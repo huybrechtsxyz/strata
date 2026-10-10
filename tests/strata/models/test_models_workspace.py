@@ -141,6 +141,23 @@ def test_workspace_resource_firewall_reference_valid():
     assert model.spec.resources[0].firewalls == ["web-fw"]
 
 
+def test_workspace_resource_dns_reference_must_exist():
+    """A resource's dns_zones reference must exist in spec.dns_zones (mirrors firewalls)."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "dns_zones": ["web-zone"]}]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_resource_dns_reference_valid():
+    """A resource's dns_zones reference resolving to a real DNS document is accepted."""
+    data = _minimal_workspace()
+    data["spec"]["dns_zones"] = ["web-zone"]
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "dns_zones": ["web-zone"]}]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.resources[0].dns_zones == ["web-zone"]
+
+
 def test_workspace_resource_subnet_network_must_exist():
     """A resource's subnet.network reference must exist in spec.networks."""
     data = _minimal_workspace()

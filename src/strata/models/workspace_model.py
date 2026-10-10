@@ -100,6 +100,12 @@ class WorkspaceResourceModel(PlatformBaseModel):
         None, description="List of resource names this resource depends on (workspace-specific gluing)"
     )
     firewalls: list[str] | None = Field(None, description="References to firewall resource names for network security")
+    dns_zones: list[str] | None = Field(
+        None,
+        description="References to DNS document names this resource is associated with (mirrors `firewalls` "
+        "above). A structural, provisioning-time fact — not itself a claim of ${output:...} ownership; see "
+        "`WorkspaceSpecModel.validate_execution()`'s `target_names` for the separate claiming mechanism.",
+    )
     subnet: WorkspaceResourceSubnetModel | None = Field(
         None, description="Structured reference to a subnet within one of this workspace's networks"
     )
@@ -427,6 +433,22 @@ class WorkspaceSpecModel(PlatformBaseModel):
             for firewall in resource.firewalls or []:
                 if firewall not in firewall_names:
                     errors.append(f"Resource '{resource.name}' references undefined firewall '{firewall}'")
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
+
+    @model_validator(mode="after")
+    def validate_resource_dns_references(self) -> "WorkspaceSpecModel":
+        """Validate that resource DNS references exist in this workspace's dns_zones (mirrors
+        validate_resource_firewall_references above)."""
+        if not self.resources:
+            return self
+        dns_names = set(self.dns_zones) if self.dns_zones else set()
+        errors = []
+        for resource in self.resources:
+            for dns_zone in resource.dns_zones or []:
+                if dns_zone not in dns_names:
+                    errors.append(f"Resource '{resource.name}' references undefined DNS zone '{dns_zone}'")
         if errors:
             raise ValueError("; ".join(errors))
         return self

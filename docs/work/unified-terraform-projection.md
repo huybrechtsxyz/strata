@@ -1,7 +1,10 @@
 # Unified Terraform Projection — One Variable, One Secrets Map
 
 - Status: **proposed, full design** — deliberately breaking, accepted as such
-- Last updated: 2026-10-09
+- Last updated: 2026-10-10
+- Decision recorded: [ADR-0035](../decisions/0035-unified-terraform-projection.md)
+  (the decision itself; this doc remains the live evidence record, full
+  payload shape, migration plan, and open implementation questions)
 - Supersedes: [flat-category-secret-taint-size-limit.md](flat-category-secret-taint-size-limit.md)
   (that doc chased a per-category patch for the secret-taint gap; this
   design deletes the gap structurally instead, along with the category
@@ -118,40 +121,90 @@ top-level Terraform variable:
     "workspace": {
       "name": "my-workspace",
       "version": "1.0.0",
+      "description": "",
+      "tags": [],
       "deployment": "prd-deploy",
+      "deployment_version": "1.0.0",
+      "deployment_description": "",
+      "deployment_tags": [],
       "environment": "prd",
       "platform_version": "strata.omp.com/v2",
       "labels": {},
       "configuration": {},
-      "custom": {},
-      "default_tags": {}
+      "custom": {}
     },
     "tenant": {
       "code": "c0062",
       "name": "GSK",
       "geographies": ["europe"],
       "onboarded": "2026-03-15",
-      "configuration": { "dns_slug": "gsk" }
+      "configuration": { "dns_slug": "gsk" },
+      "custom": {}
     },
     "providers": {
-      "azure":    { "type": "azurerm",  "region": "westeurope", "configuration": {}, "custom": {} },
-      "kamatera": { "type": "kamatera", "region": "eu",         "configuration": {}, "custom": {} }
+      "azure":    { "type": "azurerm",  "region": "westeurope", "configuration": {}, "custom": {}, "default_tags": {} },
+      "kamatera": { "type": "kamatera", "region": "eu",         "configuration": {}, "custom": {}, "default_tags": {} }
     },
     "resources": {
-      "web-vm":      { "provider_type": "azure", "resource_type": "virtual_machine",    "configuration": {} },
-      "web-storage": { "provider_type": "azure", "resource_type": "storage_account",    "configuration": {} },
-      "edge-waf":    { "provider_type": "azure", "resource_type": "application_gateway", "configuration": {} }
+      "web-vm": {
+        "provider_type": "azure",
+        "resource_type": "virtual_machine",
+        "configuration": {},
+        "custom": {},
+        "default_tags": {},
+        "custom_tags": {},
+        "firewalls": [],
+        "subnet": null,
+        "storage": {
+          "install_path": "/opt/app",
+          "disks": [{ "name": "os", "size": 64, "label": "os-disk", "mount": "/" }],
+          "volumes": [],
+          "parameters": {}
+        }
+      },
+      "web-storage": {
+        "provider_type": "azure",
+        "resource_type": "storage_account",
+        "configuration": {},
+        "custom": {},
+        "default_tags": {},
+        "custom_tags": {},
+        "firewalls": [],
+        "subnet": null,
+        "storage": null
+      },
+      "edge-waf": {
+        "provider_type": "azure",
+        "resource_type": "application_gateway",
+        "configuration": {},
+        "custom": {},
+        "default_tags": {},
+        "custom_tags": {},
+        "firewalls": [],
+        "subnet": null,
+        "storage": null
+      }
     },
-    "namespaces": { "hearth": { "modules": ["authentik"], "configuration": {}, "custom": {} } },
+    "namespaces": {
+      "hearth": {
+        "modules": ["authentik"],
+        "configuration": {},
+        "custom": {},
+        "default_labels": {},
+        "custom_labels": {}
+      }
+    },
     "modules": {
       "authentik": {
         "type": "helm",
         "source": { "...": "..." },
         "release_name": "authentik",
         "kubernetes_namespace": "hearth",
-        "mounts":    [{ "name": "media", "target_path": "/media", "storage_class": "fast-ssd" }],
-        "checks":    [{ "name": "http", "type": "http", "endpoint": "/healthz" }],
-        "endpoints": [{ "name": "web", "type": "http", "port": 9000 }],
+        "properties": {
+          "mounts":    [{ "name": "media", "target_path": "/media", "storage_class": "fast-ssd" }],
+          "checks":    [{ "name": "http", "type": "http", "endpoint": "/healthz" }],
+          "endpoints": [{ "name": "web", "type": "http", "port": 9000 }]
+        },
         "configuration":  {},
         "custom":         {},
         "default_labels": {},
@@ -161,14 +214,33 @@ top-level Terraform variable:
     "dns":        { "example-zone": { "provider": "azure", "zones": {} } },
     "networks":   { "spoke-net": { "networks": {} } },
     "firewalls":  { "edge-fw": { "allow": [], "deny": [] } },
-    "topologies": { "main": { "type": "kubernetes", "components": [] } },
+    "topologies": { "main": { "type": "kubernetes", "components": [], "namespaces": [] } },
     "properties": { "deploy_tier": "standard" },
     "custom":     { "cost_center": "1234" },
     "flags":      { "enable_x": true },
-    "variables":  { "customer_code": "c0062" }
+    "variables":  { "customer_code": "c0062" },
+    "default_tags": { "managed-by": "strata" }
   }
 }
 ```
+
+`strata.default_tags` is the **solution-wide** tag baseline — hoisted out
+of `workspace` to sit alongside `properties`/`custom`/`flags`/`variables`
+rather than nested under it, since `WorkspaceSpecModel.default_tags` was
+already documented as cross-cutting ("applied on top of/underneath *each
+Provider's* own default_tags"), not workspace-scoped data. Every other
+`default_tags` in the structure (`providers.<name>.default_tags`,
+`resources.<name>.default_tags`, each `dns`/`networks`/`firewalls` entry's
+own) stays exactly where it is — those are genuinely per-entity baselines,
+a different concept from the one solution-wide default every entity
+starts from.
+
+`topologies.main.namespaces` (the `[]` above) is a real field —
+`TopologySpecModel.namespaces: list[TopologyNamespaceReferenceModel] |
+None` — but, like `resources.custom` above, found 2026-10-09 to be
+validated and never read by today's `_build_topologies_payload()`
+(returns only `type`/`components`/`volumes`). Tracked as another
+unprojected-gap fix below, same class as `storage`/`custom`.
 
 **2. `TF_VAR_strata_secrets`** — the only environment variable strata
 sets, a flat `map(string)` keyed by dotted path into the structure above:
@@ -389,15 +461,15 @@ variable "strata" {
       labels           = map(string)
       configuration    = any          # free-form passthrough — see note
       custom           = any
-      default_tags     = map(string)
     })
 
     tenant = object({
       code          = string
       name          = string
-      geographies   = list(string)
-      onboarded     = string
+      geographies   = optional(list(string))  # TenantSpecModel.geographies is Optional — "no data-residency constraint" is the common case
+      onboarded     = optional(string)        # TenantSpecModel.onboarded is Optional
       configuration = any
+      custom        = any
     })
 
     providers = map(object({
@@ -420,10 +492,33 @@ variable "strata" {
       role          = optional(string)
       count         = optional(number)
       configuration = any
+      # ResourceSpecModel.custom — found 2026-10-09 (via the example JSON): a real field
+      # ("Custom user-defined data for scripts or extensions") but, like storage below,
+      # never read by today's _merge_resource_entry() at all. No default_labels/custom_labels
+      # here — ResourceSpecModel has no such fields at all (only default_tags/custom_tags,
+      # cloud tags; labels are a Namespace/Module-only concept, see those models' own comments).
+      custom        = any
       default_tags  = map(string)
       custom_tags   = map(string)
       firewalls     = list(string)
       subnet        = optional(any)
+      # ResourceSpecModel.storage — found 2026-10-09: validated/round-trip-tested but never read by
+      # today's _merge_resource_entry() at all, despite being exactly the shape Terraform needs to
+      # actually create a VM's disks (azurerm_managed_disk/data_disk_attachment or equivalent).
+      storage = optional(object({
+        install_path = optional(string)
+        disks = optional(list(object({
+          name  = optional(string)
+          size  = number
+          label = string
+          mount = string
+        })))
+        volumes = optional(list(object({
+          name = optional(string)
+          path = string
+        })))
+        parameters = optional(any)
+      }))
     }))
 
     namespaces = map(object({
@@ -442,9 +537,13 @@ variable "strata" {
       source               = any
       release_name         = optional(string)
       kubernetes_namespace = optional(string)
-      mounts               = list(any)
-      checks               = list(any)
-      endpoints            = list(any)
+      # mounts/checks/endpoints are NOT top-level ModuleSpecModel fields — they live under
+      # ModuleSpecModel.properties (ModulePropertiesModel | None), hence nested + optional here.
+      properties = optional(object({
+        mounts    = optional(list(any))
+        checks    = optional(list(any))
+        endpoints = optional(list(any))
+      }))
       configuration        = any
       custom               = any
       default_labels       = map(string)
@@ -460,6 +559,7 @@ variable "strata" {
     custom     = any
     flags      = map(bool)
     variables  = map(string)
+    default_tags = map(string)  # solution-wide baseline, hoisted out of workspace — see note above
   })
 }
 
@@ -548,6 +648,24 @@ Two caveats worth recording rather than discovering later:
   always emits every top-level key, empty when unused, letting the type
   stay strict with no top-level `optional()` at all. Worth confirming
   that's what the projection actually does.
+- **`variables = map(string)` is likely wrong.** `ResolvedWorkspaceGraph.
+  variable_refs` is `list[ValueReference]`, and `ValueReference.value: Any`
+  (`resolved_context.py`) — not string-constrained. `_build_variables_payload()`
+  passes `ref.value` through unmodified ("native-typed where
+  `build_value_references()` could tell", per its own docstring). A
+  variable resolved to a bool/int/list would violate a strict
+  `map(string)` declaration. Needs either confirming `build_value_references()`
+  always coerces to string before this point, or loosening the generated
+  type to `map(any)`.
+- **`map(string)`-typed `labels` fields are unverified, workspace-wide.**
+  Every `*MetaModel.labels` field (`WorkspaceMetaModel`, `ProviderMetaModel`,
+  `NamespaceMetaModel`, etc.) is typed `dict[str, Any]` in Pydantic, not
+  `dict[str, str]` — nothing stops a label value from being a bool/number/
+  nested dict. The generated `object({...})`'s `labels = map(string)`
+  entries (workspace, providers, namespaces, ...) are optimistic, not
+  verified against the schema. Worth a real check of whether any
+  consumer's YAML actually puts a non-string label value, or whether to
+  just type these `map(any)` too.
 
 ### Resources are one flat map, not nested by type
 
@@ -647,6 +765,54 @@ deployed into this namespace, and on what ports?" without a second,
 out-of-band source of truth. Whether any consumer wants that yet is
 unproven — but unlike before, finding out costs nothing.
 
+### Why `ProvisionerModel` itself stays out entirely
+
+Every category projected so far (`workspace`/`tenant`/`providers`/
+`resources`/`namespaces`/`modules`/`dns`/`networks`/`firewalls`/
+`topologies`) describes the **target infrastructure** — data the copied
+`.tf` code reads. `ProvisionerModel` (`name`, `description`, `tool`,
+`source`, `backend`, `properties`, `gitops`, `configuration`,
+`integration`, `output`, `depends_on`) describes something else entirely:
+**how strata drives the tool that reads that data** — and belongs on the
+opposite side of the build/deploy boundary from everything else here, for
+reasons already decided elsewhere, not new ones invented for this design:
+
+- **`source`** tells `build run` *where to copy the `.tf` code from*
+  (ADR-0022/ADR-0025) — consumed by `prepare()` before any projection
+  exists, never by the `.tf` code itself.
+- **`backend`** is deliberately **never** delivered via the tfvars/env-var
+  surface at all — ADR-0023 D2 resolves its tokens separately and hands
+  the result straight to `integration.init(path, backend_config=...)`
+  (real Terraform `-backend-config`), "never written back into
+  [`prepare()`'s] output." Folding it into `strata.*` would mean a second,
+  redundant delivery path for the same data.
+- **`integration`** binds a provisioner to an `Integration` document
+  (version/transport/auth, ADR-0021 D4) — strata's own plumbing concern,
+  meaningless to a `.tf` file.
+- **`output.template`** (ADR-0023 D3) *replaces* the default projection
+  for a provisioner that opts in — it's a control knob over whether/how
+  this whole design's output gets generated, not data this design's
+  output would itself carry.
+- **`properties`/`gitops`** are tool-specific (ansible/sync-only) and
+  structurally can't apply to a Terraform root at all (`validate_properties_
+  only_for_ansible`/`validate_gitops_only_for_sync_tools` reject them for
+  `tool: terraform`).
+- **`depends_on`** orders provisioner *source materialisation* at build
+  time (ADR-0029) — a build-sequencing concern, not workspace data.
+- **One more structural reason, not just "wrong layer":** a workspace can
+  declare *several* Terraform provisioners (e.g. `cfg-int-deployment`'s
+  `customer/terraform` and `spoke/terraform` roots), each with its own
+  `source`/`backend`/`configuration`. `strata.*` is one shared object for
+  the whole workspace; there is no single answer for "the" provisioner's
+  config to put there even if it belonged.
+
+Confirmed, not assumed: `build_platform_projection(graph, provisioner)`
+already takes a `provisioner` argument today and immediately `del`s it —
+its own docstring says so explicitly ("`provisioner` is currently unused
+by any category built so far"). Nothing in this design changes that;
+`ProvisionerModel`'s fields reach Terraform through `prepare()`/`init()`,
+never through `strata.*`.
+
 ## What this fixes, structurally
 
 Each of these is deleted outright, not worked around:
@@ -723,6 +889,300 @@ Two consumers, both absorbable, both owned by the same team.
 pre-1.0 version, a clean break is cheaper for everyone than a
 transitional shape nobody wants to live in.
 
+## Implementation Plan
+
+Eight phases inside this repo (Migration steps 4–5, rewriting the two
+consumers' `.tf` roots, happen in their own repos afterward — step 9
+below only tracks that it must happen, not how). Each phase is a small,
+independently mergeable, fully-tested change, per this repo's own
+"small, tested, documented phases" convention — never a big-bang rewrite
+landed in one commit.
+
+**Resolved (2026-10-10), not just left open — checking the real
+mechanisms killed the "generalize claiming" option.** Initial framing
+below treated this as one open question with three candidate answers;
+tracing the actual code found **two separate claiming mechanisms**, and
+checking each one against the categories candidate (c) proposed
+generalizing to closed the question outright.
+
+- **Mechanism 1 — validate-time acceptance**
+  (`WorkspaceService.claimed_document_names()`, `workspace_service.py`):
+  covers `dns_zones ∪ networks ∪ firewalls ∪ namespaces` — decides
+  whether a `${output:...}` token is *accepted* at all. Deliberately
+  excludes `resources`, with a reason stated in its own docstring: "a
+  Resource document has no Value-token-bearing field of its own that
+  `${output:...}` could ever appear in." Not an oversight — a considered
+  exclusion.
+- **Mechanism 2 — deploy-time resolution scoping**
+  (`deploy_controller.py`'s `claimed_by_category`/`_contains_output_token()`):
+  narrower still — only `dns`/`networks`/`firewalls`. Its own comment
+  states the two mechanisms were **deliberately never unified**.
+- **Modules already have real, independent per-step output access** —
+  confirmed in `docs/work/gap_fit_v1.md`'s gap #12 investigation:
+  Helm/Compose's `deploy_namespace()` does its own
+  `tokens = {**resolved.values, **visible_outputs}` merge, entirely
+  separate from Terraform's TF_VAR delivery ("modules (namespace-owned)
+  are already safe"). Generalizing *this* redesign's claiming to modules
+  would be solving an already-solved problem via the wrong mechanism.
+- **Topologies were never in the claimable vocabulary at all** — not a
+  `targets`-able kind, so there's no existing "exclusion" to even
+  reconsider there.
+
+So candidate (c) wasn't "nearly free," it was three different things
+wearing one label: modules need nothing from here (already solved
+elsewhere), resources were already deliberately excluded by a considered
+decision (overturning it needs new evidence, the same bar gap #12 itself
+was held to — not assumed free just because the new shape makes the
+*mechanical* check cheaper), and topologies were never a candidate to
+begin with.
+
+**Decision: (b).** Preserve today's exact scope — only `dns`/`networks`/
+`firewalls` are claim-scoped, same historic three categories, inside the
+new single-`strata`-object shape (with the per-provisioner-source-
+directory correction below applied). No generalization.
+
+(a) (drop per-step scoping entirely) was never seriously in the running —
+it's a real behavior regression (an unclaimed step would start seeing
+documents it has no business seeing), not a simplification. (c)
+(generalize to every category) is rejected per the three findings above:
+there's nothing left to generalize *to* once modules (already solved) and
+topologies (never applicable) are set aside, and extending it to
+resources specifically would mean reversing a considered decision with no
+new evidence — exactly the bar this repo's own "evidence over assumption"
+convention holds every other extension to.
+
+**Correction (2026-10-10): it is not "one directory per step."** Both
+`build_controller.py` and `deploy_controller.py` key the build directory
+by the **provisioner's own source location**
+(`provisioner.source.target_path or .source_path`), not by `step.name` —
+that fallback only applies to a source-less sync/GitOps provisioner.
+`deploy_controller.py`'s own comment states this explicitly: "a
+provisioner with a `source` is materialised once, keyed by its *source*
+location, not by whichever step happens to reference it (two steps can
+share one provisioner/source...)." So two execution steps that both
+reference the same Terraform-root provisioner (different `targets`,
+same `provisioner:`) write into the **same** directory and would share
+the **same** `strata.auto.tfvars.json` — not one each. Decision (b)
+above needs to account for this: "per-step" scoping is really
+"per-provisioner-source-directory" scoping, and a directory can be
+written to by more than one step's claims in the same `deploy run`.
+
+### Phase 1 — `modules` on `ResolvedWorkspaceGraph`
+
+**Design:** add `modules: dict[str, ModuleModel] = field(default_factory=dict)`
+to `ResolvedWorkspaceGraph` (`resolved_context.py`), populated in
+`build_resolved_workspace_graph()` (`build_controller.py`) the same way
+every other category already is: collect every `ModuleReferenceModel.module`
+name referenced by `workspace.spec.namespaces`' resolved `NamespaceModel.
+spec.modules`, then `_lookup_all(index, PlatformKind.MODULE, module_names)`.
+Namespaces must already be resolved first (the existing `_lookup_all` call
+for `namespaces` stays before this one in the same function).
+
+Zero behavior change to any existing output — this phase only makes the
+data available on the graph; no builder reads it yet.
+
+**Tests:** extend `build_controller.py`'s existing graph-construction
+tests with a workspace whose namespace references two modules (one
+referenced twice under different names, to confirm dict-by-name
+dedup/uniqueness doesn't break), asserting `graph.modules` contains the
+resolved `ModuleModel` instances.
+
+### Phase 2 — The new payload assembler
+
+**Design:** add `build_strata_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]`
+to `terraform_projection.py`, replacing `build_platform_projection()`.
+Keep one private helper per category for readability
+(`_strata_workspace()`, `_strata_tenant()`, `_strata_providers()`,
+`_strata_resources()`, `_strata_namespaces()`, `_strata_dns()`,
+`_strata_networks()`, `_strata_firewalls()`, `_strata_topologies()`,
+`_strata_flags()`, `_strata_variables()`, `_strata_properties()`,
+`_strata_custom()`, `_strata_default_tags()`) but each one returns its
+*final* nested shape directly — no more "flat dict today, wrapped later
+by `planned_files()`" split, since there is only one file to wrap into
+now. `build_strata_payload()` itself just assembles the top-level dict
+from these fourteen calls.
+
+Folded into this phase, not patched into the old functions first and
+then discarded: the three pre-existing projection gaps found during
+review (`resources.storage`, `resources.custom`, `topologies.namespaces`)
+land directly in the new `_strata_resources()`/`_strata_topologies()`
+from day one. `modules` is new (`_strata_modules()`, reading `graph.modules`
+from Phase 1, nesting `mounts`/`checks`/`endpoints` under `properties`
+per the model's real shape). `default_tags` becomes its own top-level
+call reading `graph.workspace.spec.default_tags`, not nested under
+`_strata_workspace()`.
+
+Every per-entry `configuration`/`custom` stays a raw, unresolved value at
+this stage (tokens literal) — this function is `build run`-time only,
+matching `build_platform_projection()`'s existing contract; resolution
+happens in Phase 3.
+
+Delete in this same phase (no longer called by anything once this
+lands): `build_platform_projection()`, `build_configuration_payloads()`,
+`build_dns_networks_firewalls_payloads()`, `_REAL_VARIABLE_NAME`,
+`FLAT_CATEGORIES`, `real_variable_name()`. `resolved_context.py` unaffected.
+
+**Tests:** port every existing `test_integrations_terraform_projection.py`
+category test to assert against the new nested shape instead of the old
+flat/wrapped one; add new tests for the three folded-in gap fixes and for
+`modules`/`default_tags`; one full-shape test against a graph built from
+`config/`'s real dogfood workspace, asserting the complete `strata` object
+matches field-for-field what this design doc's own example documents.
+
+### Phase 3 — Secret scanning and the deploy-time rewrite
+
+**Design:** two new functions, replacing `resolve_deploy_time_files()`
+entirely:
+
+- `find_secret_paths(payload: dict) -> list[str]` — walks the *build-time*
+  (token-literal) payload and returns every dotted path whose leaf value
+  is `${secret:...}`-shaped, using the same walk
+  `resolve_value_tokens_tracking_secrets()` already does internally (reuse
+  that primitive's path-tracking rather than re-implementing it) but
+  without needing live token values yet — needed at *build* time by
+  Phase 6 (which paths get a merge in `strata_locals.tf`), independent of
+  whether a real secret value is available yet.
+- `rewrite_strata_payload(payload: dict, tokens: dict[str, str]) -> tuple[dict, dict[str, str]]` —
+  the `deploy run`-time counterpart. Resolves every token in `payload`
+  (reusing `resolve_value_tokens_tracking_secrets()` exactly as today),
+  then walks the result once more: every secret-shaped leaf is replaced
+  in-place with the sentinel string `f"__strata_secret__:{path}"`, and
+  collected separately into a flat `{path: resolved_value}` dict (never
+  written back into `payload`) for `TF_VAR_strata_secrets`. Returns both —
+  the sentinel-substituted payload (for `strata.auto.tfvars.json`) and the
+  flat secrets dict (for the env var).
+
+No category branching of any kind (unlike `resolve_deploy_time_files()`'s
+`FLAT_CATEGORIES`-vs-everything-else split) — one shape, one walk, because
+there is only one object now.
+
+**Related, not required for this phase:** the `${output:...}`-sensitivity
+gap under Remaining Work (an `${output:}` token is never secret-shaped
+regardless of whether the referenced Terraform output is itself
+`sensitive = true`) lives in the same taint-detection primitive
+(`resolve_value_tokens_tracking_secrets()`'s `_is_secret_shaped()`) this
+phase reuses. Worth fixing in the same pass if the `tokens` dict gains
+per-key sensitivity metadata before this phase lands — not a blocker,
+since it's a pre-existing bug independent of this redesign either way.
+
+**Tests:** unit tests on a synthetic nested payload with secrets at
+multiple depths (1-level, e.g. `variables.db_password`; 3-level, e.g.
+`providers.kamatera.configuration.api_token`) confirming: the sentinel
+appears at the secret's path in the rewritten payload; the real resolved
+value appears only in the returned secrets dict, never in the payload;
+a non-secret sibling value is untouched. One real-terraform regression
+test (same pattern as `test_terraform_variable_precedence.py`) proving a
+real `terraform plan`'s effective value for a secret-bearing field is the
+resolved value, not the sentinel.
+
+### Phase 4 — One file, one `default_output()`
+
+**Design:** replace `planned_files()` with a function returning exactly
+one `(filename, data)` pair: `("strata.auto.tfvars.json", {"strata":
+build_strata_payload(graph)})`. Update `TerraformIntegration.default_output()`
+(`terraform.py`) to return this single file instead of iterating
+`planned_files()`'s multi-file list. No other `InfraIntegration` subclass
+is touched (`AnsibleIntegration`/`BicepIntegration` don't call any of this
+module's functions).
+
+**Tests:** update `test_integrations_terraform.py`'s `default_output()`
+assertions to expect one file; confirm no other integration's tests
+changed.
+
+### Phase 5 — `strata_variables.tf`: a static template, not a generator
+
+**Design — the one simplification worth calling out explicitly:** the
+`object({...})` *type* shape is identical for every workspace (only the
+map *values* vary at runtime — every workspace's `strata` object has the
+same top-level keys and the same per-category field set, by construction,
+since it's derived from strata's own fixed model schema, not from
+workspace content). So `strata_variables.tf` does **not** need to be
+generated from `ResolvedWorkspaceGraph` at all — it's a static asset,
+written once as a template file (e.g.
+`strata/templates/terraform/strata_variables.tf`, alongside the existing
+`strata/templates/examples/` convention), and `default_output()` copies it
+verbatim on every build. The only per-build decision is binary: skip
+writing it if the copied `.tf` sources already declare their own
+`variable "strata"` (extending the existing source-scan check that
+already looks for this kind of opt-out).
+
+Resolve the two still-open type sub-questions as part of authoring this
+template, not deferred further: test `sensitive = true` on
+`strata_secrets` against a real root's `terraform plan` output for
+redaction side effects before committing to it; type `variables`/every
+`labels` field `map(any)` rather than `map(string)` per the review
+finding (`ValueReference.value`/`*MetaModel.labels` are `Any`-typed in the
+real models, not string-constrained).
+
+**Tests:** a real-terraform test that `terraform validate`s a minimal root
+declaring no `variable "strata"` of its own, confirming strata's copied
+template is both present and syntactically valid against a real
+Terraform ≥ 1.3 binary; a second case confirming the file is *not*
+written when the root already declares its own `variable "strata"`.
+
+### Phase 6 — `strata_locals.tf`: genuinely generated
+
+**Design:** unlike Phase 5, this file's content is workspace-specific —
+it depends on exactly which dotted paths (from Phase 3's
+`find_secret_paths()`) this workspace's documents actually have a
+`${secret:}` token at. New function `build_strata_locals(secret_paths:
+list[str]) -> str` emits the HCL text directly (template string, not a
+third-party HCL-writing library — matches this module's existing
+"functions returning strings/dicts" convention, nothing here needs HCL
+AST manipulation). For each path, builds the nested `merge()` chain shown
+in this design doc's own "Secret delivery" section; a workspace with an
+empty `secret_paths` list gets the one-line fallback
+`locals { strata = var.strata }`.
+
+**Tests:** paths sharing a common parent (two secrets under
+`providers.kamatera.*`) must merge into one nested `merge()` call per
+parent, not two independent top-level merges that would clobber each
+other; a real-terraform test confirming `local.strata.<path>` evaluates
+to the real resolved value for a secret path and an ordinary literal
+value for everything else, in the same `terraform plan`.
+
+### Phase 7 — `deploy_controller.py` rewiring
+
+**Design:** per the resolved decision above (option (b) — preserve
+today's exact `dns`/`networks`/`firewalls`-only claim scope, now keyed by
+provisioner source directory rather than step name), replace the entire
+existing per-category `TF_VAR_<name>` delivery block and the
+`resolve_deploy_time_files()` call with: (1) call `rewrite_strata_payload()`
+(Phase 3) and overwrite `strata.auto.tfvars.json` in the step's build
+directory; (2) set exactly one environment variable,
+`{integration.ENV_VAR_PREFIX}strata_secrets = json.dumps(secrets_dict)`.
+Delete the `FLAT_CATEGORIES`/`resx_`-prefix branching entirely — there is
+no longer a case split to make.
+
+**Tests:** port the existing real-terraform deploy-time precedence tests
+(`test_terraform_variable_precedence.py`) to the new single-file/
+single-env-var shape; confirm a secret's resolved value wins in a real
+`terraform plan` and that the on-disk file never contains it (direct text
+scan of the rewritten file, matching this repo's existing convention for
+this class of test).
+
+### Phase 8 — Delete the rest of the dead machinery, bump version
+
+**Design:** sweep for any remaining reference to deleted names
+(`_REAL_VARIABLE_NAME`, `FLAT_CATEGORIES`, `real_variable_name`,
+`planned_files`, `resolve_deploy_time_files`, `build_platform_projection`,
+`build_configuration_payloads`, `build_dns_networks_firewalls_payloads`)
+across `src/` and `tests/` — comments/docstrings included, not just live
+code (the precedence-fix work already found that a path/name sweep misses
+line-wrapped occurrences; grep tolerant of whitespace/newlines between
+fragments, not just the literal joined string). Bump `VERSION.txt` with
+an explicit breaking-change note per Migration step 3.
+
+**Tests:** full suite (`mypy`, `ruff`, `pytest`, `lint-imports`) green;
+no remaining reference to any deleted symbol anywhere in the repo.
+
+### Phase 9 — Consumer migration (tracked here, executed elsewhere)
+
+Rewrite `cfg-int-deployment`'s and `haven`'s `.tf` roots against the new
+variable shape (Migration steps 4–5) — happens in those repos, after
+Phase 8 ships a real alpha release they can pin to. Not part of this
+repo's own test suite; tracked here only so it isn't forgotten.
+
 ## Open questions
 
 - **Type safety**: answered in full — see "Type design" above
@@ -775,9 +1235,90 @@ transitional shape nobody wants to live in.
 - [ ] Confirm `mounts`/`checks`/`endpoints` are the right `modules`
       fields to project (see "Projecting `modules`") — `services` is
       deliberately excluded; drop the other three too if no consumer
-      wants them.
-- [ ] Write the ADR (this is a breaking schema/output change; it needs
-      one before implementation).
+      wants them. **Note (2026-10-09 review): they must be projected nested
+      under `properties` (`ModuleSpecModel.properties: ModulePropertiesModel
+      | None`), not as flat siblings of `type`/`source` — they are not
+      top-level `ModuleSpecModel` fields.**
+- [ ] **Add a `modules: dict[str, ModuleModel]` to `ResolvedWorkspaceGraph`**
+      (2026-10-09 review finding) — unlike `providers`/`resources`/
+      `namespaces`/`firewalls`/`dns`/`networks`, there is currently no
+      resolved-modules collection at all on the graph. Projecting `modules`
+      needs a real graph-resolution step (gathering the `Module` documents
+      referenced by `NamespaceSpecModel.modules`), not just a new
+      `_build_modules_payload()` function — the data isn't in the graph yet.
+- [ ] Resolve the `variables = map(string)` / `labels = map(string)` type
+      mismatches (2026-10-09 review finding, see "Type design" sub-questions)
+      — `ValueReference.value` and every `*MetaModel.labels` value are
+      typed `Any` in the real models, not guaranteed strings.
+- [ ] Implement the `strata.default_tags` hoist — `_build_workspace_payload()`
+      currently nests `WorkspaceSpecModel.default_tags` under `workspace`;
+      the new top-level `default_tags` category needs its own builder
+      (reads the same field, just placed at the top of the payload).
+- [ ] **Add `storage` to the `resources` projection** (2026-10-09 review
+      finding — pre-existing bug, not specific to this redesign):
+      `ResourceSpecModel.storage` (`disks`/`volumes`/`parameters`) is
+      validated and round-trip tested but `_merge_resource_entry()` never
+      reads it — a VM's disks silently never reach any `.tf` artifact
+      today. Same gap-#17 class as the old `ProviderSpecModel.configuration`
+      bug, just never extended to this field. Fix applies to the *current*
+      `terraform_projection.py` independent of whether this redesign ships
+      — worth doing now rather than waiting.
+- [ ] **Add `custom` to the `resources` projection** (2026-10-09 review
+      finding, same pre-existing-bug class as `storage` above):
+      `ResourceSpecModel.custom` is a real, documented field but
+      `_merge_resource_entry()` only ever merges `configuration` — `custom`
+      is silently dropped. (`default_labels`/`custom_labels` do **not**
+      apply here — `ResourceSpecModel` has no such fields at all; that was
+      an incorrect addition to the example, reverted.)
+- [ ] **Add `namespaces` to the `topologies` projection** (2026-10-09
+      review finding, same class): `TopologySpecModel.namespaces` is a
+      real, validated field but `_build_topologies_payload()` only returns
+      `type`/`components`/`volumes` — the namespace references are
+      silently dropped.
+- [ ] **Fix: `${output:...}` is never treated as secret-shaped, regardless
+      of Terraform's own `sensitive = true` on the referenced output**
+      (2026-10-10 review finding — real, currently-live security gap,
+      independent of this redesign). `resolve_value_tokens_tracking_secrets()`'s
+      `_is_secret_shaped()` checks only the token's *kind*
+      (`kind == "secret"`); an `${output:step.key}` token is never
+      secret-shaped by that check no matter what the referenced value
+      actually is. `collect_step_outputs()` compounds this — it reads
+      `entry["value"]` from `terraform output -json` and ignores
+      `entry["sensitive"]` entirely, even though real Terraform always
+      returns the true value (never redacted) in `-json` output alongside
+      that flag. Net effect: a workspace author who marks a Terraform
+      output `sensitive = true` and references it elsewhere via
+      `${output:...}` gets that real value written straight into a plain
+      on-disk `*.auto.tfvars.json` today — never routed through the
+      `${secret:}`-only, env-var-safe delivery path. Fix needs to thread a
+      `sensitive: bool` alongside each collected output through the flat
+      `tokens: dict[str, str]` pipeline (which currently carries no
+      per-key metadata at all) so `_is_secret_shaped()`/Phase 3's
+      `find_secret_paths()` can treat it the same as a `${secret:}` leaf.
+      Worth fixing on its own merits regardless of this redesign's fate.
+- [ ] **Persist each step's collected outputs to disk** (2026-10-10
+      review finding, same independent-of-this-redesign class): `deploy_
+      controller.py`'s `step_outputs: dict[str, dict[str, str]]` is
+      purely in-memory, rebuilt fresh every `deploy run` by calling
+      `collect_step_outputs()` only for steps inside *this* invocation's
+      `resolved_steps` loop. A scoped `deploy run` (the code already has a
+      `scope` concept) that excludes an upstream dependency leaves that
+      upstream's outputs completely unavailable to a dependent step this
+      run, even though the upstream's real Terraform state/outputs still
+      exist on disk and `terraform output -json` could be called against
+      its directory on demand regardless of whether it ran this
+      invocation. Confirmed there is already a dormant, designed-but-
+      never-wired schema for roughly this:
+      `audit_manifest_model.py`'s `outputs_artifact: ManifestOutputsReferenceModel
+      | None` (path + sha256, pointing at a separate `DeploymentOutputsModel`
+      file, per [docs/work/audit-trail.md](audit-trail.md)) — grep confirms
+      zero real writer anywhere today. Wiring `collect_step_outputs()`'s
+      result into that file would close both this gap and the dormant
+      schema field in one change, and double as the audit trail it was
+      originally designed for.
+- [x] Write the ADR (this is a breaking schema/output change; it needs
+      one before implementation). **Done 2026-10-10 —
+      [ADR-0035](../decisions/0035-unified-terraform-projection.md).**
 - [ ] Implement: new `terraform_projection.py` shape, new
       `planned_files()`/`resolve_deploy_time_files()`, the
       `strata_variables.tf` **and `strata_locals.tf`** generators, delete
@@ -786,6 +1327,126 @@ transitional shape nobody wants to live in.
 
 ## Changelog
 
+- 2026-10-10: **Resolved the per-step/per-directory claiming open
+  question — decision (b), no generalization.** Tracing the real code
+  found two separate mechanisms, not one (`WorkspaceService.
+  claimed_document_names()` for validate-time `${output:}` acceptance —
+  `dns_zones ∪ networks ∪ firewalls ∪ namespaces`, resources deliberately
+  excluded by its own docstring; `deploy_controller.py`'s narrower
+  `claimed_by_category` for deploy-time resolution — `dns`/`networks`/
+  `firewalls` only, explicitly never unified with the first). Confirmed
+  via `docs/work/gap_fit_v1.md`'s gap #12 that modules already have
+  real, independent per-step output access through Helm/Compose's own
+  `deploy_namespace()` merge — nothing to generalize there. Resources
+  were already a considered exclusion, not an oversight; topologies were
+  never in the claimable vocabulary at all. Net: candidate (c)
+  ("generalize to every category, it's nearly free now") doesn't
+  survive contact with the actual mechanisms — decided (b), preserve
+  today's exact three-category scope, inside the new per-provisioner-
+  source-directory keying.
+- 2026-10-10: **Found two more real, currently-live gaps in the
+  `${output:...}`/cross-step-output mechanism, both independent of this
+  redesign, tracked under Remaining Work.** (1) Security: `${output:}` is
+  never treated as secret-shaped regardless of whether the referenced
+  Terraform output is itself `sensitive = true` —
+  `resolve_value_tokens_tracking_secrets()`'s `_is_secret_shaped()`
+  checks only the token's *kind*, and `collect_step_outputs()` ignores
+  Terraform's own `"sensitive"` JSON metadata entirely, so a value an
+  author explicitly marked sensitive can be written straight into a
+  plain on-disk `*.auto.tfvars.json` today. (2) Scope: `step_outputs` is
+  purely in-memory, rebuilt only for steps inside the *current*
+  invocation's `resolved_steps` loop — a scoped `deploy run` that
+  excludes an upstream dependency loses access to its outputs even
+  though the real Terraform state backing them still exists on disk.
+  Confirmed `audit_manifest_model.py` already has a dormant,
+  designed-but-unwired `outputs_artifact` field for roughly this, with
+  zero real writer today (`docs/work/audit-trail.md`). Both noted as
+  worth fixing on their own merits, and cross-referenced from Phase 3
+  (same taint-detection primitive) since fixing (1) there would be the
+  natural place to pick it up.
+- 2026-10-10: **Corrected a wrong assumption in the Phase 7 open
+  question**: build directories are keyed by the provisioner's own
+  source location (`target_path`/`source_path`), not by execution step
+  name — `step.name` is only the fallback for a source-less sync/GitOps
+  provisioner. Confirmed directly in `deploy_controller.py`'s own
+  comment: two steps referencing the same provisioner share one
+  directory, and therefore would share one `strata.auto.tfvars.json`.
+  Reworded the three candidate answers and Phase 7 to account for
+  this — "per-step" scoping is really "per-provisioner-source-directory"
+  scoping, where more than one step's claims can land in the same file.
+- 2026-10-10: **Added the "Implementation Plan" section** — eight
+  in-repo phases (graph plumbing → new payload assembler → secret
+  scanning/rewrite → single-file `default_output()` → the two generated
+  `.tf` files → `deploy_controller.py` rewiring → dead-code deletion),
+  plus a ninth tracking the two consumers' own migration. Grounded against
+  the real call sites (`build_resolved_workspace_graph()`, `planned_files()`/
+  `resolve_deploy_time_files()`, `deploy_controller.py`'s `TF_VAR_` loop),
+  not just the target shape — each phase names exactly which existing
+  functions it replaces or deletes. Surfaced one real open design question
+  in the process, not previously addressed anywhere in this doc: what
+  happens to today's per-step `dns`/`networks`/`firewalls` *claiming*
+  scope (gap #12) once there's only one shared `strata` object — flagged
+  as needing a decision before Phase 7, not assumed away. Also named the
+  one implementation simplification worth calling out explicitly:
+  `strata_variables.tf`'s type shape is identical for every workspace by
+  construction, so it's a static template asset copied verbatim, not
+  something generated from the resolved graph like `strata_locals.tf`
+  genuinely is.
+- 2026-10-10: **Wrote [ADR-0035](../decisions/0035-unified-terraform-projection.md)**,
+  recording the core decision (one `strata` object, one flat secrets map,
+  flat resources, sentinel-based secret delivery, strata-generated type)
+  separately from this doc's ongoing evidence/migration/open-questions
+  record — per this repo's ADR convention, the ADR captures the decision
+  only; this doc keeps tracking everything still in motion.
+- 2026-10-09: **Cleaned up the example payload after a manual edit
+  introduced invalid JSON and two inaccurate fields.** Fixed a stray
+  double comma and a trailing comma (both hard JSON syntax errors); removed
+  `default_labels`/`custom_labels` from the `resources` entries —
+  `ResourceSpecModel` has no such fields at all (that distinction is
+  Namespace/Module-only; resources get `default_tags`/`custom_tags`
+  instead, already present). Reformatted `resources`/`namespaces` to
+  multi-line, matching the `modules` entry's existing style. Kept
+  `resources.custom` and `topologies.main.namespaces` — both are real,
+  validated model fields the manual edit happened to surface, and both
+  turned out to be two more instances of the `storage` finding below:
+  real fields the *current* projection silently never reads. Added both
+  to Remaining Work.
+- 2026-10-09: **Added `storage` to the `resources` projection** —
+  `ResourceSpecModel.storage` (`disks[]`/`volumes[]`/`parameters`,
+  `resource_model.py`) is exactly the shape Terraform needs to actually
+  create a VM's disks (size/label/mount), but `_merge_resource_entry()`
+  never reads it — validated and round-trip tested, silently dropped from
+  every `.tf` artifact today. A pre-existing bug in the *current* code,
+  not something this redesign introduces; added to both the example
+  payload and the generated `resources` object type, and tracked under
+  Remaining Work as a fix that applies regardless of whether this
+  redesign ships.
+- 2026-10-09: **Hoisted `workspace.default_tags` to a top-level
+  `strata.default_tags`**, alongside `properties`/`custom`/`flags`/
+  `variables`. It was never workspace-scoped data to begin with —
+  `WorkspaceSpecModel.default_tags`'s own docstring already called it a
+  "solution-wide baseline... applied on top of/underneath each Provider's
+  own default_tags," i.e. a cross-cutting default every entity starts
+  from, not an attribute *of* the workspace. Every other `default_tags`
+  (`providers.<name>`, `resources.<name>`, each `dns`/`networks`/
+  `firewalls` entry) stays nested where it is — those are genuinely
+  per-entity baselines, not the solution-wide one.
+- 2026-10-09: **Reviewed the proposed payload against the real models**
+  (`workspace_model.py`, `tenant_model.py`, `module_model.py`, et al.) and
+  `terraform_projection.py`/`resolved_context.py`. Found and fixed: the
+  `workspace` example silently dropped the `metadata` fields
+  (`deployment_version`/`*_description`/`*_tags`) the current code already
+  emits; `tenant` was missing `custom` (a real `TenantSpecModel` field) and
+  its generated type wrongly made `geographies`/`onboarded` non-optional
+  despite both being documented as commonly absent; `modules`' `mounts`/
+  `checks`/`endpoints` were modeled as flat siblings of `type`/`source` but
+  are actually nested under `ModuleSpecModel.properties` (`ModulePropertiesModel
+  | None`) — not top-level fields at all. Also surfaced two open gaps now
+  tracked under Remaining Work: `ResolvedWorkspaceGraph` has no resolved
+  `modules` collection yet (projecting modules needs a new resolution step,
+  not just a new builder function), and `variables`/`labels` are typed `Any`
+  in the real models, making the generated `map(string)` declarations
+  unverified.
 - 2026-10-09: Created — promoted from
   [flat-category-secret-taint-size-limit.md](flat-category-secret-taint-size-limit.md)'s
   "Clean sheet" appendix into a full, standalone design after confirming
