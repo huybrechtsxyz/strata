@@ -42,13 +42,7 @@ from strata.controllers.value_controller import (
 from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.resolved_context import ValueResolution
-from strata.integrations.terraform_projection import (
-    FLAT_CATEGORIES,
-    build_configuration_payloads,
-    build_dns_networks_firewalls_payloads,
-    real_variable_name,
-    resolve_deploy_time_files,
-)
+from strata.integrations.terraform_projection import build_strata_payload, rewrite_strata_payload
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentStageModel
@@ -389,51 +383,20 @@ def deploy_run(
     )
 
     # Raw (unresolved) snapshot, built once per run — workspace-wide, not
-    # per-step data (matches `build_platform_projection()`'s own dns/
-    # networks/firewalls categories exactly). Re-resolved per step below
-    # using that step's own `tokens` (mirrors `backend.configuration`'s
-    # existing per-step pattern). A `${output:...}` token needs an owning
-    # step to scope which step's outputs apply — see the ownership/claiming
-    # logic right below (docs/design/gap_fit_v1.md gap #12) — `${var:}`/`${secret:}`
-    # tokens need no such owner and resolve identically for every step.
+    # per-step data (ADR-0035, docs/work/unified-terraform-projection.md
+    # Phase 7). Re-resolved per step below using that step's own `tokens`
+    # (mirrors `backend.configuration`'s existing per-step pattern). A
+    # `${output:...}` token needs an owning step to scope which step's
+    # outputs apply — see the ownership/claiming logic right below
+    # (docs/design/gap_fit_v1.md gap #12) — `${var:}`/`${secret:}` tokens
+    # need no such owner and resolve identically for every step.
     #
-    # Why built once here but `backend_config` is built per step inside the
-    # loop below: `backend_config` genuinely is per-step data (each step's
-    # `provisioner.backend.configuration` is a different field on a
-    # different provisioner). `dns`/`networks`/`firewalls` come from
-    # `workspace.spec.dns_zones`/`.networks`/`.firewalls` instead — the same
-    # three payloads for every step, no per-step variant exists — so only
-    # the *resolution* (which needs the per-step `tokens`) happens in the
-    # loop; building the raw payload does not, since recomputing identical
-    # data every iteration would be pure waste.
-    #
-    # Why three separate dict entries instead of one merged payload: this
-    # mirrors Terraform's own variable convention, not an arbitrary choice.
-    # `terraform_projection.py`'s `planned_files()` already writes one
-    # `*.auto.tfvars.json` file per category at build time, because each is
-    # Terraform's own natural `variable "dns" {}`/`variable "networks" {}`/
-    # `variable "firewalls" {}` unit — `TF_VAR_<name>` has to match that
-    # per-variable convention 1:1 (`TF_VAR_dns`/`TF_VAR_networks`/
-    # `TF_VAR_firewalls`), so a merged blob under one name wouldn't be
-    # readable by any of them.
-    dns_networks_firewalls = build_dns_networks_firewalls_payloads(graph)
-
-    # Ten more Value-token-bearing categories (docs/design/gap_fit_v1.md gap #8's
-    # Terraform-side refinement + gap #17's universal-resolution-reach
-    # fix, docs/design/value-token-resolution.md's "Full Solution" Phase 6
-    # and "Decision (2026-09-29)") — broadcast only, unlike the three
-    # above: `workspace`/`providers`/`resx_<type>`/`topologies`/
-    # `namespaces`/`flags`/`variables`/`properties`/`custom`/`tenant` are
-    # either workspace/deployment-wide singletons (no name to claim by) or
-    # grouped by type/topology/namespace name (addressable, but nothing
-    # evidences a real need for per-name ownership yet, gap #12-style) —
-    # so `${output:...}` is rejected outright for all ten (checked once,
-    # right below) rather than given a claiming mechanism. Gap #17 closed
-    # the confirmed real hole here: `providers` used to be entirely absent
-    # from this delivery, so a `${var:}`/`${secret:}` token in a Provider's
-    # `configuration`/`custom` passed `strata validate` but was silently
-    # never resolved or delivered anywhere.
-    configuration_payloads = build_configuration_payloads(graph)
+    # One payload now, not two (`dns_networks_firewalls`/
+    # `configuration_payloads`, the pre-ADR-0035 shape) — `payload["dns"]`/
+    # `["networks"]`/`["firewalls"]` are the only three categories with a
+    # per-name claiming concept (gap #12); every other key is broadcast,
+    # identical for every step, exactly as before.
+    payload = build_strata_payload(graph)
 
     # Same lookup `build_workload_modules()` uses at build time (docs/design/gap_fit_v1.md
     # gap #13) — `HelmIntegration.deploy_namespace()` needs it to resolve a
@@ -453,71 +416,36 @@ def deploy_run(
     # broadcasts to every step for `${var:}`/`${secret:}` (unchanged, Phase 2
     # behaviour) — only `${output:...}` needs an owner, since that's the
     # only per-step-varying data a dns/network/firewall document could ever
-    # reference.
-    claimed_by_category: dict[str, set[str]] = {category: set() for category in dns_networks_firewalls}
+    # reference. Preserves ADR-0035's own resolved decision (b): still
+    # only these three categories, not generalised to every category.
+    claimed_by_category: dict[str, set[str]] = {category: set() for category in ("dns", "networks", "firewalls")}
     for step in all_steps:
-        for category, docs in dns_networks_firewalls.items():
-            claimed_by_category[category] |= set(step.targets) & docs.keys()
+        for category in claimed_by_category:
+            claimed_by_category[category] |= set(step.targets) & payload[category].keys()
 
-    for category, docs in dns_networks_firewalls.items():
-        for name, payload in docs.items():
-            if name not in claimed_by_category[category] and _contains_output_token(payload):
+    for category in claimed_by_category:
+        for name, doc_payload in payload[category].items():
+            if name not in claimed_by_category[category] and _contains_output_token(doc_payload):
                 diagnostics.error(
                     f"'{name}' uses '${{output:...}}' but no execution step's 'targets' names "
                     f"this document — add it to the step that should apply it (docs/design/gap_fit_v1.md gap #12).",
                     location=name,
                 )
 
-    # None of build_configuration_payloads()'s ten broadcast categories may
-    # ever contain `${output:...}` — there is no per-step-varying data they
-    # could meaningfully reference (no claiming mechanism exists for a
-    # workspace-wide singleton or a type-grouped category, unlike
-    # dns/networks/firewalls above).
-    for name, payload in configuration_payloads.items():
-        if _contains_output_token(payload):
+    # None of the other twelve categories may ever contain `${output:...}`
+    # — there is no per-step-varying data they could meaningfully
+    # reference (no claiming mechanism exists for a workspace-wide
+    # singleton or a type-grouped category, unlike dns/networks/firewalls
+    # above).
+    for category, category_payload in payload.items():
+        if category in claimed_by_category:
+            continue
+        if _contains_output_token(category_payload):
             diagnostics.error(
-                f"'{name}' uses '${{output:...}}', which is not supported outside dns/networks/firewalls "
+                f"'{category}' uses '${{output:...}}', which is not supported outside dns/networks/firewalls "
                 "(docs/design/gap_fit_v1.md gap #8) — remove it or move the value into a dns/network/firewall document instead.",
-                location=name,
+                location=category,
             )
-
-    # TF_VAR delivery below needs two extra, step-invariant things worked
-    # out once, up front (docs/design/terraform-tfvars-parity.md): (1) a
-    # `FLAT_CATEGORIES` category delivers one env var per top-level key,
-    # not one per category — two categories that happen to declare the
-    # same key would otherwise silently collide as the same `env[...]`
-    # entry with no ordering guarantee at all (unlike separate on-disk
-    # `*.auto.tfvars.json` files, at least loaded in a deterministic
-    # order); caught here as a hard error instead. (2) every `resx_<type>`
-    # category is really the same "resources" Terraform variable
-    # regardless of type (confirmed against v1's real
-    # `_build_resources_by_category()`) — merged into one dict so
-    # delivering it as a single `TF_VAR_resources` doesn't have one type
-    # clobber another.
-    flat_key_owner: dict[str, str] = {}
-    merged_resources: dict[str, Any] = {}
-    for name, payload in configuration_payloads.items():
-        if name.startswith("resx_"):
-            # Every resx_<type> merges into the same "resources" variable
-            # by design (multiple types are expected to combine, not
-            # collide) — registered under a single synthetic owner label
-            # so a FLAT_CATEGORIES key that happens to also be named
-            # "resources" is still caught below.
-            flat_key_owner.setdefault("resources", "resx_<type>")
-            merged_resources.update(payload.get("resources", {}))
-            continue
-        if name not in FLAT_CATEGORIES:
-            continue
-        for key in payload:
-            owner = flat_key_owner.get(key)
-            if owner is not None and owner != name:
-                diagnostics.error(
-                    f"'{key}' is declared by both '{owner}' and '{name}' — they would collide as "
-                    f"the same 'TF_VAR_{key}' env var (docs/design/terraform-tfvars-parity.md).",
-                    location=key,
-                )
-                continue
-            flat_key_owner[key] = name
     if not diagnostics.ok:
         return diagnostics
 
@@ -651,166 +579,40 @@ def deploy_run(
             resolved_config = resolve_value_tokens_in_mapping(provisioner.backend.configuration, tokens)
             backend_config = {k: str(v) for k, v in resolved_config.items()}
 
-        # Terraform delivery for dns/networks/firewalls (docs/design/gap_fit_v1.md gap
-        # #9/#12, docs/design/value-token-resolution.md's "Full Solution"
-        # Phase 2) and build_configuration_payloads()'s ten broadcast
-        # categories (gap #8 + gap #17): the
-        # whole resolved payload as one JSON-encoded env var per category.
-        # This USED TO be described as a "never touches disk" pattern
-        # matching `backend.configuration` — that was wrong: Terraform's
-        # own variable-definition precedence means a same-named
-        # `*.auto.tfvars.json` entry outranks this env var, not the other
-        # way around (docs/design/terraform-variable-precedence.md). The
-        # rewrite block right above this one (`resolve_deploy_time_files()`)
-        # is what actually keeps this delivery meaningful now: it rewrites
-        # `terraform_projection.py`'s own build-time file with the same
-        # resolved value when secret-free, or blanks it to `{}` when a
-        # secret-shaped leaf is present — only in the blanked case does
-        # this env var end up the uncontested, effective source; otherwise
-        # it's redundant with (and consistent with) the file. Named via
-        # `integration.ENV_VAR_PREFIX` + `real_variable_name(category)` (docs/design/
-        # terraform-tfvars-parity.md) — never a hardcoded `"TF_VAR_"` literal
-        # or the bare category name, so a real Terraform root's own
-        # `TF_VAR_<declared_variable_name>` override actually matches what
-        # `planned_files()` wrapped the on-disk file's content under
-        # (`providers` → `TF_VAR_platform_providers`, `dns` →
-        # `TF_VAR_dns_zones`, `tenant` → `TF_VAR_strata_tenant`). Two
-        # categories don't reduce to a single rename at all, handled
-        # separately below instead of through `real_variable_name()`:
-        # `FLAT_CATEGORIES` (`workspace`/`flags`/`variables`/`properties`/
-        # `custom`) delivers one env var per top-level key, since each key
-        # is its own independent real Terraform variable; every
-        # `resx_<type>` category merges into one `TF_VAR_resources` (every
-        # real file is actually named `resources` regardless of type —
-        # `flat_key_owner`/`merged_resources` above already worked out
-        # there's no collision to worry about). `None` for a tool with no
-        # such mechanism (see that attribute's own docstring); this whole
-        # block is then correctly a no-op for it, rather than injecting a
-        # meaningless `"NoneD ns"`-shaped env var.
-        # A document claimed by some step's `targets` (gap #12) is
-        # delivered only to its owning step(s) — resolved using that step's
-        # own `tokens`, so `${output:}` sees exactly that step's
-        # dependency-scoped outputs, never another step's. An unclaimed
-        # document still broadcasts to every step (Phase 2's original,
-        # unchanged behaviour — the pre-flight check above already
-        # guarantees it has no `${output:}` token to be wrong about).
-        # Empty categories are skipped, matching `planned_files()`'s own
-        # convention.
+        # Terraform delivery (ADR-0035, docs/work/
+        # unified-terraform-projection.md Phase 7) — one `strata.auto.
+        # tfvars.json` rewrite plus one `TF_VAR_strata_secrets` env var,
+        # replacing the old per-category file rewrite + one-env-var-per-
+        # category/per-flat-key delivery entirely. There's only one object
+        # now, and `rewrite_strata_payload()` blanks exactly the
+        # secret-shaped leaves, never a whole category — the old
+        # `resx_<type>` collision workaround's reason for existing is gone
+        # too (`resources` is one flat map, Phase 2).
+        # `None` for a tool with no such mechanism (see that attribute's
+        # own docstring); this whole block is then correctly a no-op for
+        # it, rather than injecting a meaningless `"NoneD ns"`-shaped env
+        # var.
         if integration.ENV_VAR_PREFIX is not None:
-            docs_for_step_by_category = {
-                category: {
-                    name: payload
-                    for name, payload in docs.items()
-                    if name in step.targets or name not in claimed_by_category[category]
-                }
-                for category, docs in dns_networks_firewalls.items()
-                # Only a category `build run` actually wrote a file for in
-                # the first place (`planned_files()`'s own "skip empty
-                # categories" rule, keyed off the *workspace-wide* payload,
-                # not this step's claimed/broadcast view — those can differ:
-                # a real DNS document claimed entirely by a different step
-                # still means a file exists here, just with nothing this
-                # step can see in it). Without this filter, a workspace
-                # with zero `dns`/`networks`/`firewalls` documents at all
-                # would still get all three files newly CREATED below with
-                # empty content — `build_dns_networks_firewalls_payloads()`
-                # unconditionally returns all three keys even when empty,
-                # unlike `build_configuration_payloads()`, which already
-                # filters (confirmed empirically: caught in code review,
-                # not by the test suite — see docs/design/
-                # terraform-variable-precedence.md's own "this never
-                # creates a file build run did not produce" boundary).
-                if docs
+            # This step's own view: dns/networks/firewalls filtered to
+            # what it claims plus whatever nobody claims (gap #12,
+            # unchanged); every other category broadcasts as-is — no
+            # per-category file-existence filtering needed any more
+            # (Phase 2: `build_strata_payload()` always emits every key).
+            step_payload = {
+                category: (
+                    {
+                        name: doc
+                        for name, doc in docs.items()
+                        if name in step.targets or name not in claimed_by_category[category]
+                    }
+                    if category in claimed_by_category
+                    else docs
+                )
+                for category, docs in payload.items()
             }
-
-            # Rewrite every *.auto.tfvars.json file `build run` already
-            # wrote into this step's own directory with resolved values,
-            # so Terraform's own precedence (a `*.auto.tfvars.json` file
-            # outranks `TF_VAR_*`, confirmed against HashiCorp's own docs)
-            # can no longer shadow the correctly-resolved values this loop
-            # delivers below (docs/design/terraform-variable-precedence.md).
-            # `resx_<type>` categories are excluded here — handled
-            # by their own always-blank loop right below instead, never
-            # resolved per-file (see that loop's own comment for why).
-            # Gated the same way the `TF_VAR_` delivery below already is —
-            # a tool with no `ENV_VAR_PREFIX` has no `*.auto.tfvars.json`
-            # convention to rewrite either.
-            rewrite_payloads = {
-                **docs_for_step_by_category,
-                **{name: payload for name, payload in configuration_payloads.items() if not name.startswith("resx_")},
-            }
-            for filename, data in resolve_deploy_time_files(rewrite_payloads, tokens):
-                (path / filename).write_text(json.dumps(data))
-
-            # resx_<type>: always blanked, unconditionally — never resolved
-            # per-file (docs/design/terraform-variable-precedence.md).
-            # Every resx_<type> file declares the same real Terraform
-            # variable, "resources" (confirmed against v1's real
-            # `_build_resources_by_category()`); rewriting each file
-            # independently with its own type's resolved value would just
-            # reintroduce one file overwriting another's declaration of the
-            # same variable — the identical multi-declaration collision
-            # this whole mechanism exists to fix, one level down. Blanking
-            # every one unconditionally (not just when secret-shaped) means
-            # `TF_VAR_resources` below (already merging every type into one
-            # payload) is always the uncontested, sole source — simpler
-            # than per-file resolution, and sidesteps the collision
-            # question entirely rather than needing to answer it.
-            for name in configuration_payloads:
-                if name.startswith("resx_"):
-                    (path / f"{name}.auto.tfvars.json").write_text("{}")
-
-            for category, docs_for_step in docs_for_step_by_category.items():
-                if not docs_for_step:
-                    continue
-                resolved_payload = resolve_value_tokens_in_mapping(docs_for_step, tokens)
-                env[f"{integration.ENV_VAR_PREFIX}{real_variable_name(category)}"] = json.dumps(resolved_payload)
-
-            # build_configuration_payloads()'s ten broadcast categories
-            # (gap #8 + gap #17) — identical for
-            # every step (no ownership to vary by, and no `${output:...}`
-            # can be present, guaranteed by the pre-flight check above), so
-            # this is pure repetition of the same resolution per step, same
-            # as an unclaimed dns/network/firewall document already does
-            # above. `FLAT_CATEGORIES`/`resx_<type>` are delivered
-            # separately below, once per step — skipped here so neither
-            # gets a second, wrongly-shaped `TF_VAR_<category>` entry too.
-            for name, payload in configuration_payloads.items():
-                if name in FLAT_CATEGORIES or name.startswith("resx_"):
-                    continue
-                resolved_payload = resolve_value_tokens_in_mapping(payload, tokens)
-                env[f"{integration.ENV_VAR_PREFIX}{real_variable_name(name)}"] = json.dumps(resolved_payload)
-
-            # FLAT_CATEGORIES: one env var per top-level key, not one per
-            # category — each key is its own independent real Terraform
-            # variable (`workspace`'s six fixed keys; every user-declared
-            # flag/variable/property/custom key). `flat_key_owner` above
-            # already proved no two categories declare the same key.
-            # A plain string value is passed through RAW, never
-            # `json.dumps()`-wrapped — HashiCorp's own documented
-            # `TF_VAR_name=value` convention (no quotes needed/expected for
-            # a string-shaped variable, confirmed directly against a real
-            # `terraform plan`: a JSON-quoted value is taken completely
-            # literally, embedded quote characters included, never
-            # unwrapped — docs/design/terraform-variable-precedence.md.
-            # Only a genuinely complex value (`dict`/`list`) needs
-            # `json.dumps()`, matching `tf_var_env()`'s own already-correct
-            # convention for `resolved.values` above.
-            for name in FLAT_CATEGORIES:
-                payload = configuration_payloads.get(name, {})
-                if not payload:
-                    continue
-                resolved_payload = resolve_value_tokens_in_mapping(payload, tokens)
-                for key, value in resolved_payload.items():
-                    env[f"{integration.ENV_VAR_PREFIX}{key}"] = value if isinstance(value, str) else json.dumps(value)
-
-            # resx_<type>: every type merges into the one real "resources"
-            # variable (`merged_resources` above) — delivered once, not
-            # once per type, so multiple active resource types don't
-            # clobber each other under the same env var name.
-            if merged_resources:
-                resolved_resources = resolve_value_tokens_in_mapping(merged_resources, tokens)
-                env[f"{integration.ENV_VAR_PREFIX}resources"] = json.dumps(resolved_resources)
+            resolved_payload, strata_secrets = rewrite_strata_payload(step_payload, tokens)
+            (path / "strata.auto.tfvars.json").write_text(json.dumps({"strata": resolved_payload}))
+            env[f"{integration.ENV_VAR_PREFIX}strata_secrets"] = json.dumps(strata_secrets)
 
         if provisioner.output and provisioner.output.template:
             template_path = context.root / provisioner.output.template

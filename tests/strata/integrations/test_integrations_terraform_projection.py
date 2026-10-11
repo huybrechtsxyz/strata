@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""Tests for `terraform_projection` (ADR-0023 Phase 1 + 2a) — the default
-Terraform tfvars projection.
+"""Tests for `terraform_projection` (ADR-0035) — the unified Terraform
+tfvars projection.
 
 Fixture shaped like haven's real `stack/workspace.yaml`: one provider, one
 topology, one resource, one namespace, one firewall.
 """
 
-from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueReference
+import json
+
+from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.terraform_projection import (
-    build_configuration_payloads,
-    build_platform_projection,
-    planned_files,
-    resolve_deploy_time_files,
+    build_strata_locals,
+    build_strata_payload,
+    find_secret_paths,
+    rewrite_strata_payload,
 )
 from strata.models.common_models import ModuleReferenceModel, SourceModel
-from strata.models.deployment_model import DeploymentMetaModel, DeploymentModel, DeploymentSpecModel
 from strata.models.dns_model import DnsMetaModel, DnsModel, DnsRecordModel, DnsSpecModel, DnsZoneModel
 from strata.models.firewall_model import (
     FirewallDefaultsModel,
@@ -23,6 +24,7 @@ from strata.models.firewall_model import (
     FirewallRuleModel,
     FirewallSpecModel,
 )
+from strata.models.module_model import ModuleMetaModel, ModuleModel, ModulePropertiesModel, ModuleSpecModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.network_model import (
     NetworkDefinitionModel,
@@ -39,20 +41,24 @@ from strata.models.provider_model import (
 )
 from strata.models.provisioning_model import ProvisionerModel
 from strata.models.resource_model import (
+    ResourceDiskModel,
     ResourceMetaModel,
     ResourceModel,
     ResourcePropertiesModel,
     ResourceSpecModel,
+    ResourceStorageModel,
 )
 from strata.models.tenant_model import TenantMetaModel, TenantModel, TenantSpecModel
 from strata.models.workspace_model import (
     TopologyComponentModel,
+    TopologyNamespaceReferenceModel,
     TopologySpecModel,
     WorkspaceMetaModel,
     WorkspaceModel,
     WorkspaceResourceModel,
     WorkspaceSpecModel,
 )
+from strata.utils.value_tokens import escape_path_segment
 
 
 def _provider(name: str = "hetzner_dc_eu_de") -> ProviderModel:
@@ -215,494 +221,6 @@ def _graph(
     )
 
 
-def _provisioner() -> ProvisionerModel:
-    return ProvisionerModel(name="haven_iac", tool="terraform", source=SourceModel(source_path="deploy/terraform"))
-
-
-def test_workspace_category_present():
-    """Matches v1's real `_build_workspace_vars()` shape exactly
-    (docs/design/terraform-tfvars-parity.md) — flat, six independent
-    variables, with `graph.deployment` unset falling back to v1's own
-    documented defaults (`environment="production"`,
-    `workspace_version="1.0.0"`, `deployment_name`=the workspace's own
-    name)."""
-    payload = build_platform_projection(_graph(), _provisioner())
-    assert payload["workspace"] == {
-        "workspace_name": "haven_platform",
-        "workspace_version": "1.0.0",
-        "deployment_name": "haven_platform",
-        "environment": "production",
-        "platform_version": "",
-        "labels": {},
-        "configuration": {},
-        "custom": {},
-        "default_tags": {},
-        "metadata": {
-            "deployment_version": "1.0.0",
-            "workspace_description": "",
-            "deployment_description": "",
-            "workspace_tags": ["haven", "hetzner"],
-            "deployment_tags": [],
-        },
-    }
-
-
-def test_workspace_category_uses_deployment_labels_when_present():
-    """`environment`/`metadata.deployment_version`/`deployment_name`/
-    `platform_version` all come from the resolved Deployment document, not
-    the workspace — confirmed against v1's real `_build_workspace_vars()`."""
-    deployment = DeploymentModel(
-        meta=DeploymentMetaModel(
-            name="deploy-hub-z00-spoke-s01",
-            labels={"version": "2.3.0", "environment": "production"},
-            annotations={"description": "Spoke deployment"},
-            tags=["spoke"],
-        ),
-        spec=DeploymentSpecModel(workspace="haven_platform", environments=["spoke-env"]),
-    )
-    graph = _graph(deployment=deployment)
-    payload = build_platform_projection(graph, _provisioner())
-    assert payload["workspace"]["deployment_name"] == "deploy-hub-z00-spoke-s01"
-    assert payload["workspace"]["environment"] == "production"
-    assert payload["workspace"]["platform_version"] == "strata.huybrechts.xyz/v2"
-    assert payload["workspace"]["metadata"]["deployment_version"] == "2.3.0"
-    assert payload["workspace"]["metadata"]["deployment_description"] == "Spoke deployment"
-    assert payload["workspace"]["metadata"]["deployment_tags"] == ["spoke"]
-
-
-def test_workspace_category_includes_configuration_custom_and_default_tags_when_set():
-    """`WorkspaceSpecModel.configuration`/`.custom`/`.default_tags` — same
-    silently-dropped passthrough gap as DNS zones, now projected."""
-    graph = _graph()
-    graph.workspace.spec.configuration = {"foo": "bar"}
-    graph.workspace.spec.custom = {"team": "platform"}
-    graph.workspace.spec.default_tags = {"managed-by": "strata"}
-    payload = build_platform_projection(graph, _provisioner())
-    assert payload["workspace"]["configuration"] == {"foo": "bar"}
-    assert payload["workspace"]["custom"] == {"team": "platform"}
-    assert payload["workspace"]["default_tags"] == {"managed-by": "strata"}
-
-
-def test_providers_category_present():
-    payload = build_platform_projection(_graph(), _provisioner())
-    assert payload["providers"] == {
-        "hetzner_dc_eu_de": {
-            "type": "hetzner",
-            "region": "nbg1",
-            "display_name": "Nuremberg",
-            "description": "",
-            "labels": {},
-            "tags": [],
-            "configuration": {},
-            "custom": {},
-            "default_tags": {},
-        }
-    }
-
-
-def test_providers_category_includes_description_labels_and_tags():
-    """docs/design/terraform-tfvars-parity.md — v1's real
-    `_build_provider_vars()` emits these three from the provider's own
-    `description`/`labels`/`tags`; v2 previously dropped them entirely."""
-    graph = _graph()
-    graph.providers["hetzner_dc_eu_de"] = ProviderModel(
-        meta=ProviderMetaModel(
-            name="hetzner_dc_eu_de",
-            annotations={"description": "Nuremberg datacenter"},
-            labels={"version": "1.0.0"},
-            tags=["hetzner", "nbg1"],
-        ),
-        spec=ProviderSpecModel(
-            properties=ProviderPropertiesModel(type="hetzner", region="nbg1", display_name="Nuremberg")
-        ),
-    )
-    payload = build_platform_projection(graph, _provisioner())
-    provider = payload["providers"]["hetzner_dc_eu_de"]
-    assert provider["description"] == "Nuremberg datacenter"
-    assert provider["labels"] == {"version": "1.0.0"}
-    assert provider["tags"] == ["hetzner", "nbg1"]
-
-
-def test_providers_category_includes_configuration_and_custom_when_set():
-    """docs/design/gap_fit_v1.md gap #17: `ProviderSpecModel.configuration`/`.custom`
-    used to be silently dropped entirely — now projected like every other
-    category's own passthrough fields."""
-    graph = _graph()
-    graph.providers["hetzner_dc_eu_de"] = ProviderModel(
-        meta=ProviderMetaModel(name="hetzner_dc_eu_de"),
-        spec=ProviderSpecModel(
-            properties=ProviderPropertiesModel(type="hetzner", region="nbg1", display_name="Nuremberg"),
-            configuration={"skip_provider_registration": True},
-            custom={"cost_center": "platform"},
-        ),
-    )
-    payload = build_platform_projection(graph, _provisioner())
-    assert payload["providers"]["hetzner_dc_eu_de"]["configuration"] == {"skip_provider_registration": True}
-    assert payload["providers"]["hetzner_dc_eu_de"]["custom"] == {"cost_center": "platform"}
-
-
-def test_providers_category_includes_default_tags_when_set():
-    """`ProviderSpecModel.default_tags` — validated but never read anywhere
-    before this fix, unlike its `configuration`/`custom` siblings (gap #17)."""
-    graph = _graph()
-    graph.providers["hetzner_dc_eu_de"] = ProviderModel(
-        meta=ProviderMetaModel(name="hetzner_dc_eu_de"),
-        spec=ProviderSpecModel(
-            properties=ProviderPropertiesModel(type="hetzner", region="nbg1", display_name="Nuremberg"),
-            default_tags={"managed-by": "strata"},
-        ),
-    )
-    payload = build_platform_projection(graph, _provisioner())
-    assert payload["providers"]["hetzner_dc_eu_de"]["default_tags"] == {"managed-by": "strata"}
-
-
-def test_topologies_category_present():
-    payload = build_platform_projection(_graph(), _provisioner())
-    topology = payload["topologies"]["hetzner_hearth"]
-    assert topology["type"] == "single_node"
-    assert topology["components"] == [{"resource": "haven_vm_hetzner_hearth"}]
-    assert topology["volumes"] == []
-
-
-def test_topologies_category_empty_when_workspace_has_no_topology():
-    payload = build_platform_projection(_graph(topology_name=None), _provisioner())
-    assert payload["topologies"] == {}
-
-
-def test_namespaces_category_present():
-    payload = build_platform_projection(_graph(namespace_names=["hearth"]), _provisioner())
-    namespace = payload["namespaces"]["hearth"]
-    assert namespace["description"] == "Hearth namespace"
-    assert namespace["tags"] == ["hearth"]
-    assert namespace["modules"] == ["vaultwarden"]
-    assert namespace["configuration"] == {}
-    assert namespace["custom"] == {}
-    assert namespace["default_labels"] == {"environment": "production"}
-    assert namespace["custom_labels"] == {}
-
-
-def test_namespaces_category_includes_configuration_and_custom_when_set():
-    """`NamespaceSpecModel.configuration`/`.custom` — validated but never read
-    anywhere (not here, not by `helm.py`/`compose.py`'s `prepare_namespace()`)
-    before this fix."""
-    graph = _graph(namespace_names=["hearth"])
-    graph.namespaces["hearth"].spec.configuration = {"foo": "bar"}
-    graph.namespaces["hearth"].spec.custom = {"team": "platform"}
-    payload = build_platform_projection(graph, _provisioner())
-    namespace = payload["namespaces"]["hearth"]
-    assert namespace["configuration"] == {"foo": "bar"}
-    assert namespace["custom"] == {"team": "platform"}
-
-
-def test_namespaces_category_empty_when_workspace_has_no_namespaces():
-    payload = build_platform_projection(_graph(), _provisioner())
-    assert payload["namespaces"] == {}
-
-
-def test_firewalls_category_present():
-    payload = build_platform_projection(_graph(firewall_names=["haven_fw_hetzner_hearth"]), _provisioner())
-    firewall = payload["firewalls"]["haven_fw_hetzner_hearth"]
-    assert firewall["description"] == "Hearth firewall"
-    assert firewall["rules"]["reset"] is False
-    assert firewall["rules"]["defaults"] == [{"direction": "in", "permission": "deny"}]
-    assert firewall["rules"]["deny"] == []
-    allow_rule = firewall["rules"]["allow"][0]
-    assert allow_rule["direction"] == "in"
-    assert allow_rule["port"] == 443
-    assert allow_rule["from"] == "0.0.0.0/0"  # by_alias=True - not "from_"
-    assert firewall["configuration"] == {}
-    assert firewall["custom"] == {}
-    assert firewall["default_tags"] == {"managed-by": "strata"}
-    assert firewall["custom_tags"] == {}
-
-
-def test_firewalls_category_includes_configuration_and_custom_when_set():
-    """`FirewallSpecModel.configuration`/`.custom` — validated but never read
-    anywhere in this module before this fix (unlike DNS/providers, not even
-    partially addressed by gap #17)."""
-    graph = _graph(firewall_names=["haven_fw_hetzner_hearth"])
-    graph.firewalls["haven_fw_hetzner_hearth"].spec.configuration = {"foo": "bar"}
-    graph.firewalls["haven_fw_hetzner_hearth"].spec.custom = {"team": "platform"}
-    payload = build_platform_projection(graph, _provisioner())
-    firewall = payload["firewalls"]["haven_fw_hetzner_hearth"]
-    assert firewall["configuration"] == {"foo": "bar"}
-    assert firewall["custom"] == {"team": "platform"}
-
-
-def test_firewalls_category_empty_when_workspace_has_no_firewalls():
-    payload = build_platform_projection(_graph(), _provisioner())
-    assert payload["firewalls"] == {}
-
-
-def test_firewall_rules_include_name_priority_and_custom_when_set():
-    """`FirewallRuleModel.name`/`.priority`/`.custom` flow through automatically
-    via the existing per-rule `model_dump()` — no projection change needed."""
-    graph = _graph(firewall_names=["haven_fw_hetzner_hearth"])
-    rule = graph.firewalls["haven_fw_hetzner_hearth"].spec.allow[0]
-    rule.name = "allow-https"
-    rule.priority = 100
-    rule.custom = {"asg": "web-tier"}
-    payload = build_platform_projection(graph, _provisioner())
-    allow_rule = payload["firewalls"]["haven_fw_hetzner_hearth"]["rules"]["allow"][0]
-    assert allow_rule["name"] == "allow-https"
-    assert allow_rule["priority"] == 100
-    assert allow_rule["custom"] == {"asg": "web-tier"}
-
-
-def test_dns_category_present():
-    payload = build_platform_projection(_graph(dns_names=["huybrechts_xyz"]), _provisioner())
-    dns = payload["dns"]["huybrechts_xyz"]
-    assert dns["description"] == "Primary zone"
-    assert dns["provider"] == "cloudflare"
-    zone = dns["zones"]["huybrechts.xyz"]
-    assert zone["ttl"] == 3600
-    assert zone["records"] == [
-        {"name": "@", "type": "A", "value": "1.2.3.4", "ttl": None, "priority": None, "custom": {}}
-    ]
-    assert zone["configuration"] == {"foo": "bar"}
-    assert zone["custom"] == {"team": "platform"}
-    assert zone["default_tags"] == {"managed-by": "strata"}
-    assert zone["custom_tags"] == {"cost-center": "eng"}
-
-
-def test_dns_category_empty_when_workspace_has_no_dns_zones():
-    payload = build_platform_projection(_graph(), _provisioner())
-    assert payload["dns"] == {}
-
-
-def test_dns_records_include_custom_when_set():
-    """`DnsRecordModel.custom` — had no passthrough field at all until this
-    fix (flagged, not acted on, during the Subnet/FirewallRuleModel
-    escape-hatch audit)."""
-    graph = _graph(dns_names=["huybrechts_xyz"])
-    record = graph.dns["huybrechts_xyz"].spec.zones[0].records[0]
-    record.custom = {"proxied": True}
-    payload = build_platform_projection(graph, _provisioner())
-    records = payload["dns"]["huybrechts_xyz"]["zones"]["huybrechts.xyz"]["records"]
-    assert records[0]["custom"] == {"proxied": True}
-
-
-def test_networks_category_present():
-    payload = build_platform_projection(_graph(network_names=["product_estate"]), _provisioner())
-    attachment = payload["networks"]["product_estate"]
-    assert attachment["description"] == "Product estate"
-    network = attachment["networks"]["vnet_main"]
-    assert network["address_space"] == ["10.0.0.0/16"]
-    assert network["subnets"] == {
-        "aks": {"cidr": "10.0.1.0/24", "description": None, "configuration": {}, "custom": {}}
-    }
-    assert network["peerings"] == {}
-    assert network["configuration"] == {}
-    assert network["custom"] == {}
-    assert network["default_tags"] == {"managed-by": "strata"}
-    assert network["custom_tags"] == {}
-
-
-def test_networks_category_includes_configuration_and_custom_when_set():
-    """`NetworkDefinitionModel.configuration`/`.custom` — validated but never
-    read anywhere in this module before this fix."""
-    graph = _graph(network_names=["product_estate"])
-    graph.networks["product_estate"].spec.networks[0].configuration = {"foo": "bar"}
-    graph.networks["product_estate"].spec.networks[0].custom = {"team": "platform"}
-    payload = build_platform_projection(graph, _provisioner())
-    network = payload["networks"]["product_estate"]["networks"]["vnet_main"]
-    assert network["configuration"] == {"foo": "bar"}
-    assert network["custom"] == {"team": "platform"}
-
-
-def test_subnets_include_configuration_and_custom_when_set():
-    """`SubnetModel.configuration`/`.custom` — had no passthrough fields at
-    all until this fix, unlike every other per-item model in this category."""
-    graph = _graph(network_names=["product_estate"])
-    subnet = graph.networks["product_estate"].spec.networks[0].subnets[0]
-    subnet.configuration = {"service_endpoints": ["Microsoft.Storage"]}
-    subnet.custom = {"team": "platform"}
-    payload = build_platform_projection(graph, _provisioner())
-    subnets = payload["networks"]["product_estate"]["networks"]["vnet_main"]["subnets"]
-    assert subnets["aks"]["configuration"] == {"service_endpoints": ["Microsoft.Storage"]}
-    assert subnets["aks"]["custom"] == {"team": "platform"}
-
-
-def test_networks_category_empty_when_workspace_has_no_networks():
-    payload = build_platform_projection(_graph(), _provisioner())
-    assert payload["networks"] == {}
-
-
-def test_resources_by_category_merges_workspace_override_on_top():
-    workspace_resource = WorkspaceResourceModel(
-        name="haven_vm_hetzner_hearth",
-        resource="haven_vm_hetzner_hearth",
-        configuration={"server_type": "cx33"},  # overrides resource's own cx23
-        role="node",
-        count=1,
-    )
-    payload = build_platform_projection(_graph(resources=[workspace_resource]), _provisioner())
-    # grouped by resource_type (lowercased), not category - matches v1's real
-    # _build_resources_by_category(), wrapped under "resources" per type.
-    entry = payload["resources_by_category"]["virtualmachine"]["resources"]["haven_vm_hetzner_hearth"]
-    assert entry["provider_type"] == "hetzner"
-    assert entry["resource_type"] == "virtualmachine"
-    assert entry["unit_cost"] == 4.15
-    assert entry["role"] == "node"
-    assert entry["count"] == 1
-    # workspace wins: server_type overridden, image kept from the resource document
-    assert entry["configuration"] == {"image": "ubuntu-24.04", "server_type": "cx33"}
-    assert entry["default_tags"] == {"managed-by": "strata"}
-
-
-def test_resources_by_category_excludes_disabled_resource():
-    workspace_resource = WorkspaceResourceModel(
-        name="haven_vm_hetzner_hearth", resource="haven_vm_hetzner_hearth", enabled=False
-    )
-    payload = build_platform_projection(_graph(resources=[workspace_resource]), _provisioner())
-    assert payload["resources_by_category"] == {}
-
-
-def test_resources_by_category_excludes_managed_by_provisioner():
-    workspace_resource = WorkspaceResourceModel(name="opaque_resx", managed_by="provisioner")
-    payload = build_platform_projection(_graph(resources=[workspace_resource]), _provisioner())
-    assert payload["resources_by_category"] == {}
-
-
-def test_planned_files_wraps_categories_under_their_real_v1_variable_name():
-    """docs/design/terraform-tfvars-parity.md — confirmed directly against
-    v1's real `_planned_files()`: the file's content is nested one level
-    under the real Terraform variable name, which is not always the same
-    word as the category/filename (`providers` -> `platform_providers`,
-    `dns` -> `dns_zones`, `tenant` -> `strata_tenant`) but is for the rest
-    (`topologies`/`namespaces`/`firewalls`/`networks` wrap under their own
-    name unchanged).
-    """
-    payload = build_platform_projection(
-        _graph(
-            namespace_names=["hearth"],
-            firewall_names=["haven_fw_hetzner_hearth"],
-            dns_names=["huybrechts_xyz"],
-            network_names=["product_estate"],
-            tenant=_tenant(),
-        ),
-        _provisioner(),
-    )
-    files = dict(planned_files(payload))
-    assert set(files["providers.auto.tfvars.json"]) == {"platform_providers"}
-    assert set(files["topologies.auto.tfvars.json"]) == {"topologies"}
-    assert set(files["namespaces.auto.tfvars.json"]) == {"namespaces"}
-    assert set(files["firewalls.auto.tfvars.json"]) == {"firewalls"}
-    assert set(files["dns.auto.tfvars.json"]) == {"dns_zones"}
-    assert set(files["networks.auto.tfvars.json"]) == {"networks"}
-    assert set(files["tenant.auto.tfvars.json"]) == {"strata_tenant"}
-    assert files["providers.auto.tfvars.json"]["platform_providers"] == payload["providers"]
-    assert files["tenant.auto.tfvars.json"]["strata_tenant"] == payload["tenant"]
-    # workspace/flags/variables/properties/custom are v1's flat,
-    # multi-variable categories — never wrapped.
-    assert files["workspace.auto.tfvars.json"] == payload["workspace"]
-
-
-def test_planned_files_skips_empty_categories():
-    payload = build_platform_projection(_graph(topology_name=None, resources=[]), _provisioner())
-    files = dict(planned_files(payload))
-    assert "topologies.auto.tfvars.json" not in files
-    assert "resx_virtualmachine.auto.tfvars.json" not in files
-
-
-# ---------------------------------------------------------------------------
-# flags / variables / properties / custom (docs/design/build-time-value-categories.md)
-# ---------------------------------------------------------------------------
-
-
-def test_flags_category_only_includes_resolved_entries():
-    refs = [
-        ValueReference(key="NEW_UI", store="constant", value=True),
-        ValueReference(key="BETA", store="vault", value=None),  # integration-backed - excluded
-    ]
-    payload = build_platform_projection(_graph(feature_refs=refs), _provisioner())
-    assert payload["flags"] == {"NEW_UI": True}
-
-
-def test_variables_category_only_includes_resolved_entries():
-    refs = [
-        ValueReference(key="REGION", store="constant", value="westeurope"),
-        ValueReference(key="DB_HOST", store="vault", value=None),
-    ]
-    payload = build_platform_projection(_graph(variable_refs=refs), _provisioner())
-    assert payload["variables"] == {"REGION": "westeurope"}
-
-
-def test_properties_and_custom_categories_pass_through_graph_dicts_directly():
-    payload = build_platform_projection(
-        _graph(properties={"tier": "premium"}, custom={"team": "platform"}), _provisioner()
-    )
-    assert payload["properties"] == {"tier": "premium"}
-    assert payload["custom"] == {"team": "platform"}
-
-
-def test_flags_writes_to_flags_auto_tfvars_json_not_features():
-    """Matches v1's real filename (`_build_feature_flags_vars()`) - the
-    payload key is `flags`, not `features`/`feature_refs`."""
-    payload = build_platform_projection(
-        _graph(feature_refs=[ValueReference(key="NEW_UI", store="constant", value=True)]), _provisioner()
-    )
-    files = dict(planned_files(payload))
-    assert "flags.auto.tfvars.json" in files
-    assert "features.auto.tfvars.json" not in files
-
-
-def test_flags_and_variables_categories_empty_when_nothing_resolved():
-    payload = build_platform_projection(_graph(), _provisioner())
-    assert payload["flags"] == {}
-    assert payload["variables"] == {}
-    files = dict(planned_files(payload))
-    assert "flags.auto.tfvars.json" not in files
-    assert "variables.auto.tfvars.json" not in files
-    assert "properties.auto.tfvars.json" not in files
-    assert "custom.auto.tfvars.json" not in files
-    assert "namespaces.auto.tfvars.json" not in files
-    assert "firewalls.auto.tfvars.json" not in files
-    assert "dns.auto.tfvars.json" not in files
-    assert "networks.auto.tfvars.json" not in files
-    assert "workspace.auto.tfvars.json" in files
-    assert "providers.auto.tfvars.json" in files
-
-
-def test_planned_files_naming_matches_auto_tfvars_convention():
-    payload = build_platform_projection(
-        _graph(
-            namespace_names=["hearth"],
-            firewall_names=["haven_fw_hetzner_hearth"],
-            dns_names=["huybrechts_xyz"],
-            network_names=["product_estate"],
-        ),
-        _provisioner(),
-    )
-    filenames = {filename for filename, _ in planned_files(payload)}
-    # resources_by_category unrolls into one resx_<type> file per resource
-    # type, matching v1's real one-file-per-type split - never a single
-    # combined resources_by_category.auto.tfvars.json file.
-    assert filenames == {
-        "workspace.auto.tfvars.json",
-        "providers.auto.tfvars.json",
-        "topologies.auto.tfvars.json",
-        "resx_virtualmachine.auto.tfvars.json",
-        "namespaces.auto.tfvars.json",
-        "firewalls.auto.tfvars.json",
-        "dns.auto.tfvars.json",
-        "networks.auto.tfvars.json",
-    }
-
-
-def test_planned_files_resx_content_is_wrapped_under_resources_key():
-    payload = build_platform_projection(_graph(), _provisioner())
-    files = dict(planned_files(payload))
-    resx = files["resx_virtualmachine.auto.tfvars.json"]
-    assert set(resx) == {"resources"}
-    assert "haven_vm_hetzner_hearth" in resx["resources"]
-
-
-# ---------------------------------------------------------------------------
-# tenant (docs/design/build-command.md's `tenant` Terraform category)
-# ---------------------------------------------------------------------------
-
-
 def _tenant(name: str = "acme") -> TenantModel:
     return TenantModel(
         meta=TenantMetaModel(name=name),
@@ -714,227 +232,324 @@ def _tenant(name: str = "acme") -> TenantModel:
     )
 
 
-def test_tenant_category_present_when_deployment_references_one():
-    payload = build_platform_projection(_graph(tenant=_tenant()), _provisioner())
+# ---------------------------------------------------------------------------
+# build_strata_payload() (ADR-0035, docs/work/unified-terraform-projection.md
+# Phase 2) — the unified projection, one nested object per `ResolvedWorkspaceGraph`.
+# ---------------------------------------------------------------------------
+
+
+def _module(name: str = "authentik") -> ModuleModel:
+    return ModuleModel(
+        meta=ModuleMetaModel(name=name),
+        spec=ModuleSpecModel(
+            source=SourceModel(source_path=f"modules/{name}"),
+            type="helm",
+            release_name=name,
+            kubernetes_namespace="hearth",
+            properties=ModulePropertiesModel(),
+        ),
+    )
+
+
+def test_build_strata_payload_workspace_shape_renames_v1_parity_fields():
+    """`strata.workspace` reshapes `_build_workspace_payload()`'s flat
+    v1-parity names (`workspace_name`/`metadata.*`) into plain nested
+    fields, and drops `default_tags` (hoisted to its own top-level
+    category — see the next test)."""
+    payload = build_strata_payload(_graph())
+    assert payload["workspace"] == {
+        "name": "haven_platform",
+        "version": "1.0.0",
+        "description": "",
+        "tags": ["haven", "hetzner"],
+        "deployment": "haven_platform",
+        "deployment_version": "1.0.0",
+        "deployment_description": "",
+        "deployment_tags": [],
+        "environment": "production",
+        "platform_version": "",
+        "labels": {},
+        "configuration": {},
+        "custom": {},
+    }
+
+
+def test_build_strata_payload_default_tags_hoisted_to_top_level():
+    workspace = _workspace(resources=[], topology_name=None)
+    workspace = workspace.model_copy(
+        update={"spec": workspace.spec.model_copy(update={"default_tags": {"managed-by": "strata"}})}
+    )
+    graph = ResolvedWorkspaceGraph(workspace=workspace, providers={"hetzner_dc_eu_de": _provider()})
+    payload = build_strata_payload(graph)
+    assert payload["default_tags"] == {"managed-by": "strata"}
+    assert "default_tags" not in payload["workspace"]
+
+
+def test_build_strata_payload_tenant_includes_geographies_and_custom():
+    """`geographies` is the real `TenantSpecModel` field name (this
+    redesign abandons v1's `zones` rename); `custom` is a real field the
+    old `_build_tenant_payload()` never read at all."""
+    tenant = _tenant()
+    tenant = tenant.model_copy(update={"spec": tenant.spec.model_copy(update={"custom": {"cost_center": "1234"}})})
+    payload = build_strata_payload(_graph(tenant=tenant))
     assert payload["tenant"] == {
         "code": "acme",
         "name": "Acme",
-        "zones": ["europe"],
+        "geographies": ["europe"],
         "onboarded": None,
         "configuration": {"tier": "sandbox"},
+        "custom": {"cost_center": "1234"},
     }
 
 
-def test_tenant_category_empty_when_no_tenant_referenced():
-    payload = build_platform_projection(_graph(), _provisioner())
-    assert payload["tenant"] == {}
-    files = dict(planned_files(payload))
-    assert "tenant.auto.tfvars.json" not in files
+def test_build_strata_payload_resources_is_flat_map_not_nested_by_type():
+    """`strata.resources` is keyed directly by resource name
+    (`haven_vm_hetzner_hearth`), not wrapped under a resource-type/
+    `resources` double layer the way `resx_<type>` categories are —
+    see "Resources are one flat map"."""
+    payload = build_strata_payload(_graph())
+    assert set(payload["resources"]) == {"haven_vm_hetzner_hearth"}
+    assert payload["resources"]["haven_vm_hetzner_hearth"]["resource_type"] == "virtualmachine"
 
 
-def test_tenant_writes_to_tenant_auto_tfvars_json():
-    payload = build_platform_projection(_graph(tenant=_tenant()), _provisioner())
-    files = dict(planned_files(payload))
-    assert files["tenant.auto.tfvars.json"] == {"strata_tenant": payload["tenant"]}
+def test_build_strata_payload_resources_includes_storage_and_custom():
+    """Two gap fixes folded in: `storage` and `custom` were validated
+    `ResourceSpecModel` fields the old `_merge_resource_entry()` never
+    read at all."""
+    resource = ResourceModel(
+        meta=ResourceMetaModel(name="haven_vm_hetzner_hearth"),
+        spec=ResourceSpecModel(
+            properties=ResourcePropertiesModel(provider_type="hetzner", resource_type="virtualmachine"),
+            storage=ResourceStorageModel(
+                install_path="/opt/app", disks=[ResourceDiskModel(name="os", size=64, label="os-disk", mount="/data")]
+            ),
+            custom={"team": "platform"},
+        ),
+    )
+    workspace_resource = WorkspaceResourceModel(name="haven_vm_hetzner_hearth", resource="haven_vm_hetzner_hearth")
+    workspace = _workspace(resources=[workspace_resource], topology_name=None)
+    graph = ResolvedWorkspaceGraph(
+        workspace=workspace,
+        providers={"hetzner_dc_eu_de": _provider()},
+        resources={"haven_vm_hetzner_hearth": resource},
+    )
+    payload = build_strata_payload(graph)
+    entry = payload["resources"]["haven_vm_hetzner_hearth"]
+    assert entry["custom"] == {"team": "platform"}
+    assert entry["storage"] == {
+        "install_path": "/opt/app",
+        "disks": [{"name": "os", "size": 64, "label": "os-disk", "mount": "/data"}],
+    }
+
+
+def test_build_strata_payload_topologies_includes_namespaces():
+    """`TopologySpecModel.namespaces` was validated but never read by the
+    old `_build_topologies_payload()` at all."""
+    workspace = _workspace(namespace_names=["hearth"])
+    topology = workspace.spec.topology[0].model_copy(
+        update={"namespaces": [TopologyNamespaceReferenceModel(namespace="hearth")]}
+    )
+    workspace = workspace.model_copy(update={"spec": workspace.spec.model_copy(update={"topology": [topology]})})
+    graph = ResolvedWorkspaceGraph(
+        workspace=workspace,
+        providers={"hetzner_dc_eu_de": _provider()},
+        resources={"haven_vm_hetzner_hearth": _resource()},
+        namespaces={"hearth": _namespace("hearth")},
+    )
+    payload = build_strata_payload(graph)
+    assert payload["topologies"]["hetzner_hearth"]["namespaces"] == ["hearth"]
+
+
+def test_build_strata_payload_modules_present():
+    """New in this redesign — previously skipped entirely (zero real use
+    found). `mounts`/`checks`/`endpoints` nest under `properties`, matching
+    `ModuleSpecModel`'s real shape, not as flat siblings of `type`/`source`."""
+    graph = ResolvedWorkspaceGraph(
+        workspace=_workspace(resources=[], topology_name=None),
+        providers={"hetzner_dc_eu_de": _provider()},
+        modules={"authentik": _module()},
+    )
+    payload = build_strata_payload(graph)
+    assert payload["modules"]["authentik"] == {
+        "type": "helm",
+        "source": {"source_path": "modules/authentik"},
+        "release_name": "authentik",
+        "kubernetes_namespace": "hearth",
+        "properties": {"mounts": [], "checks": [], "endpoints": []},
+        "configuration": {},
+        "custom": {},
+        "default_labels": {},
+        "custom_labels": {},
+    }
+
+
+def test_build_strata_payload_always_emits_every_category_even_when_empty():
+    """Unlike `build_configuration_payloads()`/`planned_files()`'s old
+    'skip empty categories' convention (which existed to avoid writing an
+    empty *file* per category — no longer relevant with one shared file),
+    every one of the fifteen keys is always present, empty when unused —
+    resolves the Type design section's own open question in favor of a
+    strict, no-top-level-`optional()` generated type."""
+    payload = build_strata_payload(_graph(topology_name=None))
+    assert set(payload) == {
+        "workspace",
+        "tenant",
+        "providers",
+        "resources",
+        "namespaces",
+        "modules",
+        "dns",
+        "networks",
+        "firewalls",
+        "topologies",
+        "properties",
+        "custom",
+        "flags",
+        "variables",
+        "default_tags",
+    }
+    for empty_category in (
+        "tenant",
+        "namespaces",
+        "modules",
+        "dns",
+        "networks",
+        "firewalls",
+        "topologies",
+        "flags",
+        "variables",
+        "default_tags",
+    ):
+        assert payload[empty_category] == {}
 
 
 # ---------------------------------------------------------------------------
-# build_configuration_payloads() — docs/design/gap_fit_v1.md gap #8's Terraform-side
-# refinement + gap #17's universal-resolution-reach extension,
-# docs/design/value-token-resolution.md's "Full Solution" Phase 6 and
-# "Decision (2026-09-29)". Broadcast-only (no per-name ownership, unlike
-# build_dns_networks_firewalls_payloads()) delivery of workspace/providers/
-# resx_<type>/topologies/namespaces/flags/variables/properties/custom/tenant.
-# `workspace`/`providers` are unconditionally present in every `_graph()`
-# fixture below (a workspace always has a name; the fixture always seeds one
-# provider) — confirmed real, not an artifact of a specific test's setup.
+# find_secret_paths() / rewrite_strata_payload() (ADR-0035, docs/work/
+# unified-terraform-projection.md Phase 3) — the single-object replacement
+# for resolve_deploy_time_files(), tested standalone against synthetic
+# payloads rather than a real build_strata_payload() output, since neither
+# function cares what produced the dict it's given.
 # ---------------------------------------------------------------------------
 
 
-def test_configuration_payloads_includes_resources_and_topologies_by_default():
-    """The default `_graph()` fixture always has one resource, one
-    topology, one workspace, and one provider - all four present, keyed to
-    match `planned_files()`'s own per-category naming exactly."""
-    payloads = build_configuration_payloads(_graph())
-    assert set(payloads) == {"resx_virtualmachine", "topologies", "workspace", "providers"}
-
-
-def test_configuration_payloads_resx_key_matches_the_resource_type():
-    payloads = build_configuration_payloads(_graph())
-    assert payloads["resx_virtualmachine"] == {
-        "resources": {
-            "haven_vm_hetzner_hearth": {
-                "provider_type": "hetzner",
-                "resource_type": "virtualmachine",
-                "subcategory": None,
-                "unit_cost": 4.15,
-                "role": None,
-                "count": 1,
-                "configuration": {"image": "ubuntu-24.04", "server_type": "cx23"},
-                "default_tags": {"managed-by": "strata"},
-                "custom_tags": {},
-                "firewalls": [],
-                "subnet": None,
-            }
-        }
+def test_find_secret_paths_finds_secrets_at_multiple_depths():
+    payload = {
+        "variables": {"db_password": "${secret:DB_PASSWORD}"},
+        "providers": {"kamatera": {"configuration": {"api_token": "${secret:API_TOKEN}"}}},
+        "workspace": {"name": "ws"},  # non-secret sibling, must not appear
     }
+    assert find_secret_paths(payload) == ["variables.db_password", "providers.kamatera.configuration.api_token"]
 
 
-def test_configuration_payloads_matches_build_platform_projection_exactly():
-    """Not a second, divergent implementation - same underlying
-    `_build_resources_payload()`/`_build_topologies_payload()` calls
-    `build_platform_projection()` itself uses."""
-    graph = _graph(tenant=_tenant(), properties={"region": "eu"}, custom={"team": "platform"})
-    platform_payload = build_platform_projection(graph, _provisioner())
-    configuration_payloads = build_configuration_payloads(graph)
-
-    assert configuration_payloads["resx_virtualmachine"] == platform_payload["resources_by_category"]["virtualmachine"]
-    assert configuration_payloads["topologies"] == platform_payload["topologies"]
-    assert configuration_payloads["properties"] == platform_payload["properties"]
-    assert configuration_payloads["custom"] == platform_payload["custom"]
-    assert configuration_payloads["tenant"] == platform_payload["tenant"]
-    assert configuration_payloads["workspace"] == platform_payload["workspace"]
-    assert configuration_payloads["providers"] == platform_payload["providers"]
+def test_find_secret_paths_ignores_non_secret_tokens_without_resolving_them():
+    """A build-time payload legitimately carries unresolved `${var:}`/
+    `${feature:}` tokens too (ADR-0022 D4) — this function must not choke
+    on them the way reusing `resolve_value_tokens_tracking_secrets(payload, {})`
+    would (it would raise ValueError on a var token with no matching key)."""
+    payload = {"workspace": {"environment": "${var:ENVIRONMENT}"}}
+    assert find_secret_paths(payload) == []
 
 
-def test_configuration_payloads_excludes_resource_and_topology_categories_when_absent():
-    """No resources, no topology - only `workspace`/`providers` remain
-    (unconditionally present, see module-level comment above), matching
-    `planned_files()`'s own "skip empty categories" convention for
-    everything else."""
-    payloads = build_configuration_payloads(_graph(resources=[], topology_name=None))
-    assert set(payloads) == {"workspace", "providers"}
+def test_find_secret_paths_empty_when_no_secrets():
+    assert find_secret_paths({"workspace": {"name": "ws"}}) == []
 
 
-def test_configuration_payloads_includes_properties_and_custom_when_set():
-    payloads = build_configuration_payloads(
-        _graph(resources=[], topology_name=None, properties={"region": "eu"}, custom={"team": "platform"})
+def test_find_secret_paths_walks_list_indices():
+    payload = {"modules": [{"configuration": {"token": "${secret:T}"}}]}
+    assert find_secret_paths(payload) == ["modules.0.configuration.token"]
+
+
+def test_rewrite_strata_payload_sentinel_replaces_secret_leaf():
+    payload = {"variables": {"db_password": "${secret:DB_PASSWORD}", "db_host": "${var:DB_HOST}"}}
+    tokens = {"DB_PASSWORD": "hunter2", "DB_HOST": "db.internal"}
+
+    resolved, secrets = rewrite_strata_payload(payload, tokens)
+
+    assert resolved["variables"]["db_password"] == "__strata_secret__:variables.db_password"
+    assert resolved["variables"]["db_host"] == "db.internal"  # non-secret sibling resolved normally
+    assert secrets == {"variables.db_password": "hunter2"}
+
+
+def test_rewrite_strata_payload_real_value_never_appears_in_the_payload():
+    payload = {"providers": {"kamatera": {"configuration": {"api_token": "${secret:API_TOKEN}"}}}}
+    resolved, secrets = rewrite_strata_payload(payload, {"API_TOKEN": "super-secret-value"})
+
+    assert "super-secret-value" not in json.dumps(resolved)
+    assert secrets["providers.kamatera.configuration.api_token"] == "super-secret-value"
+
+
+def test_rewrite_strata_payload_sentinel_at_a_nested_depth():
+    payload = {"providers": {"kamatera": {"configuration": {"api_token": "${secret:API_TOKEN}"}}}}
+    resolved, _ = rewrite_strata_payload(payload, {"API_TOKEN": "x"})
+    assert (
+        resolved["providers"]["kamatera"]["configuration"]["api_token"]
+        == "__strata_secret__:providers.kamatera.configuration.api_token"
     )
-    assert payloads["properties"] == {"region": "eu"}
-    assert payloads["custom"] == {"team": "platform"}
-    assert set(payloads) == {"workspace", "providers", "properties", "custom"}
 
 
-def test_configuration_payloads_includes_tenant_when_set():
-    payloads = build_configuration_payloads(_graph(resources=[], topology_name=None, tenant=_tenant()))
-    assert payloads["tenant"] == {
-        "code": "acme",
-        "name": "Acme",
-        "zones": ["europe"],
-        "onboarded": None,
-        "configuration": {"tier": "sandbox"},
-    }
-
-
-def test_configuration_payloads_excludes_disabled_resource():
-    disabled = WorkspaceResourceModel(name="haven_vm_hetzner_hearth", resource="haven_vm_hetzner_hearth", enabled=False)
-    payloads = build_configuration_payloads(_graph(resources=[disabled], topology_name=None))
-    assert "resx_virtualmachine" not in payloads
+def test_rewrite_strata_payload_no_secrets_returns_fully_resolved_payload_unchanged_shape():
+    payload = {"workspace": {"environment": "${var:ENVIRONMENT}"}}
+    resolved, secrets = rewrite_strata_payload(payload, {"ENVIRONMENT": "prd"})
+    assert resolved == {"workspace": {"environment": "prd"}}
+    assert secrets == {}
 
 
 # ---------------------------------------------------------------------------
-# resolve_deploy_time_files() (docs/design/terraform-variable-precedence.md)
-# — the deploy-time counterpart to planned_files(): rewrites the
-# stale build-time file so it can no longer shadow a correctly-resolved
-# TF_VAR_ env var via Terraform's own variable-definition precedence.
+# build_strata_locals() (ADR-0035, docs/work/unified-terraform-projection.md
+# Phase 6) — generates strata_locals.tf's full text.
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_deploy_time_files_flat_category_resolves_every_key():
-    """FLAT_CATEGORIES (here, 'properties'): a bare {key: value} map, no
-    secret anywhere — every key resolves and is written, matching what
-    build run itself would have written had the token already been
-    resolvable at build time."""
-    files = dict(
-        resolve_deploy_time_files(
-            {"properties": {"customer_code": "${var:CUSTOMER_CODE}", "tier": "gold"}},
-            {"CUSTOMER_CODE": "acme-42"},
-        )
+def test_build_strata_locals_no_secrets_is_the_one_line_fallback():
+    assert "locals {\n  strata = var.strata\n}\n" in build_strata_locals([])
+    assert "merge(" not in build_strata_locals([])
+
+
+def test_build_strata_locals_single_path_emits_one_lookup():
+    content = build_strata_locals(["variables.db_password"])
+    assert 'lookup(var.strata_secrets, "variables.db_password", var.strata["variables"]["db_password"])' in content
+
+
+def test_build_strata_locals_shared_parent_merges_into_one_nested_call_not_two():
+    """Two secrets sharing `providers.kamatera.configuration` must produce
+    exactly one `merge(var.strata["providers"]["kamatera"]["configuration"], {...})`
+    call with both overrides inside it, not two independent top-level
+    merges that would clobber each other (each `merge()` call replaces the
+    whole key it's assigned to)."""
+    content = build_strata_locals(
+        ["providers.kamatera.configuration.api_token", "providers.kamatera.configuration.other_secret"]
     )
-    assert files["properties.auto.tfvars.json"] == {"customer_code": "acme-42", "tier": "gold"}
+    assert content.count('merge(var.strata["providers"]["kamatera"]["configuration"],') == 1
+    assert content.count('merge(var.strata["providers"],') == 1  # one path down to "providers", not two
+    assert '"api_token" = lookup(var.strata_secrets, "providers.kamatera.configuration.api_token"' in content
+    assert '"other_secret" = lookup(var.strata_secrets, "providers.kamatera.configuration.other_secret"' in content
 
 
-def test_resolve_deploy_time_files_flat_category_omits_only_the_tainted_key():
-    """A secret-shaped leaf taints only its OWN top-level key — every other
-    key in the same FLAT_CATEGORIES file still resolves and is written (the
-    whole point of the per-key granularity,
-    docs/design/terraform-variable-precedence.md's case 1)."""
-    files = dict(
-        resolve_deploy_time_files(
-            {"custom": {"db_password": "${secret:DB_PASSWORD}", "tier": "${var:TIER}"}},
-            {"DB_PASSWORD": "hunter2", "TIER": "gold"},
-        )
+def test_build_strata_locals_two_different_top_level_categories_both_present():
+    content = build_strata_locals(["variables.db_password", "providers.kamatera.configuration.api_token"])
+    assert '"variables" = merge(var.strata["variables"],' in content
+    assert '"providers" = merge(var.strata["providers"],' in content
+
+
+def test_build_strata_locals_secret_inside_a_list_uses_a_for_expression_not_merge():
+    """`merge()` rejects a list/tuple argument outright — a secret reached
+    through a list index (e.g. a DNS zone's `records.0.value`) must
+    rebuild the list via `[for idx, item in ... : ...]` instead, never
+    `merge(var.strata[...]["records"], {...})`."""
+    content = build_strata_locals(["dns.public-dns.zones." + escape_path_segment("example.com") + ".records.0.value"])
+    assert '"records" = [for idx, item in var.strata["dns"]["public-dns"]["zones"]["example.com"]["records"]' in content
+    # merge() on the *list itself* (no index) is the invalid pattern this
+    # guards against; merge() on an *indexed element* (a dict) is fine.
+    assert 'merge(var.strata["dns"]["public-dns"]["zones"]["example.com"]["records"], ' not in content
+    assert "idx == 0 ?" in content
+    assert (
+        'lookup(var.strata_secrets, "dns.public-dns.zones.example\\\\.com.records.0.value", '
+        'var.strata["dns"]["public-dns"]["zones"]["example.com"]["records"][0]["value"])' in content
     )
-    assert files["custom.auto.tfvars.json"] == {"tier": "gold"}
-    assert "db_password" not in files["custom.auto.tfvars.json"]
 
 
-def test_resolve_deploy_time_files_flat_category_all_tainted_writes_empty_dict():
-    """Every key secret-shaped — the file is still actively written, as an
-    empty dict, never left untouched
-    (docs/design/terraform-variable-precedence.md: 'always rewritten, never
-    conditionally skipped')."""
-    files = dict(
-        resolve_deploy_time_files({"properties": {"db_password": "${secret:DB_PASSWORD}"}}, {"DB_PASSWORD": "hunter2"})
-    )
-    assert files["properties.auto.tfvars.json"] == {}
-
-
-def test_resolve_deploy_time_files_single_variable_category_writes_resolved_value():
-    """'providers' (or tenant/topologies/namespaces/dns/networks/firewalls)
-    — one dict wrapped under its real variable name, written in full when
-    nothing inside is secret-shaped."""
-    files = dict(
-        resolve_deploy_time_files(
-            {"providers": {"p1": {"configuration": {"partner_id": "${var:PARTNER_ID}"}}}}, {"PARTNER_ID": "ACME123"}
-        )
-    )
-    assert files["providers.auto.tfvars.json"] == {
-        "platform_providers": {"p1": {"configuration": {"partner_id": "ACME123"}}}
-    }
-
-
-def test_resolve_deploy_time_files_single_variable_category_blanks_whole_file_on_any_secret():
-    """Unlike FLAT_CATEGORIES, a single-variable category has no per-key
-    granularity to fall back on — one secret-shaped leaf anywhere taints
-    the WHOLE variable, so the entire file is blanked
-    (docs/design/terraform-variable-precedence.md's case 2), even though
-    'partner_id' itself has no secret in it."""
-    files = dict(
-        resolve_deploy_time_files(
-            {
-                "providers": {
-                    "p1": {
-                        "configuration": {"partner_id": "${var:PARTNER_ID}"},
-                        "custom": {"cost_center": "${secret:COST_CENTER}"},
-                    }
-                }
-            },
-            {"PARTNER_ID": "ACME123", "COST_CENTER": "platform"},
-        )
-    )
-    assert files["providers.auto.tfvars.json"] == {}
-
-
-def test_resolve_deploy_time_files_every_input_category_is_always_emitted():
-    """'Always rewritten, never conditionally skipped' applies to every
-    category this function covers, not just the secret-tainted case — an
-    empty resolved result for a category must still produce a (blank)
-    file entry, since a stale build-time file may already exist there."""
-    files = dict(resolve_deploy_time_files({"dns": {}, "networks": {}}, {}))
-    assert files == {
-        "dns.auto.tfvars.json": {"dns_zones": {}},
-        "networks.auto.tfvars.json": {"networks": {}},
-    }
-
-
-def test_resolve_deploy_time_files_never_called_for_resx_categories():
-    """resx_<type> categories are deliberately never passed to this
-    function at all (docs/design/terraform-variable-precedence.md Phase 3
-    handles them separately, always-blank, unconditionally) — if one WERE
-    passed in regardless, it would still wrap under its own (wrong,
-    v1-incompatible) name rather than the shared 'resources' variable,
-    which is exactly why `deploy_controller.py`'s call site filters
-    `resx_`-prefixed keys out before calling this function."""
-    files = dict(resolve_deploy_time_files({"resx_server": {"resources": {"r1": {}}}}, {}))
-    assert files["resx_server.auto.tfvars.json"] == {"resx_server": {"resources": {"r1": {}}}}
+def test_build_strata_locals_list_with_two_secret_indices_both_present():
+    content = build_strata_locals(["services.0.env.DB_PASSWORD", "services.2.env.API_KEY"])
+    assert content.count("for idx, item in") == 1
+    assert "idx == 0 ?" in content
+    assert "idx == 2 ?" in content

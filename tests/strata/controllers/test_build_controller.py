@@ -20,7 +20,9 @@ from strata.controllers.build_controller import (
 from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.models.checkov_model import CheckovFindingModel, CheckovScanResultModel
-from strata.models.common_models import PlatformKind, SourceModel
+from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
+from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleSpecModel
+from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.sbom_model import CveAuditResultModel
@@ -218,6 +220,68 @@ def test_build_resolved_workspace_graph_walks_providers():
 
     assert graph.providers == {"p1": provider}
     assert graph.resources == {}
+    assert graph.modules == {}
+
+
+def test_build_resolved_workspace_graph_walks_modules_via_namespaces():
+    """Phase 1 of docs/work/unified-terraform-projection.md: `graph.modules`
+    is populated from every resolved namespace's own `spec.modules`, not
+    directly from a workspace-level field. Two namespaces reference the
+    same module under two different reference names — confirms dict-by-name
+    dedup doesn't break (`_lookup_all()` keys by Module *document* name,
+    not by the reference name pointing at it)."""
+    index = DocumentIndex()
+    module_a = ModuleModel(
+        meta=ModuleMetaModel(name="authentik"),
+        spec=ModuleSpecModel(source=SourceModel(source_path="modules/authentik"), type="helm"),
+    )
+    module_b = ModuleModel(
+        meta=ModuleMetaModel(name="grafana"),
+        spec=ModuleSpecModel(source=SourceModel(source_path="modules/grafana"), type="helm"),
+    )
+    index.add(
+        IndexEntry(ref=DocumentRef(kind=PlatformKind.MODULE, name="authentik"), model=module_a, source=Path("a.yaml"))
+    )
+    index.add(
+        IndexEntry(ref=DocumentRef(kind=PlatformKind.MODULE, name="grafana"), model=module_b, source=Path("b.yaml"))
+    )
+
+    namespace_one = NamespaceModel(
+        meta=NamespaceMetaModel(name="hearth"),
+        spec=NamespaceSpecModel(
+            modules=[
+                ModuleReferenceModel(name="auth", module="authentik"),
+                ModuleReferenceModel(name="auth-again", module="authentik"),  # same module, 2nd reference name
+            ]
+        ),
+    )
+    namespace_two = NamespaceModel(
+        meta=NamespaceMetaModel(name="metrics"),
+        spec=NamespaceSpecModel(modules=[ModuleReferenceModel(name="dash", module="grafana")]),
+    )
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.NAMESPACE, name="hearth"), model=namespace_one, source=Path("ns1.yaml")
+        )
+    )
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.NAMESPACE, name="metrics"), model=namespace_two, source=Path("ns2.yaml")
+        )
+    )
+
+    workspace = WorkspaceModel(
+        meta=WorkspaceMetaModel(name="ws"),
+        spec=WorkspaceSpecModel(
+            providers=["p1"],
+            provisioners=[ProvisionerModel(name="tf", tool="terraform", source=SourceModel(source_path="infra"))],
+            namespaces=["hearth", "metrics"],
+        ),
+    )
+
+    graph = build_resolved_workspace_graph(index, workspace)
+
+    assert graph.modules == {"authentik": module_a, "grafana": module_b}
 
 
 # ---------------------------------------------------------------------------
@@ -276,10 +340,12 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
     # sync_source() mirrored the provisioner's own source_path under build_path.
     materialised = build_path / "infra"
     assert (materialised / "main.tf").exists()
-    # TerraformIntegration.default_output() wrote the default projection.
-    assert (materialised / "workspace.auto.tfvars.json").exists()
-    assert (materialised / "providers.auto.tfvars.json").exists()
-    assert (materialised / "resx_server.auto.tfvars.json").exists()
+    # TerraformIntegration.default_output() wrote the unified projection
+    # (ADR-0035, docs/work/unified-terraform-projection.md Phase 4) — one
+    # strata.auto.tfvars.json file, not the old per-category files.
+    assert (materialised / "strata.auto.tfvars.json").exists()
+    assert not (materialised / "workspace.auto.tfvars.json").exists()
+    assert not (materialised / "resx_server.auto.tfvars.json").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -700,16 +766,14 @@ def test_build_run_writes_tenant_output_when_deployment_references_one(tmp_path:
     diagnostics = build_run(_context(root), "app", build_path)
 
     assert diagnostics.ok
-    tenant_path = build_path / "infra" / "tenant.auto.tfvars.json"
-    assert tenant_path.exists()
-    assert yaml.safe_load(tenant_path.read_text(encoding="utf-8")) == {
-        "strata_tenant": {
-            "code": "acme",
-            "name": "Acme",
-            "zones": ["europe"],
-            "onboarded": None,
-            "configuration": {},
-        }
+    strata_path = build_path / "infra" / "strata.auto.tfvars.json"
+    assert yaml.safe_load(strata_path.read_text(encoding="utf-8"))["strata"]["tenant"] == {
+        "code": "acme",
+        "name": "Acme",
+        "geographies": ["europe"],
+        "onboarded": None,
+        "configuration": {},
+        "custom": {},
     }
 
 
@@ -720,7 +784,8 @@ def test_build_run_writes_no_tenant_output_when_deployment_has_no_tenant(tmp_pat
     diagnostics = build_run(_context(root), "app", build_path)
 
     assert diagnostics.ok
-    assert not (build_path / "infra" / "tenant.auto.tfvars.json").exists()
+    strata_path = build_path / "infra" / "strata.auto.tfvars.json"
+    assert yaml.safe_load(strata_path.read_text(encoding="utf-8"))["strata"]["tenant"] == {}
 
 
 def test_build_run_cleans_stale_output_by_default(tmp_path: Path):
@@ -733,7 +798,7 @@ def test_build_run_cleans_stale_output_by_default(tmp_path: Path):
     build_run(_context(root), "app", build_path)
 
     assert not (build_path / "stale" / "resx_ghost_type.auto.tfvars.json").exists()
-    assert (build_path / "infra" / "workspace.auto.tfvars.json").exists()
+    assert (build_path / "infra" / "strata.auto.tfvars.json").exists()
 
 
 def test_build_run_clean_false_preserves_existing_output(tmp_path: Path):
@@ -744,7 +809,7 @@ def test_build_run_clean_false_preserves_existing_output(tmp_path: Path):
     build_run(_context(root), "app", build_path, clean=False)
 
     assert (build_path / "stale" / "leftover.txt").read_text() == "still here"
-    assert (build_path / "infra" / "workspace.auto.tfvars.json").exists()
+    assert (build_path / "infra" / "strata.auto.tfvars.json").exists()
 
 
 def test_build_run_clean_wraps_a_failed_wipe_as_build_clean_error(tmp_path: Path, monkeypatch):
@@ -1527,10 +1592,9 @@ def test_build_run_writes_flags_and_variables_terraform_output(tmp_path: Path):
 
     build_run(_context(root), "app", build_path)
 
-    variables = yaml.safe_load((build_path / "infra" / "variables.auto.tfvars.json").read_text())
-    assert variables == {"REGION": "westeurope"}
-    flags = yaml.safe_load((build_path / "infra" / "flags.auto.tfvars.json").read_text())
-    assert flags == {"NEW_UI": True}
+    strata = yaml.safe_load((build_path / "infra" / "strata.auto.tfvars.json").read_text())["strata"]
+    assert strata["variables"] == {"REGION": "westeurope"}
+    assert strata["flags"] == {"NEW_UI": True}
 
 
 def test_build_run_dry_run_does_not_write_resolved_yaml(tmp_path: Path):

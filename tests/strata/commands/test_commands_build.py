@@ -146,7 +146,7 @@ def test_build_writes_rendered_artifacts_under_the_default_build_path(runner, so
     assert result.exit_code == EXIT_SUCCESS, result.output
     materialised = solution / "build" / "app" / "infra"
     assert (materialised / "main.tf").exists()
-    assert (materialised / "workspace.auto.tfvars.json").exists()
+    assert (materialised / "strata.auto.tfvars.json").exists()
 
 
 def test_build_path_option_overrides_the_default(runner, solution, tmp_path):

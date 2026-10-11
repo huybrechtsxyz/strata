@@ -9,7 +9,7 @@ import pytest
 from strata.integrations.registry import get
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
 from strata.integrations.terraform import TerraformIntegration
-from strata.integrations.terraform_projection import build_platform_projection
+from strata.integrations.terraform_projection import build_strata_payload
 from strata.models.common_models import SourceModel
 from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
 from strata.models.provisioning_model import ProvisionerModel
@@ -196,25 +196,63 @@ def _provisioner():
     return ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))
 
 
-def test_default_output_writes_workspace_and_providers_only_when_no_topology_or_resources():
-    result = TerraformIntegration().default_output(ValueResolution(deployment="d"), _provisioner(), _graph())
-    assert set(result) == {"workspace.auto.tfvars.json", "providers.auto.tfvars.json"}
+def test_default_output_writes_strata_tfvars_and_variables_file(tmp_path: Path):
+    result = TerraformIntegration().default_output(tmp_path, ValueResolution(deployment="d"), _provisioner(), _graph())
+    assert set(result) == {"strata.auto.tfvars.json", "strata_variables.tf", "strata_locals.tf"}
 
 
-def test_default_output_is_valid_json_matching_the_projection():
+def test_default_output_is_valid_json_matching_the_projection(tmp_path: Path):
     resolved = ValueResolution(deployment="d")
     graph = _graph()
     provisioner = _provisioner()
-    result = TerraformIntegration().default_output(resolved, provisioner, graph)
-    expected = build_platform_projection(graph, provisioner)
-    assert json.loads(result["workspace.auto.tfvars.json"]) == expected["workspace"]
+    result = TerraformIntegration().default_output(tmp_path, resolved, provisioner, graph)
+    expected = build_strata_payload(graph)
+    assert json.loads(result["strata.auto.tfvars.json"]) == {"strata": expected}
+
+
+def test_default_output_skips_strata_variables_file_when_source_declares_its_own(tmp_path: Path):
+    (tmp_path / "main.tf").write_text('variable "strata" {\n  type = any\n}\n')
+    result = TerraformIntegration().default_output(tmp_path, ValueResolution(deployment="d"), _provisioner(), _graph())
+    assert set(result) == {"strata.auto.tfvars.json"}
+
+
+def test_default_output_strata_locals_is_the_one_line_fallback_with_no_secrets(tmp_path: Path):
+    result = TerraformIntegration().default_output(tmp_path, ValueResolution(deployment="d"), _provisioner(), _graph())
+    assert "locals {\n  strata = var.strata\n}\n" in result["strata_locals.tf"]
+
+
+def test_default_output_strata_locals_merges_a_real_secret_path(tmp_path: Path):
+    """ADR-0035's own decision text: `build run` emits `strata_locals.tf`
+    reassembling resolved secrets into `local.strata.*` — not just
+    `strata_variables.tf`. A secret-bearing provider must produce a real
+    `lookup(var.strata_secrets, ...)` for its own path, not the no-secrets
+    fallback."""
+    workspace = WorkspaceModel(
+        meta=WorkspaceMetaModel(name="ws"),
+        spec=WorkspaceSpecModel(
+            providers=["p"],
+            provisioners=[ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))],
+        ),
+    )
+    provider = ProviderModel(
+        meta=ProviderMetaModel(name="p"),
+        spec=ProviderSpecModel(
+            properties=ProviderPropertiesModel(type="local", region="local"),
+            configuration={"api_token": "${secret:API_TOKEN}"},
+        ),
+    )
+    graph = ResolvedWorkspaceGraph(workspace=workspace, providers={"p": provider})
+    result = TerraformIntegration().default_output(tmp_path, ValueResolution(deployment="d"), _provisioner(), graph)
+    assert 'lookup(var.strata_secrets, "providers.p.configuration.api_token"' in result["strata_locals.tf"]
 
 
 def test_prepare_writes_default_output_files_to_disk(tmp_path: Path):
     TerraformIntegration().prepare(
         tmp_path, resolved=ValueResolution(deployment="d"), provisioner=_provisioner(), graph=_graph()
     )
-    assert (tmp_path / "workspace.auto.tfvars.json").exists()
-    assert (tmp_path / "providers.auto.tfvars.json").exists()
+    assert (tmp_path / "strata.auto.tfvars.json").exists()
+    assert (tmp_path / "strata_variables.tf").exists()
+    assert (tmp_path / "strata_locals.tf").exists()
+    assert not (tmp_path / "workspace.auto.tfvars.json").exists()
     assert not (tmp_path / "topologies.auto.tfvars.json").exists()
     assert not (tmp_path / "resx_virtualmachine.auto.tfvars.json").exists()

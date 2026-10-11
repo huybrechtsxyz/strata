@@ -63,6 +63,7 @@ from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
 from strata.models.firewall_model import FirewallModel
+from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.network_model import NetworkModel
 from strata.models.provider_model import ProviderModel
@@ -155,16 +156,22 @@ def build_resolved_workspace_graph(
     itself already provides.
     """
     resource_names = [wr.resource for wr in (workspace.spec.resources or []) if wr.resource is not None]
+    namespaces = cast(dict[str, NamespaceModel], _lookup_all(index, PlatformKind.NAMESPACE, workspace.spec.namespaces))
+    # Module names come from every resolved namespace's own spec.modules
+    # (docs/work/unified-terraform-projection.md Phase 1) — `namespaces`
+    # must be resolved first, not from workspace.spec.namespaces directly,
+    # since the module references live one level down on the Namespace
+    # document itself, not on the workspace.
+    module_names = [ref.module for namespace in namespaces.values() for ref in (namespace.spec.modules or [])]
     return ResolvedWorkspaceGraph(
         workspace=workspace,
         providers=cast(dict[str, ProviderModel], _lookup_all(index, PlatformKind.PROVIDER, workspace.spec.providers)),
         resources=cast(dict[str, ResourceModel], _lookup_all(index, PlatformKind.RESOURCE, resource_names)),
-        namespaces=cast(
-            dict[str, NamespaceModel], _lookup_all(index, PlatformKind.NAMESPACE, workspace.spec.namespaces)
-        ),
+        namespaces=namespaces,
         firewalls=cast(dict[str, FirewallModel], _lookup_all(index, PlatformKind.FIREWALL, workspace.spec.firewalls)),
         dns=cast(dict[str, DnsModel], _lookup_all(index, PlatformKind.DNS, workspace.spec.dns_zones)),
         networks=cast(dict[str, NetworkModel], _lookup_all(index, PlatformKind.NETWORK, workspace.spec.networks)),
+        modules=cast(dict[str, ModuleModel], _lookup_all(index, PlatformKind.MODULE, module_names)),
         variable_refs=variable_refs or [],
         feature_refs=feature_refs or [],
         secret_refs=secret_refs or [],

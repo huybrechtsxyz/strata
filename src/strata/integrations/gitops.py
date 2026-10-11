@@ -137,14 +137,14 @@ class BaseGitOpsIntegration(InfraIntegration):
     # ------------------------------------------------------------------
 
     def default_output(
-        self, resolved: ValueResolution, provisioner: ProvisionerModel, graph: ResolvedWorkspaceGraph
+        self, path: Path, resolved: ValueResolution, provisioner: ProvisionerModel, graph: ResolvedWorkspaceGraph
     ) -> dict[str, str]:
         """No default projection exists for a GitOps push (docs/design/
         gitops-integration.md's "Rendering" section's own conclusion) —
         `output.template` is required; this is the honest failure when it
         is not set, same reasoning as the base class's own docstring for
         when a tool genuinely has nothing sensible to generate."""
-        del resolved, graph
+        del path, resolved, graph
         raise IntegrationError(
             f"{self.name}: provisioner '{provisioner.name}' (tool '{provisioner.tool}') requires "
             "'output.template' to be set — there is no default values/config projection for a "

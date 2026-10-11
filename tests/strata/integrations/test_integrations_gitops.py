@@ -75,9 +75,9 @@ def test_parse_version(raw, expected):
 # ---------------------------------------------------------------------------
 
 
-def test_default_output_raises_without_template():
+def test_default_output_raises_without_template(tmp_path: Path):
     with pytest.raises(IntegrationError, match="requires 'output.template'"):
-        ArgoCDIntegration().default_output(ValueResolution(deployment="d"), _provisioner(), _graph())
+        ArgoCDIntegration().default_output(tmp_path, ValueResolution(deployment="d"), _provisioner(), _graph())
 
 
 def test_prepare_raises_without_output_template(tmp_path: Path):

@@ -626,12 +626,12 @@ def test_deploy_run_injects_tf_var_env_for_every_step(tmp_path: Path, monkeypatc
     assert diagnostics.ok
     assert len(envs) == 5  # init, validate, plan, apply, output
     assert all(env is not None and env.get("TF_VAR_db_password") == "hunter2" for env in envs)
-    # Phase 6 (docs/design/gap_fit_v1.md gap #8): resource configuration is now also
-    # delivered, broadcast to every step regardless of ownership. Every
-    # resx_<type> merges into one TF_VAR_resources (docs/design/
-    # terraform-tfvars-parity.md: every real file is actually named
-    # "resources" regardless of type, not TF_VAR_resx_<type>).
-    assert all(env is not None and "TF_VAR_resources" in env for env in envs)
+    # ADR-0035 Phase 7: one TF_VAR_strata_secrets env var, always present
+    # for a step with ENV_VAR_PREFIX set, replacing the old per-category/
+    # per-flat-key env vars entirely.
+    assert all(env is not None and "TF_VAR_strata_secrets" in env for env in envs)
+    resources_file = build_path / "infra" / "strata.auto.tfvars.json"
+    assert json.loads(resources_file.read_text())["strata"]["resources"]["r1"]["resource_type"] == "server"
 
 
 # ---------------------------------------------------------------------------
@@ -718,9 +718,9 @@ def test_deploy_run_pin_resolves_the_artifacts_category(tmp_path: Path, monkeypa
     diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
 
     assert diagnostics.ok, diagnostics.messages()
-    # A 'variables'-category key (FLAT_CATEGORIES handling) is delivered as
-    # a raw string, same as a secret's own TF_VAR_ value — HashiCorp's own
-    # documented TF_VAR convention for a plain scalar (docs/work/
+    # A `tf_var_env()`-delivered environment variable is a raw string,
+    # same as a secret's own TF_VAR_ value — HashiCorp's own documented
+    # TF_VAR convention for a plain scalar (docs/work/
     # terraform-variable-precedence.md Open Question 7 — json.dumps()-ing a
     # plain string embedded spurious literal quote characters that Terraform
     # never unwraps).
@@ -907,15 +907,13 @@ def test_deploy_run_resolves_backend_configuration_tokens(tmp_path: Path):
 
 
 def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #9 / value-token-resolution.md Full Solution Phase 2:
-    a '${var:KEY}' inside a DNS record's value (or a network/firewall field)
-    is delivered as a whole resolved JSON payload via TF_VAR_dns_zones/networks/
-    firewalls (docs/design/terraform-tfvars-parity.md: `dns`'s real v1
-    Terraform variable name is `dns_zones`, not the file-category name)
-    — AND (docs/design/terraform-variable-precedence.md) the on-disk
-    .auto.tfvars.json is now rewritten with the same resolved value, since
-    Terraform's own precedence would otherwise let the stale, unresolved
-    file silently shadow the correctly-resolved TF_VAR_ env var."""
+    """ADR-0035 Phase 7: a '${var:KEY}' inside a DNS record's value (or a
+    network/firewall field) is delivered as part of the one unified
+    `strata.auto.tfvars.json` rewrite, inside its own `dns`/`networks`/
+    `firewalls` keys — Terraform's own precedence (a `*.auto.tfvars.json`
+    file outranks `TF_VAR_*`) means the on-disk file must carry the
+    resolved value directly, not rely on a separate per-category env var
+    the way the pre-ADR-0035 shape did."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -979,62 +977,44 @@ def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: 
         diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok
-    init_env = next(env for env in envs if env is not None)
-    assert "TF_VAR_dns_zones" in init_env
-    dns_payload = json.loads(init_env["TF_VAR_dns_zones"])
-    record_value = dns_payload["public-dns"]["zones"]["example.com"]["records"][0]["value"]
-    assert record_value == "1.2.3.4"
-    # On-disk build artifact is now rewritten with the resolved value too
-    # (docs/design/terraform-variable-precedence.md) — no secret-shaped
-    # leaf anywhere in this category, so the file legitimately wins and must
-    # carry the correct value, not the stale literal token.
-    on_disk = json.loads((build_path / "infra" / "dns.auto.tfvars.json").read_text())
-    assert on_disk["dns_zones"]["public-dns"]["zones"]["example.com"]["records"][0]["value"] == "1.2.3.4"
-    # No networks/firewalls documents in this workspace — no TF_VAR set.
-    assert "TF_VAR_networks" not in init_env
-    assert "TF_VAR_firewalls" not in init_env
+    on_disk = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())
+    strata = on_disk["strata"]
+    assert strata["dns"]["public-dns"]["zones"]["example.com"]["records"][0]["value"] == "1.2.3.4"
+    # No networks/firewalls documents in this workspace — both empty.
+    assert strata["networks"] == {}
+    assert strata["firewalls"] == {}
 
 
 def test_deploy_run_never_creates_dns_networks_firewalls_files_when_unused(tmp_path: Path, _capture):
-    """Code review finding (2026-10-08): `build_dns_networks_firewalls_payloads()`
-    unconditionally returns all three keys ('dns'/'networks'/'firewalls'),
-    even `{}` ones, unlike `build_configuration_payloads()`, which already
-    filters empty categories. Without filtering by the *workspace-wide*
-    payload first, the deploy-time file-rewrite step would have newly
-    CREATED `dns.auto.tfvars.json`/`networks.auto.tfvars.json`/
-    `firewalls.auto.tfvars.json` (each `{"<name>": {}}`) for every single
-    deploy run, even for a workspace declaring none of the three —
-    violating docs/design/terraform-variable-precedence.md's own "never
-    create a file build run did not produce" boundary, and risking a real
-    Terraform "value for undeclared variable" warning on every deploy of
-    every workspace that doesn't use these categories at all."""
+    """Original (2026-10-08) finding: a workspace-wide dns/networks/
+    firewalls payload that unconditionally returns all three keys, even
+    `{}` ones, risked newly CREATING per-category files for a workspace
+    declaring none of the three. Since ADR-0035 Phases 4/7 (2026-10-11),
+    both `build run` and `deploy run` only ever write the one unified
+    `strata.auto.tfvars.json` — there is no separate per-category file
+    left to wrongly create at all, so the file *set* itself stays
+    identical before/after, trivially satisfying the original guard."""
     root = _terraform_solution(tmp_path)  # no dns/networks/firewalls declared
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
     infra = build_path / "infra"
     before = {f.name for f in infra.glob("*.auto.tfvars.json")}
-    assert "dns.auto.tfvars.json" not in before
-    assert "networks.auto.tfvars.json" not in before
-    assert "firewalls.auto.tfvars.json" not in before
+    assert before == {"strata.auto.tfvars.json"}
 
     diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok, diagnostics.messages()
     after = {f.name for f in infra.glob("*.auto.tfvars.json")}
-    assert after == before, f"deploy run created new file(s): {after - before}"
+    assert after == before
 
 
 def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #8 (Terraform-side refinement) / value-token-
-    resolution.md Full Solution Phase 6: a '${var:KEY}' inside a resource's
-    'configuration' is delivered via TF_VAR_resources (docs/design/
-    terraform-tfvars-parity.md: every resx_<type> merges into the one real
-    "resources" Terraform variable, not a separate TF_VAR_resx_<type> per
-    type) — broadcast to every step. The on-disk resx_<type>.auto.tfvars.json
-    is always blanked to `{}` (docs/design/terraform-variable-precedence.md),
-    never rewritten with its own resolved value — TF_VAR_resources
-    above is the sole, uncontested source either way."""
+    """ADR-0035 Phase 7: a '${secret:KEY}' inside a resource's
+    'configuration' is delivered via the one TF_VAR_strata_secrets env
+    var, keyed by its dotted path into `strata.resources` (flat map,
+    Phase 2) — the on-disk `strata.auto.tfvars.json` carries only the
+    sentinel at that path, never the real value."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -1090,24 +1070,24 @@ def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: 
         diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok
+    on_disk = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())
+    resources_payload = on_disk["strata"]["resources"]
+    # Secret-shaped leaf is sentineled in the file, never the real value.
+    assert resources_payload["r1"]["configuration"]["admin_password"] == (
+        "__strata_secret__:resources.r1.configuration.admin_password"
+    )
+    assert "hunter2" not in (build_path / "infra" / "strata.auto.tfvars.json").read_text()
+    # The real value is only reachable via TF_VAR_strata_secrets.
     init_env = next(env for env in envs if env is not None)
-    assert "TF_VAR_resources" in init_env
-    resources_payload = json.loads(init_env["TF_VAR_resources"])
-    assert resources_payload["r1"]["configuration"]["admin_password"] == "hunter2"
-    # On-disk build artifact is always blanked, unconditionally (docs/work/
-    # terraform-variable-precedence.md Phase 3) — never rewritten with its
-    # own resolved value, since multiple resx_<type> files all declare the
-    # same "resources" variable; TF_VAR_resources above is the sole source.
-    on_disk = json.loads((build_path / "infra" / "resx_server.auto.tfvars.json").read_text())
-    assert on_disk == {}
+    secrets_payload = json.loads(init_env["TF_VAR_strata_secrets"])
+    assert secrets_payload["resources.r1.configuration.admin_password"] == "hunter2"
 
 
 def test_deploy_run_merges_multiple_resx_types_into_one_tf_var_resources(tmp_path: Path):
-    """docs/design/terraform-tfvars-parity.md: every resx_<type> is really
-    the same "resources" Terraform variable regardless of type (confirmed
-    against v1's real `_build_resources_by_category()`) — two active
-    resource types must merge into one TF_VAR_resources, not clobber one
-    another under the same env var name."""
+    """ADR-0035 Phase 2: `strata.resources` is one flat map keyed by
+    resource name, not nested by resource type — two active resource
+    types land as two entries in the same map, never under separate
+    per-type keys/files."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -1168,21 +1148,18 @@ def test_deploy_run_merges_multiple_resx_types_into_one_tf_var_resources(tmp_pat
         diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok, diagnostics.messages()
-    init_env = next(env for env in envs if env is not None)
-    assert "TF_VAR_resx_server" not in init_env
-    assert "TF_VAR_resx_storage" not in init_env
-    resources_payload = json.loads(init_env["TF_VAR_resources"])
+    on_disk = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())
+    resources_payload = on_disk["strata"]["resources"]
     assert set(resources_payload) == {"r1", "r2"}
     assert resources_payload["r1"]["resource_type"] == "server"
     assert resources_payload["r2"]["resource_type"] == "storage"
 
 
 def test_deploy_run_delivers_flat_categories_as_one_env_var_per_key(tmp_path: Path):
-    """docs/design/terraform-tfvars-parity.md: `flags`/`variables` (and
-    `workspace`/`properties`/`custom`) are flat, multi-variable categories
-    — each top-level key is its own independent real Terraform variable,
-    delivered as its own TF_VAR_<key>, never a single TF_VAR_flags/
-    TF_VAR_variables blob."""
+    """ADR-0035 Phase 2/7: `flags`/`variables` (and `workspace`/`properties`/
+    `custom`) are each their own nested key inside the one unified
+    `strata.auto.tfvars.json` payload now — never a separate per-key
+    TF_VAR_<key> env var the old FLAT_CATEGORIES mechanism used."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -1238,26 +1215,32 @@ def test_deploy_run_delivers_flat_categories_as_one_env_var_per_key(tmp_path: Pa
         diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok, diagnostics.messages()
+    on_disk = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())
+    strata = on_disk["strata"]
+    # The old FLAT_CATEGORIES *category-blob* env vars (one per top-level
+    # category key) are gone entirely — note `tf_var_env()`'s own,
+    # unrelated per-variable/per-flag TF_VAR_<KEY> delivery (unchanged by
+    # ADR-0035) still exists alongside this, so only the category blobs
+    # themselves are asserted absent here.
     init_env = next(env for env in envs if env is not None)
-    # Per-key delivery, not a category blob.
     assert "TF_VAR_flags" not in init_env
     assert "TF_VAR_variables" not in init_env
-    # A plain string value is delivered raw, never JSON-quoted (docs/work/
-    # terraform-variable-precedence.md Open Question 7) — only a genuinely
-    # complex value (here, the bool) needs `json.loads()` to read back.
-    assert json.loads(init_env["TF_VAR_NEW_UI"]) is True
-    assert init_env["TF_VAR_REGION"] == "westeurope"
-    # workspace's own fixed keys are delivered the same way.
-    assert init_env["TF_VAR_workspace_name"] == "main"
-    assert "TF_VAR_workspace" not in init_env
+    assert "TF_VAR_workspace_name" not in init_env
+    # Values land nested under their own real category instead.
+    assert strata["flags"]["NEW_UI"] is True
+    assert strata["variables"]["REGION"] == "westeurope"
+    assert strata["workspace"]["name"] == "main"
 
 
-def test_deploy_run_rejects_flat_category_key_collision(tmp_path: Path):
-    """docs/design/terraform-tfvars-parity.md: two flat categories
-    declaring the same top-level key would silently collide as the same
-    env var with no ordering guarantee — caught as a hard error instead.
-    Here a user-declared variable happens to be named the same as one of
-    `workspace`'s own fixed keys."""
+def test_deploy_run_no_longer_collides_on_shared_flat_category_key_names(tmp_path: Path):
+    """ADR-0035 Phase 7: the old FLAT_CATEGORIES mechanism delivered every
+    flat category's keys into one shared env-var namespace, so a
+    user-declared variable named the same as one of `workspace`'s own
+    fixed keys used to collide and was rejected as a hard error. The
+    unified payload nests each category under its own key instead
+    (`strata.variables.workspace_name` vs. `strata.workspace.name`), so
+    this scenario is no longer a collision at all — both values coexist
+    at their own distinct paths."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -1299,8 +1282,11 @@ def test_deploy_run_rejects_flat_category_key_collision(tmp_path: Path):
 
     diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
-    assert not diagnostics.ok
-    assert any("workspace_name" in message for message in diagnostics.messages())
+    assert diagnostics.ok, diagnostics.messages()
+    on_disk = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())
+    strata = on_disk["strata"]
+    assert strata["variables"]["workspace_name"] == "collides"
+    assert strata["workspace"]["name"] == "main"
 
 
 def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: Path):
@@ -1308,11 +1294,10 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
     (2026-09-29)": a '${var:}'/'${secret:}' token inside a Provider's
     'configuration'/'custom' used to pass 'strata validate' cleanly but
     was never projected into any Terraform artifact at all — silently
-    dropped, not even delivered unresolved. Now delivered via
-    TF_VAR_platform_providers (the real v1 Terraform variable name,
-    docs/design/terraform-tfvars-parity.md — not TF_VAR_providers, the
-    file-category name), same broadcast mechanism as resx_<type>/topologies/
-    properties/custom/tenant already had."""
+    dropped, not even delivered unresolved. Now delivered as part of the
+    one unified `strata.auto.tfvars.json` payload's `providers` key
+    (ADR-0035) — a secret-shaped leaf is sentineled in the file and its
+    real value only reachable via TF_VAR_strata_secrets."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -1370,21 +1355,14 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
         diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok
-    init_env = next(env for env in envs if env is not None)
-    assert "TF_VAR_platform_providers" in init_env
-    providers_payload = json.loads(init_env["TF_VAR_platform_providers"])
+    on_disk = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())
+    providers_payload = on_disk["strata"]["providers"]
     assert providers_payload["p1"]["configuration"]["partner_id"] == "ACME123"
-    assert providers_payload["p1"]["custom"]["cost_center"] == "platform"
-    # On-disk build artifact is blanked entirely (docs/work/
-    # terraform-variable-precedence.md Phase 2) — "providers" is a
-    # single-variable category (one Terraform variable, "platform_providers",
-    # for the whole dict), and a secret-shaped leaf anywhere inside taints
-    # the whole variable: the file must not declare it at all, or Terraform's
-    # own precedence would let this stale, partially-unresolved file shadow
-    # TF_VAR_platform_providers above (secrets are never written to disk,
-    # even the resolved non-secret partner_id value next to it).
-    on_disk = json.loads((build_path / "infra" / "providers.auto.tfvars.json").read_text())
-    assert on_disk == {}
+    assert providers_payload["p1"]["custom"]["cost_center"] == ("__strata_secret__:providers.p1.custom.cost_center")
+    assert '"platform"' not in (build_path / "infra" / "strata.auto.tfvars.json").read_text()
+    init_env = next(env for env in envs if env is not None)
+    secrets_payload = json.loads(init_env["TF_VAR_strata_secrets"])
+    assert secrets_payload["providers.p1.custom.cost_center"] == "platform"
 
 
 def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Path):
@@ -1516,13 +1494,13 @@ def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_pat
         diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok, diagnostics.messages()
-    hearth_envs = [e for e in envs_by_step["provision-hearth"] if e is not None]
-    dns_envs = [e for e in envs_by_step["apply-dns"] if e is not None]
-    # provision-hearth doesn't target public-dns — never sees TF_VAR_dns_zones.
-    assert all("TF_VAR_dns_zones" not in e for e in hearth_envs)
+    hearth_payload = json.loads((build_path / "infra_hearth" / "strata.auto.tfvars.json").read_text())
+    dns_payload = json.loads((build_path / "infra_dns" / "strata.auto.tfvars.json").read_text())
+    # provision-hearth doesn't target public-dns — its own file excludes it
+    # entirely (dns is claimed by apply-dns, gap #12).
+    assert hearth_payload["strata"]["dns"] == {}
     # apply-dns targets public-dns — sees the real, resolved output value.
-    dns_payload = json.loads(dns_envs[0]["TF_VAR_dns_zones"])
-    record_value = dns_payload["public-dns"]["zones"]["example.com"]["records"][0]["value"]
+    record_value = dns_payload["strata"]["dns"]["public-dns"]["zones"]["example.com"]["records"][0]["value"]
     assert record_value == "20.1.2.3"
 
 

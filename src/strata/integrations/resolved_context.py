@@ -108,6 +108,14 @@ class ResolvedWorkspaceGraph:
     lookup. `workspace.spec.topology` itself is already inline
     (`TopologySpecModel`, ADR-0028) — no separate resolution needed.
 
+    `modules` (docs/work/unified-terraform-projection.md Phase 1) is keyed
+    the same way, but one level removed: the names come from every resolved
+    namespace's own `spec.modules[].module` (`ModuleReferenceModel`), not
+    directly from a `WorkspaceSpecModel` field — scoped to namespace-attached
+    modules only, deliberately excluding `TopologyComponentModel.modules`
+    (zero real use found across six real workspaces checked, per that doc's
+    own evidence).
+
     `variable_refs`/`feature_refs`/`secret_refs`/`properties`/`custom`
     (docs/design/build-time-value-categories.md, Q3/Q4) are computed once
     by `build_controller.py`, before the per-provisioner loop — derived,
@@ -119,7 +127,7 @@ class ResolvedWorkspaceGraph:
     references no tenant, or the reference doesn't resolve.
 
     `deployment` is the whole resolved Deployment document — needed by
-    `terraform_projection.py`'s `_build_workspace_payload()` (docs/design/
+    `terraform_projection.py`'s `_strata_workspace()` (docs/design/
     terraform-tfvars-parity.md), which reads `deployment.meta.name`/
     `.labels`/`.annotations`/`.tags`/`.apiVersion` alongside the workspace's
     own, matching v1's real `_build_workspace_vars()` exactly. `None` for a
@@ -141,6 +149,7 @@ class ResolvedWorkspaceGraph:
     firewalls: dict[str, FirewallModel] = field(default_factory=dict)
     dns: dict[str, DnsModel] = field(default_factory=dict)
     networks: dict[str, NetworkModel] = field(default_factory=dict)
+    modules: dict[str, ModuleModel] = field(default_factory=dict)
     variable_refs: list[ValueReference] = field(default_factory=list)
     feature_refs: list[ValueReference] = field(default_factory=list)
     secret_refs: list[ValueReference] = field(default_factory=list)

@@ -241,6 +241,41 @@ def resolve_value_tokens_in_mapping(data: dict[str, Any], values: dict[str, str]
     return {k: _resolve(v) for k, v in data.items()}
 
 
+def escape_path_segment(segment: str) -> str:
+    """Escape a single dict-key path segment for safe inclusion in a
+    dotted path string (`resolve_value_tokens_tracking_secrets()`'s own
+    convention) — a literal `.` inside a real key (e.g. a DNS zone name
+    like `example.com`) would otherwise be indistinguishable from the `.`
+    separator joining path segments themselves, corrupting
+    `split_path()`'s reverse operation. Escapes `\\` first (so an
+    already-escaped `\\.` round-trips correctly), then `.`.
+    """
+    return segment.replace("\\", "\\\\").replace(".", "\\.")
+
+
+def split_path(path: str) -> list[str]:
+    """Inverse of joining `escape_path_segment()`-escaped segments with
+    `.` — splits a dotted path back into its original, unescaped segments,
+    treating a backslash-escaped `\\.` as a literal `.` within a segment
+    rather than a separator."""
+    parts: list[str] = []
+    current: list[str] = []
+    escape = False
+    for char in path:
+        if escape:
+            current.append(char)
+            escape = False
+        elif char == "\\":
+            escape = True
+        elif char == ".":
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    parts.append("".join(current))
+    return parts
+
+
 def resolve_value_tokens_tracking_secrets(
     data: dict[str, Any], values: dict[str, str]
 ) -> tuple[dict[str, Any], dict[str, str]]:
@@ -269,10 +304,13 @@ def resolve_value_tokens_tracking_secrets(
     function's "don't touch what you can't safely resolve in place"
     contract simple.
 
-    Dotted paths join dict keys with `.`; a list index is its plain
-    integer, stringified (e.g. `services.0.env.KEY`) — no real
-    list-shaped secret leaf has been evidenced yet, but kept generic for
-    consistency with the recursion itself.
+    Dotted paths join dict keys with `.`, each key escaped by
+    `escape_path_segment()` so a literal `.` inside a real key (e.g. a DNS
+    zone name like `example.com`) can't be confused with the separator; a
+    list index is its plain integer, stringified (e.g. `services.0.env.KEY`)
+    — no real list-shaped secret leaf has been evidenced yet, but kept
+    generic for consistency with the recursion itself. Use `split_path()`
+    to reverse this, never a plain `path.split(".")`.
     """
     secrets: dict[str, str] = {}
 
@@ -286,7 +324,11 @@ def resolve_value_tokens_tracking_secrets(
                 return node
             return resolve_value_tokens(node, values)
         if isinstance(node, dict):
-            return {key: _walk(value, f"{path}.{key}" if path else key) for key, value in node.items()}
+            result: dict[str, Any] = {}
+            for key, value in node.items():
+                escaped = escape_path_segment(key)
+                result[key] = _walk(value, f"{path}.{escaped}" if path else escaped)
+            return result
         if isinstance(node, list):
             return [_walk(value, f"{path}.{index}" if path else str(index)) for index, value in enumerate(node)]
         return node

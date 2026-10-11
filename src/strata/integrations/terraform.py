@@ -35,7 +35,7 @@ from typing import Any
 
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
-from strata.integrations.terraform_projection import build_platform_projection, planned_files
+from strata.integrations.terraform_projection import build_strata_locals, find_secret_paths, planned_strata_file
 from strata.models.integration_model import Capability
 from strata.models.provisioning_model import ProvisionerModel
 from strata.utils.transport import CommandResult
@@ -254,26 +254,66 @@ class TerraformIntegration(InfraIntegration):
         return self.run(*args, cwd=path, env=env, timeout=timeout, line_callback=line_callback)
 
     # ------------------------------------------------------------------
-    # InfraIntegration.default_output (ADR-0023 D1/D5, Phase 1)
+    # InfraIntegration.default_output (ADR-0023 D1/D5, Phase 1; ADR-0035
+    # Phase 4/5)
     # ------------------------------------------------------------------
+
+    #: `src/strata/templates/terraform/strata_variables.tf` — this file
+    #: lives at `src/strata/integrations/terraform.py`, so `.parent.parent`
+    #: reaches `src/strata/` (same pattern `scaffold_controller.py`'s own
+    #: `_TEMPLATE_ROOT` uses for `templates/solution/`).
+    _STRATA_VARIABLES_TEMPLATE = (
+        Path(__file__).resolve().parent.parent / "templates" / "terraform" / "strata_variables.tf"
+    )
+
+    #: Matches a root-module `variable "strata" { ... }` declaration in a
+    #: copied `.tf` source — the opt-out check (ADR-0035 Phase 5): a
+    #: consumer that declares its own wins, and strata stops generating one.
+    _STRATA_VARIABLE_DECLARATION = re.compile(r'variable\s+"strata"\s*\{')
+
+    @classmethod
+    def _sources_declare_own_strata_variable(cls, path: Path) -> bool:
+        """Scan every top-level `*.tf` file already synced into `path`
+        (`sync_source()` already ran before `prepare()` is ever called) for
+        an existing `variable "strata" {}` declaration — not recursive,
+        matching Terraform's own "a module is exactly one directory" rule.
+        No HCL parsing — a plain regex search, consistent with this
+        package's existing "no AST manipulation" convention (`terraform_
+        projection.py`'s `rewrite_strata_payload()`/Phase 6's planned
+        `build_strata_locals()`).
+        """
+        return any(
+            cls._STRATA_VARIABLE_DECLARATION.search(tf_file.read_text(encoding="utf-8"))
+            for tf_file in path.glob("*.tf")
+        )
 
     def default_output(
         self,
+        path: Path,
         resolved: ValueResolution,
         provisioner: ProvisionerModel,
         graph: ResolvedWorkspaceGraph,
     ) -> dict[str, str]:
-        """The default tfvars projection (ADR-0023 D1) - one
-        `*.auto.tfvars.json` file per non-empty category, Terraform's own
-        auto-load convention (no `-var-file` flag needed). `resolved` is
-        unused - `flags`/`variables`/`properties`/`custom` (docs/design/
-        build-time-value-categories.md) are fed entirely by `graph`'s own
-        `variable_refs`/`feature_refs`/`properties`/`custom` fields, not by
-        `resolved`/`ValueResolution` - accepted here so
-        `InfraIntegration.prepare()`'s uniform dispatch (D5) does not need
-        a different call shape once a later phase (Phase 3 token
-        substitution) does use it.
+        """The default tfvars projection (ADR-0035, docs/work/
+        unified-terraform-projection.md Phase 4/5/6) — one `strata.auto.
+        tfvars.json` file, always, replacing the old one-file-per-category
+        projection entirely, plus two generated files declaring `var.strata`'s
+        real type (Phase 5) and reassembling resolved secrets into
+        `local.strata.*` (Phase 6) — both skipped whenever `path` already
+        has its own `variable "strata"` declaration, the documented
+        opt-out (a consumer who opts out of the generated type takes on
+        its own secret-merging too, not just its own type). `resolved`/
+        `provisioner` are unused — `flags`/`variables`/`properties`/
+        `custom` are fed by `graph`'s own fields, not by `ValueResolution`;
+        `provisioner` is confirmed unused by every category `build_strata_
+        payload()` builds — accepted here so `InfraIntegration.prepare()`'s
+        uniform dispatch (D5) does not need a different call shape.
         """
         del resolved
-        payload = build_platform_projection(graph, provisioner)
-        return {filename: json.dumps(data) for filename, data in planned_files(payload)}
+        del provisioner
+        filename, data = planned_strata_file(graph)
+        output = {filename: json.dumps(data)}
+        if not self._sources_declare_own_strata_variable(path):
+            output["strata_variables.tf"] = self._STRATA_VARIABLES_TEMPLATE.read_text(encoding="utf-8")
+            output["strata_locals.tf"] = build_strata_locals(find_secret_paths(data["strata"]))
+        return output

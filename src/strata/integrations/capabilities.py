@@ -151,7 +151,7 @@ class InfraIntegration(Integration):
                 raise IntegrationError(f"output.template '{provisioner.output.template}': " + "; ".join(errors))
             return path
 
-        for filename, content in self.default_output(resolved, provisioner, graph).items():
+        for filename, content in self.default_output(path, resolved, provisioner, graph).items():
             (path / filename).write_text(content)
         return path
 
@@ -218,6 +218,7 @@ class InfraIntegration(Integration):
 
     def default_output(
         self,
+        path: Path,
         resolved: ValueResolution,
         provisioner: ProvisionerModel,
         graph: ResolvedWorkspaceGraph,
@@ -226,8 +227,16 @@ class InfraIntegration(Integration):
         is unset. Base default: nothing
         generated — Bicep's real behaviour (v1's `bicep_builder.py`: copy
         the source, generate nothing); subclasses override only this hook.
+
+        `path` is the destination directory `prepare()` is about to write
+        into (already holding this provisioner's synced `.tf`/etc. sources)
+        — added for `TerraformIntegration` (ADR-0035 Phase 5), which must
+        check whether those sources already declare their own `variable
+        "strata" {}` before deciding whether to also write the generated
+        `strata_variables.tf`. Unused by every other subclass, same as
+        `resolved`/`provisioner`/`graph` already are for this base no-op.
         """
-        del resolved, provisioner, graph
+        del path, resolved, provisioner, graph
         return {}
 
     def prepare_namespace(

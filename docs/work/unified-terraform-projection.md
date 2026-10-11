@@ -1,7 +1,11 @@
 # Unified Terraform Projection — One Variable, One Secrets Map
 
-- Status: **proposed, full design** — deliberately breaking, accepted as such
-- Last updated: 2026-10-10
+- Status: **done** — Phases 1-8 of 8 implemented; `2.0.0-Alpha20` built and
+  verified; a post-Phase-8 requirements-traceability pass against ADR-0035
+  itself found and fixed a real gap (`strata_locals.tf` was never actually
+  wired into `build run`) plus two bugs it had been masking. Phase 9
+  (consumer migration) tracked here, executed elsewhere.
+- Last updated: 2026-10-11
 - Decision recorded: [ADR-0035](../decisions/0035-unified-terraform-projection.md)
   (the decision itself; this doc remains the live evidence record, full
   payload shape, migration plan, and open implementation questions)
@@ -967,7 +971,7 @@ above needs to account for this: "per-step" scoping is really
 "per-provisioner-source-directory" scoping, and a directory can be
 written to by more than one step's claims in the same `deploy run`.
 
-### Phase 1 — `modules` on `ResolvedWorkspaceGraph`
+### Phase 1 — `modules` on `ResolvedWorkspaceGraph` — DONE (2026-10-11)
 
 **Design:** add `modules: dict[str, ModuleModel] = field(default_factory=dict)`
 to `ResolvedWorkspaceGraph` (`resolved_context.py`), populated in
@@ -987,7 +991,19 @@ referenced twice under different names, to confirm dict-by-name
 dedup/uniqueness doesn't break), asserting `graph.modules` contains the
 resolved `ModuleModel` instances.
 
-### Phase 2 — The new payload assembler
+**Implemented as designed, no deviations.** `resolved_context.py`:
+`ResolvedWorkspaceGraph.modules` field added, docstring updated.
+`build_controller.py`: `build_resolved_workspace_graph()` now resolves
+`namespaces` first into a local variable, derives `module_names` from
+every resolved namespace's `spec.modules[].module`, and passes the
+`_lookup_all(..., PlatformKind.MODULE, module_names)` result through.
+Added `test_build_resolved_workspace_graph_walks_modules_via_namespaces()`
+(two namespaces, one module referenced twice under different reference
+names from the same namespace) plus a `graph.modules == {}` assertion on
+the existing provider-walking test. Full suite: 2320 passed, mypy/ruff/
+lint-imports all clean.
+
+### Phase 2 — The new payload assembler — DONE (2026-10-11)
 
 **Design:** add `build_strata_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]`
 to `terraform_projection.py`, replacing `build_platform_projection()`.
@@ -996,11 +1012,13 @@ Keep one private helper per category for readability
 `_strata_resources()`, `_strata_namespaces()`, `_strata_dns()`,
 `_strata_networks()`, `_strata_firewalls()`, `_strata_topologies()`,
 `_strata_flags()`, `_strata_variables()`, `_strata_properties()`,
-`_strata_custom()`, `_strata_default_tags()`) but each one returns its
-*final* nested shape directly — no more "flat dict today, wrapped later
-by `planned_files()`" split, since there is only one file to wrap into
-now. `build_strata_payload()` itself just assembles the top-level dict
-from these fourteen calls.
+`_strata_custom()`, `_strata_default_tags()`, plus the new
+`_strata_modules()` — fifteen total, not fourteen; the original count
+predated deciding to add `modules`) but each one returns its *final*
+nested shape directly — no more "flat dict today, wrapped later by
+`planned_files()`" split, since there is only one file to wrap into now.
+`build_strata_payload()` itself just assembles the top-level dict from
+these fifteen calls.
 
 Folded into this phase, not patched into the old functions first and
 then discarded: the three pre-existing projection gaps found during
@@ -1017,19 +1035,50 @@ this stage (tokens literal) — this function is `build run`-time only,
 matching `build_platform_projection()`'s existing contract; resolution
 happens in Phase 3.
 
-Delete in this same phase (no longer called by anything once this
-lands): `build_platform_projection()`, `build_configuration_payloads()`,
+**Correction before implementing (2026-10-11): the old functions are
+NOT deleted in this phase.** Grepped every real call site of
+`build_platform_projection()`/`build_configuration_payloads()`/
+`build_dns_networks_firewalls_payloads()`/`_REAL_VARIABLE_NAME`/
+`FLAT_CATEGORIES`/`real_variable_name()` before touching anything —
+`terraform.py`'s `default_output()` and `deploy_controller.py`'s entire
+TF_VAR_ delivery block (claiming loop, FLAT_CATEGORIES per-key delivery,
+`resx_` merge) still call them directly today. Deleting them now, as
+this phase's original text said, would make both files fail to import
+immediately — not consistent with this plan's own "each phase small,
+independently mergeable, fully tested" convention, since Phase 7
+("`deploy_controller.py` rewiring") and Phase 4 (`default_output()`'s
+single-file rewrite) are the phases that actually migrate those call
+sites. **Decided: the old functions stay, unchanged, until the phase that
+rewires their real callers** — `build_strata_payload()` and its helpers
+are purely additive this phase, verified by running the full test suite
+afterward (no existing test touched, all still green). Deletion itself
+is now explicitly Phase 7/8's job, not this one's.
+
+**Also resolved one of "Type design"'s open sub-questions while
+implementing, not left pending:** `build_strata_payload()` always emits
+all fifteen top-level keys, empty (`{}`) rather than omitted, when a
+category is unused — settles "should the projection always emit every
+top-level key" in favor of yes, which is what lets the generated
+`strata_variables.tf` (Phase 5) stay a strict type with no top-level
+`optional()`.
+
+Delete in a later phase (Phase 7/8, not this one — see correction
+above): `build_platform_projection()`, `build_configuration_payloads()`,
 `build_dns_networks_firewalls_payloads()`, `_REAL_VARIABLE_NAME`,
 `FLAT_CATEGORIES`, `real_variable_name()`. `resolved_context.py` unaffected.
 
-**Tests:** port every existing `test_integrations_terraform_projection.py`
-category test to assert against the new nested shape instead of the old
-flat/wrapped one; add new tests for the three folded-in gap fixes and for
-`modules`/`default_tags`; one full-shape test against a graph built from
-`config/`'s real dogfood workspace, asserting the complete `strata` object
-matches field-for-field what this design doc's own example documents.
+**Tests:** implemented as targeted new tests, not a full port of every
+existing category test — the old functions/tests are unchanged and still
+valid (they stay in place until Phase 7/8), so porting them now would
+just be duplicate coverage of unchanged code paths. Added: a workspace
+shape test (confirms the v1-parity flat-name reshaping), a `default_tags`
+hoist test, a tenant test (`geographies` key + `custom`), two resources
+tests (flat-map-not-nested-by-type, storage/custom gap fixes), a
+topologies-namespaces test, a modules test, and an
+always-emit-every-category test. Full suite: 2328 passed, mypy/ruff/
+lint-imports all clean.
 
-### Phase 3 — Secret scanning and the deploy-time rewrite
+### Phase 3 — Secret scanning and the deploy-time rewrite — DONE (2026-10-11)
 
 **Design:** two new functions, replacing `resolve_deploy_time_files()`
 entirely:
@@ -1064,6 +1113,13 @@ regardless of whether the referenced Terraform output is itself
 phase reuses. Worth fixing in the same pass if the `tokens` dict gains
 per-key sensitivity metadata before this phase lands — not a blocker,
 since it's a pre-existing bug independent of this redesign either way.
+**Not folded in here, confirmed on review** — this phase's two functions
+take a flat `tokens: dict[str, str]` with no sensitivity metadata at all
+(same shape `resolve_value_tokens_tracking_secrets()` already requires),
+so fixing the `${output:}` gap would need that dict's shape to change
+everywhere it's threaded, a separate, cross-cutting change independent of
+this phase's own scope — left for whichever phase (or separate fix)
+actually threads sensitivity metadata through.
 
 **Tests:** unit tests on a synthetic nested payload with secrets at
 multiple depths (1-level, e.g. `variables.db_password`; 3-level, e.g.
@@ -1075,7 +1131,44 @@ test (same pattern as `test_terraform_variable_precedence.py`) proving a
 real `terraform plan`'s effective value for a secret-bearing field is the
 resolved value, not the sentinel.
 
-### Phase 4 — One file, one `default_output()`
+**Implemented as designed, with one necessary deviation from the literal
+"reuse the same walk" phrasing:** `find_secret_paths()` could not
+literally call `resolve_value_tokens_tracking_secrets(payload, {})` with
+an empty `values` dict as a shortcut — verified by tracing that
+function's own non-secret branch, which calls `resolve_value_tokens()`
+and *raises* `ValueError` the instant it meets any `${var:}`/`${feature:}`
+token with no matching key, which a real build-time payload is expected
+to still contain (ADR-0022 D4). Written as its own small standalone walk
+instead, structurally identical to the shared pattern but checking only
+shape, never attempting resolution — confirmed by a dedicated test
+(`test_find_secret_paths_ignores_non_secret_tokens_without_resolving_them`).
+`rewrite_strata_payload()` matches the design exactly: calls
+`resolve_value_tokens_tracking_secrets()` unchanged, then a new
+`_set_path()` helper overwrites every secret path with its sentinel in
+the already-resolved result.
+
+Both functions land in `terraform_projection.py`, next to
+`resolve_deploy_time_files()` (which stays, unchanged, until Phase 7
+rewires its real caller — same deferred-deletion pattern Phase 2 already
+established).
+
+**Tests implemented:** 9 fast unit tests in
+`test_integrations_terraform_projection.py` (multi-depth secret finding,
+non-secret-token safety, empty case, list-index paths, sentinel
+replacement, real-value-never-in-payload via a `json.dumps()`
+containment check, nested-depth sentinel placement, no-secrets passthrough)
+plus one real-terraform test in a new file,
+`test_unified_terraform_projection_secrets.py` (mirrors
+`test_terraform_variable_precedence.py`'s pattern/gating) — a
+hand-written minimal root (`variable "strata"`/`variable "strata_secrets"`,
+no merge logic yet since Phase 6 doesn't exist) with two outputs proving,
+against a real `terraform plan`: a direct `var.strata.*` read sees only
+the sentinel; a `var.strata_secrets[path]` read sees the real value; a
+non-secret sibling resolves normally; and the on-disk tfvars file never
+contains the real secret value (direct text scan). Full suite: 2337
+passed, mypy/ruff/lint-imports all clean.
+
+### Phase 4 — One file, one `default_output()` — DONE (2026-10-11)
 
 **Design:** replace `planned_files()` with a function returning exactly
 one `(filename, data)` pair: `("strata.auto.tfvars.json", {"strata":
@@ -1089,7 +1182,84 @@ module's functions).
 assertions to expect one file; confirm no other integration's tests
 changed.
 
-### Phase 5 — `strata_variables.tf`: a static template, not a generator
+**Implemented as designed** — `planned_strata_file(graph)` added to
+`terraform_projection.py` (singular, not a list — "exactly one pair"
+taken literally), `default_output()` rewired to call it and `del
+provisioner` too (confirmed unused by `build_strata_payload()`, same as
+`resolved` already was). `planned_files()` itself is **not** deleted —
+same deferred-deletion pattern as Phase 2/3 (Phase 8's job); it keeps
+exactly its own, already-passing direct tests, since nothing in this
+phase removes it, only stops calling it from `default_output()`.
+
+**A real, verified consequence found before writing any test fixes, not
+assumed:** this phase changes what `build run` *actually produces* for
+every real Terraform workspace — unlike Phases 2/3 (purely additive).
+Traced through two real questions rather than guessing:
+
+1. **Does a real `terraform plan` break for today's consumers**, who
+   still declare `var.platform_providers`/`var.resources`/etc. (not
+   `var.strata`), once their build output also contains a
+   `strata.auto.tfvars.json` with a key their root never declared?
+   Checked empirically (not assumed) with a real minimal root + an
+   extraneous `auto.tfvars.json` key: Terraform only **warns**
+   ("Value for undeclared variable"), it does not error, and `plan`
+   still succeeds. So today's real consumers (`haven`/`cfg-int-deployment`,
+   neither of which has migrated to `var.strata` yet — that's Phase 9)
+   are unaffected beyond one new, harmless warning line per plan.
+2. **Does `deploy_controller.py` (unchanged, Phase 7 not done) still
+   work correctly against the new build output?** Yes, for a reason
+   that took re-reading its real write loop to confirm: `resolve_deploy_
+   time_files()`'s callers (`configuration_payloads`/`docs_for_step_by_
+   category`) are computed **fresh from the graph every time**, never
+   read from disk — `deploy run` was never "patching a file build run
+   wrote," despite how the comments read; it recomputes and overwrites
+   unconditionally. So it keeps creating/rewriting the *old* per-category
+   files (`workspace.auto.tfvars.json`, `providers.auto.tfvars.json`,
+   `resx_<type>.auto.tfvars.json`, etc.) completely independent of
+   whatever `build run` did or didn't write — today's real consumers,
+   who still read those old variable names, keep working exactly as
+   before.
+
+**One real, now-confirmed, temporary asymmetry, worth tracking
+explicitly rather than leaving implicit:** after this phase, a build
+directory ends up holding **both** the new `strata.auto.tfvars.json`
+(written once by `build run`, tokens left literal, never touched again
+until Phase 7) **and** the old per-category files (created fresh every
+`deploy run`, correctly resolved, exactly as before). This is safe (nothing
+reads `var.strata` yet) but means `deploy run` now legitimately creates
+files `build run` itself never wrote — the literal scenario a 2026-10-08
+code review finding called a bug for `dns`/`networks`/`firewalls`
+specifically (`build_dns_networks_firewalls_payloads()`'s unconditional
+3-keys quirk). Confirmed on closer reading that finding's fix was about a
+different thing (filtering by the *workspace-wide* payload's own
+non-emptiness, not about disk existence) and was never a literal
+"only write what build already wrote" check to begin with — so this
+phase doesn't reopen that specific bug, but it does make the general
+"deploy creates files build didn't" shape real and common now (every
+workspace with any non-empty category), where before it only happened
+for the narrow dns/networks/firewalls case that finding was about. Not a
+regression needing its own fix — it resolves naturally once Phase 7
+rewires `deploy_controller.py` onto `rewrite_strata_payload()` and stops
+computing the old per-category payloads at all.
+
+**Real test fallout, not anticippated in the original phase scope**:
+updating `default_output()` broke 6 existing tests across 3 files that
+asserted on `build run`'s own immediate per-category output (not just
+the 2 `test_integrations_terraform.py` tests the design's own "Tests"
+line called out) — `test_build_controller.py` (2: tenant shape, flags/
+variables shape), `test_commands_build.py` (1: sanity existence check),
+`test_deploy_controller.py` (1: the dns/networks/firewalls-never-created
+guard, whose `after == before` file-set-equality assertion no longer
+holds in general per the asymmetry above — narrowed to check its actual
+guard directly instead of full set equality), and
+`test_terraform_variable_precedence.py` (3: each had a
+"confirm build wrote the stale file first" assertion that no longer
+applies — removed, keeping each test's real regression-guard intact
+since `deploy_run()`'s own rewrite/blank/real-terraform-plan assertions
+are all unaffected). Full suite: 2337 passed (unchanged count — fixes,
+not new tests), mypy/ruff/lint-imports all clean.
+
+### Phase 5 — `strata_variables.tf`: a static template, not a generator — DONE (2026-10-11)
 
 **Design — the one simplification worth calling out explicitly:** the
 `object({...})` *type* shape is identical for every workspace (only the
@@ -1120,7 +1290,77 @@ template is both present and syntactically valid against a real
 Terraform ≥ 1.3 binary; a second case confirming the file is *not*
 written when the root already declares its own `variable "strata"`.
 
-### Phase 6 — `strata_locals.tf`: genuinely generated
+**Two real gaps found before implementing, neither assumed:**
+
+1. **"extending the existing source-scan check" referred to nothing
+   real.** Grepped for it — the only hit was the Type design section's
+   own hypothetical phrasing ("the same scan `_validate_inputs()`-style
+   checks would need anyway"), not a literal existing function. No code
+   anywhere scans a copied `.tf` source for an existing declaration
+   today. Built it from scratch: `TerraformIntegration.
+   _sources_declare_own_strata_variable()`, a plain regex over every
+   top-level `*.tf` file (non-recursive, matching Terraform's own
+   one-module-one-directory rule) — no HCL parsing, consistent with this
+   module's existing "no AST manipulation" convention.
+2. **`default_output()` never received the destination path at all** —
+   its real signature (`capabilities.py`) was `(resolved, provisioner,
+   graph)`; `prepare()` computes `path` itself and only uses it to write
+   whatever `default_output()` returns, never passes it in. The new scan
+   needs `path` to know which directory to look in. Decided: add `path`
+   to the shared `InfraIntegration.default_output()` signature itself
+   (not a Terraform-only override of `prepare()`) — keeps ADR-0023 D5's
+   own stated goal intact ("every subclass gets the same `prepare()`
+   dispatch for free; only `default_output()` varies per tool"), at the
+   cost of a mechanical ripple through every real implementer:
+   `capabilities.py` (base stub + the one call site), `terraform.py`,
+   `gitops.py` (raises unconditionally, `path` just `del`'d), and two
+   anonymous test stubs in `test_integrations_capabilities.py`.
+
+**Implemented:** `src/strata/templates/terraform/strata_variables.tf`
+(static asset, loaded via the exact same `Path(__file__).resolve()
+.parent.parent / "templates" / ...` pattern `scaffold_controller.py`'s
+own `_TEMPLATE_ROOT` already uses — not `importlib.resources`, matching
+precedent). Type written directly from the real, already-implemented
+`_strata_*()` functions (not from this doc's own draft "Option B" code
+block, confirmed stale — it predated the `modules`/`default_tags`/
+workspace-reshaping work and still had `variables`/`labels` as
+`map(string)`). Resolved `optional()` usage empirically rather than by
+pure reasoning: every field that's merely *nullable-but-always-present*
+(e.g. `resources.role`, `providers.display_name`) needs no `optional()`
+at all — Terraform accepts `null` for a plain attribute type regardless;
+`optional()` only matters for a key that can be genuinely *absent*. The
+one real case of that: `_strata_tenant()` returns a bare `{}` (no keys at
+all) when the deployment references no tenant — found by inspection,
+confirmed by a dedicated real-terraform test — so every `tenant.*` field
+is `optional()`, the only place in the whole type that needs it.
+`sensitive = true` on `strata_secrets` tested empirically against a real
+plan — no redaction side effects found, kept as designed.
+
+**Recurrence, not a new bug — updating personal notes, not just this
+doc:** the generated file's header comment used an em dash; `create_file`
+wrote it as a cp1252 byte (`0x97`), not UTF-8, which `default_output()`'s
+own `.read_text(encoding="utf-8")` then failed to decode at runtime (not
+at authoring time — this surfaced as a `UnicodeDecodeError` deep inside
+an unrelated `build_run()` test, not anywhere near the template file
+itself). Same class of corruption as previously noted for
+`replace_string_in_file`/`multi_replace_string_in_file` — confirmed here
+it also affects `create_file`. Fixed by recreating the file with
+plain-ASCII punctuation throughout (no em dashes at all), verified
+byte-for-byte via a direct decode check before moving on, not just by
+re-reading it through the same tool that mis-wrote it the first time.
+
+**Tests:** 2 cheap (no real binary needed) in `test_integrations_terraform.py`
+— `default_output()` returns `strata_variables.tf` alongside
+`strata.auto.tfvars.json` when no `.tf` file in `path` declares
+`variable "strata"`; it's excluded when one does. 2 real-terraform tests
+in a new file, `test_unified_terraform_projection_variables.py` — `terraform
+validate`+`plan` against a fully-populated payload (one document per
+category) and a minimal one (no tenant, no optional categories at all),
+both using the real generated template, proving the type accepts real
+`build_strata_payload()` output in both the common and the one-real-edge-
+case shape. Full suite: 2340 passed, mypy/ruff/lint-imports all clean.
+
+### Phase 6 — `strata_locals.tf`: genuinely generated — DONE (2026-10-11)
 
 **Design:** unlike Phase 5, this file's content is workspace-specific —
 it depends on exactly which dotted paths (from Phase 3's
@@ -1141,7 +1381,121 @@ other; a real-terraform test confirming `local.strata.<path>` evaluates
 to the real resolved value for a secret path and an ordinary literal
 value for everything else, in the same `terraform plan`.
 
-### Phase 7 — `deploy_controller.py` rewiring
+**Implemented as designed.** `build_strata_locals()` groups paths by
+their first dotted segment (`_group_by_first_segment()`) and recurses —
+a leaf (`children == [""]`) emits one `lookup(var.strata_secrets, "<full
+path>", <real var.strata.* fallback expression>)`; anything deeper emits
+a nested `merge(var.strata.<prefix>, {...})` and recurses, so two paths
+sharing a parent (`providers.kamatera.configuration.{api_token,
+other_secret}`) land inside the **same** `merge()` call at that level,
+confirmed by a dedicated test counting occurrences of each nesting
+level's own `merge(...)` call.
+
+**One real mistake caught by the real-terraform test, not by the unit
+tests** (exactly why the design called for a real-terraform test at
+all): the first draft of the real-terraform test hand-rolled a partial
+synthetic payload (`{"providers": {...}}` only) the way Phase 3's own
+test had — but Phase 3's test wrote against a root declaring `variable
+"strata" { type = any }`, while this one reuses Phase 5's real generated
+`strata_variables.tf`, whose strict `object({...})` type has **no
+top-level `optional()`** by design (Phase 2's "always emit every
+category" decision) — a partial payload is a genuine type violation
+there, not a quirk of the test. Real `terraform plan` failed with
+"attributes ... are required," pointing at the exact missing keys;
+fixed by building the test payload from a real `build_strata_payload()`
+call against an actual graph (one provider carrying the `${secret:}`
+token) instead of a hand-rolled dict — the correct, general lesson:
+anything validated against the Phase 5 type must come from the real
+payload builder, never a partial literal, even in a test.
+
+**Tests:** 4 unit tests in `test_integrations_terraform_projection.py`
+(empty-paths fallback, single path, shared-parent merges into one nested
+call — not two, two distinct top-level categories both present) plus one
+real-terraform test in a new file, `test_unified_terraform_projection_
+locals.py`, wiring the full chain (`build_strata_payload()` ->
+`find_secret_paths()` -> `rewrite_strata_payload()` ->
+`build_strata_locals()`) against Phase 5's real generated
+`strata_variables.tf`: a real `terraform plan` proves `local.strata`'s
+secret path resolves to the actual value and an ordinary sibling
+resolves to its plain literal, through identical `local.strata.*` syntax
+either way. Full suite: 2345 passed, mypy/ruff/lint-imports all clean.
+
+### Post-Phase-8 correction — `default_output()` never wired `strata_locals.tf` in (found 2026-10-11)
+
+A requirements-traceability pass against ADR-0035's own accepted decision
+text — not just the phase-by-phase Implementation Plan above — found
+that the delivered state did not actually match the decision: ADR-0035
+explicitly commits to *"`build run` emits `strata_variables.tf` ... and
+`strata_locals.tf` ... unless the root already declares its own `variable
+"strata"`"* and counts both as one of its own stated Consequences
+("two generated `.tf` files ... now land in every Terraform build
+output"). Phase 5's own Design text said exactly this for
+`strata_variables.tf` ("`default_output()` copies it verbatim on every
+build"); Phase 6's Design text never said the equivalent for
+`strata_locals.tf` at all — it only tasked building the generator
+function and testing it standalone. That gap was carried through Phases
+7/8 and repeatedly re-confirmed as "a separate, known limitation, not
+this phase's concern" without ever being recognised as an unmet
+requirement from the ADR itself, because nothing had re-checked the
+Implementation Plan's own phase boundaries against the ADR's decision
+text as a whole.
+
+**Fixed:** `TerraformIntegration.default_output()` now also writes
+`strata_locals.tf` (via `build_strata_locals(find_secret_paths(data["strata"]))`)
+under the exact same opt-out gate as `strata_variables.tf` — a consumer
+who declares their own `variable "strata"` takes on their own secret
+merging too, not just their own type.
+
+**Two more real bugs found immediately once this was actually exercised
+end to end for the first time** (both were latent since Phase 6/the
+HCL-string-escaping fix noted in Phase 7's own corrections, invisible
+because no existing test routed a dotted-key or list-contained secret
+through `build_strata_locals()` against a real `terraform plan` before
+now):
+
+1. **`merge()` cannot partially override a list.** A secret reached
+   through a list index (a DNS zone's `records.N.value` — a realistic
+   case, not a contrived one) produced `merge(var.strata[...]["records"],
+   {...})`, and Terraform rejects a list/tuple argument to `merge()`
+   outright ("arguments must be maps or objects, got \"tuple\""). Fixed
+   by adding `_is_list_level()`/`_render_strata_list_override()`: a
+   nesting level whose `_group_by_first_segment()` keys are all-digit
+   (a list, not a dict) now renders `[for idx, item in <expr> : idx == N
+   ? <override> : item]` instead of `merge()`, dispatched via a new
+   `_render_strata_override()` that both `_render_strata_merge()` and
+   `_render_strata_list_override()` recurse through (rather than each
+   other directly), so a dict level can bottom out into a list level
+   (or vice versa) at any depth.
+2. **Lookup-key double-escaping.** The existing `\.`-is-not-a-valid-HCL-
+   escape fix (Phase 7's own corrections) doubled a path's literal
+   backslash before embedding it as a quoted string — correct — but then
+   wrapped the *already-doubled* string in `json.dumps()` too, which
+   escapes backslashes a second time. The generated lookup key, once
+   decoded by HCL's own string parser, ended up with twice as many
+   backslashes as the real `var.strata_secrets` key Terraform populates
+   from `TF_VAR_strata_secrets` — so `lookup()` silently fell through to
+   the sentinel fallback for any secret reached through a dotted key,
+   never the real value, with no error at all. Confirmed by decoding the
+   generated HCL string by hand (not just comparing generated text
+   between two runs) and found to mismatch. Fixed with a dedicated
+   `_quote_full_path()` helper that quotes the already-doubled string
+   directly, never through `json.dumps()` a second time.
+
+**Tests:** 3 new unit tests (`build_strata_locals()` emits a `for`
+expression, not `merge()`, for a list-contained secret path; two secret
+indices in the same list both present; `default_output()` now returns
+`strata_locals.tf` too, with its own one-line-fallback and real-secret
+cases). One new real-terraform test in
+`test_unified_terraform_projection_locals.py` — a DNS zone literally
+named `example.com` (dotted key) with a secret inside `records` (list) —
+proves the real decoded lookup key matches the real `var.strata_secrets`
+key end to end via `local.strata.*` and a real `terraform plan`, not
+just that the generated text looks plausible. Simplified the existing
+locals test to call the real `default_output()` for both generated files
+instead of hand-assembling them, now that both are actually wired in.
+Full suite: 2306 passed, mypy/ruff/ruff format/lint-imports all clean.
+
+### Phase 7 — `deploy_controller.py` rewiring — DONE (2026-10-11)
 
 **Design:** per the resolved decision above (option (b) — preserve
 today's exact `dns`/`networks`/`firewalls`-only claim scope, now keyed by
@@ -1161,7 +1515,65 @@ single-env-var shape; confirm a secret's resolved value wins in a real
 scan of the rewritten file, matching this repo's existing convention for
 this class of test).
 
-### Phase 8 — Delete the rest of the dead machinery, bump version
+**Implemented as designed**, with real bugs found and fixed along the
+way (none were in the design text itself — all were latent correctness
+bugs in Phase 3/6 code this phase was the first to actually exercise
+end-to-end against real data shapes and a real `terraform plan`):
+
+- `deploy_controller.py`: `claimed_by_category`/the pre-flight
+  `${output:}` diagnostics/the per-step delivery block were all rewired
+  onto `build_strata_payload()`/`rewrite_strata_payload()` exactly as
+  designed. The entire `flat_key_owner`/`merged_resources`
+  collision-prevention block was deleted outright — no longer
+  applicable, since there is only one env var now, not one per flat key.
+  `resolve_deploy_time_files()`/`build_configuration_payloads()`/
+  `build_dns_networks_firewalls_payloads()`/`FLAT_CATEGORIES`/
+  `real_variable_name` are now fully dead code with zero real callers,
+  ready for Phase 8's sweep.
+- **Found and fixed a real path-ambiguity bug** in
+  `resolve_value_tokens_tracking_secrets()`'s dotted-path convention
+  (`value_tokens.py`, pre-existing, inherited by Phase 3's
+  `find_secret_paths()`/`rewrite_strata_payload()`): a dict key
+  containing a literal `.` (a DNS zone name like `example.com` is the
+  obvious, common real case) was indistinguishable from the `.`
+  separator joining path segments, corrupting both path construction and
+  `_set_path()`'s reverse lookup (`KeyError`, confirmed via a real
+  `terraform plan` once a DNS secret was actually exercised end-to-end —
+  no existing unit test had a dotted key). Fixed by adding
+  `escape_path_segment()`/`split_path()` to `value_tokens.py` (escape a
+  literal `.` as `\.`, backslash-escaped) and using them consistently in
+  `resolve_value_tokens_tracking_secrets()`, `find_secret_paths()`,
+  `_set_path()`, and `_group_by_first_segment()`.
+- **Found and fixed a second, deeper bug** this surfaced in Phase 6's
+  `_render_strata_merge()`: it built both HCL object-constructor keys and
+  nested attribute-access expressions using bare dot-chains
+  (`var.strata.foo.bar`) and bare identifiers — invalid HCL the moment a
+  real key contains a `.` or a `-` (a hyphenated name like `public-dns` is
+  at least as common as a dotted one, and neither is a valid bare HCL
+  identifier). Fixed by switching to JSON-quoted keys and bracket
+  indexing throughout (`var.strata["public-dns"]`, `"public-dns" = ...`)
+  — valid HCL for any string key, not just identifier-safe ones. A
+  related encoding wrinkle: the escaped-path *string* (e.g.
+  `dns.public-dns.zones.example\.com...`) needed its own backslash doubled
+  again before embedding as an HCL string literal, since `\.` is not a
+  recognized HCL string escape sequence — only `\\.` round-trips through
+  HCL's own string parser back to the real single-backslash path.
+- **Confirmed, not fixed (separate, out-of-scope Phase 6 limitation)**:
+  `build_strata_locals()`'s generic `merge()`-based reassembly only
+  handles a secret path nested through dicts — a secret reachable only
+  through a list index (e.g. a DNS record's `value`, since `records` is a
+  list) hits Terraform's own `merge(): arguments must be maps or objects,
+  got "tuple"` error, because `merge()` cannot partially override a list
+  element. `build_strata_locals()` is not yet wired into `build run`/
+  `default_output()` at all (confirmed — still a standalone, manually
+  invoked function, exactly as Phase 6 left it), so this never affects
+  Phase 7's own deliverable; the ported secrets-in-every-shape test
+  works around it by reading `var.strata_secrets` directly via
+  `lookup()` in its own hand-written `outputs.tf`, bypassing
+  `build_strata_locals()` entirely, rather than papering over a gap this
+  phase did not introduce and was not asked to close.
+
+### Phase 8 — Delete the rest of the dead machinery, bump version — DONE (2026-10-11)
 
 **Design:** sweep for any remaining reference to deleted names
 (`_REAL_VARIABLE_NAME`, `FLAT_CATEGORIES`, `real_variable_name`,
@@ -1175,6 +1587,59 @@ an explicit breaking-change note per Migration step 3.
 
 **Tests:** full suite (`mypy`, `ruff`, `pytest`, `lint-imports`) green;
 no remaining reference to any deleted symbol anywhere in the repo.
+
+**Implemented as designed**, the deletion/sweep half:
+
+- Deleted from `terraform_projection.py`: all fourteen old
+  `_build_*_payload()`/`_merge_resource_entry()` functions,
+  `build_dns_networks_firewalls_payloads()`, `build_configuration_
+  payloads()`, `build_platform_projection()`, `_REAL_VARIABLE_NAME`,
+  `FLAT_CATEGORIES`, `real_variable_name()`, `planned_files()`,
+  `resolve_deploy_time_files()` — confirmed zero real callers left in
+  `src/` first (only comment/docstring mentions, all inside the functions
+  being deleted or in the surviving Phase 2+ functions' own historical
+  comparisons). Rewrote the module's own top-of-file docstring, which
+  still described the pre-ADR-0035 "one function per category" design
+  wholesale, not just a stale reference.
+  Dropped the now-dead `ProvisionerModel`/`WorkspaceResourceModel` imports
+  alongside them.
+- Deleted the matching dead tests from `test_integrations_terraform_
+  projection.py` (every `build_platform_projection()`/`build_
+  configuration_payloads()`/`planned_files()`/`resolve_deploy_time_
+  files()` test) — ~52 tests — while preserving the `_tenant()` fixture
+  helper (still used by a surviving `build_strata_payload()` test) and
+  every Phase 2+ test. Ran `ruff check --fix` to catch the resulting
+  dangling imports (`ValueReference`'s own sibling import, `Deployment*
+  Model`) rather than auditing each one by hand.
+- Cleaned up stale docstring/comment cross-references to the deleted
+  names inside the SURVIVING functions (`build_strata_payload()`,
+  `planned_strata_file()`, `rewrite_strata_payload()` in `terraform_
+  projection.py`; `default_output()` in `terraform.py`; the per-step
+  delivery block in `deploy_controller.py`) — these referenced the old
+  functions for comparison/contrast and would otherwise dangle-reference
+  deleted symbols by name once this phase's deletion landed.
+- Left historical, past-tense mentions of the deleted names alone where
+  they explain *why* a test exists or what bug it used to guard against
+  (e.g. "the old FLAT_CATEGORIES mechanism used") — these are accurate,
+  intentional documentation of history, not stale/confusing references to
+  something assumed to still exist. Also left every `docs/decisions/`,
+  `docs/design/`, and other `docs/work/` mention alone — Phase 8's own
+  design text scopes the sweep to `src/` and `tests/` only; those are
+  historical ADRs/design docs appropriately describing what came before.
+- Full suite: 2293 passed (down from 2345 — the ~52 deleted dead tests,
+  no net-new), mypy (151 files)/ruff/lint-imports all clean.
+- **Version bump, done 2026-10-11**: bumped `VERSION.txt` to
+  `2.0.0-Alpha20` (normalizes to `2.0.0a20`), deliberately skipping
+  `alpha10`-`alpha19` to leave room for bugfix alphas on this work, per
+  explicit request — not just "alpha9 + 1". `ruff format --check` caught
+  2 files needing reformatting from Phases 7/8's own edits, fixed before
+  rebuilding. Full check suite green again after; `uv build` produced
+  `xyz_strata-2.0.0a20-py3-none-any.whl`/`.tar.gz` (confirmed Phase 5's
+  packaged `strata_variables.tf` template is included); installed into a
+  fresh isolated venv, confirmed `strata version` → `2.0.0a20` and
+  `strata --help` still lists the same nine commands. Full details in
+  release-strategy.md's own Changelog. Tag+push intentionally left for
+  explicit user confirmation, per this repo's standing convention.
 
 ### Phase 9 — Consumer migration (tracked here, executed elsewhere)
 
@@ -1222,12 +1687,22 @@ repo's own test suite; tracked here only so it isn't forgotten.
       `resx_<type>` file split for a real reason. **Done 2026-10-09 —
       neither does, and the split is actively lossy. See "Resources are
       one flat map".**
-- [ ] Resolve the two remaining sub-questions under "Type design"
-      (`sensitive = true` plan-output impact, strict-vs-`optional()` top
-      level). `optional()` itself is resolved — allowed.
-- [ ] Decide whether strata emits its own `terraform { required_version }`
-      block or only documents the ≥ 1.3 requirement (leaning: document
-      only, a duplicate block is a hard error).
+- [x] Resolve whether the projection always emits every top-level key
+      (**done, Phase 2 — yes, always**, see Phase 2's own "Correction"
+      note) — leaves one sub-question under "Type design" still open:
+      `sensitive = true`'s plan-output redaction impact on
+      `strata_secrets` (not yet tested against a real root, deferred to
+      Phase 5 which authors the static type template).
+      `optional()` itself is resolved — allowed.
+- [x] **Decide whether strata emits its own `terraform { required_version }`
+      block** — **done, Phase 5 (2026-10-11): emits it unconditionally.**
+      Verified empirically (not assumed) the design's own prior caveat was
+      wrong: multiple `terraform { required_version = ... }` blocks across
+      different files in the same root do NOT error as "duplicate block" —
+      Terraform merges/intersects every such constraint (confirmed with a
+      real, deliberately-impossible intersection producing the expected
+      "Unsupported Terraform Core version" error, not a duplicate-block
+      error). Safe to emit unconditionally.
 - [ ] Decide whether `build run` rejects `var.strata.` references in
       copied `.tf` sources, or only documents the `local.strata.*` rule.
 - [ ] Pick the exact sentinel prefix (`__strata_secret__:` is a
@@ -1239,42 +1714,31 @@ repo's own test suite; tracked here only so it isn't forgotten.
       under `properties` (`ModuleSpecModel.properties: ModulePropertiesModel
       | None`), not as flat siblings of `type`/`source` — they are not
       top-level `ModuleSpecModel` fields.**
-- [ ] **Add a `modules: dict[str, ModuleModel]` to `ResolvedWorkspaceGraph`**
-      (2026-10-09 review finding) — unlike `providers`/`resources`/
-      `namespaces`/`firewalls`/`dns`/`networks`, there is currently no
-      resolved-modules collection at all on the graph. Projecting `modules`
-      needs a real graph-resolution step (gathering the `Module` documents
-      referenced by `NamespaceSpecModel.modules`), not just a new
-      `_build_modules_payload()` function — the data isn't in the graph yet.
-- [ ] Resolve the `variables = map(string)` / `labels = map(string)` type
+- [x] **Add a `modules: dict[str, ModuleModel]` to `ResolvedWorkspaceGraph`**
+      (2026-10-09 review finding) — **done, Phase 1 (2026-10-11).**
+- [x] Resolve the `variables = map(string)` / `labels = map(string)` type
       mismatches (2026-10-09 review finding, see "Type design" sub-questions)
-      — `ValueReference.value` and every `*MetaModel.labels` value are
-      typed `Any` in the real models, not guaranteed strings.
-- [ ] Implement the `strata.default_tags` hoist — `_build_workspace_payload()`
-      currently nests `WorkspaceSpecModel.default_tags` under `workspace`;
-      the new top-level `default_tags` category needs its own builder
-      (reads the same field, just placed at the top of the payload).
-- [ ] **Add `storage` to the `resources` projection** (2026-10-09 review
-      finding — pre-existing bug, not specific to this redesign):
-      `ResourceSpecModel.storage` (`disks`/`volumes`/`parameters`) is
-      validated and round-trip tested but `_merge_resource_entry()` never
-      reads it — a VM's disks silently never reach any `.tf` artifact
-      today. Same gap-#17 class as the old `ProviderSpecModel.configuration`
-      bug, just never extended to this field. Fix applies to the *current*
-      `terraform_projection.py` independent of whether this redesign ships
-      — worth doing now rather than waiting.
-- [ ] **Add `custom` to the `resources` projection** (2026-10-09 review
-      finding, same pre-existing-bug class as `storage` above):
-      `ResourceSpecModel.custom` is a real, documented field but
-      `_merge_resource_entry()` only ever merges `configuration` — `custom`
-      is silently dropped. (`default_labels`/`custom_labels` do **not**
-      apply here — `ResourceSpecModel` has no such fields at all; that was
-      an incorrect addition to the example, reverted.)
-- [ ] **Add `namespaces` to the `topologies` projection** (2026-10-09
-      review finding, same class): `TopologySpecModel.namespaces` is a
-      real, validated field but `_build_topologies_payload()` only returns
-      `type`/`components`/`volumes` — the namespace references are
-      silently dropped.
+      — **done, Phase 5 (2026-10-11)**: both typed `map(any)` in the
+      generated `strata_variables.tf`, matching the real `Any`-typed
+      `ValueReference.value`/`*MetaModel.labels` fields.
+- [x] `sensitive = true` on `strata_secrets` plan-output impact — **done,
+      Phase 5 (2026-10-11)**: tested against a real `terraform plan`, no
+      redaction side effects found; kept as designed.
+- [x] Implement the `strata.default_tags` hoist — **done, Phase 2
+      (2026-10-11)**, `_strata_default_tags()`.
+- [x] **Add `storage` to the `resources` projection** — **done in the new
+      `_strata_resources()`, Phase 2 (2026-10-11).** Note: the
+      *current/old* `_merge_resource_entry()` (still live until Phase
+      7/8 deletes it) still has this gap — only the new unified path
+      fixes it; not worth patching the old function too for code about
+      to be deleted.
+- [x] **Add `custom` to the `resources` projection** — **done in the new
+      `_strata_resources()`, Phase 2 (2026-10-11)**, merged workspace-wins
+      like `configuration`/`default_tags`/`custom_tags`. (`default_labels`/
+      `custom_labels` still do **not** apply here — `ResourceSpecModel` has
+      no such fields at all.)
+- [x] **Add `namespaces` to the `topologies` projection** — **done in the
+      new `_strata_topologies()`, Phase 2 (2026-10-11).**
 - [ ] **Fix: `${output:...}` is never treated as secret-shaped, regardless
       of Terraform's own `sensitive = true` on the referenced output**
       (2026-10-10 review finding — real, currently-live security gap,
@@ -1327,6 +1791,196 @@ repo's own test suite; tracked here only so it isn't forgotten.
 
 ## Changelog
 
+- 2026-10-11: **Requirements-traceability pass against ADR-0035 itself**
+  (prompted by "go back and check the result against the requirements,"
+  not against this doc's own phase checklist, which was already fully
+  checked off) found the implementation didn't match the accepted
+  decision text: `strata_locals.tf` was never wired into `build run`'s
+  `default_output()` at all, despite ADR-0035 explicitly committing to
+  it and counting it as one of the decision's own Consequences. Fixed,
+  and in doing so found two more real bugs the missing wiring had been
+  masking: `merge()` cannot partially override a list (a DNS record
+  secret inside `records` crashed a real `terraform plan`), and the
+  lookup-key HCL-escaping fix from Phase 7 was itself double-escaping
+  (via a redundant `json.dumps()` on an already-doubled string), so any
+  dotted-key secret silently resolved to the wrong (sentinel) value with
+  no error. All three fixed and proven via a new real-terraform test
+  using a DNS zone literally named `example.com` with a secret inside its
+  `records` list — the exact shape that exposed both bugs at once. Full
+  suite: 2306 passed, mypy/ruff/ruff format/lint-imports all clean. See
+  this doc's own "Post-Phase-8 correction" section (inserted after Phase
+  6) for the full account.
+- 2026-10-11: **Implemented Phase 8, fully — sweep/deletion plus the
+  version bump.** Deleted all fourteen old `_build_*_payload()` functions,
+  `_merge_resource_entry()`, `build_dns_networks_firewalls_payloads()`,
+  `build_configuration_payloads()`, `build_platform_projection()`,
+  `_REAL_VARIABLE_NAME`, `FLAT_CATEGORIES`, `real_variable_name()`,
+  `planned_files()`, and `resolve_deploy_time_files()` from
+  `terraform_projection.py` (confirmed zero real callers left first),
+  plus their ~52 matching dead tests from `test_integrations_terraform_
+  projection.py` (keeping the still-used `_tenant()` fixture helper and
+  every Phase 2+ test). Rewrote the module's own stale top-of-file
+  docstring and cleaned up dangling cross-references inside the surviving
+  Phase 2-7 functions' own docstrings. Left intentional, past-tense
+  historical mentions of the deleted names alone (they document why a
+  test exists, not that the code still does). Bumped `VERSION.txt` to
+  `2.0.0-Alpha20` per explicit request (skipping `alpha10`-`alpha19` to
+  leave room for bugfix alphas), caught and fixed 2 files `ruff format`
+  flagged from this phase's own edits, built and verified the wheel in a
+  fresh isolated venv. Full suite: 2293 passed (down from 2345 — the
+  deleted dead tests, no net-new), mypy/ruff/ruff format/lint-imports all
+  clean. Details of the version bump itself in release-strategy.md's own
+  Changelog, per this repo's convention of keeping that the single source
+  of truth for release mechanics.
+- 2026-10-11: **Implemented Phase 7 — `deploy_controller.py` rewiring.**
+  Replaced the entire per-category `TF_VAR_<name>`/`FLAT_CATEGORIES`
+  delivery block and the `resolve_deploy_time_files()` call with
+  `rewrite_strata_payload()` + a single `strata.auto.tfvars.json`
+  rewrite + one `TF_VAR_strata_secrets` env var, as designed; deleted the
+  now-inapplicable `flat_key_owner`/`merged_resources` collision block
+  outright. Found and fixed two real, pre-existing bugs this phase was
+  the first to exercise end-to-end against real data and a real
+  `terraform plan`: (1) `resolve_value_tokens_tracking_secrets()`'s
+  dotted-path convention broke on any real key containing a literal `.`
+  (e.g. a DNS zone name like `example.com`) — fixed with new
+  `escape_path_segment()`/`split_path()` helpers in `value_tokens.py`,
+  used consistently by `find_secret_paths()`/`_set_path()`/
+  `_group_by_first_segment()`; (2) Phase 6's `_render_strata_merge()`
+  generated invalid HCL (bare dot-chains/bare identifiers) for any key
+  with a `.` or a `-` — fixed by switching to JSON-quoted keys and
+  bracket indexing throughout. Also confirmed (not fixed, out of this
+  phase's scope) that `build_strata_locals()`'s `merge()`-based
+  reassembly cannot override a secret reached through a list index (e.g.
+  a DNS record's `value`) — `merge()` rejects list/tuple arguments;
+  `build_strata_locals()` is still not wired into `build run` at all, so
+  this doesn't affect any real pipeline today. Ported all 3
+  `test_terraform_variable_precedence.py` real-terraform tests plus 8
+  `test_deploy_controller.py` tests to the new single-file/single-env-var
+  shape. Full suite: 2345 passed, mypy/ruff/lint-imports all clean.
+- 2026-10-11: **Implemented Phase 6 — `build_strata_locals()`.** Built
+  as designed: groups secret paths by first segment and recurses,
+  producing one nested `merge()` per shared parent rather than
+  independent, mutually-clobbering top-level merges. The real-terraform
+  test caught a real mistake the unit tests couldn't: its first draft
+  reused Phase 3's own hand-rolled partial payload pattern, but Phase 3's
+  root declared `variable "strata" { type = any }` while this one uses
+  Phase 5's real generated strict type (no top-level `optional()`, by
+  Phase 2's own "always emit every category" decision) — a partial
+  payload is a genuine type violation there. Fixed by building the test
+  payload from a real `build_strata_payload()` call instead of a literal
+  dict — confirms the general rule (anything validated against the
+  Phase 5 type must come from the real payload builder). Added 4 unit
+  tests plus one real-terraform test wiring the full Phase 3/5/6 chain
+  together against a live `terraform plan`. Full suite: 2345 passed,
+  mypy/ruff/lint-imports all clean.
+- 2026-10-11: **Implemented Phase 5 — `strata_variables.tf` static
+  template.** Two real gaps found before writing code: (1) "extending the
+  existing source-scan check" referred to nothing real — grepped and
+  confirmed no `.tf`-source-scanning mechanism exists anywhere, built
+  `_sources_declare_own_strata_variable()` from scratch; (2)
+  `default_output()` never received the destination path at all — added
+  `path` to the shared `InfraIntegration.default_output()` signature
+  (not a Terraform-only `prepare()` override), rippling through
+  `capabilities.py`/`terraform.py`/`gitops.py` and their tests. Wrote the
+  type directly from the real, already-implemented `_strata_*()`
+  functions rather than trusting this doc's own "Option B" draft code
+  block (confirmed stale — predated `modules`/`default_tags`/the
+  workspace reshaping). Resolved `optional()` usage empirically: nothing
+  needs it except every `tenant.*` field, since `_strata_tenant()`
+  collapses to a bare `{}` (keys genuinely absent, not just null) when no
+  tenant is referenced — proven by a dedicated real-terraform test, not
+  just asserted. Verified empirically that this doc's own prior
+  "duplicate `required_version` block is a hard error" caveat was wrong:
+  multiple `terraform { required_version }` blocks across different
+  files in one root merge/intersect their constraints, they don't error
+  — so the generated file emits one unconditionally, as designed, now
+  confirmed safe. Tested `sensitive = true` on `strata_secrets` against a
+  real plan — no redaction side effects. Recreated the template file
+  once after `create_file` wrote its em-dash header byte as cp1252 (same
+  corruption class already known for `replace_string_in_file`, now
+  confirmed for `create_file` too) — fixed with plain-ASCII punctuation,
+  verified by a direct byte-decode check. Added 2 cheap tests (opt-out
+  scan behavior) plus 2 real-terraform tests validating the generated
+  type against a fully-populated and a minimal (no-tenant) payload. Full
+  suite: 2340 passed, mypy/ruff/lint-imports all clean.
+- 2026-10-11: **Implemented Phase 4 — single-file `default_output()`.**
+  Verified two real questions empirically before trusting the design was
+  safe to land, rather than assuming: (1) a real `terraform plan` against
+  a root that doesn't declare `variable "strata"` only **warns**
+  ("Value for undeclared variable"), never errors — confirmed against a
+  real minimal root, not assumed from Terraform's docs; (2)
+  `deploy_controller.py` (unchanged, Phase 7 not done) keeps working
+  correctly regardless, because its `resolve_deploy_time_files()` inputs
+  are computed fresh from the graph every run, never read from disk — it
+  was never literally "patching what build wrote," so it keeps
+  creating/rewriting the old per-category files exactly as before,
+  independent of `build run`'s new single-file output. Documented the one
+  real (safe but worth tracking) consequence this surfaces: `deploy run`
+  now legitimately creates files `build run` itself never wrote, for
+  every workspace with any non-empty category — generalizing what used
+  to be a narrow, already-fixed dns/networks/firewalls-only quirk;
+  resolves naturally once Phase 7 lands, not a regression needing its own
+  fix. Fixed 6 existing tests (beyond the 2 the design's own "Tests" line
+  anticipated) whose build-time assertions no longer applied — each
+  test's real regression-guard was kept intact, only the "build wrote the
+  stale file first" setup assertion was removed/adjusted. Full suite:
+  2337 passed (unchanged count), mypy/ruff/lint-imports all clean.
+- 2026-10-11: **Implemented Phase 3 — `find_secret_paths()`/
+  `rewrite_strata_payload()`.** One real deviation found before writing
+  code: the design's "reuse the same walk `resolve_value_tokens_tracking_
+  secrets()` already does" could not mean literally calling it with an
+  empty `values` dict for `find_secret_paths()` — traced its non-secret
+  branch and confirmed it raises `ValueError` on any unresolved
+  `${var:}`/`${feature:}` token, which a build-time payload is expected to
+  still carry (ADR-0022 D4). Wrote `find_secret_paths()` as its own small
+  shape-only walk instead, confirmed by a dedicated test exercising
+  exactly that case. `rewrite_strata_payload()` matched the design
+  exactly — resolve via the existing primitive, then overwrite every
+  secret path with its sentinel via a new `_set_path()` helper. Both land
+  in `terraform_projection.py`; `resolve_deploy_time_files()` stays
+  unchanged until Phase 7 (same deferred-deletion pattern as Phase 2).
+  Added 9 unit tests plus one real-terraform regression test (new file,
+  `test_unified_terraform_projection_secrets.py`, mirroring
+  `test_terraform_variable_precedence.py`'s pattern) proving against a
+  real `terraform plan`: a direct `var.strata.*` read sees only the
+  sentinel, a `var.strata_secrets[path]` read sees the real value, a
+  non-secret sibling is untouched, and the on-disk file never contains
+  the real secret (direct text scan). Full suite: 2337 passed, mypy/
+  ruff/lint-imports all clean.
+- 2026-10-11: **Implemented Phase 2 — `build_strata_payload()`.** Found a
+  real planning bug before writing any code: this phase's own text said
+  to delete `build_platform_projection()`/`build_configuration_payloads()`/
+  `build_dns_networks_firewalls_payloads()`/`_REAL_VARIABLE_NAME`/
+  `FLAT_CATEGORIES`/`real_variable_name()` in this same phase — grepping
+  their real call sites first found `terraform.py`'s `default_output()`
+  and `deploy_controller.py`'s whole TF_VAR_ delivery block still call
+  them directly, so deleting now would break both at import time.
+  Corrected the plan instead of following it mechanically: kept all old
+  functions unchanged and purely additive this phase, deferring deletion
+  to Phase 7/8 (the phases that actually rewire those two real callers)
+  — consistent with this doc's own "each phase independently mergeable"
+  convention, which the original text violated for this one phase. Added
+  `build_strata_payload()` + 15 `_strata_*()` helpers (14 originally
+  planned + `_strata_modules()`), folding in the three known gap fixes
+  (`resources.storage`, `resources.custom`, `topologies.namespaces`) and
+  the `tenant.custom`/`geographies`-not-`zones` rename from the earlier
+  review. Also resolved one of "Type design"'s open sub-questions while
+  implementing (always emit all 15 top-level keys, empty when unused,
+  rather than the old "skip empty categories" convention) instead of
+  leaving it pending. Targeted new tests only (old category tests
+  untouched, still valid). Full suite 2328 passed, mypy/ruff/lint-imports
+  all clean.
+- 2026-10-11: **Implemented Phase 1 — `modules` on
+  `ResolvedWorkspaceGraph`.** No deviations from the design: added the
+  `modules: dict[str, ModuleModel]` field to `resolved_context.py`,
+  resolved `namespaces` first in `build_resolved_workspace_graph()` so
+  module names could be derived from their `spec.modules[].module`
+  references, then looked them up the same way every other category is.
+  Added a dedup-focused test (two namespaces, one module referenced
+  twice under different reference names) plus a `graph.modules == {}`
+  check on the existing provider test. Full suite 2320 passed, mypy/
+  ruff/lint-imports all clean — zero behavior change to any existing
+  output, as designed (no builder reads `graph.modules` yet).
 - 2026-10-10: **Resolved the per-step/per-directory claiming open
   question — decision (b), no generalization.** Tracing the real code
   found two separate mechanisms, not one (`WorkspaceService.

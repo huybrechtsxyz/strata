@@ -246,6 +246,24 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-10-11: **Built alpha20** — bumped `VERSION.txt` to `2.0.0-Alpha20`
+  (normalizes to `2.0.0a20`; confirmed via `packaging.version.Version`
+  first), deliberately skipping `alpha10`-`alpha19` to leave room for
+  bugfix alphas on the unified-terraform-projection (ADR-0035) work
+  landed as `alpha9`, per explicit request. Full check suite green: mypy
+  (151 files), ruff check, ruff format (2 files needed reformatting after
+  Phase 7/8's edits — fixed), import-linter, pytest (2293 passed — hit
+  the documented stale-dist-info sharp edge first, same as alpha9;
+  `uv sync --reinstall-package xyz-strata --index-strategy
+  unsafe-best-match` + a follow-up `uv sync --all-extras
+  --index-strategy unsafe-best-match` to restore the dropped `docs`
+  group; green after). `uv build --index-strategy unsafe-best-match`
+  produced `xyz_strata-2.0.0a20-py3-none-any.whl`/`.tar.gz` (confirmed
+  `strata_variables.tf`, Phase 5's packaged template, is included);
+  installed into a fresh isolated `uv venv`, confirmed `strata version`
+  → `2.0.0a20` and `strata --help` still lists the same nine commands.
+  Verification venv removed after. Tag+push intentionally left for
+  explicit user confirmation, same as every prior alpha.
 - 2026-09-30: Initial draft — captured current state and the decisions made
   in this session (branch = `v2` direct, name = `xyz-strata`, Docker `latest`
   gating needed, GitHub prerelease flag needed, `VERSION.txt` → `2.0.0a1`).

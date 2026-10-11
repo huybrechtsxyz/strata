@@ -190,7 +190,7 @@ def build_workload_modules(
 
     Skips a `ModuleReferenceModel` with `enabled=False` entirely — neither
     resolved, materialised, nor rendered. Matches
-    `terraform_projection._build_resources_payload()`'s identical treatment
+    `terraform_projection._strata_resources()`'s identical treatment
     of `WorkspaceResourceModel.enabled=False` (that field's own docstring:
     "excludes it from the built platform artifact, and therefore from every
     provisioner that consumes it") — the same v1 parity gap, on the

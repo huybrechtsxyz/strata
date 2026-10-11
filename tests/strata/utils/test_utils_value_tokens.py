@@ -6,6 +6,7 @@ docs/design/deploy-command.md)."""
 import pytest
 
 from strata.utils.value_tokens import (
+    escape_path_segment,
     extract_value_tokens,
     find_malformed_value_tokens,
     has_value_tokens,
@@ -13,6 +14,7 @@ from strata.utils.value_tokens import (
     resolve_value_tokens_in_mapping,
     resolve_value_tokens_renaming_secrets,
     resolve_value_tokens_tracking_secrets,
+    split_path,
     strip_escaped_value_tokens,
     validate_value_tokens,
 )
@@ -280,6 +282,58 @@ def test_tracking_secrets_plain_literal_passes_through_unchanged():
     resolved, secrets = resolve_value_tokens_tracking_secrets(data, {})
     assert resolved == data
     assert secrets == {}
+
+
+def test_tracking_secrets_a_dotted_real_key_does_not_corrupt_the_path():
+    """A real key containing a literal '.' (a DNS zone name like
+    example.com) must not be confused with the '.' path separator —
+    the escaped path must still split back to the real key via
+    split_path(), unescaped."""
+    data = {"zones": {"example.com": {"value": "${secret:dns_secret}"}}}
+    resolved, secrets = resolve_value_tokens_tracking_secrets(data, {"dns_secret": "1.2.3.4"})
+    assert resolved["zones"]["example.com"]["value"] == "${secret:dns_secret}"
+    (path,) = secrets
+    assert secrets[path] == "1.2.3.4"
+    assert split_path(path) == ["zones", "example.com", "value"]
+
+
+# ---------------------------------------------------------------------------
+# escape_path_segment() / split_path() — the dotted-path escaping
+# convention `resolve_value_tokens_tracking_secrets()` (and
+# `terraform_projection.py`'s `_set_path()`/`find_secret_paths()`) rely on
+# so a literal '.' inside a real key can't be confused with the '.'
+# separator joining path segments.
+# ---------------------------------------------------------------------------
+
+
+def test_escape_path_segment_escapes_a_literal_dot():
+    assert escape_path_segment("example.com") == "example\\.com"
+
+
+def test_escape_path_segment_escapes_a_literal_backslash_first():
+    assert escape_path_segment("a\\b") == "a\\\\b"
+
+
+def test_escape_path_segment_is_a_no_op_for_a_plain_key():
+    assert escape_path_segment("public-dns") == "public-dns"
+
+
+def test_split_path_splits_plain_segments_on_the_separator():
+    assert split_path("dns.public-dns.value") == ["dns", "public-dns", "value"]
+
+
+def test_split_path_treats_an_escaped_dot_as_literal_within_a_segment():
+    assert split_path("zones.example\\.com.value") == ["zones", "example.com", "value"]
+
+
+def test_split_path_reverses_escape_path_segment_round_trip():
+    segments = ["zones", "example.com", "a\\b", "value"]
+    joined = ".".join(escape_path_segment(s) for s in segments)
+    assert split_path(joined) == segments
+
+
+def test_split_path_single_segment_with_no_dots():
+    assert split_path("workspace") == ["workspace"]
 
 
 # ---------------------------------------------------------------------------

@@ -1,97 +1,50 @@
 #!/usr/bin/env python3
-"""The default Terraform output projection (ADR-0023 D1, Phase 1 + 2a + 2c
-dns/networks).
+"""The default Terraform output projection (ADR-0035, docs/work/
+unified-terraform-projection.md) — `build_strata_payload()` builds one
+nested `strata` object (every top-level key always present, even empty)
+from a `ResolvedWorkspaceGraph`; `planned_strata_file()` wraps it as the
+single `strata.auto.tfvars.json` `build run` writes; `rewrite_strata_
+payload()`/`find_secret_paths()` re-resolve it at deploy time, sentineling
+any secret-shaped leaf rather than ever writing a real secret value to
+disk; `build_strata_locals()` generates the `strata_locals.tf` a consumer
+can use to merge a step's `TF_VAR_strata_secrets` back in.
 
 One function per category, not a method on any model. Not a style
 preference: ADR-0003's import-linter contract has `strata.integrations`
 sitting *above* `strata.models`, so a `WorkspaceModel.to_tfvars_payload()`-
 style method would mean the model layer reaching up into Terraform-specific
-shaping (backwards). The `resources_by_category` merge also can't be one
-model's method regardless of layering — it needs a `ResourceModel`'s own
-fields *and* the workspace's `WorkspaceResourceModel` override merged on
-top, two documents at once.
+shaping (backwards).
 
 A sibling module to `terraform.py`, not a method on `TerraformIntegration`
 — the projection only needs a `ResolvedWorkspaceGraph` (already-resolved
 plain models), never `DocumentIndex`/`SolutionContext` access, which
 `InfraIntegration` subclasses are not allowed to touch (ADR-0021 D2).
 
-Deliberately excludes several things this module does not build (see
-ADR-0023's own Phase 1/2/3 split, checked against real evidence, not
-assumed):
-
-- `modules` — checked all six real workspaces available for this ADR;
-  zero use of `TopologyComponentModel.modules` in any of them (Compose/Helm
-  modules go through the entirely separate `prepare_namespace()` pipeline,
-  ADR-0022 D5-D7, never this projection). Skipped, not built.
-- `dns`/`networks` are built with `DnsRecordModel.value`/`SubnetModel.cidr`/
-  `NetworkDefinitionModel.address_space` written as-is, tokens (ADR-0002)
-  unresolved — this build-time projection deliberately never resolves them
-  (ADR-0022 D4); `deploy_run()` re-resolves both categories per step via
-  `build_dns_networks_firewalls_payloads()` below, delivered as
-  `TF_VAR_dns`/`TF_VAR_networks` (docs/design/value-token-resolution.md's
-  "Full Solution" Phase 2, implemented — not a gap anymore).
-- Until docs/design/gap_fit_v1.md gap #17, `_build_providers_payload()` silently
-  dropped `ProviderSpecModel.configuration`/`.custom` entirely — fixed;
-  see that function's own docstring.
-- `required_variables`/`required_features`/`required_secrets` (deferred —
-  no v2 model has a `references` field to walk for this; building it means
-  regex-scanning resolved config for `${var:}`/`${secret:}`/`${feature:}`
-  tokens, Phase 3's job).
-- `custom` is never read for `resources_by_category` — only `configuration`
-  is merged. Checked against both real workspaces available and found zero
-  use of `custom` anywhere; `configuration`/`custom` are separate channels
-  for a reason (`configuration` is merged verbatim into the deployer's own
-  structures, `custom` is for scripts/extensions only) — if a value needs
-  to reach Terraform's tfvars it goes in `configuration`, never `custom`.
-- A `WorkspaceResourceModel` with `enabled=False` is skipped entirely, and
-  one with `managed_by="provisioner"` (no backing `Resource` document —
-  the real `spoke_resx`/`env_resx` case in `config-deploy`) has
-  nothing to categorise and is skipped too.
+Deliberately excludes `modules` attached to a topology (not a namespace) —
+checked all six real workspaces available for this ADR; zero use of
+`TopologyComponentModel.modules` in any of them (Compose/Helm modules go
+through the entirely separate `prepare_namespace()` pipeline, ADR-0022
+D5-D7, never this projection).
 """
 
+import json
 from typing import Any
 
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
-from strata.models.provisioning_model import ProvisionerModel
-from strata.models.workspace_model import WorkspaceResourceModel
-from strata.utils.value_tokens import resolve_value_tokens_tracking_secrets
+from strata.utils.value_tokens import (
+    escape_path_segment,
+    extract_value_tokens,
+    resolve_value_tokens_tracking_secrets,
+    split_path,
+)
 
 
-def _build_workspace_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """`workspace_name`/`workspace_version`/`deployment_name`/`environment`/
-    `platform_version`/`labels`/`metadata` — six independent, flat
-    Terraform variables (docs/design/terraform-tfvars-parity.md), matching
-    v1's real `_build_workspace_vars()` exactly (confirmed directly), plus
-    `configuration`/`custom`/`default_tags` — `WorkspaceSpecModel`'s own
-    passthrough fields, previously validated but never read anywhere in this
-    module (same silent-data-loss gap as `_build_dns_payload()`'s zone fields,
-    found and fixed alongside it).
-
-    - `workspace_version` — `workspace.meta.labels["version"]`, default
-      `"1.0.0"` (v1's own default, not a v2 invention).
-    - `deployment_name`/`platform_version` — the deployment document's own
-      `meta.name`/`apiVersion` (v1's `platform.meta.name`/`platform.apiVersion`
-      — v1 calls the resolved deployment artifact `platform`, the same
-      document this module's own `graph.deployment` now carries).
-    - `environment` — `deployment.meta.labels["environment"]`, default
-      `"production"` (v1's own default). **Not** `DeploymentSpecModel.
-      environments` — confirmed against v1's real source this is a plain
-      label, not the deployment's environment-reference list.
-    - `metadata.deployment_version` — `deployment.meta.labels["version"]`,
-      default to `workspace_version` (v1's own fallback chain).
-    - `metadata.workspace_description`/`deployment_description` —
-      `workspace.meta.annotations`/`deployment.meta.annotations`'s
-      `"description"` key, same convention every other category here
-      already uses for its own `description` field.
-    - `metadata.workspace_tags`/`deployment_tags` — `workspace.meta.tags`/
-      `deployment.meta.tags`.
-
-    `graph.deployment` is `None` for a caller with no deployment in scope
-    (none exist today) — falls back to v1's own documented defaults for
-    every deployment-derived field rather than raising, so `build run`
-    against a hypothetical deployment-less graph still gets a valid,
-    if minimal, `workspace.auto.tfvars.json`.
+def _strata_workspace(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.workspace` — v1-parity flat names (`workspace_name`/
+    `metadata.*`) reshaped as plain nested fields, and `default_tags`
+    hoisted out to its own top-level `strata.default_tags` category
+    (`_strata_default_tags()` below) rather than nested here — see this
+    design doc's own "The output surface" section for why.
     """
     meta = graph.workspace.meta
     workspace_labels = meta.labels or {}
@@ -118,54 +71,54 @@ def _build_workspace_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 
     spec = graph.workspace.spec
     return {
-        "workspace_name": meta.name,
-        "workspace_version": workspace_version,
-        "deployment_name": deployment_name,
+        "name": meta.name,
+        "version": workspace_version,
+        "description": (meta.annotations or {}).get("description", ""),
+        "tags": meta.tags or [],
+        "deployment": deployment_name,
+        "deployment_version": deployment_version,
+        "deployment_description": deployment_description,
+        "deployment_tags": deployment_tags,
         "environment": environment,
         "platform_version": platform_version,
         "labels": workspace_labels,
         "configuration": spec.configuration or {},
         "custom": spec.custom or {},
-        "default_tags": spec.default_tags or {},
-        "metadata": {
-            "deployment_version": deployment_version,
-            "workspace_description": (meta.annotations or {}).get("description", ""),
-            "deployment_description": deployment_description,
-            "workspace_tags": meta.tags or [],
-            "deployment_tags": deployment_tags,
-        },
     }
 
 
-def _build_providers_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {type, region, display_name, description, labels, tags,
-    configuration, custom, default_tags} per `ProviderPropertiesModel`/
-    `ProviderSpecModel`/`ProviderMetaModel`.
+def _strata_default_tags(graph: ResolvedWorkspaceGraph) -> dict[str, str]:
+    """`strata.default_tags` — the solution-wide tag baseline, hoisted out
+    of `workspace` (see `_strata_workspace()` above)."""
+    return graph.workspace.spec.default_tags or {}
 
-    `default_tags` added alongside the DNS zone passthrough fix — same gap:
-    `ProviderSpecModel.default_tags` was validated but never read anywhere
-    in the codebase; gap #17 only fixed `configuration`/`custom` here, not
-    this sibling field.
 
-    `configuration`/`custom` added docs/design/value-token-resolution.md's
-    "Decision (2026-09-29)" fix (docs/design/gap_fit_v1.md gap #17) — previously
-    silently dropped from every Terraform artifact despite passing `strata
-    validate` cleanly (`ProviderSpecModel.configuration`/`.custom` are
-    checked by `unresolved_value_tokens()` via `_documents_reachable_from_
-    workspace()`'s whole-document walk, but were never read anywhere in
-    this module before this fix — confirmed by grep, unlike every other
-    `configuration`/`custom`-bearing category here).
-
-    `description`/`labels`/`tags` added docs/design/terraform-tfvars-parity.md
-    — v1's real `_build_provider_vars()` (confirmed directly) emits these
-    three from the provider component's own `description`/`labels`/`tags`,
-    v2's equivalents being `meta.annotations["description"]`/`meta.labels`/
-    `meta.tags` (the same convention every other category here already
-    uses). v1 also emits a `version` field (`provider.properties.version`)
-    with no v2 model equivalent at all — deliberately not restored here;
-    that doc's own Open Questions track it as a separate, unresolved
-    question (no confirmed real usage evidence for it, unlike these three).
+def _strata_tenant(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.tenant` — the deployment's own `spec.tenant` reference,
+    resolved once by `value_controller.resolve_tenant()`. Two gap fixes
+    folded in from day one: `custom` was a real `TenantSpecModel` field
+    never read at all; `geographies` is the real field name (`spec.
+    geographies`), not v1's `zones` rename — this redesign abandons v1
+    output parity on purpose, so the field keeps its real name instead of
+    being translated back to what v1 called it.
     """
+    if graph.tenant is None:
+        return {}
+    spec = graph.tenant.spec
+    return {
+        "code": graph.tenant.meta.name,
+        "name": spec.display_name,
+        "geographies": spec.geographies,
+        "onboarded": spec.onboarded.isoformat() if spec.onboarded else None,
+        "configuration": spec.configuration or {},
+        "custom": spec.custom or {},
+    }
+
+
+def _strata_providers(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.providers` — name -> {type, region, display_name,
+    description, labels, tags, configuration, custom, default_tags} per
+    `ProviderPropertiesModel`/`ProviderSpecModel`/`ProviderMetaModel`."""
     payload: dict[str, Any] = {}
     for name, provider in graph.providers.items():
         properties = provider.spec.properties
@@ -184,103 +137,71 @@ def _build_providers_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     return payload
 
 
-def _build_topologies_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {type, components: [...], volumes: [...]}.
+def _strata_resources(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.resources` — a **flat map keyed by resource name**, not
+    nested by resource type (v1's old per-type `resx_<type>` grouping) — see this design doc's "Resources are one
+    flat map" section: the only real consumer checked (`haven`) re-merges
+    the type split itself, and the split is a confirmed silent-data-loss
+    bug when multiple `resx_<type>.auto.tfvars.json` files declare the
+    same `resources` Terraform variable (last-file-wins, no warning).
 
-    `workspace.spec.topology` is optional (a workspace may have no grouping
-    concept at all) — an empty dict, not an error, when it is unset. Entries
-    are inline `TopologySpecModel` blocks (ADR-0028), read directly off the
-    workspace — no separate document lookup.
+    Two gap fixes folded in from day one, not patched into the old
+    function first: `storage` (`ResourceSpecModel.storage` — disks/
+    volumes/parameters, validated and round-trip tested but never
+    projected anywhere until now) and `custom` (same "validated, never
+    read" gap, merged workspace-wins like `configuration`/`default_tags`/
+    `custom_tags` already are, for consistency with every other
+    `WorkspaceResourceModel` override field here).
     """
     payload: dict[str, Any] = {}
-    for topology in graph.workspace.spec.topology or []:
-        payload[topology.name] = {
-            "type": topology.type,
-            "components": [c.model_dump(mode="json", exclude_none=True) for c in topology.components],
-            "volumes": [v.model_dump(mode="json", exclude_none=True) for v in (topology.volumes or [])],
-        }
-    return payload
-
-
-def _merge_resource_entry(workspace_resource: WorkspaceResourceModel, resource_spec: Any) -> dict[str, Any]:
-    """One `resources_by_category` entry — `ResourceSpecModel`'s own fields
-    with the matching `WorkspaceResourceModel` override fields merged on
-    top ("workspace wins"). Only `configuration` is merged from the two
-    documents (never `custom` — see module docstring); `labels`/`tags` on
-    the entry are the *resource document's* `meta.labels`/`meta.tags`
-    overridden by the workspace instance's own, since `ResourceSpecModel`
-    itself has no plain `labels`/`tags` field (only `default_tags`/
-    `custom_tags`, cloud tags, a distinct concept).
-    """
-    properties = resource_spec.properties
-    return {
-        "provider_type": properties.provider_type,
-        "resource_type": properties.resource_type,
-        "subcategory": properties.subcategory,
-        "unit_cost": properties.unit_cost,
-        "role": workspace_resource.role,
-        "count": workspace_resource.count,
-        "configuration": {
-            **(resource_spec.configuration or {}),
-            **(workspace_resource.configuration or {}),
-        },
-        "default_tags": {
-            **(resource_spec.default_tags or {}),
-            **(workspace_resource.default_tags or {}),
-        },
-        "custom_tags": {
-            **(resource_spec.custom_tags or {}),
-            **(workspace_resource.custom_tags or {}),
-        },
-        "firewalls": workspace_resource.firewalls or [],
-        "subnet": (
-            workspace_resource.subnet.model_dump(mode="json") if workspace_resource.subnet is not None else None
-        ),
-    }
-
-
-def _build_resources_payload(graph: ResolvedWorkspaceGraph) -> dict[str, dict[str, dict[str, Any]]]:
-    """Grouped by `ResourceSpecModel.properties.resource_type` (lowercased),
-    each group wrapped as `{"resources": {name: entry}}` - matches v1's real
-    `_build_resources_by_category()` exactly (confirmed by reading
-    `terraform_builder.py` directly), not `category` and not a flat dict -
-    an earlier draft grouped by `category` and skipped the wrapper, which
-    also meant `planned_files()` wrote one combined file instead of v1's
-    real one-file-per-resource-type split (`resx_<type>.auto.tfvars.json`).
-
-    Skips a `WorkspaceResourceModel` with `enabled=False` entirely - that
-    field's own docstring is explicit: "excludes it from the built platform
-    artifact, and therefore from every provisioner that consumes it." Also
-    skips `managed_by="provisioner"` entries (no backing `Resource`
-    document to categorise - the real `spoke_resx`/`env_resx` case).
-    """
-    payload: dict[str, dict[str, dict[str, Any]]] = {}
     for workspace_resource in graph.workspace.spec.resources or []:
         if not workspace_resource.enabled:
             continue
         if workspace_resource.resource is None:
             continue
         resource = graph.resources[workspace_resource.resource]
-        resource_type = (resource.spec.properties.resource_type or "uncategorized").lower()
-        entries = payload.setdefault(resource_type, {}).setdefault("resources", {})
-        entries[workspace_resource.name] = _merge_resource_entry(workspace_resource, resource.spec)
+        resource_spec = resource.spec
+        properties = resource_spec.properties
+        payload[workspace_resource.name] = {
+            "provider_type": properties.provider_type,
+            "resource_type": properties.resource_type,
+            "subcategory": properties.subcategory,
+            "unit_cost": properties.unit_cost,
+            "role": workspace_resource.role,
+            "count": workspace_resource.count,
+            "configuration": {
+                **(resource_spec.configuration or {}),
+                **(workspace_resource.configuration or {}),
+            },
+            "custom": {
+                **(resource_spec.custom or {}),
+                **(workspace_resource.custom or {}),
+            },
+            "default_tags": {
+                **(resource_spec.default_tags or {}),
+                **(workspace_resource.default_tags or {}),
+            },
+            "custom_tags": {
+                **(resource_spec.custom_tags or {}),
+                **(workspace_resource.custom_tags or {}),
+            },
+            "firewalls": workspace_resource.firewalls or [],
+            "subnet": (
+                workspace_resource.subnet.model_dump(mode="json") if workspace_resource.subnet is not None else None
+            ),
+            "storage": (
+                resource_spec.storage.model_dump(mode="json", exclude_none=True)
+                if resource_spec.storage is not None
+                else None
+            ),
+        }
     return payload
 
 
-def _build_namespaces_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {description, labels, tags, modules: [module names],
-    configuration, custom, default_labels, custom_labels} (Phase 2a).
-
-    Matches v1's real `_build_namespace_vars()` shape (confirmed directly).
-    `description` falls back to `""` when `meta.annotations` has none set,
-    same as v1's own `namespace.annotations.get("description", "")`.
-
-    `configuration`/`custom`/`default_labels`/`custom_labels` added alongside
-    the DNS zone passthrough fix — confirmed by grep that `NamespaceSpecModel`'s
-    own fields of the same names were validated but never read anywhere,
-    including by `helm.py`/`compose.py`'s `prepare_namespace()` (the only other
-    candidate consumer).
-    """
+def _strata_namespaces(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.namespaces` — name -> {description, labels, tags,
+    modules: [module names], configuration, custom, default_labels,
+    custom_labels}."""
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.namespaces or []:
         namespace = graph.namespaces[name]
@@ -298,72 +219,54 @@ def _build_namespaces_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     return payload
 
 
-def _build_firewalls_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {description, labels, tags, rules: {reset, defaults, deny, allow},
-    configuration, custom, default_tags, custom_tags} (Phase 2a). Matches v1's
-    real `_build_firewall_vars()` shape (confirmed directly). `by_alias=True`
-    on the rule dumps so `from_` serialises back to `from` (the schema's real
-    field name, aliased for the `from`/Python keyword clash) - matches v1's
-    own `model_dump(..., by_alias=True)`.
+def _strata_modules(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.modules` — new in this redesign (`graph.modules`, Phase 1).
+    Previously skipped entirely (zero real use of `TopologyComponentModel
+    .modules` found, and adding a per-category file/variable/rename-table
+    entry for unproven demand was real cost) — in a single-object shape,
+    adding one more nested key is free, and omitting it would itself have
+    become the special case this whole redesign exists to delete.
 
-    `configuration`/`custom`/`default_tags`/`custom_tags` added alongside the
-    DNS zone passthrough fix — `FirewallSpecModel`'s own fields of the same
-    names were validated but never read anywhere in this module at all
-    (unlike DNS/providers, not even partially fixed by gap #17).
-
-    `FirewallRuleModel.name`/`.priority`/`.custom` need no change here at
-    all — already flow through automatically via the existing per-rule
-    `model_dump(..., exclude_none=True)` calls below, unlike every other
-    passthrough fix in this module (those all needed an explicit new dict
-    key since their payload entries are built field-by-field, not dumped).
+    `mounts`/`checks`/`endpoints` nest under `properties`
+    (`ModuleSpecModel.properties: ModulePropertiesModel | None`), not as
+    flat siblings of `type`/`source` — they are not top-level
+    `ModuleSpecModel` fields. `services` is deliberately excluded (Helm
+    chart/workload-builder internals, not something a Terraform root
+    plausibly needs) — this is a read-only projection, it does not change
+    the Helm/Compose workload pipeline at all.
     """
     payload: dict[str, Any] = {}
-    for name in graph.workspace.spec.firewalls or []:
-        firewall = graph.firewalls[name]
-        meta = firewall.meta
-        spec = firewall.spec
+    for name, module in graph.modules.items():
+        spec = module.spec
+        properties = spec.properties
         payload[name] = {
-            "description": (meta.annotations or {}).get("description", ""),
-            "labels": meta.labels or {},
-            "tags": meta.tags or [],
-            "rules": {
-                "reset": spec.reset or False,
-                "defaults": [d.model_dump(mode="json", exclude_none=True) for d in spec.defaults or []],
-                "deny": [r.model_dump(mode="json", exclude_none=True, by_alias=True) for r in spec.deny or []],
-                "allow": [r.model_dump(mode="json", exclude_none=True, by_alias=True) for r in spec.allow or []],
+            "type": spec.type,
+            "source": spec.source.model_dump(mode="json", exclude_none=True),
+            "release_name": spec.release_name,
+            "kubernetes_namespace": spec.kubernetes_namespace,
+            "properties": {
+                "mounts": [m.model_dump(mode="json", exclude_none=True) for m in (properties.mounts or [])]
+                if properties
+                else [],
+                "checks": [c.model_dump(mode="json", exclude_none=True) for c in (properties.checks or [])]
+                if properties
+                else [],
+                "endpoints": [e.model_dump(mode="json", exclude_none=True) for e in (properties.endpoints or [])]
+                if properties
+                else [],
             },
             "configuration": spec.configuration or {},
             "custom": spec.custom or {},
-            "default_tags": spec.default_tags or {},
-            "custom_tags": spec.custom_tags or {},
+            "default_labels": spec.default_labels or {},
+            "custom_labels": spec.custom_labels or {},
         }
     return payload
 
 
-def _build_dns_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {description, labels, tags, provider, zones: {zone_name:
-    {ttl, records: [...]}}} (Phase 2c).
-
-    Adapted from v1's real `_build_dns_vars()`, not copied verbatim: v2's
-    `DnsRecordModel` has a single `value` field that may itself contain
-    `${var:}`/`${secret:}`/`${feature:}` tokens (ADR-0002), unlike v1's
-    separate `value`/`var`/`secret`/`output_key` fields - v2 never ported
-    `output_key` at all (ADR-0006, no shared runtime Context store yet), so
-    there is no `dns_secret_records`/`dns_output_records` bucketing to
-    reproduce. `record.value` is written as-is here, tokens and all - this
-    build-time projection deliberately never resolves them (ADR-0022 D4:
-    "build run renders; it does not execute"); `deploy_run()` re-resolves
-    this whole category per step via `build_dns_networks_firewalls_payloads()`
-    (docs/design/value-token-resolution.md's "Full Solution" Phase 2,
-    `deploy_controller.py`), delivered as `TF_VAR_dns`, never rewriting the
-    file this function produced.
-
-    Per-record `custom` added separately — `DnsRecordModel` had no passthrough
-    field at all until then (flagged, not acted on, during the Subnet/
-    FirewallRuleModel escape-hatch audit: Azure alias records, Cloudflare's
-    `proxied` flag, Route53 weighted/health-check routing all need a
-    record-level extension point with no cross-provider equivalent).
-    """
+def _strata_dns(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.dns` — name -> {description, labels, tags, provider,
+    zones: {zone_name: {ttl, records: [...]}}}. Tokens stay literal
+    (build-time only, ADR-0022 D4)."""
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.dns_zones or []:
         dns = graph.dns[name]
@@ -399,26 +302,11 @@ def _build_dns_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     return payload
 
 
-def _build_networks_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {description, labels, tags, networks: {network_name:
-    {address_space, subnets, peerings, configuration, custom, default_tags,
-    custom_tags}}} (Phase 2c).
-
-    `configuration`/`custom`/`default_tags`/`custom_tags` added alongside the
-    DNS zone passthrough fix — `NetworkDefinitionModel`'s own fields of the
-    same names were validated but never read anywhere in this module.
-
-    Per-subnet `configuration`/`custom` added separately — `SubnetModel` had
-    no passthrough fields at all until then (delegations, service endpoints,
-    NSG association, etc. had no escape hatch, unlike every other per-item
-    model in this category).
-
-    Adapted from v1's real `_build_network_vars()`. `address_space`/
-    `subnet.cidr` may themselves contain `${var:}`/`${secret:}`/`${feature:}`
-    tokens (ADR-0002) - written as-is here, same build-time-never-resolves
-    reasoning as `_build_dns_payload()` above; `deploy_run()` re-resolves
-    this category per step as `TF_VAR_networks` (Phase 2, same function).
-    """
+def _strata_networks(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.networks` — name -> {description, labels, tags, networks:
+    {network_name: {address_space, subnets, peerings, configuration,
+    custom, default_tags, custom_tags}}}. Tokens stay literal (build-time
+    only, ADR-0022 D4)."""
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.networks or []:
         network_doc = graph.networks[name]
@@ -451,350 +339,376 @@ def _build_networks_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     return payload
 
 
-def _build_flags_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """`{key: bool}` for `flags.auto.tfvars.json` (docs/design/
-    build-time-value-categories.md, Q1/Q2) - matches v1's real filename
-    (`_build_feature_flags_vars()`), not the `feature_refs` field name.
+def _strata_firewalls(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.firewalls` — name -> {description, labels, tags,
+    rules: {reset, defaults, deny, allow}, configuration, custom,
+    default_tags, custom_tags}. `by_alias=True` on the rule dumps so
+    `from_` serialises back to `from` (the schema's real field name)."""
+    payload: dict[str, Any] = {}
+    for name in graph.workspace.spec.firewalls or []:
+        firewall = graph.firewalls[name]
+        meta = firewall.meta
+        spec = firewall.spec
+        payload[name] = {
+            "description": (meta.annotations or {}).get("description", ""),
+            "labels": meta.labels or {},
+            "tags": meta.tags or [],
+            "rules": {
+                "reset": spec.reset or False,
+                "defaults": [d.model_dump(mode="json", exclude_none=True) for d in spec.defaults or []],
+                "deny": [r.model_dump(mode="json", exclude_none=True, by_alias=True) for r in spec.deny or []],
+                "allow": [r.model_dump(mode="json", exclude_none=True, by_alias=True) for r in spec.allow or []],
+            },
+            "configuration": spec.configuration or {},
+            "custom": spec.custom or {},
+            "default_tags": spec.default_tags or {},
+            "custom_tags": spec.custom_tags or {},
+        }
+    return payload
 
-    Only entries `build_value_references()` already resolved (`constant`/
-    `environment` stores) carry a `value` - everything else (integration-
-    backed stores) is filtered out here, never emitted.
-    """
+
+def _strata_topologies(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.topologies` — name -> {type, components, namespaces,
+    volumes}, including `TopologySpecModel.namespaces` (a gap fix — that
+    field was validated but never read at all before this redesign)."""
+    payload: dict[str, Any] = {}
+    for topology in graph.workspace.spec.topology or []:
+        payload[topology.name] = {
+            "type": topology.type,
+            "components": [c.model_dump(mode="json", exclude_none=True) for c in topology.components],
+            "namespaces": [n.namespace for n in (topology.namespaces or [])],
+            "volumes": [v.model_dump(mode="json", exclude_none=True) for v in (topology.volumes or [])],
+        }
+    return payload
+
+
+def _strata_flags(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.flags` — `{key: bool}`, resolved `constant`/`environment`-
+    store entries only (unresolved integration-backed stores are filtered
+    out, never emitted) — no longer its own flat Terraform variable, now
+    `local.strata.flags.<key>`."""
     return {ref.key: ref.value for ref in graph.feature_refs if ref.value is not None}
 
 
-def _build_variables_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """`{key: value}` for `variables.auto.tfvars.json`, native-typed where
-    `build_value_references()` could tell (docs/design/
-    build-time-value-categories.md, Q1/Q2). Same `constant`/`environment`-
-    only filter as `_build_flags_payload()`.
-    """
+def _strata_variables(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.variables` — `{key: value}`, same `constant`/`environment`-
+    only filter as `_strata_flags()` above."""
     return {ref.key: ref.value for ref in graph.variable_refs if ref.value is not None}
 
 
-def _build_properties_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """`properties.auto.tfvars.json` - already the final merged dict
-    (workspace -> environment(s) -> deployment's own), computed once by
-    `build_controller.py` (docs/design/build-time-value-categories.md, Q3).
-    """
+def _strata_properties(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.properties` — the already-merged workspace -> environment(s)
+    -> deployment dict, computed once by `build_controller.py`."""
     return graph.properties
 
 
-def _build_custom_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """`custom.auto.tfvars.json` - same merge as `_build_properties_payload()`,
-    `custom` source instead of `properties` (Q3)."""
+def _strata_custom(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.custom` — same merge as `_strata_properties()` above,
+    `custom` source instead of `properties`."""
     return graph.custom
 
 
-def _build_tenant_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """`tenant.auto.tfvars.json` - the deployment's own `spec.tenant`
-    reference (docs/design/build-command.md's `tenant` category), resolved
-    once by `value_controller.resolve_tenant()`.
+def build_strata_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """The unified projection (ADR-0035, docs/work/
+    unified-terraform-projection.md) — one nested object.
+    `{"strata": build_strata_payload(graph)}` is the file content
+    `default_output()` writes to `strata.auto.tfvars.json` — this function
+    returns the *inner* dict, not the wrapped file content.
 
-    Flat top-level keys here (the *value* this function returns), matching
-    every other category's own builder function — `planned_files()` wraps
-    this under `strata_tenant` before writing the file
-    (docs/design/terraform-tfvars-parity.md's `_REAL_VARIABLE_NAME`),
-    confirmed directly against v1's real `_build_tenant_vars()` (which
-    returns `{"strata_tenant": {code, name, zones, onboarded,
-    configuration}}`) *and* independently against `tenant_zone_policy.md`'s
-    own real `plan_data["variables"]["strata_tenant"]` read — the field
-    names below (`code`/`name`/`zones`/`onboarded`/`configuration`) already
-    matched v1 exactly before this fix; only the wrapper key was missing.
-
-    Empty dict when the deployment references no tenant - `planned_files()`
-    already skips empty categories, so no `tenant.auto.tfvars.json` is
-    written at all in that case, same treatment as an unset `dns_zones`.
+    **Every one of the fifteen keys below is always present**, empty
+    (`{}`) when unused rather than omitted — resolves the Type design
+    section's own open sub-question ("should the projection always emit
+    every top-level key, which would let the generated `strata_variables.tf`
+    type stay strict with no top-level `optional()`") in favor of always
+    emitting: a workspace with no `dns_zones` gets `strata.dns == {}`, not
+    a missing key.
     """
-    if graph.tenant is None:
-        return {}
-    spec = graph.tenant.spec
     return {
-        "code": graph.tenant.meta.name,
-        "name": spec.display_name,
-        "zones": spec.geographies,
-        "onboarded": spec.onboarded.isoformat() if spec.onboarded else None,
-        "configuration": spec.configuration or {},
+        "workspace": _strata_workspace(graph),
+        "tenant": _strata_tenant(graph),
+        "providers": _strata_providers(graph),
+        "resources": _strata_resources(graph),
+        "namespaces": _strata_namespaces(graph),
+        "modules": _strata_modules(graph),
+        "dns": _strata_dns(graph),
+        "networks": _strata_networks(graph),
+        "firewalls": _strata_firewalls(graph),
+        "topologies": _strata_topologies(graph),
+        "properties": _strata_properties(graph),
+        "custom": _strata_custom(graph),
+        "flags": _strata_flags(graph),
+        "variables": _strata_variables(graph),
+        "default_tags": _strata_default_tags(graph),
     }
 
 
-def build_dns_networks_firewalls_payloads(graph: ResolvedWorkspaceGraph) -> dict[str, dict[str, Any]]:
-    """The three Terraform-delivered, Value-token-bearing categories with
-    per-name step ownership (docs/design/gap_fit_v1.md gap #12) — `dns`/`networks`/
-    `firewalls` — grouped for deploy-time token resolution
-    (docs/design/value-token-resolution.md's "Full Solution" Phase 2).
-
-    **Not the only token-bearing categories** — `build_configuration_payloads()`
-    (below) delivers ten more (`workspace`/`providers`/`resx_<type>`/
-    `topologies`/`namespaces`/`flags`/`variables`/`properties`/`custom`/
-    `tenant`, Phase 6 + gap #17's universal-reach fix) via a deliberately
-    *separate* function: those ten have no per-name ownership concept at
-    all (`${output:}` is rejected outright for them), a genuinely different
-    claiming semantics than this function's own dns/networks/firewalls,
-    which do support it (gap #12).
+def planned_strata_file(graph: ResolvedWorkspaceGraph) -> tuple[str, dict[str, Any]]:
+    """Phase 4 (ADR-0035) — exactly one `(filename, data)` pair, every
+    time, never a list. One `strata` key wraps `build_strata_payload(graph)`'s
+    whole inner object — the file's real Terraform variable name is
+    `strata`, matching the `variable "strata" {}` declaration
+    `strata_variables.tf` (Phase 5) generates.
     """
-    return {
-        "dns": _build_dns_payload(graph),
-        "networks": _build_networks_payload(graph),
-        "firewalls": _build_firewalls_payload(graph),
-    }
+    return "strata.auto.tfvars.json", {"strata": build_strata_payload(graph)}
 
 
-def build_configuration_payloads(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """Ten more Value-token-bearing categories, broadcast (no per-name step
-    ownership, unlike `build_dns_networks_firewalls_payloads()` above) —
-    every one of `build_platform_projection()`'s 13 categories except
-    dns/networks/firewalls: `workspace`/`providers`/`resx_<type>`/
-    `topologies`/`namespaces`/`flags`/`variables`/`properties`/`custom`/
-    `tenant`.
+def _set_path(data: dict[str, Any], path: str, value: Any) -> None:
+    """Navigate a dotted path (`resolve_value_tokens_tracking_secrets()`'s
+    own convention — dict keys joined by `.`, each key escaped by
+    `escape_path_segment()`, a list index its plain stringified integer)
+    into `data` and overwrite the leaf it names. Always use `split_path()`
+    to reverse the join, never a plain `path.split(".")` — a real key can
+    itself contain a literal `.` (e.g. a DNS zone name like `example.com`),
+    which a naive split would wrongly treat as two separate path segments.
 
-    Originally five (`resx_<type>`/`topologies`/`properties`/`custom`/
-    `tenant`, docs/design/value-token-resolution.md's "Full Solution"
-    Phase 6, docs/design/gap_fit_v1.md gap #8's Terraform-side refinement) — extended
-    to all ten by gap #17 (docs/design/value-token-resolution.md's
-    "Decision (2026-09-29)": resolution reach must match validation reach,
-    no curated subset). The confirmed real gap that motivated the
-    extension: `ProviderSpecModel.configuration`/`.custom` passed `strata
-    validate` cleanly (`_documents_reachable_from_workspace()` already
-    walks the whole Provider document) yet was never projected into any
-    Terraform artifact at all — silently dropped, not even delivered as an
-    unresolved literal. `workspace`/`namespaces`/`flags`/`variables` came
-    along for free from the same generalization (none of the four
-    realistically carry a token-bearing field, so adding them is a no-op
-    in practice — see this module's own tests) but are included on
-    principle: a curated allowlist is exactly the shape of bug gap #17
-    fixes, so this function must not reintroduce one.
+    `data` must already contain every segment of `path` (true by
+    construction for every caller here — the path was discovered by
+    walking this exact structure in the first place), so no segment is
+    ever created, only indexed into.
+    """
+    parts = split_path(path)
+    node: Any = data
+    for part in parts[:-1]:
+        node = node[int(part)] if isinstance(node, list) else node[part]
+    last = parts[-1]
+    if isinstance(node, list):
+        node[int(last)] = value
+    else:
+        node[last] = value
 
-    Each category carries a real `configuration`/`custom`-shaped free-form
-    passthrough (`ProviderSpecModel.configuration`/`.custom`,
-    `ResourceSpecModel.configuration`/`WorkspaceResourceModel.configuration`,
-    `TopologyVolumeModel.configuration`, the merged `properties`/`custom`
-    dicts, `TenantSpecModel.configuration`) that can contain a
-    `${var:}`/`${secret:}`/`${feature:}` token — projected into a
-    `*.auto.tfvars.json` file at build time (`build_platform_projection()`)
-    but, until resolved here, never re-resolved at deploy time the way
-    dns/networks/firewalls already are.
 
-    Keyed to match `planned_files()`'s own per-category filenames exactly
-    (`resx_<type>`, not a combined `resources_by_category` key — a real
-    root module declares `variable "resx_compute" {}` per resource type,
-    matching the one-file-per-type convention `planned_files()` already
-    uses at build time) — so `deploy_controller.py` can deliver each as
-    `TF_VAR_<key>` with zero translation.
+def find_secret_paths(payload: dict[str, Any]) -> list[str]:
+    """Phase 3 (ADR-0035) — every dotted path in a *build-time*
+    (token-literal, unresolved) `strata` payload whose leaf is
+    `${secret:...}`-shaped, in the exact path convention
+    `resolve_value_tokens_tracking_secrets()` already uses (dict keys
+    joined by `.`, a list index its plain stringified integer) — needed by
+    Phase 6's `strata_locals.tf` generator, which must know every
+    secret-bearing path at build time, before any real secret value
+    exists to resolve.
 
-    `${output:...}` is never valid in any of these ten — deliberately not
-    checked here (that is `deploy_controller.py`'s pre-flight job, same
-    split `build_dns_networks_firewalls_payloads()`'s own caller already
-    has for its three categories) — this function only builds the raw,
-    still-token-bearing payloads.
+    Deliberately its own standalone walk, not a call into
+    `resolve_value_tokens_tracking_secrets(payload, {})` with an empty
+    `values` dict — that function's non-secret branch calls
+    `resolve_value_tokens()`, which raises `ValueError` the moment it
+    meets a `${var:...}`/`${feature:...}` token with no matching key in
+    `values`. A build-time payload is expected to carry exactly such
+    still-unresolved tokens (ADR-0022 D4) — this function only ever
+    checks a leaf's *shape*, never attempts to resolve anything, so it
+    never needs real values to run.
+    """
+    paths: list[str] = []
+
+    def _walk(node: Any, path: str) -> None:
+        if isinstance(node, str):
+            if any(kind == "secret" for kind, _ in extract_value_tokens(node)):
+                paths.append(path)
+            return
+        if isinstance(node, dict):
+            for key, value in node.items():
+                escaped_key = escape_path_segment(key)
+                _walk(value, f"{path}.{escaped_key}" if path else escaped_key)
+            return
+        if isinstance(node, list):
+            for index, value in enumerate(node):
+                _walk(value, f"{path}.{index}" if path else str(index))
+
+    for key, value in payload.items():
+        escaped_key = escape_path_segment(key)
+        _walk(value, escaped_key)
+    return paths
+
+
+def rewrite_strata_payload(payload: dict[str, Any], tokens: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
+    """Phase 3 (ADR-0035) — the `deploy run`-time counterpart to
+    `build_strata_payload()`: no category branching of any kind — one
+    shape, one walk, because there is only one object now.
+
+    Resolves every token in `payload` via
+    `resolve_value_tokens_tracking_secrets()` exactly as today — every
+    non-secret-shaped leaf resolves to its real value in place; every
+    secret-shaped leaf is left as its original, still-unresolved literal
+    by that function and reported separately in the returned `secrets`
+    dict instead. This function's own addition on top of that: every path
+    in `secrets` is then overwritten *in the resolved payload* with the
+    sentinel string `f"__strata_secret__:{path}"` — never the literal
+    unresolved token (which would leak the fact a value is missing, not
+    what it is), never the real value (which must never touch disk,
+    ADR-0031), and never omitted (an omitted key breaks every attribute
+    access expecting it to exist — see this design's own "Secret
+    delivery" section for why a stable shape matters more than it first
+    appears).
 
     Returns:
-        Only non-empty categories — matches `planned_files()`'s own
-        "skip empty categories" convention, so an unset `tenant`/no
-        `resources`/no `topologies` contributes nothing to deliver.
-        `workspace` is a practical exception: a workspace document always
-        has a non-empty `name`, so it is unconditionally present whenever
-        any category is (harmless — no realistic token there, and the
-        value already matches what `build_platform_projection()` wrote to
-        disk at build time).
+        `(sentinel_payload, secrets)` — `sentinel_payload` is written to
+        `strata.auto.tfvars.json`; `secrets` is the flat `{path: value}`
+        map delivered as `TF_VAR_strata_secrets` (never written to disk).
     """
-    payloads: dict[str, Any] = {
-        "workspace": _build_workspace_payload(graph),
-        "providers": _build_providers_payload(graph),
-        "properties": _build_properties_payload(graph),
-        "custom": _build_custom_payload(graph),
-        "tenant": _build_tenant_payload(graph),
-        "topologies": _build_topologies_payload(graph),
-        "namespaces": _build_namespaces_payload(graph),
-        "flags": _build_flags_payload(graph),
-        "variables": _build_variables_payload(graph),
-    }
-    for resource_type, type_payload in _build_resources_payload(graph).items():
-        payloads[f"resx_{resource_type}"] = type_payload
-    return {name: payload for name, payload in payloads.items() if payload}
+    resolved, secrets = resolve_value_tokens_tracking_secrets(payload, tokens)
+    for path in secrets:
+        _set_path(resolved, path, f"__strata_secret__:{path}")
+    return resolved, secrets
 
 
-def build_platform_projection(graph: ResolvedWorkspaceGraph, provisioner: ProvisionerModel) -> dict[str, Any]:
-    """The default projection (D1: Phase 1's four structural categories,
-    Phase 2a's namespaces/firewalls, Phase 2c's dns/networks, and
-    docs/design/build-time-value-categories.md's `flags`/`variables`/
-    `properties`/`custom`).
-
-    `provisioner` is currently unused by any category built so far -
-    accepted now so a later phase's per-provisioner filtering (if any turns
-    out to be needed) does not change this function's call sites again.
+def _group_by_first_segment(paths: list[str]) -> dict[str, list[str]]:
+    """Split every dotted path on its first segment — `{head: [rest, ...]}`,
+    `rest` empty when `head` is itself the whole (leaf) path. Uses
+    `split_path()` (not a naive `path.partition(".")`) so a real key
+    containing a literal `.` (e.g. a DNS zone name like `example.com`)
+    splits correctly; `rest` is re-escaped via `escape_path_segment()`
+    before being rejoined, so it remains a valid path string for a
+    recursive call back into this same function. Used by
+    `_render_strata_merge()` to decide, per key, whether to emit a
+    `lookup()` leaf or recurse into a nested `merge()`.
     """
-    del provisioner
-    return {
-        "workspace": _build_workspace_payload(graph),
-        "providers": _build_providers_payload(graph),
-        "topologies": _build_topologies_payload(graph),
-        "resources_by_category": _build_resources_payload(graph),
-        "namespaces": _build_namespaces_payload(graph),
-        "firewalls": _build_firewalls_payload(graph),
-        "dns": _build_dns_payload(graph),
-        "networks": _build_networks_payload(graph),
-        "flags": _build_flags_payload(graph),
-        "variables": _build_variables_payload(graph),
-        "properties": _build_properties_payload(graph),
-        "custom": _build_custom_payload(graph),
-        "tenant": _build_tenant_payload(graph),
-    }
+    groups: dict[str, list[str]] = {}
+    for path in paths:
+        parts = split_path(path)
+        head = parts[0]
+        rest = ".".join(escape_path_segment(part) for part in parts[1:])
+        groups.setdefault(head, []).append(rest)
+    return groups
 
 
-# Real v1 Terraform variable name per category, where it differs from the
-# file's own category name (docs/design/terraform-tfvars-parity.md) —
-# confirmed directly against v1's real `_build_*_vars()` return values.
-# `planned_files()` wraps each category's payload under this key so the
-# file's *content* matches the real variable a Terraform root declares
-# (`variable "platform_providers" {}`, not `variable "providers" {}`),
-# while the *filename* stays `<category>.auto.tfvars.json` (v1's own real,
-# confirmed filenames — the two are independent conventions in v1, not one).
-# A category absent here (`topologies`/`namespaces`/`firewalls`/`networks`)
-# still gets wrapped — just under the *same* word as its own category name
-# (v1's real `_build_topology_vars()`/etc. all return `{"<name>": {...}}`,
-# one level of nesting, even where the wrapper key equals the file's own
-# category name) — `.get(category, category)` below covers that case.
-_REAL_VARIABLE_NAME: dict[str, str] = {
-    "providers": "platform_providers",
-    "dns": "dns_zones",
-    "tenant": "strata_tenant",
-}
-
-# Categories v1 treats as flat, multi-variable bags — no wrapper key at
-# all, each top-level key is its own independent Terraform variable
-# (docs/design/terraform-tfvars-parity.md's three-shape convention).
-# Public — `deploy_controller.py`'s `TF_VAR_<name>` delivery needs the same
-# set to know which categories are several independent variables (one per
-# top-level key) rather than one variable per category.
-FLAT_CATEGORIES = {"workspace", "flags", "variables", "properties", "custom"}
-
-
-def real_variable_name(category: str) -> str:
-    """The real v1 Terraform variable name for a `planned_files()`/
-    `build_configuration_payloads()`/`build_dns_networks_firewalls_payloads()`
-    category — `_REAL_VARIABLE_NAME`'s lookup, identity for everything
-    else (docs/design/terraform-tfvars-parity.md).
-
-    Identity is the correct answer, not a fallback-of-convenience, for two
-    different reasons depending on the category: `topologies`/`namespaces`/
-    `firewalls`/`networks` already use the same word for both their file
-    category and their real variable name (nothing to translate);
-    `FLAT_CATEGORIES` (`workspace`/`flags`/`variables`/`properties`/`custom`)
-    and `resx_<type>` have **no single real variable name at all** to
-    rename to — each is either several independent variables (`workspace`'s
-    six top-level keys, one per real variable) or, for `resx_<type>`,
-    actually named `resources` in every real file regardless of type
-    (confirmed against v1's real `_build_resources_by_category()`), which
-    cannot be delivered as a single env var without colliding across
-    resource types. `deploy_controller.py`'s `TF_VAR_<name>` delivery
-    handles both of those cases itself (`FLAT_CATEGORIES`'s per-key
-    delivery, `resx_<type>`'s merge-into-one-"resources"-variable) rather
-    than through this function, since neither reduces to a single rename.
-
-    Exposed for `deploy_controller.py`'s `TF_VAR_<name>` env var delivery
-    — the same rename `planned_files()` already applies to the on-disk
-    file's content key must also apply to the env var's own *name*, not
-    just its value, for a real Terraform root's `TF_VAR_<declared_variable_name>`
-    override mechanism to actually see it.
+def _is_list_level(groups: dict[str, list[str]]) -> bool:
+    """True when every key `_group_by_first_segment()` found at this
+    nesting level is a list index (all-digit), not a dict key — found via
+    a real-terraform regression (a secret inside a DNS record's `value`,
+    `records` being a list): `merge()` rejects a list/tuple argument
+    outright (`arguments must be maps or objects, got "tuple"`), so a list
+    level needs `_render_strata_list_override()`'s `for`-expression
+    rebuild instead of `_render_strata_merge()`'s `merge()` call.
     """
-    return _REAL_VARIABLE_NAME.get(category, category)
+    return bool(groups) and all(key.isdigit() for key in groups)
 
 
-def planned_files(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    """(filename, data) per non-empty category - Terraform's
-    `*.auto.tfvars.json` auto-load convention (D1), no `-var-file` flag
-    needed. Empty categories are skipped automatically, not a configuration
-    knob (D2).
-
-    `resources_by_category` unrolls into one file per resource type
-    (`resx_<type>.auto.tfvars.json`) instead of a single combined file -
-    matches v1's real `_planned_files()` (confirmed directly): each
-    resource type is Terraform's own natural `for_each` unit, not the
-    category grouping as a whole.
-
-    Every category except `FLAT_CATEGORIES` is wrapped under its real v1
-    Terraform variable name (`_REAL_VARIABLE_NAME`, defaulting to the
-    category's own name) before being written — e.g.
-    `providers.auto.tfvars.json`'s real content is
-    `{"platform_providers": {...}}`, and `topologies.auto.tfvars.json`'s is
-    `{"topologies": {...}}` — not the bare `{name: {...}}` map each
-    `_build_*_payload()` function itself returns. The wrap happens here,
-    not inside each builder function, so `build_configuration_payloads()`'s
-    deploy-time re-resolution (`deploy_controller.py`'s `TF_VAR_<category>`
-    delivery) keeps working against the same flat, unwrapped payloads —
-    only the on-disk *file* shape needs the real variable-name wrapper.
-    `resources_by_category` needs no wrapping here either — it is already
-    produced pre-wrapped per type (`{"resources": {...}}`) by
-    `_build_resources_payload()`.
+def _render_strata_override(var_expr: str, full_path: str, paths: list[str], indent: str) -> str:
+    """Dispatch to `_render_strata_merge()` (dict level) or
+    `_render_strata_list_override()` (list level) — the two are mutually
+    exclusive shapes at any given nesting level (a dict can't have a
+    digit-only key, and a list has nothing else), so inspecting
+    `_group_by_first_segment(paths)` once up front is enough to pick.
     """
-    files: list[tuple[str, dict[str, Any]]] = []
-    for category, data in payload.items():
-        if not data:
-            continue
-        if category == "resources_by_category":
-            for resource_type, type_payload in data.items():
-                files.append((f"resx_{resource_type}.auto.tfvars.json", type_payload))
-            continue
-        if category in FLAT_CATEGORIES:
-            files.append((f"{category}.auto.tfvars.json", data))
-            continue
-        real_name = _REAL_VARIABLE_NAME.get(category, category)
-        files.append((f"{category}.auto.tfvars.json", {real_name: data}))
-    return files
+    if _is_list_level(_group_by_first_segment(paths)):
+        return _render_strata_list_override(var_expr, full_path, paths, indent)
+    return _render_strata_merge(var_expr, full_path, paths, indent)
 
 
-def resolve_deploy_time_files(payloads: dict[str, Any], tokens: dict[str, str]) -> list[tuple[str, dict[str, Any]]]:
-    """Deploy-time counterpart to `planned_files()` — rewrites the stale,
-    build-time-written `*.auto.tfvars.json` files so a resolved value can
-    no longer be shadowed by Terraform's own variable-definition precedence
-    (`*.auto.tfvars.json` outranks `TF_VAR_*`,
-    docs/design/terraform-variable-precedence.md).
-
-    Unlike `planned_files()`, every key in `payloads` is **always** emitted,
-    never skipped when its resolved content is empty — presence of a key
-    here means `build run` already wrote a same-named file for this
-    category into this step's own directory; an empty result must actively
-    blank that stale file (`{}`), not leave it untouched, or its literal,
-    unresolved content would still shadow a correctly-resolved `TF_VAR_`
-    env var exactly as before.
-
-    Two shapes, matching `FLAT_CATEGORIES` vs. everything else — the same
-    split `planned_files()` itself already makes, not a new one:
-
-    - **`FLAT_CATEGORIES`** (`workspace`/`flags`/`variables`/`properties`/
-      `custom`) — bare `{key: value}`, each key its own independent real
-      Terraform variable. Every key resolves except one with a
-      `${secret:}`-shaped leaf anywhere beneath it (`resolve_value_tokens_
-      tracking_secrets()`'s own rule) — that key is omitted entirely, left
-      for `TF_VAR_<key>` to deliver instead, now uncontested since the file
-      no longer declares it.
-    - **Everything else** (`providers`/`tenant`/`topologies`/`namespaces`,
-      and `dns`/`networks`/`firewalls` once the caller has already narrowed
-      their payload to this step's own claimed/broadcast view) — one dict
-      wrapped under its real variable name (`real_variable_name()`, matching
-      `planned_files()`'s own wrap). Any secret-shaped leaf anywhere taints
-      the whole variable: the file is blanked to `{}` and `TF_VAR_<name>`
-      alone determines the effective value, uncontested.
-
-    `resx_<type>` categories are deliberately never passed to this function
-    (docs/design/terraform-variable-precedence.md — every type
-    declares the same real `resources` variable, so rewriting each file
-    independently would just reintroduce the identical multi-declaration
-    collision this whole mechanism exists to fix; blanked unconditionally
-    by a dedicated, simpler step instead).
+def _quote_full_path(full_path: str) -> str:
+    """Quote a dotted path for embedding as an HCL string literal naming
+    the `var.strata_secrets` lookup key. Doubles each literal backslash
+    (our own `escape_path_segment()` convention for a literal `.` inside
+    a real key) so HCL's own string parser decodes it back to exactly one
+    backslash at runtime, matching the real key Terraform populates
+    `var.strata_secrets` with — **not** `json.dumps()` on top of that
+    doubling, which would escape the already-doubled backslashes a
+    second time and produce a lookup key that can never match the real
+    one (found via a real-terraform test once `strata_locals.tf` was
+    actually wired into a real `build run`, not caught by any unit test
+    since those only ever compared generated *text*, never decoded it the
+    way HCL itself would).
     """
-    files: list[tuple[str, dict[str, Any]]] = []
-    for category, data in payloads.items():
-        resolved, secrets = resolve_value_tokens_tracking_secrets(data, tokens)
-        if category in FLAT_CATEGORIES:
-            tainted = {path.split(".", 1)[0] for path in secrets}
-            files.append(
-                (f"{category}.auto.tfvars.json", {key: value for key, value in resolved.items() if key not in tainted})
-            )
-            continue
-        if secrets:
-            files.append((f"{category}.auto.tfvars.json", {}))
+    return '"' + full_path.replace("\\", "\\\\") + '"'
+
+
+def _render_strata_list_override(var_expr: str, full_path: str, paths: list[str], indent: str) -> str:
+    """Render a `[for idx, item in <var_expr> : idx == N ? ... : item]`
+    rebuild of a list, replacing exactly the indices that lead to a
+    secret-bearing leaf — `merge()`'s list/map sibling to
+    `_render_strata_merge()`, needed because `merge()` itself cannot
+    partially override a list/tuple at all (Terraform rejects it
+    outright), unlike a map.
+    """
+    branches = []
+    for key, children in _group_by_first_segment(paths).items():
+        index = int(key)
+        escaped_key = escape_path_segment(key)
+        child_full_path = f"{full_path}.{escaped_key}" if full_path else escaped_key
+        child_var_expr = f"{var_expr}[{index}]"
+        if children == [""]:
+            replacement = f"lookup(var.strata_secrets, {_quote_full_path(child_full_path)}, {child_var_expr})"
         else:
-            files.append((f"{category}.auto.tfvars.json", {real_variable_name(category): resolved}))
-    return files
+            replacement = _render_strata_override(child_var_expr, child_full_path, children, indent + "  ")
+        branches.append(f"idx == {index} ? {replacement} :")
+    return f"[for idx, item in {var_expr} : {' '.join(branches)} item]"
+
+
+def _render_strata_merge(var_expr: str, full_path: str, paths: list[str], indent: str) -> str:
+    """Render one `merge(<var_expr>, {...})` call overriding exactly the
+    keys that lead to a secret-bearing leaf — recursing per nesting level,
+    never touching a sibling key that has no secret beneath it.
+
+    `var_expr` is the real `var.strata.foo.bar`-style access expression for
+    this level (the fallback — "sentinel, safe, key always exists" per the
+    design doc's own comment); `full_path` is the dotted path consumed so
+    far, used both as the next level's `var_expr` suffix and as the literal
+    key into `var.strata_secrets`.
+
+    Every key is emitted via `json.dumps()` — both as an object
+    constructor's quoted key (`"key" = value`, valid HCL for ANY string,
+    unlike a bare identifier) and as a bracket-indexed attribute access
+    (`var_expr["key"]`, unlike dot access, which splits on a literal `.`
+    the same way our own path convention would without escaping) — a real
+    key can contain characters a bare HCL identifier can't (a DNS zone
+    name like `example.com`, a hyphenated name like `public-dns`), and
+    JSON's string-escaping rules are a safe enough subset of HCL's own for
+    every real key this generates against.
+
+    Recurses into `_render_strata_override()`, not directly back into
+    itself — a key's own children can turn out to be a list level one
+    step further down (e.g. a DNS zone's `records`), which needs
+    `_render_strata_list_override()` instead.
+    """
+    inner = indent + "  "
+    lines = [f"merge({var_expr}, {{"]
+    for key, children in _group_by_first_segment(paths).items():
+        quoted_key = json.dumps(key)
+        escaped_key = escape_path_segment(key)
+        child_full_path = f"{full_path}.{escaped_key}" if full_path else escaped_key
+        child_var_expr = f"{var_expr}[{quoted_key}]"
+        if children == [""]:
+            # HCL double-quoted strings only recognize a small fixed set of
+            # `\x` escapes — `\.` (our own path-escaping convention for a
+            # literal `.` inside a real key) is not one of them, so
+            # `_quote_full_path()` doubles the literal backslash itself
+            # before embedding, letting HCL's own string parser decode it
+            # back to the literal 2-character `\.` our path convention
+            # expects.
+            lines.append(
+                f"{inner}{quoted_key} = lookup(var.strata_secrets, {_quote_full_path(child_full_path)}, "
+                f"{child_var_expr})"
+            )
+        else:
+            nested = _render_strata_override(child_var_expr, child_full_path, children, inner)
+            lines.append(f"{inner}{quoted_key} = {nested}")
+    lines.append(f"{indent}}})")
+    return "\n".join(lines)
+
+
+def build_strata_locals(secret_paths: list[str]) -> str:
+    """Phase 6 (ADR-0035) — generates `strata_locals.tf`'s full text: a
+    `local.strata` that is `var.strata` with every secret-bearing leaf
+    replaced by its real value from `var.strata_secrets`, so a consumer
+    reads `local.strata.*` identically whether or not a given value is a
+    secret (this design's own "Secret delivery" section).
+
+    `secret_paths` is `find_secret_paths()`'s own output (dotted, same
+    path convention `resolve_value_tokens_tracking_secrets()` uses) — a
+    build-time-only input: every secret-bearing path is already known from
+    the literal `${secret:...}` tokens themselves, long before any real
+    value exists to resolve.
+
+    No third-party HCL-writing library — a plain template/string build,
+    matching this module's existing "functions returning strings/dicts"
+    convention; nothing here needs HCL AST manipulation.
+    """
+    header = (
+        "# GENERATED BY STRATA - DO NOT EDIT\n"
+        "# local.strata is var.strata with every secret-bearing leaf replaced by\n"
+        "# its resolved value from var.strata_secrets. Read local.strata.* -\n"
+        "# never var.strata.* - and secrets are simply never a special case.\n"
+    )
+    if not secret_paths:
+        return header + "\nlocals {\n  strata = var.strata\n}\n"
+    merge_expr = _render_strata_override("var.strata", "", secret_paths, "  ")
+    return header + "\nlocals {\n  strata = " + merge_expr + "\n}\n"

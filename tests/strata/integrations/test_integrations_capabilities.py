@@ -281,9 +281,11 @@ def _provisioner() -> ProvisionerModel:
     return ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))
 
 
-def test_default_output_base_default_is_empty():
+def test_default_output_base_default_is_empty(tmp_path: Path):
     integration = _Bare()
-    result = integration.default_output(ValueResolution(deployment="d"), _provisioner(), _resolved_workspace_graph())
+    result = integration.default_output(
+        tmp_path, ValueResolution(deployment="d"), _provisioner(), _resolved_workspace_graph()
+    )
     assert result == {}
 
 
@@ -302,7 +304,7 @@ def test_prepare_writes_nothing_when_default_output_is_empty(tmp_path: Path):
 
 def test_prepare_writes_default_output_files(tmp_path: Path):
     class _WithOutput(_Bare):
-        def default_output(self, resolved, provisioner, graph):
+        def default_output(self, path, resolved, provisioner, graph):
             return {"workspace.auto.tfvars.json": '{"name": "ws"}'}
 
     integration = _WithOutput()
@@ -379,7 +381,7 @@ def test_prepare_output_template_skips_default_output_entirely(tmp_path: Path):
     the two are mutually exclusive, not layered."""
 
     class _WithOutput(_Bare):
-        def default_output(self, resolved, provisioner, graph):
+        def default_output(self, path, resolved, provisioner, graph):
             raise AssertionError("default_output() should not be called when output.template is set")
 
     template_path = tmp_path / "variables.json.j2"
