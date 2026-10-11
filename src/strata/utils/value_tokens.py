@@ -277,7 +277,7 @@ def split_path(path: str) -> list[str]:
 
 
 def resolve_value_tokens_tracking_secrets(
-    data: dict[str, Any], values: dict[str, str]
+    data: dict[str, Any], values: dict[str, str], *, sensitive_output_keys: set[str] | None = None
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """Like `resolve_value_tokens_in_mapping()`, except a secret-shaped leaf
     is never resolved in place — its dotted path and resolved value are
@@ -294,7 +294,16 @@ def resolve_value_tokens_tracking_secrets(
     secret-shaped as a whole, even mixed with `${var:}`/`${feature:}` in the
     same string (e.g. a connection string) — such a leaf is reported
     *only* in the secrets map, fully resolved, never partially rewritten
-    into the returned dict.
+    into the returned dict. An `${output:step.key}` token is secret-shaped
+    too, but only conditionally: it is real Terraform state, not a store
+    strata itself classifies, so whether `step.key` is sensitive is a fact
+    the caller must supply (a collected Terraform output's own `sensitive`
+    flag) — `sensitive_output_keys` is that set, keyed exactly like an
+    `${output:...}` token's own `key` half (`"step.key"`). Found as a real
+    gap (2026-10-10): without this, a workspace author who marks a
+    Terraform output `sensitive = true` and references it elsewhere via
+    `${output:...}` got that real value written straight into a plain
+    on-disk file — never routed through the secret-safe delivery path.
 
     A secret-shaped leaf's original, still-unresolved literal
     (``"${secret:KEY}"``) is left untouched in the returned dict rather
@@ -313,9 +322,12 @@ def resolve_value_tokens_tracking_secrets(
     to reverse this, never a plain `path.split(".")`.
     """
     secrets: dict[str, str] = {}
+    sensitive_keys = sensitive_output_keys or set()
 
     def _is_secret_shaped(text: str) -> bool:
-        return any(kind == "secret" for kind, _ in extract_value_tokens(text))
+        return any(
+            kind == "secret" or (kind == "output" and key in sensitive_keys) for kind, key in extract_value_tokens(text)
+        )
 
     def _walk(node: Any, path: str) -> Any:
         if isinstance(node, str):

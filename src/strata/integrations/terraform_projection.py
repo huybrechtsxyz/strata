@@ -519,7 +519,9 @@ def find_secret_paths(payload: dict[str, Any]) -> list[str]:
     return paths
 
 
-def rewrite_strata_payload(payload: dict[str, Any], tokens: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
+def rewrite_strata_payload(
+    payload: dict[str, Any], tokens: dict[str, str], *, sensitive_output_keys: set[str] | None = None
+) -> tuple[dict[str, Any], dict[str, str]]:
     """Phase 3 (ADR-0035) — the `deploy run`-time counterpart to
     `build_strata_payload()`: no category branching of any kind — one
     shape, one walk, because there is only one object now.
@@ -539,12 +541,21 @@ def rewrite_strata_payload(payload: dict[str, Any], tokens: dict[str, str]) -> t
     delivery" section for why a stable shape matters more than it first
     appears).
 
+    `sensitive_output_keys` passes straight through to `resolve_value_
+    tokens_tracking_secrets()` — the caller's own collected-output
+    sensitivity flags, keyed `"step.key"` exactly like an `${output:...}`
+    token's own key half, so a `${output:}` reference to a real Terraform
+    `sensitive = true` output is treated as secret-shaped too, not just a
+    literal `${secret:}` token.
+
     Returns:
         `(sentinel_payload, secrets)` — `sentinel_payload` is written to
         `strata.auto.tfvars.json`; `secrets` is the flat `{path: value}`
         map delivered as `TF_VAR_strata_secrets` (never written to disk).
     """
-    resolved, secrets = resolve_value_tokens_tracking_secrets(payload, tokens)
+    resolved, secrets = resolve_value_tokens_tracking_secrets(
+        payload, tokens, sensitive_output_keys=sensitive_output_keys
+    )
     for path in secrets:
         _set_path(resolved, path, f"__strata_secret__:{path}")
     return resolved, secrets

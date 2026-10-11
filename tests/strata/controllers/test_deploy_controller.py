@@ -1504,6 +1504,98 @@ def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_pat
     assert record_value == "20.1.2.3"
 
 
+def test_deploy_run_sentinels_an_output_token_when_the_real_output_is_sensitive(tmp_path: Path):
+    """Regression test for the real gap found 2026-10-10: an
+    '${output:...}' reference to a Terraform output marked
+    `sensitive = true` must be treated exactly like a `${secret:}` leaf —
+    sentineled in the on-disk file, real value only reachable via
+    `TF_VAR_strata_secrets` — never written to disk in plain text the way
+    'provision-hearth.public_ip' (not sensitive) legitimately is above."""
+    root = _solution(tmp_path)
+    _write(root, "infra_hearth/main.tf", "# root module\n")
+    _write(root, "infra_dns/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: hearth\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "dns.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: dns\nmeta:\n  name: public-dns\nspec:\n"
+        "  zones:\n    - name: example.com\n      records:\n"
+        "        - name: '@'\n          type: A\n          value: '${output:provision-hearth.admin_password}'\n"
+        "      default_tags:\n        environment: prd\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  dns_zones:\n    - public-dns\n"
+        "  provisioners:\n"
+        "    - name: tf_hearth\n      tool: terraform\n      source:\n        source_path: infra_hearth\n"
+        "    - name: tf_dns\n      tool: terraform\n      source:\n        source_path: infra_dns\n"
+        "  execution:\n"
+        "    - name: provision-hearth\n      provisioner: tf_hearth\n      targets:\n        - hearth\n"
+        "    - name: apply-dns\n      provisioner: tf_dns\n      targets:\n        - hearth\n        - public-dns\n"
+        "      depends_on:\n        - provision-hearth\n"
+        "  resources:\n    - name: hearth\n      resource: hearth\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    envs_by_step: dict[str, list[dict[str, str] | None]] = {"apply-dns": []}
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if cwd is not None and "infra_dns" in str(cwd):
+            envs_by_step["apply-dns"].append(env)
+        if args[1] == "output":
+            return CommandResult(
+                returncode=0,
+                stdout=json.dumps({"admin_password": {"value": "hunter2", "sensitive": True}}),
+                stderr="",
+            )
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    dns_file = build_path / "infra_dns" / "strata.auto.tfvars.json"
+    dns_payload = json.loads(dns_file.read_text())
+    record_value = dns_payload["strata"]["dns"]["public-dns"]["zones"]["example.com"]["records"][0]["value"]
+    assert record_value == "__strata_secret__:dns.public-dns.zones.example\\.com.records.0.value"
+    assert "hunter2" not in dns_file.read_text()
+    apply_dns_env = next(e for e in envs_by_step["apply-dns"] if e is not None)
+    secrets_payload = json.loads(apply_dns_env["TF_VAR_strata_secrets"])
+    assert secrets_payload["dns.public-dns.zones.example\\.com.records.0.value"] == "hunter2"
+
+
 def test_deploy_run_rejects_unclaimed_output_token_in_dns(tmp_path: Path):
     """docs/design/gap_fit_v1.md gap #12: a DNS document using '${output:...}' with no
     step naming it in `targets` is a clear, single diagnostic error — not a
@@ -1722,18 +1814,47 @@ def test_collect_step_outputs_parses_terraform_json():
     original_output = integration.output
     try:
         integration.output = lambda *a, **kw: _FakeResult()  # type: ignore[method-assign]
-        result = collect_step_outputs(integration, Path("/work"), {})
+        values, sensitive_keys = collect_step_outputs(integration, Path("/work"), {})
     finally:
         integration.output = original_output  # type: ignore[method-assign]
 
-    assert result == {"vm_ip": "10.0.0.5", "vm_count": "3"}
+    assert values == {"vm_ip": "10.0.0.5", "vm_count": "3"}
+    assert sensitive_keys == set()
+
+
+def test_collect_step_outputs_marks_sensitive_outputs_separately():
+    """Regression test for the real gap found 2026-10-10: an
+    `${output:step.key}` reference to a Terraform output marked
+    `sensitive = true` must be resolvable as secret-shaped by the caller —
+    `collect_step_outputs()` is the one place that sees the real
+    `-json` `sensitive` flag at all, so it must surface it, not just the
+    value."""
+    from strata.controllers.deploy_controller import collect_step_outputs
+    from strata.integrations.terraform import TerraformIntegration
+
+    class _FakeResult:
+        is_successful = True
+        stdout = json.dumps(
+            {
+                "db_password": {"value": "hunter2", "type": "string", "sensitive": True},
+                "vm_ip": {"value": "10.0.0.5", "type": "string", "sensitive": False},
+            }
+        )
+
+    integration = TerraformIntegration()
+    integration.output = lambda *a, **kw: _FakeResult()  # type: ignore[method-assign]
+
+    values, sensitive_keys = collect_step_outputs(integration, Path("/work"), {})
+
+    assert values == {"db_password": "hunter2", "vm_ip": "10.0.0.5"}
+    assert sensitive_keys == {"db_password"}
 
 
 def test_collect_step_outputs_empty_for_integration_without_output():
     from strata.controllers.deploy_controller import collect_step_outputs
     from strata.integrations.compose import ComposeIntegration
 
-    assert collect_step_outputs(ComposeIntegration(), Path("/work"), {}) == {}
+    assert collect_step_outputs(ComposeIntegration(), Path("/work"), {}) == ({}, set())
 
 
 def test_collect_step_outputs_empty_on_failed_output_call():
@@ -1747,7 +1868,7 @@ def test_collect_step_outputs_empty_on_failed_output_call():
     integration = TerraformIntegration()
     integration.output = lambda *a, **kw: _FakeResult()  # type: ignore[method-assign]
 
-    assert collect_step_outputs(integration, Path("/work"), {}) == {}
+    assert collect_step_outputs(integration, Path("/work"), {}) == ({}, set())
 
 
 # ---------------------------------------------------------------------------
@@ -1852,7 +1973,7 @@ def test_collect_step_outputs_real_terraform_output_tolerates_auth_kwargs():
 
     result = collect_step_outputs(integration, Path("/work"), {}, auth=auth, resolved_values={"k": "v"})
 
-    assert result == {"vm_ip": "10.0.0.5"}
+    assert result == ({"vm_ip": "10.0.0.5"}, set())
 
 
 def test_upstream_step_names_is_transitive():

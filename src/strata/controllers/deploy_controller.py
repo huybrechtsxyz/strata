@@ -139,7 +139,7 @@ def collect_step_outputs(
     *,
     auth: AuthenticationModel | None = None,
     resolved_values: Mapping[str, str] | None = None,
-) -> dict[str, str]:
+) -> tuple[dict[str, str], set[str]]:
     """Collect a just-deployed step's outputs (`terraform output -json`) for
     later, dependent steps to reference via `${output:step.key}` tokens
     (docs/design/deploy-command.md's "Cross-step output context").
@@ -148,10 +148,10 @@ def collect_step_outputs(
     confirmed not part of the `InfraIntegration` ABC — so Compose/Helm
     integrations (no native "outputs" concept in either real reference repo)
     simply contribute nothing, via the same `getattr(..., None)` pattern
-    already used for `init`/`validate`. Returns `{}` (rather than raising) on
-    any collection failure — a step already deployed successfully; losing
-    its outputs should not fail the run, only leave later `${output:}`
-    references for this step unresolved.
+    already used for `init`/`validate`. Returns `({}, set())` (rather than
+    raising) on any collection failure — a step already deployed
+    successfully; losing its outputs should not fail the run, only leave
+    later `${output:}` references for this step unresolved.
 
     `auth`/`resolved_values` (docs/design/gitops-integration.md
     Implementation Plan Phase 5) are **only** added to the `output()` call
@@ -167,10 +167,20 @@ def collect_step_outputs(
     permanently empty. Callers pass both only for an actual GitOps step;
     `None`/`None` for every other tool keeps this call textually identical
     to before Phase 5.
+
+    Returns:
+        `(values, sensitive_keys)` — `values` is every output's real value
+        (never redacted; real Terraform returns it unredacted in `-json`
+        output regardless of the output's own `sensitive` flag), keyed by
+        output name; `sensitive_keys` is the subset of those names whose
+        own `sensitive` flag was `true` — found as a real gap (2026-10-10):
+        without this, an `${output:step.key}` reference to a Terraform
+        output marked `sensitive = true` was never treated as secret-
+        shaped at all, so its real value reached a plain on-disk file.
     """
     output = getattr(integration, "output", None)
     if output is None:
-        return {}
+        return {}, set()
     extra: dict[str, Any] = {}
     if auth is not None or resolved_values is not None:
         extra["auth"] = auth
@@ -184,21 +194,24 @@ def collect_step_outputs(
         # JSON key/value map, and requires a `namespace` kwarg this doesn't
         # pass). Only Terraform's `output(json_format=...)` shape is
         # understood here; anything else contributes nothing.
-        return {}
+        return {}, set()
     if not result.is_successful:
-        return {}
+        return {}, set()
     try:
         parsed = json.loads(result.stdout)
     except (json.JSONDecodeError, TypeError):
-        return {}
+        return {}, set()
     if not isinstance(parsed, dict):
-        return {}
+        return {}, set()
     values: dict[str, str] = {}
+    sensitive_keys: set[str] = set()
     for key, entry in parsed.items():
         if isinstance(entry, dict) and "value" in entry:
             value = entry["value"]
             values[key] = value if isinstance(value, str) else json.dumps(value)
-    return values
+            if entry.get("sensitive") is True:
+                sensitive_keys.add(key)
+    return values, sensitive_keys
 
 
 def _upstream_step_names(step_name: str, steps: list[ProvisioningStepModel]) -> set[str]:
@@ -480,6 +493,7 @@ def deploy_run(
 
     upstream_by_step = {s.name: _upstream_step_names(s.name, all_steps) for s in all_steps}
     step_outputs: dict[str, dict[str, str]] = {}
+    step_sensitive_outputs: dict[str, set[str]] = {}
     stage_by_step = {s.step: s for s in (deployment.spec.stages or [])}
 
     for step, provisioner, integration in resolved_steps:
@@ -532,6 +546,12 @@ def deploy_run(
             if upstream_step in upstream
             for key, value in outputs.items()
         }
+        visible_sensitive_outputs = {
+            f"{upstream_step}.{key}"
+            for upstream_step, keys in step_sensitive_outputs.items()
+            if upstream_step in upstream
+            for key in keys
+        }
         tokens = {**resolved.values, **visible_outputs}
 
         # Helm/Compose dispatch (docs/design/gap_fit_v1.md gap #13): a
@@ -579,8 +599,8 @@ def deploy_run(
             resolved_config = resolve_value_tokens_in_mapping(provisioner.backend.configuration, tokens)
             backend_config = {k: str(v) for k, v in resolved_config.items()}
 
-        # Terraform delivery (ADR-0035, docs/work/
-        # unified-terraform-projection.md Phase 7) — one `strata.auto.
+        # Terraform delivery (ADR-0035, docs/design/
+        # unified-terraform-projection.md) — one `strata.auto.
         # tfvars.json` rewrite plus one `TF_VAR_strata_secrets` env var,
         # replacing the old per-category file rewrite + one-env-var-per-
         # category/per-flat-key delivery entirely. There's only one object
@@ -610,7 +630,9 @@ def deploy_run(
                 )
                 for category, docs in payload.items()
             }
-            resolved_payload, strata_secrets = rewrite_strata_payload(step_payload, tokens)
+            resolved_payload, strata_secrets = rewrite_strata_payload(
+                step_payload, tokens, sensitive_output_keys=visible_sensitive_outputs
+            )
             (path / "strata.auto.tfvars.json").write_text(json.dumps({"strata": resolved_payload}))
             env[f"{integration.ENV_VAR_PREFIX}strata_secrets"] = json.dumps(strata_secrets)
 
@@ -724,7 +746,7 @@ def deploy_run(
             diagnostics.error(f"Step '{step.name}': deploy failed — {deploy_result.stderr}", location=step.name)
             return diagnostics
 
-        step_outputs[step.name] = collect_step_outputs(
+        step_outputs[step.name], step_sensitive_outputs[step.name] = collect_step_outputs(
             integration, path, env, auth=auth, resolved_values=step_resolved_values
         )
 
