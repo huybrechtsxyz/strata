@@ -1,7 +1,7 @@
 # FLAT_CATEGORIES Secret Taint Forces Whole-Key Env Var Delivery — Work
 
 - Status: **superseded (2026-10-09)** — see
-  [unified-terraform-projection.md](unified-terraform-projection.md),
+  [unified-terraform-projection.md](../design/unified-terraform-projection.md),
   which deletes this gap structurally (per-leaf secret granularity by
   construction) rather than patching it per-category. This doc is kept
   for its evidence record and reasoning trail — the gap analysis, the
@@ -702,7 +702,7 @@ sense if per-category is actually the chosen shape.
   fork. Then added the "Clean sheet" appendix below for comparison.
 - 2026-10-09: **Superseded.** The clean-sheet appendix was promoted into
   its own full design,
-  [unified-terraform-projection.md](unified-terraform-projection.md) —
+  [unified-terraform-projection.md](../design/unified-terraform-projection.md) —
   one `strata` variable, one path-keyed `TF_VAR_strata_secrets` map,
   accepted as deliberately breaking (two consumers, both absorbable,
   alpha). That design deletes this doc's entire subject structurally

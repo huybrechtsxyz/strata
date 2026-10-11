@@ -233,7 +233,7 @@ def _tenant(name: str = "acme") -> TenantModel:
 
 
 # ---------------------------------------------------------------------------
-# build_strata_payload() (ADR-0035, docs/work/unified-terraform-projection.md
+# build_strata_payload() (ADR-0035, docs/design/unified-terraform-projection.md
 # Phase 2) — the unified projection, one nested object per `ResolvedWorkspaceGraph`.
 # ---------------------------------------------------------------------------
 
@@ -495,7 +495,7 @@ def test_rewrite_strata_payload_no_secrets_returns_fully_resolved_payload_unchan
 
 
 # ---------------------------------------------------------------------------
-# build_strata_locals() (ADR-0035, docs/work/unified-terraform-projection.md
+# build_strata_locals() (ADR-0035, docs/design/unified-terraform-projection.md
 # Phase 6) — generates strata_locals.tf's full text.
 # ---------------------------------------------------------------------------
 

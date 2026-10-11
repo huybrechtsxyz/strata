@@ -1,6 +1,16 @@
 # Terraform Deploy-Time Value Delivery — Design
 
-- Status: current
+- Status: **superseded (2026-10-11)** — see
+  [unified-terraform-projection.md](unified-terraform-projection.md)
+  ([ADR-0035](../decisions/0035-unified-terraform-projection.md)), which
+  replaced the twelve-category `TF_VAR_<name>`/per-category file rewrite
+  this doc describes with one `strata.auto.tfvars.json` rewrite and one
+  `TF_VAR_strata_secrets` map. ADR-0031's own deploy-time file-rewrite
+  *mechanism* (a `*.auto.tfvars.json` file outranks `TF_VAR_*`) is still in
+  effect and still the reason the rewrite happens at all — only the
+  category/env-var shape described below is gone. Kept as the evidence
+  record (the real Terraform-precedence bug report, the empirical
+  verification against v1.12.2) the new design was built from.
 - Last updated: 2026-10-08
 
 ## Overview

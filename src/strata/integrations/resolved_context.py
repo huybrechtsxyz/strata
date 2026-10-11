@@ -108,7 +108,7 @@ class ResolvedWorkspaceGraph:
     lookup. `workspace.spec.topology` itself is already inline
     (`TopologySpecModel`, ADR-0028) — no separate resolution needed.
 
-    `modules` (docs/work/unified-terraform-projection.md Phase 1) is keyed
+    `modules` (docs/design/unified-terraform-projection.md) is keyed
     the same way, but one level removed: the names come from every resolved
     namespace's own `spec.modules[].module` (`ModuleReferenceModel`), not
     directly from a `WorkspaceSpecModel` field — scoped to namespace-attached

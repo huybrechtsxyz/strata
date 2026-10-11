@@ -1,9 +1,14 @@
 # Terraform `*.auto.tfvars.json` Parity — v1 vs v2 Real Output Gap
 
-- Status: **fixed** — every real, confirmed gap below has been designed
-  and implemented (see "Fix Design and Resolution" at the end of this
-  doc). The category-by-category catalog above the fold is kept as-is,
-  unmodified, as the evidence record the fix was built from.
+- Status: **superseded (2026-10-11)** — see
+  [unified-terraform-projection.md](unified-terraform-projection.md)
+  ([ADR-0035](../decisions/0035-unified-terraform-projection.md)), which
+  abandoned v1 output parity entirely (deliberately — a real rewrite, not
+  "same variables, new tool") in favor of one unified `strata` object.
+  The category-by-category catalog below describes real variable names/
+  shapes that no longer exist in the current projection. Kept as the
+  evidence record (the real, empirical v1-vs-v2 output comparison) the
+  new design was built from.
 - Date: 2026-09-30 (catalog), 2026-09-30 (fix)
 - Related: [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #15 (Terraform
   `variables.tf` input validation — a related but distinct gap: that one

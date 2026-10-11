@@ -2,10 +2,9 @@
 
 - Status: accepted
 - Date: 2026-10-10
-- Related: [docs/work/unified-terraform-projection.md](../work/unified-terraform-projection.md)
-  (full evidence record, the complete payload shape, migration plan, and
-  the implementation questions still open — this ADR records only the
-  decision itself), [terraform-tfvars-parity.md](../design/terraform-tfvars-parity.md)
+- Related: [docs/design/unified-terraform-projection.md](../design/unified-terraform-projection.md)
+  (the finished design — current payload shape, how it works end to end),
+  [terraform-tfvars-parity.md](../design/terraform-tfvars-parity.md)
   (the v1-parity shape this decision replaces), [flat-category-secret-taint-size-limit.md](../work/flat-category-secret-taint-size-limit.md)
   (the per-category patch this decision supersedes structurally rather
   than extending), sequenced after [flatten-provider-resource-module-properties.md](../work/flatten-provider-resource-module-properties.md),

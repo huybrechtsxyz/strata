@@ -246,6 +246,26 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-10-11: **Rebuilt alpha20** (same `2.0.0-Alpha20`/`2.0.0a20`, not a
+  new version — explicit request to "rebuild," not rebump) after a
+  requirements-traceability pass found and fixed a real, silent-wrong-
+  value bug in `strata_locals.tf` generation (see unified-terraform-
+  projection.md's "Post-Phase-8 correction") that the first `alpha20`
+  build (below) did not include. Full check suite green again: mypy,
+  ruff check, ruff format, import-linter, pytest (2306 passed — up from
+  2293, the new regression tests for this fix). `uv build
+  --index-strategy unsafe-best-match` produced a fresh `xyz_strata-
+  2.0.0a20-py3-none-any.whl`/`.tar.gz`, overwriting the first build's
+  artifacts; installed into a fresh isolated `uv venv`, confirmed
+  `strata version` → `2.0.0a20`, `strata --help` unchanged, AND directly
+  imported `build_strata_locals()` from the installed wheel (not just the
+  dev tree) to confirm the fix's exact backslash-count behavior is really
+  present in the packaged code, not just the source. Verification venv
+  removed after. **Known sharp edge**, confirmed once more: the dev
+  venv's own editable install needed no reinstall this time (`VERSION.txt`
+  itself didn't change, only source content — editable installs pick that
+  up live; the stale-dist-info edge only bites when the version *string*
+  changes).
 - 2026-10-11: **Built alpha20** — bumped `VERSION.txt` to `2.0.0-Alpha20`
   (normalizes to `2.0.0a20`; confirmed via `packaging.version.Version`
   first), deliberately skipping `alpha10`-`alpha19` to leave room for

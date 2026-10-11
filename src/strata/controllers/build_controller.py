@@ -158,7 +158,7 @@ def build_resolved_workspace_graph(
     resource_names = [wr.resource for wr in (workspace.spec.resources or []) if wr.resource is not None]
     namespaces = cast(dict[str, NamespaceModel], _lookup_all(index, PlatformKind.NAMESPACE, workspace.spec.namespaces))
     # Module names come from every resolved namespace's own spec.modules
-    # (docs/work/unified-terraform-projection.md Phase 1) — `namespaces`
+    # (docs/design/unified-terraform-projection.md Phase 1) — `namespaces`
     # must be resolved first, not from workspace.spec.namespaces directly,
     # since the module references live one level down on the Namespace
     # document itself, not on the workspace.

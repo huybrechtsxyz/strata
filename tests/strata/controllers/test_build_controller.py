@@ -224,7 +224,7 @@ def test_build_resolved_workspace_graph_walks_providers():
 
 
 def test_build_resolved_workspace_graph_walks_modules_via_namespaces():
-    """Phase 1 of docs/work/unified-terraform-projection.md: `graph.modules`
+    """docs/design/unified-terraform-projection.md: `graph.modules`
     is populated from every resolved namespace's own `spec.modules`, not
     directly from a workspace-level field. Two namespaces reference the
     same module under two different reference names — confirms dict-by-name
@@ -341,7 +341,7 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
     materialised = build_path / "infra"
     assert (materialised / "main.tf").exists()
     # TerraformIntegration.default_output() wrote the unified projection
-    # (ADR-0035, docs/work/unified-terraform-projection.md Phase 4) — one
+    # (ADR-0035, docs/design/unified-terraform-projection.md) — one
     # strata.auto.tfvars.json file, not the old per-category files.
     assert (materialised / "strata.auto.tfvars.json").exists()
     assert not (materialised / "workspace.auto.tfvars.json").exists()

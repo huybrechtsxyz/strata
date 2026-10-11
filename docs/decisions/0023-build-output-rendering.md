@@ -1,6 +1,10 @@
 # Build Output Rendering — Default Projection and a Jinja2 Escape Hatch
 
-- Status: accepted
+- Status: accepted — D1 (the per-category structural projection) superseded
+  by [ADR-0035](0035-unified-terraform-projection.md) (one unified `strata`
+  object); D2-D5 (the `prepare()`/`default_output()` hook mechanism, the
+  `output.template` Jinja2 escape hatch, and uniform per-tool dispatch)
+  remain in effect unchanged
 - Date: 2026-09-24
 - Related: [ADR-0022](0022-strata-build-run.md) (`strata build run` - the
   consumer: `InfraIntegration.prepare()`/`prepare_namespace()` call into this

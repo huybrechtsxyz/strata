@@ -383,7 +383,7 @@ def deploy_run(
     )
 
     # Raw (unresolved) snapshot, built once per run — workspace-wide, not
-    # per-step data (ADR-0035, docs/work/unified-terraform-projection.md
+    # per-step data (ADR-0035, docs/design/unified-terraform-projection.md
     # Phase 7). Re-resolved per step below using that step's own `tokens`
     # (mirrors `backend.configuration`'s existing per-step pattern). A
     # `${output:...}` token needs an owning step to scope which step's
