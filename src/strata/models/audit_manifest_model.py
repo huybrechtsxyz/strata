@@ -220,15 +220,20 @@ class ManifestPolicyResultModel(PlatformBaseModel):
     violations: list[str] = Field(default_factory=list, description="Violation messages when the policy failed")
 
 
-class ManifestLockReferenceModel(PlatformBaseModel):
-    """State lock audit trail — which backend held the lock, who, when."""
-
-    lock_id: str = Field(description="Unique lock identifier")
-    backend: str = Field(description="Lock backend type: azurerm | terraform_cloud | s3 | consul | gcs | local")
-    acquired_at: str = Field(description="ISO-8601 timestamp when the lock was acquired")
-    released_at: str | None = Field(default=None, description="ISO-8601 timestamp when the lock was released")
-    holder: str = Field(description="Identity of the lock holder")
-    hostname: str = Field(description="Hostname of the machine that acquired the lock")
+# Commented out, not deleted: no real producer populates this today (confirmed — zero
+# references outside this model/docs). docs/work/cross-run-step-output-delivery.md's
+# Implementation Plan step 5 plans to reactivate this as the audit record for the
+# DeploymentOutputStore's own CAS-retry writes, not just a Terraform backend lock —
+# uncomment (and restore the `lock` field on DeploymentManifestModel below) then.
+# class ManifestLockReferenceModel(PlatformBaseModel):
+#     """State lock audit trail — which backend held the lock, who, when."""
+#
+#     lock_id: str = Field(description="Unique lock identifier")
+#     backend: str = Field(description="Lock backend type: azurerm | terraform_cloud | s3 | consul | gcs | local")
+#     acquired_at: str = Field(description="ISO-8601 timestamp when the lock was acquired")
+#     released_at: str | None = Field(default=None, description="ISO-8601 timestamp when the lock was released")
+#     holder: str = Field(description="Identity of the lock holder")
+#     hostname: str = Field(description="Hostname of the machine that acquired the lock")
 
 
 class DeploymentManifestModel(PlatformBaseModel):
@@ -283,7 +288,8 @@ class DeploymentManifestModel(PlatformBaseModel):
     policy_results: list[ManifestPolicyResultModel] | None = Field(
         default=None, description="Policy evaluation results from all phases run during this deployment"
     )
-    lock: ManifestLockReferenceModel | None = Field(default=None, description="State lock audit trail")
+    # lock: ManifestLockReferenceModel | None = Field(default=None, description="State lock audit trail")
+    # — commented out alongside the class above; same reactivation plan.
 
     # Catch-alls
     errors: list[str] | None = Field(default=None, description="Run-level error messages")
