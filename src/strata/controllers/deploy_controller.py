@@ -691,7 +691,11 @@ def deploy_run(
 
         backend_config: dict[str, str] = {}
         if provisioner.backend is not None:
-            resolved_config = resolve_value_tokens_in_mapping(provisioner.backend.configuration, tokens)
+            try:
+                resolved_config = resolve_value_tokens_in_mapping(provisioner.backend.configuration, tokens)
+            except ValueError as exc:
+                diagnostics.error(f"Step '{step.name}': {exc}", location=step.name)
+                return diagnostics
             backend_config = {k: str(v) for k, v in resolved_config.items()}
 
         # Terraform delivery (ADR-0035, docs/design/
@@ -725,9 +729,13 @@ def deploy_run(
                 )
                 for category, docs in payload.items()
             }
-            resolved_payload, strata_secrets = rewrite_strata_payload(
-                step_payload, tokens, sensitive_output_keys=visible_sensitive_outputs
-            )
+            try:
+                resolved_payload, strata_secrets = rewrite_strata_payload(
+                    step_payload, tokens, sensitive_output_keys=visible_sensitive_outputs
+                )
+            except ValueError as exc:
+                diagnostics.error(f"Step '{step.name}': {exc}", location=step.name)
+                return diagnostics
             (path / "strata.auto.tfvars.json").write_text(json.dumps({"strata": resolved_payload}))
             env[f"{integration.ENV_VAR_PREFIX}strata_secrets"] = json.dumps(strata_secrets)
 

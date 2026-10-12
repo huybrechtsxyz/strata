@@ -1738,7 +1738,101 @@ def test_deploy_run_resolves_output_token_from_upstream_step(tmp_path: Path, mon
     assert "host=10.0.0.5" in apps_init_call
 
 
+def test_deploy_run_reports_a_diagnostic_when_a_backend_configuration_token_is_unresolved(tmp_path: Path, monkeypatch):
+    """A referenced key genuinely missing from `tokens` (here: an upstream
+    step's Terraform output never produced it) must not escape as a bare
+    `ValueError` — `resolve_value_tokens_in_mapping()` raises one, and
+    `deploy_controller.py`'s backend.configuration call site must catch it
+    and report a clean diagnostic instead of crashing with a raw traceback."""
+    root = _output_chained_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "output":
+            # `apply_infra`'s real Terraform output never declared `vm_ip` —
+            # `apply_apps`'s backend.configuration still references it.
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert not diagnostics.ok
+    assert "did not resolve to a value" in diagnostics.messages()[0]
+
+
+def test_deploy_run_reports_a_diagnostic_when_a_strata_payload_token_is_unresolved(tmp_path: Path, monkeypatch):
+    """Same bug, different call site: a resource's `custom` field (part of
+    the unified `strata.auto.tfvars.json` payload, ADR-0035) referencing an
+    undeclared `${var:...}` key must not escape `rewrite_strata_payload()`'s
+    bare `ValueError` either — distinct from the backend.configuration call
+    site above, no `provisioner.backend` at all here. `${output:...}` can't
+    be used for this repro (rejected earlier, outside dns/networks/
+    firewalls, by its own dedicated pre-flight check)."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n"
+        "  custom:\n    vm_ip: '${var:undeclared_var}'\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    import strata.integrations.base as base_module
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert "did not resolve to a value" in diagnostics.messages()[0]
+
+
 def test_deploy_run_rejects_output_token_from_non_dependency(tmp_path: Path, monkeypatch):
+    """Previously asserted the bare `ValueError` this very bug fix removes
+    (`resolve_value_tokens_in_mapping()`'s "key not in values" is now
+    caught and reported as a clean diagnostic, same as every other
+    unresolved-token case) — updated to assert the fixed behavior instead
+    of the crash."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -1793,8 +1887,10 @@ def test_deploy_run_rejects_output_token_from_non_dependency(tmp_path: Path, mon
     monkeypatch.setattr(base_module, "run_command", _fake_run_command)
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
-    with pytest.raises(ValueError, match="output:apply_infra.vm_ip"):
-        deploy_run(_context(root), "app", build_path)
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert not diagnostics.ok
+    assert "output:apply_infra.vm_ip" in diagnostics.messages()[0]
 
 
 def test_collect_step_outputs_parses_terraform_json():

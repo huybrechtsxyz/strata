@@ -733,6 +733,29 @@ def test_deploy_namespace_missing_meta_file_reports_a_diagnostic_and_skips(monke
     assert "meta.yaml not found" in diagnostics.errors[0].message
 
 
+def test_deploy_namespace_unresolvable_token_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):
+    """A missing Value token key must not escape as a bare `ValueError` —
+    `resolve_module_values()` raises one, and this call site must catch it
+    exactly like `ComposeIntegration.deploy_namespace()` already does
+    (`test_deploy_namespace_unresolvable_token_reports_a_diagnostic` in
+    test_integrations_compose.py)."""
+    _capture(monkeypatch)
+    module = _module(
+        services=[
+            ModuleServiceModel(name="server", environment=[ModuleServiceEnvironmentModel(key="TZ", value="${var:tz}")])
+        ]
+    )
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
+    resolved_module = _resolved_module("authentik", module, module_dir)
+
+    diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=False)
+
+    assert not diagnostics.ok
+    assert "did not resolve to a value" in diagnostics.errors[0].message
+
+
 def test_deploy_namespace_unresolvable_chart_remote_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):
     _capture(monkeypatch)
     module = _module(source=SourceModel(remote="missing", chart_name="authentik"))

@@ -159,7 +159,14 @@ class HelmIntegration(InfraIntegration):
                 )
                 continue
 
-            resolved_values, secrets = resolve_module_values(item.module, tokens)
+            try:
+                resolved_values, secrets = resolve_module_values(item.module, tokens)
+            except ValueError as exc:
+                diagnostics.error(
+                    f"Namespace '{namespace.meta.name}', module '{item.reference.name}': {exc}",
+                    location=item.reference.name,
+                )
+                continue
             set_string = list(secrets.items())
 
             if resolved_values:
