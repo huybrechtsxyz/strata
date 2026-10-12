@@ -14,11 +14,17 @@ there is nothing to dispatch it to.
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from strata.integrations.base import Integration
 from strata.integrations.errors import IntegrationError
-from strata.integrations.resolved_context import ResolvedModule, ResolvedWorkspaceGraph, SecretMetadata, ValueResolution
+from strata.integrations.resolved_context import (
+    KeyValueEntry,
+    ResolvedModule,
+    ResolvedWorkspaceGraph,
+    SecretMetadata,
+    ValueResolution,
+)
 from strata.models.integration_model import Capability
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
@@ -80,6 +86,101 @@ class StoreIntegration(Integration):
                 does not report secret metadata (the base default).
         """
         raise IntegrationError(f"{self.name} does not report secret metadata")
+
+
+#: Reserved `KeyValueStoreIntegration.put(if_version=...)` sentinel meaning
+#: "this key must not already exist" — the create-only guard a lock's first
+#: acquire needs (docs/work/key-value-store-integration.md's "Validated
+#: reuse" section), distinct from an ordinary value meaning "must still
+#: equal this known version." Matches Consul's/etcd's own documented CAS
+#: convention (a nonexistent key's ModifyIndex/mod_revision is `0`) exactly;
+#: the Azure/S3 backends special-case this string instead, since their own
+#: versions are opaque ETags that could never collide with it.
+NEW_KEY_VERSION = "0"
+
+
+class KeyValueStoreIntegration(Integration):
+    """Capability: `key_value`. Raw get/put of a single small value by key,
+    with optional compare-and-swap via a backend-returned version tag
+    (docs/work/key-value-store-integration.md).
+
+    Deliberately not a `StoreIntegration` (`resolve(key) -> str`, no
+    version concept at all) — a real shape mismatch for "read/write a
+    small record with optional CAS," not a style preference. A class
+    needing both capabilities (e.g. `AzureAppConfigResolver`,
+    `AzureKeyVaultResolver`) inherits both ABCs and declares both
+    capability strings; nothing about this ABC assumes it's the only one
+    a class implements.
+    """
+
+    #: Whether `put(if_version=...)` is honored at all, for *any* value
+    #: (including `NEW_KEY_VERSION`) — `True` by default, since every real
+    #: backend built so far except one supports it natively.
+    #:
+    #: **Any current or future caller that relies on real compare-and-swap**
+    #: (today: only `DeploymentOutputStore`'s read-modify-write; a lock's
+    #: create-then-update-then-reacquire lifecycle would be another) **must
+    #: check this before ever calling `put(if_version=...)`**, not just
+    #: handle the resulting exception — the one known `False` case
+    #: (`AzureKeyVaultResolver`, docs/work/key-value-store-integration.md's
+    #: Backend 7) still raises `IntegrationError` from `put()` itself if
+    #: called anyway, but silently discovering that via a runtime exception
+    #: (or, worse, a caller that swallows it as a warning, the way
+    #: `DeploymentOutputStore.record()`'s own failed-write handling does) is
+    #: exactly the "quiet wrong value" bug class this flag exists to let a
+    #: caller pre-empt instead.
+    #:
+    #: A backend implementer must set this to `False` unless **both**
+    #: `if_version=NEW_KEY_VERSION` (create-only) *and* `if_version=<a real
+    #: prior version>` (update-only-if-unchanged) are genuinely honored —
+    #: a backend supporting only the create-only case (the file backend's
+    #: planned design, docs/work/key-value-store-integration.md's Backend 1:
+    #: a real atomic create via `O_EXCL`, but no atomic primitive at all for
+    #: an *existing* key) is not "supports CAS" for this flag's purpose,
+    #: since `DeploymentOutputStore.record()` needs the update case on
+    #: every write after the first.
+    SUPPORTS_CAS: ClassVar[bool] = True
+
+    @abstractmethod
+    def get(self, key: str) -> KeyValueEntry | None:
+        """Return the current value and version for `key`, or `None` if it
+        does not exist in the store.
+
+        Callers must check `is None`, never truthiness — `None` ("key does
+        not exist") and `KeyValueEntry(value=b"", ...)` ("key exists, value
+        is empty") are both falsy in Python, but mean genuinely different
+        things. `if not entry:` or `if not entry.value:` silently conflate
+        them; `if entry is None:` does not.
+
+        Raises:
+            strata.integrations.errors.IntegrationError: the store is
+                unreachable or unauthenticated.
+        """
+
+    @abstractmethod
+    def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
+        """Write `value` to `key`, returning the new version.
+
+        Args:
+            if_version: three distinct modes, matching the three real
+                states a caller needs (a lock's create-then-update-then-
+                reacquire lifecycle needs all three):
+                - omitted/`None` — unconditional write, no guard.
+                - `NEW_KEY_VERSION` — the write only succeeds if `key`
+                  does **not already exist**.
+                - any other value — the write only succeeds if the
+                  backend's current version for `key` still equals it
+                  exactly (an ordinary CAS update).
+
+        Raises:
+            strata.integrations.errors.KeyValueConflictError: `if_version`
+                was given and the condition above didn't hold — the caller
+                should re-read and retry its own merge, never force the
+                write through by retrying without `if_version`.
+            strata.integrations.errors.IntegrationError: the store is
+                unreachable/unauthenticated, or this backend cannot honor
+                `if_version` at all for the case given.
+        """
 
 
 class InfraIntegration(Integration):
@@ -451,6 +552,7 @@ CAPABILITY_ABCS: dict[str, type[Integration]] = {
     Capability.CONTAINER: InfraIntegration,
     Capability.AUDIT: AuditSinkIntegration,
     Capability.SCANNER: ScannerIntegration,
+    Capability.KEY_VALUE: KeyValueStoreIntegration,
 }
 
 

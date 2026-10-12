@@ -72,6 +72,16 @@ class SecretMetadata:
 
 
 @dataclass(frozen=True)
+class KeyValueEntry:
+    """One `KeyValueStoreIntegration.get()` result — the stored bytes and
+    the backend's own version/ETag for them, consumed by a caller's
+    compare-and-swap retry loop (docs/work/key-value-store-integration.md)."""
+
+    value: bytes
+    version: str
+
+
+@dataclass(frozen=True)
 class ValueReference:
     """One declared variable/feature/secret — never a resolved
     integration-backed value (docs/design/build-time-value-categories.md,

@@ -31,10 +31,14 @@ from typing import cast
 
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
+from strata.integrations.capabilities import KeyValueStoreIntegration
+from strata.integrations.errors import IntegrationError
+from strata.integrations.registry import get_class as get_integration_class
 from strata.models.common_models import PlatformBaseModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
+from strata.models.integration_model import IntegrationModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.network_model import NetworkModel
@@ -378,6 +382,13 @@ def _check_resources(index: DocumentIndex) -> Diagnostics:
 
 def _check_workspaces(index: DocumentIndex) -> Diagnostics:
     diagnostics = Diagnostics()
+
+    security: ConfigurationSecurityModel | None = None
+    configuration_entries = index.all_of(PlatformKind.CONFIGURATION)
+    if len(configuration_entries) == 1:
+        configuration = cast(ConfigurationModel, configuration_entries[0].model)
+        security = configuration.spec.security
+
     for entry in index.all_of(PlatformKind.WORKSPACE):
         workspace = cast(WorkspaceModel, entry.model)
         if workspace.spec.topology:
@@ -385,6 +396,90 @@ def _check_workspaces(index: DocumentIndex) -> Diagnostics:
 
         diagnostics.extend(_check_workspace_subnets(index, workspace), source=str(entry.source))
 
+        diagnostics.extend(_check_workspace_key_value_store_supports_cas(index, workspace), source=str(entry.source))
+        if security is not None:
+            diagnostics.extend(
+                _check_workspace_key_value_store_allowed(index, workspace, security), source=str(entry.source)
+            )
+
+    return diagnostics
+
+
+def _resolve_workspace_output_store_backend_type(index: DocumentIndex, workspace: WorkspaceModel) -> str | None:
+    """`output_store`/`output_store_integration`'s real backend type (a named
+    Integration document's own `spec.type`, for the latter) — shared by
+    both checks below.
+
+    `output_store_integration` wins outright when set, exactly mirroring
+    `resolve_output_store_integration()`'s own precedence — a workspace
+    may declare both (`output_store` as the informational/auto-bind type,
+    `.output_store_integration` naming the specific document), and the
+    named document's own `spec.type` is what actually runs at deploy time
+    regardless of what `output_store` separately says. Checking
+    `output_store` first (a real bug this fixed) would validate the wrong
+    type whenever the two disagree, silently passing a disallowed/
+    incompatible backend.
+
+    A dangling `output_store_integration` name is not re-reported here —
+    `validate_references` already catches it; this silently has nothing to
+    check in that case (same 'skip rather than guess' rule the rest of
+    this module already follows).
+    """
+    if workspace.spec.output_store_integration:
+        integration_entry = index.get(PlatformKind.INTEGRATION, workspace.spec.output_store_integration)
+        return cast(IntegrationModel, integration_entry.model).spec.type if integration_entry is not None else None
+    return workspace.spec.output_store
+
+
+def _check_workspace_key_value_store_allowed(
+    index: DocumentIndex, workspace: WorkspaceModel, security: ConfigurationSecurityModel
+) -> Diagnostics:
+    """Check the resolved output-store backend type against
+    `security.allowed_key_value_stores` — the controller's job
+    (cross-document resolution), not the service's (docs/work/
+    cross-run-step-output-delivery.md's Implementation Plan step 1,
+    'Governance').
+    """
+    backend_type = _resolve_workspace_output_store_backend_type(index, workspace)
+    service = WorkspaceService.from_model(workspace)
+    return service.validate_allowed_key_value_store(security, backend_type)
+
+
+def _check_workspace_key_value_store_supports_cas(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
+    """Catch a structurally incompatible output-store backend (one that
+    cannot honor `put(if_version=...)` at all, e.g. `azure-keyvault` —
+    docs/work/key-value-store-integration.md's Backend 7) at validate
+    time, before `deploy run` ever gets far enough to discover it as a
+    buried warning on every single step's durable write
+    (`DeploymentOutputStore.record()`'s own "never fail the run" design,
+    which would otherwise make this failure mode nearly invisible).
+
+    Class-only lookup (`registry.get_class()`), never constructs a real
+    instance — no credentials/network needed to check a class attribute,
+    unlike actually resolving the backend. Unknown/not-yet-ported types
+    and non-`KeyValueStoreIntegration` types are silently skipped here —
+    both are already reachable, louder errors elsewhere (`_construct()`'s
+    `UsageError` / `_require_key_value_integration()`'s `isinstance`
+    check), not this check's job to re-report.
+    """
+    backend_type = _resolve_workspace_output_store_backend_type(index, workspace)
+    if backend_type is None:
+        return Diagnostics()
+    try:
+        backend_class = get_integration_class(backend_type)
+    except IntegrationError:
+        return Diagnostics()
+    if not issubclass(backend_class, KeyValueStoreIntegration) or backend_class.SUPPORTS_CAS:
+        return Diagnostics()
+
+    diagnostics = Diagnostics()
+    diagnostics.error(
+        f"Workspace '{workspace.meta.name}': output-store backend '{backend_type}' does not support "
+        "compare-and-swap — required for cross-run step-output persistence's read-modify-write. Use a "
+        "backend with real CAS support instead (e.g. 'azure-appconfig', 'azure-blob').",
+        location="spec.output_store",
+        code="output_store_lacks_cas",
+    )
     return diagnostics
 
 

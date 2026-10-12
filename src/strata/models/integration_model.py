@@ -122,6 +122,12 @@ class Capability(StrEnum):
     # `ScannerIntegration`'s own docstring (`capabilities.py`) for exactly
     # how thin that shared contract deliberately is.
     SCANNER = "scanner"  #: External security scanner tools (CVE/SCA, static IaC, ...)
+    # docs/work/key-value-store-integration.md — get/put of a single small
+    # value by key with optional compare-and-swap, backend-agnostic (not
+    # one feature's name, e.g. not 'output_store' — this capability already
+    # has more than one real consumer planned, see that doc's own
+    # Terminology section).
+    KEY_VALUE = "key_value"  #: Small, keyed records needing optional compare-and-swap writes
 
 
 #: Capability vocabulary v2 currently has real consumers for. Closed/curated

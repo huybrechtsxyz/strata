@@ -23,24 +23,33 @@ through this store — parse it properly once one does.
 ADR-0021 D7 retrofit: a `StoreIntegration`, `TRANSPORTS={"sdk"}` — keeps
 `AzureAppConfigurationClient` unchanged, same reasoning as the Key Vault
 resolver.
+
+Also a `KeyValueStoreIntegration` (docs/work/key-value-store-integration.md's
+Backend 2) — real compare-and-swap, unlike Key Vault's own retrofit:
+App Configuration's ETag + `match_condition` natively supports both the
+create-only (`NEW_KEY_VERSION`) and update-only (a real prior ETag)
+cases, confirmed empirically against the installed SDK (`put()`'s own
+docstring).
 """
 
 from os import environ
 
 from azure.appconfiguration import AzureAppConfigurationClient, ConfigurationSetting
-from azure.core.exceptions import AzureError, ResourceNotFoundError
+from azure.core import MatchConditions
+from azure.core.exceptions import AzureError, ResourceModifiedError, ResourceNotFoundError
 from azure.identity import DefaultAzureCredential
 
-from strata.integrations.capabilities import StoreIntegration
-from strata.integrations.errors import IntegrationError, ValueResolutionError
+from strata.integrations.capabilities import NEW_KEY_VERSION, KeyValueStoreIntegration, StoreIntegration
+from strata.integrations.errors import IntegrationError, KeyValueConflictError, ValueResolutionError
+from strata.integrations.resolved_context import KeyValueEntry
 from strata.models.integration_model import Capability, IntegrationModel
 
 
-class AzureAppConfigResolver(StoreIntegration):
+class AzureAppConfigResolver(StoreIntegration, KeyValueStoreIntegration):
     """Resolves Azure App Configuration variables/feature flags, by key."""
 
     TYPE = "azure-appconfig"
-    CAPABILITIES = frozenset({Capability.VARIABLES, Capability.FEATURES})
+    CAPABILITIES = frozenset({Capability.VARIABLES, Capability.FEATURES, Capability.KEY_VALUE})
     TRANSPORTS = frozenset({"sdk"})
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
@@ -93,3 +102,64 @@ class AzureAppConfigResolver(StoreIntegration):
             client.set_configuration_setting(ConfigurationSetting(key=key, value=value))
         except AzureError as exc:
             raise IntegrationError(f"Azure App Configuration: could not write '{key}': {exc}") from exc
+
+    def get(self, key: str) -> KeyValueEntry | None:
+        """Return the current value and version of configuration key `key`,
+        or `None` if it does not exist in the store — reuses `resolve()`'s
+        own `get_configuration_setting()` call, but treats "not found" as
+        a normal outcome here, not a failure (docs/work/
+        key-value-store-integration.md's Backend 2).
+
+        Raises:
+            strata.integrations.errors.IntegrationError: Not configured,
+                unauthenticated, or unreachable.
+        """
+        try:
+            client = self._get_client()
+            setting = client.get_configuration_setting(key=key)
+        except ResourceNotFoundError:
+            return None
+        except ValueResolutionError as exc:
+            raise IntegrationError(str(exc)) from exc
+        except AzureError as exc:
+            raise IntegrationError(f"Azure App Configuration: could not resolve '{key}': {exc}") from exc
+        if setting is None or setting.value is None:
+            raise IntegrationError(f"Azure App Configuration: key '{key}' has no value.")
+        return KeyValueEntry(value=setting.value.encode(), version=setting.etag or "")
+
+    def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
+        """Write `value` to configuration key `key`, returning the new ETag.
+
+        Args:
+            if_version: `NEW_KEY_VERSION` maps to `MatchConditions.IfMissing`
+                (succeeds only if `key` doesn't exist yet); any other value
+                maps to `MatchConditions.IfNotModified` with that value as
+                the required ETag (succeeds only if `key`'s current ETag
+                still matches); omitted is an unconditional write — all
+                three natively supported by the SDK's own
+                `set_configuration_setting()`, confirmed empirically
+                against the installed package.
+
+        Raises:
+            strata.integrations.errors.KeyValueConflictError: the
+                condition `if_version` specified didn't hold.
+            strata.integrations.errors.IntegrationError: Not configured,
+                unauthenticated, or the write itself failed.
+        """
+        try:
+            client = self._get_client()
+        except ValueResolutionError as exc:
+            raise IntegrationError(str(exc)) from exc
+        setting = ConfigurationSetting(key=key, value=value.decode())
+        try:
+            if if_version == NEW_KEY_VERSION:
+                result = client.set_configuration_setting(setting, MatchConditions.IfMissing)
+            elif if_version is not None:
+                result = client.set_configuration_setting(setting, MatchConditions.IfNotModified, etag=if_version)
+            else:
+                result = client.set_configuration_setting(setting)
+        except ResourceModifiedError as exc:
+            raise KeyValueConflictError(f"Azure App Configuration: '{key}' was modified concurrently.") from exc
+        except AzureError as exc:
+            raise IntegrationError(f"Azure App Configuration: could not write '{key}': {exc}") from exc
+        return result.etag or ""

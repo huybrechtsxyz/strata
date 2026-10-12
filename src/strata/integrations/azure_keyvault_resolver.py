@@ -23,6 +23,16 @@ ADR-0021 D7 retrofit: a `StoreIntegration`, `TRANSPORTS={"sdk"}` — keeps
 `SecretClient` unchanged. No `http_request`/`self.request()` involved: the
 SDK client carries its own auth chain and HTTP stack, and reimplementing
 that would be the opposite of leaner.
+
+Also a `KeyValueStoreIntegration` (docs/work/key-value-store-integration.md's
+Backend 7) — some teams already use Key Vault as a general small-settings
+store rather than Azure App Configuration, specifically because it's
+cheaper for that usage pattern, which this capability's shape (small
+keyed records, not necessarily secret) fits directly. The weakest
+compare-and-swap story of any backend designed there: Key Vault's
+data-plane API has no conditional-write primitive for secrets at all, not
+even for the create-only case (`put()` rejects any `if_version` outright)
+— see `put()`'s own docstring.
 """
 
 from os import environ
@@ -31,18 +41,24 @@ from azure.core.exceptions import AzureError, ResourceNotFoundError
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 
-from strata.integrations.capabilities import StoreIntegration
+from strata.integrations.capabilities import KeyValueStoreIntegration, StoreIntegration
 from strata.integrations.errors import IntegrationError, ValueResolutionError
-from strata.integrations.resolved_context import SecretMetadata
+from strata.integrations.resolved_context import KeyValueEntry, SecretMetadata
 from strata.models.integration_model import Capability, IntegrationModel
 
 
-class AzureKeyVaultResolver(StoreIntegration):
+class AzureKeyVaultResolver(StoreIntegration, KeyValueStoreIntegration):
     """Resolves Azure Key Vault secrets, by name."""
 
     TYPE = "azure-keyvault"
-    CAPABILITIES = frozenset({Capability.SECRETS})
+    CAPABILITIES = frozenset({Capability.SECRETS, Capability.KEY_VALUE})
     TRANSPORTS = frozenset({"sdk"})
+    #: No conditional-write primitive exists on `set_secret()` at all (see
+    #: `put()`'s own docstring below) — advertised here so a CAS-dependent
+    #: caller (e.g. `DeploymentOutputStore`) can reject this backend up
+    #: front instead of discovering it only once `put(if_version=...)`
+    #: actually raises.
+    SUPPORTS_CAS = False
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
         super().__init__(config)
@@ -120,3 +136,57 @@ class AzureKeyVaultResolver(StoreIntegration):
             raise IntegrationError(f"Azure Key Vault: could not read metadata for '{key}': {exc}") from exc
         properties = secret.properties
         return SecretMetadata(created_at=properties.created_on, updated_at=properties.updated_on)
+
+    def get(self, key: str) -> KeyValueEntry | None:
+        """Return the current value and version of secret `key`, or `None`
+        if it does not exist in the vault — reuses `resolve()`'s own
+        `get_secret()` call, but treats "not found" as a normal outcome
+        here, not a failure (docs/work/key-value-store-integration.md's
+        Backend 7).
+
+        Raises:
+            strata.integrations.errors.IntegrationError: Not configured,
+                unauthenticated, or unreachable.
+        """
+        try:
+            client = self._get_client()
+            secret = client.get_secret(key)
+        except ResourceNotFoundError:
+            return None
+        except ValueResolutionError as exc:
+            raise IntegrationError(str(exc)) from exc
+        except AzureError as exc:
+            raise IntegrationError(f"Azure Key Vault: could not resolve '{key}': {exc}") from exc
+        if secret.value is None:
+            raise IntegrationError(f"Azure Key Vault: secret '{key}' has no value.")
+        return KeyValueEntry(value=secret.value.encode(), version=secret.properties.version or "")
+
+    def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
+        """Write `value` to secret `key`, returning Key Vault's own new
+        version id. Key Vault secrets are natively append-only/versioned —
+        every `set_secret()` call creates a brand-new version regardless
+        of the current one, so an unconditional write is simply Key
+        Vault's own normal behavior, nothing extra needed.
+
+        Raises:
+            strata.integrations.errors.IntegrationError: `if_version` was
+                given — Key Vault's data-plane API has no conditional-write
+                primitive for secrets at all, not even for the create-only
+                case (a `get()`-then-`set_secret()` check would have the
+                same unavoidable race window as a non-atomic update, so
+                this backend is honest about not supporting `if_version`
+                in any form rather than offering a weaker guarantee than
+                it can actually provide) — or the store is not configured,
+                unauthenticated, or the write itself failed.
+        """
+        if if_version is not None:
+            raise IntegrationError("Azure Key Vault does not support conditional writes (if_version) for secrets.")
+        try:
+            client = self._get_client()
+        except ValueResolutionError as exc:
+            raise IntegrationError(str(exc)) from exc
+        try:
+            result = client.set_secret(key, value.decode())
+        except AzureError as exc:
+            raise IntegrationError(f"Azure Key Vault: could not write '{key}': {exc}") from exc
+        return result.properties.version or ""

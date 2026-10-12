@@ -1991,6 +1991,361 @@ def test_upstream_step_names_is_transitive():
 
 
 # ---------------------------------------------------------------------------
+# _merge_durable_outputs() — docs/work/cross-run-step-output-delivery.md's
+# Implementation Plan step 4. Direct unit tests against a stub
+# DeploymentOutputStore (same "test the private helper directly" convention
+# as _upstream_step_names above) — asymmetric by design: not-found is
+# forgiving, stale/unreachable stop the pipeline immediately.
+# ---------------------------------------------------------------------------
+
+
+class _StubOutputStore:
+    """Duck-types `DeploymentOutputStore.read()` only — `_merge_durable_outputs()`
+    never calls anything else on it."""
+
+    def __init__(self, read_results: dict) -> None:
+        self._read_results = read_results
+        self.read_calls: list[str] = []
+
+    def read(self, step: str) -> dict[str, str]:
+        self.read_calls.append(step)
+        result = self._read_results[step]
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+def test_merge_durable_outputs_returns_true_and_does_nothing_when_output_store_is_none():
+    from strata.controllers.deploy_controller import _merge_durable_outputs
+    from strata.utils.diagnostics import Diagnostics
+
+    visible_outputs: dict[str, str] = {}
+    diagnostics = Diagnostics()
+
+    result = _merge_durable_outputs(
+        None, {"apply_infra"}, {}, visible_outputs, step_name="apply_apps", diagnostics=diagnostics
+    )
+
+    assert result is True
+    assert visible_outputs == {}
+    assert diagnostics.ok
+
+
+def test_merge_durable_outputs_only_consults_steps_not_already_in_memory():
+    from strata.controllers.deploy_controller import _merge_durable_outputs
+    from strata.utils.diagnostics import Diagnostics
+
+    store = _StubOutputStore({})
+    step_outputs = {"apply_infra": {"vm_ip": "10.0.0.5"}}
+
+    result = _merge_durable_outputs(
+        store, {"apply_infra"}, step_outputs, {}, step_name="apply_apps", diagnostics=Diagnostics()
+    )
+
+    assert result is True
+    assert store.read_calls == []
+
+
+def test_merge_durable_outputs_skips_silently_when_never_recorded_anywhere():
+    from strata.controllers.deploy_controller import OutputRecordNotFoundError, _merge_durable_outputs
+    from strata.utils.diagnostics import Diagnostics
+
+    store = _StubOutputStore({"apply_infra": OutputRecordNotFoundError("no record")})
+    visible_outputs: dict[str, str] = {}
+    diagnostics = Diagnostics()
+
+    result = _merge_durable_outputs(
+        store, {"apply_infra"}, {}, visible_outputs, step_name="apply_apps", diagnostics=diagnostics
+    )
+
+    assert result is True
+    assert visible_outputs == {}
+    assert diagnostics.ok
+
+
+def test_merge_durable_outputs_merges_values_on_success():
+    from strata.controllers.deploy_controller import _merge_durable_outputs
+    from strata.utils.diagnostics import Diagnostics
+
+    store = _StubOutputStore({"apply_infra": {"vm_ip": "10.0.0.5"}})
+    visible_outputs: dict[str, str] = {}
+
+    result = _merge_durable_outputs(
+        store, {"apply_infra"}, {}, visible_outputs, step_name="apply_apps", diagnostics=Diagnostics()
+    )
+
+    assert result is True
+    assert visible_outputs == {"apply_infra.vm_ip": "10.0.0.5"}
+
+
+def test_merge_durable_outputs_fails_loudly_on_a_stale_record():
+    from strata.controllers.deploy_controller import OutputRecordStaleError, _merge_durable_outputs
+    from strata.utils.diagnostics import Diagnostics
+
+    store = _StubOutputStore({"apply_infra": OutputRecordStaleError("too old")})
+    diagnostics = Diagnostics()
+
+    result = _merge_durable_outputs(store, {"apply_infra"}, {}, {}, step_name="apply_apps", diagnostics=diagnostics)
+
+    assert result is False
+    assert not diagnostics.ok
+    assert any("apply_apps" in m and "apply_infra" in m for m in diagnostics.messages())
+
+
+def test_merge_durable_outputs_fails_loudly_when_the_backend_is_unreachable():
+    from strata.controllers.deploy_controller import _merge_durable_outputs
+    from strata.integrations.errors import IntegrationError
+    from strata.utils.diagnostics import Diagnostics
+
+    store = _StubOutputStore({"apply_infra": IntegrationError("unreachable")})
+    diagnostics = Diagnostics()
+
+    result = _merge_durable_outputs(store, {"apply_infra"}, {}, {}, step_name="apply_apps", diagnostics=diagnostics)
+
+    assert result is False
+    assert not diagnostics.ok
+
+
+# ---------------------------------------------------------------------------
+# deploy_run() wired end to end to a configured output_store (docs/work/
+# cross-run-step-output-delivery.md's Implementation Plan step 4) — a fake
+# KeyValueStoreIntegration registered as a real entry-point plugin (same
+# pattern test_integrations_registry.py's own tests use), so no real SDK is
+# needed.
+# ---------------------------------------------------------------------------
+
+
+def _register_fake_output_store_backend(monkeypatch):
+    """Registers `fake-output-store` as a real, resolvable integration type
+    for the duration of one test — returns the class so a test can inspect
+    its shared, class-level backing store afterward."""
+    from dataclasses import dataclass, field
+    from typing import Any
+
+    from strata.integrations import registry as registry_module
+    from strata.integrations.capabilities import NEW_KEY_VERSION, KeyValueStoreIntegration
+    from strata.integrations.errors import KeyValueConflictError
+    from strata.integrations.resolved_context import KeyValueEntry
+
+    class _FakeOutputStoreBackend(KeyValueStoreIntegration):
+        TYPE = "fake-output-store"
+        CAPABILITIES = frozenset({"key_value"})
+        TRANSPORTS = frozenset({"sdk"})
+
+        # Class-level, not instance-level: registry.get() never caches
+        # (ADR-0021 D3), so real cross-invocation persistence in this test
+        # needs the data to survive across separate fresh instances.
+        shared_data: dict[str, tuple[bytes, str]] = {}
+        version_counter = 0
+
+        def get(self, key: str) -> KeyValueEntry | None:
+            if key not in type(self).shared_data:
+                return None
+            value, version = type(self).shared_data[key]
+            return KeyValueEntry(value=value, version=version)
+
+        def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
+            existing = type(self).shared_data.get(key)
+            if if_version == NEW_KEY_VERSION and existing is not None:
+                raise KeyValueConflictError("already exists")
+            if if_version is not None and if_version != NEW_KEY_VERSION:
+                current = existing[1] if existing is not None else None
+                if current != if_version:
+                    raise KeyValueConflictError("modified concurrently")
+            type(self).version_counter += 1
+            new_version = str(type(self).version_counter)
+            type(self).shared_data[key] = (value, new_version)
+            return new_version
+
+    _FakeOutputStoreBackend.shared_data = {}
+    _FakeOutputStoreBackend.version_counter = 0
+
+    @dataclass
+    class _FakeEntryPoint:
+        name: str
+        value: str
+        _target: Any = field(default=_FakeOutputStoreBackend)
+
+        def load(self) -> Any:
+            return self._target
+
+    monkeypatch.setattr(
+        registry_module,
+        "entry_points",
+        lambda group: [_FakeEntryPoint(name="fake-output-store", value="does.not.matter:Ignored")],
+    )
+    return _FakeOutputStoreBackend
+
+
+def test_deploy_run_records_step_output_to_the_configured_output_store(tmp_path: Path, monkeypatch):
+    backend_cls = _register_fake_output_store_backend(monkeypatch)
+    root = _output_chained_solution(tmp_path)
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "spec:\n  providers:", "spec:\n  output_store: fake-output-store\n  providers:"
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "output":
+            if cwd is not None and cwd.name == "infra_a":
+                payload = json.dumps({"vm_ip": {"value": "10.0.0.5", "type": "string", "sensitive": False}})
+                return CommandResult(returncode=0, stdout=payload, stderr="")
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    record_bytes, _version = backend_cls.shared_data["strata/deployment-outputs/app"]
+    record = json.loads(record_bytes)
+    assert record["apply_infra"]["values"] == {"vm_ip": "10.0.0.5"}
+
+
+def test_deploy_run_resolves_output_token_from_a_durable_record_not_produced_this_invocation(
+    tmp_path: Path, monkeypatch
+):
+    """apply_infra is filtered OUT via --stage (simulating 'ran in a
+    different, earlier invocation') — its output only exists because it
+    was already durably recorded, never because this run produced it."""
+    import json as json_module
+
+    backend_cls = _register_fake_output_store_backend(monkeypatch)
+    root = _output_chained_solution(tmp_path)
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "spec:\n  providers:", "spec:\n  output_store: fake-output-store\n  providers:"
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    backend_cls.shared_data["strata/deployment-outputs/app"] = (
+        json_module.dumps(
+            {"apply_infra": {"collected_at": "2026-10-12T00:00:00+00:00", "values": {"vm_ip": "10.0.0.5"}}}
+        ).encode("utf-8"),
+        "1",
+    )
+
+    calls: list[tuple[list[str], Path | None]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append((list(args), cwd))
+        if args[1] == "output":
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, stage="apply_apps")
+
+    assert diagnostics.ok, diagnostics.messages()
+    apps_init_call = next(
+        call for call, cwd in calls if cwd is not None and cwd.name == "infra_b" and call[1] == "init"
+    )
+    assert "host=10.0.0.5" in apps_init_call
+
+
+def test_deploy_run_fails_when_durable_record_is_older_than_the_workspace_max_age(tmp_path: Path, monkeypatch):
+    """`WorkspaceSpecModel.output_store_max_age` is the default trust window
+    \u2014 a record older than it is a hard pre-flight failure, before
+    apply_apps' own tool ever runs."""
+    import json as json_module
+
+    backend_cls = _register_fake_output_store_backend(monkeypatch)
+    root = _output_chained_solution(tmp_path)
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "spec:\n  providers:",
+            "spec:\n  output_store: fake-output-store\n  output_store_max_age: 60\n  providers:",
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    backend_cls.shared_data["strata/deployment-outputs/app"] = (
+        json_module.dumps(
+            {"apply_infra": {"collected_at": "2020-01-01T00:00:00+00:00", "values": {"vm_ip": "10.0.0.5"}}}
+        ).encode("utf-8"),
+        "1",
+    )
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "output":
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, stage="apply_apps")
+
+    assert not diagnostics.ok
+    assert any("unusable" in message for message in diagnostics.messages())
+
+
+def test_deploy_run_output_max_age_overrides_the_workspace_setting(tmp_path: Path, monkeypatch):
+    """`output_max_age` (CLI's '--output-max-age') wins over the workspace's
+    own 'output_store_max_age' for a single invocation \u2014 a generous
+    workspace default is overridden down to something small enough that a
+    record which would otherwise pass is now treated as stale."""
+    import json as json_module
+
+    backend_cls = _register_fake_output_store_backend(monkeypatch)
+    root = _output_chained_solution(tmp_path)
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "spec:\n  providers:",
+            "spec:\n  output_store: fake-output-store\n  output_store_max_age: 31536000\n  providers:",
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    backend_cls.shared_data["strata/deployment-outputs/app"] = (
+        json_module.dumps(
+            {"apply_infra": {"collected_at": "2020-01-01T00:00:00+00:00", "values": {"vm_ip": "10.0.0.5"}}}
+        ).encode("utf-8"),
+        "1",
+    )
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "output":
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, stage="apply_apps", output_max_age=60)
+
+    assert not diagnostics.ok
+    assert any("unusable" in message for message in diagnostics.messages())
+
+
+# ---------------------------------------------------------------------------
 # output.template's actual render (docs/design/deploy-command.md
 # Implementation Plan phase 8) — build run only validates it; deploy run
 # renders it for real, with fully-resolved values, before init() runs.

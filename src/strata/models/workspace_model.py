@@ -331,6 +331,27 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "rather than 'provisioning' so it cannot be confused with the sibling 'provisioners' (tool "
         "definitions) or with the 'deployment' kind.",
     )
+    output_store: PlatformName | None = Field(
+        None,
+        description="Key/value backend TYPE for cross-run step-output persistence (e.g. 'azure-keyvault', "
+        "'azure-appconfig', 'azure-blob') — auto-binds to zero-or-one enabled Integration document of this "
+        "type, same rule as a Provisioner's bare 'tool' (ADR-0022 D2). Omit to disable cross-run output "
+        "persistence entirely (today's in-memory-only behavior). Checked against Configuration.spec.security."
+        "allowed_key_value_stores when set (docs/work/cross-run-step-output-delivery.md).",
+    )
+    output_store_integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
+        None,
+        description="Explicit Integration document name for the output-store backend, overriding auto-bind "
+        "— same precedence as a Provisioner's '.integration' field winning over '.tool'.",
+    )
+    output_store_max_age: int | None = Field(
+        None,
+        ge=1,
+        description="Trust window in seconds for durable cross-run step outputs read back via "
+        "'output_store'/'output_store_integration' — a record older than this is a hard 'deploy run' "
+        "failure, never a silent stale read. None (default) disables staleness enforcement entirely "
+        "(today's behavior). 'deploy run --output-max-age' overrides this for a single invocation.",
+    )
     topology: list[TopologySpecModel] | None = Field(
         None,
         description="Inline topology groupings (type, components, namespaces, volumes) — pure grouping, no "

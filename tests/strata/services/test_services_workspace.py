@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for WorkspaceService loading and validation."""
 
-from strata.models.configuration_model import ConfigurationModel
+from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel
 from strata.models.network_model import NetworkModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.services.workspace_service import WorkspaceService
@@ -260,6 +260,76 @@ def test_validate_resource_subnets_ignores_resources_with_no_subnet():
 
     result = service.validate_resource_subnets({"main-network": _network_model()})
     assert result.ok
+
+
+# ---------------------------------------------------------------------------
+# validate_allowed_key_value_store() — docs/work/cross-run-step-output-
+# delivery.md's Implementation Plan step 1 ('Governance'). Takes the
+# already-resolved backend type directly (the controller's job to resolve
+# output_store_integration -> its target document's spec.type), unlike
+# validate_allowed_stores() which walks spec.variables/secrets/features.
+# ---------------------------------------------------------------------------
+
+
+def _minimal_workspace_service() -> WorkspaceService:
+    data = {
+        "meta": {"name": "myapp-workspace"},
+        "spec": {
+            "providers": ["azure-main"],
+            "provisioners": [
+                {
+                    "name": "terraform-main",
+                    "tool": "terraform",
+                    "source": {"remote": "infra-repo", "source_path": "terraform/main"},
+                }
+            ],
+        },
+    }
+    service = WorkspaceService(data=data)
+    service.validate()
+    return service
+
+
+def _security(**overrides) -> ConfigurationSecurityModel:
+    return ConfigurationSecurityModel.model_validate(overrides)
+
+
+def test_validate_allowed_key_value_store_accepts_a_listed_type():
+    service = _minimal_workspace_service()
+
+    result = service.validate_allowed_key_value_store(
+        _security(allowed_key_value_stores=["azure-appconfig"]), "azure-appconfig"
+    )
+    assert result.ok
+    assert result.messages() == []
+
+
+def test_validate_allowed_key_value_store_rejects_an_unlisted_type():
+    service = _minimal_workspace_service()
+
+    result = service.validate_allowed_key_value_store(_security(allowed_key_value_stores=["azure-appconfig"]), "consul")
+    assert not result.ok
+    assert any("consul" in m and "allowed_key_value_stores" in m for m in result.messages())
+
+
+def test_validate_allowed_key_value_store_unrestricted_when_none():
+    """allowed_key_value_stores unset (None) means no restriction — matches
+    every other allow-list in ConfigurationSecurityModel."""
+    service = _minimal_workspace_service()
+
+    result = service.validate_allowed_key_value_store(_security(), "anything-at-all")
+    assert result.ok
+
+
+def test_validate_allowed_key_value_store_skips_when_no_backend_configured():
+    """backend_type=None (neither output_store nor output_store_integration
+    set) means the feature is disabled for this workspace — nothing to
+    check, even under a restrictive allow-list."""
+    service = _minimal_workspace_service()
+
+    result = service.validate_allowed_key_value_store(_security(allowed_key_value_stores=["azure-appconfig"]), None)
+    assert result.ok
+    assert result.messages() == []
 
 
 # ---------------------------------------------------------------------------

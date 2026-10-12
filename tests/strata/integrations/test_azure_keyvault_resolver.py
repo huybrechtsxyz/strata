@@ -6,7 +6,7 @@ from azure.core.exceptions import AzureError, ResourceNotFoundError
 
 from strata.integrations.azure_keyvault_resolver import AzureKeyVaultResolver
 from strata.integrations.errors import IntegrationError, ValueResolutionError
-from strata.integrations.resolved_context import SecretMetadata
+from strata.integrations.resolved_context import KeyValueEntry, SecretMetadata
 from strata.models.integration_model import (
     IntegrationEndpointsModel,
     IntegrationMetaModel,
@@ -16,9 +16,10 @@ from strata.models.integration_model import (
 
 
 class _FakeSecretProperties:
-    def __init__(self, created_on=None, updated_on=None) -> None:
+    def __init__(self, created_on=None, updated_on=None, version=None) -> None:
         self.created_on = created_on
         self.updated_on = updated_on
+        self.version = version
 
 
 class _FakeSecret:
@@ -33,6 +34,7 @@ class _FakeSecretClient:
     ) -> None:
         self._secrets = secrets
         self._properties_by_key = properties_by_key or {}
+        self._version_counter = 0
 
     def get_secret(self, key: str) -> _FakeSecret:
         if key not in self._secrets:
@@ -41,7 +43,10 @@ class _FakeSecretClient:
 
     def set_secret(self, key: str, value: str) -> _FakeSecret:
         self._secrets[key] = value
-        return _FakeSecret(value)
+        self._version_counter += 1
+        properties = _FakeSecretProperties(version=str(self._version_counter))
+        self._properties_by_key[key] = properties
+        return _FakeSecret(value, properties)
 
 
 class _FailingSecretClient:
@@ -57,7 +62,7 @@ class _FailingSecretClient:
 
 def test_class_declares_its_contract():
     assert AzureKeyVaultResolver.TYPE == "azure-keyvault"
-    assert AzureKeyVaultResolver.CAPABILITIES == {"secrets"}
+    assert AzureKeyVaultResolver.CAPABILITIES == {"secrets", "key_value"}
     assert AzureKeyVaultResolver.TRANSPORTS == {"sdk"}
 
 
@@ -206,3 +211,121 @@ def test_metadata_raises_integration_error_on_a_real_azure_failure(monkeypatch):
 
     with pytest.raises(IntegrationError, match="could not read metadata"):
         resolver.metadata("K")
+
+
+# ---------------------------------------------------------------------------
+# get() / put() — KeyValueStoreIntegration (docs/work/key-value-store-
+# integration.md's Backend 7)
+# ---------------------------------------------------------------------------
+
+
+def test_get_returns_entry_with_value_and_version(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FakeSecretClient(
+        {"DB_PASSWORD": "hunter2"},
+        properties_by_key={"DB_PASSWORD": _FakeSecretProperties(version="abc123")},
+    )
+
+    assert resolver.get("DB_PASSWORD") == KeyValueEntry(value=b"hunter2", version="abc123")
+
+
+def test_get_returns_none_when_not_found(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FakeSecretClient({})
+
+    assert resolver.get("GHOST") is None
+
+
+def test_get_treats_an_empty_string_value_as_a_real_entry_not_an_error(monkeypatch):
+    """ "" is not None — distinct from the 'has no value' (None) case below,
+    and from NOT_FOUND above: an existing secret with an empty value is
+    still a found, valid entry."""
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FakeSecretClient(
+        {"EMPTY": ""}, properties_by_key={"EMPTY": _FakeSecretProperties(version="abc123")}
+    )
+
+    assert resolver.get("EMPTY") == KeyValueEntry(value=b"", version="abc123")
+
+
+def test_get_without_vault_url_raises_integration_error(monkeypatch):
+    monkeypatch.delenv("AZURE_KEYVAULT_URL", raising=False)
+    resolver = AzureKeyVaultResolver()
+
+    with pytest.raises(IntegrationError, match="AZURE_KEYVAULT_URL"):
+        resolver.get("ANY")
+
+
+def test_get_none_value_raises_integration_error(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FakeSecretClient({"EMPTY": None})  # type: ignore[dict-item]
+
+    with pytest.raises(IntegrationError, match="has no value"):
+        resolver.get("EMPTY")
+
+
+def test_get_raises_integration_error_on_a_real_azure_failure(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FailingSecretClient()
+
+    with pytest.raises(IntegrationError, match="could not resolve"):
+        resolver.get("K")
+
+
+def test_put_writes_unconditionally_and_returns_new_version(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    client = _FakeSecretClient({})
+    resolver._client = client
+
+    version = resolver.put("DB_PASSWORD", b"new-value")
+
+    assert client._secrets == {"DB_PASSWORD": "new-value"}
+    assert version == "1"
+
+
+def test_put_rejects_if_version_for_create_only():
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FakeSecretClient({})
+
+    from strata.integrations.capabilities import NEW_KEY_VERSION
+
+    with pytest.raises(IntegrationError, match="does not support conditional writes"):
+        resolver.put("K", b"v", if_version=NEW_KEY_VERSION)
+
+
+def test_put_rejects_if_version_for_an_update():
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FakeSecretClient({})
+
+    with pytest.raises(IntegrationError, match="does not support conditional writes"):
+        resolver.put("K", b"v", if_version="some-prior-version")
+
+
+def test_supports_cas_is_false():
+    """Advertised so a CAS-dependent caller (resolve_output_store_integration(),
+    semantic_checks.py's validate-time check) can reject this backend up
+    front instead of discovering it only once put(if_version=...) raises."""
+    assert AzureKeyVaultResolver.SUPPORTS_CAS is False
+
+
+def test_put_without_vault_url_raises_integration_error(monkeypatch):
+    monkeypatch.delenv("AZURE_KEYVAULT_URL", raising=False)
+    resolver = AzureKeyVaultResolver()
+
+    with pytest.raises(IntegrationError, match="AZURE_KEYVAULT_URL"):
+        resolver.put("K", b"v")
+
+
+def test_put_raises_integration_error_when_the_write_itself_fails(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FailingSecretClient()
+
+    with pytest.raises(IntegrationError, match="could not write"):
+        resolver.put("K", b"v")

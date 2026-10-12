@@ -8,6 +8,7 @@ import pytest
 
 from strata.integrations import registry
 from strata.integrations.azure_appconfig_resolver import AzureAppConfigResolver
+from strata.integrations.azure_blob_keyvalue_store import AzureBlobKeyValueStore
 from strata.integrations.azure_keyvault_resolver import AzureKeyVaultResolver
 from strata.integrations.base import Integration
 from strata.integrations.infisical_resolver import InfisicalResolver
@@ -34,6 +35,7 @@ def test_get_returns_an_instance_of_the_registered_class():
 def test_get_returns_the_right_class_per_built_in_type():
     assert isinstance(get("azure-keyvault"), AzureKeyVaultResolver)
     assert isinstance(get("azure-appconfig"), AzureAppConfigResolver)
+    assert isinstance(get("azure-blob"), AzureBlobKeyValueStore)
 
 
 def test_get_constructs_a_new_instance_every_call():
@@ -44,6 +46,15 @@ def test_get_constructs_a_new_instance_every_call():
 def test_unknown_type_raises_with_no_v1_hint():
     with pytest.raises(IntegrationNotFoundError, match="no integration registered for type 'totally-made-up'"):
         get("totally-made-up")
+
+
+def test_get_class_returns_the_class_without_constructing_an_instance():
+    assert registry.get_class("azure-keyvault") is AzureKeyVaultResolver
+
+
+def test_get_class_raises_the_same_error_as_get_for_an_unknown_type():
+    with pytest.raises(IntegrationNotFoundError, match="no integration registered for type 'totally-made-up'"):
+        registry.get_class("totally-made-up")
 
 
 def test_unknown_type_known_from_v1_gets_a_hint():

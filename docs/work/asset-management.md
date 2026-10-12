@@ -1,7 +1,7 @@
 # Asset Management (non-code, per-environment input files) — Work
 
 - Status: draft
-- Last updated: 2026-10-10
+- Last updated: 2026-10-11
 
 ## Overview
 
@@ -409,25 +409,41 @@ declares *what it, specifically, needs this run* (same-document existence,
 also Phase 1) — identical two-layer shape `targets`/`resources` already
 established, just one more pool.
 
-### Sync mechanism
+### Sync mechanism (revised, 2026-10-11 — resolved once up front, not lazily per-step)
 
 A new `sync_asset()` in `strata/controllers/source_sync.py` (or a sibling
 module), structurally parallel to `sync_source()`: fill `source_path`'s
 `{name}` tokens from `graph.properties`, resolve `remote` via the
 already-built `resolve_remote()`, copy the result (file or directory,
-`shutil.copy2`/`copytree` exactly as today) into the build output. Called
-from `build_controller.py`'s step loop, once per `step.assets` entry,
-right after that step's provisioner's own `sync_source()` call.
+`shutil.copy2`/`copytree` exactly as today) into the build output, and
+return the destination `Path` — the exact same signature `sync_source()`
+already has.
 
-The filled, resolved path is the same for every step that names the same
-asset (`graph.properties` is deployment-wide, not step-scoped) — two
-steps both naming `openapi` resolve to the identical
-`build_path/assets/openapi/` and should not copy twice; `sync_asset()`
-should no-op (or overwrite idempotently) when its destination already
-exists in this build, the same way a cache/dedupe would be needed if two
-provisioners ever named the same `depends_on` source today (not currently
-an issue there because `sync_source()`'s destination is source-path-keyed
-per provisioner, not name-shared the way an asset deliberately is here).
+Original plan (first draft of this section) called this **from the step
+loop**, once per `step.assets` entry, with an explicit no-op/idempotency
+rule for two steps naming the same asset. Revised after designing the
+projection below: since `strata.assets` (next section) needs to be
+computed *before* the step loop even starts — the same timing
+`properties`/`tenant`/`version` already have on `ResolvedWorkspaceGraph`
+(`resolved_context.py`) — there is no reason to defer the copy itself to
+step-loop time either. `build_controller.py` now:
+
+1. Statically scans every `step.assets` across `workspace.spec.execution`
+   (plain declarative data — no need to actually run a step to know this)
+   into one `set[str]` of asset names genuinely needed by *this* build.
+2. Calls `sync_asset()` exactly once per name in that set, before the step
+   loop, right alongside where `properties`/`graph` are assembled.
+3. Lists the returned destination directory's filenames
+   (`sorted(p.name for p in dest.iterdir())` if a directory, `[dest.name]`
+   if a single file) and stores `ResolvedAssetInfo(path, files)` keyed by
+   name — see "`strata.assets` projection" below.
+
+This removes the earlier no-op/idempotency concern structurally (each name
+in the set is resolved exactly once, by construction) rather than by
+making `sync_asset()` defensively idempotent. The step loop itself no
+longer calls `sync_asset()` at all — by the time any step runs, every
+asset it names is already on disk, the same guarantee steps already have
+for `graph.properties`.
 
 ### Destination convention
 
@@ -448,9 +464,103 @@ No new `${asset:}` token, and nothing written into `resolved.yaml` for
 this — an asset's build-output path is not a *value* consumed by name
 inside a document field; it is a filesystem location the provisioner's
 own code already knows how to reach once the destination convention is
-documented. Revisit only if a real provisioner needs to reference an
-asset's path *from inside* a `backend.configuration`/`output.template`
-field rather than its own code reaching for a known relative path.
+documented. `strata.assets` (below) is additive, read-only metadata about
+that same filesystem location — it does not replace or change this
+convention, a consumer can still always just reach for the known relative
+path directly.
+
+### `strata.assets` projection (new, 2026-10-11)
+
+[unified-terraform-projection.md](../design/unified-terraform-projection.md)
+(ADR-0035) graduated to `docs/design/` after this doc's first draft, and
+`sync_asset()`/`build_strata_payload()` were designed completely
+unconnected until now: one copies files to `build_path/assets/<name>/`,
+the other projects every *document* category (`workspace`/`providers`/
+`resources`/.../`properties`/`custom`) into `var.strata` — fifteen keys,
+none of them an asset. A provisioner's `.tf` code could reach the copied
+files only by hardcoding the destination convention's relative path and,
+to know *which* files actually landed there, would need its own
+`fileset()`/`for_each` glob — strata already knows this, just didn't say
+so.
+
+**`ResolvedAssetInfo`** (`resolved_context.py`, new, alongside
+`ResolvedModule`) — the same "controller resolves paths/remotes, the
+Integration never touches `DocumentIndex`/remotes directly" split that
+type's own docstring already establishes for namespace modules:
+
+```python
+@dataclass(frozen=True)
+class ResolvedAssetInfo:
+    """One asset's build-time resolution (docs/work/asset-management.md) —
+    computed once by build_controller.py before the step loop, exactly
+    like ResolvedModule.source_path is for namespace modules. Carries no
+    remote/DocumentIndex access itself; terraform_projection.py only ever
+    reads the plain fields below."""
+
+    path: str                         # build-relative, e.g. "assets/openapi"
+    files: list[str] = field(default_factory=list)  # sorted filenames at that path
+```
+
+**`ResolvedWorkspaceGraph.resolved_assets: dict[str, ResolvedAssetInfo]`**
+(new field, default `{}`) — keyed by asset name, populated by
+`build_controller.py`'s step 3 above (not by `terraform_projection.py`,
+which never touches a remote or the filesystem — ADR-0021 D2).
+
+**`_strata_assets()`** (`terraform_projection.py`, same shape as every
+other category function — a plain read of already-resolved graph data,
+zero I/O):
+
+```python
+def _strata_assets(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.assets` — name -> {path, files}, resolved once by
+    build_controller.py before the step loop (ResolvedAssetInfo). Unlike
+    every other category, keyed only by assets at least one execution
+    step actually references this build — see this function's own
+    "Deliberate deviation" note in docs/work/asset-management.md."""
+    return {
+        name: {"path": info.path, "files": info.files}
+        for name, info in graph.resolved_assets.items()
+    }
+```
+
+Wired into `build_strata_payload()` as a sixteenth key, `"assets":
+_strata_assets(graph)`, and into `strata_variables.tf`'s generated type
+right alongside `modules`:
+
+```hcl
+assets = map(object({
+  path  = string
+  files = list(string)
+}))
+```
+
+```hcl
+local.strata.assets.openapi.path   # "assets/openapi", relative to the build root
+local.strata.assets.openapi.files  # ["openapi.json", "openapi.xml"]
+```
+
+Nothing secret-shaped here — a filename is not a value needing
+`strata_secrets` treatment, so no `strata_locals.tf` reassembly is
+involved for this category, same as `providers`/`resources`/etc. that
+happen to hold no secret-shaped leaves in a given build.
+
+**Deliberate deviation from "every category always emits the full
+workspace pool, empty `{}` when unused"**: `strata.assets` is keyed only
+by names at least one `execution` step's `step.assets` actually
+references *in this build* — not the full `workspace.spec.assets` pool,
+unlike `namespaces`/`firewalls`/`dns_zones`/`networks` (which project
+every pool entry unconditionally, since those are pure YAML data, always
+safe to include). An asset entry requires real filesystem resolution
+(`resolve_remote()` + a directory that must actually exist); eagerly
+resolving every *declared* pool entry regardless of whether this build's
+steps need it would turn a harmless, currently-unused `assets: [openapi,
+some_other_asset]` pool declaration into a hard build failure the moment
+`some_other_asset`'s variant doesn't exist on disk yet for this
+deployment — strictly worse than today's reference-scoped laziness. This
+mirrors the open question already tracked in Remaining Work #1 (should a
+missing variant be a hard error always, or only when reachable) — this
+design answers it for the *pool* vs. *referenced* distinction specifically,
+by only ever resolving what's referenced.
 
 ## Alternatives considered and rejected (draft reasoning — revisit before deciding)
 
@@ -543,6 +653,13 @@ field rather than its own code reaching for a known relative path.
   fill values.
 - [remotes.md](remotes.md) — `resolve_remote()`, the prerequisite this
   design reuses unchanged.
+- [ADR-0035](../decisions/0035-unified-terraform-projection.md) /
+  [unified-terraform-projection.md](../design/unified-terraform-projection.md) —
+  the finished `var.strata` projection; `strata.assets` (this doc's
+  "`strata.assets` projection" section) is a sixteenth category following
+  that design's own established shape, exposing `ResolvedAssetInfo`'s
+  `path`/`files` for only the asset names this build's execution steps
+  actually reference.
 
 ## Remaining Work / Open Questions
 
@@ -571,18 +688,24 @@ field rather than its own code reaching for a known relative path.
    `ProvisioningStepModel.assets` (selection) + the new cross-check in
    `validate_execution()` (second `asset_names` set, same shape as the
    existing `target_names` one).
-7. `sync_asset()` + wiring into `build_controller.py`'s step loop, called
-   after `graph.properties` is computed (already available before the
-   provisioner loop today).
-8. Decide whether a missing on-disk `source_path` (after filling) is a
+7. `sync_asset()` + wiring into `build_controller.py`, called once per
+   name in the statically-scanned `step.assets` set, before the step loop
+   (see "Sync mechanism" above — revised 2026-10-11 from the original
+   per-step-lazy plan).
+8. `ResolvedAssetInfo` (`resolved_context.py`) + `ResolvedWorkspaceGraph
+   .resolved_assets` + `_strata_assets()` (`terraform_projection.py`) +
+   the `strata_variables.tf` template's new `assets` type entry — see
+   "`strata.assets` projection" above, the concrete design for this item
+   (superseding the previous draft's open "whether to" framing).
+9. Decide whether a missing on-disk `source_path` (after filling) is a
    build-time error only (most likely, matching `sync_source()`'s own
    `SourceSyncError` today) or also a `strata validate` Phase 2 warning
    (would need a real filesystem check at validate time, which Phase 2
    does not currently do for any other kind — confirm real appetite before
    adding it).
-9. Write the JSON Schema / docs/config/asset.md once the shape above is
-   no longer draft.
-10. Graduate this doc to `docs/design/asset-management.md` once built and
+10. Write the JSON Schema / docs/config/asset.md once the shape above is
+    no longer draft.
+11. Graduate this doc to `docs/design/asset-management.md` once built and
     end-to-end tested, per `docs/work/README.md`'s own lifecycle — collapse
     this section and "Alternatives considered" into a `## History` section
     at that point.
@@ -628,3 +751,36 @@ field rather than its own code reaching for a known relative path.
   unresolved at build time and fail obscurely rather than with a clear
   diagnostic; added to Remaining Work rather than designed further, since
   no real workspace does this today.
+- 2026-10-11: Checked this doc against
+  [unified-terraform-projection.md](../design/unified-terraform-projection.md)
+  (ADR-0035), which graduated to `docs/design/` the day after this doc was
+  first written. Today `sync_asset()` and `build_strata_payload()` are
+  genuinely unlinked — an asset is copied to a known directory, but
+  nothing about it (its path, or the filenames the resolved variant
+  actually contains) is projected into `var.strata` the way every
+  document category is. Added "Open consideration" (new section, above
+  "Alternatives considered") proposing a sixteenth `strata.assets`
+  category, same shape as every other category, for a provisioner that
+  wants to read the file list as an ordinary Terraform value instead of
+  globbing a hardcoded relative path — tracked as an open question
+  (Remaining Work #4), not designed further, since no real provisioner
+  has needed this yet.
+- 2026-10-11: Turned the "Open consideration" into a concrete design —
+  `ResolvedAssetInfo` (`resolved_context.py`), `ResolvedWorkspaceGraph
+  .resolved_assets`, `_strata_assets()` (`terraform_projection.py`), and
+  the `strata_variables.tf` type's new `assets` entry, following the
+  `ResolvedModule.source_path` precedent (orchestrator resolves, the
+  Integration only ever reads already-resolved plain data). This forced a
+  real revision to "Sync mechanism": computing `strata.assets` needs the
+  asset copy to have already happened *before* the step loop starts, the
+  same timing `properties`/`tenant` already have — so `sync_asset()` is no
+  longer called lazily per `step.assets` entry inside the loop; instead
+  `build_controller.py` statically scans every step's `assets` up front
+  into one name set and resolves each exactly once, before the loop,
+  which also deletes the earlier no-op/idempotency concern structurally
+  rather than patching it. Also made explicit that `strata.assets`
+  deliberately deviates from "every category always emits the full
+  workspace pool" — it's keyed only by names this build's steps actually
+  reference, not the full `spec.assets` pool, because (unlike every other
+  category) an entry here requires a real directory to exist on disk.
+

@@ -23,13 +23,19 @@ import json
 import os
 import re
 from collections.abc import Callable, Mapping
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
 
 import jinja2
 
 from strata.controllers.build_controller import build_resolved_workspace_graph, find_provisioner, ordered_by_depends_on
-from strata.controllers.integration_resolution import resolve_integration
+from strata.controllers.deployment_output_store import (
+    DeploymentOutputStore,
+    OutputRecordNotFoundError,
+    OutputRecordStaleError,
+)
+from strata.controllers.integration_resolution import resolve_integration, resolve_output_store_integration
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import (
     build_value_references,
@@ -41,6 +47,7 @@ from strata.controllers.value_controller import (
 )
 from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
+from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ValueResolution
 from strata.integrations.terraform_projection import build_strata_payload, rewrite_strata_payload
 from strata.models.auth_models import AuthenticationModel
@@ -52,7 +59,7 @@ from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.errors import UsageError
+from strata.utils.errors import SystemError, UsageError
 from strata.utils.value_tokens import extract_value_tokens, resolve_value_tokens_in_mapping
 
 #: Minimum length a resolved secret value must have before `_redact()`
@@ -234,6 +241,63 @@ def _upstream_step_names(step_name: str, steps: list[ProvisioningStepModel]) -> 
     return seen
 
 
+def _merge_durable_outputs(
+    output_store: DeploymentOutputStore | None,
+    upstream: set[str],
+    step_outputs: dict[str, dict[str, str]],
+    visible_outputs: dict[str, str],
+    *,
+    step_name: str,
+    diagnostics: Diagnostics,
+) -> bool:
+    """Fill in `visible_outputs` for any `upstream` step not already
+    produced by this same invocation (`step_outputs`), reading from the
+    durable `output_store` as a fallback (docs/work/
+    cross-run-step-output-delivery.md's Implementation Plan step 4) —
+    the actual cross-*run* half of `${output:...}` resolution; the
+    in-memory half above is unchanged, same-run only.
+
+    Deliberately asymmetric, not a single pass/fail: a durable record
+    that was simply never written is forgiving (`OutputRecordNotFoundError`,
+    silently skipped) — this step may not even reference that upstream
+    step's outputs at all, and the existing per-token resolution still
+    raises its own error later if it does. A durable record that DOES
+    exist but is untrustworthy (stale, or the store itself is
+    unreachable) is not forgiving — silently ignoring it risks exactly
+    the "quiet wrong value" class of bug this feature exists to prevent,
+    so those two cases fail loudly here, immediately, before this step's
+    tool ever runs (the "all four stop the pipeline" decision already
+    settled in that doc, for the two cases reachable at this stage —
+    "sensitive" and "never recorded by any invocation" are the other two,
+    both already handled elsewhere: sensitive outputs are excluded by
+    `DeploymentOutputStore.record()` itself, and a reference to a key
+    that was never produced anywhere still reaches the existing deep
+    resolution error unchanged).
+
+    Returns:
+        `True` if no stop-the-pipeline condition was hit (the caller
+        should continue); `False` once `diagnostics` already carries a
+        pre-flight error for `step_name` (the caller must return
+        immediately, matching every other pre-flight check in this
+        function).
+    """
+    if output_store is None:
+        return True
+    for upstream_step in upstream - step_outputs.keys():
+        try:
+            durable_values = output_store.read(upstream_step)
+        except OutputRecordNotFoundError:
+            continue
+        except (OutputRecordStaleError, IntegrationError) as exc:
+            diagnostics.error(
+                f"Step '{step_name}': durable output for upstream step '{upstream_step}' is unusable — {exc}",
+                location=step_name,
+            )
+            return False
+        visible_outputs.update({f"{upstream_step}.{key}": value for key, value in durable_values.items()})
+    return True
+
+
 def deploy_run(
     context: SolutionContext,
     deployment_name: str,
@@ -247,6 +311,7 @@ def deploy_run(
     on_step: Callable[[str], None] | None = None,
     on_line: Callable[[str, str, str], None] | None = None,
     pin: str | None = None,
+    output_max_age: int | None = None,
 ) -> Diagnostics:
     """Execute `deployment_name`'s workspace provisioners against `build_path`
     (already rendered by a prior `build run` — this never re-renders it).
@@ -312,6 +377,13 @@ def deploy_run(
             time, so `build run --pin` is where those three actually need
             it; passing the same pin to both commands keeps one deploy
             consistent with the build it is executing.
+        output_max_age: `--output-max-age` (docs/work/cross-run-step-
+            output-delivery.md) — trust window in seconds for durable
+            cross-run step outputs, overriding `WorkspaceSpecModel.
+            output_store_max_age` for this invocation only (same
+            override precedence as `pin` over `spec.version`). `None`
+            (default) falls back to the workspace's own setting, itself
+            `None` by default (no staleness enforcement).
 
     Returns:
         Diagnostics accumulated while resolving values, preflight-
@@ -341,6 +413,25 @@ def deploy_run(
             f"Deployment '{deployment_name}' names workspace '{deployment.spec.workspace}', which is not in the index."
         )
     workspace = cast(WorkspaceModel, workspace_entry.model)
+
+    # Cross-run step-output persistence (docs/work/cross-run-step-output-
+    # delivery.md) — `None` when the workspace configures no
+    # `output_store`/`output_store_integration` at all, matching today's
+    # in-memory-only behavior exactly (no new required step for existing
+    # consumers). Trust window: `--output-max-age` wins when given, else
+    # the workspace's own `output_store_max_age`, else `None` (no
+    # staleness enforcement — today's behavior, unchanged by default).
+    output_store_backend = resolve_output_store_integration(index, workspace)
+    effective_max_age = output_max_age if output_max_age is not None else workspace.spec.output_store_max_age
+    output_store = (
+        DeploymentOutputStore(
+            output_store_backend,
+            deployment_name,
+            max_age=timedelta(seconds=effective_max_age) if effective_max_age is not None else None,
+        )
+        if output_store_backend
+        else None
+    )
 
     diagnostics = Diagnostics()
 
@@ -552,6 +643,10 @@ def deploy_run(
             if upstream_step in upstream
             for key in keys
         }
+        if not _merge_durable_outputs(
+            output_store, upstream, step_outputs, visible_outputs, step_name=step.name, diagnostics=diagnostics
+        ):
+            return diagnostics
         tokens = {**resolved.values, **visible_outputs}
 
         # Helm/Compose dispatch (docs/design/gap_fit_v1.md gap #13): a
@@ -749,6 +844,23 @@ def deploy_run(
         step_outputs[step.name], step_sensitive_outputs[step.name] = collect_step_outputs(
             integration, path, env, auth=auth, resolved_values=step_resolved_values
         )
+        if output_store is not None:
+            # Per step, immediately after collection — not batched to the
+            # end of the run (docs/work/cross-run-step-output-delivery.md)
+            # — so a mid-run crash still leaves every already-completed
+            # step's output durably recorded. A write failure here never
+            # fails the run: the step already deployed successfully,
+            # matching `collect_step_outputs()`'s own stated philosophy
+            # one paragraph up — losing the durable record only leaves a
+            # later invocation's `${output:}` reference unresolved, same
+            # as losing the in-memory collection would.
+            try:
+                output_store.record(step.name, step_outputs[step.name], step_sensitive_outputs[step.name])
+            except (SystemError, IntegrationError) as exc:
+                diagnostics.warning(
+                    f"Step '{step.name}': could not durably record output for later invocations — {exc}",
+                    location=step.name,
+                )
 
         _step(f"deployed step '{step.name}' via {integration_type}")
 

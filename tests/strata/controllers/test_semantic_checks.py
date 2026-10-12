@@ -926,6 +926,180 @@ def test_security_with_no_fields_set_restricts_nothing(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Workspace -> Configuration.spec.security.allowed_key_value_stores
+# (docs/work/cross-run-step-output-delivery.md's Implementation Plan step 1,
+# 'Governance') — same mechanism as allowed_variable_stores above, but
+# checking WorkspaceModel.spec.output_store/.output_store_integration
+# instead of an Environment's per-key store declarations.
+# ---------------------------------------------------------------------------
+
+
+def _append_to_workspace(root: Path, spec_yaml: str) -> None:
+    path = root / "workspace.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + spec_yaml, encoding="utf-8")
+
+
+def test_workspace_output_store_allowed_by_security_passes(tmp_path):
+    root = _base_solution(tmp_path)
+    _append_to_workspace(root, "  output_store: azure-appconfig\n")
+    path = root / "configuration.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  security:\n    allowed_key_value_stores: [azure-appconfig]\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_workspace_output_store_not_allowed_by_security_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    _append_to_workspace(root, "  output_store: consul\n")
+    path = root / "configuration.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  security:\n    allowed_key_value_stores: [azure-appconfig]\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("consul" in m and "allowed_key_value_stores" in m for m in context.diagnostics.messages())
+    assert any(d.code == "disallowed_store" for d in context.diagnostics.errors)
+
+
+def test_workspace_output_store_integration_resolves_to_its_own_type(tmp_path):
+    """output_store_integration names a document — the allow-list is
+    checked against *that document's* spec.type, not the reference name
+    itself."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "integration.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: integration
+meta:
+  name: shared-consul
+spec:
+  type: consul
+""",
+    )
+    _append_to_workspace(root, "  output_store_integration: shared-consul\n")
+    path = root / "configuration.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  security:\n    allowed_key_value_stores: [azure-appconfig]\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("consul" in m and "allowed_key_value_stores" in m for m in context.diagnostics.messages())
+
+
+def test_workspace_output_store_integration_wins_over_a_mismatched_output_store(tmp_path):
+    """Both fields set, disagreeing types: `output_store_integration`'s own
+    document type is what actually runs at deploy time (`resolve_
+    output_store_integration()`'s precedence) and must be what gets
+    checked — not the separately-declared `output_store`, even though
+    that one alone is allow-listed. A regression test for a real bug:
+    checking `output_store` first let a disallowed `output_store_
+    integration` backend silently pass validation."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "integration.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: integration
+meta:
+  name: shared-consul
+spec:
+  type: consul
+""",
+    )
+    _append_to_workspace(root, "  output_store: azure-appconfig\n  output_store_integration: shared-consul\n")
+    path = root / "configuration.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  security:\n    allowed_key_value_stores: [azure-appconfig]\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("consul" in m and "allowed_key_value_stores" in m for m in context.diagnostics.messages())
+
+
+def test_workspace_without_output_store_is_unaffected_by_restrictive_security(tmp_path):
+    """Neither output_store nor output_store_integration set means the
+    feature is disabled for this workspace — nothing to check, even under
+    a restrictive allow-list that would reject every real backend type."""
+    root = _base_solution(tmp_path)
+    path = root / "configuration.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  security:\n    allowed_key_value_stores: []\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+# ---------------------------------------------------------------------------
+# Workspace -> output-store backend must support compare-and-swap
+# (docs/work/cross-run-step-output-delivery.md — DeploymentOutputStore's
+# read-modify-write cannot work with a backend lacking real CAS, e.g.
+# azure-keyvault; caught here at validate time, independent of any
+# Configuration document/allow-list).
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_output_store_lacking_cas_support_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    _append_to_workspace(root, "  output_store: azure-keyvault\n")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("azure-keyvault" in m and "compare-and-swap" in m for m in context.diagnostics.messages())
+    assert any(d.code == "output_store_lacks_cas" for d in context.diagnostics.errors)
+
+
+def test_workspace_output_store_integration_lacking_cas_support_is_caught(tmp_path):
+    """Same check, resolved through `output_store_integration` instead of
+    the bare `output_store` type — same precedence as the allow-list
+    check above."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "integration.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: integration
+meta:
+  name: shared-vault
+spec:
+  type: azure-keyvault
+""",
+    )
+    _append_to_workspace(root, "  output_store_integration: shared-vault\n")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("azure-keyvault" in m and "compare-and-swap" in m for m in context.diagnostics.messages())
+
+
+def test_workspace_output_store_with_cas_support_passes(tmp_path):
+    root = _base_solution(tmp_path)
+    _append_to_workspace(root, "  output_store: azure-appconfig\n")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_workspace_without_output_store_is_unaffected_by_the_cas_check(tmp_path):
+    root = _base_solution(tmp_path)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+# ---------------------------------------------------------------------------
 # Configuration.spec.paths (docs/design/path-conventions.md, docs/design/gap_fit_v1.md
 # gap #7 — real usage: config-deploy's config/paths.yaml)
 # ---------------------------------------------------------------------------

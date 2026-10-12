@@ -109,6 +109,16 @@ def deploy_command() -> None:
     "same value to 'build run --pin' too so a deploy matches the build it is executing.",
 )
 @click.option(
+    "--output-max-age",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="SECONDS",
+    help="Trust window for durable cross-run step outputs, overriding the workspace's own "
+    "'output_store_max_age' for this invocation only. A durable record older than this is a hard "
+    "failure, never a silent stale read. Omit to use the workspace setting (itself optional, "
+    "no staleness enforcement by default).",
+)
+@click.option(
     "--change-system",
     default=None,
     metavar="TEXT",
@@ -176,6 +186,7 @@ def deploy_run_command(
     stage: str | None,
     scope: str | None,
     pin: str | None,
+    output_max_age: int | None,
     change_system: str | None,
     change_id: str | None,
     change_reason: str | None,
@@ -294,6 +305,7 @@ def deploy_run_command(
             on_step=on_step,
             on_line=on_line,
             pin=pin,
+            output_max_age=output_max_age,
         )
 
         # Audit trail — finalize + write locally + distribute (docs/design/

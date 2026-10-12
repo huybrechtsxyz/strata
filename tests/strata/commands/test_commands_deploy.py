@@ -360,6 +360,34 @@ def test_pin_names_an_unknown_version_exits_two(runner, solution, _stub_terrafor
 
 
 # ---------------------------------------------------------------------------
+# --output-max-age (docs/work/cross-run-step-output-delivery.md)
+# ---------------------------------------------------------------------------
+
+
+def test_output_max_age_is_accepted_and_inert_without_a_configured_output_store(runner, solution, _stub_terraform):
+    """No `output_store` configured on the workspace at all \u2014 the option
+    is parsed and threaded through, but has nothing to act on."""
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--output-max-age", "60")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+
+def test_output_max_age_rejects_a_non_integer_value(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--output-max-age", "not-a-number")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_output_max_age_rejects_a_non_positive_value(runner, solution, _stub_terraform):
+    """Matches `WorkspaceSpecModel.output_store_max_age`'s own `ge=1` —
+    a CLI override should reject the same invalid range, not just the
+    workspace-level config field."""
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--output-max-age", "0")
+    assert result.exit_code == EXIT_USAGE
+
+
+# ---------------------------------------------------------------------------
 # --change-* (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
 # ---------------------------------------------------------------------------
 

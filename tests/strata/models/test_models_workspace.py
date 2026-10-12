@@ -55,6 +55,48 @@ def test_workspace_topology_is_optional():
     assert model.spec.topology is None
 
 
+def test_workspace_output_store_fields_are_optional():
+    """Both output_store/output_store_integration default to None (feature
+    disabled — today's in-memory-only cross-step output behavior)."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.output_store is None
+    assert model.spec.output_store_integration is None
+
+
+def test_workspace_accepts_output_store_type():
+    data = _minimal_workspace()
+    data["spec"]["output_store"] = "azure-appconfig"
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.output_store == "azure-appconfig"
+
+
+def test_workspace_accepts_output_store_integration_name():
+    data = _minimal_workspace()
+    data["spec"]["output_store_integration"] = "shared-appconfig"
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.output_store_integration == "shared-appconfig"
+
+
+def test_workspace_output_store_max_age_defaults_to_none():
+    """No staleness enforcement unless a workspace opts in explicitly."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.output_store_max_age is None
+
+
+def test_workspace_accepts_output_store_max_age_in_seconds():
+    data = _minimal_workspace()
+    data["spec"]["output_store_max_age"] = 3600
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.output_store_max_age == 3600
+
+
+def test_workspace_rejects_non_positive_output_store_max_age():
+    data = _minimal_workspace()
+    data["spec"]["output_store_max_age"] = 0
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
 def test_workspace_accepts_inline_topology():
     """spec.topology accepts an inline topology block (ADR-0028, reverted from
     a standalone-document name reference, ADR-0011)."""

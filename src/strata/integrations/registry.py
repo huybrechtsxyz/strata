@@ -36,6 +36,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "infisical": ("strata.integrations.infisical_resolver", "InfisicalResolver"),
     "azure-keyvault": ("strata.integrations.azure_keyvault_resolver", "AzureKeyVaultResolver"),
     "azure-appconfig": ("strata.integrations.azure_appconfig_resolver", "AzureAppConfigResolver"),
+    "azure-blob": ("strata.integrations.azure_blob_keyvalue_store", "AzureBlobKeyValueStore"),
     "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
     "compose": ("strata.integrations.compose", "ComposeIntegration"),
     "helm": ("strata.integrations.helm", "HelmIntegration"),
@@ -103,11 +104,26 @@ def get(integration_type: str, config: IntegrationModel | None = None) -> Integr
             as a built-in nor as an installed entry point, or collides
             between the two.
     """
-    integration_class = _resolve_class(integration_type)
+    integration_class = get_class(integration_type)
     return integration_class(config)
 
 
-def _resolve_class(integration_type: str) -> type[Integration]:
+def get_class(integration_type: str) -> type[Integration]:
+    """Resolve `integration_type` to its registered class, without
+    constructing an instance — no credentials/network/PATH touched at all,
+    unlike `get()`.
+
+    The one real caller that needs this instead of `get()`: a static,
+    validate-time check inspecting a class-level attribute (e.g.
+    `KeyValueStoreIntegration.SUPPORTS_CAS`) to catch a structurally
+    incompatible configuration before `deploy run` ever constructs the
+    real thing (docs/work/cross-run-step-output-delivery.md).
+
+    Raises:
+        IntegrationNotFoundError: `integration_type` is registered neither
+            as a built-in nor as an installed entry point, or collides
+            between the two.
+    """
     plugins = [ep for ep in entry_points(group=ENTRY_POINT_GROUP) if ep.name == integration_type]
 
     if integration_type in _KNOWN:

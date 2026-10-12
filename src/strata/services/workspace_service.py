@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Service for loading and validating workspace configuration."""
 
-from strata.models.configuration_model import ConfigurationModel
+from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel
 from strata.models.network_model import NetworkModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.workspace_model import WorkspaceModel
@@ -215,4 +215,48 @@ class WorkspaceService(BaseService[WorkspaceModel]):
                     code="unregistered_subnet",
                 )
 
+        return diagnostics
+
+    def validate_allowed_key_value_store(
+        self, security: ConfigurationSecurityModel, backend_type: str | None
+    ) -> Diagnostics:
+        """Check this workspace's resolved output-store backend type against
+        the platform's key/value store allow-list (same convention as
+        `EnvironmentService.validate_allowed_stores()`, docs/work/
+        cross-run-step-output-delivery.md's Implementation Plan step 1,
+        'Governance').
+
+        Unlike variable/secret/feature stores (many independent per-key
+        declarations), a workspace declares at most one key/value backend —
+        so this takes the already-resolved backend type directly rather
+        than walking a list. Resolving `output_store_integration` to its
+        target document's own `spec.type` is the caller's job (needs the
+        `DocumentIndex`, which services never touch — ADR-0021 D2's same
+        rule); a dangling reference there is not re-checked here either —
+        `validate_references` already reports it.
+
+        Args:
+            security: The single Configuration document's `spec.security`
+                (never `None` itself — same calling convention as
+                `validate_allowed_stores()`).
+            backend_type: The resolved backend type, or `None` when
+                neither `output_store` nor `output_store_integration` is
+                set (feature disabled for this workspace — nothing to
+                check).
+
+        Returns:
+            One error if `backend_type` is set and not in
+            `allowed_key_value_stores`. Empty when unrestricted (`None`)
+            or no backend is configured at all.
+        """
+        diagnostics = Diagnostics()
+        if security.allowed_key_value_stores is None or backend_type is None:
+            return diagnostics
+        if backend_type not in security.allowed_key_value_stores:
+            diagnostics.error(
+                f"output_store: backend '{backend_type}' is not in the platform's allowed_key_value_stores. "
+                f"Available: {sorted(security.allowed_key_value_stores)}",
+                location="spec.output_store",
+                code="disallowed_store",
+            )
         return diagnostics

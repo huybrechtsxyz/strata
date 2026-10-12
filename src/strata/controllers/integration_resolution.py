@@ -15,6 +15,14 @@ about. Two entry points, sharing one auto-bind rule:
   `integration:` binding field at all (D5's own finding: `module.spec.type`
   is looked up directly, no `ProvisionerModel` involved), so only the
   auto-bind half applies, keyed on the module's bare `type` string.
+- `resolve_output_store_integration()` (docs/work/cross-run-step-output-
+  delivery.md's Implementation Plan step 1) — same named-binding-wins-
+  else-auto-bind duality as `resolve_integration()`, keyed on
+  `WorkspaceModel.spec.output_store_integration`/`.output_store` instead
+  of a Provisioner's fields. The one real difference: both fields unset
+  is not an error here — it means the feature is disabled for this
+  workspace, so it returns `None` rather than falling through to any
+  default (unlike a Provisioner, which always names a `tool`).
 
 Auto-bind itself (`bind_integration_config()`): zero or one *enabled*
 `Integration` document whose `spec.type` matches construct the same way
@@ -30,12 +38,13 @@ from typing import cast
 
 from strata.controllers.solution_controller import DocumentIndex
 from strata.integrations.base import Integration
-from strata.integrations.capabilities import InfraIntegration
+from strata.integrations.capabilities import InfraIntegration, KeyValueStoreIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.registry import get as get_integration
 from strata.models.common_models import PlatformKind
 from strata.models.integration_model import IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel
+from strata.models.workspace_model import WorkspaceModel
 from strata.utils.errors import UsageError
 
 
@@ -158,5 +167,79 @@ def _require_infra_integration(context: str, integration: Integration) -> InfraI
     if not isinstance(integration, InfraIntegration):
         raise UsageError(
             f"{context} resolves to '{type(integration).__name__}', which is not an infrastructure/container integration."
+        )
+    return integration
+
+
+def resolve_output_store_integration(
+    index: DocumentIndex, workspace: WorkspaceModel
+) -> KeyValueStoreIntegration | None:
+    """Return the `KeyValueStoreIntegration` instance `workspace`'s cross-run
+    step-output store should read/write against, or `None` when the
+    feature is disabled for this workspace (docs/work/
+    cross-run-step-output-delivery.md's Implementation Plan step 1).
+
+    Same named-binding-wins-else-auto-bind duality as `resolve_integration()`
+    above, just keyed on `output_store_integration`/`output_store` instead
+    of a Provisioner's `.integration`/`.tool`. **Unlike `resolve_integration()`,
+    both fields unset is not an error** — it means cross-run output
+    persistence is simply disabled for this workspace (today's in-memory-
+    only behavior), so this returns `None` rather than falling through to
+    any default.
+
+    Args:
+        index: The loaded, already-`require_valid()`-ed `DocumentIndex`.
+        workspace: The workspace naming a backend type (`.output_store`)
+            and/or a specific `Integration` document
+            (`.output_store_integration`).
+
+    Returns:
+        A new `KeyValueStoreIntegration` instance (never cached — matches
+        `registry.get()`'s own no-cache design), or `None` when neither
+        field is set.
+
+    Raises:
+        UsageError: A named `output_store_integration` is missing from the
+            index (should not happen post-validation; defensive), more than
+            one enabled `Integration` document auto-bind-matches
+            `output_store`, `output_store` is not a registered integration
+            type (built-in or plugin), it resolves to an integration
+            that does not implement `KeyValueStoreIntegration` (e.g. a
+            typo'd `output_store: "terraform"`), or it resolves to one
+            that does but does not support compare-and-swap at all (e.g.
+            `azure-keyvault` — should not happen post-validation, a static
+            check already catches it in `semantic_checks.py`; defensive
+            for a caller that skipped validation).
+    """
+    context = f"Workspace '{workspace.meta.name}'"
+    if workspace.spec.output_store_integration:
+        entry = index.get(PlatformKind.INTEGRATION, workspace.spec.output_store_integration)
+        if entry is None:
+            raise UsageError(
+                f"{context} names output_store_integration '{workspace.spec.output_store_integration}', "
+                "which is not in the index."
+            )
+        named_config = cast(IntegrationModel, entry.model)
+        integration = _construct(named_config.spec.type, named_config, context=context)
+    elif workspace.spec.output_store:
+        config = bind_integration_config(index, workspace.spec.output_store, requester=context)
+        integration = _construct(workspace.spec.output_store, config, context=context)
+    else:
+        return None
+
+    return _require_key_value_integration(context, integration)
+
+
+def _require_key_value_integration(context: str, integration: Integration) -> KeyValueStoreIntegration:
+    if not isinstance(integration, KeyValueStoreIntegration):
+        raise UsageError(
+            f"{context} resolves to '{type(integration).__name__}', which does not implement the key/value "
+            "store capability."
+        )
+    if not integration.SUPPORTS_CAS:
+        raise UsageError(
+            f"{context} resolves to '{type(integration).__name__}', which does not support compare-and-swap "
+            "— required for cross-run step-output persistence's read-modify-write. Use a backend with real "
+            "CAS support instead (e.g. 'azure-appconfig', 'azure-blob')."
         )
     return integration

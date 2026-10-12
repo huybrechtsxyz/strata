@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """Tests for the capability ABCs and the pairing checker (ADR-0021 D1/D9)."""
 
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 from strata.integrations.base import Integration
 from strata.integrations.capabilities import (
     CAPABILITY_ABCS,
+    NEW_KEY_VERSION,
     AuditSinkIntegration,
     InfraIntegration,
+    KeyValueStoreIntegration,
     ScannerIntegration,
     StoreIntegration,
     find_capability_mismatches,
 )
-from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
+from strata.integrations.resolved_context import KeyValueEntry, ResolvedWorkspaceGraph, ValueResolution
 from strata.models.common_models import SourceModel
 from strata.models.integration_model import Capability
 from strata.models.provisioning_model import ProvisionerModel
@@ -188,7 +191,8 @@ def test_no_mismatch_for_a_capability_with_no_abc_yet():
 
 def test_capability_abcs_covers_every_core_capability_with_a_real_consumer():
     """variables/secrets/features -> StoreIntegration; infrastructure/container ->
-    InfraIntegration; audit -> AuditSinkIntegration; scanner -> ScannerIntegration."""
+    InfraIntegration; audit -> AuditSinkIntegration; scanner -> ScannerIntegration;
+    key_value -> KeyValueStoreIntegration."""
     assert CAPABILITY_ABCS == {
         "variables": StoreIntegration,
         "secrets": StoreIntegration,
@@ -197,7 +201,122 @@ def test_capability_abcs_covers_every_core_capability_with_a_real_consumer():
         "container": InfraIntegration,
         "audit": AuditSinkIntegration,
         "scanner": ScannerIntegration,
+        "key_value": KeyValueStoreIntegration,
     }
+
+
+# ---------------------------------------------------------------------------
+# KeyValueStoreIntegration (docs/work/key-value-store-integration.md) —
+# get/put-with-CAS, modeled alongside StoreIntegration (not merged into it,
+# shape mismatch: single-value resolve vs. versioned get/put).
+# ---------------------------------------------------------------------------
+
+
+def test_keyvalue_store_integration_requires_both_methods():
+    class _Incomplete(KeyValueStoreIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"key_value"})
+        TRANSPORTS = frozenset({"sdk"})
+
+        def get(self, key: str) -> KeyValueEntry | None:
+            return None
+
+    import pytest
+
+    with pytest.raises(TypeError):
+        _Incomplete()  # type: ignore[abstract]
+
+
+def test_keyvalue_store_integration_can_be_instantiated_when_complete():
+    class _Complete(KeyValueStoreIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"key_value"})
+        TRANSPORTS = frozenset({"sdk"})
+
+        def __init__(self):
+            self._store: dict[str, bytes] = {}
+
+        def get(self, key: str) -> KeyValueEntry | None:
+            if key not in self._store:
+                return None
+            return KeyValueEntry(value=self._store[key], version="1")
+
+        def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
+            self._store[key] = value
+            return "1"
+
+    instance = _Complete()
+    assert instance.get("k") is None
+    assert instance.put("k", b"v") == "1"
+    assert instance.get("k") == KeyValueEntry(value=b"v", version="1")
+
+
+def test_new_key_version_sentinel_is_the_zero_string():
+    """Matches Consul's/etcd's own documented CAS convention for 'does not exist yet'."""
+    assert NEW_KEY_VERSION == "0"
+
+
+def test_supports_cas_defaults_to_true():
+    """Every real backend except one (AzureKeyVaultResolver) supports CAS
+    natively — a class that doesn't override this attribute is assumed to."""
+
+    class _Complete(KeyValueStoreIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"key_value"})
+        TRANSPORTS = frozenset({"sdk"})
+
+        def get(self, key: str) -> KeyValueEntry | None:
+            return None
+
+        def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
+            return "1"
+
+    assert _Complete.SUPPORTS_CAS is True
+
+
+def test_no_mismatch_for_a_compliant_keyvalue_store():
+    class _Compliant(KeyValueStoreIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"key_value"})
+        TRANSPORTS = frozenset({"sdk"})
+
+        def get(self, key: str) -> KeyValueEntry | None:
+            return None
+
+        def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
+            return "1"
+
+    assert find_capability_mismatches(_Compliant) == []
+
+
+def test_mismatch_when_a_plain_integration_declares_key_value_capability():
+    class _Wrong(Integration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"key_value"})
+        TRANSPORTS = frozenset({"sdk"})
+
+    mismatches = find_capability_mismatches(_Wrong)
+    assert len(mismatches) == 1
+    assert "key_value" in mismatches[0]
+    assert "KeyValueStoreIntegration" in mismatches[0]
+
+
+def test_key_value_entry_is_frozen_and_value_equal():
+    assert KeyValueEntry(value=b"v", version="1") == KeyValueEntry(value=b"v", version="1")
+    assert KeyValueEntry(value=b"v", version="1") != KeyValueEntry(value=b"v", version="2")
+
+    import pytest
+
+    with pytest.raises(FrozenInstanceError):
+        KeyValueEntry(value=b"v", version="1").version = "2"  # type: ignore[misc]
+
+
+def test_key_value_conflict_error_is_an_integration_error():
+    """Subclass, not a sibling — every existing 'except IntegrationError' call
+    site still catches it unchanged (docs/work/key-value-store-integration.md)."""
+    from strata.integrations.errors import IntegrationError, KeyValueConflictError
+
+    assert issubclass(KeyValueConflictError, IntegrationError)
 
 
 # ---------------------------------------------------------------------------
@@ -473,14 +592,14 @@ def _all_infra_integration_types() -> list[type]:
     and every strata invocation hard-depending on hvac") — a class that
     was never imported never registers as a subclass at all, so every
     known type is force-loaded (class only, never instantiated) via
-    `registry._resolve_class()` first. Iterating `registry._KNOWN` rather
+    `registry.get_class()` first. Iterating `registry._KNOWN` rather
     than hardcoding today's three names means a future registration is
     force-loaded and checked automatically too.
     """
     from strata.integrations import registry
 
     for known_type in registry._KNOWN:
-        registry._resolve_class(known_type)
+        registry.get_class(known_type)
 
     found: list[type] = []
     stack: list[type] = list(InfraIntegration.__subclasses__())

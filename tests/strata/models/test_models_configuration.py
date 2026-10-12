@@ -78,11 +78,13 @@ def test_configuration_accepts_security_allow_lists():
         "allowed_secret_stores": ["github", "azure-keyvault"],
         "allowed_variable_stores": ["constant", "azure-appconfig"],
         "allowed_feature_stores": ["constant", "azure-appconfig"],
+        "allowed_key_value_stores": ["azure-keyvault", "azure-appconfig"],
     }
     model = ConfigurationModel.model_validate(data)
     assert model.spec.security.allowed_secret_stores == ["github", "azure-keyvault"]
     assert model.spec.security.allowed_variable_stores == ["constant", "azure-appconfig"]
     assert model.spec.security.allowed_feature_stores == ["constant", "azure-appconfig"]
+    assert model.spec.security.allowed_key_value_stores == ["azure-keyvault", "azure-appconfig"]
 
 
 def test_configuration_security_fields_are_each_independently_optional():
@@ -92,6 +94,7 @@ def test_configuration_security_fields_are_each_independently_optional():
     assert model.spec.security.allowed_secret_stores == ["azure-keyvault"]
     assert model.spec.security.allowed_variable_stores is None
     assert model.spec.security.allowed_feature_stores is None
+    assert model.spec.security.allowed_key_value_stores is None
 
 
 def test_configuration_security_rejects_unknown_fields():

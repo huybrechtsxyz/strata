@@ -73,7 +73,7 @@ _KNOWN = {
 ```
 
 Third-party plugins register via the `strata.integrations` entry-point
-group (`ADR-0021` D10) — checked in `_resolve_class()` after built-ins, and
+group (`ADR-0021` D10) — checked in `get_class()` after built-ins, and
 a plugin may not reuse a built-in name. `_KNOWN_V1_TYPES` is a frozenset of
 v1 type names not yet ported (ansible, git, bicep, opentofu, vault, consul,
 etcd, bitwarden, flagsmith, and several observability/policy tools) — used

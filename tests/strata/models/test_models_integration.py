@@ -87,6 +87,14 @@ def test_integration_accepts_container_capability():
     assert model.spec.capabilities == {"container"}
 
 
+def test_integration_accepts_key_value_capability():
+    """'key_value' (docs/work/key-value-store-integration.md) is a recognized core capability."""
+    data = _minimal_integration()
+    data["spec"]["capabilities"] = ["key_value"]
+    model = IntegrationModel.model_validate(data)
+    assert model.spec.capabilities == {"key_value"}
+
+
 def test_integration_accepts_x_prefixed_extension_capability():
     """An 'x-'-prefixed capability bypasses the closed vocabulary entirely."""
     data = _minimal_integration()

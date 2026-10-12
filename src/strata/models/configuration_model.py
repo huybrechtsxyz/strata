@@ -58,8 +58,8 @@ from strata.utils.names import check_unique_names
 
 
 class ConfigurationSecurityModel(PlatformBaseModel):
-    """Allow-lists restricting which store types a `variable`/`secret`/`feature`
-    may declare, platform-wide.
+    """Allow-lists restricting which store/backend types a `variable`/
+    `secret`/`feature`/Workspace output-store may declare, platform-wide.
 
     Ported from v1's real, active usage (`config/stores.yaml`'s
     `spec.security`, config-deploy) — ADR-0020/gap #7 originally
@@ -75,6 +75,9 @@ class ConfigurationSecurityModel(PlatformBaseModel):
     `environment`, ...) still needs to appear in the list to be allowed —
     v1's real `config/stores.yaml` deliberately excludes `environment`
     platform-wide this way, proving builtins are not implicitly exempt.
+    `allowed_key_value_stores` (docs/work/cross-run-step-output-delivery.md)
+    is a v2-only addition, no v1 precedent — same discipline applied to a
+    new capability, not retrofitted after real usage existed.
     """
 
     allowed_secret_stores: list[str] | None = Field(
@@ -91,6 +94,13 @@ class ConfigurationSecurityModel(PlatformBaseModel):
         None,
         description="Feature store types (FeatureStoreType values, e.g. 'azure-appconfig') permitted in any "
         "`kind: environment` document. None means unrestricted.",
+    )
+    allowed_key_value_stores: list[str] | None = Field(
+        None,
+        description="Key/value backend types (e.g. 'azure-keyvault', 'azure-appconfig', 'azure-blob') "
+        "permitted for a Workspace's 'output_store'/'output_store_integration' (docs/work/"
+        "cross-run-step-output-delivery.md). Named after the capability (KEY_VALUE), not the feature field, "
+        "since it already has more than one planned consumer. None means unrestricted.",
     )
 
 
