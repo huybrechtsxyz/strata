@@ -199,13 +199,13 @@ section, and the explicit revisit action recorded in Q5).
 
 That disqualifies most candidates before taste enters:
 
-| Candidate                       | Verdict                                                                                                        |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `schema`                        | **Ruled out on evidence.** `scaffold_controller.py` exports `model_json_schema()` one file per kind into `.strata/schemas/`, and the scaffolded `.vscode/settings.json` points `yaml.schemas` at them. A `schema` kind yields `.strata/schemas/schema.json` — the JSON Schema *for* the schema kind. Genuine collision, not a hypothetical one. |
-| `block` / `attributes`          | Name the **content**, not the document. A `kind: block` document is not a block, it describes one. `attributes` is also plural, breaking rule 2.    |
-| `extraFields`                   | camelCase (rule 1), and backwards: the fields are the real payload, not "extra".                               |
-| `dynamicConfig` / `dynamicSchema` | camelCase (rule 1). "Dynamic" also names the **mechanism**, not the thing — and is misleading, since from the author's seat the document is a wholly static declaration. |
-| `userdefined`                   | An adjective, not a noun (rule 3). Says nothing about what the document is.                                    |
+| Candidate                         | Verdict                                                                                                                                                                                                                                                                                                                                         |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema`                          | **Ruled out on evidence.** `scaffold_controller.py` exports `model_json_schema()` one file per kind into `.strata/schemas/`, and the scaffolded `.vscode/settings.json` points `yaml.schemas` at them. A `schema` kind yields `.strata/schemas/schema.json` — the JSON Schema *for* the schema kind. Genuine collision, not a hypothetical one. |
+| `block` / `attributes`            | Name the **content**, not the document. A `kind: block` document is not a block, it describes one. `attributes` is also plural, breaking rule 2.                                                                                                                                                                                                |
+| `extraFields`                     | camelCase (rule 1), and backwards: the fields are the real payload, not "extra".                                                                                                                                                                                                                                                                |
+| `dynamicConfig` / `dynamicSchema` | camelCase (rule 1). "Dynamic" also names the **mechanism**, not the thing — and is misleading, since from the author's seat the document is a wholly static declaration.                                                                                                                                                                        |
+| `userdefined`                     | An adjective, not a noun (rule 3). Says nothing about what the document is.                                                                                                                                                                                                                                                                     |
 
 **The document is a schema.** The only real question is the qualifier, and
 `<thing>schema` is preferred over `<thing>config` here on ADR-0014's own
@@ -213,12 +213,12 @@ stated criterion — it picked `Config` over `Class` as "most obvious to a
 general audience", and by that same test "schema" beats "config" for a
 thing that literally is one.
 
-| Candidate         | Reads as                          | Assessment                                                                                                               |
-| ----------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `attributeschema` | "the schema for these attributes" | **Adopted as the working name (2026-10-13).** Ties to `spec.attributes`, the field most likely to survive design churn.                               |
+| Candidate         | Reads as                          | Assessment                                                                                                                |
+| ----------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `attributeschema` | "the schema for these attributes" | **Adopted as the working name (2026-10-13).** Ties to `spec.attributes`, the field most likely to survive design churn.   |
 | `blockschema`     | "the schema for a block"          | Runner-up. Shorter, but `block` is a term invented in this sketch, exists only as `target.block`, and may not survive Q5. |
-| `propertyschema`  | "the schema for properties"       | Too narrow — the design targets `configuration` and `custom` as well.                                                    |
-| `attributeconfig` | registry governing attributes     | Fits `<thing>config` precisely, but loses the obviousness of "schema".                                                   |
+| `propertyschema`  | "the schema for properties"       | Too narrow — the design targets `configuration` and `custom` as well.                                                     |
+| `attributeconfig` | registry governing attributes     | Fits `<thing>config` precisely, but loses the obviousness of "schema".                                                    |
 
 **Caveat: naming is partly premature.** The right qualifier depends on Q5
 (how far coverage extends) and Q3 (schema language). If `block` ceases to
@@ -514,6 +514,11 @@ Ordered by what they block, not by when they were raised.
   cross-field invariant precisely because it cannot see `features`.
   Widening the target may not actually help (that invariant is semantic,
   not shape) — worth confirming rather than assuming.
+  **Required action on resolution (closes Q14):** revisit D2's working
+  name. If `block` survives as a `target` field, `blockschema` becomes
+  viable again; if coverage narrows to `properties` alone,
+  `propertyschema` does. Do not let `attributeschema` ship unexamined
+  just because it was the working term.
 - **Q6. Confirm D1** (standalone kind, nothing on `Configuration`).
   Argued from the ADR-0011/ADR-0014 precedent and recommended, but not
   ratified. *Supersedes the earlier open question "where does a schema
@@ -568,11 +573,10 @@ work starts.
   key must be present" or "the map must be non-empty"? The acid-test
   example doesn't exercise this distinction (`identities` isn't marked
   `required`) — pick one and say so explicitly.
-- [ ] **Q14. Wire D2's naming back to Q5's resolution.** D2 recommends
-  `attributeschema` while flagging the choice as "partly premature"
-  pending Q5 (coverage) and Q3 (schema language) — right now nothing
-  forces D2 to actually be revisited once Q5 lands; add that as an
-  explicit action in Q5's own resolution instead of leaving it implied.
+- [x] ~~**Q14. Wire D2's naming back to Q5's resolution.**~~ **Closed
+  2026-10-13.** `attributeschema` adopted as the working name, and Q5 now
+  carries an explicit "revisit D2 on resolution" action rather than
+  leaving it implied.
 - [ ] **Q15. Consider stating D6's dividing line as a tentative answer,
   not just an open question.** "Policy evaluation needs heterogeneous
   external data (SBOM/CVE/Checkov/Terraform plan/an LLM); a shape check
@@ -651,3 +655,9 @@ work starts.
   semantics on map attributes left ambiguous, D2 not explicitly wired to
   revisit once Q5 resolves, and D6's dividing line being strong enough to
   record as a tentative answer rather than purely an open question).
+- 2026-10-13: **`attributeschema` adopted as the working name** (D2), so
+  the rest of the design has a stable term. Final ratification stays
+  deferred — the name is cheap to change now and expensive once a
+  `PlatformKind` value ships. **Q14 closed** by recording the revisit as
+  an explicit required action inside Q5's own resolution (including which
+  alternative wins under which Q5 outcome) instead of leaving it implied.
