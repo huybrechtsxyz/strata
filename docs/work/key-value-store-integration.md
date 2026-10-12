@@ -36,6 +36,8 @@
   `capabilities.py` states this as a general rule, not a
   `DeploymentOutputStore`-specific one.
 - Last updated: 2026-10-12
+- Tracks follow-on work for: [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md)
+  (D1 — this capability's own existence — and D2's `SUPPORTS_CAS` gate)
 - Split out from: [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md)
   (that doc's "Proposed interface" section) — this is "first step": the
   reusable I/O primitive on its own, independent of the

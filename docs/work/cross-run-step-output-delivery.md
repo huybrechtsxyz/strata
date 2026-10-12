@@ -9,10 +9,12 @@
   `DeploymentOutputStore.record()` called per step after collection),
   **plus the configurable staleness trust window**
   (`WorkspaceSpecModel.output_store_max_age` / `deploy run
-  --output-max-age`). **Not yet built**: step 5 (lock-audit
-  reactivation) — see "Built" notes under step 4 below for exactly
-  what shipped. Remaining backends (file, Consul, etcd, S3) also
-  deferred, lower priority.
+  --output-max-age`). **Step 5 (lock-audit reactivation) split out to its
+  own doc**, [output-store-lock-audit.md](output-store-lock-audit.md) —
+  not started, low priority (Terraform's own backend locking already
+  covers the actual IaC use case; this is an audit-trail nice-to-have on
+  top of an already write-safe CAS-retry path). Remaining backends
+  (file, Consul, etcd, S3) also deferred, lower priority.
 - **Code-review fixes (2026-10-12):** (1) a real governance-bypass bug —
   `semantic_checks.py` checked `output_store` before resolving
   `output_store_integration`'s own type, backwards from
@@ -25,7 +27,15 @@
   new `SUPPORTS_CAS` note) is now rejected at validate time instead of
   silently never persisting anything, downgraded to an easy-to-miss
   warning on every single deploy.
+- **Doc cleanup + v1-precedent re-check (2026-10-12):** stale "not yet
+  built/designed" claims throughout this doc (left over from before the
+  real build) corrected to match what's actually shipped. The
+  long-standing "re-confirm the v1 lock-file precedent" open question is
+  now resolved — checked directly against real v1 source, no such
+  precedent exists; this feature is original to v2 (see Open Questions).
 - Last updated: 2026-10-12
+- Tracks follow-on work for: [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md)
+  (the settled decisions this doc's own brainstorming led to)
 - Split out from: [deploy-time-output-sensitivity-gaps.md](deploy-time-output-sensitivity-gaps.md)
   gap 2
 
@@ -53,23 +63,24 @@ not about modeling the dependency itself.
 
 ## Current Design / Progress
 
-**Accepted now, shipping as the actual near-term fix:** cross-step
+**Accepted now, shipped as the actual fix (BUILT 2026-10-12, see
+Implementation Plan below for exactly what):** cross-step
 `${output:...}` resolution remains scoped to a single `deploy run`
 invocation — that limitation is real and explicit, not silently patched
-over. What changes is the *failure*: today a missing cross-run reference
-fails deep inside `resolve_value_tokens()` with a generic "did not
-resolve to a value" `ValueError`, after `init`/`validate`/`plan` may
-already be underway for that step. This should become a pre-flight check
-(before any tool runs for any step) that reports exactly which step/key
-is missing and why — e.g. distinguishing "step1 didn't run in this
-invocation" from "step1's output 'admin_password' is sensitive and can
-never cross a deploy run boundary" (see Security below). *(Not yet
-implemented — next concrete step once this doc's own open questions
-below are resolved enough to write real code against.)*
+over. What changes is the *failure*: a missing cross-run reference is
+now caught by a pre-flight check (`_merge_durable_outputs()`, before
+that step's own tool runs) that reports exactly which step/key is
+unusable and why — a durable record that genuinely doesn't exist yet is
+forgiving (the step may not even reference it; the existing deep
+token-resolution error still fires if it does), one that exists but is
+stale or unreachable is not (see Security below for the sensitive-output
+case, handled separately by never durably writing one in the first
+place).
 
 **The real fix — a pluggable cross-run/cross-pipeline output store —
-is a separate, bigger effort,** sketched below but not yet designed in
-enough detail to build.
+is now fully designed and built**, `DeploymentOutputStore` on top of
+the `KeyValueStoreIntegration` capability (see Implementation Plan
+below).
 
 ### Why not just persist a file inside `build_path`?
 
@@ -94,10 +105,12 @@ pipeline's own disposable environment.
 
 ### Direction: a pluggable cross-run output store
 
-v1 precedent (user's own recollection, not yet re-confirmed against real
-v1 source): a lock-file system, conceptually similar to Terraform's own
-remote state + locking, supporting multiple backends including blob
-storage. The same shape fits here: step outputs need to be written
+Originally sketched as a "v1 precedent" (a lock-file system, conceptually
+similar to Terraform's own remote state + locking, supporting multiple
+backends including blob storage) — **checked directly against real v1
+source and found not to exist** (see Open Questions' now-resolved entry
+below): this design is original to v2. The shape still fits the real
+problem regardless of provenance: step outputs need to be written
 somewhere **durable and shared across pipelines**, with the actual
 backend being a deployment/environment-specific choice, not something
 strata hardcodes.
@@ -220,13 +233,15 @@ ever tries to solve.
 ## Implementation Plan (`DeploymentOutputStore`, on top of the already-
 designed key/value capability)
 
-Four pieces, each independently testable — identified by walking through
-"configure the backend, find the steps that need it, gather+store on
-run" and checking what's actually load-bearing between those three:
+Identified by walking through "configure the backend, find the steps
+that need it, gather+store on run" and checking what's actually
+load-bearing between those three — steps 1-4 are built (below); step 5
+(lock audit) split out to [output-store-lock-audit.md](output-store-lock-audit.md),
+not started:
 
 1. **Configuration — settled, mirrors `ProvisionerModel.tool`/`.integration`
-   exactly (ADR-0022 D2), not a new mechanism. Fields and governance BUILT
-   (2026-10-12); resolution function not yet built, see below.** Two new
+   exactly (ADR-0022 D2), not a new mechanism. Fields, governance, and
+   resolution function all BUILT (2026-10-12), see below.** Two new
    optional `WorkspaceSpecModel` fields —
 
    ```python
@@ -260,26 +275,23 @@ run" and checking what's actually load-bearing between those three:
    — the one real difference from `resolve_integration()`: both fields
    unset returns `None` (feature disabled) rather than being a usage
    error, since a Provisioner always names a `tool` but a workspace need
-   not configure an output store at all. 22 tests in
-   `test_integration_resolution.py` (9 new: named-binding-wins,
-   missing-name, zero/one/many-candidate auto-bind, non-key-value-type
-   rejection, unregistered-type rejection, and the both-unset-is-None
-   case specifically). **Not yet built:** the actual caller — nothing in
-   `deploy_controller.py` invokes this yet (still ahead, see
-   Implementation Plan steps 3–4 below).
-
-   Resolved by a new `resolve_output_store_integration(index, workspace) ->
-   KeyValueStoreIntegration | None` in `integration_resolution.py`, built
-   from pieces that already exist there unchanged: `output_store_integration`
-   set wins outright (look the named document up by name, `_construct()`
-   it); else `bind_integration_config(index, output_store, requester=...)`
-   (the exact zero-or-one-enabled-match auto-bind every other capability
-   tier already shares) + `_construct()`; both fields unset returns `None`
-   (feature disabled, no error) rather than falling through to any
-   default. A new `_require_key_value_integration()` guard (same shape as
-   the existing `_require_infra_integration()`) rejects a resolved
-   integration that doesn't implement `KeyValueStoreIntegration` — e.g. a
-   typo'd `output_store: "terraform"`.
+   not configure an output store at all. Built from pieces that already
+   exist there unchanged: `output_store_integration` set wins outright
+   (look the named document up by name, `_construct()` it); else
+   `bind_integration_config(index, output_store, requester=...)` (the
+   exact zero-or-one-enabled-match auto-bind every other capability tier
+   already shares) + `_construct()`. A new `_require_key_value_integration()`
+   guard (same shape as the existing `_require_infra_integration()`)
+   rejects a resolved integration that doesn't implement
+   `KeyValueStoreIntegration` (e.g. a typo'd `output_store: "terraform"`)
+   or implements it but can't honor real CAS (`SUPPORTS_CAS` \u2014 added
+   later, code review, see "Code-review fixes" at the top of this doc).
+   22 tests in `test_integration_resolution.py` (9 new: named-binding-
+   wins, missing-name, zero/one/many-candidate auto-bind, non-key-value-
+   type rejection, unregistered-type rejection, and the both-unset-is-None
+   case specifically). **The caller is also now built** — `deploy_
+   controller.py`'s `deploy_run()` resolves it once per run (Implementation
+   Plan step 4 below).
 
    **Deliberately not `ProvisionerBackendModel`'s shape
    (`type`+`configuration` inline dict)**, even though that model looks
@@ -407,9 +419,9 @@ run" and checking what's actually load-bearing between those three:
    `_MAX_CAS_RETRIES` (5) times on `KeyValueConflictError` — never
    retrying with a blind unconditional `put()`. Retry exhaustion raises
    `strata.utils.errors.SystemError` (real contention, not a caller
-   mistake). **Not yet built:** actually *calling* this per step,
-   immediately after that step's output is collected — that's
-   `deploy_controller.py` wiring, step 4 below, still ahead.
+   mistake). Actually *calling* this per step, immediately after that
+   step's output is collected, is `deploy_controller.py`'s job — also
+   now built, step 4 below.
 4. **Read path — BUILT (2026-10-12), exactly as designed:**
    `DeploymentOutputStore.read(step)` (same file) — looks up the shared
    record, raises `OutputRecordNotFoundError` when no record exists at
@@ -472,25 +484,13 @@ run" and checking what's actually load-bearing between those three:
    deliberately excluded from the invocation via `--stage`, simulating
    "ran in an earlier invocation" for real). Full suite green, mypy/
    ruff/lint-imports clean.
-5. **Lock audit — reuses an existing, currently-dormant model instead of
-   inventing one:** `audit_manifest_model.py`'s `ManifestLockReferenceModel`
-   (`lock_id`/`backend`/`acquired_at`/`released_at`/`holder`/`hostname`)
-   already exists for exactly this shape of fact — "who held exclusive
-   write access to a shared backend resource, and when" — but today it's
-   modeled only for a Terraform provisioner's own *native* remote-backend
-   lock (azurerm/s3/consul/gcs/local), never actually populated anywhere
-   (confirmed: zero real references outside the model/docs). Step 3's
-   read-modify-write-with-CAS-retry is the same fact for a *different*
-   (optimistic, not pessimistic) locking mechanism — worth recording in
-   this exact same shape rather than a new one: one `ManifestLockReferenceModel`
-   entry per successful write (not per failed CAS attempt — too chatty
-   under real contention, and `released_at` already implies a normally-
-   completed event), `lock_id` a fresh UUID per attempt, `backend` the
-   resolved output-store integration's `type` string, `holder` e.g.
-   `f"{step.name}@{execution_id}"`, `hostname` via `socket.gethostname()`.
-   Gives an operator the same write-contention visibility for the output
-   store that this model already promises for Terraform's own state
-   lock — and finally gives `ManifestLockReferenceModel` a real producer.
+5. **Lock audit — split out to its own doc:**
+   [output-store-lock-audit.md](output-store-lock-audit.md). Not started,
+   low priority — for the primary IaC use case, Terraform's own backend
+   locking already does the real locking; this is purely an audit-trail
+   nice-to-have for `DeploymentOutputStore.record()`'s own (already
+   write-safe) CAS-retry writes, split out so it gets its own tracked
+   doc instead of living only as an unbuilt step here.
 
    **Interim step, done now, ahead of the rest of this plan:** since
    `ManifestLockReferenceModel`/`DeploymentManifestModel.lock` has zero
@@ -498,34 +498,47 @@ run" and checking what's actually load-bearing between those three:
    references either beyond the model file itself — left live-but-always-
    `None` in a shipped audit schema is exactly the "looks implemented but
    isn't" gap this repo avoids elsewhere. Commented out in place (not
-   deleted) in `audit_manifest_model.py` until step 5 above gives it a
-   real producer, at which point both the class and the field get
-   uncommented as part of that step's own change.
+   deleted) in `audit_manifest_model.py`, pointing at the split-out doc
+   above for its reactivation plan.
 
 ## Open Questions
 
 - **Staleness enforcement policy — settled:** hard pre-flight failure,
   always, no warn-and-use mode even as an opt-in — see the Staleness
   paragraph and Implementation Plan step 4 above.
-- **The file backend has no native version/CAS primitive — settled:**
-  accept no concurrency protection for this backend at all (option (a)) —
-  see [key-value-store-integration.md](key-value-store-integration.md)'s
-  own Backend 1 section. Documented limitation, not blocking: dependent
-  steps never race with each other regardless, and this backend is the
-  single-agent/low-concurrency case by nature.
+- **The file backend has no native version/CAS primitive for an
+  *update* — settled, superseded by a stronger mechanism than originally
+  planned:** originally "accept no concurrency protection for this
+  backend at all" (silent degradation). Now instead rejected outright at
+  validate time for this feature specifically — `SUPPORTS_CAS` (code
+  review, 2026-10-12) will be `False` on the file backend once built (see
+  [key-value-store-integration.md](key-value-store-integration.md)'s own
+  Backend 1 section), so `output_store: file` fails loud and early
+  instead of silently never protecting an update the way Key Vault
+  originally did. The file backend itself remains otherwise useful
+  (other `KeyValueStoreIntegration` consumers that only ever need
+  create-only semantics, e.g. a simple lock-acquire, are unaffected).
 - **Where is the backend configured? — settled:** two new
   `WorkspaceSpecModel` fields (`output_store`/`output_store_integration`),
   resolved via the existing `bind_integration_config()`/`_construct()`
   pair, same mechanism as every other capability tier — see
   Implementation Plan step 1 above.
-- **Does this need its own ADR?** Likely yes, now that a real direction
-  is chosen (new capability, two workspace fields, six backends, the
-  `ManifestLockReferenceModel` reuse) — this doc stays the
-  brainstorming/evidence record either way, same convention as every
-  other ADR-tracked feature in this repo.
-- **Re-confirm the v1 lock-file precedent against real v1 source**
-  before finalising the concurrency design — described here from memory,
-  not yet re-verified.
+- **Does this need its own ADR? — RESOLVED (2026-10-12):** yes —
+  [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md),
+  covering the new capability, the optimistic-CAS concurrency model, the
+  staleness/sensitivity rules, and the governance allow-list. This doc
+  remains the brainstorming/evidence record and build-progress tracker;
+  the ADR records only the decisions themselves.
+- **Re-confirm the v1 lock-file precedent against real v1 source — RESOLVED
+  (2026-10-12): no such precedent exists.** Checked directly against v1's
+  real source (`e:\SourcesXYZ\strata`) — zero matches anywhere for
+  `lock`/`Lock`, and zero for `remote_state`/`blob_storage`/`shared_state`/
+  `output_store`/CAS-related terms either. v1 has no lock-file system, no
+  remote-state abstraction, and no cross-run output store of any kind —
+  this whole feature (capability, governance, CAS gating, staleness
+  window) is original to v2, not a port of anything. The "user's own
+  recollection" that motivated the original design sketch did not hold up;
+  corrected here rather than left open.
 
 ## Related
 
@@ -543,8 +556,10 @@ run" and checking what's actually load-bearing between those three:
   — the look-alike inline `type`+`configuration` shape considered and
   rejected for this (inert HCL-bound data, not a live Python instance).
 - `src/strata/models/audit_manifest_model.py`'s `ManifestLockReferenceModel`
-  — the existing, currently-unpopulated lock-audit shape step 5 reuses
-  for the output store's own CAS-retry write attempts.
+  — the existing, currently-unpopulated lock-audit shape
+  [output-store-lock-audit.md](output-store-lock-audit.md) (step 5,
+  split out) plans to reuse for the output store's own CAS-retry write
+  attempts.
 - [deploy-time-output-sensitivity-gaps.md](deploy-time-output-sensitivity-gaps.md) —
   gap 1 (sensitive `${output:}` handling, done) lives there; this doc is
   gap 2, split out once its scope grew past "a gap."
