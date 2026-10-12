@@ -283,7 +283,7 @@ Minor, same origin:
   green: 990/990 tests passing.
 - **Terraform input validation against `variables.tf`** — v1 fails the
   build on a declared-input/schema mismatch before `apply` would.
-  [provisioning-injection-model.md](provisioning-injection-model.md)
+  [provisioning-injection-model.md](../archive/provisioning-injection-model.md)
   mentions parsing `variables.tf` as a capability lookup, but not as a
   build-time gate.
 
@@ -465,7 +465,7 @@ is a missed conversion, but neither has been revisited:
   `TerraformIntegration.default_output()` discards `resolved.values`
   entirely (`del resolved`), so the `features`/`variables`/`properties`
   categories `emits` would gate don't exist in v2 at all yet. Traced this
-  into [provisioning-injection-model.md](provisioning-injection-model.md)
+  into [provisioning-injection-model.md](../archive/provisioning-injection-model.md)
   (Context) while checking whether it was a missing-Context problem — it
   isn't; `ValueResolution` already flows through the whole build pipeline,
   this is a narrower, one-method gap. No code changed; both this doc and

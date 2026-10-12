@@ -11,8 +11,9 @@
   (unify-terraform-helm-value-expression-syntax),
   [docs/design/value-token-resolution.md](../design/value-token-resolution.md)
   (Value token resolver/delivery, built on this decision),
-  [docs/work/provisioning-injection-model.md](../work/provisioning-injection-model.md)
-  (Interface/Injection/Grant/Translation/Context, not yet built)
+  [docs/archive/provisioning-injection-model.md](../archive/provisioning-injection-model.md)
+  (Interface/Injection/Grant/Translation/Context — archived 2026-10-12,
+  mostly a dead direction; see that doc's own status line)
 
 ## Context and Problem Statement
 

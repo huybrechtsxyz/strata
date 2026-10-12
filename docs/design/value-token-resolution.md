@@ -109,7 +109,7 @@ secret."
 ## Current Design
 
 - **Syntax**: `${kind:KEY}` where `kind` is `var`, `secret`, or `feature`
-  (also `output`, [Context](../work/provisioning-injection-model.md)/[deploy-command.md](../work/deploy-command.md)'s
+  (also `output`, [Context](../archive/provisioning-injection-model.md)/[deploy-command.md](../work/deploy-command.md)'s
   own dedicated design; also `value` — [cross-document-value-references.md](cross-document-value-references.md),
   a solution-wide `${value:kind.name.path.to.field}` reference into another
   already-loaded document's own literal field, not an Environment-declared
@@ -176,8 +176,9 @@ Q1/Q5) — a `${var:X}` backed by an integration-backed or secret store is
 (it needs deploy's own fully-resolved values anyway), applying it uniformly
 to every kind's Value-token fields (`dns`, `network`, `firewall`, `module`,
 and any future one) — not separately, not build-time-only. Tracked as
-blocked on the same prerequisite `docs/work/provisioning-injection-model.md`
-already names for Context/deploy-time work generally.
+blocked on the same prerequisite `docs/archive/provisioning-injection-model.md`
+already names for Context/deploy-time work generally (since built, via a
+different path — see that doc's own archived status line).
 
 ## Per-Kind Status
 

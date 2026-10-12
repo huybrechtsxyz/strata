@@ -65,8 +65,9 @@ separate mechanisms, not one to unify later:
 
 Interface/Injection governs the *Environmental* channel (`variables`/
 `features`/`secrets` sourced from `Configuration`/environment stores) and is
-**not yet built** in v2 at all (`docs/work/provisioning-injection-model.md`
-tracks it, zero implementation today). `emits` governs the *Structural*
+**a dead direction, archived** (`docs/archive/provisioning-injection-model.md`
+— superseded by ADR-0035's unconditional-delivery model, zero implementation
+ever existed). `emits` governs the *Structural*
 channel (this doc's 13 `terraform_projection.py` categories) and is
 declared, matching v1's `OutputProfileModel`'s own real behaviour exactly —
 not a gap to eventually close with introspection, a different concept by

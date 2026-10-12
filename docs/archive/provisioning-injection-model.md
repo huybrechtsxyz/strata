@@ -1,14 +1,28 @@
 # Provisioning Injection Model — Interface, Injection, Grant, Translation, Context
 
-- Status: proposed — fully designed conceptually; Context's build-time analog
-  (`ValueResolution`) is implemented and threaded through the whole
-  `build_run()` pipeline today, but Context itself (the deploy-time,
-  multi-stage, `stage_outputs`-accumulating object ADR-0006 actually
-  describes) is still unbuilt — blocked on `deploy run`, which does not
-  exist yet. Interface/Injection/Grant/Translation remain fully unbuilt too.
-- Last updated: 2026-09-25
+- Status: **Archived (2026-10-12) — largely dead, not shipped.**
+  Interface/Injection/Grant/Translation were never built and are a dead
+  direction, superseded by ADR-0035's unconditional-delivery model
+  (confirmed by grep: zero matches anywhere in `src/` for any of their
+  concrete nouns). Context's deploy-time half did ship, but unrecognizably
+  differently from this doc's own design — a plain `dict`
+  (`deploy_controller.py`'s `step_outputs`), never a dedicated Pydantic
+  model — plus `DeploymentOutputStore` (ADR-0036) for the cross-run case
+  this doc never anticipated at all. `${step:step_name.output_key}`
+  shipped as `${output:step.key}`. The one piece that wasn't dead —
+  Outputs Declaration — was split out to its own *active* design doc,
+  [output-declarations.md](../work/output-declarations.md), before this one was
+  archived. Kept here as the full investigation record rather than
+  deleted.
+- Last updated: 2026-10-12
 
 ## Overview
+
+**Historical note (2026-10-12):** the paragraph below is left as written
+for the historical record of how this doc reasoned at the time — `deploy
+run` has since been built (ADR-0027), resolving the premise it describes
+as still-blocking. See "Re-check against the real codebase" further down
+for what's actually true today.
 
 Records the current conceptual design for how a provisioner instance
 receives values at build/deploy time — worked out in
@@ -57,12 +71,61 @@ has a `references` field):
   variables/secrets/features plus `stage_outputs` from prior stages.
   `${step:step_name.output_key}` is the token that reads from it (not yet
   added to `VALUE_TOKEN_KINDS` — see
-  [value-token-resolution.md](value-token-resolution.md)).
+  [value-token-resolution.md](../work/value-token-resolution.md)).
 
 **Rejected**: Requirement (`spec.references` as a schema field) — both of
 its v1 jobs (provisioner scoping, typo-catching) are better solved without
 it: scoping is derived (Injection), typo-catching is a direct Phase 2
 `Environment` cross-check.
+
+## Re-check against the real codebase (2026-10-12)
+
+Prompted by a direct question while reviewing the (separately built)
+cross-run step-output feature ([cross-run-step-output-delivery.md](../work/cross-run-step-output-delivery.md),
+[ADR-0036](../decisions/0036-cross-run-key-value-output-store.md)), which
+turned out to be this doc's own `${step:...}`/Context vision realized —
+just via a completely different, independently-designed path, not an
+implementation of this doc.
+
+- **Interface/Injection/Grant/Translation: confirmed dead, not just
+  stale.** Grepped `src/` directly for every concrete noun this doc names
+  — zero matches. `ProvisionerModel` has no `needs:` field (Interface's
+  whole escape-hatch design depends on one existing). Nothing parses a
+  provisioner's declared variables. Nothing derives a per-stage secret
+  grant (`resolve_values()` resolves every secret unconditionally,
+  `--dry-run` included — confirmed directly, no stage-kind branching
+  anywhere in `deploy_controller.py`). No alias/translation table exists
+  anywhere. ADR-0035 (unified Terraform projection) solved the adjacent
+  real problem — getting values into Terraform at all — via unconditional
+  delivery instead, which needs none of these four concepts: no
+  declared-variable ground truth to intersect against (Injection), no
+  per-module naming to bridge (Translation), and this repo's real secret-
+  handling posture turned out to be "redact in transit, never withhold at
+  plan time" rather than Grant's per-stage allow/deny design.
+- **Context: realized, differently shaped, worth noting as validated
+  rather than ignored.** The *principle* this doc argued for — a required-
+  but-missing dependency is a hard, loud failure, never silent — was
+  independently re-derived for the output case specifically
+  (`_merge_durable_outputs()`'s asymmetric not-found-vs-stale handling),
+  without anyone consulting this doc while building it. Worth reading as
+  confirmation the principle was right, not as this doc's own
+  implementation.
+- **Resumability — RESOLVED, this doc's own flagged open question.**
+  "Whether a partially-completed multi-stage deploy can ever be resumed
+  across separate CLI invocations" (raised below, left genuinely
+  undecided) is now directly answered: `DeploymentOutputStore` durably
+  persists every step's output across invocations specifically so a later,
+  separate `deploy run` can resume consuming an earlier one's results.
+  Nobody wrote this connection down before this re-check.
+- **Outputs Declaration — the one piece that's still a real, open gap.**
+  This doc's own Remaining Work list named it directly ("a ground truth to
+  validate `${step:...}`'s key against, symmetric to Interface... open,
+  unscheduled") and it's still true today: nothing declares *"step1 will
+  produce `vm_ip`"* anywhere, so a typo'd `${output:step1.vm_ipp}` passes
+  `strata validate` cleanly and only fails deep inside an actual
+  `deploy run`. Unlike the other four concepts, this one was never
+  superseded by anything — split out to its own design doc:
+  [output-declarations.md](../work/output-declarations.md).
 
 ## Build-time vs. deploy-time Context — what exists today, grounded against `build_run()`
 
@@ -171,42 +234,45 @@ even have noticed.
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md) — the full Requirement/Interface/Injection/Grant/Value/Translation analysis
 - [ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md) — Context, `${step:}` token
 - [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md) — `ProvisionerModel`/`ProvisioningStepModel`, the declarations this design will eventually execute against
+- [ADR-0035](../decisions/0035-unified-terraform-projection.md) — the
+  unconditional-delivery model that made Interface/Injection/Grant/
+  Translation moot (2026-10-12 re-check finding; ADR-0035 itself predates
+  and does not reference this connection)
+- [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md) —
+  `DeploymentOutputStore`, the real (differently-shaped) realization of
+  this doc's deploy-time Context, and the answer to the resumability
+  question below
+- [output-declarations.md](../work/output-declarations.md) — the one surviving
+  open item, split out to its own design doc
 
 ## Remaining Work / Open Questions
 
-- **Deploy-time Context (ADR-0006's real target) waits on `deploy run`**,
-  which does not exist — no stages, no sequencing, nothing to accumulate
-  outputs from. Interface/Injection/Grant/Translation are unbuilt for the
-  same reason: all four presuppose a provisioner is actually being
-  planned/applied, not just rendered.
-- **Narrow, separately-actionable, ready now:**
-  `TerraformIntegration.default_output()` discards `resolved.values`
-  entirely (`del resolved`) — the build-time `ValueResolution` Context
-  analog already exists and is already threaded through `build_run()`; it
-  simply isn't written to a `.tfvars.json` file. Fixing this does not
-  require deploy-time Context at all — tracked as its own item in
-  [build-command.md](build-command.md), not blocked on anything above.
-- Provisioner capability lookup (`always`/`conditional`/`never` per
-  `ProvisionerType`) — not built. Its `terraform` = always-capable branch
-  needs "Interface parse-failure policy" above (hard-fail by default,
-  `needs:` as the deliberate opt-out) built alongside it, not as a
-  follow-on — a capability lookup that can silently produce zero
-  injection on a parser hiccup would be worse than not having the check
-  at all.
-- Concrete shape of Context as a Pydantic model — not designed in detail,
-  only sketched (mirrors v1's `ResolvedValues` dataclass). The build-time
-  half now has a real, working analog (`ValueResolution`,
-  `strata/integrations/resolved_context.py`) worth checking directly before
-  designing Context's Pydantic shape from scratch — they may be the same
-  object with a `stage_outputs` field added, not two separate types.
-- "Outputs declaration" (a ground truth to validate `${step:...}`'s key
-  against, symmetric to Interface) — open, unscheduled.
-- Exact schema for Grant's override (`grant.allow`/`grant.deny` on a stage)
-  — conceptually decided, fields not named yet.
-- Resumability of a partially-completed multi-stage deploy across separate
-  CLI invocations — raised while confirming Context's lifetime (see above),
-  genuinely undecided; check v1's per-stage locking fields for adjacent
-  evidence before designing.
+- ~~**Deploy-time Context waits on `deploy run`**~~ — `deploy run` now
+  exists (ADR-0027). Interface/Injection/Grant/Translation remain unbuilt
+  regardless — not because they're still waiting on anything, but because
+  ADR-0035's unconditional-delivery model made them moot (see "Re-check
+  against the real codebase" above). Not revisiting.
+- ~~**`TerraformIntegration.default_output()` discards `resolved.values`**~~
+  — re-checked 2026-10-12: not a live bug. That method's own current
+  docstring confirms `resolved`/`provisioner` are deliberately unused —
+  the real data flow is `graph`'s own fields via `build_strata_payload()`
+  (ADR-0035), a mechanism that didn't exist when this item was written.
+- ~~Provisioner capability lookup / Interface parse-failure policy~~ — moot,
+  same reason as Interface/Injection above: nothing introspects a
+  provisioner's declared variables under the unconditional-delivery model,
+  so there is nothing to look up a capability for.
+- ~~Concrete shape of Context as a Pydantic model~~ — moot as originally
+  scoped (Context itself is a plain `dict`, not a model, and nothing
+  indicates that will change); `DeploymentOutputStore`'s own
+  `DeploymentStepOutputs` dataclass (ADR-0036) is the closest real analog
+  that did get a formal shape, for the cross-run case specifically.
+- ~~Exact schema for Grant's override~~ — moot, Grant itself is moot.
+- ~~Resumability of a partially-completed multi-stage deploy across
+  separate CLI invocations~~ — **RESOLVED**, see "Re-check against the
+  real codebase" above: `DeploymentOutputStore` (ADR-0036) is the answer.
+- **"Outputs declaration" — the one item still open.** Split out to
+  [output-declarations.md](../work/output-declarations.md) for its own design
+  thought, rather than left as a single unscheduled bullet here.
 
 ## Changelog
 
@@ -223,7 +289,7 @@ even have noticed.
   ready-to-implement gap while grounding this: `TerraformIntegration
   .default_output()` silently discards `resolved.values` (`del resolved`)
   instead of writing it — not a missing Context, a one-method fix, tracked
-  in [build-command.md](build-command.md) instead of here. No code changed
+  in [build-command.md](../work/build-command.md) instead of here. No code changed
   in this update.
 - 2026-09-30: **Designed the Interface parse-failure policy**, per direct
   request, prompted by a real question about gap #15's
@@ -241,3 +307,17 @@ even have noticed.
   unauthored empty `needs:` would silently zero out injection entirely, a
   worse failure than the one being escaped. Design only — nothing
   implemented yet.
+- 2026-10-12: **Re-checked against the real codebase**, prompted while
+  reviewing the separately-built cross-run step-output feature. Found
+  Interface/Injection/Grant/Translation were never built at all (zero
+  matches anywhere in `src/` for any of their concrete nouns) and are
+  moot under ADR-0035's unified Terraform projection (unconditional
+  delivery, built independently, never reconciled against this doc until
+  now). Context's deploy-time half did get built, just as a plain `dict`
+  (`deploy_controller.py`'s `step_outputs`) plus `DeploymentOutputStore`
+  (ADR-0036) for the cross-run case — resolving this doc's own flagged
+  "resumability across invocations" open question in the process, never
+  previously connected. The one surviving, still-genuinely-open item —
+  Outputs Declaration — split out to its own design doc,
+  [output-declarations.md](../work/output-declarations.md). No code changed;
+  documentation only.

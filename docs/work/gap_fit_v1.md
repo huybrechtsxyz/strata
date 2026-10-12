@@ -980,7 +980,7 @@ durable, reviewable record.
   own "Remaining Work / Open Questions" section already tracks this
   ("Terraform input validation against `variables.tf` — v1 fails the build
   on a declared-input/schema mismatch before `apply` would.
-  [provisioning-injection-model.md](provisioning-injection-model.md)
+  [provisioning-injection-model.md](../archive/provisioning-injection-model.md)
   mentions parsing `variables.tf` as a capability lookup, but not as a
   build-time gate."). Cross-referenced into this file's numbered gap list
   for the first time while migrating `.v2-cfg`'s spoke stack (2026-09-29):
