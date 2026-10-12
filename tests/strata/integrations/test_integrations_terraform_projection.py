@@ -8,7 +8,7 @@ topology, one resource, one namespace, one firewall.
 
 import json
 
-from strata.integrations.resolved_context import ResolvedWorkspaceGraph
+from strata.integrations.resolved_context import ResolvedAssetInfo, ResolvedWorkspaceGraph
 from strata.integrations.terraform_projection import (
     build_strata_locals,
     build_strata_payload,
@@ -387,7 +387,7 @@ def test_build_strata_payload_always_emits_every_category_even_when_empty():
     """Unlike `build_configuration_payloads()`/`planned_files()`'s old
     'skip empty categories' convention (which existed to avoid writing an
     empty *file* per category — no longer relevant with one shared file),
-    every one of the fifteen keys is always present, empty when unused —
+    every one of the sixteen keys is always present, empty when unused —
     resolves the Type design section's own open question in favor of a
     strict, no-top-level-`optional()` generated type."""
     payload = build_strata_payload(_graph(topology_name=None))
@@ -407,6 +407,7 @@ def test_build_strata_payload_always_emits_every_category_even_when_empty():
         "flags",
         "variables",
         "default_tags",
+        "assets",
     }
     for empty_category in (
         "tenant",
@@ -419,8 +420,22 @@ def test_build_strata_payload_always_emits_every_category_even_when_empty():
         "flags",
         "variables",
         "default_tags",
+        "assets",
     ):
         assert payload[empty_category] == {}
+
+
+def test_build_strata_payload_assets_present():
+    """docs/design/asset-management.md Phase 4 — `strata.assets` is keyed by
+    name, projecting ResolvedAssetInfo's plain `path`/`files` fields, zero
+    I/O of its own."""
+    graph = ResolvedWorkspaceGraph(
+        workspace=_workspace(resources=[], topology_name=None),
+        providers={"hetzner_dc_eu_de": _provider()},
+        resolved_assets={"openapi": ResolvedAssetInfo(path="assets/openapi", files=["openapi.json", "openapi.xml"])},
+    )
+    payload = build_strata_payload(graph)
+    assert payload["assets"] == {"openapi": {"path": "assets/openapi", "files": ["openapi.json", "openapi.xml"]}}
 
 
 # ---------------------------------------------------------------------------

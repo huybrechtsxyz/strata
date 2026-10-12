@@ -70,6 +70,41 @@ def compile_pattern(pattern: str) -> re.Pattern[str]:
     return re.compile("^" + "".join(pieces) + "$")
 
 
+def fill_pattern(template: str, values: dict[str, str]) -> str:
+    """Fill a `{name}`-templated template's segment tokens from `values` —
+    the inverse of `compile_pattern()` above (that one *matches* a template
+    against a real path; this one *fills* it into one). Used by
+    `AssetSpecModel.source_path` (docs/design/asset-management.md) to
+    template an asset's path against a deployment's resolved
+    `spec.properties` at build time.
+
+    Every `{name}` token in `template` must have a matching key in `values`;
+    an unknown token raises `ValueError` rather than being substituted with
+    an empty string or left literal in the resulting path, so a missing
+    `properties` key fails loudly at the point of filling, not later as a
+    confusing "path does not exist" error.
+    """
+
+    def _substitute(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in values:
+            raise ValueError(f"Unknown token '{{{key}}}' in template '{template}': no matching value provided")
+        return str(values[key])
+
+    return _SEGMENT_TOKEN.sub(_substitute, template)
+
+
+def segment_tokens(template: str) -> list[str]:
+    """Return every `{name}` segment token in `template`, in order of
+    appearance — lets a caller inspect which tokens a template references
+    *before* filling it (e.g. `sync_asset()`'s check for an unresolved
+    `${...}` Value token in the property that would fill a given segment,
+    docs/design/asset-management.md Phase 3), without duplicating
+    `_SEGMENT_TOKEN`'s regex at the call site.
+    """
+    return [match.group(1) for match in _SEGMENT_TOKEN.finditer(template)]
+
+
 def split_directory_and_filename(relative_path: str) -> tuple[str, str]:
     """Split `relative_path` into its containing directory and bare filename.
 

@@ -2,7 +2,7 @@
 
 - Status: draft — not started, low priority
 - Last updated: 2026-10-12
-- Split out from: [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md)
+- Split out from: [cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md)
   Implementation Plan step 5, so it isn't lost once that doc's own status
   line stops mentioning it as "not yet built"
 
@@ -49,7 +49,7 @@ exactly as already defined, commented out):
 
 ## Related Decisions
 
-- [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md) —
+- [cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md) —
   the parent feature; `DeploymentOutputStore.record()`'s own CAS-retry
   loop is the thing this doc would start recording.
 - [key-value-store-integration.md](key-value-store-integration.md) — the

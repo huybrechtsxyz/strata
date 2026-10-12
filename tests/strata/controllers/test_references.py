@@ -220,6 +220,7 @@ def test_workspace_references_are_discovered_from_its_own_fields():
         "spec.firewalls[]",
         "spec.dns_zones[]",
         "spec.networks[]",
+        "spec.assets[]",
         "spec.resources[].resource",
         "spec.provisioners[].source.remote",
         "spec.provisioners[].integration",

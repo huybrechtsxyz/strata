@@ -24,7 +24,7 @@ time until the referencing step's tool actually runs and the token
 substitution fails to find a value. A typo'd `${output:step1.vm_ipp}`
 passes validation cleanly and only surfaces deep inside a real deploy,
 exactly the "did not resolve to a value" `ValueError` class of bug
-[cross-run-step-output-delivery.md](cross-run-step-output-delivery.md)
+[cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md)
 already fixed for the *step*-level case (`_merge_durable_outputs()`) but
 never for the *key* level.
 
@@ -211,12 +211,7 @@ Two real options, not yet decided between:
 - **Auto-derived** — parse real `output "X" {}` blocks out of the synced
   `.tf` source, mirroring Interface's own (abandoned) auto-derivation
   idea for *input* variables. Stays in sync automatically, removing the
-  double-bookkeeping burden entirely for Terraform specifically, but
-  reintroduces the exact complexity `provisioning-injection-model.md`'s
-  "Interface parse-failure policy" wrestled with and never got built:
-  dynamically-generated output names (`for_each`/`count`), parse
-  failures on a valid-but-unsupported HCL construct, and a tool-specific
-  mechanism that simply doesn't exist for Helm/Compose at all.
+  double-bookkeeping burden entirely for Terraform specifically.
 
   **Must be static regex/HCL scanning, not asking Terraform itself**
   (checked directly, 2026-10-12): `terraform validate`/`init` never touch
@@ -227,11 +222,48 @@ Two real options, not yet decided between:
   That rules it out on two independent grounds: `build run` is
   architecturally no-network-by-default (ADR-0022 D4, "build run
   renders; it does not execute"), and `strata validate` is static
-  everywhere else in this codebase. The only auto-derive approach that
-  actually fits is scanning synced `.tf` source text for `output "X" {}`
-  blocks via regex — the exact same technique `terraform.py`'s
-  `_STRATA_VARIABLE_DECLARATION` already uses for `variable "strata" {}`
-  detection, not a real `terraform` invocation at all.
+  everywhere else in this codebase.
+
+  **A real HCL2 parser already exists in this repo as a dependency,
+  checked directly (2026-10-12) rather than assumed** — `python-hcl2>=8.0`
+  (`pyproject.toml`), already used for exactly this kind of structural
+  `.tf` scan in `sbom_collectors/terraform_collector.py` (extracting
+  `required_providers`/`module {}` blocks). Real, grounded findings from
+  that existing code, not speculation:
+  - **Not a semantic query API** — `hcl2.load(fh)` parses the full syntax
+    tree into a plain nested `dict`/`list`, nothing more. There is no
+    `hcl2.get_outputs(file)`; the caller still writes the extraction walk
+    by hand, exactly the "HCL language library, then scan it yourself"
+    shape guessed at — confirmed, not assumed.
+  - **Labeled blocks (`output "name" {}`, same shape as `module "name" {}`)
+    turn the label into a dict key**: `{"output": [{"vm_ip": [{"value": ...}]}]}`
+    — so extracting output *names* specifically is just `block.keys()`
+    (filtered past a `__is_block__` sentinel key the library also emits),
+    genuinely simple once you know the shape.
+  - **String values keep their surrounding quotes** (`'"some-string"'`,
+    not `"some-string"`) — the existing code has its own
+    `_strip_hcl_string()` helper to work around this; a real, confirmed
+    quirk, not a hypothetical one.
+  - **Parse failures raise a catchable exception** (`except Exception`
+    in the real code, since the library doesn't document one single
+    exception type) — confirmed directly via a real test
+    (`test_collect_warns_on_an_unparseable_tf_file`) feeding deliberately
+    broken HCL and asserting a clean, caught failure — not a silent
+    wrong-result or a crash.
+  - **Maturity**: a third-party Lark-grammar reimplementation of HCL2,
+    not HashiCorp's own parser — real, documented lag-behind-real-syntax
+    risk exists (the same caveat `provisioning-injection-model.md`'s
+    "Interface parse-failure policy" already flagged), but it's already a
+    proven, working dependency in this exact codebase for a structurally
+    adjacent task, not an unproven external risk.
+  - **Correction to an earlier overcautious note in this doc**: `output`
+    blocks, unlike `resource`/`module`, never support `for_each`/`count`
+    in real Terraform — an output's label is always a static string
+    literal. The "dynamically-generated output names" concern that
+    applies to *variable*/*resource* auto-derivation (Interface's own
+    abandoned worry) does not apply to output *names* at all — only to
+    an output's *value* expression, which this design never needs to
+    evaluate, only the name.
 
 **Leaning towards manual-only as the real first cut**, deferring
 auto-derivation the same way this repo already defers several other
@@ -257,7 +289,7 @@ unchanged.
   precedent the alternative (schema-field) direction mirrors, for outputs
   instead of inputs — not needed by the leading (dynamic) direction, which
   checks real collected data instead of a declared ground truth.
-- [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md) /
+- [cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md) /
   [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md) — the
   feature this extends: `_merge_durable_outputs()` already does the
   step-level pre-flight check; the leading direction here is the
@@ -333,3 +365,18 @@ unchanged.
   of this doc's own direction. The original schema-field sketch is kept
   as an analyzed alternative, not deleted. No code changed; documentation
   only.
+- 2026-10-12: Researched real HCL2 parsing options for the (now
+  secondary, alternative-direction-only) auto-derivation idea, prompted by
+  a direct question about library stability/capability. Found
+  `python-hcl2>=8.0` is already a real dependency of this repo, already
+  used for a structurally adjacent `.tf`-scanning task
+  (`sbom_collectors/terraform_collector.py`) — confirmed its real shape
+  (plain syntax-tree dict, no semantic query API; labeled blocks keyed by
+  their own label; quoted string values; broad-exception parse-failure
+  handling, directly tested) by reading that real code and its test,
+  not assumed. Also corrected an overcautious claim: output block *names*
+  (unlike variable/resource names) are always static string literals in
+  real Terraform syntax — no `for_each`/`count` dynamic-naming risk
+  applies to them at all, unlike the concern Interface's own abandoned
+  auto-derivation idea had for *input* variables. No code changed;
+  documentation only.

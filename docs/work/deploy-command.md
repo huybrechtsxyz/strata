@@ -7,21 +7,26 @@
   deliberately deferred (no real evidence forces them yet); a confirmed
   gap (not just a hypothetical) remains for `store: artifact` at deploy
   time (Remaining Work item 8); Helm/Compose deploy orchestration
-  (`docs/work/gap_fit_v1.md` gap #13) is now implemented for both container tools;
-  cross-invocation output access (a later, separate `deploy run` reading
-  an earlier one's outputs) is designed but not implemented (new section
-  below), including a static `SUPPORTS_OUTPUT` capability flag and two
-  validate/build-time checks for a doomed or non-durable `${output:}`
-  reference — **review (2026-09-29) found a real, confirmed prerequisite
-  bug blocking it**: `strata validate` already rejects every
-  `${output:...}` token unconditionally today, even gap #12's own
-  already-working, already-tested claimed example (empirically
-  reproduced) — fixing that is now step (0) of this design, ahead of the
-  new capability/checks
-- Last updated: 2026-10-06 (graduated the `--smoke-test`/`--dry-run`-
-  redefine/streaming feature to its own finished design doc + ADR-0030,
-  below — `unresolved_value_tokens()` staleness note from 2026-09-29
-  still applies)
+  (`docs/work/gap_fit_v1.md` gap #13) is now implemented for both container tools.
+  **Cross-invocation output access — status updated 2026-10-12:** the
+  false-rejection prerequisite bug (step (0) below) is **BUILT** —
+  `WorkspaceService.claimed_document_names()`, `_documents_reachable_
+  from_workspace()`'s `(document, claimed)` pairs, and
+  `unresolved_value_tokens()`'s `output_claimed` parameter all confirmed
+  directly in real code, `strata validate` no longer false-rejects a
+  claimed `${output:...}` reference. Steps (1)-(3) (the `SUPPORTS_OUTPUT`
+  capability flag, the two static doomed/non-durable checks, and the
+  opportunistic live-re-collection mechanism) remain design-only, not
+  built — **and the actual cross-invocation durability problem these
+  were aimed at ended up solved a different way**: `DeploymentOutputStore`
+  ([ADR-0036](../decisions/0036-cross-run-key-value-output-store.md),
+  [cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md))
+  durably persists outputs via a pluggable key/value backend instead of
+  re-querying a Terraform step's own remote backend live — see the
+  "Status" section below this design's own body for exactly how steps
+  (1)-(3) now relate to that shipped mechanism.
+- Last updated: 2026-10-12
+
 
 See also: [docs/design/deploy-plan-preview.md](../design/deploy-plan-preview.md)
 ([ADR-0030](../decisions/0030-deploy-run-plan-preview-and-streaming.md))
@@ -884,7 +889,19 @@ schema alone (no cloud call, no subprocess):
    ever needs it split across processes, which the schema alone cannot
    rule out or confirm).
 
-#### Blocking prerequisite found on review (2026-09-29): `strata validate` already rejects EVERY `${output:...}` token today, even ones that already work
+   **Needs revisiting (2026-10-12), not yet done:** this check's premise
+   — "no `backend:` block means never durable across invocations" — is
+   now incomplete. `DeploymentOutputStore` ([ADR-0036](../decisions/0036-cross-run-key-value-output-store.md))
+   gives a workspace an *alternative* durability path, independent of
+   whether the Terraform provisioner itself has a remote `backend:`
+   configured — a workspace with local-only Terraform state but a
+   configured `output_store` genuinely is durable across invocations
+   today, and this warning would incorrectly fire for it if built as
+   originally specified. If (1)/(2) are ever built, this specific
+   condition needs to also check `workspace.spec.output_store`/
+   `.output_store_integration`, not just `provisioner.backend`.
+
+#### Blocking prerequisite — RESOLVED (2026-10-12), found on review (2026-09-29): `strata validate` already rejects EVERY `${output:...}` token today, even ones that already work
 
 Re-reading `unresolved_value_tokens()` (`environment_service.py`, the
 function `strata validate`'s Phase 2 pass actually calls, via
@@ -922,11 +939,23 @@ rejected by `strata validate` alone today.** This is a genuine,
 independent gap — not a consequence of anything proposed above, and worth
 fixing regardless of whether the rest of this design is ever built.
 
-**Consequence for this design**: checks 1/2 above are unreachable as
-additive new code — `unresolved_value_tokens()`'s current blanket
-rejection fires first, for every `${output:...}` token, claimed or not.
+**Fixed (2026-10-12)** — confirmed directly against current `src/`, not
+assumed: `unresolved_value_tokens()` now takes an `output_claimed: bool =
+False` keyword, `_documents_reachable_from_workspace()` threads
+`(document, claimed)` pairs computed from the new
+`WorkspaceService.claimed_document_names()`, and
+`_check_deployment_value_tokens()` passes `output_claimed=claimed`
+through — exactly the "Concrete implementation plan" below, built
+verbatim. The reproduction above no longer reproduces; a claimed
+`${output:...}` reference now passes `strata validate` correctly.
 
-#### Expanded finding (2026-09-29): the same bug also affects Modules, not just DNS/network/firewall
+**Consequence for this design, updated**: checks 1/2 below were
+originally described as blocked ("unreachable as additive new code")
+by the bug above — that blocker is gone, so if (1)/(2) are ever built
+they can now layer directly on top of the fixed, claiming-aware check
+without first needing to fix anything.
+
+#### Expanded finding (2026-09-29) — RESOLVED alongside the above: the same bug also affects Modules, not just DNS/network/firewall
 
 `unresolved_value_tokens()` has no per-document-kind special-casing at
 all — it walks `model_dump()` generically, so the blanket rejection above
@@ -946,7 +975,7 @@ resource/provider/topology) into one plain `list[PlatformBaseModel]` with
 no per-document memory of which step (if any) claims it, before handing
 each to the same `unresolved_value_tokens()` call uniformly.
 
-### Concrete implementation plan (design only, not yet built)
+### Concrete implementation plan — BUILT (2026-10-12), exactly as designed below
 
 1. **`WorkspaceService.claimed_document_names()`** (new method,
    `workspace_service.py`) — a pure function of this workspace's own
@@ -1030,6 +1059,13 @@ plumbing was ever asked to solve.
 
 ### Worked example
 
+**Historical illustration of the problem (2026-09-29) — the specific
+"re-query the Terraform backend live" mechanism it shows was not what
+ended up built; see "Status" above.** The scenario (two steps, separate
+CI jobs) is still accurate and still the real motivating shape;
+`DeploymentOutputStore` solves it via a durably-written record instead of
+step (3)'s live re-collection against `core_iac`'s own remote backend.
+
 ```yaml
 # workspace.yaml (abridged) — two steps, no shared invocation required
 spec:
@@ -1094,28 +1130,38 @@ spec:
 
 ### Status
 
-Design only, not yet implemented — four parts now, in dependency order:
-(0) **prerequisite, independently valuable on its own, and now confirmed
-to affect Modules too, not just DNS/network/firewall**: add
-`WorkspaceService.claimed_document_names()`, make
-`_documents_reachable_from_workspace()` return claiming alongside each
-document, and give `unresolved_value_tokens()` an `output_claimed`
-parameter — see "Concrete implementation plan" above for the exact
-4-step breakdown. This alone fixes a confirmed real bug (`strata
-validate` currently rejects gap #12's own already-working, already-tested
-DNS example, and would reject an equally-valid claimed Module example the
-same way); (1) the `SUPPORTS_OUTPUT` capability flag on `Integration`;
+**Updated 2026-10-12.** (0) is **BUILT** (`gap_fit_v1.md`'s own 2026-09-29
+entry confirms: `WorkspaceService.claimed_document_names()`,
+`_documents_reachable_from_workspace()`'s `(document, claimed)` pairs,
+`unresolved_value_tokens()`'s `output_claimed` parameter — 11 tests,
+full suite green). Per the user's own framing at the time ("next up is
+revisiting the value resolver... rather than continuing straight through
+those remaining steps"), (1)-(3) were deliberately not picked up next —
+still design-only, not built:
+(1) the `SUPPORTS_OUTPUT` capability flag on `Integration`;
 (2) the two Phase 2 static checks (`output_reference_unsupported` error,
-`output_reference_not_durable` warning), layered on top of (0)'s now-
-claiming-aware check; (3) the opportunistic live-re-collection itself in
-`deploy_run()`. (0)-(2) need no new deploy mechanism to exist first and
-are independently useful even
-before (3) is built. `docs/work/gap_fit_v1.md` was not updated with a new numbered
-gap for (1)-(3) — a genuine capability *extension* beyond both v1 and v2's
-current design (v1 never solved cross-invocation output access via strata
-either). (0) **is** exactly gap-shaped (a real, confirmed, currently-wrong
-behavior) and should get its own numbered entry in `docs/work/gap_fit_v1.md` when
-this is implemented, separate from the (1)-(3) extension.
+`output_reference_not_durable` warning — the latter needs revisiting per
+the note earlier in this section, now that `output_store` is an
+alternative durability path); (3) the opportunistic live-re-collection
+itself in `deploy_run()` (re-run `terraform init` + `output -json`
+against the producing step's own remote backend).
+
+**(3) was not the mechanism that ended up solving cross-invocation
+durability** — a separate, later effort
+([ADR-0036](../decisions/0036-cross-run-key-value-output-store.md),
+[cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md))
+built `DeploymentOutputStore` instead: a pluggable key/value backend the
+producing step durably writes to and a later invocation reads from,
+rather than re-querying the Terraform backend live. That's a materially
+different mechanism (works for any `SUPPORTS_OUTPUT`-capable tool, not
+just ones with a real remote Terraform backend; needs its own configured
+backend rather than piggy-backing on the IaC tool's own state) — (1)/(2)
+remain independently valid ideas (a static, structural "can this ever
+work" check is a different question from "does the durable record
+actually exist," the same distinction [output-declarations.md](output-declarations.md)
+later drew for key-level checking), but (3) specifically should be
+considered superseded, not merely deferred, should (1)/(2) ever get
+picked back up.
 
 ## Remaining Work / Open Questions
 

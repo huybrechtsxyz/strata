@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from strata.controllers.source_sync import SourceSyncError, sync_module_source, sync_source
+from strata.controllers.source_sync import SourceSyncError, sync_asset, sync_module_source, sync_source
+from strata.models.asset_model import AssetModel
 from strata.models.common_models import SourceModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
 
@@ -156,6 +157,107 @@ def test_module_source_same_document_attached_twice_does_not_collide(tmp_path: P
     assert (dir_a / "Chart.yaml").exists()
     assert (dir_b / "Chart.yaml").exists()
     assert dir_a != dir_b
+
+
+# ---------------------------------------------------------------------------
+# sync_asset() — docs/design/asset-management.md Phase 3
+# ---------------------------------------------------------------------------
+
+
+def _asset(source_path: str, remote: str | None = None) -> AssetModel:
+    spec: dict[str, object] = {"source_path": source_path}
+    if remote is not None:
+        spec["remote"] = remote
+    return AssetModel.model_validate({"meta": {"name": "openapi"}, "spec": spec})
+
+
+def test_asset_fills_source_path_from_properties_and_copies_a_directory(tmp_path: Path):
+    root = tmp_path / "solution"
+    _write(root / "assets" / "contoso" / "prod" / "openapi" / "openapi.json", "{}")
+    build_path = tmp_path / "build"
+
+    destination = sync_asset(
+        root,
+        build_path,
+        _asset("assets/{customer}/{deploy_tier}/openapi"),
+        properties={"customer": "contoso", "deploy_tier": "prod"},
+        remotes={},
+    )
+
+    assert destination == build_path / "assets" / "openapi"
+    assert (destination / "openapi.json").read_text() == "{}"
+
+
+def test_asset_single_file_source_lands_inside_the_destination_directory(tmp_path: Path):
+    root = tmp_path / "solution"
+    _write(root / "assets" / "cert.pem", "---cert---")
+    build_path = tmp_path / "build"
+
+    destination = sync_asset(
+        root, build_path, _asset("assets/{deploy_tier}.pem"), properties={"deploy_tier": "cert"}, remotes={}
+    )
+
+    assert destination == build_path / "assets" / "openapi"
+    assert (destination / "cert.pem").read_text() == "---cert---"
+
+
+def test_asset_resolves_against_a_declared_remote(tmp_path: Path):
+    solution_root = tmp_path / "solution"
+    _write(solution_root / "vendor" / "assets-repo" / "openapi" / "openapi.json", "{}")
+    build_path = tmp_path / "build"
+    remote = SolutionRemoteModel(name="assets-repo", type=RemoteType.LOCAL, url="vendor/assets-repo")
+
+    destination = sync_asset(
+        solution_root,
+        build_path,
+        _asset("openapi", remote="assets-repo"),
+        properties={},
+        remotes={"assets-repo": remote},
+    )
+
+    assert (destination / "openapi.json").read_text() == "{}"
+
+
+def test_asset_unknown_remote_name_raises_clear_error(tmp_path: Path):
+    with pytest.raises(SourceSyncError, match="not declared"):
+        sync_asset(tmp_path, tmp_path / "build", _asset("openapi", remote="ghost"), properties={}, remotes={})
+
+
+def test_asset_missing_token_value_raises_clear_error(tmp_path: Path):
+    """A `{name}` token with no matching properties key is a clear build-time
+    error, not a silent empty-string substitution."""
+    with pytest.raises(SourceSyncError, match="Unknown token"):
+        sync_asset(tmp_path, tmp_path / "build", _asset("assets/{deploy_tier}/openapi"), properties={}, remotes={})
+
+
+def test_asset_missing_on_disk_variant_raises_clear_error(tmp_path: Path):
+    root = tmp_path / "solution"
+    root.mkdir()
+    with pytest.raises(SourceSyncError, match="does not exist"):
+        sync_asset(
+            root,
+            tmp_path / "build",
+            _asset("assets/{deploy_tier}/openapi"),
+            properties={"deploy_tier": "prod"},
+            remotes={},
+        )
+
+
+def test_asset_unresolved_value_token_in_filling_property_raises_dedicated_diagnostic(tmp_path: Path):
+    """A property value that still contains an unresolved '${var:}'-style
+    token (deploy-time-only, docs/design/value-token-resolution.md) must
+    fail with a clear diagnostic, not a confusing 'path does not exist'
+    error (Remaining Work #2)."""
+    root = tmp_path / "solution"
+    root.mkdir()
+    with pytest.raises(SourceSyncError, match="unresolved '\\$\\{\\.\\.\\.\\}' token"):
+        sync_asset(
+            root,
+            tmp_path / "build",
+            _asset("assets/{deploy_tier}/openapi"),
+            properties={"deploy_tier": "${var:TIER}"},
+            remotes={},
+        )
 
 
 def test_module_source_unknown_remote_raises_clear_error(tmp_path: Path):

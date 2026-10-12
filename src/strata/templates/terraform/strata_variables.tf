@@ -13,19 +13,19 @@ variable "strata" {
   description = "Everything strata projects for this deployment (ADR-0035)."
   type = object({
     workspace = object({
-      name                    = string
-      version                 = string
-      description             = string
-      tags                    = list(string)
-      deployment              = string
-      deployment_version      = string
-      deployment_description  = string
-      deployment_tags         = list(string)
-      environment             = string
-      platform_version        = string
-      labels                  = map(any)
-      configuration           = any
-      custom                  = any
+      name                   = string
+      version                = string
+      description            = string
+      tags                   = list(string)
+      deployment             = string
+      deployment_version     = string
+      deployment_description = string
+      deployment_tags        = list(string)
+      environment            = string
+      platform_version       = string
+      labels                 = map(any)
+      configuration          = any
+      custom                 = any
     })
 
     # Every other key here is always present too (build_strata_payload()'s
@@ -95,6 +95,11 @@ variable "strata" {
       custom         = any
       default_labels = map(string)
       custom_labels  = map(string)
+    }))
+
+    assets = map(object({
+      path  = string
+      files = list(string)
     }))
 
     dns        = map(any)

@@ -310,7 +310,7 @@ can't reach." Real migration cost: every existing `targets:` list in a
 real workspace needs splitting by kind.
 
 **Independent reinforcement, found the same day in a different doc:**
-[asset-management.md](asset-management.md) arrived at the identical
+[asset-management.md](../design/asset-management.md) arrived at the identical
 "pool on `WorkspaceSpecModel`, selection on `ProvisioningStepModel`"
 shape for its own new `assets` field — after first trying to attach it to
 `ProvisionerModel` and rejecting that specifically *because* it didn't
@@ -770,7 +770,7 @@ action this phase.
   7's `topology:` field also being implemented; neither is built yet.
 - 2026-10-10: **Decided point 9** — split `targets` into
   `resources`/`namespaces`/`topologies`, confirmed after independent
-  reinforcement from `asset-management.md` reaching the identical
+  reinforcement from [asset-management.md](../design/asset-management.md) reaching the identical
   pool-then-select shape for its own `assets` field in the same session.
   Points 7/8 (the `topology:` expansion field, deriving dns/firewall/
   network ownership from targeted resources) remain open, not yet

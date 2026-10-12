@@ -42,6 +42,7 @@ import yaml
 from strata.models.common_models import PlatformBaseModel, PlatformKind
 from strata.models.solution_model import SolutionModel
 from strata.services.artifact_service import ArtifactService
+from strata.services.asset_service import AssetService
 from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
@@ -93,6 +94,7 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.DEPLOYMENT: DeploymentService,
     PlatformKind.VERSION: VersionService,
     PlatformKind.ARTIFACT: ArtifactService,
+    PlatformKind.ASSET: AssetService,
 }
 
 

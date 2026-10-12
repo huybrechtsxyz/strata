@@ -36,19 +36,17 @@ class DnsRecordModel(PlatformBaseModel):
 
     ``value`` is a Value binding (ADR-0002): a plain string that is either a
     literal (``"1.2.3.4"``) or contains embedded ``${var:KEY}``/
-    ``${secret:KEY}``/``${feature:KEY}`` tokens (e.g. ``"${var:public_ip}"``),
-    resolved once the build/deploy layer exists. There is no ``spec.references``
-    declaring which keys are valid — a token's *key* is checked against a real
-    Environment in Phase 2 (deferred; Environment doesn't exist in v2 yet).
-
-    v1 also had an ``output_key`` field (bind a record's value to a preceding
-    deployment stage's provisioner output, e.g. a VM's public IP). Not ported
-    for now — see [ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md):
-    it depends on a shared runtime "Context" store that doesn't exist in v2 yet,
-    and folding it into the token syntax as ``${output:KEY}`` prematurely would
-    misrepresent it as having the same validation guarantees as ``var``/``secret``/
-    ``feature`` (which will be checkable against a real Environment; ``output``
-    has no equivalent ground truth, in v1 or here). Re-add once Context is built.
+    ``${secret:KEY}``/``${feature:KEY}``/``${output:STEP.KEY}``/
+    ``${value:kind.name.path}`` tokens, resolved at build/deploy time.
+    ``${output:STEP.KEY}`` (docs/decisions/0036-cross-run-key-value-output-store.md)
+    resolves a prior execution step's collected output — e.g. point an
+    ``A`` record at whatever public IP a Terraform step ends up producing
+    — as long as this record's zone is claimed by an owning step's
+    ``targets`` (``docs/work/gap_fit_v1.md`` gap #12,
+    ``WorkspaceService.claimed_document_names()``); an unclaimed zone still
+    rejects it at ``strata validate`` time. A token's *key* (for
+    ``var``/``secret``/``feature``) is checked against a real Environment
+    in Phase 2.
     """
 
     name: str = Field(..., min_length=1, description="Record name, e.g. '@', 'www', '_dmarc'")
@@ -56,7 +54,8 @@ class DnsRecordModel(PlatformBaseModel):
     value: str = Field(
         ...,
         min_length=1,
-        description="Literal value, or a string containing '${var:KEY}'/'${secret:KEY}'/'${feature:KEY}' tokens.",
+        description="Literal value, or a string containing "
+        "'${var:KEY}'/'${secret:KEY}'/'${feature:KEY}'/'${output:STEP.KEY}'/'${value:kind.name.path}' tokens.",
     )
     ttl: int | None = Field(None, ge=1, description="Record-level TTL override in seconds (>=1 if set)")
     priority: int | None = Field(None, ge=1, le=65535, description="Priority for MX/SRV records (1-65535 if set)")

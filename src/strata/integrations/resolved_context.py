@@ -150,6 +150,15 @@ class ResolvedWorkspaceGraph:
     one was given (`value_controller.resolve_version()`'s own job) — needed
     by `write_resolved_manifest()`'s optional `promotion` section. `None`
     when the deployment names no version, same as `tenant`.
+
+    `resolved_assets` (docs/design/asset-management.md Phase 4) is keyed by
+    asset name, populated by `build_controller.py`'s asset-sync step
+    (Phase 3) before the provisioning step loop — not by
+    `terraform_projection.py`, which never touches a remote or the
+    filesystem (ADR-0021 D2). Deliberately keyed only by names this
+    build's execution steps actually reference, not the full
+    `workspace.spec.assets` pool — see that doc's own "Deliberate
+    deviation" note.
     """
 
     workspace: WorkspaceModel
@@ -168,6 +177,7 @@ class ResolvedWorkspaceGraph:
     tenant: TenantModel | None = None
     deployment: DeploymentModel | None = None
     version: VersionModel | None = None
+    resolved_assets: dict[str, "ResolvedAssetInfo"] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -197,3 +207,18 @@ class ResolvedModule:
     reference: ModuleReferenceModel
     module: ModuleModel
     source_path: Path
+
+
+@dataclass(frozen=True)
+class ResolvedAssetInfo:
+    """One asset's build-time resolution (docs/design/asset-management.md
+    Phase 4) — computed once by `build_controller.py` before the step
+    loop, exactly like `ResolvedModule.source_path` is for namespace
+    modules. Carries no remote/`DocumentIndex` access itself;
+    `terraform_projection.py` only ever reads the plain fields below.
+    """
+
+    path: str
+    """Build-relative, e.g. 'assets/openapi'."""
+    files: list[str] = field(default_factory=list)
+    """Sorted filenames at that path."""

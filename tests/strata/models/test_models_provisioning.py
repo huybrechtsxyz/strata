@@ -374,6 +374,26 @@ def test_provisioning_step_rejects_duplicate_targets():
         ProvisioningStepModel.model_validate(data)
 
 
+def test_provisioning_step_assets_defaults_to_none():
+    """assets (docs/design/asset-management.md Phase 2) is optional — most steps won't need one."""
+    model = ProvisioningStepModel.model_validate(_minimal_step())
+    assert model.assets is None
+
+
+def test_provisioning_step_accepts_assets():
+    """assets accepts a list of names, existence checked at the Workspace container level."""
+    data = _minimal_step(assets=["openapi"])
+    model = ProvisioningStepModel.model_validate(data)
+    assert model.assets == ["openapi"]
+
+
+def test_provisioning_step_rejects_duplicate_assets():
+    """Duplicate asset names within a step are rejected (same rule as duplicate targets)."""
+    data = _minimal_step(assets=["openapi", "openapi"])
+    with pytest.raises(ValidationError):
+        ProvisioningStepModel.model_validate(data)
+
+
 def test_provisioning_step_rejects_self_dependency():
     """A step cannot depend on itself."""
     data = _minimal_step(depends_on=["provision-infra"])

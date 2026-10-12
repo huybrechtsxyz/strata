@@ -1,7 +1,9 @@
 # Deploy-Time Output Sensitivity & Step-Output Persistence Gaps — Work
 
-- Status: **gap 1 done (2026-10-11); gap 2 split out** — see
-  [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md)
+- Status: **Archived (2026-10-12) — both gaps resolved, nothing pending
+  in this doc's own scope.** Gap 1 done (2026-10-11). Gap 2 split out and
+  fully built — see [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md)
+  (archived alongside this doc) and [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md).
 - Last updated: 2026-10-11
 
 ## Overview

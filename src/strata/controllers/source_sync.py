@@ -40,11 +40,15 @@ escape hatch if a real need for rendering appears.
 
 import shutil
 from pathlib import Path
+from typing import Any
 
 from strata.controllers.remote_resolution import resolve_remote
+from strata.models.asset_model import AssetModel
 from strata.models.common_models import SourceModel
 from strata.models.solution_model import SolutionRemoteModel
 from strata.utils.errors import SystemError
+from strata.utils.path_conventions import fill_pattern, segment_tokens
+from strata.utils.value_tokens import has_value_tokens
 
 
 class SourceSyncError(SystemError):
@@ -118,6 +122,89 @@ def sync_source(
             shutil.copytree(origin, destination, dirs_exist_ok=True)
         else:
             shutil.copy2(origin, destination)
+    except OSError as exc:
+        raise SourceSyncError(f"Failed to copy '{origin}' to '{destination}': {exc}") from exc
+
+    return destination
+
+
+def sync_asset(
+    root: Path,
+    build_path: Path,
+    asset: AssetModel,
+    properties: dict[str, Any],
+    remotes: dict[str, SolutionRemoteModel],
+) -> Path:
+    """Copy `asset`'s files into `build_path/assets/<name>/`, filling its
+    `source_path` template against `properties` first (docs/design/
+    asset-management.md Phase 3).
+
+    Structurally parallel to `sync_source()` above — same remote
+    resolution, same byte-for-byte copy, same error class — with two
+    differences: `source_path` is templated (`fill_pattern()`) rather than
+    used literally, and the destination is always a directory keyed by the
+    asset's own name, never path-mirrored the way a provisioner's source is
+    (an asset has no sibling-composition need to preserve — see this
+    module's own docstring's "Destination mirrors..." paragraph, which does
+    not apply here).
+
+    Args:
+        root: The solution root (where `strata.yaml` lives).
+        build_path: The build output root for this `build run` invocation.
+        asset: The `AssetModel` to materialise.
+        properties: The deployment's already build-time-resolved
+            `spec.properties` (`ResolvedWorkspaceGraph.properties`) —
+            fills `asset.spec.source_path`'s `{name}` segment tokens.
+        remotes: Every declared remote, keyed by name.
+
+    Returns:
+        The directory `asset`'s files were copied into
+        (`build_path/assets/<asset.meta.name>/`).
+
+    Raises:
+        SourceSyncError: a `{name}` token has no matching `properties` key,
+            a property used to fill one still contains an unresolved
+            `${...}` Value token (resolves only at deploy time — see
+            docs/design/value-token-resolution.md — so `fill_pattern()`
+            can never substitute it), the declared `remote` is not
+            declared in this solution, the filled path does not exist
+            under the resolved remote, or the copy itself failed.
+    """
+    for token in segment_tokens(asset.spec.source_path):
+        value = properties.get(token)
+        if isinstance(value, str) and has_value_tokens(value):
+            raise SourceSyncError(
+                f"Asset '{asset.meta.name}': property '{token}' used to fill source_path still contains "
+                f"an unresolved '${{...}}' token ({value!r}) — Value tokens resolve at deploy time, not "
+                "build time (docs/design/value-token-resolution.md), so this cannot be filled now."
+            )
+
+    try:
+        filled_path = fill_pattern(asset.spec.source_path, {k: str(v) for k, v in properties.items() if v is not None})
+    except ValueError as exc:
+        raise SourceSyncError(f"Asset '{asset.meta.name}': {exc}") from exc
+
+    remote = None
+    if asset.spec.remote is not None:
+        remote = remotes.get(asset.spec.remote)
+        if remote is None:
+            raise SourceSyncError(
+                f"Asset '{asset.meta.name}' names remote '{asset.spec.remote}', which is not declared in this solution."
+            )
+
+    repo_root = resolve_remote(root, remote)
+    origin = repo_root / filled_path
+    destination = build_path / "assets" / asset.meta.name
+
+    if not origin.exists():
+        raise SourceSyncError(f"Asset '{asset.meta.name}': path '{filled_path}' does not exist under '{repo_root}'.")
+
+    destination.mkdir(parents=True, exist_ok=True)
+    try:
+        if origin.is_dir():
+            shutil.copytree(origin, destination, dirs_exist_ok=True)
+        else:
+            shutil.copy2(origin, destination / origin.name)
     except OSError as exc:
         raise SourceSyncError(f"Failed to copy '{origin}' to '{destination}': {exc}") from exc
 

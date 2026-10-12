@@ -408,6 +408,15 @@ def _strata_custom(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     return graph.custom
 
 
+def _strata_assets(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.assets` (docs/design/asset-management.md) — name -> {path,
+    files}, resolved once by `build_controller.py` before the step loop
+    (`ResolvedAssetInfo`). Unlike every other category, keyed only by
+    assets at least one execution step actually references this build —
+    see this function's own "Deliberate deviation" note in that doc."""
+    return {name: {"path": info.path, "files": info.files} for name, info in graph.resolved_assets.items()}
+
+
 def build_strata_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     """The unified projection (ADR-0035, docs/work/
     unified-terraform-projection.md) — one nested object.
@@ -415,7 +424,7 @@ def build_strata_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     `default_output()` writes to `strata.auto.tfvars.json` — this function
     returns the *inner* dict, not the wrapped file content.
 
-    **Every one of the fifteen keys below is always present**, empty
+    **Every one of the sixteen keys below is always present**, empty
     (`{}`) when unused rather than omitted — resolves the Type design
     section's own open sub-question ("should the projection always emit
     every top-level key, which would let the generated `strata_variables.tf`
@@ -439,6 +448,7 @@ def build_strata_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
         "flags": _strata_flags(graph),
         "variables": _strata_variables(graph),
         "default_tags": _strata_default_tags(graph),
+        "assets": _strata_assets(graph),
     }
 
 

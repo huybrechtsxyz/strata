@@ -279,7 +279,7 @@ unhelpful output redaction.
 - Two independent, pre-existing gaps were found during this design's own
   review but are explicitly out of scope for it (not caused by, and not
   fixed by, this redesign) — tracked separately in
-  [deploy-time-output-sensitivity-gaps.md](../work/deploy-time-output-sensitivity-gaps.md)
+  [deploy-time-output-sensitivity-gaps.md](../archive/deploy-time-output-sensitivity-gaps.md)
   rather than silently dropped: `${output:...}` tokens are never treated
   as secret-shaped regardless of the referenced Terraform output's own
   `sensitive = true`, and a step's collected outputs are never persisted

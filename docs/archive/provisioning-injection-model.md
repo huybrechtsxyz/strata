@@ -81,7 +81,7 @@ it: scoping is derived (Injection), typo-catching is a direct Phase 2
 ## Re-check against the real codebase (2026-10-12)
 
 Prompted by a direct question while reviewing the (separately built)
-cross-run step-output feature ([cross-run-step-output-delivery.md](../work/cross-run-step-output-delivery.md),
+cross-run step-output feature ([cross-run-step-output-delivery.md](cross-run-step-output-delivery.md),
 [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md)), which
 turned out to be this doc's own `${step:...}`/Context vision realized —
 just via a completely different, independently-designed path, not an

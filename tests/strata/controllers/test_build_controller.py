@@ -4,6 +4,7 @@
 `build_run()` orchestrator end to end."""
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from strata.controllers.build_controller import (
 )
 from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
+from strata.controllers.source_sync import SourceSyncError
 from strata.models.checkov_model import CheckovFindingModel, CheckovScanResultModel
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleSpecModel
@@ -346,6 +348,107 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
     assert (materialised / "strata.auto.tfvars.json").exists()
     assert not (materialised / "workspace.auto.tfvars.json").exists()
     assert not (materialised / "resx_server.auto.tfvars.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Assets (docs/design/asset-management.md Phase 3) — sync_asset(), resolved
+# once up front from the deployment's own graph.properties, before the step
+# loop.
+# ---------------------------------------------------------------------------
+
+
+def _asset_solution(tmp_path: Path) -> Path:
+    """Extends _terraform_solution with one asset (templated source_path),
+    one consuming step — this doc's own Phase 3 'Done when' fixture."""
+    root = _terraform_solution(tmp_path)
+    _write(root, "assets/contoso/prod/openapi/openapi.json", "{}")
+    _write(
+        root,
+        "asset.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: openapi\nspec:\n"
+        "  source_path: assets/contoso/{deploy_tier}/openapi\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  properties:\n    deploy_tier: prod\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "      assets:\n        - openapi\n"
+        "  resources:\n    - name: r1\n      resource: r1\n"
+        "  assets:\n    - openapi\n",
+    )
+    return root
+
+
+def test_build_run_materialises_an_asset_before_the_step_loop(tmp_path: Path):
+    root = _asset_solution(tmp_path)
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    destination = build_path / "assets" / "openapi"
+    assert (destination / "openapi.json").read_text() == "{}"
+
+
+def test_build_run_projects_the_asset_into_the_consuming_steps_strata_payload(tmp_path: Path):
+    """docs/design/asset-management.md Phase 4 — the same fixture workspace
+    from Phase 3 produces strata.auto.tfvars.json with a populated
+    assets.<name>.{path,files} key, every other projected category
+    unchanged."""
+    root = _asset_solution(tmp_path)
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    payload = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())["strata"]
+    assert payload["assets"] == {"openapi": {"path": "assets/openapi", "files": ["openapi.json"]}}
+    assert set(payload) == {
+        "workspace",
+        "tenant",
+        "providers",
+        "resources",
+        "namespaces",
+        "modules",
+        "dns",
+        "networks",
+        "firewalls",
+        "topologies",
+        "properties",
+        "custom",
+        "flags",
+        "variables",
+        "default_tags",
+        "assets",
+    }
+
+
+def test_build_run_fails_when_an_assets_on_disk_variant_is_missing(tmp_path: Path):
+    root = _asset_solution(tmp_path)
+    shutil.rmtree(root / "assets")
+
+    with pytest.raises(SourceSyncError, match="does not exist"):
+        build_run(_context(root), "app", tmp_path / "build")
+
+
+def test_build_run_dry_run_reports_asset_materialisation_without_copying(tmp_path: Path):
+    root = _asset_solution(tmp_path)
+    build_path = tmp_path / "build"
+    steps: list[str] = []
+
+    build_run(_context(root), "app", build_path, dry_run=True, on_step=steps.append)
+
+    assert any("would materialise asset 'openapi'" in s for s in steps)
+    assert not (build_path / "assets" / "openapi").exists()
 
 
 # ---------------------------------------------------------------------------

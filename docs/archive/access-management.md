@@ -1,7 +1,17 @@
 # Access Management — Work
 
-- Status: draft (brainstorm only — no ADR, no implementation, no decided MVP scope)
-- Last updated: 2026-10-06
+- Status: **Archived (2026-10-12) — superseded, never built.** The four
+  candidate kinds below (`identity`/`role`/`grant`/`accesspackage`) are a
+  dead direction. Checking the brainstorm against the real consumer
+  (`cfg-int-deployment` + `iac-int-deployment`) showed access management is
+  *already solved there* as an ordinary strata `properties` blob, and that
+  what the blob actually lacks is **validation**, not kinds — see
+  "2026-10-12 Evidence Review" below. The live follow-on is
+  [dynamic-configuration-validation.md](../work/dynamic-configuration-validation.md).
+  Kept here as the full investigation record (conceptual layering, the
+  provisioner mapping analysis, and the evidence review that killed it)
+  rather than deleted.
+- Last updated: 2026-10-12
 
 ## Overview
 
@@ -219,22 +229,120 @@ responsibility:
   (how `InfraIntegration`s consume a `ResolvedWorkspaceGraph`, same shape
   a `grant`/`identity` payload would need to fit).
 
+## 2026-10-12 Evidence Review — why this direction was abandoned
+
+Pressure-tested the brainstorm above against the real consumers
+(`e:\Sources\cfg-int-deployment`, `e:\Sources\iac-int-deployment`,
+`e:\Sources\env-int-deployment`) rather than against the azure-certificates
+gap alone. The finding inverts the premise of this whole doc: **this repo's
+real consumer already does workload-identity access management today, and
+does it without a single new kind.**
+
+### It is already modeled — as an opaque `properties` blob
+
+`cfg-int-deployment/stacks/customer/environment.yaml` declares it as an
+ordinary strata property plus a feature flag:
+
+```yaml
+spec:
+  properties:
+    workload_identity_config:
+      oidc_issuer_url: ""
+      identities: {}      # key -> {namespace, service_account, role_assignments{scope, role}}
+  features:
+    - key: enable_workload_identity
+      value: false
+```
+
+A concrete customer fills it in (`cfg-int-deployment/customers/README.md`),
+and it rides into `iac-int-deployment/core/terraform/components/workload-identity/`,
+which creates `azurerm_user_assigned_identity` +
+`azurerm_federated_identity_credential` + `azurerm_role_assignment`. So
+"identity", "grant" and "federation" — three of the four candidate kinds —
+are all three *already expressed and working* as passthrough.
+
+### Four populations of role assignment, only two of which strata can reach
+
+|       | Principal known at authoring time? | Scope known at authoring time? | How it is expressed today                                          |
+| ----- | ---------------------------------- | ------------------------------ | ------------------------------------------------------------------ |
+| **A** | yes (declared identity)            | yes (full ARM ID)              | `role_assignments: {scope, role}` — works cleanly                  |
+| **B** | yes                                | **no** — created in same state | `grant_tenant_key_vault_secrets: true` — one **boolean per scope** |
+| **C** | **no** — a consumer elsewhere      | yes                            | `acr_pull_principal_ids: []` — a raw **principal-ID list**         |
+| **D** | no                                 | no                             | pure HCL, strata never sees it                                     |
+
+Population D is the product-level `role_assignments.tf` files
+(`principal_id = azurerm_linux_function_app.datahub.identity[0].principal_id`,
+`scope = var.key_vault_id`) — both ends are resources in the same module.
+**Strata has no business modeling these and never will**; that is a scope
+boundary, not a gap.
+
+Populations B and C are the only genuinely interesting ones, and they are
+mirror images: B degenerates to a hard-coded boolean per in-state scope
+because *"the tenant's Key Vault and storage account are created in this
+same Terraform state, so their ARM resource IDs are not knowable when this
+file is written"* (quoting the real `environment.yaml` comment); C
+degenerates to a hand-maintained ID list because the principal is the
+unknowable end instead. Both are strata-reference problems wearing
+Terraform-variable costumes — but note that even a `(kind, name)` reference
+would **not** let strata resolve an ARM ID; the consuming module still has
+to do the lookup. Strata would be handing it a structured reference instead
+of a boolean, which is a real but modest gain.
+
+### What the evidence killed outright
+
+- **`role` as a kind.** Every real role is a plain built-in string
+  (`"Key Vault Secrets User"`, `"App Configuration Data Reader"`,
+  `"Storage Blob Data Contributor"`). The Terraform component validates only
+  `role != ""`. The Tier-A registry has no constituency.
+- **`accesspackage`, PIM, entitlement management, access reviews, and human
+  or group principals.** Zero occurrences anywhere across all three repos.
+  This is the half that made the proposal feel like overkill, and it was.
+- **Cross-provider role abstraction.** Not a requirement: every scope is
+  `/subscriptions/...`, and the component *enforces* that with a validation
+  block. The two-tier compromise solved a problem nobody has.
+
+### What the evidence strengthened — validation, in the wrong layer
+
+`workload-identity/variables.tf` carries **five validation blocks plus a
+lifecycle precondition**: Kubernetes namespace charset, service-account
+charset, identity-key charset, key-collision-after-underscore-rewrite,
+scope-must-start-with-`/subscriptions/`, role-non-empty, and
+oidc-issuer-required-when-identities-non-empty. Its own comment states the
+case better than this doc could:
+
+> *"A malformed subject is accepted by Entra ID and by Terraform; it only
+> surfaces as pods failing to obtain a token at runtime, with nothing in the
+> plan or the apply log to point at. Rejecting it here turns a production
+> runtime failure into a plan error."*
+
+That is a **validation** argument, not a modeling one — and the validation
+currently lives in HCL, per-module, un-reusable, downstream of
+`strata validate`. There is also a cross-field invariant
+(`enable_workload_identity: true` requires a non-empty `identities` *and* a
+non-blank `oidc_issuer_url`) split across a YAML comment and a stack root.
+
+### Conclusion
+
+The question was never "four security kinds, yes or no". It is: **should a
+known-shaped `properties`/`configuration`/`custom` blob be declaratively
+schema-checkable by strata?** Access management is one instance of that
+general problem, not a domain deserving its own kinds. Carried forward to
+[dynamic-configuration-validation.md](../work/dynamic-configuration-validation.md).
+
 ## Remaining Work / Open Questions
 
-- No MVP scope decided yet — this doc deliberately covers the full
-  conceptual surface (human + workload identities, PIM, access packages)
-  before any scoping-down discussion.
-- Cross-provider role abstraction (Tier A/B) only pressure-tested against
-  one real example (Key Vault Secrets User) — needs checking against a
-  wider real role set before trusting the split holds.
-- Whether `identity`/`grant`/`role`/`accesspackage` become standalone
-  kinds or get folded into existing kinds as extra fields isn't decided —
-  pending if/when this becomes a real ADR.
-- AWS/GCP Terraform-provider equivalents for PIM/entitlement-management
-  resources not researched (Azure's `azurerm`/`azuread` support confirmed
-  only by name, not by reading real provider docs yet).
-- Whether this is worth building at all — zero real consumer has asked
-  for it yet; the only evidence of need is the azure-certificates.md gap.
+None — this doc is closed. The open questions it carried were resolved or
+discharged by the evidence review above:
+
+- *MVP scope* — resolved as "none"; no kind is being built.
+- *Cross-provider role abstraction (Tier A/B)* — discharged; not a real
+  requirement for any current consumer.
+- *Standalone kinds vs. fields on existing kinds* — resolved as neither;
+  the real answer is a validation mechanism over existing passthrough
+  fields.
+- *AWS/GCP PIM/entitlement provider equivalents* — moot, never researched,
+  no longer needed.
+- *Whether this is worth building at all* — answered: no.
 
 ## Changelog
 
@@ -242,3 +350,7 @@ responsibility:
   (`identity`/`role`/`grant`/`accesspackage`), field sketches, two-tier
   role abstraction, provision-vs-reference semantics, and how each would
   map onto Terraform/Helm/Compose provisioners.
+- 2026-10-12: Evidence review against the real consumers killed the
+  four-kind direction (see section above); doc archived and superseded by
+  [dynamic-configuration-validation.md](../work/dynamic-configuration-validation.md).
+

@@ -1,7 +1,15 @@
 # Output Profile Model (`emits` gating) — Design
 
-- Status: draft
-- Last updated: 2026-10-05
+- Status: draft — design itself still fully applicable and unimplemented
+  (`emits`/`OutputProfileModel`, the two wiring points, the verified
+  Terraform auto-load-vs-env-var behavior, the "env-var-only delivery"
+  alternative). **One conclusion corrected 2026-10-12**: this doc
+  previously pointed to ADR-0002's Interface/Injection as the eventual
+  fix for `emits`'s key-granularity gap (Remaining Work item 6) — that
+  mechanism is now confirmed dead/archived, not "not yet built," so the
+  gap is permanent for `emits`, strengthening the case for the
+  alternative. See Related Decisions and item 6.
+- Last updated: 2026-10-12
 
 ## Overview
 
@@ -714,18 +722,24 @@ is in `emits` is **all-or-nothing for the whole category** — remove
 `display_name`'s warning. There is no partial answer within this doc's
 scope.
 
-**The actual fix is the different, not-yet-built mechanism already flagged
-above — ADR-0002's Interface/Injection, not an extension of `emits`.**
-`Injection = Interface ∩ Environment` would filter at exactly this
-granularity: `Interface` (real HCL parse of the `.tf` root) would contain
-`{customer_code}` and not `{display_name}`, so the intersection naturally
-excludes `display_name` without anyone hand-maintaining an allowlist of
-*individual variable keys* — which `emits` was never designed to be (it
-allowlists categories, not keys, matching v1's own real granularity
-exactly). Do not solve this by adding key-level filtering to `emits`/
-`EmitCategory` — that would blur the Structural/Environmental split
-ADR-0002 already deliberately drew; it belongs in Interface/Injection's own
-future design instead.
+**Corrected (2026-10-12): there is no actual fix coming, not just "not yet
+built."** This section originally pointed to ADR-0002's Interface/
+Injection as the eventual, key-granular answer — `Injection = Interface ∩
+Environment` would have filtered at exactly this granularity (`Interface`,
+a real HCL parse of the `.tf` root, would contain `{customer_code}` and
+not `{display_name}`). That premise no longer holds: Interface/Injection
+was never built and is a **confirmed dead, archived direction**
+([provisioning-injection-model.md](../archive/provisioning-injection-model.md),
+superseded by ADR-0035's unconditional-delivery model) — not "not yet
+built," genuinely not coming. `emits`'s key-granularity gap (example 6a)
+is therefore a **permanent limitation of `emits` itself**, not a
+temporary one some other mechanism will eventually close. This is a real
+point in favor of the "Alternative: env-var-only delivery" option above —
+it has no such gap to begin with, key-granular or otherwise, since it
+never allowlists anything. Still correct not to solve this by adding
+key-level filtering to `emits`/`EmitCategory` directly (that would blur
+the Structural/Environmental split ADR-0002 drew) — there is simply no
+mechanism, built or planned, that closes this gap for `emits` specifically.
 
 ## Related Decisions
 
@@ -740,9 +754,13 @@ future design instead.
   2026-09-25 investigation that found/cleared the prerequisite.
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)
   — defines the parallel Interface/Injection concept (Environmental channel,
-  HCL-introspection-derived, not yet built) and explicitly decides it stays
-  separate from `emits` (Structural channel, hand-authored) forever, not a
-  future-unification target.
+  HCL-introspection-derived). **Confirmed dead, archived (2026-10-12)**,
+  not "not yet built" — see [provisioning-injection-model.md](../archive/provisioning-injection-model.md)
+  and the correction in Remaining Work item 6 below. ADR-0002's own
+  decision that this stays separate from `emits` (Structural channel,
+  hand-authored) forever still holds regardless — the two were never
+  going to unify either way, this just means `emits`'s own gap (item 6)
+  has no future fix coming from this direction at all.
 
 ## Remaining Work / Open Questions
 
@@ -797,18 +815,24 @@ future design instead.
    this session), and Compose/Helm's own deploy-time value substitution is
    already tracked as separate, not-yet-designed work in ADR-0023's
    Remaining Work.
-6. **Confirmed, real, and out of scope: `emits` has no key-level
-   granularity within a category (see worked example 6a).** Opting
-   `variables`/`flags`/`properties`/`custom` into `emits` delivers *every*
-   declared key in that category, not just the ones the real `.tf` root
-   happens to declare `variable {}` blocks for — adding one new variable
-   that the root doesn't declare reintroduces the exact undeclared-variable
-   warning this design exists to prevent, with no lever in this doc to stop
-   it short of pulling the whole category back out of `emits`. The real fix
-   is key-granularity Interface/Injection (ADR-0002), not yet built — do
-   not attempt to add key-level filtering to `EmitCategory`/`emits` itself
-   to compensate; that would blur the Structural/Environmental split
-   ADR-0002 already deliberately drew on purpose.
+6. **Confirmed, real, and permanent (not just "out of scope"): `emits` has
+   no key-level granularity within a category (see worked example 6a).**
+   Opting `variables`/`flags`/`properties`/`custom` into `emits` delivers
+   *every* declared key in that category, not just the ones the real `.tf`
+   root happens to declare `variable {}` blocks for — adding one new
+   variable that the root doesn't declare reintroduces the exact
+   undeclared-variable warning this design exists to prevent, with no
+   lever in this doc to stop it short of pulling the whole category back
+   out of `emits`. **Corrected (2026-10-12): there is no fix coming for
+   this, ever** — this item originally pointed to key-granularity
+   Interface/Injection (ADR-0002) as the real fix, "not yet built." That
+   mechanism is now confirmed dead/archived, not merely delayed (see
+   Related Decisions above) — so this gap is permanent for `emits`
+   specifically, a real point in favor of the env-var-only alternative,
+   which has no such gap. Still do not attempt to add key-level filtering
+   to `EmitCategory`/`emits` itself to compensate; that would blur the
+   Structural/Environmental split ADR-0002 already deliberately drew on
+   purpose, for no mechanism that will ever exist to receive it.
 
 ## Implementation Plan
 
@@ -935,3 +959,20 @@ future design instead.
   already-produced `.tfplan` binary — never a `.tfvars` file. Neither real
   consumer's CI depends on the auto-load convention anywhere. Updated the
   Implementation Plan's blocking item to reflect this is now resolved.
+- 2026-10-12: **Corrected this doc's own pointer to ADR-0002's Interface/
+  Injection**, found while auditing `docs/work/` for everything connected
+  to the (separately built, unrelated) cross-run `${output:...}` feature.
+  This doc's Remaining Work item 6/worked example 6a/Related Decisions
+  described Interface/Injection as the eventual, "not yet built" fix for
+  `emits`'s key-granularity gap — checked directly against real `src/`
+  (prompted by a different thread this session): Interface/Injection was
+  never built at all and is now a confirmed dead, archived direction
+  ([provisioning-injection-model.md](../archive/provisioning-injection-model.md),
+  superseded by ADR-0035's unconditional-delivery model). Updated item 6,
+  the worked-example-6a conclusion, and Related Decisions to say the gap
+  is permanent for `emits`, not pending a future mechanism — strengthening
+  (not weakening) the case this doc's own "Alternative: env-var-only
+  delivery" section already made. Nothing else in this doc affected —
+  the `emits` design itself, the verified Terraform behavior, and the
+  alternative's own reasoning are all unrelated to Interface/Injection and
+  remain fully applicable. No code changed; documentation only.

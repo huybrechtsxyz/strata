@@ -371,6 +371,14 @@ class WorkspaceSpecModel(PlatformBaseModel):
     networks: list[Annotated[PlatformName, References(PlatformKind.NETWORK)]] | None = Field(
         None, description="Network document names"
     )
+    assets: list[Annotated[PlatformName, References(PlatformKind.ASSET)]] | None = Field(
+        None,
+        description="Asset document names this workspace may materialise into a build (docs/design/"
+        "asset-management.md) — Phase 1 existence check, same pattern as 'namespaces'/'firewalls'/"
+        "'dns_zones'/'networks'. A step claims which of these it needs via its own 'assets' field, "
+        "cross-checked in validate_execution() below (a second, independent set from 'target_names' — "
+        "an asset is materialised input, not a provisioning target).",
+    )
     cve_policy: CveMaxSeverityPolicyModel | None = Field(
         None,
         description="Gates 'build run' on CVE findings in the SBOM it just generated (docs/archive/"
@@ -402,6 +410,8 @@ class WorkspaceSpecModel(PlatformBaseModel):
             check_unique_names(self.dns_zones, "DNS zone names")
         if self.networks:
             check_unique_names(self.networks, "network names")
+        if self.assets:
+            check_unique_names(self.assets, "asset names")
         return self
 
     @model_validator(mode="after")
@@ -510,6 +520,12 @@ class WorkspaceSpecModel(PlatformBaseModel):
         DNS/network/firewall document named by no step still resolves
         `${var:}`/`${secret:}` tokens broadcast to every step exactly as
         before this gap — only `${output:...}` requires an owning step.
+
+        `step.assets` (docs/design/asset-management.md Phase 2) is checked
+        against a second, independent `asset_names` set below — deliberately
+        NOT folded into `target_names`: an asset is materialised input a
+        step consumes, not a provisioning target a step "acts on" the way
+        `targets` are defined, so the two checks/sets stay separate.
         """
         if not self.execution:
             return self
@@ -524,6 +540,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
             | set(self.networks or [])
             | set(self.firewalls or [])
         )
+        asset_names = set(self.assets or [])
 
         errors = []
         for step in self.execution:
@@ -535,6 +552,9 @@ class WorkspaceSpecModel(PlatformBaseModel):
                         f"Execution step '{step.name}' targets undefined resource/namespace/"
                         f"dns_zone/network/firewall '{target}'"
                     )
+            for asset in step.assets or []:
+                if asset not in asset_names:
+                    errors.append(f"Execution step '{step.name}' references undefined asset '{asset}'")
         if errors:
             raise ValueError("; ".join(errors))
         return self

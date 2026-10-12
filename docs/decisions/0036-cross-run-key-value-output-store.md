@@ -7,7 +7,7 @@
   unchanged, not reopened), [ADR-0022](0022-strata-build-run.md) (D2's
   named-binding-wins-else-auto-bind duality, mirrored exactly by the new
   `output_store`/`output_store_integration` fields)
-- See also: [docs/work/cross-run-step-output-delivery.md](../work/cross-run-step-output-delivery.md)
+- See also: [docs/archive/cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md)
   (full evidence record, brainstorming, and build progress — this ADR
   records only the decisions themselves), [docs/work/key-value-store-integration.md](../work/key-value-store-integration.md)
   (the capability's own backend-by-backend design), [docs/work/output-store-lock-audit.md](../work/output-store-lock-audit.md)

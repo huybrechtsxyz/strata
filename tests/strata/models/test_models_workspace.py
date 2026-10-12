@@ -264,6 +264,51 @@ def test_workspace_execution_step_rejects_unknown_target():
         WorkspaceModel.model_validate(data)
 
 
+# ---------------------------------------------------------------------------
+# Assets pool + per-step selection (docs/design/asset-management.md Phase 2)
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_assets_pool_defaults_to_none():
+    """spec.assets is optional, same as namespaces/firewalls/dns_zones/networks."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.assets is None
+
+
+def test_workspace_rejects_duplicate_asset_names():
+    """Duplicate names within spec.assets are rejected."""
+    data = _minimal_workspace()
+    data["spec"]["assets"] = ["openapi", "openapi"]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_execution_step_accepts_valid_asset_reference():
+    """A step naming an asset declared in spec.assets is accepted."""
+    data = _workspace_with_execution(assets=["openapi"])
+    data["spec"]["assets"] = ["openapi"]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.execution[0].assets == ["openapi"]
+
+
+def test_workspace_execution_step_rejects_unknown_asset():
+    """A step naming an asset outside spec.assets is rejected (same pattern as
+    an unknown target)."""
+    data = _workspace_with_execution(assets=["openapi"])
+    # spec.assets deliberately left undeclared — "openapi" is not in the pool.
+    with pytest.raises(ValidationError, match="references undefined asset 'openapi'"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_execution_step_rejects_unknown_target_regression():
+    """Regression: the existing target_names check is unaffected by the new,
+    independent asset_names check."""
+    data = _workspace_with_execution(targets=["nonexistent"], assets=["openapi"])
+    data["spec"]["assets"] = ["openapi"]
+    with pytest.raises(ValidationError, match="targets undefined resource/namespace/"):
+        WorkspaceModel.model_validate(data)
+
+
 def test_workspace_rejects_legacy_provisioning_key():
     """The recipe key is 'execution'; the old 'provisioning' name is not accepted."""
     data = _minimal_workspace()

@@ -293,6 +293,11 @@ class ProvisioningStepModel(PlatformBaseModel):
     pool; "this step realizes topology X" is a derived fact, not declared).
     Ordering uses `depends_on` (explicit graph), not `priority` — see
     ADR-0011.
+
+    `assets` (docs/design/asset-management.md Phase 2) names non-code input
+    files (from the workspace's own `spec.assets` pool) this step needs
+    materialised into the build output before its provisioner runs — a
+    separate concept from `targets`, which a step acts *on*.
     """
 
     name: PlatformName = Field(description="Unique step name")
@@ -301,6 +306,14 @@ class ProvisioningStepModel(PlatformBaseModel):
     )
     targets: list[PlatformName] = Field(
         ..., min_length=1, description="Resource/Namespace name references this step acts on"
+    )
+    assets: list[PlatformName] | None = Field(
+        None,
+        description="Asset names (from this workspace's spec.assets pool, docs/design/asset-management.md) "
+        "this step needs materialised into the build output before its provisioner runs. Existence checked "
+        "against spec.assets once Workspace ties these together (WorkspaceSpecModel.validate_execution()) "
+        "— deliberately a second, independent set from 'targets', not folded into it: an asset is "
+        "materialised input a step consumes, not a provisioning target a step acts on.",
     )
     depends_on: list[PlatformName] | None = Field(
         None, description="Names of other ProvisioningSteps that must complete before this one runs"
@@ -319,6 +332,8 @@ class ProvisioningStepModel(PlatformBaseModel):
     def validate_unique_targets(self) -> "ProvisioningStepModel":
         """Validate that targets are unique within this step."""
         check_unique_names(self.targets, f"targets in provisioning step '{self.name}'")
+        if self.assets:
+            check_unique_names(self.assets, f"assets in provisioning step '{self.name}'")
         return self
 
     @model_validator(mode="after")

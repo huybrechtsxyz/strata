@@ -87,6 +87,29 @@ def test_load_indexes_documents_regardless_of_folder_layout(tmp_path):
     assert controller.index.names_of(PlatformKind.NAMESPACE) == {"main-ns"}
 
 
+def test_load_indexes_asset_document(tmp_path):
+    """A standalone `kind: asset` document (docs/design/asset-management.md
+    Phase 1) round-trips through discovery/validation like any other kind."""
+    root = _solution(tmp_path)
+    (root / "asset.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\n"
+        "kind: asset\n"
+        "meta:\n"
+        "  name: openapi\n"
+        "spec:\n"
+        "  source_path: assets/contoso/{deploy_tier}/openapi\n",
+        encoding="utf-8",
+    )
+
+    controller = SolutionController(root)
+    result = controller.load()
+    assert result.ok, result.messages()
+    assert controller.index.names_of(PlatformKind.ASSET) == {"openapi"}
+    entry = controller.index.get(PlatformKind.ASSET, "openapi")
+    assert entry is not None
+    assert entry.model.spec.source_path == "assets/contoso/{deploy_tier}/openapi"  # type: ignore[attr-defined]
+
+
 def test_load_reports_missing_manifest(tmp_path):
     """A root without strata.yaml is an error, not a crash."""
     result = SolutionController(tmp_path).load()

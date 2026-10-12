@@ -38,7 +38,7 @@
 - Last updated: 2026-10-12
 - Tracks follow-on work for: [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md)
   (D1 — this capability's own existence — and D2's `SUPPORTS_CAS` gate)
-- Split out from: [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md)
+- Split out from: [cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md)
   (that doc's "Proposed interface" section) — this is "first step": the
   reusable I/O primitive on its own, independent of the
   `DeploymentOutputStore` business logic, the workspace/deployment
@@ -49,7 +49,7 @@
 
 A new, minimal capability — get/put a single small value by key, with
 optional compare-and-swap via a backend-returned version tag. The direct
-motivation is [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md)
+motivation is [cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md)
 (a deployment's step outputs need to live somewhere durable and shared
 across separate `deploy run` invocations/pipelines), but the capability
 itself is deliberately generic and reusable — any future feature needing
@@ -646,14 +646,14 @@ that need.
   directly; left to confirm against the real client library when
   implementing.
 - Key naming convention for records this capability stores — settled,
-  see [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md)'s
+  see [cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md)'s
   Implementation Plan step 2 (not this capability's own concern, since
   the capability itself is key-naming-agnostic; recorded there since
   `DeploymentOutputStore` is the first real caller).
 
 ## Related
 
-- [cross-run-step-output-delivery.md](cross-run-step-output-delivery.md) —
+- [cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md) —
   the feature this capability is the foundation for.
 - `src/strata/integrations/capabilities.py`'s `StoreIntegration` — the
   sibling capability this is modeled alongside, not merged into (shape

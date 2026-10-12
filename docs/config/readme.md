@@ -40,6 +40,7 @@ see [docs/design/v2-schema-overview.md](../design/v2-schema-overview.md).
 - [deployment.md](deployment.md) — workspace + environment + tenant, tied into stages
 - [version.md](version.md) — pinned tool/image/chart versions with rationale
 - [artifact.md](artifact.md) — a pinnable reference to something external (a container image today)
+- [asset.md](asset.md) — a named, non-code input file/directory, materialised into the build output
 
 **Tooling:**
 

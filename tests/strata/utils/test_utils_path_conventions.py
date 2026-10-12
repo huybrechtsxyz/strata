@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Tests for path_conventions (docs/design/path-conventions.md)."""
 
+import pytest
+
 from strata.utils.path_conventions import (
     compile_pattern,
+    fill_pattern,
     in_scope,
     match_directory,
     match_filename,
     matches_segment_pattern,
+    segment_tokens,
     split_directory_and_filename,
 )
 
@@ -152,3 +156,53 @@ def test_compile_pattern_returns_a_reusable_compiled_regex():
 def test_matches_segment_pattern_true_and_false():
     assert matches_segment_pattern("^[a-z]{3}$", "dev") is True
     assert matches_segment_pattern("^[a-z]{3}$", "development") is False
+
+
+# ---------------------------------------------------------------------------
+# fill_pattern()
+# ---------------------------------------------------------------------------
+
+
+def test_fill_pattern_substitutes_a_single_token():
+    assert (
+        fill_pattern("assets/contoso/{deploy_tier}/openapi", {"deploy_tier": "prod"}) == "assets/contoso/prod/openapi"
+    )
+
+
+def test_fill_pattern_substitutes_multiple_tokens():
+    template = "assets/{customer}/{region}/{deploy_tier}/openapi"
+    values = {"customer": "contoso", "region": "northeurope", "deploy_tier": "prod"}
+    assert fill_pattern(template, values) == "assets/contoso/northeurope/prod/openapi"
+
+
+def test_fill_pattern_with_no_tokens_returns_the_template_unchanged():
+    assert fill_pattern("assets/openapi", {}) == "assets/openapi"
+    assert fill_pattern("assets/openapi", {"unused": "value"}) == "assets/openapi"
+
+
+def test_fill_pattern_raises_on_unknown_token():
+    with pytest.raises(ValueError, match=r"Unknown token '\{deploy_tier\}'"):
+        fill_pattern("assets/{deploy_tier}/openapi", {})
+
+
+def test_fill_pattern_ignores_extra_values_not_referenced_by_the_template():
+    assert fill_pattern("assets/{customer}/openapi", {"customer": "contoso", "region": "northeurope"}) == (
+        "assets/contoso/openapi"
+    )
+
+
+# ---------------------------------------------------------------------------
+# segment_tokens()
+# ---------------------------------------------------------------------------
+
+
+def test_segment_tokens_returns_every_token_in_order():
+    assert segment_tokens("assets/{customer}/{region}/{deploy_tier}/openapi") == [
+        "customer",
+        "region",
+        "deploy_tier",
+    ]
+
+
+def test_segment_tokens_returns_empty_list_for_a_template_with_no_tokens():
+    assert segment_tokens("assets/openapi") == []

@@ -32,6 +32,7 @@ Four small, independent helpers plus the loop itself:
 import os
 import shutil
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -44,7 +45,7 @@ from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (
 from strata.controllers.sbom_controller import evaluate_cve_policy, write_sbom
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
-from strata.controllers.source_sync import describe_source, sync_source
+from strata.controllers.source_sync import describe_source, sync_asset, sync_source
 from strata.controllers.value_controller import (
     build_value_references,
     merge_workspace_environment_deployment_properties,
@@ -57,7 +58,13 @@ from strata.controllers.value_controller import (
 from strata.controllers.version_pins import log_pin_applied
 from strata.controllers.workload_controller import build_workload_modules
 from strata.integrations.errors import IntegrationError
-from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueReference, ValueResolution
+from strata.integrations.resolved_context import (
+    ResolvedAssetInfo,
+    ResolvedWorkspaceGraph,
+    ValueReference,
+    ValueResolution,
+)
+from strata.models.asset_model import AssetModel
 from strata.models.audit_manifest_model import ManifestPolicyResultModel
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
@@ -549,6 +556,38 @@ def build_run(
         else {}
     )
     remotes = apply_remote_version_pins(remotes, version)
+
+    # Assets (docs/design/asset-management.md Phases 3-4) — every asset
+    # actually referenced by this build's execution steps, statically
+    # scanned and resolved once up front, the same timing properties/graph
+    # already have — not lazily inside the step loop below (see that doc's
+    # own "Sync mechanism" section for why).
+    asset_names = {name for step in (workspace.spec.execution or []) for name in (step.assets or [])}
+    resolved_assets: dict[str, ResolvedAssetInfo] = {}
+    for asset_name in sorted(asset_names):
+        asset_entry = index.get(PlatformKind.ASSET, asset_name)
+        if asset_entry is None:
+            # Defensive backstop, not primary validation — WorkspaceSpecModel.
+            # validate_execution()'s asset_names check already guarantees this.
+            raise UsageError(f"Workspace '{workspace.meta.name}' references undeclared asset '{asset_name}'.")
+        asset = cast(AssetModel, asset_entry.model)
+        if dry_run:
+            _step(f"would materialise asset '{asset_name}' (source_path '{asset.spec.source_path}')")
+        else:
+            asset_path = sync_asset(context.root, build_path, asset, graph.properties, remotes)
+            _step(f"materialised asset '{asset_name}' at {asset_path}")
+            resolved_assets[asset_name] = ResolvedAssetInfo(
+                path=asset_path.relative_to(build_path).as_posix(),
+                files=sorted(p.name for p in asset_path.iterdir()),
+            )
+    if resolved_assets:
+        # ResolvedWorkspaceGraph is frozen (ADR-0021 D2's immutable-handoff
+        # shape) — `graph` was already assembled/written to resolved.yaml
+        # above, so this replaces it with an equivalent copy carrying
+        # `resolved_assets`, picked up by every `integration.prepare(...,
+        # graph=graph, ...)` call in the step loop below
+        # (`_strata_assets()`, docs/design/asset-management.md Phase 4).
+        graph = replace(graph, resolved_assets=resolved_assets)
 
     materialised: dict[str, Path | None] = {}
     for step in ordered_by_depends_on(workspace.spec.execution or []):
