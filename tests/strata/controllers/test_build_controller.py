@@ -25,7 +25,7 @@ from strata.models.checkov_model import CheckovFindingModel, CheckovScanResultMo
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleSpecModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
-from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
+from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderSpecModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.sbom_model import CveAuditResultModel
 from strata.models.solution_model import RemoteFetch, RemoteType, SolutionRemoteModel
@@ -204,7 +204,7 @@ def test_build_resolved_workspace_graph_walks_providers():
     index = DocumentIndex()
     provider = ProviderModel(
         meta=ProviderMetaModel(name="p1"),
-        spec=ProviderSpecModel(properties=ProviderPropertiesModel(type="local", region="local")),
+        spec=ProviderSpecModel(type="local", region="local"),
     )
     index.add(
         IndexEntry(ref=DocumentRef(kind=PlatformKind.PROVIDER, name="p1"), model=provider, source=Path("p1.yaml"))
@@ -300,13 +300,13 @@ def _terraform_solution(tmp_path: Path) -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -492,13 +492,13 @@ def _terraform_solution_with_shared_dependency(tmp_path: Path) -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -760,13 +760,13 @@ def _terraform_solution_with_remote(
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1002,13 +1002,13 @@ def test_build_run_renders_helm_workload_modules(tmp_path: Path):
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1069,13 +1069,13 @@ def test_build_run_writes_a_valid_sbom(tmp_path: Path):
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1134,13 +1134,13 @@ def test_build_run_dry_run_does_not_write_an_sbom(tmp_path: Path):
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1223,13 +1223,13 @@ def _minimal_solution(tmp_path: Path, *, cve_policy_yaml: str = "", checkov_poli
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1405,13 +1405,13 @@ def _helm_solution(tmp_path: Path, *, checkov_policy_yaml: str = "") -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(

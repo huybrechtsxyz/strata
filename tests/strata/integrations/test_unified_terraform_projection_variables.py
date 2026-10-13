@@ -23,7 +23,7 @@ from strata.integrations.terraform_projection import build_strata_payload
 from strata.models.common_models import ModuleReferenceModel, SourceModel
 from strata.models.dns_model import DnsMetaModel, DnsModel, DnsRecordModel, DnsSpecModel, DnsZoneModel
 from strata.models.firewall_model import FirewallMetaModel, FirewallModel, FirewallSpecModel
-from strata.models.module_model import ModuleMetaModel, ModuleModel, ModulePropertiesModel, ModuleSpecModel
+from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleSpecModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.network_model import (
     NetworkDefinitionModel,
@@ -32,13 +32,12 @@ from strata.models.network_model import (
     NetworkSpecModel,
     SubnetModel,
 )
-from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
+from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderSpecModel
 from strata.models.provisioning_model import ProvisionerModel
 from strata.models.resource_model import (
     ResourceDiskModel,
     ResourceMetaModel,
     ResourceModel,
-    ResourcePropertiesModel,
     ResourceSpecModel,
     ResourceStorageModel,
 )
@@ -85,12 +84,13 @@ def _full_graph() -> ResolvedWorkspaceGraph:
     )
     provider = ProviderModel(
         meta=ProviderMetaModel(name="p1"),
-        spec=ProviderSpecModel(properties=ProviderPropertiesModel(type="azurerm", region="westeurope")),
+        spec=ProviderSpecModel(type="azurerm", region="westeurope"),
     )
     resource = ResourceModel(
         meta=ResourceMetaModel(name="r1"),
         spec=ResourceSpecModel(
-            properties=ResourcePropertiesModel(provider_type="azurerm", resource_type="virtual_machine"),
+            provider_type="azurerm",
+            resource_type="virtual_machine",
             storage=ResourceStorageModel(disks=[ResourceDiskModel(name="os", size=64, label="os-disk", mount="/data")]),
         ),
     )
@@ -100,9 +100,7 @@ def _full_graph() -> ResolvedWorkspaceGraph:
     )
     module = ModuleModel(
         meta=ModuleMetaModel(name="authentik"),
-        spec=ModuleSpecModel(
-            source=SourceModel(source_path="modules/authentik"), type="helm", properties=ModulePropertiesModel()
-        ),
+        spec=ModuleSpecModel(source=SourceModel(source_path="modules/authentik"), type="helm"),
     )
     firewall = FirewallModel(meta=FirewallMetaModel(name="fw1"), spec=FirewallSpecModel())
     dns = DnsModel(
@@ -149,7 +147,7 @@ def _minimal_graph() -> ResolvedWorkspaceGraph:
     )
     provider = ProviderModel(
         meta=ProviderMetaModel(name="p1"),
-        spec=ProviderSpecModel(properties=ProviderPropertiesModel(type="azurerm", region="westeurope")),
+        spec=ProviderSpecModel(type="azurerm", region="westeurope"),
     )
     return ResolvedWorkspaceGraph(workspace=workspace, providers={"p1": provider})
 

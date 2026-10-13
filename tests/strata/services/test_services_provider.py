@@ -12,10 +12,8 @@ def _minimal_provider_data() -> dict:
     return {
         "meta": {"name": "kamatera-primary"},
         "spec": {
-            "properties": {
-                "type": "kamatera",
-                "region": "eu-west",
-            }
+            "type": "kamatera",
+            "region": "eu-west",
         },
     }
 
@@ -58,9 +56,8 @@ def test_provider_service_validates_from_file(tmp_path):
 meta:
   name: kamatera-primary
 spec:
-  properties:
-    type: kamatera
-    region: eu-west
+  type: kamatera
+  region: eu-west
 """
     yaml_file = tmp_path / "provider.yaml"
     yaml_file.write_text(yaml_content, encoding="utf-8")
@@ -75,7 +72,7 @@ spec:
 def test_provider_service_invalid_data_reports_errors():
     """Missing required field surfaces a validation error, not an exception."""
     data = _minimal_provider_data()
-    del data["spec"]["properties"]["region"]
+    del data["spec"]["region"]
 
     service = ProviderService(data=data)
     result = service.validate()
@@ -87,7 +84,7 @@ def test_provider_service_invalid_data_reports_errors():
 def test_provider_service_accessors_raise_before_valid():
     """Calling an accessor on invalid data raises instead of silently returning None."""
     data = _minimal_provider_data()
-    del data["spec"]["properties"]["region"]
+    del data["spec"]["region"]
 
     service = ProviderService(data=data)
     with pytest.raises(ValueError, match="not valid"):
@@ -105,7 +102,7 @@ def test_provider_service_accepts_valid_against_configuration():
 def test_provider_service_rejects_unknown_type_against_configuration():
     """Phase 2: a provider type absent from the configuration registry fails validation."""
     data = _minimal_provider_data()
-    data["spec"]["properties"]["type"] = "unknown-cloud"
+    data["spec"]["type"] = "unknown-cloud"
     service = ProviderService(data=data)
     result = service.validate(configuration_model=_configuration_with_kamatera_pointer())
     assert not result.ok
@@ -124,7 +121,7 @@ def test_provider_service_accepts_valid_against_provider_config():
 def test_provider_service_rejects_unknown_region_against_provider_config():
     """A region absent from the loaded ProviderConfig document's regions fails validation."""
     data = _minimal_provider_data()
-    data["spec"]["properties"]["region"] = "us-east"
+    data["spec"]["region"] = "us-east"
     service = ProviderService(data=data)
     service.validate()
     result = service.validate_against_provider_config(_kamatera_provider_config())
@@ -155,7 +152,7 @@ def test_provider_service_accepts_valid_against_provider_config_with_geography_t
 def test_provider_service_skips_phase_2_without_configuration():
     """Omitting configuration_model skips Phase 2 entirely (Phase 1 only)."""
     data = _minimal_provider_data()
-    data["spec"]["properties"]["type"] = "anything-goes"
+    data["spec"]["type"] = "anything-goes"
     service = ProviderService(data=data)
     result = service.validate()
     assert result.ok

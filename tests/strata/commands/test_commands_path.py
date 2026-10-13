@@ -33,9 +33,8 @@ kind: provider
 meta:
   name: azure-main
 spec:
-  properties:
-    type: azure
-    region: westeurope
+  type: azure
+  region: westeurope
 """
 
 VERSION = """apiVersion: strata.huybrechts.xyz/v2

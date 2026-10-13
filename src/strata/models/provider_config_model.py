@@ -130,7 +130,7 @@ class ProviderConfigMetaModel(PlatformBaseModel):
     """Provider config metadata (name, annotations, labels, tags).
 
     `name` is the provider type key (e.g. 'kamatera', 'azure') — matched
-    against a real `Provider` document's `spec.properties.type`.
+    against a real `Provider` document's `spec.type`.
     """
 
     name: PlatformName = Field(description="Provider type name (e.g. kamatera, azure)")

@@ -6,11 +6,10 @@ meta:
     description: "Holds the App Gateway's TLS certificate as a secret - issuance/renewal happens out-of-band (a Key Vault-integrated CA issuer, or Key Vault Acmebot for Let's Encrypt), never inside strata or Terraform state."
   tags: ["security", "example"]
 spec:
-  properties:
-    provider_type: azure
-    resource_type: key_vault
-    category: security
-    subcategory: secrets
+  provider_type: azure
+  resource_type: key_vault
+  category: security
+  subcategory: secrets
   configuration:
     sku_name: standard
   default_tags:
@@ -25,11 +24,10 @@ meta:
     description: "Application Gateway v2 / WAF. The HTTPS listener's certificate is a Key Vault secret reference (key_vault_secret_id) resolved through the azure-keyvault secret store, so no PFX bytes or password ever live in this repo or in Terraform state - see docs/decisions/0021-integration-layer.md for the store."
   tags: ["networking", "waf", "example"]
 spec:
-  properties:
-    provider_type: azure
-    resource_type: application_gateway
-    category: networking
-    subcategory: waf
+  provider_type: azure
+  resource_type: application_gateway
+  category: networking
+  subcategory: waf
   dependencies:
     - category: security
       subcategory: secrets

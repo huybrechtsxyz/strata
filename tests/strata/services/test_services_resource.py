@@ -10,10 +10,8 @@ def _minimal_resource_data() -> dict:
     return {
         "meta": {"name": "web-vm"},
         "spec": {
-            "properties": {
-                "provider_type": "kamatera",
-                "resource_type": "virtual_machine",
-            },
+            "provider_type": "kamatera",
+            "resource_type": "virtual_machine",
             "default_tags": {"environment": "test"},
         },
     }
@@ -67,7 +65,7 @@ def test_resource_service_accepts_valid_against_configuration():
 def test_resource_service_rejects_unknown_resource_type():
     """Deep check: a resource type absent from the provider config's registry entry fails validation."""
     data = _minimal_resource_data()
-    data["spec"]["properties"]["resource_type"] = "unknown_type"
+    data["spec"]["resource_type"] = "unknown_type"
     service = ResourceService(data=data)
     service.validate()
     result = service.validate_against_provider_config(_kamatera_provider_config())

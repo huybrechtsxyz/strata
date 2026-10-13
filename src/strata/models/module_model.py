@@ -254,14 +254,6 @@ class ModuleServiceModel(PlatformBaseModel):
         return self
 
 
-class ModulePropertiesModel(PlatformBaseModel):
-    """Model for module-specific properties and configurations."""
-
-    mounts: list[ModuleMountModel] | None = Field(None, description="List of module mount configurations")
-    checks: list[ModuleCheckModel] | None = Field(None, description="List of module health check configurations")
-    endpoints: list[ModuleEndpointModel] | None = Field(None, description="List of module endpoint configurations")
-
-
 class ModuleSpecModel(PlatformBaseModel):
     """Model for module spec (source, lifecycle, services, configuration).
 
@@ -278,7 +270,21 @@ class ModuleSpecModel(PlatformBaseModel):
         "provisioner plugin name). Required for service deployment commands.",
     )
     lifecycle: CommonLifecycleModel | None = Field(None, description="Module-specific lifecycle hooks")
-    properties: ModulePropertiesModel | None = Field(None, description="Module-specific properties and configurations")
+    mounts: list[ModuleMountModel] | None = Field(
+        None,
+        description="List of module mount configurations (single-service shape, see `services` for the "
+        "multi-container alternative)",
+    )
+    checks: list[ModuleCheckModel] | None = Field(
+        None,
+        description="List of module health check configurations (single-service shape, see `services` for the "
+        "multi-container alternative)",
+    )
+    endpoints: list[ModuleEndpointModel] | None = Field(
+        None,
+        description="List of module endpoint configurations (single-service shape, see `services` for the "
+        "multi-container alternative)",
+    )
     configuration: dict[str, Any] | None = Field(None, description="Module-specific configuration data")
     custom: dict[str, Any] | None = Field(
         None,
@@ -306,7 +312,8 @@ class ModuleSpecModel(PlatformBaseModel):
     services: list[ModuleServiceModel] | None = Field(
         None,
         description="List of services (containers/sub-charts) that make up this module. "
-        "When absent, the module is treated as single-service using the properties shape (backward compatible). "
+        "When absent, the module is treated as single-service using the `mounts`/`checks`/`endpoints` shape "
+        "directly on `spec` (backward compatible). "
         "When present, each entry defines one container (compose) or sub-chart section (helm).",
     )
 

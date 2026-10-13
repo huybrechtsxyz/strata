@@ -187,9 +187,8 @@ kind: provider
 meta:
   name: azure-main
 spec:
-  properties:
-    type: azure
-    region: westeurope
+  type: azure
+  region: westeurope
 """,
     )
     for name in ("dep-a", "dep-b"):

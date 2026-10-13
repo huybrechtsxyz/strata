@@ -29,9 +29,8 @@ kind: provider
 meta:
   name: p1
 spec:
-  properties:
-    type: local
-    region: local
+  type: local
+  region: local
 """
 
 RESOURCE = """apiVersion: strata.huybrechts.xyz/v2
@@ -39,10 +38,9 @@ kind: resource
 meta:
   name: r1
 spec:
-  properties:
-    provider_type: local
-    resource_type: server
-    category: compute
+  provider_type: local
+  resource_type: server
+  category: compute
   default_tags:
     managed-by: strata
 """

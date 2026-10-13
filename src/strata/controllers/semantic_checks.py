@@ -248,21 +248,19 @@ def _check_deployment_tenant_geography(index: DocumentIndex, deployment: Deploym
             continue  # reference existence already reports this
         provider = cast(ProviderModel, provider_entry.model)
 
-        config_entry = index.get(PlatformKind.PROVIDERCONFIG, provider.spec.properties.type)
+        config_entry = index.get(PlatformKind.PROVIDERCONFIG, provider.spec.type)
         if config_entry is None:
             continue  # unregistered type — _check_providers()'s own existing skip
         provider_config = cast(ProviderConfigModel, config_entry.model)
 
-        region = next(
-            (r for r in (provider_config.spec.regions or []) if r.name == provider.spec.properties.region), None
-        )
+        region = next((r for r in (provider_config.spec.regions or []) if r.name == provider.spec.region), None)
         if region is None or region.geography is None:
             continue  # invalid region (already reported by _check_providers()) or no geography tag declared
 
         if region.geography not in allowed_geographies:
             diagnostics.error(
                 f"Deployment '{deployment.meta.name}': provider '{provider_name}' is in region "
-                f"'{provider.spec.properties.region}' (geography '{region.geography}'), which is not in "
+                f"'{provider.spec.region}' (geography '{region.geography}'), which is not in "
                 f"tenant '{tenant.meta.name}''s allowed geographies: {sorted(allowed_geographies)}",
                 code="tenant_geography_mismatch",
             )
@@ -355,7 +353,7 @@ def _check_providers(index: DocumentIndex) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.PROVIDER):
         provider = cast(ProviderModel, entry.model)
-        config_entry = index.get(PlatformKind.PROVIDERCONFIG, provider.spec.properties.type)
+        config_entry = index.get(PlatformKind.PROVIDERCONFIG, provider.spec.type)
         if config_entry is None:
             continue  # unregistered type is a schema-registry policy question, not existence
         service = ProviderService.from_model(provider)
@@ -368,7 +366,7 @@ def _check_resources(index: DocumentIndex) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.RESOURCE):
         resource = cast(ResourceModel, entry.model)
-        config_entry = index.get(PlatformKind.PROVIDERCONFIG, resource.spec.properties.provider_type)
+        config_entry = index.get(PlatformKind.PROVIDERCONFIG, resource.spec.provider_type)
         if config_entry is None:
             continue
         service = ResourceService.from_model(resource)

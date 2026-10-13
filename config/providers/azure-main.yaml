@@ -3,9 +3,8 @@ kind: provider
 meta:
   name: azure-main
 spec:
-  properties:
-    type: azure
-    region: westeurope
-    display_name: "West Europe"
+  type: azure
+  region: westeurope
+  display_name: "West Europe"
   default_tags:
     managed-by: strata

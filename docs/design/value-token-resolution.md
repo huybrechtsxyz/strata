@@ -803,9 +803,10 @@ itself already produces (13 categories: `workspace`/`providers`/
 isn't on the curated 8-category re-resolution list simply never gets
 substituted, no matter how correctly validated it is.
 
-**Confirmed real, concrete gap this produces**: `_build_providers_payload()`
+**Confirmed real, concrete gap this produces**: `_strata_providers()`
 (`terraform_projection.py`) projects only `type`/`region`/`display_name`
-from `ProviderPropertiesModel` — it never even projects `ProviderSpecModel.
+directly from `ProviderSpecModel` (flattened, ADR-0037 — no longer a nested
+`ProviderPropertiesModel`) — it never even projects `ProviderSpecModel.
 configuration`/`.custom` into *any* artifact, build- or deploy-time, despite
 the Per-Kind Status table above correctly saying Provider's Phase 1/Phase 2
 *validation* is "Done." A `${var:X}`/`${secret:X}` token in a Provider's

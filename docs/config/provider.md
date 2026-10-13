@@ -6,9 +6,9 @@ combination a workspace provisions into.
 
 ## Schema
 
-- `spec.properties.type` — provider type (must match a [providerconfig.md](providerconfig.md) document's `meta.name`)
-- `spec.properties.region` — region/datacenter (cross-checked against that `ProviderConfig`'s `spec.regions`)
-- `spec.properties.display_name` — optional human-readable label, purely cosmetic
+- `spec.type` — provider type (must match a [providerconfig.md](providerconfig.md) document's `meta.name`)
+- `spec.region` — region/datacenter (cross-checked against that `ProviderConfig`'s `spec.regions`)
+- `spec.display_name` — optional human-readable label, purely cosmetic
 - `spec.authentication` — optional; one of several supported methods (OAuth2, API key,
   certificate/mTLS, managed identity, CLI-based, ...)
 - `spec.configuration` — raw passthrough to the provisioner (e.g. extra Terraform provider-block
@@ -25,10 +25,9 @@ kind: provider
 meta:
   name: azure-main
 spec:
-  properties:
-    type: azure
-    region: westeurope
-    display_name: "West Europe"
+  type: azure
+  region: westeurope
+  display_name: "West Europe"
   default_tags:
     managed-by: strata
 ```

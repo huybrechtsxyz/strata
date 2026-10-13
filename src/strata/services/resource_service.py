@@ -13,7 +13,7 @@ from strata.utils.diagnostics import Diagnostics
 class ResourceService(BaseService[ResourceModel]):
     """Service for handling resource configurations.
 
-    Phase 2 here only checks that `spec.properties.provider_type` is a
+    Phase 2 here only checks that `spec.provider_type` is a
     *registered* provider type name (a pointer existing in
     `configuration_model.spec.providers`) — same reasoning as
     `ProviderService` (ADR-0014): `configuration_model.spec.providers`
@@ -28,19 +28,19 @@ class ResourceService(BaseService[ResourceModel]):
         return ResourceModel
 
     def _validate_dynamic(self, configuration_model: ConfigurationModel | None = None) -> Diagnostics:
-        """Phase 2: check that `spec.properties.provider_type` is a registered provider type name."""
+        """Phase 2: check that `spec.provider_type` is a registered provider type name."""
         diagnostics = Diagnostics()
         if configuration_model is None or self.model is None:
             return diagnostics
 
-        provider_type = self.model.spec.properties.provider_type
+        provider_type = self.model.spec.provider_type
         registered_names = set(configuration_model.spec.providers or [])
 
         if provider_type not in registered_names:
             available = sorted(registered_names)
             diagnostics.error(
                 f"Provider type '{provider_type}' not found in configuration. Available providers: {available}",
-                location="spec.properties.provider_type",
+                location="spec.provider_type",
                 code="unregistered_provider_type",
             )
 
@@ -63,8 +63,8 @@ class ResourceService(BaseService[ResourceModel]):
             diagnostics.error("Resource model is not initialized")
             return diagnostics
 
-        provider_type = self.model.spec.properties.provider_type
-        resource_type = self.model.spec.properties.resource_type
+        provider_type = self.model.spec.provider_type
+        resource_type = self.model.spec.resource_type
         spec = provider_config.spec
 
         if not spec.additional_resources:
@@ -72,7 +72,7 @@ class ResourceService(BaseService[ResourceModel]):
                 diagnostics.error(
                     f"Provider '{provider_type}' has no resources defined in its provider config, "
                     f"but additional_resources is False",
-                    location="spec.properties.resource_type",
+                    location="spec.resource_type",
                     code="no_resources_defined",
                 )
                 return diagnostics
@@ -82,7 +82,7 @@ class ResourceService(BaseService[ResourceModel]):
                 diagnostics.error(
                     f"Resource type '{resource_type}' is not valid for provider '{provider_type}'. "
                     f"Valid resource types: {valid_resource_types}",
-                    location="spec.properties.resource_type",
+                    location="spec.resource_type",
                     code="invalid_resource_type",
                 )
                 return diagnostics
@@ -167,22 +167,22 @@ class ResourceService(BaseService[ResourceModel]):
         """Return the resource's provider type."""
         self._ensure_validated()
         assert self.model is not None
-        return self.model.spec.properties.provider_type
+        return self.model.spec.provider_type
 
     def get_resource_type(self) -> str:
         """Return the resource's type."""
         self._ensure_validated()
         assert self.model is not None
-        return self.model.spec.properties.resource_type
+        return self.model.spec.resource_type
 
     def get_unit_cost(self) -> float | None:
         """Return the resource's unit cost."""
         self._ensure_validated()
         assert self.model is not None
-        return self.model.spec.properties.unit_cost
+        return self.model.spec.unit_cost
 
     def get_category_and_subcategory(self) -> tuple[str | None, str | None]:
         """Return (category, subcategory) for this resource."""
         self._ensure_validated()
         assert self.model is not None
-        return (self.model.spec.properties.category, self.model.spec.properties.subcategory)
+        return (self.model.spec.category, self.model.spec.subcategory)

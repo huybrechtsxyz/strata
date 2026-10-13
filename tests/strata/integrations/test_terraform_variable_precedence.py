@@ -76,13 +76,13 @@ def _solution_with_properties_token(tmp_path: Path) -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -173,13 +173,13 @@ def _solution_with_two_resource_types(tmp_path: Path) -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  configuration:\n    partner_id: '${var:PARTNER_ID}'\n"
         "  default_tags:\n    managed-by: strata\n",
     )
@@ -187,7 +187,7 @@ def _solution_with_two_resource_types(tmp_path: Path) -> Path:
         root,
         "resource2.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r2\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: storage\n    category: storage\n"
+        "  provider_type: local\n  resource_type: storage\n  category: storage\n"
         "  configuration:\n    tier: '${var:TIER}'\n"
         "  default_tags:\n    managed-by: strata\n",
     )
@@ -292,14 +292,14 @@ def _solution_with_secrets_in_every_shape(tmp_path: Path) -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n"
+        "  type: local\n  region: local\n"
         "  custom:\n    cost_center: '${secret:COST_CENTER}'\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(

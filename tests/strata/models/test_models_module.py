@@ -231,9 +231,9 @@ def test_module_service_allows_neither_image_nor_artifact():
 def test_module_mount_rejects_volume_ref_and_storage_class_together():
     """A mount cannot set both volume_ref and storage_class."""
     data = _minimal_module()
-    data["spec"]["properties"] = {
-        "mounts": [{"name": "data", "volume_ref": "data-vol", "storage_class": "standard", "storage_size": "10Gi"}]
-    }
+    data["spec"]["mounts"] = [
+        {"name": "data", "volume_ref": "data-vol", "storage_class": "standard", "storage_size": "10Gi"}
+    ]
     with pytest.raises(ValidationError):
         ModuleModel.model_validate(data)
 
@@ -241,7 +241,7 @@ def test_module_mount_rejects_volume_ref_and_storage_class_together():
 def test_module_mount_requires_storage_size_with_storage_class():
     """A mount with storage_class but no storage_size is rejected."""
     data = _minimal_module()
-    data["spec"]["properties"] = {"mounts": [{"name": "data", "storage_class": "standard"}]}
+    data["spec"]["mounts"] = [{"name": "data", "storage_class": "standard"}]
     with pytest.raises(ValidationError):
         ModuleModel.model_validate(data)
 

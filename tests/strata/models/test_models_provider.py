@@ -11,10 +11,8 @@ def _minimal_provider() -> dict:
     return {
         "meta": {"name": "kamatera-primary"},
         "spec": {
-            "properties": {
-                "type": "kamatera",
-                "region": "eu-west",
-            }
+            "type": "kamatera",
+            "region": "eu-west",
         },
     }
 
@@ -23,8 +21,8 @@ def test_provider_minimal_is_valid():
     """A minimal provider (only required fields) validates successfully."""
     model = ProviderModel.model_validate(_minimal_provider())
     assert model.meta.name == "kamatera-primary"
-    assert model.spec.properties.type == "kamatera"
-    assert model.spec.properties.region == "eu-west"
+    assert model.spec.type == "kamatera"
+    assert model.spec.region == "eu-west"
     assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
     assert model.kind.value == "provider"
 
@@ -58,9 +56,9 @@ def test_provider_rejects_references_field():
 
 
 def test_provider_missing_required_field_is_invalid():
-    """Missing spec.properties.region raises a ValidationError."""
+    """Missing spec.region raises a ValidationError."""
     data = _minimal_provider()
-    del data["spec"]["properties"]["region"]
+    del data["spec"]["region"]
     with pytest.raises(ValidationError):
         ProviderModel.model_validate(data)
 
@@ -68,7 +66,7 @@ def test_provider_missing_required_field_is_invalid():
 def test_provider_rejects_unknown_fields():
     """Extra/unknown fields are rejected (extra='forbid')."""
     data = _minimal_provider()
-    data["spec"]["properties"]["unknown_field"] = "oops"
+    data["spec"]["unknown_field"] = "oops"
     with pytest.raises(ValidationError):
         ProviderModel.model_validate(data)
 

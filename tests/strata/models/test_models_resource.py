@@ -11,10 +11,8 @@ def _minimal_resource() -> dict:
     return {
         "meta": {"name": "web-vm"},
         "spec": {
-            "properties": {
-                "provider_type": "kamatera",
-                "resource_type": "virtual_machine",
-            },
+            "provider_type": "kamatera",
+            "resource_type": "virtual_machine",
             "default_tags": {"environment": "test"},
         },
     }
@@ -24,8 +22,8 @@ def test_resource_minimal_is_valid():
     """A minimal resource (only required fields) validates successfully."""
     model = ResourceModel.model_validate(_minimal_resource())
     assert model.meta.name == "web-vm"
-    assert model.spec.properties.provider_type == "kamatera"
-    assert model.spec.properties.resource_type == "virtual_machine"
+    assert model.spec.provider_type == "kamatera"
+    assert model.spec.resource_type == "virtual_machine"
     assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
     assert model.kind.value == "resource"
 
@@ -87,9 +85,9 @@ def test_resource_dependency_is_valid():
 
 
 def test_resource_missing_required_field_is_invalid():
-    """Missing spec.properties.resource_type raises a ValidationError."""
+    """Missing spec.resource_type raises a ValidationError."""
     data = _minimal_resource()
-    del data["spec"]["properties"]["resource_type"]
+    del data["spec"]["resource_type"]
     with pytest.raises(ValidationError):
         ResourceModel.model_validate(data)
 
@@ -114,7 +112,7 @@ def test_resource_custom_tags_is_valid():
 def test_resource_rejects_unknown_fields():
     """Extra/unknown fields are rejected (extra='forbid')."""
     data = _minimal_resource()
-    data["spec"]["properties"]["unknown_field"] = "oops"
+    data["spec"]["unknown_field"] = "oops"
     with pytest.raises(ValidationError):
         ResourceModel.model_validate(data)
 

@@ -20,11 +20,16 @@ from strata.models.common_models import (
 )
 
 
-class ProviderPropertiesModel(PlatformBaseModel):
+class ProviderSpecModel(PlatformBaseModel):
     """
-    Provider configuration: cloud provider and datacenter location.
+    Provider specification containing properties and lifecycle configuration.
     """
 
+    lifecycle: CommonLifecycleModel | None = Field(
+        None,
+        description="IaC workflow lifecycle phases, keyed by phase name "
+        "(e.g. deploy_check, deploy_plan_before, deploy_provision, deploy_destroy_after)",
+    )
     type: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         description="Cloud or infrastructure provider (e.g., kamatera, local). Must match a provider type in configuration.yaml."
     )
@@ -41,6 +46,33 @@ class ProviderPropertiesModel(PlatformBaseModel):
         description="Optional human-readable label for the region (e.g., 'West US', 'eu-west-1'). Purely "
         "cosmetic/documentation — not a distinct geographic concept from `region` and not required for "
         "provider validation.",
+    )
+    authentication: AuthenticationModel | None = Field(
+        None, description="Authentication configuration for cloud provider access"
+    )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Raw provisioner-specific passthrough configuration (e.g. extra Terraform "
+        "provider-block arguments such as 'skip_provider_registration' or 'partner_id'). "
+        "Unlike `type`/`region`, these keys are not validated by strata and are passed through "
+        "as-is to the provisioner. Must be consumed by the corresponding builder/service — "
+        "a field here is inert until that layer exists.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Optional custom key-value pairs for automation/bookkeeping (e.g. cost center, "
+        "billing account). Not consumed by any provisioner — for external tooling/documentation "
+        "only. Must be explicitly wired through by the builder/service layer if it needs to reach "
+        "build output; it is not automatic.",
+    )
+    default_tags: dict[str, str] | None = Field(
+        None,
+        description="Default tags to apply to all resources created by this provider (ignored if provider "
+        "doesn't support tagging). Deliberately distinct from meta.tags (a free-form list used for "
+        "strata-internal categorization/documentation, not cloud tags). Optional (unlike "
+        "ResourceSpecModel.default_tags) — not every provider account needs an organization-wide tagging "
+        "policy; no custom_tags sibling either, since this is a broad provider-scope default, not an "
+        "individually-tagged resource.",
     )
 
     @field_validator("type")
@@ -62,48 +94,6 @@ class ProviderPropertiesModel(PlatformBaseModel):
         Dynamic validation against configuration happens in service layer (Phase 2).
         """
         return v
-
-
-class ProviderSpecModel(PlatformBaseModel):
-    """
-    Provider specification containing properties and lifecycle configuration.
-    """
-
-    lifecycle: CommonLifecycleModel | None = Field(
-        None,
-        description="IaC workflow lifecycle phases, keyed by phase name "
-        "(e.g. deploy_check, deploy_plan_before, deploy_provision, deploy_destroy_after)",
-    )
-    properties: ProviderPropertiesModel = Field(
-        description="Provider configuration (cloud provider, IaC tool, datacenter location)"
-    )
-    authentication: AuthenticationModel | None = Field(
-        None, description="Authentication configuration for cloud provider access"
-    )
-    configuration: dict[str, Any] | None = Field(
-        None,
-        description="Raw provisioner-specific passthrough configuration (e.g. extra Terraform "
-        "provider-block arguments such as 'skip_provider_registration' or 'partner_id'). "
-        "Unlike `properties`, these keys are not validated by strata and are passed through "
-        "as-is to the provisioner. Must be consumed by the corresponding builder/service — "
-        "a field here is inert until that layer exists.",
-    )
-    custom: dict[str, Any] | None = Field(
-        None,
-        description="Optional custom key-value pairs for automation/bookkeeping (e.g. cost center, "
-        "billing account). Not consumed by any provisioner — for external tooling/documentation "
-        "only. Must be explicitly wired through by the builder/service layer if it needs to reach "
-        "build output; it is not automatic.",
-    )
-    default_tags: dict[str, str] | None = Field(
-        None,
-        description="Default tags to apply to all resources created by this provider (ignored if provider "
-        "doesn't support tagging). Deliberately distinct from meta.tags (a free-form list used for "
-        "strata-internal categorization/documentation, not cloud tags). Optional (unlike "
-        "ResourceSpecModel.default_tags) — not every provider account needs an organization-wide tagging "
-        "policy; no custom_tags sibling either, since this is a broad provider-scope default, not an "
-        "individually-tagged resource.",
-    )
 
 
 class ProviderMetaModel(PlatformBaseModel):
@@ -134,7 +124,7 @@ class ProviderModel(PlatformBaseModel):
         description="Resource kind (always 'Provider')",
     )
     meta: ProviderMetaModel = Field(description="Provider metadata (name, annotations, labels, tags)")
-    spec: ProviderSpecModel = Field(description="Provider specification (properties, authentication, lifecycle)")
+    spec: ProviderSpecModel = Field(description="Provider specification (type, region, authentication, lifecycle)")
 
     @field_validator("kind")
     @classmethod

@@ -118,21 +118,21 @@ def _strata_tenant(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 def _strata_providers(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     """`strata.providers` — name -> {type, region, display_name,
     description, labels, tags, configuration, custom, default_tags} per
-    `ProviderPropertiesModel`/`ProviderSpecModel`/`ProviderMetaModel`."""
+    `ProviderSpecModel`/`ProviderMetaModel`."""
     payload: dict[str, Any] = {}
     for name, provider in graph.providers.items():
-        properties = provider.spec.properties
+        spec = provider.spec
         meta = provider.meta
         payload[name] = {
-            "type": properties.type,
-            "region": properties.region,
-            "display_name": properties.display_name,
+            "type": spec.type,
+            "region": spec.region,
+            "display_name": spec.display_name,
             "description": (meta.annotations or {}).get("description", ""),
             "labels": meta.labels or {},
             "tags": meta.tags or [],
-            "configuration": provider.spec.configuration or {},
-            "custom": provider.spec.custom or {},
-            "default_tags": provider.spec.default_tags or {},
+            "configuration": spec.configuration or {},
+            "custom": spec.custom or {},
+            "default_tags": spec.default_tags or {},
         }
     return payload
 
@@ -161,12 +161,11 @@ def _strata_resources(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
             continue
         resource = graph.resources[workspace_resource.resource]
         resource_spec = resource.spec
-        properties = resource_spec.properties
         payload[workspace_resource.name] = {
-            "provider_type": properties.provider_type,
-            "resource_type": properties.resource_type,
-            "subcategory": properties.subcategory,
-            "unit_cost": properties.unit_cost,
+            "provider_type": resource_spec.provider_type,
+            "resource_type": resource_spec.resource_type,
+            "subcategory": resource_spec.subcategory,
+            "unit_cost": resource_spec.unit_cost,
             "role": workspace_resource.role,
             "count": workspace_resource.count,
             "configuration": {
@@ -227,33 +226,27 @@ def _strata_modules(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     adding one more nested key is free, and omitting it would itself have
     become the special case this whole redesign exists to delete.
 
-    `mounts`/`checks`/`endpoints` nest under `properties`
-    (`ModuleSpecModel.properties: ModulePropertiesModel | None`), not as
-    flat siblings of `type`/`source` — they are not top-level
-    `ModuleSpecModel` fields. `services` is deliberately excluded (Helm
-    chart/workload-builder internals, not something a Terraform root
-    plausibly needs) — this is a read-only projection, it does not change
-    the Helm/Compose workload pipeline at all.
+    `mounts`/`checks`/`endpoints` are flattened directly onto `ModuleSpecModel`
+    (ADR-0037), not nested under a `properties` sub-model — the output
+    payload below still groups them under a `"properties"` key, since that's
+    a separate, Terraform-facing shape decision, not the source model's own
+    field layout. `services` is deliberately excluded (Helm chart/workload-
+    builder internals, not something a Terraform root plausibly needs) —
+    this is a read-only projection, it does not change the Helm/Compose
+    workload pipeline at all.
     """
     payload: dict[str, Any] = {}
     for name, module in graph.modules.items():
         spec = module.spec
-        properties = spec.properties
         payload[name] = {
             "type": spec.type,
             "source": spec.source.model_dump(mode="json", exclude_none=True),
             "release_name": spec.release_name,
             "kubernetes_namespace": spec.kubernetes_namespace,
             "properties": {
-                "mounts": [m.model_dump(mode="json", exclude_none=True) for m in (properties.mounts or [])]
-                if properties
-                else [],
-                "checks": [c.model_dump(mode="json", exclude_none=True) for c in (properties.checks or [])]
-                if properties
-                else [],
-                "endpoints": [e.model_dump(mode="json", exclude_none=True) for e in (properties.endpoints or [])]
-                if properties
-                else [],
+                "mounts": [m.model_dump(mode="json", exclude_none=True) for m in (spec.mounts or [])],
+                "checks": [c.model_dump(mode="json", exclude_none=True) for c in (spec.checks or [])],
+                "endpoints": [e.model_dump(mode="json", exclude_none=True) for e in (spec.endpoints or [])],
             },
             "configuration": spec.configuration or {},
             "custom": spec.custom or {},

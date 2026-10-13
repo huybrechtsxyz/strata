@@ -2,7 +2,7 @@
 
 The registry entry for one provider *type* (azure, aws, kamatera, gcp, ...): its valid regions
 and supported resource types. `meta.name` is the type key itself (e.g. `azure`) — matched
-against a real [`provider`](provider.md) document's `spec.properties.type`.
+against a real [`provider`](provider.md) document's `spec.type`.
 
 Promoted to its own kind (rather than a bare list on [`configuration`](configuration.md)) so a
 platform with many provider types doesn't need one shared, ever-growing file — each type gets

@@ -193,11 +193,14 @@ class ConfigurationSpecModel(PlatformBaseModel):
     Only `providers`/`topologies`/`security`/`paths`/`audit`/`cve_allowed`
     are modeled so far — see module docstring for what v1 has that v2 is
     deliberately deferring.
-    """
 
-    properties: dict[str, Any] | None = Field(None, description="Optional additional properties for the configuration.")
-    configuration: dict[str, Any] | None = Field(None, description="Optional configuration-specific properties.")
-    custom: dict[str, Any] | None = Field(None, description="Optional custom properties for the configuration.")
+    No `properties`/`configuration`/`custom` (ADR-0038) — unlike
+    Provider/Resource/Module, these were never a naming collision to fix
+    here; they had zero real consumers and no concrete plan to ever give
+    them one. A solution-wide "globals" need, if it ever arises, is
+    already met by referencing a shared Environment document instead
+    (ADR-0024's merge chain).
+    """
 
     providers: list[Annotated[PlatformName, References(PlatformKind.PROVIDERCONFIG)]] | None = Field(
         None, description="Provider type registry: names of ProviderConfig documents"

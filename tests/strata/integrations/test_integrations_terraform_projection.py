@@ -24,7 +24,7 @@ from strata.models.firewall_model import (
     FirewallRuleModel,
     FirewallSpecModel,
 )
-from strata.models.module_model import ModuleMetaModel, ModuleModel, ModulePropertiesModel, ModuleSpecModel
+from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleSpecModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.network_model import (
     NetworkDefinitionModel,
@@ -36,7 +36,6 @@ from strata.models.network_model import (
 from strata.models.provider_model import (
     ProviderMetaModel,
     ProviderModel,
-    ProviderPropertiesModel,
     ProviderSpecModel,
 )
 from strata.models.provisioning_model import ProvisionerModel
@@ -44,7 +43,6 @@ from strata.models.resource_model import (
     ResourceDiskModel,
     ResourceMetaModel,
     ResourceModel,
-    ResourcePropertiesModel,
     ResourceSpecModel,
     ResourceStorageModel,
 )
@@ -64,9 +62,7 @@ from strata.utils.value_tokens import escape_path_segment
 def _provider(name: str = "hetzner_dc_eu_de") -> ProviderModel:
     return ProviderModel(
         meta=ProviderMetaModel(name=name),
-        spec=ProviderSpecModel(
-            properties=ProviderPropertiesModel(type="hetzner", region="nbg1", display_name="Nuremberg")
-        ),
+        spec=ProviderSpecModel(type="hetzner", region="nbg1", display_name="Nuremberg"),
     )
 
 
@@ -78,9 +74,10 @@ def _resource(name: str = "haven_vm_hetzner_hearth", category: str = "compute") 
     return ResourceModel(
         meta=ResourceMetaModel(name=name),
         spec=ResourceSpecModel(
-            properties=ResourcePropertiesModel(
-                provider_type="hetzner", resource_type="virtualmachine", unit_cost=4.15, category=category
-            ),
+            provider_type="hetzner",
+            resource_type="virtualmachine",
+            unit_cost=4.15,
+            category=category,
             configuration={"image": "ubuntu-24.04", "server_type": "cx23"},
             default_tags={"managed-by": "strata"},
         ),
@@ -246,7 +243,6 @@ def _module(name: str = "authentik") -> ModuleModel:
             type="helm",
             release_name=name,
             kubernetes_namespace="hearth",
-            properties=ModulePropertiesModel(),
         ),
     )
 
@@ -319,7 +315,8 @@ def test_build_strata_payload_resources_includes_storage_and_custom():
     resource = ResourceModel(
         meta=ResourceMetaModel(name="haven_vm_hetzner_hearth"),
         spec=ResourceSpecModel(
-            properties=ResourcePropertiesModel(provider_type="hetzner", resource_type="virtualmachine"),
+            provider_type="hetzner",
+            resource_type="virtualmachine",
             storage=ResourceStorageModel(
                 install_path="/opt/app", disks=[ResourceDiskModel(name="os", size=64, label="os-disk", mount="/data")]
             ),

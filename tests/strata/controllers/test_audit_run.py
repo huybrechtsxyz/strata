@@ -54,13 +54,13 @@ def _solution_root(tmp_path: Path, *, remote_url: str | None = None) -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -284,13 +284,13 @@ def _solution_with_workload(
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(

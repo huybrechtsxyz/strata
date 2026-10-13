@@ -11,7 +11,7 @@ from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueRe
 from strata.integrations.terraform import TerraformIntegration
 from strata.integrations.terraform_projection import build_strata_payload
 from strata.models.common_models import SourceModel
-from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
+from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderSpecModel
 from strata.models.provisioning_model import ProvisionerModel
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
 from strata.utils.transport import CommandResult
@@ -187,7 +187,7 @@ def _graph():
     )
     provider = ProviderModel(
         meta=ProviderMetaModel(name="p"),
-        spec=ProviderSpecModel(properties=ProviderPropertiesModel(type="local", region="local")),
+        spec=ProviderSpecModel(type="local", region="local"),
     )
     return ResolvedWorkspaceGraph(workspace=workspace, providers={"p": provider})
 
@@ -237,7 +237,8 @@ def test_default_output_strata_locals_merges_a_real_secret_path(tmp_path: Path):
     provider = ProviderModel(
         meta=ProviderMetaModel(name="p"),
         spec=ProviderSpecModel(
-            properties=ProviderPropertiesModel(type="local", region="local"),
+            type="local",
+            region="local",
             configuration={"api_token": "${secret:API_TOKEN}"},
         ),
     )

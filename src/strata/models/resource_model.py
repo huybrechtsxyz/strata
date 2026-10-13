@@ -195,9 +195,13 @@ class ResourceStorageModel(PlatformBaseModel):
         return self
 
 
-class ResourcePropertiesModel(PlatformBaseModel):
-    """Model for resource properties (provider, type, cost, category)."""
+class ResourceSpecModel(PlatformBaseModel):
+    """Resource specification containing its core identity fields and lifecycle configuration."""
 
+    lifecycle: CommonLifecycleModel | None = Field(
+        None,
+        description="IaC workflow lifecycle phases, keyed by phase name",
+    )
     provider_type: PlatformName = Field(
         description="Cloud/infrastructure provider. Must be a known provider string matching PlatformName pattern."
     )
@@ -212,36 +216,6 @@ class ResourcePropertiesModel(PlatformBaseModel):
     subcategory: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
         None,
         description="Resource subcategory for finer classification (e.g., vnet, nosql, blob)",
-    )
-
-    @field_validator("provider_type")
-    @classmethod
-    def validate_provider_type(cls, v: str) -> str:
-        """
-        Validate provider type format (Phase 1: static validation only).
-        Dynamic validation against configuration happens in service layer (Phase 2).
-        """
-        return v
-
-    @field_validator("resource_type")
-    @classmethod
-    def validate_resource_type(cls, v: str) -> str:
-        """
-        Validate resource type format (Phase 1: static validation only).
-        Dynamic validation against configuration happens in service layer (Phase 2).
-        """
-        return v
-
-
-class ResourceSpecModel(PlatformBaseModel):
-    """Resource specification containing properties and lifecycle configuration."""
-
-    lifecycle: CommonLifecycleModel | None = Field(
-        None,
-        description="IaC workflow lifecycle phases, keyed by phase name",
-    )
-    properties: ResourcePropertiesModel = Field(
-        description="Configuration properties (provider, resource type, category, cost)"
     )
     dependencies: list[ResourceDependencyModel] | None = Field(None, description="List of resource dependencies")
     storage: ResourceStorageModel | None = Field(None, description="Virtual machine specific configuration")
@@ -267,6 +241,24 @@ class ResourceSpecModel(PlatformBaseModel):
         description="Optional additional cloud provider tags beyond default_tags, for ad-hoc/one-off tagging "
         "needs that don't belong in the required baseline set.",
     )
+
+    @field_validator("provider_type")
+    @classmethod
+    def validate_provider_type(cls, v: str) -> str:
+        """
+        Validate provider type format (Phase 1: static validation only).
+        Dynamic validation against configuration happens in service layer (Phase 2).
+        """
+        return v
+
+    @field_validator("resource_type")
+    @classmethod
+    def validate_resource_type(cls, v: str) -> str:
+        """
+        Validate resource type format (Phase 1: static validation only).
+        Dynamic validation against configuration happens in service layer (Phase 2).
+        """
+        return v
 
 
 class ResourceMetaModel(PlatformBaseModel):
@@ -300,7 +292,7 @@ class ResourceModel(PlatformBaseModel):
         description="Platform kind (always 'resource')",
     )
     meta: ResourceMetaModel = Field(description="Resource metadata (name, annotations, labels, tags)")
-    spec: ResourceSpecModel = Field(description="Resource specification (properties, lifecycle, ...)")
+    spec: ResourceSpecModel = Field(description="Resource specification (provider_type, resource_type, lifecycle, ...)")
 
     @field_validator("kind")
     @classmethod

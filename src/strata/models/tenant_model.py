@@ -16,7 +16,7 @@ Three deliberate differences from v1's `tenant_model.py`:
    tenant code; there is nothing to keep in sync.
 2. **`spec.name` renamed `display_name`.** It holds the human label ("GSK")
    while `meta.name` holds the identifier (`c0062`) — two different things
-   called the same word. Matches `ProviderPropertiesModel.display_name`.
+   called the same word. Matches `ProviderSpecModel.display_name`.
 3. **`spec.environments` names Environment documents, not file paths.**
    v1 listed workspace-relative paths (`customers/c0062/tenant.env.yaml`);
    documents are now resolved by identity (ADR-0015). The real tenant env

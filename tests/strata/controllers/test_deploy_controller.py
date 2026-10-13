@@ -59,13 +59,13 @@ def _terraform_solution(
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     execution = "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n      scope: infra\n"
@@ -352,13 +352,13 @@ def _solution_with_secret(tmp_path: Path, secret_value: str) -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -577,13 +577,13 @@ def test_deploy_run_injects_tf_var_env_for_every_step(tmp_path: Path, monkeypatc
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -651,13 +651,13 @@ def _artifact_pin_solution(tmp_path: Path, *, reference_version_from_deployment:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -849,13 +849,13 @@ def test_deploy_run_resolves_backend_configuration_tokens(tmp_path: Path):
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -920,13 +920,13 @@ def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: 
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1021,13 +1021,13 @@ def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: 
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  configuration:\n    admin_password: '${secret:vm_admin_password}'\n"
         "  default_tags:\n    managed-by: strata\n",
     )
@@ -1094,20 +1094,20 @@ def test_deploy_run_merges_multiple_resx_types_into_one_tf_var_resources(tmp_pat
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
         root,
         "resource2.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r2\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: storage\n    category: storage\n"
+        "  provider_type: local\n  resource_type: storage\n  category: storage\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1166,13 +1166,13 @@ def test_deploy_run_delivers_flat_categories_as_one_env_var_per_key(tmp_path: Pa
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1247,13 +1247,13 @@ def test_deploy_run_no_longer_collides_on_shared_flat_category_key_names(tmp_pat
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1304,7 +1304,7 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n"
+        "  type: local\n  region: local\n"
         "  configuration:\n    partner_id: '${var:partner_id}'\n"
         "  custom:\n    cost_center: '${secret:cost_center}'\n",
     )
@@ -1312,7 +1312,7 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1376,13 +1376,13 @@ def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Pat
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  configuration:\n    ip: '${output:apply_infra.vm_ip}'\n"
         "  default_tags:\n    managed-by: strata\n",
     )
@@ -1427,13 +1427,13 @@ def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_pat
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: hearth\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1518,13 +1518,13 @@ def test_deploy_run_sentinels_an_output_token_when_the_real_output_is_sensitive(
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: hearth\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1606,13 +1606,13 @@ def test_deploy_run_rejects_unclaimed_output_token_in_dns(tmp_path: Path):
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1668,13 +1668,13 @@ def _output_chained_solution(tmp_path: Path) -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -1780,13 +1780,13 @@ def test_deploy_run_reports_a_diagnostic_when_a_strata_payload_token_is_unresolv
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n"
         "  custom:\n    vm_ip: '${var:undeclared_var}'\n",
     )
@@ -1839,13 +1839,13 @@ def test_deploy_run_rejects_output_token_from_non_dependency(tmp_path: Path, mon
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(
@@ -2456,13 +2456,13 @@ def _output_template_solution(tmp_path: Path) -> Path:
         root,
         "provider.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
-        "  properties:\n    type: local\n    region: local\n",
+        "  type: local\n  region: local\n",
     )
     _write(
         root,
         "resource.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
-        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
     _write(

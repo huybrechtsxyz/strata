@@ -88,9 +88,8 @@ kind: provider
 meta:
   name: azure-main
 spec:
-  properties:
-    type: azure
-    region: westeurope
+  type: azure
+  region: westeurope
 """,
     )
     _write(
@@ -101,9 +100,8 @@ kind: resource
 meta:
   name: storage-account
 spec:
-  properties:
-    provider_type: azure
-    resource_type: storage_account
+  provider_type: azure
+  resource_type: storage_account
   default_tags:
     environment: test
 """,
@@ -375,7 +373,7 @@ def test_deployment_with_multiple_providers_reports_each_mismatch_independently(
         root,
         "provider2.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: azure-secondary\nspec:\n"
-        "  properties:\n    type: azure\n    region: eastus2\n",
+        "  type: azure\n  region: eastus2\n",
     )
     workspace_path = root / "workspace.yaml"
     workspace_path.write_text(
@@ -1562,9 +1560,8 @@ kind: provider
 meta:
   name: azure-main
 spec:
-  properties:
-    type: azure
-    region: westeurope
+  type: azure
+  region: westeurope
 """,
     )
     _write(

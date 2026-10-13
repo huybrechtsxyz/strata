@@ -60,7 +60,7 @@ geographies`, not a gap to port 1:1):
   "spec.providers[*].regions[]"` — the captured region must be a real,
   registered provider region) — **already covered**, more precisely, by
   `_check_providers()`/`ProviderService` today: a `Provider` document's
-  `spec.properties.region` is already cross-checked against its
+  `spec.region` is already cross-checked against its
   `ProviderConfig`'s real `spec.regions[*].name`
   (`test_provider_region_invalid_for_its_config_is_caught`). A generic
   YAML-expression evaluator would only re-derive a check v2 already does

@@ -7,7 +7,7 @@
   [terraform-tfvars-parity.md](../design/terraform-tfvars-parity.md)
   (the v1-parity shape this decision replaces), [flat-category-secret-taint-size-limit.md](../work/flat-category-secret-taint-size-limit.md)
   (the per-category patch this decision supersedes structurally rather
-  than extending), sequenced after [flatten-provider-resource-module-properties.md](../work/flatten-provider-resource-module-properties.md),
+  than extending), sequenced after [flatten-provider-resource-module-properties.md](../design/flatten-provider-resource-module-properties.md),
   ADR-0022 (build renders, deploy executes), ADR-0023 (build output
   rendering — `InfraIntegration.prepare()`/`default_output()`), ADR-0025
   (strata supplies input, not source rewriting — the rule this decision's

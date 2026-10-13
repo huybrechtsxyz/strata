@@ -80,7 +80,7 @@ It is genuinely enforced, not aspirational.
 `ResourceService._validate_configuration_schema()`
 (`src/strata/services/resource_service.py`) is reached from
 `validate_against_provider_config()`, which `semantic_checks.py` calls for
-every resource whose `spec.properties.provider_type` resolves to a loaded
+every resource whose `spec.provider_type` resolves to a loaded
 `providerconfig`. It emits four diagnostic codes:
 
 | Code                              | Raised when                                                       |
@@ -170,7 +170,7 @@ re-create the monolith ADR-0014 just dismantled.
 list.** `spec.providers`/`spec.topologies` exist as registration
 allow-lists, but the actual `providerconfig` lookup in `semantic_checks.py`
 goes straight to the document index
-(`index.get(PlatformKind.PROVIDERCONFIG, provider.spec.properties.type)`),
+(`index.get(PlatformKind.PROVIDERCONFIG, provider.spec.type)`),
 not through that list. A schema is selected by *what it targets*, not by
 name, so the check must scan all schema documents in the index regardless
 — a registration list would add a second place to forget to update. Open
@@ -245,8 +245,8 @@ spec:
     kind: resource
     block: configuration
     selector:                       # optional; omitted means "every document of this kind"
-      spec.properties.provider_type: azure
-      spec.properties.resource_type: storage_account
+      spec.provider_type: azure
+      spec.resource_type: storage_account
 ```
 
 For the motivating case the selector is simply absent (every `environment`
@@ -556,7 +556,7 @@ work starts.
   [`references.py`](../../src/strata/controllers/references.py)'s
   `_walk()` already follows a dotted path (with `[]` list syntax) across an
   already-validated Pydantic document and yields the leaf value — close to
-  what a `spec.properties.provider_type: azure` selector needs to
+  what a `spec.provider_type: azure` selector needs to
   evaluate. It's currently private and reference-specific (filters to
   string/list-of-string leaves only), and a second, unrelated dotted-path
   mechanism (`_set_path()`/`split_path()` in `terraform_projection.py`,

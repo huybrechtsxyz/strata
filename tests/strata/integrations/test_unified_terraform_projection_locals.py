@@ -22,7 +22,7 @@ from strata.integrations.terraform import TerraformIntegration
 from strata.integrations.terraform_projection import build_strata_payload, rewrite_strata_payload
 from strata.models.common_models import SourceModel
 from strata.models.dns_model import DnsMetaModel, DnsModel, DnsRecordModel, DnsSpecModel, DnsZoneModel
-from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
+from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderSpecModel
 from strata.models.provisioning_model import ProvisionerModel
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
 
@@ -64,7 +64,8 @@ def _graph_with_a_provider_secret() -> ResolvedWorkspaceGraph:
     provider = ProviderModel(
         meta=ProviderMetaModel(name="kamatera"),
         spec=ProviderSpecModel(
-            properties=ProviderPropertiesModel(type="kamatera", region="eu"),
+            type="kamatera",
+            region="eu",
             configuration={"api_token": "${secret:API_TOKEN}"},
         ),
     )
@@ -131,7 +132,7 @@ def _graph_with_a_dotted_key_list_secret() -> ResolvedWorkspaceGraph:
     )
     provider = ProviderModel(
         meta=ProviderMetaModel(name="kamatera"),
-        spec=ProviderSpecModel(properties=ProviderPropertiesModel(type="kamatera", region="eu")),
+        spec=ProviderSpecModel(type="kamatera", region="eu"),
     )
     dns = DnsModel(
         meta=DnsMetaModel(name="public-dns"),
