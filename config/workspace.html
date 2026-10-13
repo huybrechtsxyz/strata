@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workspace (kind: workspace) &mdash; strata 2.0.0-Alpha9 documentation</title>
+  <title>Workspace (kind: workspace) &mdash; strata 2.0.0-Alpha21 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=63c80f8a"></script>
+      <script src="../_static/documentation_options.js?v=ef84901b"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -152,7 +152,13 @@ helm, compose, …), <code class="docutils literal notranslate"><span class="pre
 <code class="docutils literal notranslate"><span class="pre">integration</span></code> (which <a class="reference internal" href="integration.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">integration</span></code></span></a> document supplies version/auth), <code class="docutils literal notranslate"><span class="pre">output</span></code>
 (Jinja2 template escape hatch)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.execution[]</span></code> — the ordered recipe (<code class="docutils literal notranslate"><span class="pre">ProvisioningStepModel</span></code>): <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">provisioner</span></code>,
-<code class="docutils literal notranslate"><span class="pre">targets[]</span></code> (resource/namespace names), <code class="docutils literal notranslate"><span class="pre">depends_on[]</span></code> for step ordering</p></li>
+<code class="docutils literal notranslate"><span class="pre">resources[]</span></code>/<code class="docutils literal notranslate"><span class="pre">namespaces[]</span></code> (direct references this step acts on), <code class="docutils literal notranslate"><span class="pre">topologies[]</span></code> (expands to
+that topology’s own resources/namespaces), <code class="docutils literal notranslate"><span class="pre">dns_zones[]</span></code>/<code class="docutils literal notranslate"><span class="pre">firewalls[]</span></code>/<code class="docutils literal notranslate"><span class="pre">networks[]</span></code> (direct
+escape hatch for claiming one of those documents’ <code class="docutils literal notranslate"><span class="pre">${output:...}</span></code> ownership without a
+resource/topology link), <code class="docutils literal notranslate"><span class="pre">depends_on[]</span></code> for step ordering. At least one of the six target-ish
+fields is required. A resource’s own <code class="docutils literal notranslate"><span class="pre">firewalls</span></code>/<code class="docutils literal notranslate"><span class="pre">dns_zones</span></code>/<code class="docutils literal notranslate"><span class="pre">subnet.network</span></code> are claimed
+automatically once that resource is effectively in scope (direct or via <code class="docutils literal notranslate"><span class="pre">topologies[]</span></code>) — no
+need to also list them directly on the step.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.default_tags</span></code> — default cloud tags for resources created by this workspace</p></li>
 </ul>
 </section>
@@ -188,7 +194,7 @@ helm, compose, …), <code class="docutils literal notranslate"><span class="pre
 <span class="w">  </span><span class="nt">execution</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provision-infra</span>
 <span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform-main</span>
-<span class="w">      </span><span class="nt">targets</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">resources</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-storage</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-vm</span>
 <span class="w">  </span><span class="nt">topology</span><span class="p">:</span>

@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Provider (kind: provider) &mdash; strata 2.0.0-Alpha9 documentation</title>
+  <title>Provider (kind: provider) &mdash; strata 2.0.0-Alpha21 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=63c80f8a"></script>
+      <script src="../_static/documentation_options.js?v=ef84901b"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -128,9 +128,9 @@ combination a workspace provisions into.</p>
 <section id="schema">
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.properties.type</span></code> — provider type (must match a <a class="reference internal" href="providerconfig.html"><span class="std std-doc">providerconfig.md</span></a> document’s <code class="docutils literal notranslate"><span class="pre">meta.name</span></code>)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.properties.region</span></code> — region/datacenter (cross-checked against that <code class="docutils literal notranslate"><span class="pre">ProviderConfig</span></code>’s <code class="docutils literal notranslate"><span class="pre">spec.regions</span></code>)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.properties.display_name</span></code> — optional human-readable label, purely cosmetic</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.type</span></code> — provider type (must match a <a class="reference internal" href="providerconfig.html"><span class="std std-doc">providerconfig.md</span></a> document’s <code class="docutils literal notranslate"><span class="pre">meta.name</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.region</span></code> — region/datacenter (cross-checked against that <code class="docutils literal notranslate"><span class="pre">ProviderConfig</span></code>’s <code class="docutils literal notranslate"><span class="pre">spec.regions</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.display_name</span></code> — optional human-readable label, purely cosmetic</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.authentication</span></code> — optional; one of several supported methods (OAuth2, API key,
 certificate/mTLS, managed identity, CLI-based, …)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> — raw passthrough to the provisioner (e.g. extra Terraform provider-block
@@ -147,10 +147,9 @@ arguments), never validated by strata</p></li>
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-main</span>
 <span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
-<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">westeurope</span>
-<span class="w">    </span><span class="nt">display_name</span><span class="p">:</span><span class="w"> </span><span class="s">"West</span><span class="nv"> </span><span class="s">Europe"</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
+<span class="w">  </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">westeurope</span>
+<span class="w">  </span><span class="nt">display_name</span><span class="p">:</span><span class="w"> </span><span class="s">"West</span><span class="nv"> </span><span class="s">Europe"</span>
 <span class="w">  </span><span class="nt">default_tags</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">managed-by</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata</span>
 </pre></div>

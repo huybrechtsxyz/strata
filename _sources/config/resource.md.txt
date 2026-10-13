@@ -6,10 +6,10 @@ several times, under different local names) via `WorkspaceResourceModel`.
 
 ## Schema
 
-- `spec.properties.provider_type` — must match a [providerconfig.md](providerconfig.md) document
-- `spec.properties.resource_type` — must match one of that provider type's `spec.resources[].name`
-- `spec.properties.category` / `subcategory` — resource classification
-- `spec.properties.unit_cost` — optional cost-tracking figure (default `0.0`)
+- `spec.provider_type` — must match a [providerconfig.md](providerconfig.md) document
+- `spec.resource_type` — must match one of that provider type's `spec.resources[].name`
+- `spec.category` / `subcategory` — resource classification
+- `spec.unit_cost` — optional cost-tracking figure (default `0.0`)
 - `spec.dependencies[]` — capability-based dependencies (`category`/`subcategory`/`resource_type`,
   `optional`) — declares what *kind* of resource is needed, resolved by the workspace, not a
   hardcoded instance reference
@@ -30,10 +30,9 @@ kind: resource
 meta:
   name: storage-account
 spec:
-  properties:
-    provider_type: azure
-    resource_type: storage_account
-    category: storage
+  provider_type: azure
+  resource_type: storage_account
+  category: storage
   configuration:
     account_tier: Standard
   default_tags:
@@ -45,10 +44,9 @@ kind: resource
 meta:
   name: linux-vm
 spec:
-  properties:
-    provider_type: azure
-    resource_type: virtual_machine
-    category: compute
+  provider_type: azure
+  resource_type: virtual_machine
+  category: compute
   default_tags:
     environment: example
     cost-center: "cc-1234"

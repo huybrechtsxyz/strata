@@ -26,7 +26,7 @@ from either a Helm chart or a Compose-style service list, sourced from a remote.
   - `healthcheck` — `{name, type, command|endpoint, interval, timeout, retries}`
   - `configuration` — deployer-specific overrides merged verbatim (into the Compose service block,
     or `values.<service.name>` for Helm)
-- `spec.properties` — single-service backward-compatible shape (`mounts[]`/`checks[]`/`endpoints[]`)
+- `spec.mounts[]` / `spec.checks[]` / `spec.endpoints[]` — single-service backward-compatible shape,
   used when `spec.services` is absent
 - `spec.default_labels` / `spec.custom_labels` — Kubernetes-style labels
 - `spec.lifecycle` — optional IaC workflow hook phases

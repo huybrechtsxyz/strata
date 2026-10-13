@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DNS (kind: dns) &mdash; strata 2.0.0-Alpha9 documentation</title>
+  <title>DNS (kind: dns) &mdash; strata 2.0.0-Alpha21 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=63c80f8a"></script>
+      <script src="../_static/documentation_options.js?v=ef84901b"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -73,6 +73,7 @@
 <li class="toctree-l1"><a class="reference internal" href="firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#validation">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
@@ -134,7 +135,8 @@
 <li><p><code class="docutils literal notranslate"><span class="pre">records[]</span></code>, each <code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">type,</span> <span class="pre">value,</span> <span class="pre">ttl,</span> <span class="pre">priority,</span> <span class="pre">description,</span> <span class="pre">notes}</span></code></p>
 <ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">type</span></code> — <code class="docutils literal notranslate"><span class="pre">A</span></code>, <code class="docutils literal notranslate"><span class="pre">AAAA</span></code>, <code class="docutils literal notranslate"><span class="pre">CNAME</span></code>, <code class="docutils literal notranslate"><span class="pre">MX</span></code>, <code class="docutils literal notranslate"><span class="pre">TXT</span></code>, <code class="docutils literal notranslate"><span class="pre">SRV</span></code>, <code class="docutils literal notranslate"><span class="pre">NS</span></code>, <code class="docutils literal notranslate"><span class="pre">PTR</span></code>, <code class="docutils literal notranslate"><span class="pre">CAA</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">value</span></code> — a literal, or a <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code> token</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">value</span></code> — a literal, or a <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${output:STEP.KEY}</span></code>/
+<code class="docutils literal notranslate"><span class="pre">${value:kind.name.path}</span></code> token</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">priority</span></code> — only valid for <code class="docutils literal notranslate"><span class="pre">MX</span></code>/<code class="docutils literal notranslate"><span class="pre">SRV</span></code> records</p></li>
 </ul>
 </li>
@@ -143,6 +145,20 @@
 <li><p><code class="docutils literal notranslate"><span class="pre">custom</span></code> — free-form data</p></li>
 </ul>
 </li>
+</ul>
+</section>
+<section id="validation">
+<h2>Validation<a class="headerlink" href="#validation" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Within one zone, records are rejected if they exactly duplicate another
+record’s <code class="docutils literal notranslate"><span class="pre">(name,</span> <span class="pre">type,</span> <span class="pre">value)</span></code>, or if a <code class="docutils literal notranslate"><span class="pre">CNAME</span></code> shares its <code class="docutils literal notranslate"><span class="pre">name</span></code> with any
+other record (including another <code class="docutils literal notranslate"><span class="pre">CNAME</span></code>) — invalid in DNS itself, not just
+a strata convention. A record whose <code class="docutils literal notranslate"><span class="pre">value</span></code> still carries an unresolved
+<code class="docutils literal notranslate"><span class="pre">${...}</span></code> token is skipped for the duplicate-value check (its real value
+isn’t known until build/deploy time).</p></li>
+<li><p>The same zone domain (<code class="docutils literal notranslate"><span class="pre">name</span></code>) declared by two or more documents produces a
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> warning (<code class="docutils literal notranslate"><span class="pre">dns_zone_declared_twice</span></code>) — provisioning both
+will likely conflict depending on provider/apply order.</p></li>
 </ul>
 </section>
 <section id="example">
@@ -171,9 +187,11 @@
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p>v1 also had an <code class="docutils literal notranslate"><span class="pre">output_key</span></code> field, binding a record’s value to a preceding deployment stage’s
-provisioner output. Not ported yet — it needs a shared runtime “Context” store that doesn’t
-exist in v2 (see ADR-0006).</p></li>
+<li><p>v1’s <code class="docutils literal notranslate"><span class="pre">output_key</span></code> field (binding a record’s value to a preceding deployment stage’s provisioner
+output) was not ported as its own field — the same need is already met by <code class="docutils literal notranslate"><span class="pre">${output:STEP.KEY}</span></code>
+in <code class="docutils literal notranslate"><span class="pre">value</span></code>, as long as the zone is claimed by an owning execution step (directly via
+<code class="docutils literal notranslate"><span class="pre">dns_zones[]</span></code>, or indirectly through a claimed resource/topology — see
+<a class="reference internal" href="workspace.html"><span class="std std-doc">workspace</span></a>).</p></li>
 <li><p>Azure-style private DNS zones (VNet links, writing records into a pre-existing/externally-owned
 zone) are deliberately modeled via <code class="docutils literal notranslate"><span class="pre">configuration</span></code>, not dedicated fields — see
 <a class="reference internal" href="../how-to/azure-private-dns-zones.html"><span class="std std-doc">How To: Model Azure Private DNS Zones</span></a>.</p></li>

@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Resource (kind: resource) &mdash; strata 2.0.0-Alpha9 documentation</title>
+  <title>Resource (kind: resource) &mdash; strata 2.0.0-Alpha21 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=63c80f8a"></script>
+      <script src="../_static/documentation_options.js?v=ef84901b"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -128,10 +128,10 @@ several times, under different local names) via <code class="docutils literal no
 <section id="schema">
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.properties.provider_type</span></code> — must match a <a class="reference internal" href="providerconfig.html"><span class="std std-doc">providerconfig.md</span></a> document</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.properties.resource_type</span></code> — must match one of that provider type’s <code class="docutils literal notranslate"><span class="pre">spec.resources[].name</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.properties.category</span></code> / <code class="docutils literal notranslate"><span class="pre">subcategory</span></code> — resource classification</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.properties.unit_cost</span></code> — optional cost-tracking figure (default <code class="docutils literal notranslate"><span class="pre">0.0</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.provider_type</span></code> — must match a <a class="reference internal" href="providerconfig.html"><span class="std std-doc">providerconfig.md</span></a> document</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.resource_type</span></code> — must match one of that provider type’s <code class="docutils literal notranslate"><span class="pre">spec.resources[].name</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.category</span></code> / <code class="docutils literal notranslate"><span class="pre">subcategory</span></code> — resource classification</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.unit_cost</span></code> — optional cost-tracking figure (default <code class="docutils literal notranslate"><span class="pre">0.0</span></code>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.dependencies[]</span></code> — capability-based dependencies (<code class="docutils literal notranslate"><span class="pre">category</span></code>/<code class="docutils literal notranslate"><span class="pre">subcategory</span></code>/<code class="docutils literal notranslate"><span class="pre">resource_type</span></code>,
 <code class="docutils literal notranslate"><span class="pre">optional</span></code>) — declares what <em>kind</em> of resource is needed, resolved by the workspace, not a
 hardcoded instance reference</p></li>
@@ -151,10 +151,9 @@ entry’s field patterns</p></li>
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage-account</span>
 <span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">provider_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
-<span class="w">    </span><span class="nt">resource_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage_account</span>
-<span class="w">    </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage</span>
+<span class="w">  </span><span class="nt">provider_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
+<span class="w">  </span><span class="nt">resource_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage_account</span>
+<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage</span>
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">account_tier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Standard</span>
 <span class="w">  </span><span class="nt">default_tags</span><span class="p">:</span>
@@ -166,10 +165,9 @@ entry’s field patterns</p></li>
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">linux-vm</span>
 <span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">provider_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
-<span class="w">    </span><span class="nt">resource_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">virtual_machine</span>
-<span class="w">    </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">compute</span>
+<span class="w">  </span><span class="nt">provider_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
+<span class="w">  </span><span class="nt">resource_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">virtual_machine</span>
+<span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">compute</span>
 <span class="w">  </span><span class="nt">default_tags</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example</span>
 <span class="w">    </span><span class="nt">cost-center</span><span class="p">:</span><span class="w"> </span><span class="s">"cc-1234"</span>

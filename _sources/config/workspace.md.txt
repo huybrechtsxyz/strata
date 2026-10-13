@@ -26,7 +26,13 @@ parameters.
   `integration` (which [`integration`](integration.md) document supplies version/auth), `output`
   (Jinja2 template escape hatch)
 - `spec.execution[]` — the ordered recipe (`ProvisioningStepModel`): `name`, `provisioner`,
-  `targets[]` (resource/namespace names), `depends_on[]` for step ordering
+  `resources[]`/`namespaces[]` (direct references this step acts on), `topologies[]` (expands to
+  that topology's own resources/namespaces), `dns_zones[]`/`firewalls[]`/`networks[]` (direct
+  escape hatch for claiming one of those documents' `${output:...}` ownership without a
+  resource/topology link), `depends_on[]` for step ordering. At least one of the six target-ish
+  fields is required. A resource's own `firewalls`/`dns_zones`/`subnet.network` are claimed
+  automatically once that resource is effectively in scope (direct or via `topologies[]`) — no
+  need to also list them directly on the step.
 - `spec.default_tags` — default cloud tags for resources created by this workspace
 
 ## Example
@@ -62,7 +68,7 @@ spec:
   execution:
     - name: provision-infra
       provisioner: terraform-main
-      targets:
+      resources:
         - web-storage
         - web-vm
   topology:

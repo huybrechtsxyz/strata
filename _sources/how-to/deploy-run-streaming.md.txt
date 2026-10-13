@@ -3,8 +3,8 @@
 `strata deploy run` can show subprocess output (Terraform/Helm/Compose) live as
 it happens instead of only at the very end. This guide covers both streaming
 modes, how they interact with `--output`/`STRATA_OUTPUT`, and what's piped
-where. See [docs/work/cli-output-mode-interactions.md](../work/cli-output-mode-interactions.md)
-and [docs/work/ndjson-output.md](../work/ndjson-output.md) for the full design
+where. See [docs/archive/cli-output-mode-interactions.md](../archive/cli-output-mode-interactions.md)
+and [docs/archive/ndjson-output.md](../archive/ndjson-output.md) for the full design
 rationale and evidence trail.
 
 ## The short answer

@@ -9,7 +9,6 @@ logging, cost/drift tracking are not ported (only added when a v2 feature actual
 - `spec.providers[]` — names of `ProviderConfig` documents (the provider type registry)
 - `spec.topologies[]` — names of `TopologyConfig` documents (the topology type registry)
 - `spec.additional_topologies` — allow topology types not listed in `spec.topologies` (default `false`)
-- `spec.properties` / `spec.configuration` / `spec.custom` — free-form passthrough
 
 ## Example
 
