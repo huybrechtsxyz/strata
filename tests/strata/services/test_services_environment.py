@@ -173,6 +173,46 @@ def test_multiple_tokens_in_one_string_are_each_checked():
     assert len(result.errors) == 2
 
 
+def test_unresolved_token_location_is_still_rooted_at_spec():
+    """The walk still starts from the document root (`apiVersion`/`kind`/
+    `spec`) — only `meta` is excluded (see the next test) — so an existing
+    finding's `location` keeps its full `spec....` path unchanged."""
+    result = _environment().validate_document_tokens(_dns("${var:GHOST_IP}"))
+    assert result.items[0].location is not None
+    assert result.items[0].location.startswith("spec.")
+
+
+def test_meta_annotations_labels_tags_are_not_scanned_for_value_tokens():
+    """`meta` (name/annotations/labels/tags) is documentation/presentation
+    only — nothing ever resolves a Value token from it, unlike `spec`. A
+    literal '${...}'-shaped string there — well-formed, malformed, or
+    simply undeclared — must never be flagged; it's always a false
+    positive (e.g. an annotation's own description quoting the real token
+    syntax as documentation)."""
+    document = DnsModel.model_validate(
+        {
+            "meta": {
+                "name": "public-dns",
+                "annotations": {"description": "uses '${secret:KEY}' tokens; this one is malformed: '${nope}'"},
+                "labels": {"owner": "${var:GHOST_OWNER}"},
+                "tags": ["${secret:ALSO_GHOST}"],
+            },
+            "spec": {
+                "zones": [
+                    {
+                        "name": "example.com",
+                        "records": [{"name": "@", "type": "A", "value": "1.2.3.4"}],
+                        "default_tags": {"environment": "test"},
+                    }
+                ]
+            },
+        }
+    )
+    result = _environment().validate_document_tokens(document)
+    assert result.ok, result.messages()
+    assert result.messages() == []
+
+
 # ---------------------------------------------------------------------------
 # Generalized Phase 1 (malformed-syntax) check in configuration/custom
 # passthrough fields — docs/design/value-token-resolution.md's "Full

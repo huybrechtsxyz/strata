@@ -210,7 +210,17 @@ def unresolved_value_tokens(
         field path where it was written.
     """
     diagnostics = Diagnostics()
-    for path, text in _iter_strings(model.model_dump(by_alias=True, mode="json")):
+    # `meta` (name/annotations/labels/tags) is documentation/presentation
+    # only — nothing ever resolves a Value token from it (unlike `spec`,
+    # which every real resolver reads), and `meta.name` itself is a
+    # `PlatformName` (schema-constrained to `^[a-z][a-z0-9_-]*$`, so it can
+    # never even contain `${`). A `${...}`-shaped string there is always a
+    # false positive (e.g. an annotation's own description quoting the
+    # token syntax as documentation) — excluded so authors never need to
+    # `$${...}`-escape prose that was never a real token to begin with.
+    dumped = model.model_dump(by_alias=True, mode="json")
+    dumped.pop("meta", None)
+    for path, text in _iter_strings(dumped):
         for candidate in find_malformed_value_tokens(text):
             kinds = "|".join(VALUE_TOKEN_KINDS)
             diagnostics.error(

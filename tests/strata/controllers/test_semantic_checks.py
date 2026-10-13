@@ -793,6 +793,27 @@ def test_resource_configuration_token_not_declared_is_caught(tmp_path):
     assert any("GHOST_RESOURCE_SECRET" in m for m in context.diagnostics.messages())
 
 
+def test_value_token_diagnostic_source_is_the_real_offending_document_not_the_deployment(tmp_path):
+    """docs/work/gap_fit_v1.md gap #20 — a token error found in a document
+    reached *through* the deployment's workspace (here, resource.yaml) must
+    attribute `source` to that document, not to deployment.yaml."""
+    root = _base_solution(tmp_path)
+    path = root / "resource.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  configuration:\n    admin_password: '${secret:GHOST_RESOURCE_SECRET}'\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    matches = [item for item in context.diagnostics.items if "GHOST_RESOURCE_SECRET" in item.message]
+    assert matches
+    for item in matches:
+        assert item.source is not None
+        assert item.source.endswith("resource.yaml")
+        assert "deployment.yaml" not in item.source
+
+
 def test_provider_configuration_token_not_declared_is_caught(tmp_path):
     root = _base_solution(tmp_path)
     path = root / "provider.yaml"
@@ -862,13 +883,13 @@ def test_topology_is_reachable_as_part_of_the_workspace_document(tmp_path):
     """Topology is inline on `WorkspaceModel.spec.topology` now (ADR-0028) —
     there is no separate Topology document to add to the reachable set;
     its fields (and any tokens in them) are already covered by the
-    `(workspace, False)` entry `_documents_reachable_from_workspace()`
+    `(workspace, False, source)` entry `_documents_reachable_from_workspace()`
     always includes first."""
     from strata.controllers.semantic_checks import _documents_reachable_from_workspace
 
     context = _resolve(_base_solution(tmp_path))
     documents = _documents_reachable_from_workspace(context.controller.index, "main")
-    kinds = {type(document).__name__ for document, _claimed in documents}
+    kinds = {type(document).__name__ for document, _claimed, _source in documents}
     assert "WorkspaceModel" in kinds
     assert "ProviderModel" in kinds
     assert "ResourceModel" in kinds

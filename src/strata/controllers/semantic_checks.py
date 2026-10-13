@@ -614,6 +614,11 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     this field" one. Verified real: gap #9 Phase 6 delivers exactly these
     fields at deploy time now, but nothing validated their tokens before
     that ever ran.
+
+    Each document's own real source path is attributed to its findings
+    (docs/design/gap_fit_v1.md gap #20) — every finding used to report
+    `entry.source` (this deployment's own path) regardless of which
+    document actually held the token.
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
@@ -623,22 +628,22 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
             continue  # no resolvable environment — nothing to check tokens against
 
         owner = "+".join(deployment.spec.environments or []) or "(none)"
-        documents: list[tuple[PlatformBaseModel, bool]] = _documents_reachable_from_workspace(
+        documents: list[tuple[PlatformBaseModel, bool, Path]] = _documents_reachable_from_workspace(
             index, deployment.spec.workspace
         )
-        documents.append((deployment, False))
+        documents.append((deployment, False, entry.source))
         if deployment.spec.tenant:
             tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
             if tenant_entry is not None:
-                documents.append((tenant_entry.model, False))
+                documents.append((tenant_entry.model, False, tenant_entry.source))
         for name in _reachable_environment_names(index, deployment):
             env_entry = index.get(PlatformKind.ENVIRONMENT, name)
             if env_entry is not None:
-                documents.append((env_entry.model, False))
+                documents.append((env_entry.model, False, env_entry.source))
 
-        for document, claimed in documents:
+        for document, claimed, doc_source in documents:
             diagnostics.extend(
-                unresolved_value_tokens(document, declared, owner, output_claimed=claimed), source=str(entry.source)
+                unresolved_value_tokens(document, declared, owner, output_claimed=claimed), source=str(doc_source)
             )
     return diagnostics
 
@@ -684,7 +689,7 @@ def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> 
 
 def _documents_reachable_from_workspace(
     index: DocumentIndex, workspace_name: str | None
-) -> list[tuple[PlatformBaseModel, bool]]:
+) -> list[tuple[PlatformBaseModel, bool, Path]]:
     """Every document a workspace renders or configures — DNS/Network/
     Firewall/Module (rendered artifacts) plus the workspace document itself
     and every Resource/Provider/Topology it references (config passthrough
@@ -692,7 +697,7 @@ def _documents_reachable_from_workspace(
     checked at all before, a validate-time coverage gap entirely separate
     from gap #9/Phase 6's deploy-time delivery fix).
 
-    Returns `(document, claimed)` pairs — `claimed` is whether some
+    Returns `(document, claimed, source)` triples — `claimed` is whether some
     workspace execution step's `targets` claims this document
     (`WorkspaceService.claimed_document_names()`, gap #12 generalized to
     namespaces, docs/design/deploy-command.md's "Cross-invocation output
@@ -722,7 +727,7 @@ def _documents_reachable_from_workspace(
     spec = workspace.spec
     claimed_names = WorkspaceService.from_model(workspace).claimed_document_names()
 
-    documents: list[tuple[PlatformBaseModel, bool]] = [(workspace, False)]
+    documents: list[tuple[PlatformBaseModel, bool, Path]] = [(workspace, False, workspace_entry.source)]
 
     for kind, names in (
         (PlatformKind.DNS, spec.dns_zones),
@@ -733,21 +738,21 @@ def _documents_reachable_from_workspace(
         for name in names or []:
             found = index.get(kind, name)
             if found is not None:
-                documents.append((found.model, name in claimed_names))
+                documents.append((found.model, name in claimed_names, found.source))
 
     for workspace_resource in spec.resources or []:
         if workspace_resource.resource is None:
             continue
         resource_entry = index.get(PlatformKind.RESOURCE, workspace_resource.resource)
         if resource_entry is not None:
-            documents.append((resource_entry.model, False))
+            documents.append((resource_entry.model, False, resource_entry.source))
 
     for topo in spec.topology or []:
         for component in topo.components:
             for module_ref in component.modules or []:
                 module_entry = index.get(PlatformKind.MODULE, module_ref.module)
                 if module_entry is not None:
-                    documents.append((module_entry.model, False))
+                    documents.append((module_entry.model, False, module_entry.source))
 
     for name in spec.namespaces or []:
         namespace_entry = index.get(PlatformKind.NAMESPACE, name)
@@ -758,7 +763,7 @@ def _documents_reachable_from_workspace(
         for module_ref in namespace.spec.modules or []:
             module_entry = index.get(PlatformKind.MODULE, module_ref.module)
             if module_entry is not None:
-                documents.append((module_entry.model, namespace_claimed))
+                documents.append((module_entry.model, namespace_claimed, module_entry.source))
 
     return documents
 

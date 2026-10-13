@@ -1,8 +1,8 @@
 # v1 -> v2 Coverage Gaps
 
 - Status: living — update in place as gaps are closed or new ones are found
-- Last updated: 2026-10-02 (gap #19 added — composite/mergeable variable
-  values, Azure Application Gateway + WAF multi-customer composition)
+- Last updated: 2026-10-13 (gap #23 added — `meta` excluded from the
+  Value-token scanner's generic walk; `spec`-level scanning unchanged)
 
 ## Overview
 
@@ -1228,7 +1228,77 @@ durable, reviewable record.
   [docs/how-to/generate-per-instance-terraform-blocks.md](../how-to/generate-per-instance-terraform-blocks.md)
   for looping `output.template` over the same merged value.
 
+### 20. ~~`strata validate`'s value-token check misattributes every finding's `source` to the deployment document~~ — RESOLVED
 
+- **Found in:** the 2026-10-13 full regeneration of `.v2-haven/` — while
+  tracking down which real document a `malformed_value_token`/
+  `unresolved_value_token` diagnostic pointed at, every single one reported
+  `source: deployment.yaml` regardless of which module/namespace/resource/
+  provider/topology document actually contained the offending string.
+- **Root cause, confirmed in source:** `_check_deployment_value_tokens()`
+  (`semantic_checks.py`) iterates `index.all_of(PlatformKind.DEPLOYMENT)`
+  to get `entry`, then walks every document reachable from that
+  deployment's workspace (dns/network/firewall/module/resource/provider/
+  topology/environment/tenant/the deployment itself) — but every
+  `diagnostics.extend(unresolved_value_tokens(document, ...), source=...)`
+  call passes `source=str(entry.source)` (the **deployment's own** file
+  path), not the real `document`'s source. Every other Phase 1/Phase 2
+  check in this codebase attributes `source` to the document actually
+  being checked — this is the one call site that doesn't, confirmed by
+  comparison (not just inspection of this one function).
+- **Impact:** purely diagnostic UX, not a correctness bug — the check
+  itself still correctly finds every real violation, with the right field
+  path and token in the message. But a solution with more than a
+  handful of documents (`.v2-haven`'s 52, or any real multi-module
+  workspace) makes every one of these errors equally hard to locate: the
+  message has to be read character-by-character for the real dotted field
+  path, since the file-level `source` is useless for jumping to the right
+  file (confirmed directly — this is also why `src/vscode`'s
+  `diagnosticsProvider.ts` buckets Phase 2 diagnostics by `.source` into
+  per-file `DiagnosticCollection` entries; every value-token finding
+  today would incorrectly land entirely on `deployment.yaml` in the VS
+  Code Problems view too).
+- **Status: RESOLVED (2026-10-13).** `_documents_reachable_from_workspace()`
+  now returns `(document, claimed, source)` triples instead of
+  `(document, claimed)` pairs — `source` is each document's own real
+  `IndexEntry.source` (the workspace's own for the workspace itself,
+  `found.source`/`resource_entry.source`/`module_entry.source` for every
+  reached dns/network/firewall/provider/resource/module). `_check_
+  deployment_value_tokens()` now attributes each finding to that real
+  `doc_source` instead of unconditionally `entry.source` (the deployment's);
+  the same fix applies to the deployment/tenant/environment documents it
+  appends directly (each now carries its own `IndexEntry.source` too).
+  New regression test
+  `test_value_token_diagnostic_source_is_the_real_offending_document_not_the_deployment`
+  (`test_semantic_checks.py`) asserts a token error in `resource.yaml`
+  reports `source` ending in `resource.yaml`, not `deployment.yaml`. Full
+  check suite green (mypy 155 files, ruff clean, import-linter 1/0, pytest
+  2523 passed); `.v2-cfg`/`.v2-haven` unchanged (80/22, 52/0).
+- **Migration action:** none — existing/future tooling consuming
+  `Diagnostic.source` (e.g. the VS Code extension's per-file bucketing)
+  now gets the real document path for free, no caller change needed.
+
+### 21. ~~Real external v2 consumer broke against same-day ADR-0037/ADR-0039 schema changes~~ — RESOLVED (fixture updated, not a v2 gap)
+
+- **Found in:** `.v2-cfg` (2026-10-13) — a full copy of `e:\cfg-int-deployment-v2\cfg-int-deployment`'s real strata documents (`strata.yaml`, `config/`, `customers/`, `providers/`, `stacks/`, `deploy/hubs/`), a genuine external, already-on-v2 consumer (`apiVersion: strata.omp.com/v2`, a recognized `PlatformVersion` value — not a v1 migration). First `strata validate` run: 37 errors across 12 documents.
+- **Root cause:** not a gap at all — both breaking changes were accepted the **same day** as this discovery: [ADR-0037](../decisions/0037-flatten-provider-resource-module-properties.md) (`Provider.spec.properties.{type,region,display_name}` → flat `spec.type`/`spec.region`/`spec.display_name`) and [ADR-0039](../decisions/0039-provisioning-step-target-fields-by-kind.md) (`ProvisioningStepModel.targets` → `resources`/`namespaces`/`topologies`/`dns_zones`/`firewalls`/`networks`, split by kind). `.v2-cfg`'s real documents were written against the pre-ADR shape (all 8 `providers/*.yaml` used the nested wrapper; all 4 `stacks/*/workspace.yaml` used `targets:`) and simply hadn't been touched since. This is the first real, independently-authored (not `strata-v2`-repo-internal) document set either ADR has been checked against.
+- **Fixed:** flattened all 8 provider docs; renamed `targets:` → `resources:` on all 13 execution steps across `stacks/{contract,core,customer,ring,spoke}/workspace.yaml` (every real `targets:` entry in this repo names a `managed_by: provisioner` Resource, never a namespace/topology/dns/firewall/network — a single mechanical rename sufficed, no per-step kind analysis needed). `strata validate` clean afterward (80 documents, 0 errors).
+- **Not logged as a new gap** — both ADRs already fully document their own rationale; this entry exists only to record the first real-world confirmation that the old shape genuinely appears in production-authored documents (not just hypothesized), and the exact mechanical fix a real consumer needs to apply.
+- **Migration action:** for any other real v2-schema document predating 2026-10-13, check for `spec.properties` on a `provider`/`resource`/`module` document (ADR-0037) and `targets:` on any `ProvisioningStepModel` entry (ADR-0039) — both are silent schema breaks (missing-field/extra-field errors, not a dedicated migration diagnostic).
+
+### 22. `hub-path`'s full-path (incl. filename) matching produces 22 real warnings against genuinely hub/spoke/customer/ring-shaped data
+
+- **Found in:** `.v2-cfg`'s `deploy/hubs/**` tree (2026-10-13) — real files exist at every intermediate level of the hierarchy (`deploy/hubs/z00/s01/deploy-spoke.yaml`, `.../c0224/deploy-customer.yaml`, `.../c0224/dev/deploy-ring.yaml`, etc.), not only at the deepest 5-segment `{hub}/{spoke}/{customer}/{ring}/{instance}` leaf the `hub-path` convention's `pattern` is written for. `strata validate` reports all 22 such files as `path_convention_mismatch` warnings.
+- **Status:** not a new design gap — [docs/design/path-conventions.md](path-conventions.md)'s own `## History` section already names this exact tradeoff: "v1's real `hub-path`/`control-path` conventions match only the containing directory (no filename); this implementation's `pattern` always matches the full relative path including filename — simpler and unambiguous, at the cost of a migrated `layers`-resolving convention needing an explicit trailing filename segment it didn't need in v1." This entry is the first confirmation of that documented tradeoff's real cost against genuine hub/spoke/customer/ring-shaped data, at real scale (22 warnings, not a hypothetical count) — every file above a `{ring}` or `{instance}` leaf triggers it, which in practice is most of a real hub/spoke/customer tree (`deploy-spoke.yaml`/`env-spoke.yaml` at the spoke level, `deploy-customer.yaml`/`env-customer.yaml` at the customer level — only `dev/deploy-ring.yaml`/`dev/env-ring.yaml` sit at the convention's intended depth, and even those are one segment short of the full `{instance}` leaf since no real document yet exists at that depth).
+- **Not fixed** — warning-severity only (not an error, `strata validate` still exits 0/PASSED), and fixing it (e.g. a prefix-match mode for `pattern` vs. today's full-match) is a real design question path-conventions.md's own History section already flagged as a known cost, not something to patch ad hoc from this fixture.
+- **Migration action:** none — a real multi-level hub/spoke/customer/ring directory tree should expect a `path_convention_mismatch` warning at every level shallower than the convention's full declared segment depth; this is current, intended (if costly) behavior, not a bug to work around per-document.
+
+### 23. ~~`meta` (annotations/labels/tags) was swept by the same Value-token scanner as operational `spec` fields~~ — RESOLVED
+
+- **Found in:** a senior-architect-style review of the annotation-escaping friction logged while building `.v2-haven` — `meta.annotations.description` is documentation-only (never read by any resolver; `meta.name` itself is a schema-constrained `PlatformName`, `^[a-z][a-z0-9_-]*$`, so it can never even contain `${`), yet `unresolved_value_tokens()`'s generic walk (`model.model_dump(...)`) covered the whole document including `meta` — so an annotation's own prose quoting the real token syntax as documentation (e.g. "...rewritten as services[] '${secret:KEY}' entries...") was flagged as a `malformed_value_token`, indistinguishable from a real mistake.
+- **Impact, precisely quantified (not estimated) before fixing:** confirmed exactly one production call path (`semantic_checks.py::_check_deployment_value_tokens()`, always passed a whole Kind-root document — every one of the 19 kinds uniformly has both `meta`/`spec`, so no per-kind special-casing was needed); confirmed zero existing tests asserted meta-level scanning as a requirement; confirmed the real fixture cost was 16 of `.v2-haven`'s ~30 module files' `annotations.description` text (not all 72 `$${` matches grep first suggested — the rest are an unrelated, still-needed escape: real `spec.configuration`/`services[].environment[]` values holding Helm's own chart-native `${TOKEN}` substitution syntax, gap #8's case, which stays escaped regardless since `spec` is still fully scanned).
+- **Fixed:** `unresolved_value_tokens()` (`environment_service.py`) now pops `"meta"` from the dumped dict before walking — deliberately NOT re-rooting the walk at `model.spec` (which would have silently dropped the `spec.` prefix from every *other* finding's `location`, a bigger, unrelated blast radius); every non-meta `location` path is byte-for-byte unchanged. Un-escaped the 16 affected `.v2-haven` annotation strings back to plain `${secret:KEY}` prose. New tests in `test_services_environment.py`: `test_meta_annotations_labels_tags_are_not_scanned_for_value_tokens` (malformed/well-formed/undeclared tokens in `annotations`/`labels`/`tags` all pass clean) and `test_unresolved_token_location_is_still_rooted_at_spec` (locks down the no-re-rooting guarantee). Full check suite green (mypy 155 files, ruff clean, import-linter 1/0, pytest 2525 passed); both fixtures unchanged (`.v2-haven` 52/0, `.v2-cfg` 80/22-warnings).
+- **Migration action:** none — a document's `meta.annotations`/`labels`/`tags` can now freely mention `${...}`-shaped example text without `$$`-escaping; `spec.configuration`/`custom` passthrough fields still need the escape for a real third-party `${TOKEN}` substitution syntax (gap #8, unchanged).
 
 Confirmed during the same migration to have zero loss of expressiveness:
 namespace grouping, firewall rules (`from`/`to`/`port`/`proto`/`interface`),
@@ -1237,38 +1307,42 @@ and the provider/providerconfig/topologyconfig registry split.
 
 ## Related
 
-- `.v2-cfg/` at the workspace root — a small hand-migrated slice of the
-  real `config-deploy` repo (`e:\sources\config-deploy`): one
-  tenant (`c0062`), one provider (`westeurope`), and the spoke stack
-  (`stacks/spoke/*` — the reusable hub x spoke shared-AKS-cluster
-  template), deliberately not a full migration. Chosen because the spoke
-  stack is v1's real, most concrete example of gap #5's exact structural
-  change (v1's `workspace.yaml` binds `provider`/`provisioner` directly
-  onto a `topology[].components` entry). **Passed `strata validate` clean
-  (12/12 documents, zero findings) as of 2026-09-29** — gap #14 (now
-  resolved) and gap #15 (cross-linked from `docs/work/build-command.md`'s
-  existing Remaining Work) were both found/logged while building it; no
-  other new schema/feature gap surfaced. **Stale as of 2026-10-01
-  (ADR-0028):** this fixture still uses the pre-ADR-0028 standalone
-  `kind: topology` document for `spoke-cluster` — `WorkspaceModel` no
-  longer parses that shape (`spec.topology[]` is now inline blocks, not
-  name references), so `strata validate` against `.v2-cfg/` as-is will now
-  fail until someone hand-migrates it inline. Deliberately left unfixed
-  (Phase 5 of the ADR-0028 reversal, skipped — `.v2-cfg` is gitignored, not
-  exercised by the automated test suite); see
-  [docs/design/topology-standalone-kind-reconsideration.md](topology-standalone-kind-reconsideration.md).
+- `.v2-cfg/` at the workspace root — **regenerated from scratch 2026-10-13**,
+  replacing the small, stale (ADR-0028-broken) hand-migrated slice
+  described below. Now a full copy of every real strata document from
+  `E:\cfg-int-deployment-v2\cfg-int-deployment` (`strata.yaml`, `config/`,
+  `customers/` x6, `providers/` x8, `stacks/{contract,core,customer,ring,
+  spoke}/`, `deploy/hubs/**`) — a genuine external, already-on-v2 consumer
+  (`apiVersion: strata.omp.com/v2`), not a v1 migration; only non-strata
+  content (`.azure/`, `.strata/`, `assets/`, `build/`, `docs/`, `scripts/`,
+  `.archive/`, `.github/`, every `*.md`) was deliberately excluded per
+  request ("only convert the configuration... just strata"). Required 2
+  mechanical fixes to validate clean against current schema — see gap #21
+  (ADR-0037/ADR-0039 same-day schema changes this external repo predated).
+  **`strata validate` passes with 0 errors (80/80 documents, 22
+  pre-existing `path_convention_mismatch` warnings — see gap #22) as of
+  2026-10-13.** Superseded history: the original 2026-09-28/29 fixture was
+  a deliberately small, hand-picked slice of a *different* real repo path
+  (`e:\sources\config-deploy`) — one tenant (`c0062`), one provider
+  (`westeurope`), the spoke stack only — chosen then because it was v1's
+  real, most concrete example of gap #5's structural change; that slice
+  passed clean as of 2026-09-29 (gaps #14/#15 found/logged while building
+  it) but went stale 2026-10-01 (ADR-0028's inline-topology reversal) and
+  was never updated before being fully replaced today.
 - `.v2-haven/` at the workspace root — a full 52-document hand-migration of
   every real document in `e:\SourcesXYZ\haven\config`, kept as a live
-  fixture. **Currently failing `strata validate` (44 errors, 17 module
-  files) as of 2026-09-28** — an expected, deliberately-deferred
-  consequence of gap #8's Phase 1 implementation (generalized
-  malformed-token detection), not an unrelated regression. Fixing the
-  fixture (escape `gatus.yaml`'s placeholders, convert the rest to
-  `${secret:KEY}`) is its own dedicated follow-up pass. Until that lands,
-  a *new* failure here needs to be diffed against this known 44 to confirm
-  it's actually new, not just re-triggering the logged ones. Re-run
-  validate after any model change touching provider/resource/firewall/
-  module/namespace/workspace/topology/deployment/environment.
+  fixture. **Regenerated from scratch 2026-10-13** to match haven's real
+  directory layout as it exists today (`hearth/`, `forge/`, `providers/`,
+  `stack/` — replacing the flat layout the original 2026-09-28 pass was
+  based on). The 44-error state logged below (gap #8's Phase 1 malformed-
+  token detection) is resolved as part of this regeneration — every
+  module's literal Helm-native `${TOKEN}` placeholder is now escaped as
+  `$${TOKEN}`, and every real `references.secrets` entry is a proper
+  `services[].environment[].value: "${secret:KEY}"` token (gap #1).
+  **`strata validate` passes clean (52/52 documents, 0 errors) as of
+  2026-10-13.** Re-run validate after any model change touching provider/
+  resource/firewall/module/namespace/workspace/topology/deployment/
+  environment.
 - [docs/decisions/0011-topology-and-provisioning-decoupling.md](../decisions/0011-topology-and-provisioning-decoupling.md)
 - [docs/decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)
 - [docs/decisions/0015-solution-manifest-and-document-discovery.md](../decisions/0015-solution-manifest-and-document-discovery.md)
@@ -1284,6 +1358,32 @@ and the provider/providerconfig/topologyconfig registry split.
   (gaps #8, #9)
 
 ## Changelog
+
+- 2026-10-13: **Regenerated `.v2-cfg/` from scratch** from
+  `E:\cfg-int-deployment-v2\cfg-int-deployment`'s real strata documents
+  (80 documents: `strata.yaml`/`config/`/`customers/`/`providers/`/
+  `stacks/`/`deploy/hubs/`), replacing the small, already-stale
+  2026-09-29 slice. **Added gap #21** (real external v2 consumer broke
+  against ADR-0037/ADR-0039, both accepted the same day — fixed by
+  flattening 8 provider docs and renaming `targets:` → `resources:` on
+  13 execution steps) and **gap #22** (`hub-path`'s already-documented
+  full-path-match tradeoff, confirmed at real scale: 22 warnings across
+  genuinely hub/spoke/customer/ring-shaped data). `strata validate`
+  clean otherwise (0 errors). Per explicit request, scope was strata
+  documents only — no Terraform/Helm/other IaC content copied.
+
+- 2026-10-13: **Regenerated `.v2-haven/` from scratch** to match haven's
+  real current directory layout (`hearth/`, `forge/`, `providers/`,
+  `stack/` — the 2026-09-28 fixture predated this reorganization).
+  `strata validate` passes clean, 52/52 documents, 0 errors — the
+  previously-logged 44-error state (gap #8's Phase 1 malformed-token
+  detection) is resolved as part of this pass (see the updated `.v2-haven/`
+  bullet under Related). **Added gap #20** (`source` misattribution in
+  `_check_deployment_value_tokens()`), found while tracking down which
+  real document each of those 44 errors pointed at. No other new
+  schema/feature gap surfaced — gaps #1/#2/#6's "RESOLVED" status and
+  gap #9's Helm `resolve_module_values()` wiring (`helm.py:163`) were all
+  independently re-confirmed still accurate against current source.
 
 - 2026-09-28: Created, seeded with 7 gaps found migrating the full haven
   repo (`.v2-haven/`, 52 documents, `strata validate` clean).
