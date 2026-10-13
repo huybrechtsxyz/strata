@@ -246,6 +246,35 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-10-13: **Built alpha21** — bumped `VERSION.txt` to `2.0.0-Alpha21`
+  (normalizes to `2.0.0a21`; confirmed via `packaging.version.Version`
+  first), cut right after the `ProvisioningStepModel.targets` breaking
+  schema split (ADR-0039: six kind-specific fields replacing the flat
+  `targets` list, plus topology/resource-derived dns/firewall/network
+  claiming — see [workspace-execution-model.md](../design/
+  workspace-execution-model.md)) and the follow-up `dns_zones`
+  Terraform-projection gap fix (`_strata_resources()`/`strata_variables.tf`),
+  both landed this session — a real breaking-change unit, matching this
+  stage's "cut ad hoc as significant units land" rule. Full check suite
+  green via `scripts/Check.ps1 -SkipDocsBuild`: ruff lint, ruff format (1
+  file needed reformatting after the deterministic-namespace-ordering
+  code-review fix — fixed), mypy (155 files), import-linter, pytest (2522
+  passed), CLI smoke test. Hit the documented stale-dist-info sharp edge
+  first (`get_version()` still reported `2.0.0a20` right after the
+  `VERSION.txt` edit) — `uv sync --reinstall-package xyz-strata
+  --index-strategy unsafe-best-match` + a follow-up `uv sync --all-extras
+  --index-strategy unsafe-best-match` to restore the dropped `docs` group;
+  green after. `uv build --index-strategy unsafe-best-match` produced
+  `xyz_strata-2.0.0a21-py3-none-any.whl`/`.tar.gz` (confirmed
+  `strata_variables.tf`, including its new `dns_zones` key, is packaged);
+  installed into a fresh isolated `uv venv`, confirmed `strata version` →
+  `2.0.0a21`, `strata --help` still lists the same ten commands, and
+  directly imported `claimed_names()`/`effective_resources_and_
+  namespaces()`/`ProvisioningStepModel.resources` from the installed
+  wheel (not just the dev tree) to confirm this session's schema change is
+  really present in the packaged code. Verification venv removed after.
+  Tag+push intentionally left for explicit user confirmation, same as
+  every prior alpha.
 - 2026-10-11: **Rebuilt alpha20** (same `2.0.0-Alpha20`/`2.0.0a20`, not a
   new version — explicit request to "rebuild," not rebump) after a
   requirements-traceability pass found and fixed a real, silent-wrong-

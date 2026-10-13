@@ -671,7 +671,9 @@ def deploy_run(
             _, namespaces_eff = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
             # sorted(): namespaces_eff is a set (hash order, not declaration order) — deploy order
             # must stay deterministic across runs, not vary with PYTHONHASHSEED.
-            namespaces_targeted = [graph.namespaces[name] for name in sorted(namespaces_eff) if name in graph.namespaces]
+            namespaces_targeted = [
+                graph.namespaces[name] for name in sorted(namespaces_eff) if name in graph.namespaces
+            ]
             if not namespaces_targeted:
                 diagnostics.error(
                     f"Step '{step.name}': provisioner '{provisioner.name}' ({integration_type}) is "
