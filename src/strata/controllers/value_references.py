@@ -184,7 +184,16 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
     diagnostics = Diagnostics()
 
     for entry in index.all():
+        # `meta` (name/annotations/labels/tags) is documentation/presentation
+        # only, never a real ${value:...} source — excluded here the same way
+        # and for the same reason as `unresolved_value_tokens()` (gap_fit_v1.md
+        # gap #23). The TARGET side below (`_walk_value_reference_path()`)
+        # deliberately keeps full `meta` access — `${value:tenant.c0062.meta.name}`
+        # is a real, working reference shape (this design's own "Problem"
+        # example) — only the source-side scan for where a token is *written*
+        # is narrowed.
         dumped = entry.model.model_dump(by_alias=True, mode="json")
+        dumped.pop("meta", None)
         for location, text in _iter_document_strings(dumped):
             for token_kind, full_key in extract_value_tokens(text):
                 if token_kind != "value":

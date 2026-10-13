@@ -1001,6 +1001,33 @@ def test_resolve_document_value_references_ignores_documents_with_no_value_token
     assert values == {}
 
 
+def test_resolve_document_value_references_does_not_scan_meta_as_a_source(tmp_path):
+    """docs/design/gap_fit_v1.md gap #24 — `meta` (name/annotations/labels/
+    tags) is documentation only; a literal '${value:...}'-shaped string
+    there (e.g. an annotation quoting the real reference syntax as
+    documentation) must not be treated as a reference to resolve, even
+    when it happens to name a real, existing document. The TARGET side is
+    unaffected — `test_resolve_document_value_references_happy_path_
+    matches_design_example` above already proves `${value:tenant.c0062.
+    meta.name}` still resolves correctly when used as a real reference."""
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062")
+    _write(
+        root,
+        "probe.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n"
+        "  name: probe\n"
+        '  annotations:\n    description: "see ${value:tenant.c0062.meta.name} for an example"\n'
+        "spec: {}\n",
+    )
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert values == {}
+
+
 # ---------------------------------------------------------------------------
 # Name-based list-segment addressing (docs/work/firewall-network-cidr-
 # references.md, 2026-10-13) — `_walk_value_reference_path()`'s positional-
