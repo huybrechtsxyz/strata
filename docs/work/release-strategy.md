@@ -246,6 +246,32 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-10-13: **Built alpha23** — bumped `VERSION.txt` to `2.0.0-Alpha23`
+  (normalizes to `2.0.0a23`; confirmed via `packaging.version.Version`
+  first), cut after a full gap-tracker review session (`docs/work/
+  gap_fit_v1.md` gaps #20/#23/#24 fixed — value-token diagnostic source
+  misattribution, `meta` wrongly swept by the Value-token/`${value:...}`
+  scanners) and `.v2-cfg`/`.v2-haven` both regenerated and validated
+  clean against current schema. Considered bumping straight to beta1
+  instead — checked this doc's own Decision 7 entry bar first: not met
+  (`.v2-haven`/`.v2-cfg` only proven against `validate`, not `build run`/
+  `deploy run --dry-run`; `deploy run`'s `store: artifact` gap still
+  confirmed open per `deploy-command.md`) — bumped the next alpha instead,
+  same as the 2026-10-06 precedent. Full check suite green: mypy (155
+  files), ruff check, ruff format, import-linter, pytest (2526 passed).
+  Hit the documented stale-dist-info sharp edge again (expected on every
+  version-string change) — `uv sync --reinstall-package xyz-strata
+  --index-strategy unsafe-best-match` + `uv sync --all-extras
+  --index-strategy unsafe-best-match`; green after. `uv build
+  --index-strategy unsafe-best-match` produced
+  `xyz_strata-2.0.0a23-py3-none-any.whl`/`.tar.gz`; installed into a
+  fresh isolated `uv venv`, confirmed `strata version` → `2.0.0a23` and
+  `strata --help` lists the same ten commands. Verification venv removed
+  after. Tag+push intentionally left for explicit user confirmation, same
+  as every prior alpha — noted separately that this repo's own automated
+  commit/push process had already committed `VERSION.txt` directly to
+  `v2-beta`/`origin` by the time this was recorded, outside this
+  procedure's own tag/push step.
 - 2026-10-13: **Built alpha22** — bumped `VERSION.txt` to `2.0.0-Alpha22`
   (normalizes to `2.0.0a22`; confirmed via `packaging.version.Version`
   first), cut to pick up the fixes found while diagnosing why alpha21's
