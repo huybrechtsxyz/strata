@@ -3,8 +3,7 @@
 
 This module had no dedicated test file despite being the repo's path-traversal
 guard — every helper was only exercised indirectly, through whichever model
-happened to call it. Found during the asset-management code review
-(docs/work/asset-management-review.md).
+happened to call it. Found during the asset-management code review.
 """
 
 from pathlib import Path

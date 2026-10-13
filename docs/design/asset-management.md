@@ -1,7 +1,7 @@
 # Asset Management (non-code, per-environment input files) — Design
 
 - Status: current
-- Last updated: 2026-10-12
+- Last updated: 2026-10-13
 
 ## Overview
 
@@ -327,17 +327,52 @@ metadata about that same location, not a replacement for it.
   actually reference are ever resolved at all, so an unreachable pool
   entry's missing token/variant never surfaces as a failure in the first
   place — there was no separate "defensive-only" case left to design.
-- Glob support, the two path-traversal guards, the scalar-only fill rule,
-  and the recursive `files` listing all came out of a code review of the
-  shipped feature (2026-10-13,
-  [asset-management-review.md](../work/asset-management-review.md)).
-  Three of those were defects; globbing was not. It replaced an open
-  question this design had answered badly — whether `files` should be a
-  shallow or recursive listing — by removing the question: once the
-  author states which files they want, strata has nothing left to infer.
-  The shallow `iterdir()` listing it replaced also reported directory
-  names as though they were files. The review's own verification found
-  glob syntax and the existing `{name}` tokens compose without collision
-  (a token name is `\w+`, so brace expansion can never be mistaken for
-  one), and that a wildcard-free `source_path` still resolves exactly as
-  before — so no existing asset document changed meaning.
+- Glob support replaced an open question this design had answered badly —
+  whether `files` should be a shallow or a recursive listing — by removing
+  the question: once the author states which files they want, strata has
+  nothing left to infer. (The shallow `iterdir()` listing it replaced also
+  reported directory names as though they were files.) Verified before
+  committing to it: glob metacharacters and the existing `{name}` tokens
+  compose without collision — a token name is `\w+`, so brace expansion can
+  never be mistaken for one, though it isn't *supported* either, since
+  `pathlib.glob()` has no equivalent — and a wildcard-free `source_path`
+  still resolves exactly as before, so no existing asset document changed
+  meaning. Flattening every match into one directory was the alternative to
+  preserving structure, and was rejected: two same-named files from
+  different directories would collide silently.
+- The build-time containment check (`path_safety.resolve_within()`) was put
+  in `path_safety.py` rather than `layout.py`, despite `layout.py` claiming
+  ownership of *every* derived path ("nothing outside this module should
+  join a path segment") and `sync_asset()`/`sync_source()` both already
+  bypassing that rule — it validates untrusted input rather than deriving a
+  strata-owned location, and is useful to any caller joining an untrusted
+  segment. Searching first confirmed there was no prior art to reuse:
+  `is_relative_to()` appeared nowhere in `src/`, and every existing
+  `relative_to()` call was display-only — `layout.py`'s own `display_path()`
+  deliberately *swallows* the `ValueError` and falls back to the original
+  string, the exact opposite of a security check. `references.py` was
+  checked as a candidate home and ruled out: it resolves `(kind, meta.name)`
+  document identity, nothing filesystem-related. The helper resolves both
+  sides before comparing, since a purely lexical check misses
+  `root/sub/../../outside`, and runs **per glob match** — a glob escapes via
+  `..` even when the pattern never names the escaping path literally.
+- The document-load-time guard, by contrast, had prior art and had simply
+  been missed: `validate_relative_path()` was already applied to every other
+  path-bearing field in the schema, and `AssetSpecModel.source_path` was the
+  sole exception. The absolute case was the worse half of that gap —
+  `Path('/repo/root') / '/etc/passwd'` discards the left operand entirely,
+  so an absolute `source_path` read straight from the filesystem root. The
+  two guards are not redundant: a string check cannot cover a path only
+  assembled at build time out of a `{name}` fill value. Both were afterwards
+  extended past assets — `resolve_within()` to `sync_source()` and
+  `sync_module_source()`, where the remaining vector is narrower but real (a
+  symlink inside the repo pointing out of it, which no string validation
+  catches and which `copytree` follows by default), and
+  `validate_no_path_traversal()` from a `..` *substring* match to a
+  per-segment one, so `archive..json` is an ordinary filename again.
+- Restricting a `{name}` fill value to `str`/`int`/`float` needs an explicit
+  `isinstance(value, bool)` rejection *first*: `bool` subclasses `int` in
+  Python, so the natural scalar check silently accepts `True` and fills a
+  literal `assets/True/openapi` segment. `None` deliberately falls through
+  instead of raising there, so that a missing key and a null value both
+  reach `fill_pattern()`'s clearer "unknown token" error.
