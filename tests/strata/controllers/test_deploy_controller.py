@@ -1232,7 +1232,7 @@ def test_deploy_run_delivers_flat_categories_as_one_env_var_per_key(tmp_path: Pa
     assert strata["workspace"]["name"] == "main"
 
 
-def test_deploy_run_no_longer_collides_on_shared_flat_category_key_names(tmp_path: Path):
+def test_deploy_run_no_longer_collides_on_shared_flat_category_key_names(tmp_path: Path, _capture):
     """ADR-0035 Phase 7: the old FLAT_CATEGORIES mechanism delivered every
     flat category's keys into one shared env-var namespace, so a
     user-declared variable named the same as one of `workspace`'s own
