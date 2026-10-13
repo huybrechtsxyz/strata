@@ -578,7 +578,10 @@ def build_run(
             _step(f"materialised asset '{asset_name}' at {asset_path}")
             resolved_assets[asset_name] = ResolvedAssetInfo(
                 path=asset_path.relative_to(build_path).as_posix(),
-                files=sorted(p.name for p in asset_path.iterdir()),
+                # Recursive and files-only: a glob `source_path` preserves nested structure
+                # (docs/design/asset-management.md), so a shallow listing would both hide
+                # real files and surface directory names as though they were files.
+                files=sorted(p.relative_to(asset_path).as_posix() for p in asset_path.rglob("*") if p.is_file()),
             )
     if resolved_assets:
         # ResolvedWorkspaceGraph is frozen (ADR-0021 D2's immutable-handoff

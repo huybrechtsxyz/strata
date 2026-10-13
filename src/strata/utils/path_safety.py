@@ -5,13 +5,22 @@ Lives in `strata.utils` (below `strata.models` in the layered architecture,
 ADR-0003): pure string/path logic, no Pydantic dependency, reused across
 `common_models.py` (`SourceModel`, `ModuleReferenceModel`) and multiple model
 files (`module_model.py`, `namespace_model.py`).
+
+Most helpers here validate a *declared string* before it ever becomes a real
+path. `resolve_within()` is the exception and the complement: it checks an
+already-built `Path` after the fact, for the cases a string check cannot
+cover — a path assembled from runtime-supplied parts, or a glob match
+strata never saw as a literal string at all.
 """
+
+from pathlib import Path
 
 from strata.utils.repo_refs import split_repo_ref
 
 
 def validate_no_path_traversal(value: str) -> None:
-    """Raise ``ValueError`` if `value` is an absolute path or contains '..'.
+    """Raise ``ValueError`` if `value` is an absolute path or contains a `..`
+    path segment.
 
     Guards against path traversal escaping a build/deploy output directory.
     Validation only — does not normalize/mutate `value` (callers that also
@@ -19,6 +28,10 @@ def validate_no_path_traversal(value: str) -> None:
     `validate_relative_path` instead; callers where a trailing '/' is
     semantically meaningful, e.g. `ModuleFileModel.target`, should use this
     directly so that marker isn't stripped).
+
+    `..` is matched per *segment*, not as a substring: `a/../b` is traversal
+    and rejected, while a filename that merely contains two dots
+    (`archive..json`, `v1..2`) is an ordinary name and is allowed.
     """
     path_str = str(value)
 
@@ -28,7 +41,7 @@ def validate_no_path_traversal(value: str) -> None:
     if len(path_str) >= 2 and path_str[1] == ":":
         raise ValueError(f"Path must be relative, not absolute. Got: {path_str}")
 
-    if ".." in path_str:
+    if ".." in path_str.replace("\\", "/").split("/"):
         raise ValueError(f"Path cannot contain parent directory references (..). Got: {path_str}")
 
 
@@ -61,3 +74,25 @@ def validate_file_ref_no_traversal(value: str) -> None:
     path_to_check = split["rest"] if split is not None else value
     if path_to_check:
         validate_no_path_traversal(path_to_check)
+
+
+def resolve_within(root: Path, candidate: Path) -> Path:
+    """Resolve `candidate` and return it, raising ``ValueError`` if it lands
+    outside `root`.
+
+    The runtime complement to this module's string validators. Those reject a
+    bad path at *declaration* time, which cannot cover two real cases:
+    a path built from values only known at build time (e.g. an asset's
+    `source_path` after its `{name}` tokens are filled from a deployment's
+    `properties`), and a glob match, which is produced by the filesystem
+    rather than written down anywhere.
+
+    Resolves both sides before comparing, so `..` segments and symlinks are
+    collapsed first — a purely lexical check would miss
+    `root/subdir/../../outside` entirely.
+    """
+    resolved_root = root.resolve()
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(resolved_root):
+        raise ValueError(f"'{resolved}' resolves outside '{resolved_root}'")
+    return resolved

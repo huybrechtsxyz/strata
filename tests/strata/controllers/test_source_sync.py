@@ -260,6 +260,168 @@ def test_asset_unresolved_value_token_in_filling_property_raises_dedicated_diagn
         )
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param({"size": "large"}, id="dict"),
+        pytest.param(["eu", "us"], id="list"),
+        pytest.param(True, id="bool-true"),
+        pytest.param(False, id="bool-false"),
+    ],
+)
+def test_asset_non_scalar_filling_property_raises_clear_error(tmp_path: Path, value: object):
+    """A dict/list/bool property would stringify into a nonsense path
+    segment ("assets/{'size': 'large'}/openapi", "assets/True/openapi") and
+    only fail later as a confusing "path does not exist" — reject it up
+    front instead (review finding 4). `bool` is rejected deliberately even
+    though `isinstance(True, int)` is True in Python."""
+    root = tmp_path / "solution"
+    root.mkdir()
+    with pytest.raises(SourceSyncError, match="cannot be a path segment"):
+        sync_asset(
+            root,
+            tmp_path / "build",
+            _asset("assets/{deploy_tier}/openapi"),
+            properties={"deploy_tier": value},
+            remotes={},
+        )
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_segment"),
+    [
+        pytest.param("prod", "prod", id="str"),
+        pytest.param(3, "3", id="int"),
+        pytest.param(1.5, "1.5", id="float"),
+    ],
+)
+def test_asset_scalar_filling_property_is_accepted(tmp_path: Path, value: object, expected_segment: str):
+    """str/int/float all fill a segment — a numeric tier/ring/version is a
+    legitimate path segment, so only dict/list/bool are rejected."""
+    root = tmp_path / "solution"
+    _write(root / "assets" / expected_segment / "openapi" / "openapi.json", "{}")
+    build_path = tmp_path / "build"
+
+    destination = sync_asset(
+        root,
+        build_path,
+        _asset("assets/{deploy_tier}/openapi"),
+        properties={"deploy_tier": value},
+        remotes={},
+    )
+
+    assert (destination / "openapi.json").read_text() == "{}"
+
+
+# Review finding 2 — a filled `{name}` token can inject traversal that no
+# validation of the *declared* source_path string could have caught.
+
+
+@pytest.mark.parametrize(
+    ("source_path", "value"),
+    [
+        pytest.param("assets/{deploy_tier}/openapi", "../../../..", id="parent-traversal"),
+        pytest.param("{deploy_tier}/openapi", "/etc", id="absolute"),
+    ],
+)
+def test_asset_token_value_cannot_escape_the_remote_root(tmp_path: Path, source_path: str, value: str):
+    root = tmp_path / "solution"
+    root.mkdir()
+    with pytest.raises(SourceSyncError, match="resolves outside"):
+        sync_asset(
+            root,
+            tmp_path / "build",
+            _asset(source_path),
+            properties={"deploy_tier": value},
+            remotes={},
+        )
+
+
+def test_asset_glob_match_cannot_escape_the_remote_root(tmp_path: Path):
+    """Same escape, but through a glob — the containment check has to run per
+    match, since the pattern itself never names the escaping path literally."""
+    root = tmp_path / "solution"
+    root.mkdir()
+    _write(tmp_path / "outside" / "secret.json", "{}")
+
+    with pytest.raises(SourceSyncError, match="resolves outside"):
+        sync_asset(
+            root,
+            tmp_path / "build",
+            _asset("{deploy_tier}/*.json"),
+            properties={"deploy_tier": "../outside"},
+            remotes={},
+        )
+
+
+# Review finding 3 — glob-aware source_path, preserving structure.
+
+
+def _glob_tree(tmp_path: Path) -> Path:
+    root = tmp_path / "solution"
+    _write(root / "assets" / "openapi" / "api.json", "{}")
+    _write(root / "assets" / "openapi" / "api.xml", "<x/>")
+    _write(root / "assets" / "openapi" / "nested" / "deep.json", "{}")
+    return root
+
+
+def test_asset_glob_selects_only_matching_files(tmp_path: Path):
+    """`*.json` takes the json and leaves the xml — the author selects, strata
+    no longer guesses."""
+    root = _glob_tree(tmp_path)
+    destination = sync_asset(root, tmp_path / "build", _asset("assets/openapi/*.json"), properties={}, remotes={})
+
+    assert (destination / "api.json").exists()
+    assert not (destination / "api.xml").exists()
+    assert not (destination / "nested").exists()
+
+
+def test_asset_recursive_glob_preserves_nested_structure(tmp_path: Path):
+    """`**/*.json` keeps each match's path relative to the pattern's last
+    wildcard-free directory, so two same-named files in different directories
+    cannot silently overwrite each other."""
+    root = _glob_tree(tmp_path)
+    destination = sync_asset(root, tmp_path / "build", _asset("assets/openapi/**/*.json"), properties={}, remotes={})
+
+    assert (destination / "api.json").exists()
+    assert (destination / "nested" / "deep.json").exists()
+    assert not (destination / "deep.json").exists()  # not flattened
+
+
+def test_asset_glob_combines_with_a_filled_token(tmp_path: Path):
+    root = tmp_path / "solution"
+    _write(root / "assets" / "prod" / "openapi" / "api.json", "{}")
+    _write(root / "assets" / "prod" / "openapi" / "api.xml", "<x/>")
+
+    destination = sync_asset(
+        root,
+        tmp_path / "build",
+        _asset("assets/{deploy_tier}/openapi/*.json"),
+        properties={"deploy_tier": "prod"},
+        remotes={},
+    )
+
+    assert (destination / "api.json").exists()
+    assert not (destination / "api.xml").exists()
+
+
+def test_asset_glob_matching_nothing_raises_clear_error(tmp_path: Path):
+    root = _glob_tree(tmp_path)
+    with pytest.raises(SourceSyncError, match="matched no files"):
+        sync_asset(root, tmp_path / "build", _asset("assets/openapi/*.yaml"), properties={}, remotes={})
+
+
+def test_asset_without_a_wildcard_still_copies_a_whole_directory(tmp_path: Path):
+    """Backward compatibility — a wildcard-free source_path behaves exactly as
+    it did before globs were supported."""
+    root = _glob_tree(tmp_path)
+    destination = sync_asset(root, tmp_path / "build", _asset("assets/openapi"), properties={}, remotes={})
+
+    assert (destination / "api.json").exists()
+    assert (destination / "api.xml").exists()
+    assert (destination / "nested" / "deep.json").exists()
+
+
 def test_module_source_unknown_remote_raises_clear_error(tmp_path: Path):
     source = SourceModel(remote="ghost", source_path="charts/authentik")
     with pytest.raises(SourceSyncError, match="not declared"):

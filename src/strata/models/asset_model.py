@@ -16,10 +16,6 @@ which apply here (an asset is always a plain file/directory copy, never a
 Helm pull). Re-declaring just the two fields it does need avoids inheriting
 `SourceModel.validate_source_mode()`'s git-vs-chart mode check, which would
 be meaningless for an asset.
-
-This is Phase 1 of that doc's Implementation Plan (schema only): no
-`WorkspaceSpecModel.assets` pool, no `sync_asset()`, no `strata.assets`
-projection yet — those are Phases 2-4.
 """
 
 from typing import Annotated, Any
@@ -34,6 +30,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.reference_fields import RemoteReference
+from strata.utils.path_safety import validate_relative_path
 
 
 class AssetSpecModel(PlatformBaseModel):
@@ -48,9 +45,22 @@ class AssetSpecModel(PlatformBaseModel):
     source_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         description="Path to the file or directory, relative to the resolved remote's root. May contain "
         "'{name}' segment tokens, filled from the deployment's resolved spec.properties at build time "
-        "(same token syntax path_conventions.compile_pattern() uses for matching, reused here via "
-        "path_conventions.fill_pattern() for filling — not yet wired up, Phase 3)."
+        "(same token syntax path_conventions.compile_pattern() uses for matching, reused via "
+        "path_conventions.fill_pattern() for filling). May also contain glob wildcards ('*', '**', '?', "
+        "'[abc]') to select a subset of files, e.g. 'assets/{deploy_tier}/openapi/*.json'; a path with "
+        "no wildcard names a single file or directory exactly as before. Shell brace expansion "
+        "('{a,b}') is NOT supported. Must be relative — an absolute path or one containing '..' is "
+        "rejected; use 'remote' to point at files outside this solution's own repository."
     )
+
+    @field_validator("source_path")
+    @classmethod
+    def validate_source_path(cls, v: str) -> str:
+        """Reject absolute paths and '..' traversal, and normalize separators
+        (see `validate_relative_path`) — the same guard `SourceModel
+        .source_path` already applies. Glob wildcards pass through untouched.
+        """
+        return validate_relative_path(v)
 
 
 class AssetMetaModel(PlatformBaseModel):

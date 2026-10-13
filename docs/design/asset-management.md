@@ -55,7 +55,24 @@ already set for `deploy_tier` itself), `{ring}`/`{region}`/`{customer}`/
 anything else works identically, and more than one token can appear in the
 same template (e.g. `assets/{customer}/{region}/{deploy_tier}/openapi`),
 each filled from a different layer of the same already-merged `properties`
-dict.
+dict. A value filling a token must be a `str`/`int`/`float` — a
+`dict`/`list`/`bool` would stringify into a nonsense path segment
+(`assets/True/openapi`), so it is rejected up front with a clear
+diagnostic rather than failing later as "path does not exist".
+
+`source_path` **may also be a glob** — `*`, `**`, `?`, `[abc]` — so the
+author selects exactly which files they want rather than strata inferring
+it: `assets/{deploy_tier}/openapi/*.json` takes only the JSON contracts,
+`.../**/*.json` takes them recursively. A `source_path` with no wildcard
+names one file or directory, exactly as before. Shell brace expansion
+(`{a,b}`) is **not** supported — `pathlib.glob()` has no equivalent, and
+`{...}` is already strata's own segment-token syntax; the two never
+collide, since a token name is `\w+` and so can never contain a comma.
+
+`source_path` must be relative. An absolute path or one containing `..`
+is rejected at document-load time by the same `validate_relative_path()`
+guard `SourceModel.source_path` already uses — `remote` is how an asset
+points outside this solution's own repository.
 
 ### Workspace wiring: pool + per-step selection
 
@@ -96,7 +113,7 @@ copy to have already happened before the step loop begins anyway.
 `sync_asset()` is structurally parallel to `sync_source()`: it resolves
 `remote` via `resolve_remote()`, copies the result (file or directory)
 into the build output, and raises `SourceSyncError` on any failure — but
-with two differences from `sync_source()`:
+with three differences from `sync_source()`:
 
 - `source_path` is templated via `fill_pattern()` first, not used
   literally. Before filling, every `{name}` token in the template is
@@ -110,6 +127,18 @@ with two differences from `sync_source()`:
   matching `properties` key at all is likewise a clear `SourceSyncError`
   (`fill_pattern()`'s own `ValueError`, re-wrapped) — never a silent
   empty-string substitution.
+- **The filled path may be a glob**, in which case every match is copied
+  **preserving its path relative to the pattern's last wildcard-free
+  directory** — `assets/openapi/**/*.json` lands
+  `assets/openapi/nested/deep.json` at `assets/<name>/nested/deep.json`,
+  never flattened onto a same-named sibling. A pattern matching nothing
+  is a clear error, not a silently empty asset.
+- **Every resolved path is checked back against the resolved remote root**
+  (`path_safety.resolve_within()`). A declared `source_path` is already
+  validated as relative at document-load time, but that cannot cover a
+  path only assembled at build time: a `{name}` token filled with
+  `../../..` (or an absolute value), or a glob match the pattern never
+  named literally. Both are rejected before anything is copied.
 - The destination is always `build_path/assets/<asset-name>/` — keyed by
   asset name only, **never** path-mirrored the way `sync_source()`
   preserves a provisioner's own relative repo layout (that convention
@@ -161,8 +190,13 @@ relative path:
 
 ```hcl
 local.strata.assets.openapi.path   # "assets/openapi", relative to the build root
-local.strata.assets.openapi.files  # ["openapi.json", "openapi.xml"]
+local.strata.assets.openapi.files  # ["api.json", "nested/deep.json"]
 ```
+
+`files` is a **recursive, files-only** listing of what actually landed,
+each entry relative to `path` — so it stays correct for a glob that
+preserved nested structure, and never reports a directory name as though
+it were a file.
 
 `strata_variables.tf`'s generated type carries the matching
 `assets = map(object({ path = string, files = list(string) }))` entry,
@@ -293,3 +327,17 @@ metadata about that same location, not a replacement for it.
   actually reference are ever resolved at all, so an unreachable pool
   entry's missing token/variant never surfaces as a failure in the first
   place — there was no separate "defensive-only" case left to design.
+- Glob support, the two path-traversal guards, the scalar-only fill rule,
+  and the recursive `files` listing all came out of a code review of the
+  shipped feature (2026-10-13,
+  [asset-management-review.md](../work/asset-management-review.md)).
+  Three of those were defects; globbing was not. It replaced an open
+  question this design had answered badly — whether `files` should be a
+  shallow or recursive listing — by removing the question: once the
+  author states which files they want, strata has nothing left to infer.
+  The shallow `iterdir()` listing it replaced also reported directory
+  names as though they were files. The review's own verification found
+  glob syntax and the existing `{name}` tokens compose without collision
+  (a token name is `\w+`, so brace expansion can never be mistaken for
+  one), and that a wildcard-free `source_path` still resolves exactly as
+  before — so no existing asset document changed meaning.
