@@ -1038,7 +1038,7 @@ spec:
 def test_resolve_document_value_references_resolves_a_named_subnet(tmp_path):
     """`networks.main-network.subnets.aks-nodes.cidr` — the exact case
     firewall-network-cidr-references.md's 'sharp edge' section flagged as
-    unaddressable before this change."""
+    unaddressable before this change (now docs/design/)."""
     root = _solution(tmp_path)
     _network_doc(root, "network")
     _probe(root, "${value:network.network.spec.networks.main-network.subnets.aks-nodes.cidr}")

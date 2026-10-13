@@ -160,7 +160,7 @@ useful, and cut for exactly this reason.
    - `path`, walked through the target document's `model_dump(by_alias=True,
      mode="json")` (dict/list traversal; a list segment indexes by position
      or, if non-numeric, by matching a `"name"` key on one of the list's
-     own dict items — docs/work/firewall-network-cidr-references.md,
+     own dict items — docs/design/firewall-network-cidr-references.md,
      2026-10-13), must resolve to something.
    - The resolved leaf must be a scalar (`str`/`int`/`float`/`bool`), not a
      `dict`/`list` — referencing a whole sub-object is out of scope (see

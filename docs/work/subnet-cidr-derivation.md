@@ -9,12 +9,13 @@
   (current `NetworkModel`/`SubnetModel` shape — `cidr` is a literal-or-Value-
   token `str`, nothing is derived); spun off a sibling doc from the
   "does DNS/Firewall have the same architect itch" comparison:
-  [firewall-network-cidr-references.md](firewall-network-cidr-references.md)
+  [firewall-network-cidr-references.md](../design/firewall-network-cidr-references.md)
   (Firewall is a real downstream *consumer* of this doc's CIDRs, not just a
-  parallel — worth reading once this doc moves forward). DNS's own sibling
-  doc, `dns-value-and-output-binding.md`, resolved and was removed
-  2026-10-13 — its cross-tenant zone-collision idea shipped as
-  `semantic_checks.py`'s `_check_dns_records()`.
+  parallel — graduated to docs/design/ 2026-10-13 once its own name-based
+  `${value:}` addressing work finished). DNS's own sibling doc,
+  `dns-value-and-output-binding.md`, resolved and was removed 2026-10-13 —
+  its cross-tenant zone-collision idea shipped as `semantic_checks.py`'s
+  `_check_dns_records()`.
 
 ## Overview
 

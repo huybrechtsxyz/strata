@@ -68,7 +68,7 @@ def _walk_value_reference_path(node: Any, segments: list[str]) -> Any:
     dict items (`networks.main-network.cidr`) — the same `(kind, name)`
     identity convention ADR-0015 already established for document
     addressing, applied one level deeper to named items *within* a
-    document (docs/work/firewall-network-cidr-references.md). The two can
+    document (docs/design/firewall-network-cidr-references.md). The two can
     never be ambiguous: `PlatformName`'s own pattern requires a leading
     lowercase letter, so a real name is never also `.isdigit()`. A list of
     plain scalars (no dict items at all) simply never matches a non-digit
@@ -98,9 +98,7 @@ def _walk_value_reference_path(node: Any, segments: list[str]) -> Any:
                     return _VALUE_PATH_MISSING
                 node = node[int(segment)]
             else:
-                match = next(
-                    (item for item in node if isinstance(item, dict) and item.get("name") == segment), None
-                )
+                match = next((item for item in node if isinstance(item, dict) and item.get("name") == segment), None)
                 if match is None:
                     return _VALUE_PATH_MISSING
                 node = match

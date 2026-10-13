@@ -74,11 +74,12 @@ the full flow.
 ## Related Decisions
 
 - [ADR-0010](../decisions/0010-namespace-model-design-decisions.md), [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md), [ADR-0012](../decisions/0012-workspace-model-design-decisions.md), [ADR-0013](../decisions/0013-configuration-topology-registry.md), [ADR-0014](../decisions/0014-provider-topology-config-standalone-kinds.md), [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md), [ADR-0028](../decisions/0028-topology-inline-reversion.md)
-- [firewall-network-cidr-references.md](firewall-network-cidr-references.md) — a
+- [firewall-network-cidr-references.md](../design/firewall-network-cidr-references.md) — a
   related but distinct concern: that doc's `${value:}` path addressing into
-  `NetworkDefinitionModel.subnets[]` is positional (by list index) only; this
-  validator resolves by `.name` instead, so it doesn't share that doc's
-  "sharp edge," but both touch the same `Network`/subnet surface.
+  `NetworkDefinitionModel.subnets[]` supports both integer position and
+  `.name`; this validator resolves `WorkspaceResourceSubnetModel.subnet` by
+  `.name` directly on its own model field, a separate mechanism that
+  happens to touch the same `Network`/subnet surface.
 
 ## Remaining Work / Open Questions
 
