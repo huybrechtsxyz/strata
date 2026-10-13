@@ -464,16 +464,46 @@ All five findings are fixed — nothing open.
       clean; [asset-management.md](../design/asset-management.md) updated
       for finding 3's design change.
 
-### Follow-ups deliberately left out of scope
+### Follow-ups — also DONE (2026-10-13)
 
-- `sync_source()` has the same two un-helpered path joins `sync_asset()`
-  did, and still bypasses `layout.py`'s "every derived path belongs here"
-  rule. Not touched — pre-existing, unrelated to assets, and provisioner
-  sources are not token-filled, so they lack the runtime-injection vector
-  that made finding 2 reachable. Worth a separate look.
-- `validate_no_path_traversal()` rejects any `..` substring, so a
-  legitimate filename containing `..` (e.g. `file..json`) is rejected.
-  Pre-existing and shared with `SourceModel`; noted, not changed.
+Both items originally parked as out-of-scope were picked up, plus a third
+gap found while doing them.
+
+- [x] ~~`sync_source()` has the same two un-helpered path joins~~ —
+      `resolve_within()` now runs in **`sync_source()` and
+      `sync_module_source()`** too, so every path strata materialises gets
+      the same containment guarantee, not just assets. The value here is
+      narrower but real: both fields are already validated as relative at
+      the model layer and neither is token-filled, so the remaining vector
+      is a **symlink inside the repo pointing out of it** — which no
+      string validation can catch, and which `copytree` would otherwise
+      follow (it copies symlink *targets* by default). Noted in the code
+      comment so the narrower purpose isn't mistaken for the asset case.
+- [x] ~~`validate_no_path_traversal()` rejects any `..` substring~~ — now
+      matched **per segment** (`path.replace("\\", "/").split("/")`), so
+      `a/../b` is still traversal while `archive..json` / `v1..2` are
+      ordinary names. Checked every existing traversal test first: all of
+      them use `..` as a real segment, so nothing depended on the
+      substring behaviour. This touches a helper shared by five models
+      (`SourceModel`, `ModuleFileModel`, `NamespaceModuleModel`,
+      `ProvisionerModel`, `solution_model.py`), so the full suite was the
+      real gate rather than the targeted files.
+- [x] **Third gap, found while doing the above: `path_safety.py` had no
+      test file at all.** The repo's path-traversal guard was only ever
+      exercised indirectly, through whichever model happened to call it —
+      and `resolve_within()` was in the same position after being added
+      for finding 2. New `tests/strata/utils/test_utils_path_safety.py`
+      covers all four helpers directly (25 tests), including the cases
+      that distinguish a lexical check from a resolving one: a path that
+      escapes and comes back (`sub/../ok.txt`, allowed) versus one that
+      escapes for real (`sub/../../escaped.txt`, rejected).
+
+One test in that new file initially **failed and was wrong, not the code**
+— it asserted `validate_relative_path("/a/b/")` strips the leading slash,
+when the absolute-path check correctly rejects it first. Corrected to
+assert the real behaviour, and split into a separate test naming it
+explicitly, since "leading slash rejected, trailing slash stripped" is a
+non-obvious asymmetry worth pinning.
 
 ## Changelog
 
