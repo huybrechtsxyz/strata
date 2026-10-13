@@ -11,6 +11,7 @@ own unit tests).
 from pathlib import Path
 
 from strata.controllers.solution_context import open_solution
+from strata.utils.diagnostics import Severity
 
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
@@ -1827,3 +1828,39 @@ spec:
 
     context = _resolve(root)
     assert context.ok, context.diagnostics.messages()
+
+
+# ---------------------------------------------------------------------------
+# DnsZoneModel.name -> same domain declared by more than one document
+# (docs/config/dns.md's cross-tenant zone-collision validation)
+# ---------------------------------------------------------------------------
+
+
+def test_dns_zone_declared_twice_across_documents_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "dns-other-tenant.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: dns
+meta:
+  name: example-again
+spec:
+  zones:
+    - name: example.com
+      records:
+        - name: www
+          type: A
+          value: "5.6.7.8"
+""",
+    )
+
+    context = _resolve(root)
+    assert context.ok  # warning, not an error — does not fail validate
+    assert any(d.code == "dns_zone_declared_twice" for d in context.diagnostics.warnings)
+    assert any("example.com" in m for m in context.diagnostics.messages(Severity.WARNING))
+
+
+def test_dns_zone_declared_once_is_not_flagged(tmp_path):
+    context = _resolve(_base_solution(tmp_path))
+    assert not any(d.code == "dns_zone_declared_twice" for d in context.diagnostics.warnings)

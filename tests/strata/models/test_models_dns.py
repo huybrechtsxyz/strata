@@ -145,3 +145,61 @@ def test_dns_rejects_unknown_fields():
     data["spec"]["zones"][0]["unknown_field"] = "oops"
     with pytest.raises(ValidationError):
         DnsModel.model_validate(data)
+
+
+def test_dns_rejects_exact_duplicate_record():
+    """Same (name, type, value) twice in one zone is rejected."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"].append(dict(data["spec"]["zones"][0]["records"][0]))
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_allows_same_name_and_type_with_different_values():
+    """Round-robin A records (same name+type, different value) are legitimate, not a conflict."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"].append({"name": "@", "type": "A", "value": "5.6.7.8"})
+    model = DnsModel.model_validate(data)
+    assert len(model.spec.zones[0].records) == 2
+
+
+def test_dns_allows_multiple_mx_records_at_same_name():
+    """Multiple MX records (different priority/value) at the same name are legitimate."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"] = [
+        {"name": "@", "type": "MX", "value": "mail1.example.com", "priority": 10},
+        {"name": "@", "type": "MX", "value": "mail2.example.com", "priority": 20},
+    ]
+    model = DnsModel.model_validate(data)
+    assert len(model.spec.zones[0].records) == 2
+
+
+def test_dns_rejects_two_cnames_at_same_name():
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"] = [
+        {"name": "www", "type": "CNAME", "value": "a.example.com"},
+        {"name": "www", "type": "CNAME", "value": "b.example.com"},
+    ]
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_rejects_cname_sharing_name_with_other_type():
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"] = [
+        {"name": "www", "type": "CNAME", "value": "a.example.com"},
+        {"name": "www", "type": "TXT", "value": "v=spf1 -all"},
+    ]
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_duplicate_check_skips_records_with_unresolved_value_tokens():
+    """A record whose value is still a Value token can't be compared literally — skipped, not flagged."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"] = [
+        {"name": "@", "type": "A", "value": "${var:public_ip}"},
+        {"name": "@", "type": "A", "value": "${var:public_ip}"},
+    ]
+    model = DnsModel.model_validate(data)
+    assert len(model.spec.zones[0].records) == 2

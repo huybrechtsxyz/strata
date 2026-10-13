@@ -37,6 +37,7 @@ from strata.integrations.registry import get_class as get_integration_class
 from strata.models.common_models import PlatformBaseModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
 from strata.models.deployment_model import DeploymentModel
+from strata.models.dns_model import DnsModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.integration_model import IntegrationModel
 from strata.models.module_model import ModuleModel
@@ -91,7 +92,7 @@ def run_semantic_checks(
             other Configuration-backed check here already uses.
 
     Returns:
-        Every finding, from all eleven checks combined.
+        Every finding, from all twelve checks combined.
     """
     resolved = resolved_deployments or {}
     diagnostics = Diagnostics()
@@ -106,6 +107,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_value_references(index))
     diagnostics.extend(_check_paths(index, root))
     diagnostics.extend(_check_version_workspace(index, resolved))
+    diagnostics.extend(_check_dns_records(index))
     return diagnostics
 
 
@@ -964,4 +966,40 @@ def _check_document_against_path_convention(
                     f"convention '{convention.name}''s declared pattern '{segment.pattern}'.",
                     code="path_convention_segment_mismatch",
                 )
+    return diagnostics
+
+
+# ---------------------------------------------------------------------------
+# DnsZoneModel.name -> same domain declared by more than one document
+# (docs/config/dns.md's cross-tenant zone-collision validation)
+# ---------------------------------------------------------------------------
+
+
+def _check_dns_records(index: DocumentIndex) -> Diagnostics:
+    """Warn when the same DNS zone domain is declared in two or more documents.
+
+    `DnsZoneModel.validate_unique_records()` (Phase 1) already rejects
+    duplicate/conflicting records *within* one document's zones — this is
+    the one case that needs the whole-solution index: the same domain
+    (`DnsZoneModel.name`) declared again by a second `Dns` document (e.g.
+    two different tenants' zone files both claiming `example.com`), which
+    Phase 1 can't see on its own.
+    """
+    diagnostics = Diagnostics()
+    zone_sources: dict[str, list[str]] = {}
+    for entry in index.all_of(PlatformKind.DNS):
+        dns = cast(DnsModel, entry.model)
+        for zone in dns.spec.zones:
+            zone_sources.setdefault(zone.name, []).append(str(entry.source))
+
+    for zone_name, sources in zone_sources.items():
+        if len(sources) > 1:
+            diagnostics.warning(
+                f"DNS zone '{zone_name}' is declared in {len(sources)} documents: "
+                f"{', '.join(sorted(sources))} — provisioning both will likely conflict or silently "
+                "overwrite records depending on provider/apply order.",
+                source=sources[0],
+                location="spec.zones",
+                code="dns_zone_declared_twice",
+            )
     return diagnostics

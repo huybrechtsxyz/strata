@@ -1,7 +1,8 @@
 # Firewall — Consuming Network's CIDRs via `${value:}` References — Work
 
-- Status: draft — question captured, no decision, no implementation
-- Last updated: 2026-10-06
+- Status: draft — question captured, no decision, no implementation; the
+  `strata firewall check` lint (below) was considered and dropped 2026-10-13
+- Last updated: 2026-10-13
 - Related: [subnet-cidr-derivation.md](subnet-cidr-derivation.md) (spun out
   of that doc's cross-kind "does DNS/Firewall have the same architect itch
   as Network" comparison, 2026-10-06 — this is where Firewall becomes a
@@ -109,7 +110,15 @@ digit-only integer indexing when the segment is numeric, so no existing
   happens to exactly equal a real subnet's CIDR declared elsewhere in the
   solution but is **not** expressed as a `${value:}` reference — a "you
   should probably reference this instead of duplicating it" lint, surfaced
-  before it has a chance to silently drift.
+  before it has a chance to silently drift. **Considered and dropped
+  2026-10-13**: the only `${value:...}` reference this lint could suggest
+  today is positional (`networks.0.subnets.0.cidr`), which is itself fragile
+  to reordering — the exact problem this doc's "sharp edge" section already
+  flagged. A lint that recommends a fragile fix isn't worth shipping; the
+  real prerequisite is the name-based path addressing proposed below, not
+  `strata network allocate` (which was itself cancelled — see
+  [subnet-cidr-derivation.md](subnet-cidr-derivation.md)'s Decision section,
+  "Approach 1b" superseding the original allocate-and-persist design).
 - **Drift detection**: a literal `from`/`to` that *used to* match a real
   subnet's CIDR (by name, via some prior recorded association) but no
   longer does, after a reallocation — needs the literal lint above as a
@@ -137,6 +146,18 @@ command group.
 - [ ] If built: needs its own `## History`-worthy test coverage for both
       the fallback-to-integer-index behavior (no regression) and the new
       name-matching behavior.
-- [ ] Prototype the `strata firewall check` / `strata network check`
+- [x] ~~Prototype the `strata firewall check` / `strata network check`
       literal-duplication lint once `strata network allocate` itself
-      exists (no point linting against a feature that doesn't exist yet).
+      exists~~ — **DROPPED (2026-10-13)**: `strata network allocate` was
+      itself cancelled (subnet-cidr-derivation.md), but that's moot anyway
+      — the real blocker is the positional-addressing footgun above, which
+      would make the lint's own suggested fix fragile. Revisit only if/when
+      name-based path addressing lands.
+
+## Changelog
+
+- 2026-10-13: Dropped the `strata firewall check` literal-CIDR-duplication
+  lint (companion to DNS's own `_check_dns_records()`, which was built
+  instead) — its only buildable `${value:}` suggestion today is positional
+  and fragile to reordering, and its old dependency on `strata network
+  allocate` no longer applies since that command was cancelled.

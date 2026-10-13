@@ -14,7 +14,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
-from strata.utils.value_tokens import validate_value_tokens
+from strata.utils.value_tokens import has_value_tokens, validate_value_tokens
 
 
 class DnsRecordType(str, Enum):
@@ -122,6 +122,51 @@ class DnsZoneModel(PlatformBaseModel):
     custom_tags: dict[str, str] | None = Field(
         None, description="Optional additional cloud provider tags beyond default_tags."
     )
+
+    @model_validator(mode="after")
+    def validate_unique_records(self) -> "DnsZoneModel":
+        """Reject duplicate/conflicting records within this zone (Phase 1).
+
+        Identity is ``(name, type, value)``, not just ``(name, type)`` — a
+        round-robin pair of ``A`` records, multiple ``MX``/priority entries, or
+        several ``TXT`` records (SPF + DKIM) at the same name legitimately
+        share ``(name, type)``. A record whose ``value`` still carries an
+        unresolved Value token is skipped for the exact-duplicate comparison
+        (its real value isn't known until build/deploy time) but still
+        participates in the CNAME check below, which only looks at name/type.
+
+        A ``CNAME`` may never share its name with any other record, including
+        another ``CNAME`` — that's invalid in DNS itself, not just a strata
+        convention (RFC 1034 §3.6.2).
+
+        Cross-document duplication (the same zone domain declared twice, each
+        individually valid) needs the whole-solution index and is a separate,
+        later check — see ``_check_dns_records()`` in
+        ``strata.controllers.semantic_checks``.
+        """
+        if not self.records:
+            return self
+
+        seen_literal: set[tuple[str, str, str]] = set()
+        records_by_name: dict[str, list[DnsRecordModel]] = {}
+        for record in self.records:
+            if not has_value_tokens(record.value):
+                literal_key = (record.name, record.type.value, record.value)
+                if literal_key in seen_literal:
+                    raise ValueError(
+                        f"Duplicate DNS record in zone '{self.name}': name='{record.name}', "
+                        f"type='{record.type.value}', value='{record.value}'"
+                    )
+                seen_literal.add(literal_key)
+            records_by_name.setdefault(record.name, []).append(record)
+
+        for name, records in records_by_name.items():
+            if len(records) > 1 and any(record.type is DnsRecordType.CNAME for record in records):
+                raise ValueError(
+                    f"CNAME conflict in zone '{self.name}' for name '{name}': a CNAME record cannot "
+                    "share its name with any other record, including another CNAME"
+                )
+        return self
 
 
 class DnsSpecModel(PlatformBaseModel):
