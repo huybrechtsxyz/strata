@@ -44,6 +44,7 @@ strata-v2
    config/deployment
    config/version
    config/artifact
+   config/asset
    config/integration
 
 .. toctree::
