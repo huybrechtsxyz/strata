@@ -63,8 +63,21 @@ def _walk_value_reference_path(node: Any, segments: list[str]) -> Any:
     """Walk `segments` through `node` (a target document's own
     `model_dump(by_alias=True, mode="json")`), one segment per step.
 
+    A list segment is resolved by integer index (`networks.0.cidr`) or, if
+    it isn't a digit, by matching a `"name"` key on one of the list's own
+    dict items (`networks.main-network.cidr`) — the same `(kind, name)`
+    identity convention ADR-0015 already established for document
+    addressing, applied one level deeper to named items *within* a
+    document (docs/work/firewall-network-cidr-references.md). The two can
+    never be ambiguous: `PlatformName`'s own pattern requires a leading
+    lowercase letter, so a real name is never also `.isdigit()`. A list of
+    plain scalars (no dict items at all) simply never matches a non-digit
+    segment, the same miss as today. Duplicate names within one list are
+    not re-validated here — the first match wins; uniqueness is each
+    model's own `check_unique_names()` validator's job, not this walk's.
+
     Returns `_VALUE_PATH_MISSING` the instant a segment cannot be resolved
-    — a missing dict key, a non-integer or out-of-range list index, or an
+    — a missing dict key, a list index/name that doesn't exist, or an
     attempt to descend into an already-scalar value. An empty `segments`
     list (a bare `${value:kind.name}` with no path at all) returns `node`
     itself unchanged — the whole document's dumped dict — which
@@ -80,9 +93,17 @@ def _walk_value_reference_path(node: Any, segments: list[str]) -> Any:
                 return _VALUE_PATH_MISSING
             node = node[segment]
         elif isinstance(node, list):
-            if not segment.isdigit() or int(segment) >= len(node):
-                return _VALUE_PATH_MISSING
-            node = node[int(segment)]
+            if segment.isdigit():
+                if int(segment) >= len(node):
+                    return _VALUE_PATH_MISSING
+                node = node[int(segment)]
+            else:
+                match = next(
+                    (item for item in node if isinstance(item, dict) and item.get("name") == segment), None
+                )
+                if match is None:
+                    return _VALUE_PATH_MISSING
+                node = match
         else:
             return _VALUE_PATH_MISSING
     return node

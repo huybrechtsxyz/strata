@@ -1,7 +1,10 @@
 # Firewall — Consuming Network's CIDRs via `${value:}` References — Work
 
-- Status: draft — question captured, no decision, no implementation; the
-  `strata firewall check` lint (below) was considered and dropped 2026-10-13
+- Status: in-progress — the `strata firewall check` lint was considered and
+  dropped 2026-10-13; name-based path-segment addressing was designed and
+  implemented 2026-10-13 (`_walk_value_reference_path()`); the original
+  "verify `${value:}` resolves end to end from Firewall" item is now
+  closed by that same change's test coverage
 - Last updated: 2026-10-13
 - Related: [subnet-cidr-derivation.md](subnet-cidr-derivation.md) (spun out
   of that doc's cross-kind "does DNS/Firewall have the same architect itch
@@ -25,13 +28,15 @@ declared in `network.yaml` (e.g. an NSG rule granting the AKS node subnet
 access re-types `10.0.1.128/25` by hand). Nothing today keeps the two in
 sync — they're two independently hand-typed strings that happen to agree.
 
-This was a background duplication annoyance before
-[subnet-cidr-derivation.md](subnet-cidr-derivation.md)'s `strata network
-allocate` design; it becomes a real correctness risk once that lands —
-`allocate` can legitimately reallocate/append subnet CIDRs, and a firewall
-rule holding a stale hand-copied literal would then silently grant access
-to the wrong range (or no longer match the subnet it was meant to) with no
-error anywhere.
+This was a background duplication annoyance even before considering any
+future Network tooling: a subnet's position in `subnets:` can already
+shift today just by hand-reordering/inserting entries in `network.yaml`,
+silently invalidating any positional `${value:...}` reference a firewall
+rule held — the same "wrong, not missing" risk this doc originally framed
+around `strata network allocate` (since cancelled — see
+[subnet-cidr-derivation.md](subnet-cidr-derivation.md)'s Decision
+section), which only would have made the existing risk more frequent, not
+unique to it.
 
 ## The fix already exists — `${value:kind.name.path}`
 
@@ -46,9 +51,11 @@ decision 1) — syntactically, a rule should already be able to write:
 from: "${value:network.main-network.spec.networks.0.subnets.0.cidr}"
 ```
 
-instead of a literal, today, with no new token kind needed. **Not yet
-verified against real code** — needs an actual test, same as the DNS doc's
-equivalent open item, before claiming this works end to end.
+instead of a literal, today, with no new token kind needed. **Verified
+end to end (2026-10-13)**:
+`test_firewall_rule_references_a_named_subnet_cidr_end_to_end`
+(`test_value_controller.py`) proves a real `FirewallRuleModel.from_`
+resolving a `${value:...}` reference to a Network subnet's `cidr`.
 
 ## The sharp edge: positional, not name-based, path addressing
 
@@ -82,6 +89,55 @@ to named items *within* a document). Falls back to the existing
 digit-only integer indexing when the segment is numeric, so no existing
 `${value:...}` reference changes behavior.
 
+**Design finalized 2026-10-13** (both open items below resolved against
+real code, not assumed):
+
+```python
+def _walk_value_reference_path(node: Any, segments: list[str]) -> Any:
+    for segment in segments:
+        if isinstance(node, dict):
+            if segment not in node:
+                return _VALUE_PATH_MISSING
+            node = node[segment]
+        elif isinstance(node, list):
+            if segment.isdigit():
+                if int(segment) >= len(node):
+                    return _VALUE_PATH_MISSING
+                node = node[int(segment)]
+            else:
+                match = next(
+                    (item for item in node if isinstance(item, dict) and item.get("name") == segment), None
+                )
+                if match is None:
+                    return _VALUE_PATH_MISSING
+                node = match
+        else:
+            return _VALUE_PATH_MISSING
+    return node
+```
+
+- **No new diagnostics code needed.** A failed name lookup returns the
+  same `_VALUE_PATH_MISSING` sentinel the digit-index branch already
+  returns — `resolve_document_value_references()` reports it as the
+  existing `value_reference_invalid_path`, unchanged.
+- **No ambiguity between a name and a digit index, by construction**:
+  `PlatformName` (`common_models.py`) is `pattern=r"^[a-z][a-z0-9_-]*$"` —
+  every real document/list-item name *must* start with a lowercase
+  letter, so a name can never also be `.isdigit()`. The existing
+  `if segment.isdigit()` check is therefore never a real choice between
+  two valid interpretations; it's only ever "is this plainly numeric, or
+  not."
+- **Duplicate names within one list are not re-validated here.** The walk
+  takes the *first* matching item (list order) and leaves uniqueness
+  enforcement entirely to whichever model's own `check_unique_names()`
+  validator already covers that list (confirmed: `NetworkDefinitionModel.
+  validate_unique_subnet_names()`/`validate_unique_peering_names()`,
+  `NetworkSpecModel.validate_unique_network_names()` all already do, for
+  the concrete Network case) — not every named list in the schema has
+  such a validator (e.g. `ResourceModel.volumes` only checks uniqueness
+  among volumes that *do* have a name set), so the walker deliberately
+  doesn't assume uniqueness as its own precondition.
+
 - Pros: directly removes the positional footgun above; consistent with
   how this repo already addresses *documents* by name rather than
   position (ADR-0015) — this just extends the same principle one level
@@ -94,14 +150,32 @@ digit-only integer indexing when the segment is numeric, so no existing
   to an already-finished feature, not a bug fix, and per this repo's own
   `docs/design/` convention, shouldn't be edited into that already-"done"
   doc in place; it belongs in its own follow-on work (this doc), graduating
-  separately if built.
-- Scope question: does this need to support *every* named list in the
-  schema generically, or only `NetworkDefinitionModel.subnets`/`.networks`
-  (the concrete case found)? Generic is more consistent with how
-  `check_unique_names()`/`References()` are already applied uniformly
-  across kinds; scoped-to-Network is less work and matches "don't solve a
-  problem no one cited" if no other kind's named lists are actually
-  referenced this way yet.
+  separately if built. One line in that doc ("integer segments index into
+  lists", `cross-document-value-references.md` line ~162) would need a
+  small factual correction once this ships, since it would no longer be
+  exclusively true — a narrow, cited exception to the "don't edit a
+  finished doc" rule, the same class of fix the DNS docstring got
+  2026-10-12.
+- **Scope question — RESOLVED (2026-10-13): generic, not Network-only.**
+  `_walk_value_reference_path()` has zero visibility into which `kind` or
+  model produced the list it's currently walking — it only ever sees a
+  plain `dict`/`list` from `model_dump()`. Scoping the new branch to "only
+  when inside a Network document" isn't mechanically simpler, since
+  there's no `kind` parameter to branch on without threading one through
+  purely to narrow this check — it would be *more* code for an artificial
+  restriction, not less. The generic rule ("list of dicts, try matching
+  `name` first") naturally only ever activates for whichever lists happen
+  to carry dict items with a literal `name` key — confirmed via a
+  repo-wide `check_unique_names()` survey: `networks`/`subnets`/
+  `peerings` (Network), `sinks` (Audit), `paths` (Configuration), `zones`
+  (DNS), `services` (Module), `modules` (Namespace), `remotes` (Solution),
+  `provisioners`/`topology`/`resources`/`volumes` (Workspace) all use
+  `.name`; a handful of other lists key off a *different* field instead
+  (`environment.variables`/`.secrets`/`.features` use `.key`, `stage.step`
+  uses `.step`, `topology.components` uses `.role`) — those are simply
+  unaffected (no `"name"` key present, so the match always misses and
+  falls through to `_VALUE_PATH_MISSING`, same as today), not a second
+  field convention this change needs to add support for.
 
 ## Report/lint command ideas
 
@@ -133,26 +207,44 @@ command group.
 
 ## Remaining Work
 
-- [ ] Verify `${value:network.NAME.spec.networks.N.subnets.M.cidr}`
+- [x] ~~Verify `${value:network.NAME.spec.networks.N.subnets.M.cidr}`
       actually resolves end to end from a real `FirewallRuleModel.from_`/
       `.to` today (write a throwaway test) before treating it as already
-      usable.
-- [ ] Read `_walk_value_reference_path()`'s full implementation and its
+      usable.~~ — **DONE (2026-10-13)**:
+      `test_firewall_rule_references_a_named_subnet_cidr_end_to_end`
+      (`test_value_controller.py`) proves a real `FirewallRuleModel.from_`
+      resolving `${value:...subnets.aks-nodes.cidr}` end to end.
+- [x] ~~Read `_walk_value_reference_path()`'s full implementation and its
       existing test coverage before committing to the name-based-segment
       design above — confirm there's no existing partial support and no
-      test that would need to change.
-- [ ] Decide the scope question (generic named-list addressing vs.
-      Network-only) above.
-- [ ] If built: needs its own `## History`-worthy test coverage for both
-      the fallback-to-integer-index behavior (no regression) and the new
-      name-matching behavior.
-- [x] ~~Prototype the `strata firewall check` / `strata network check`
-      literal-duplication lint once `strata network allocate` itself
-      exists~~ — **DROPPED (2026-10-13)**: `strata network allocate` was
-      itself cancelled (subnet-cidr-derivation.md), but that's moot anyway
-      — the real blocker is the positional-addressing footgun above, which
-      would make the lint's own suggested fix fragile. Revisit only if/when
-      name-based path addressing lands.
+      test that would need to change~~ — **DONE (2026-10-13)**: read in
+      full; no partial support exists today (list segments are
+      `.isdigit()`-only); existing coverage is `test_value_controller.py`'s
+      `resolve_document_value_references()` suite (integer-index/whole-
+      object/not-scalar cases) plus `test_semantic_checks.py`'s wiring
+      tests — none assume list segments can *only* ever be digits, so none
+      need to change.
+- [x] ~~Decide the scope question (generic named-list addressing vs.
+      Network-only) above~~ — **DONE (2026-10-13): generic** — see
+      "Candidate fix" section above.
+- [x] ~~Implement the algorithm above in `_walk_value_reference_path()`,
+      update its docstring, and fix the one now-stale line in
+      `cross-document-value-references.md` ("integer segments index into
+      lists").~~ — **DONE (2026-10-13)**: implemented in
+      `value_references.py`; docstring updated; the one stale line in
+      `cross-document-value-references.md` corrected.
+- [x] ~~Needs its own test coverage for: fallback-to-integer-index (no
+      regression — every existing `test_value_controller.py` case must
+      still pass unmodified), new name-matching resolving a real
+      `FirewallRuleModel.from_`/`.to` end to end (closes the item above),
+      a name that doesn't match any item (still `value_reference_invalid_path`),
+      and a list of plain scalars (e.g. `address_space`/`targets`) with a
+      non-digit segment (still misses, not a crash).~~ — **DONE
+      (2026-10-13)**: five new tests added to `test_value_controller.py`
+      (named subnet, positional index — previously untested at all, unknown
+      name, non-digit segment against a scalar list, and the firewall
+      end-to-end case); full suite (2512 tests) + mypy + ruff + lint-imports
+      all clean.
 
 ## Changelog
 
@@ -161,3 +253,17 @@ command group.
   instead) — its only buildable `${value:}` suggestion today is positional
   and fragile to reordering, and its old dependency on `strata network
   allocate` no longer applies since that command was cancelled.
+- 2026-10-13: Finalized the name-based path-segment design (both open
+  questions resolved against real code): generic (not Network-scoped,
+  since the walker has no `kind` context to scope by anyway), and the
+  digit-vs-name branch is unambiguous by construction thanks to
+  `PlatformName`'s pattern (names can never be all-digit). Not yet
+  implemented — see Remaining Work.
+- 2026-10-13: Implemented. `_walk_value_reference_path()` now matches a
+  non-digit list segment against a `"name"` key on the list's own dict
+  items, falling back to integer indexing unchanged. No new diagnostics
+  code needed (reuses the existing `_VALUE_PATH_MISSING` ->
+  `value_reference_invalid_path` path). This also means a Firewall rule's
+  `from`/`to` can now reference a Network subnet by name
+  (`${value:network.NAME.spec.networks.NET.subnets.SUBNET.cidr}`) instead
+  of position — the original motivation for this whole doc.

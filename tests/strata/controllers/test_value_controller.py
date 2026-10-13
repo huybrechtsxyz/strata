@@ -1002,6 +1002,132 @@ def test_resolve_document_value_references_ignores_documents_with_no_value_token
 
 
 # ---------------------------------------------------------------------------
+# Name-based list-segment addressing (docs/work/firewall-network-cidr-
+# references.md, 2026-10-13) — `_walk_value_reference_path()`'s positional-
+# only addressing gained a name-matching branch; these prove it end to end,
+# alongside the (previously untested) positional case it must not regress.
+# ---------------------------------------------------------------------------
+
+
+def _network_doc(
+    root: Path,
+    name: str,
+    *,
+    network_name: str = "main-network",
+    subnet_name: str = "aks-nodes",
+    cidr: str = "10.0.1.0/24",
+) -> None:
+    _write(
+        root,
+        f"{name}.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: network
+meta:
+  name: {name}
+spec:
+  networks:
+    - name: {network_name}
+      address_space: ["10.0.0.0/16"]
+      subnets:
+        - name: {subnet_name}
+          cidr: "{cidr}"
+""",
+    )
+
+
+def test_resolve_document_value_references_resolves_a_named_subnet(tmp_path):
+    """`networks.main-network.subnets.aks-nodes.cidr` — the exact case
+    firewall-network-cidr-references.md's 'sharp edge' section flagged as
+    unaddressable before this change."""
+    root = _solution(tmp_path)
+    _network_doc(root, "network")
+    _probe(root, "${value:network.network.spec.networks.main-network.subnets.aks-nodes.cidr}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert values == {"network.network.spec.networks.main-network.subnets.aks-nodes.cidr": "10.0.1.0/24"}
+
+
+def test_resolve_document_value_references_still_resolves_by_integer_index(tmp_path):
+    """The original positional addressing (`networks.0.subnets.0.cidr`)
+    must keep working unchanged — no prior test exercised list indexing
+    through this resolver at all, so this is also new coverage, not just
+    a regression guard."""
+    root = _solution(tmp_path)
+    _network_doc(root, "network")
+    _probe(root, "${value:network.network.spec.networks.0.subnets.0.cidr}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert values == {"network.network.spec.networks.0.subnets.0.cidr": "10.0.1.0/24"}
+
+
+def test_resolve_document_value_references_unknown_name_in_a_list_is_invalid_path(tmp_path):
+    """A name that doesn't match any list item is the same
+    `value_reference_invalid_path` an out-of-range integer index already
+    produces — no new error code for the name-matching branch."""
+    root = _solution(tmp_path)
+    _network_doc(root, "network")
+    _probe(root, "${value:network.network.spec.networks.main-network.subnets.ghost-subnet.cidr}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert values == {}
+    assert diagnostics.items[0].code == "value_reference_invalid_path"
+
+
+def test_resolve_document_value_references_name_segment_on_a_scalar_list_is_invalid_path(tmp_path):
+    """A non-digit segment against a list of plain scalars (e.g.
+    `address_space`, no dict items to match a name against) misses the
+    same way it always did — not a crash, not a false match."""
+    root = _solution(tmp_path)
+    _network_doc(root, "network")
+    _probe(root, "${value:network.network.spec.networks.main-network.address_space.primary}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert values == {}
+    assert diagnostics.items[0].code == "value_reference_invalid_path"
+
+
+def test_firewall_rule_references_a_named_subnet_cidr_end_to_end(tmp_path):
+    """The real motivating case: a `FirewallRuleModel.from_` written as a
+    `${value:}` reference to a named subnet, resolved through
+    `resolve_values()` the same way `strata validate`/deploy would."""
+    root = _solution(tmp_path)
+    _network_doc(root, "network")
+    _write(
+        root,
+        "firewall.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: firewall
+meta:
+  name: main-firewall
+spec:
+  allow:
+    - direction: in
+      proto: tcp
+      port: 443
+      from: "${value:network.network.spec.networks.main-network.subnets.aks-nodes.cidr}"
+""",
+    )
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert values == {"network.network.spec.networks.main-network.subnets.aks-nodes.cidr": "10.0.1.0/24"}
+
+
+# ---------------------------------------------------------------------------
 # resolve_values() merging in resolve_document_value_references() — Phase 4.
 # Solution-wide, so a `${value:...}` entry appears in `.values` regardless
 # of the `keys` list passed in (it is never a declared var/secret/feature
