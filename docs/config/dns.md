@@ -56,7 +56,9 @@ spec:
 
 - v1's `output_key` field (binding a record's value to a preceding deployment stage's provisioner
   output) was not ported as its own field — the same need is already met by `${output:STEP.KEY}`
-  in `value`, as long as the zone is claimed by an owning execution step's `targets`.
+  in `value`, as long as the zone is claimed by an owning execution step (directly via
+  `dns_zones[]`, or indirectly through a claimed resource/topology — see
+  [workspace](workspace.md)).
 - Azure-style private DNS zones (VNet links, writing records into a pre-existing/externally-owned
   zone) are deliberately modeled via `configuration`, not dedicated fields — see
   [How To: Model Azure Private DNS Zones](../how-to/azure-private-dns-zones.md).

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real-terraform regression test for Phase 3 of docs/work/
+"""Real-terraform regression test for Phase 3 of docs/design/
 unified-terraform-projection.md (ADR-0035) — `find_secret_paths()`/
 `rewrite_strata_payload()`. A stubbed `run_command` can never prove this:
 the claim under test is what a real `terraform plan` sees, not what

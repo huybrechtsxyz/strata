@@ -37,7 +37,7 @@ spec:
   execution:
     - name: publish_api
       provisioner: terraform_apim
-      targets: [apim]
+      resources: [apim]
       assets: [openapi]
 ```
 

@@ -273,6 +273,76 @@ class TopologySpecModel(PlatformBaseModel):
         return self
 
 
+def expand_topology_members(
+    topologies_by_name: dict[str, TopologySpecModel], topology_names: list[str]
+) -> tuple[set[str], set[str]]:
+    """A named topology's own `components[]`/`namespaces[]` members
+    (docs/design/workspace-execution-model.md).
+
+    An unknown `name` is silently skipped rather than raising — whether a
+    `topologies:` entry actually names a real topology is a separate,
+    independent concern (`WorkspaceSpecModel.validate_execution()`'s own
+    pool-existence check), and this function must stay safe to call before
+    that check has run (both run from the same `validate_execution()`,
+    with no guaranteed ordering between them)."""
+    resources: set[str] = set()
+    namespaces: set[str] = set()
+    for name in topology_names:
+        topo = topologies_by_name.get(name)
+        if topo is None:
+            continue
+        resources |= {c.resource for c in topo.components}
+        namespaces |= {n.namespace for n in (topo.namespaces or [])}
+    return resources, namespaces
+
+
+def effective_resources_and_namespaces(
+    step: ProvisioningStepModel,
+    resources_by_name: dict[str, WorkspaceResourceModel],
+    topologies_by_name: dict[str, TopologySpecModel],
+) -> tuple[set[str], set[str]]:
+    """A step's real provisioning set: direct + topology-expanded
+    (docs/design/workspace-execution-model.md).
+
+    `resources_by_name` is deliberately built EXCLUDING any resource with
+    `enabled=False` (a disabled resource behaves as if absent from the
+    document entirely) — intersecting against its keys here means a
+    disabled resource silently drops out of the effective set the same way
+    it already drops out of the real Terraform payload, and makes every
+    `resources_by_name[name]` lookup downstream (`claimed_names()` below)
+    provably safe, never a bare/unchecked index.
+    """
+    topo_resources, topo_namespaces = expand_topology_members(topologies_by_name, step.topologies or [])
+    resources = (set(step.resources or []) | topo_resources) & resources_by_name.keys()
+    return resources, (set(step.namespaces or []) | topo_namespaces)
+
+
+def claimed_names(
+    step: ProvisioningStepModel,
+    resources_by_name: dict[str, WorkspaceResourceModel],
+    topologies_by_name: dict[str, TopologySpecModel],
+) -> set[str]:
+    """The dns/firewall/network claimed set for `${output:...}` ownership
+    (docs/design/workspace-execution-model.md).
+
+    Deliberately scoped to dns/firewall/network only, NOT namespaces —
+    mirrors this codebase's own established principle that the two
+    claiming mechanisms (`WorkspaceService.claimed_document_names()`'s
+    broad vocabulary vs. `deploy_controller.py`'s narrower dns/network/
+    firewall-only one) stay separate rather than being unified. Namespace
+    claiming's topology extension lives in `claimed_document_names()`
+    itself — a second, independent union term, not folded in here.
+    """
+    resources_eff, _ = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
+    claimed: set[str] = set(step.dns_zones or []) | set(step.firewalls or []) | set(step.networks or [])
+    for name in resources_eff:
+        resource = resources_by_name[name]  # safe: resources_eff is a subset of resources_by_name.keys()
+        claimed |= set(resource.firewalls or []) | set(resource.dns_zones or [])
+        if resource.subnet is not None:
+            claimed.add(resource.subnet.network)
+    return claimed
+
+
 class WorkspaceMetaModel(PlatformBaseModel):
     """Workspace metadata (name, annotations, labels, tags)."""
 
@@ -510,48 +580,76 @@ class WorkspaceSpecModel(PlatformBaseModel):
     def validate_execution(self) -> "WorkspaceSpecModel":
         """Validate the execution recipe: internal step consistency plus
         cross-references against this workspace's own provisioners/resources/
-        namespaces/dns_zones/networks/firewalls.
+        namespaces/topology/dns_zones/networks/firewalls.
 
-        DNS/network/firewall names became valid targets 2026-09-28
-        (docs/design/gap_fit_v1.md gap #12) — a step names one of these to claim
-        ownership of it for `${output:...}` token resolution at deploy time
-        (`deploy_controller.py`), reusing `validate_provisioning_steps()`'s
-        existing shared-target ordering rule unchanged. Optional: a
-        DNS/network/firewall document named by no step still resolves
-        `${var:}`/`${secret:}` tokens broadcast to every step exactly as
-        before this gap — only `${output:...}` requires an owning step.
+        Each of the six target-ish fields on a step (`resources`/
+        `namespaces`/`topologies`/`dns_zones`/`firewalls`/`networks`) is
+        checked against its own matching pool only
+        (docs/design/workspace-execution-model.md) — a resource name is
+        never silently accepted as a valid dns_zone just because both pools
+        happen to share a name, unlike the old single flat `target_names`
+        union this replaces.
+
+        The shared-target ordering rule (`validate_provisioning_steps()`)
+        now runs against each step's fully *effective* touched-name set —
+        topology-expanded resources/namespaces plus resource-derived
+        dns/firewall/network claiming (point 8), not just a step's own
+        directly-declared fields — two steps sharing a target become
+        ambiguous even when that sharing is only indirect (e.g. both acting
+        on resources that reference the same firewall).
 
         `step.assets` (docs/design/asset-management.md Phase 2) is checked
         against a second, independent `asset_names` set below — deliberately
-        NOT folded into `target_names`: an asset is materialised input a
-        step consumes, not a provisioning target a step "acts on" the way
-        `targets` are defined, so the two checks/sets stay separate.
+        NOT folded into any of the six fields above: an asset is
+        materialised input a step consumes, not a provisioning target a
+        step "acts on".
         """
         if not self.execution:
             return self
 
-        validate_provisioning_steps(self.execution)
+        resources_by_name = {r.name: r for r in (self.resources or []) if r.enabled}
+        topologies_by_name = {t.name: t for t in (self.topology or [])}
+        touched_names_by_step = {}
+        for step in self.execution:
+            resources_eff, namespaces_eff = effective_resources_and_namespaces(
+                step, resources_by_name, topologies_by_name
+            )
+            claimed = claimed_names(step, resources_by_name, topologies_by_name)
+            touched_names_by_step[step.name] = resources_eff | namespaces_eff | claimed
+
+        validate_provisioning_steps(self.execution, touched_names_by_step)
 
         provisioner_names = {p.name for p in self.provisioners}
-        target_names = (
-            {r.name for r in (self.resources or [])}
-            | set(self.namespaces or [])
-            | set(self.dns_zones or [])
-            | set(self.networks or [])
-            | set(self.firewalls or [])
-        )
+        resource_names = {r.name for r in (self.resources or [])}
+        namespace_names = set(self.namespaces or [])
+        topology_names = {t.name for t in (self.topology or [])}
+        dns_names = set(self.dns_zones or [])
+        firewall_names = set(self.firewalls or [])
+        network_names = set(self.networks or [])
         asset_names = set(self.assets or [])
 
         errors = []
         for step in self.execution:
             if step.provisioner not in provisioner_names:
                 errors.append(f"Execution step '{step.name}' references undefined provisioner '{step.provisioner}'")
-            for target in step.targets:
-                if target not in target_names:
-                    errors.append(
-                        f"Execution step '{step.name}' targets undefined resource/namespace/"
-                        f"dns_zone/network/firewall '{target}'"
-                    )
+            for resource in step.resources or []:
+                if resource not in resource_names:
+                    errors.append(f"Execution step '{step.name}' references undefined resource '{resource}'")
+            for namespace in step.namespaces or []:
+                if namespace not in namespace_names:
+                    errors.append(f"Execution step '{step.name}' references undefined namespace '{namespace}'")
+            for topology in step.topologies or []:
+                if topology not in topology_names:
+                    errors.append(f"Execution step '{step.name}' references undefined topology '{topology}'")
+            for dns_zone in step.dns_zones or []:
+                if dns_zone not in dns_names:
+                    errors.append(f"Execution step '{step.name}' references undefined dns_zone '{dns_zone}'")
+            for firewall in step.firewalls or []:
+                if firewall not in firewall_names:
+                    errors.append(f"Execution step '{step.name}' references undefined firewall '{firewall}'")
+            for network in step.networks or []:
+                if network not in network_names:
+                    errors.append(f"Execution step '{step.name}' references undefined network '{network}'")
             for asset in step.assets or []:
                 if asset not in asset_names:
                     errors.append(f"Execution step '{step.name}' references undefined asset '{asset}'")

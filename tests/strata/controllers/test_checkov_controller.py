@@ -20,7 +20,7 @@ def _provisioner(name: str, *, tool: str = "terraform") -> ProvisionerModel:
 
 
 def _step(name: str, provisioner: str, *, targets: list[str] | None = None) -> ProvisioningStepModel:
-    return ProvisioningStepModel(name=name, provisioner=provisioner, targets=targets or ["r1"])
+    return ProvisioningStepModel(name=name, provisioner=provisioner, resources=targets or ["r1"])
 
 
 def _workspace(

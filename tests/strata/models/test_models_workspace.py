@@ -238,7 +238,7 @@ def test_workspace_resource_subnet_network_valid():
 def _workspace_with_execution(**step_overrides) -> dict:
     data = _minimal_workspace()
     data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
-    step = {"name": "provision-infra", "provisioner": "terraform-main", "targets": ["aks_cluster"]}
+    step = {"name": "provision-infra", "provisioner": "terraform-main", "resources": ["aks_cluster"]}
     step.update(step_overrides)
     data["spec"]["execution"] = [step]
     return data
@@ -258,9 +258,9 @@ def test_workspace_execution_step_rejects_unknown_provisioner():
 
 
 def test_workspace_execution_step_rejects_unknown_target():
-    """An execution step targeting an undefined resource/namespace is rejected."""
-    data = _workspace_with_execution(targets=["nonexistent"])
-    with pytest.raises(ValidationError):
+    """An execution step targeting an undefined resource is rejected."""
+    data = _workspace_with_execution(resources=["nonexistent"])
+    with pytest.raises(ValidationError, match="references undefined resource 'nonexistent'"):
         WorkspaceModel.model_validate(data)
 
 
@@ -301,11 +301,11 @@ def test_workspace_execution_step_rejects_unknown_asset():
 
 
 def test_workspace_execution_step_rejects_unknown_target_regression():
-    """Regression: the existing target_names check is unaffected by the new,
+    """Regression: the existing resource-reference check is unaffected by the new,
     independent asset_names check."""
-    data = _workspace_with_execution(targets=["nonexistent"], assets=["openapi"])
+    data = _workspace_with_execution(resources=["nonexistent"], assets=["openapi"])
     data["spec"]["assets"] = ["openapi"]
-    with pytest.raises(ValidationError, match="targets undefined resource/namespace/"):
+    with pytest.raises(ValidationError, match="references undefined resource 'nonexistent'"):
         WorkspaceModel.model_validate(data)
 
 
@@ -314,7 +314,7 @@ def test_workspace_rejects_legacy_provisioning_key():
     data = _minimal_workspace()
     data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
     data["spec"]["provisioning"] = [
-        {"name": "provision-infra", "provisioner": "terraform-main", "targets": ["aks_cluster"]}
+        {"name": "provision-infra", "provisioner": "terraform-main", "resources": ["aks_cluster"]}
     ]
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         WorkspaceModel.model_validate(data)
@@ -324,9 +324,9 @@ def test_workspace_execution_step_can_target_a_namespace():
     """An execution step may target a namespace, not just a resource."""
     data = _minimal_workspace()
     data["spec"]["namespaces"] = ["myapp"]
-    data["spec"]["execution"] = [{"name": "deploy-app", "provisioner": "terraform-main", "targets": ["myapp"]}]
+    data["spec"]["execution"] = [{"name": "deploy-app", "provisioner": "terraform-main", "namespaces": ["myapp"]}]
     model = WorkspaceModel.model_validate(data)
-    assert model.spec.execution[0].targets == ["myapp"]
+    assert model.spec.execution[0].namespaces == ["myapp"]
 
 
 def test_workspace_rejects_ambiguous_execution_order():
@@ -341,8 +341,8 @@ def test_workspace_rejects_ambiguous_execution_order():
     )
     data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
     data["spec"]["execution"] = [
-        {"name": "a", "provisioner": "terraform-main", "targets": ["aks_cluster"]},
-        {"name": "b", "provisioner": "ansible-init", "targets": ["aks_cluster"]},
+        {"name": "a", "provisioner": "terraform-main", "resources": ["aks_cluster"]},
+        {"name": "b", "provisioner": "ansible-init", "resources": ["aks_cluster"]},
     ]
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
@@ -360,8 +360,8 @@ def test_workspace_accepts_ordered_execution_steps():
     )
     data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
     data["spec"]["execution"] = [
-        {"name": "a", "provisioner": "terraform-main", "targets": ["aks_cluster"]},
-        {"name": "b", "provisioner": "ansible-init", "targets": ["aks_cluster"], "depends_on": ["a"]},
+        {"name": "a", "provisioner": "terraform-main", "resources": ["aks_cluster"]},
+        {"name": "b", "provisioner": "ansible-init", "resources": ["aks_cluster"], "depends_on": ["a"]},
     ]
     model = WorkspaceModel.model_validate(data)
     assert model.spec.execution[1].depends_on == ["a"]
@@ -412,7 +412,7 @@ def test_workspace_accepts_provisioner_with_no_execution_step_but_a_depends_on_c
     ]
     data["spec"]["resources"] = [{"name": "spoke_network", "resource": "network-class"}]
     data["spec"]["execution"] = [
-        {"name": "spoke_infra_step", "provisioner": "spoke_infra", "targets": ["spoke_network"]}
+        {"name": "spoke_infra_step", "provisioner": "spoke_infra", "resources": ["spoke_network"]}
     ]
     model = WorkspaceModel.model_validate(data)
     step_provisioners = {step.provisioner for step in model.spec.execution}

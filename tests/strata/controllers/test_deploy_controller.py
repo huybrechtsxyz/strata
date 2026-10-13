@@ -68,10 +68,10 @@ def _terraform_solution(
         "  provider_type: local\n  resource_type: server\n  category: compute\n"
         "  default_tags:\n    managed-by: strata\n",
     )
-    execution = "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n      scope: infra\n"
+    execution = "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n      scope: infra\n"
     if second_step:
         execution += (
-            "    - name: apply_apps\n      provisioner: tf_main\n      targets:\n        - r1\n"
+            "    - name: apply_apps\n      provisioner: tf_main\n      resources:\n        - r1\n"
             "      depends_on:\n        - apply_infra\n      scope: apps\n"
         )
     _write(
@@ -367,7 +367,7 @@ def _solution_with_secret(tmp_path: Path, secret_value: str) -> Path:
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -592,7 +592,7 @@ def test_deploy_run_injects_tf_var_env_for_every_step(tmp_path: Path, monkeypatc
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -666,7 +666,7 @@ def _artifact_pin_solution(tmp_path: Path, *, reference_version_from_deployment:
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -866,7 +866,7 @@ def test_deploy_run_resolves_backend_configuration_tokens(tmp_path: Path):
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "      backend:\n        type: azurerm\n        configuration:\n"
         "          resource_group_name: ${var:tf_state_resource_group}\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -944,7 +944,7 @@ def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: 
         "  providers:\n    - p1\n"
         "  dns_zones:\n    - public-dns\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1037,7 +1037,7 @@ def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: 
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1116,7 +1116,7 @@ def test_deploy_run_merges_multiple_resx_types_into_one_tf_var_resources(tmp_pat
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n        - r2\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n        - r2\n"
         "  resources:\n    - name: r1\n      resource: r1\n    - name: r2\n      resource: r2\n",
     )
     _write(
@@ -1181,7 +1181,7 @@ def test_deploy_run_delivers_flat_categories_as_one_env_var_per_key(tmp_path: Pa
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1262,7 +1262,7 @@ def test_deploy_run_no_longer_collides_on_shared_flat_category_key_names(tmp_pat
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1321,7 +1321,7 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1392,7 +1392,7 @@ def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Pat
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1454,8 +1454,9 @@ def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_pat
         "    - name: tf_hearth\n      tool: terraform\n      source:\n        source_path: infra_hearth\n"
         "    - name: tf_dns\n      tool: terraform\n      source:\n        source_path: infra_dns\n"
         "  execution:\n"
-        "    - name: provision-hearth\n      provisioner: tf_hearth\n      targets:\n        - hearth\n"
-        "    - name: apply-dns\n      provisioner: tf_dns\n      targets:\n        - hearth\n        - public-dns\n"
+        "    - name: provision-hearth\n      provisioner: tf_hearth\n      resources:\n        - hearth\n"
+        "    - name: apply-dns\n      provisioner: tf_dns\n      resources:\n        - hearth\n"
+        "      dns_zones:\n        - public-dns\n"
         "      depends_on:\n        - provision-hearth\n"
         "  resources:\n    - name: hearth\n      resource: hearth\n",
     )
@@ -1545,8 +1546,9 @@ def test_deploy_run_sentinels_an_output_token_when_the_real_output_is_sensitive(
         "    - name: tf_hearth\n      tool: terraform\n      source:\n        source_path: infra_hearth\n"
         "    - name: tf_dns\n      tool: terraform\n      source:\n        source_path: infra_dns\n"
         "  execution:\n"
-        "    - name: provision-hearth\n      provisioner: tf_hearth\n      targets:\n        - hearth\n"
-        "    - name: apply-dns\n      provisioner: tf_dns\n      targets:\n        - hearth\n        - public-dns\n"
+        "    - name: provision-hearth\n      provisioner: tf_hearth\n      resources:\n        - hearth\n"
+        "    - name: apply-dns\n      provisioner: tf_dns\n      resources:\n        - hearth\n"
+        "      dns_zones:\n        - public-dns\n"
         "      depends_on:\n        - provision-hearth\n"
         "  resources:\n    - name: hearth\n      resource: hearth\n",
     )
@@ -1630,7 +1632,7 @@ def test_deploy_run_rejects_unclaimed_output_token_in_dns(tmp_path: Path):
         "  providers:\n    - p1\n"
         "  dns_zones:\n    - public-dns\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1653,7 +1655,7 @@ def test_deploy_run_rejects_unclaimed_output_token_in_dns(tmp_path: Path):
     message = diagnostics.messages()[0]
     assert "public-dns" in message
     assert "output" in message
-    assert "targets" in message
+    assert "claims this document" in message
 
 
 def _output_chained_solution(tmp_path: Path) -> Path:
@@ -1688,8 +1690,8 @@ def _output_chained_solution(tmp_path: Path) -> Path:
         "      backend:\n        type: local\n        configuration:\n"
         "          host: ${output:apply_infra.vm_ip}\n"
         "  execution:\n"
-        "    - name: apply_infra\n      provisioner: tf_infra\n      targets:\n        - r1\n"
-        "    - name: apply_apps\n      provisioner: tf_apps\n      targets:\n        - r1\n"
+        "    - name: apply_infra\n      provisioner: tf_infra\n      resources:\n        - r1\n"
+        "    - name: apply_apps\n      provisioner: tf_apps\n      resources:\n        - r1\n"
         "      depends_on:\n        - apply_infra\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
@@ -1796,7 +1798,7 @@ def test_deploy_run_reports_a_diagnostic_when_a_strata_payload_token_is_unresolv
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1859,8 +1861,8 @@ def test_deploy_run_rejects_output_token_from_non_dependency(tmp_path: Path, mon
         "      backend:\n        type: local\n        configuration:\n"
         "          host: ${output:apply_infra.vm_ip}\n"
         "  execution:\n"
-        "    - name: apply_infra\n      provisioner: tf_infra\n      targets:\n        - r1\n"
-        "    - name: apply_apps\n      provisioner: tf_apps\n      targets:\n        - r2\n"
+        "    - name: apply_infra\n      provisioner: tf_infra\n      resources:\n        - r1\n"
+        "    - name: apply_apps\n      provisioner: tf_apps\n      resources:\n        - r2\n"
         "  resources:\n    - name: r1\n      resource: r1\n    - name: r2\n      resource: r1\n",
     )
     _write(
@@ -2077,9 +2079,9 @@ def test_upstream_step_names_is_transitive():
     from strata.models.provisioning_model import ProvisioningStepModel
 
     steps = [
-        ProvisioningStepModel(name="a", provisioner="p", targets=["r1"]),
-        ProvisioningStepModel(name="b", provisioner="p", targets=["r1"], depends_on=["a"]),
-        ProvisioningStepModel(name="c", provisioner="p", targets=["r1"], depends_on=["b"]),
+        ProvisioningStepModel(name="a", provisioner="p", resources=["r1"]),
+        ProvisioningStepModel(name="b", provisioner="p", resources=["r1"], depends_on=["a"]),
+        ProvisioningStepModel(name="c", provisioner="p", resources=["r1"], depends_on=["b"]),
     ]
 
     assert _upstream_step_names("c", steps) == {"a", "b"}
@@ -2472,7 +2474,7 @@ def _output_template_solution(tmp_path: Path) -> Path:
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "      output:\n        template: variables.json.j2\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -2558,13 +2560,75 @@ def _helm_solution(tmp_path: Path) -> Path:
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "      scope: infra\n"
-        "    - name: deploy_apps\n      provisioner: helm_main\n      targets:\n        - apps\n"
+        "    - name: deploy_apps\n      provisioner: helm_main\n      namespaces:\n        - apps\n"
         "      scope: apps\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     return root
+
+
+def _helm_two_namespace_solution(tmp_path: Path) -> Path:
+    """Same shape as `_helm_solution()`, but one Helm step names TWO
+    namespaces, declared in reverse-alphabetical YAML order — regression
+    fixture for the deterministic-ordering fix (`effective_resources_and_
+    namespaces()` returns a set, not a list; deploy order must come from
+    `sorted()`, not declaration order or set/hash order)."""
+    root = _terraform_solution(tmp_path)
+    _write(root, "charts/authentik/Chart.yaml", "name: authentik\n")
+    _write(
+        root,
+        "module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    source_path: charts/authentik\n  type: helm\n"
+        "  default_labels:\n    app: authentik\n"
+        "  services:\n    - name: server\n",
+    )
+    _write(
+        root,
+        "namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: zzz\nspec:\n"
+        "  default_labels:\n    app: zzz\n"
+        "  modules:\n    - name: auth\n      module: authentik\n",
+    )
+    _write(
+        root,
+        "namespace2.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: aaa\nspec:\n"
+        "  default_labels:\n    app: aaa\n"
+        "  modules:\n    - name: auth\n      module: authentik\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  namespaces:\n    - zzz\n    - aaa\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
+        "      scope: infra\n"
+        "    - name: deploy_apps\n      provisioner: helm_main\n      namespaces:\n        - zzz\n        - aaa\n"
+        "      scope: apps\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    return root
+
+
+def test_deploy_run_deploys_container_capable_step_namespaces_in_sorted_order(tmp_path: Path, _capture):
+    """`namespaces:` listed as `[zzz, aaa]` must still deploy `aaa` before
+    `zzz` — the effective namespace set is derived (a `set`, no inherent
+    order), so deploy order must be sorted, not declaration order."""
+    root = _helm_two_namespace_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    helm_namespaces = [call[call.index("--namespace") + 1] for call in _capture if call[0] == "helm"]
+    assert helm_namespaces == ["aaa", "zzz"]
 
 
 def test_deploy_run_dispatches_container_capable_step_to_deploy_namespace(tmp_path: Path, _capture):
@@ -2661,9 +2725,9 @@ def test_deploy_run_container_step_with_no_matching_namespace_target_errors(tmp_
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "      scope: infra\n"
-        "    - name: deploy_apps\n      provisioner: helm_main\n      targets:\n        - r1\n"
+        "    - name: deploy_apps\n      provisioner: helm_main\n      resources:\n        - r1\n"
         "      depends_on:\n        - apply_infra\n"
         "      scope: apps\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
@@ -2706,9 +2770,9 @@ def _compose_solution(tmp_path: Path) -> Path:
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "    - name: compose_main\n      tool: compose\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "      scope: infra\n"
-        "    - name: deploy_apps\n      provisioner: compose_main\n      targets:\n        - apps\n"
+        "    - name: deploy_apps\n      provisioner: compose_main\n      namespaces:\n        - apps\n"
         "      scope: apps\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )

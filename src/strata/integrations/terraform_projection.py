@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The default Terraform output projection (ADR-0035, docs/work/
+"""The default Terraform output projection (ADR-0035, docs/design/
 unified-terraform-projection.md) — `build_strata_payload()` builds one
 nested `strata` object (every top-level key always present, even empty)
 from a `ResolvedWorkspaceGraph`; `planned_strata_file()` wraps it as the
@@ -185,6 +185,7 @@ def _strata_resources(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
                 **(workspace_resource.custom_tags or {}),
             },
             "firewalls": workspace_resource.firewalls or [],
+            "dns_zones": workspace_resource.dns_zones or [],
             "subnet": (
                 workspace_resource.subnet.model_dump(mode="json") if workspace_resource.subnet is not None else None
             ),
@@ -411,7 +412,7 @@ def _strata_assets(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 
 
 def build_strata_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """The unified projection (ADR-0035, docs/work/
+    """The unified projection (ADR-0035, docs/design/
     unified-terraform-projection.md) — one nested object.
     `{"strata": build_strata_payload(graph)}` is the file content
     `default_output()` writes to `strata.auto.tfvars.json` — this function

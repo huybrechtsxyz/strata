@@ -66,6 +66,7 @@ variable "strata" {
       default_tags  = map(string)
       custom_tags   = map(string)
       firewalls     = list(string)
+      dns_zones     = list(string)
       subnet        = any
       storage       = any
     }))

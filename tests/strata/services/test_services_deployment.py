@@ -20,7 +20,7 @@ def _workspace(*step_names) -> WorkspaceModel:
                 ],
                 "resources": [{"name": "aks", "resource": "aks-class"}],
                 "execution": [
-                    {"name": name, "provisioner": "terraform-main", "targets": ["aks"]} for name in step_names
+                    {"name": name, "provisioner": "terraform-main", "resources": ["aks"]} for name in step_names
                 ],
             },
         }

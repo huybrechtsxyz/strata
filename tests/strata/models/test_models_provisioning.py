@@ -348,7 +348,7 @@ def test_provisioner_depends_on_is_distinct_from_step_depends_on():
 
 
 def _minimal_step(**overrides) -> dict:
-    data = {"name": "provision-infra", "provisioner": "terraform-main", "targets": ["aks_cluster", "blobstore"]}
+    data = {"name": "provision-infra", "provisioner": "terraform-main", "resources": ["aks_cluster", "blobstore"]}
     data.update(overrides)
     return data
 
@@ -357,21 +357,46 @@ def test_provisioning_step_minimal_is_valid():
     """A minimal provisioning step validates successfully."""
     model = ProvisioningStepModel.model_validate(_minimal_step())
     assert model.name == "provision-infra"
-    assert model.targets == ["aks_cluster", "blobstore"]
+    assert model.resources == ["aks_cluster", "blobstore"]
 
 
-def test_provisioning_step_rejects_empty_targets():
-    """An empty targets list is rejected (min_length=1)."""
-    data = _minimal_step(targets=[])
+def test_provisioning_step_rejects_when_no_target_field_set():
+    """At least one of resources/namespaces/topologies/dns_zones/firewalls/networks is required."""
+    data = _minimal_step(resources=[])
+    with pytest.raises(ValidationError, match="at least one target field is required"):
+        ProvisioningStepModel.model_validate(data)
+
+
+def test_provisioning_step_rejects_duplicate_resources():
+    """Duplicate names within a single target field are rejected."""
+    data = _minimal_step(resources=["aks_cluster", "aks_cluster"])
     with pytest.raises(ValidationError):
         ProvisioningStepModel.model_validate(data)
 
 
-def test_provisioning_step_rejects_duplicate_targets():
-    """Duplicate targets within a step are rejected."""
-    data = _minimal_step(targets=["aks_cluster", "aks_cluster"])
-    with pytest.raises(ValidationError):
-        ProvisioningStepModel.model_validate(data)
+def test_provisioning_step_rejects_duplicate_names_across_different_target_fields():
+    """Duplicate-name checking is per-field — a name repeated in a different field is not itself an error here
+    (cross-field collisions across pools are a Workspace-level concern, not this model's)."""
+    data = _minimal_step(resources=["aks_cluster"], namespaces=["aks_cluster"])
+    model = ProvisioningStepModel.model_validate(data)
+    assert model.resources == ["aks_cluster"]
+    assert model.namespaces == ["aks_cluster"]
+
+
+def test_provisioning_step_accepts_topologies():
+    """topologies names a workspace topology grouping — expansion happens at the Workspace container level."""
+    data = _minimal_step(resources=None, topologies=["web-tier"])
+    model = ProvisioningStepModel.model_validate(data)
+    assert model.topologies == ["web-tier"]
+
+
+def test_provisioning_step_accepts_dns_firewalls_networks_directly():
+    """dns_zones/firewalls/networks are a direct escape hatch, independent of resources/namespaces."""
+    data = _minimal_step(resources=None, dns_zones=["public-dns"], firewalls=["web-fw"], networks=["vnet-main"])
+    model = ProvisioningStepModel.model_validate(data)
+    assert model.dns_zones == ["public-dns"]
+    assert model.firewalls == ["web-fw"]
+    assert model.networks == ["vnet-main"]
 
 
 def test_provisioning_step_assets_defaults_to_none():
@@ -424,8 +449,8 @@ def test_provisioning_step_accepts_free_form_scope():
 def test_provisioning_step_scope_uniqueness_not_enforced():
     """Multiple steps may share a scope label by design — that's the whole point of the filter."""
     steps = [
-        ProvisioningStepModel.model_validate(_minimal_step(name="a", targets=["t1"], scope="infra")),
-        ProvisioningStepModel.model_validate(_minimal_step(name="b", targets=["t2"], scope="infra")),
+        ProvisioningStepModel.model_validate(_minimal_step(name="a", resources=["t1"], scope="infra")),
+        ProvisioningStepModel.model_validate(_minimal_step(name="b", resources=["t2"], scope="infra")),
     ]
     validate_provisioning_steps(steps)  # must not raise
 
@@ -438,9 +463,9 @@ def test_provisioning_step_scope_uniqueness_not_enforced():
 def test_validate_provisioning_steps_accepts_ordered_shared_target():
     """Two steps sharing a target are fine when one depends_on the other."""
     steps = [
-        ProvisioningStepModel.model_validate({"name": "infra", "provisioner": "tf", "targets": ["aks_cluster"]}),
+        ProvisioningStepModel.model_validate({"name": "infra", "provisioner": "tf", "resources": ["aks_cluster"]}),
         ProvisioningStepModel.model_validate(
-            {"name": "init", "provisioner": "ansible", "targets": ["aks_cluster"], "depends_on": ["infra"]}
+            {"name": "init", "provisioner": "ansible", "resources": ["aks_cluster"], "depends_on": ["infra"]}
         ),
     ]
     validate_provisioning_steps(steps)  # should not raise
@@ -449,8 +474,8 @@ def test_validate_provisioning_steps_accepts_ordered_shared_target():
 def test_validate_provisioning_steps_rejects_ambiguous_shared_target():
     """Two steps sharing a target with no ordering between them are rejected."""
     steps = [
-        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "targets": ["aks_cluster"]}),
-        ProvisioningStepModel.model_validate({"name": "b", "provisioner": "ansible", "targets": ["aks_cluster"]}),
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["aks_cluster"]}),
+        ProvisioningStepModel.model_validate({"name": "b", "provisioner": "ansible", "resources": ["aks_cluster"]}),
     ]
     with pytest.raises(ValueError, match="Ambiguous provisioning order"):
         validate_provisioning_steps(steps)
@@ -460,7 +485,7 @@ def test_validate_provisioning_steps_rejects_unknown_depends_on():
     """A depends_on referencing a step not in the list is rejected."""
     steps = [
         ProvisioningStepModel.model_validate(
-            {"name": "a", "provisioner": "tf", "targets": ["x"], "depends_on": ["nonexistent"]}
+            {"name": "a", "provisioner": "tf", "resources": ["x"], "depends_on": ["nonexistent"]}
         ),
     ]
     with pytest.raises(ValueError, match="not a defined step"):
@@ -470,8 +495,12 @@ def test_validate_provisioning_steps_rejects_unknown_depends_on():
 def test_validate_provisioning_steps_rejects_cycle():
     """A cycle in depends_on is rejected."""
     steps = [
-        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "targets": ["x"], "depends_on": ["b"]}),
-        ProvisioningStepModel.model_validate({"name": "b", "provisioner": "tf", "targets": ["y"], "depends_on": ["a"]}),
+        ProvisioningStepModel.model_validate(
+            {"name": "a", "provisioner": "tf", "resources": ["x"], "depends_on": ["b"]}
+        ),
+        ProvisioningStepModel.model_validate(
+            {"name": "b", "provisioner": "tf", "resources": ["y"], "depends_on": ["a"]}
+        ),
     ]
     with pytest.raises(ValueError, match="Circular dependency"):
         validate_provisioning_steps(steps)
@@ -480,8 +509,8 @@ def test_validate_provisioning_steps_rejects_cycle():
 def test_validate_provisioning_steps_rejects_duplicate_step_names():
     """Duplicate step names across the list are rejected."""
     steps = [
-        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "targets": ["x"]}),
-        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "targets": ["y"]}),
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["x"]}),
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["y"]}),
     ]
     with pytest.raises(ValueError, match="Duplicate"):
         validate_provisioning_steps(steps)
@@ -490,12 +519,12 @@ def test_validate_provisioning_steps_rejects_duplicate_step_names():
 def test_validate_provisioning_steps_accepts_transitive_ordering():
     """Ordering can be transitive: c depends on b, b depends on a — c and a sharing a target is fine."""
     steps = [
-        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "targets": ["shared"]}),
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["shared"]}),
         ProvisioningStepModel.model_validate(
-            {"name": "b", "provisioner": "ansible", "targets": ["other"], "depends_on": ["a"]}
+            {"name": "b", "provisioner": "ansible", "resources": ["other"], "depends_on": ["a"]}
         ),
         ProvisioningStepModel.model_validate(
-            {"name": "c", "provisioner": "script", "targets": ["shared"], "depends_on": ["b"]}
+            {"name": "c", "provisioner": "script", "resources": ["shared"], "depends_on": ["b"]}
         ),
     ]
     validate_provisioning_steps(steps)  # should not raise
@@ -504,8 +533,8 @@ def test_validate_provisioning_steps_accepts_transitive_ordering():
 def test_validate_provisioning_steps_accepts_disjoint_targets_with_no_ordering():
     """Two steps with no shared targets and no depends_on are fine."""
     steps = [
-        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "targets": ["x"]}),
-        ProvisioningStepModel.model_validate({"name": "b", "provisioner": "tf", "targets": ["y"]}),
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["x"]}),
+        ProvisioningStepModel.model_validate({"name": "b", "provisioner": "tf", "resources": ["y"]}),
     ]
     validate_provisioning_steps(steps)  # should not raise
 

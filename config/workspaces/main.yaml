@@ -44,7 +44,7 @@ spec:
   execution:
     - name: provision-infra
       provisioner: terraform-main
-      targets:
+      resources:
         - web-storage
         - web-vm
         - security-kv

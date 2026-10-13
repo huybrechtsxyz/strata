@@ -295,7 +295,7 @@ metadata about that same location, not a replacement for it.
   .assets` (selection) after noticing `WorkspaceSpecModel` already has an
   established, repeated pool-then-select pattern for exactly this shape
   — independently reinforced the same day by
-  [workspace-execution-model-review.md](../work/workspace-execution-model-review.md)
+  [workspace-execution-model.md](workspace-execution-model.md)
   arriving at the identical shape for an unrelated `targets`-splitting
   decision.
 - Whether `properties` really is resolved by the time a step copies files

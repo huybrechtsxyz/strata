@@ -339,6 +339,25 @@ def test_build_strata_payload_resources_includes_storage_and_custom():
     }
 
 
+def test_build_strata_payload_resources_includes_dns_zones():
+    """docs/design/workspace-execution-model.md — `dns_zones` is projected
+    alongside the pre-existing `firewalls`/`subnet`, closing the gap that
+    doc's own History section flagged (field existed and validated, but
+    was never read by the Terraform projection)."""
+    workspace_resource = WorkspaceResourceModel(
+        name="haven_vm_hetzner_hearth", resource="haven_vm_hetzner_hearth", dns_zones=["huybrechts_xyz"]
+    )
+    workspace = _workspace(resources=[workspace_resource], topology_name=None, dns_names=["huybrechts_xyz"])
+    graph = ResolvedWorkspaceGraph(
+        workspace=workspace,
+        providers={"hetzner_dc_eu_de": _provider()},
+        resources={"haven_vm_hetzner_hearth": _resource()},
+        dns={"huybrechts_xyz": _dns("huybrechts_xyz")},
+    )
+    payload = build_strata_payload(graph)
+    assert payload["resources"]["haven_vm_hetzner_hearth"]["dns_zones"] == ["huybrechts_xyz"]
+
+
 def test_build_strata_payload_topologies_includes_namespaces():
     """`TopologySpecModel.namespaces` was validated but never read by the
     old `_build_topologies_payload()` at all."""

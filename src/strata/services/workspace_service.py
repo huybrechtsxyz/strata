@@ -4,7 +4,7 @@
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel
 from strata.models.network_model import NetworkModel
 from strata.models.topology_config_model import TopologyConfigModel
-from strata.models.workspace_model import WorkspaceModel
+from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
 
@@ -37,36 +37,44 @@ class WorkspaceService(BaseService[WorkspaceModel]):
 
     def claimed_document_names(self) -> set[str]:
         """Every dns_zones/networks/firewalls/namespaces name claimed by
-        some execution step's own `targets` — the ownership half of
-        `${output:...}` resolution (docs/design/gap_fit_v1.md gap #12, generalized to
+        some execution step — the ownership half of `${output:...}`
+        resolution (docs/design/gap_fit_v1.md gap #12, generalized to
         namespaces so a Module reached through a targeted namespace is
         covered too, not just a directly-targeted DNS/network/firewall
         document — see docs/design/deploy-command.md's "Cross-invocation
         output access" section, "Expanded finding" subsection, for why
         Modules needed the same treatment).
 
+        Namespace claiming extends symmetrically to topology-expanded
+        membership (docs/design/workspace-execution-model.md) — a namespace
+        reached only through a step's `topologies` is claimed exactly as if
+        it were listed directly under `namespaces`. dns_zones/networks/
+        firewalls claiming is delegated to `claimed_names()`, which
+        additionally derives claims from a step's effective resources
+        (direct + topology-expanded) referencing those documents, not just
+        a step's own direct `dns_zones`/`firewalls`/
+        `networks` fields.
+
         Pure function of this workspace's own declarations — no other
-        loaded document needed. Reuses the same target vocabulary
-        `workspace_model.py`'s own `validate_execution()` already validates
-        `targets` against (`resources ∪ namespaces ∪ dns_zones ∪ networks ∪
-        firewalls`), rather than a second, narrower one — a resource is
-        deliberately not surfaced as "claimable" here even though it's a
-        valid target too: a Resource document has no Value-token-bearing
-        field of its own that `${output:...}` could ever appear in (unlike
-        a Module reached through a namespace).
+        loaded document needed. `resources_by_name` excludes any resource
+        with `enabled=False`, same rule as `WorkspaceSpecModel.
+        validate_execution()` (a disabled resource behaves as if absent).
+        A resource itself is deliberately not surfaced as "claimable" here
+        even though it's a valid provisioning target too: a Resource
+        document has no Value-token-bearing field of its own that
+        `${output:...}` could ever appear in (unlike a Module reached
+        through a namespace).
         """
         if self.model is None:
             return set()
         spec = self.model.spec
-        claimable = (
-            set(spec.dns_zones or [])
-            | set(spec.networks or [])
-            | set(spec.firewalls or [])
-            | set(spec.namespaces or [])
-        )
+        resources_by_name = {r.name: r for r in (spec.resources or []) if r.enabled}
+        topologies_by_name = {t.name: t for t in (spec.topology or [])}
         claimed: set[str] = set()
         for step in spec.execution or []:
-            claimed |= set(step.targets) & claimable
+            _, namespaces_eff = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
+            claimed |= namespaces_eff
+            claimed |= claimed_names(step, resources_by_name, topologies_by_name)
         return claimed
 
     def validate_topology_components(

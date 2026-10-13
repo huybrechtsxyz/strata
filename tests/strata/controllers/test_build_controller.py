@@ -65,7 +65,7 @@ def _context(root: Path):
 
 
 def _step(name: str, *, provisioner: str = "p", depends_on: list[str] | None = None) -> ProvisioningStepModel:
-    return ProvisioningStepModel(name=name, provisioner=provisioner, targets=["r1"], depends_on=depends_on)
+    return ProvisioningStepModel(name=name, provisioner=provisioner, resources=["r1"], depends_on=depends_on)
 
 
 def test_ordered_by_depends_on_respects_dependency_order():
@@ -315,7 +315,7 @@ def _terraform_solution(tmp_path: Path) -> Path:
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -380,7 +380,7 @@ def _asset_solution(tmp_path: Path) -> Path:
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "      assets:\n        - openapi\n"
         "  resources:\n    - name: r1\n      resource: r1\n"
         "  assets:\n    - openapi\n",
@@ -474,7 +474,7 @@ def _terraform_solution_with_dependency(tmp_path: Path) -> Path:
         "      depends_on:\n        - iac_components\n        - iac_primitives\n"
         "    - name: iac_components\n      tool: terraform\n      source:\n        source_path: components\n"
         "    - name: iac_primitives\n      tool: terraform\n      source:\n        source_path: primitives\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     return root
@@ -513,8 +513,8 @@ def _terraform_solution_with_shared_dependency(tmp_path: Path) -> Path:
         "      depends_on:\n        - iac_components\n"
         "    - name: iac_components\n      tool: terraform\n      source:\n        source_path: components\n"
         "  execution:\n"
-        "    - name: apply_a\n      provisioner: tf_a\n      targets:\n        - r1\n"
-        "    - name: apply_b\n      provisioner: tf_b\n      targets:\n        - r2\n"
+        "    - name: apply_a\n      provisioner: tf_a\n      resources:\n        - r1\n"
+        "    - name: apply_b\n      provisioner: tf_b\n      resources:\n        - r2\n"
         "  resources:\n    - name: r1\n      resource: r1\n    - name: r2\n      resource: r1\n",
     )
     _write(
@@ -548,7 +548,7 @@ def _terraform_solution_with_transitive_dependency(tmp_path: Path) -> Path:
         "    - name: iac_components\n      tool: terraform\n      source:\n        source_path: components\n"
         "      depends_on:\n        - iac_primitives\n"
         "    - name: iac_primitives\n      tool: terraform\n      source:\n        source_path: primitives\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     return root
@@ -672,8 +672,8 @@ def _terraform_solution_with_dependency_also_executed(tmp_path: Path) -> Path:
         "    - name: iac_components\n      tool: terraform\n      source:\n        source_path: components\n"
         "    - name: iac_primitives\n      tool: terraform\n      source:\n        source_path: primitives\n"
         "  execution:\n"
-        "    - name: apply_components\n      provisioner: iac_components\n      targets:\n        - r1\n"
-        "    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "    - name: apply_components\n      provisioner: iac_components\n      resources:\n        - r1\n"
+        "    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "      depends_on:\n        - apply_components\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
@@ -776,7 +776,7 @@ def _terraform_solution_with_remote(
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n"
         "        remote: infra-remote\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1033,7 +1033,7 @@ def test_build_run_renders_helm_workload_modules(tmp_path: Path):
         "  providers:\n    - p1\n"
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1100,7 +1100,7 @@ def test_build_run_writes_a_valid_sbom(tmp_path: Path):
         "  providers:\n    - p1\n"
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1149,7 +1149,7 @@ def test_build_run_dry_run_does_not_write_an_sbom(tmp_path: Path):
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -1238,7 +1238,7 @@ def _minimal_solution(tmp_path: Path, *, cve_policy_yaml: str = "", checkov_poli
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n" + cve_policy_yaml + checkov_policy_yaml,
     )
     _write(
@@ -1436,7 +1436,7 @@ def _helm_solution(tmp_path: Path, *, checkov_policy_yaml: str = "") -> Path:
         "  providers:\n    - p1\n"
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n" + checkov_policy_yaml,
     )
     _write(
@@ -1538,7 +1538,7 @@ def test_build_run_applies_remotes_charts_and_images_pins_simultaneously(tmp_pat
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n"
         "        remote: infra-remote\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
 
@@ -1867,7 +1867,7 @@ def test_build_run_output_template_valid_writes_nothing_but_succeeds(tmp_path: P
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "      output:\n        template: variables.json.j2\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(root, "variables.json.j2", '{"region": "{{ variables.REGION }}"}')
@@ -1892,7 +1892,7 @@ def test_build_run_output_template_with_bad_reference_fails(tmp_path: Path):
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "      output:\n        template: variables.json.j2\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(root, "variables.json.j2", '{"region": "{{ variables.REGOIN }}"}')
@@ -1911,7 +1911,7 @@ def test_build_run_output_template_missing_file_fails(tmp_path: Path):
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "      output:\n        template: ghost.json.j2\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     build_path = tmp_path / "build"
@@ -1934,7 +1934,7 @@ def test_build_run_dry_run_still_catches_a_bad_output_template_reference(tmp_pat
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "      output:\n        template: variables.json.j2\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(root, "variables.json.j2", '{"region": "{{ variables.REGOIN }}"}')
@@ -1958,7 +1958,7 @@ def test_build_run_dry_run_reports_output_template_would_validate(tmp_path: Path
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "      output:\n        template: variables.json.j2\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(root, "variables.json.j2", '{"region": "{{ variables.REGION }}"}')

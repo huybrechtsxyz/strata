@@ -287,32 +287,57 @@ class ProvisionerModel(PlatformBaseModel):
 class ProvisioningStepModel(PlatformBaseModel):
     """One recipe entry: run a Provisioner against a set of targets, after other steps.
 
-    `targets` names Resources/Namespaces this step acts on — deliberately
-    NOT a Topology reference (ADR-0011: Topology and Provisioning are
-    decoupled, both independently reference the same Resource/Namespace
-    pool; "this step realizes topology X" is a derived fact, not declared).
-    Ordering uses `depends_on` (explicit graph), not `priority` — see
-    ADR-0011.
+    `resources`/`namespaces` name Resources/Namespaces this step acts on
+    directly. `topologies` (docs/design/workspace-execution-model.md)
+    names a `WorkspaceSpecModel.topology` grouping instead — its
+    member resources/namespaces are derived (expanded) at the Workspace
+    container level (`effective_resources_and_namespaces()` in
+    `workspace_model.py`), not declared redundantly here; this is still
+    deliberately NOT a Topology *reference* that this model resolves itself
+    (ADR-0011: Topology and Provisioning are decoupled) — "this step
+    realizes topology X" states which topology's members to pull in, not
+    that the step IS that topology. `dns_zones`/`firewalls`/`networks`
+    (point 8) are a direct escape hatch for claiming one of those documents'
+    `${output:...}` ownership without needing a resource/topology link to
+    it at all. Ordering uses `depends_on` (explicit graph), not `priority`
+    — see ADR-0011.
 
     `assets` (docs/design/asset-management.md Phase 2) names non-code input
     files (from the workspace's own `spec.assets` pool) this step needs
     materialised into the build output before its provisioner runs — a
-    separate concept from `targets`, which a step acts *on*.
+    separate concept from the six fields above, which a step acts *on*.
     """
 
     name: PlatformName = Field(description="Unique step name")
     provisioner: PlatformName = Field(
         description="Name reference to a Provisioner (existence checked once Workspace ties these together)"
     )
-    targets: list[PlatformName] = Field(
-        ..., min_length=1, description="Resource/Namespace name references this step acts on"
+    resources: list[PlatformName] | None = Field(
+        None, description="Resource name references this step acts on directly"
+    )
+    namespaces: list[PlatformName] | None = Field(
+        None, description="Namespace name references this step acts on directly"
+    )
+    topologies: list[PlatformName] | None = Field(
+        None,
+        description="Topology name references — this step acts on every resource/namespace that topology "
+        "groups (expanded at the Workspace container level, not declared redundantly here).",
+    )
+    dns_zones: list[PlatformName] | None = Field(
+        None, description="DNS document name references — direct escape hatch for ${output:...} claiming"
+    )
+    firewalls: list[PlatformName] | None = Field(
+        None, description="Firewall document name references — direct escape hatch for ${output:...} claiming"
+    )
+    networks: list[PlatformName] | None = Field(
+        None, description="Network document name references — direct escape hatch for ${output:...} claiming"
     )
     assets: list[PlatformName] | None = Field(
         None,
         description="Asset names (from this workspace's spec.assets pool, docs/design/asset-management.md) "
         "this step needs materialised into the build output before its provisioner runs. Existence checked "
         "against spec.assets once Workspace ties these together (WorkspaceSpecModel.validate_execution()) "
-        "— deliberately a second, independent set from 'targets', not folded into it: an asset is "
+        "— deliberately a second, independent set from the fields above, not folded into them: an asset is "
         "materialised input a step consumes, not a provisioning target a step acts on.",
     )
     depends_on: list[PlatformName] | None = Field(
@@ -330,10 +355,36 @@ class ProvisioningStepModel(PlatformBaseModel):
 
     @model_validator(mode="after")
     def validate_unique_targets(self) -> "ProvisioningStepModel":
-        """Validate that targets are unique within this step."""
-        check_unique_names(self.targets, f"targets in provisioning step '{self.name}'")
+        """Validate that each target field's own names are unique within this step.
+
+        Checked per-field, collecting every field's violations before
+        raising once, rather than stopping at the first offending field
+        (matches this file's dominant error-collection style elsewhere)."""
+        errors: list[str] = []
+        for field_name in ("resources", "namespaces", "topologies", "dns_zones", "firewalls", "networks"):
+            values = getattr(self, field_name)
+            if not values:
+                continue
+            try:
+                check_unique_names(values, f"{field_name} in provisioning step '{self.name}'")
+            except ValueError as exc:
+                errors.append(str(exc))
         if self.assets:
-            check_unique_names(self.assets, f"assets in provisioning step '{self.name}'")
+            try:
+                check_unique_names(self.assets, f"assets in provisioning step '{self.name}'")
+            except ValueError as exc:
+                errors.append(str(exc))
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
+
+    @model_validator(mode="after")
+    def validate_at_least_one_target(self) -> "ProvisioningStepModel":
+        """A step must act on at least one resource/namespace/topology/dns_zone/firewall/network."""
+        if not (
+            self.resources or self.namespaces or self.topologies or self.dns_zones or self.firewalls or self.networks
+        ):
+            raise ValueError(f"Provisioning step '{self.name}': at least one target field is required.")
         return self
 
     @model_validator(mode="after")
@@ -344,7 +395,29 @@ class ProvisioningStepModel(PlatformBaseModel):
         return self
 
 
-def validate_provisioning_steps(steps: list[ProvisioningStepModel]) -> None:
+def _step_own_target_names(step: ProvisioningStepModel) -> set[str]:
+    """A step's own directly-declared target names across all six kind-specific
+    fields, with no topology expansion or resource-derived dns/firewall/
+    network claiming applied — used only as the fallback touched-name set
+    when `validate_provisioning_steps()` is called with no richer
+    `touched_names_by_step` mapping (e.g. a direct unit test constructing a
+    bare `ProvisioningStepModel` with no surrounding workspace context).
+    `WorkspaceSpecModel.validate_execution()`, this function's one real
+    caller, always supplies the fuller, derived mapping instead (see
+    docs/design/workspace-execution-model.md's "Derivation" sections)."""
+    return (
+        set(step.resources or [])
+        | set(step.namespaces or [])
+        | set(step.topologies or [])
+        | set(step.dns_zones or [])
+        | set(step.firewalls or [])
+        | set(step.networks or [])
+    )
+
+
+def validate_provisioning_steps(
+    steps: list[ProvisioningStepModel], touched_names_by_step: dict[str, set[str]] | None = None
+) -> None:
     """Cross-step validation over a full list of ProvisioningSteps.
 
     Not a `model_validator` on either model above — both need sibling
@@ -361,6 +434,17 @@ def validate_provisioning_steps(steps: list[ProvisioningStepModel]) -> None:
     - Two steps sharing a target must have a `depends_on` edge (direct or
       transitive) between them — undefined execution order on a shared
       target is a hard error, not a warning (ADR-0011).
+
+    `touched_names_by_step` (keyed by step name) is the full set of names a
+    step actually touches once topology expansion and resource-derived
+    dns/firewall/network claiming are taken into account
+    (`effective_resources_and_namespaces()` ∪ `claimed_names()` in
+    `workspace_model.py`) — this function deliberately has no dependency on
+    those models/helpers itself (would create a circular import, since
+    `workspace_model.py` already imports from this module), so it accepts
+    the already-computed result instead. When omitted (direct unit tests
+    with no workspace context), falls back to each step's own directly-
+    declared fields via `_step_own_target_names()`.
 
     Raises:
         ValueError: with all violations joined, if any are found.
@@ -402,7 +486,8 @@ def validate_provisioning_steps(steps: list[ProvisioningStepModel]) -> None:
 
     target_owners: dict[str, list[str]] = {}
     for step in steps:
-        for target in step.targets:
+        names = touched_names_by_step[step.name] if touched_names_by_step is not None else _step_own_target_names(step)
+        for target in names:
             target_owners.setdefault(target, []).append(step.name)
 
     ambiguous: list[str] = []

@@ -176,7 +176,7 @@ spec:
   execution:
     - name: provision-infra
       provisioner: tf
-      targets: [storage-account]
+      resources: [storage-account]
   resources:
     - name: storage-account
       resource: storage-account
@@ -496,7 +496,7 @@ spec:
   execution:
     - name: provision-infra
       provisioner: tf
-      targets: [storage-account]
+      resources: [storage-account]
   networks: [main-network]
   resources:
     - name: storage-account
@@ -663,7 +663,8 @@ spec:
   execution:
     - name: provision-infra
       provisioner: tf
-      targets: [storage-account, example]
+      resources: [storage-account]
+      dns_zones: [example]
   resources:
     - name: storage-account
       resource: storage-account
@@ -736,7 +737,8 @@ spec:
   execution:
     - name: provision-infra
       provisioner: tf
-      targets: [storage-account, apps]
+      resources: [storage-account]
+      namespaces: [apps]
   resources:
     - name: storage-account
       resource: storage-account

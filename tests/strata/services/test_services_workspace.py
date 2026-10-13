@@ -374,7 +374,9 @@ def test_claimed_document_names_includes_a_targeted_dns_zone():
     data = _workspace_with_execution(
         dns_zones=["public-dns"],
         resources=[{"name": "vm", "resource": "vm-class", "role": "node"}],
-        execution=[{"name": "apply", "provisioner": "terraform-main", "targets": ["vm", "public-dns"]}],
+        execution=[
+            {"name": "apply", "provisioner": "terraform-main", "resources": ["vm"], "dns_zones": ["public-dns"]}
+        ],
     )
     service = WorkspaceService(data=data)
     assert service.validate().ok
@@ -391,7 +393,7 @@ def test_claimed_document_names_includes_a_targeted_namespace_not_just_dns_netwo
     did)."""
     data = _workspace_with_execution(
         namespaces=["apps"],
-        execution=[{"name": "deploy", "provisioner": "terraform-main", "targets": ["apps"]}],
+        execution=[{"name": "deploy", "provisioner": "terraform-main", "namespaces": ["apps"]}],
     )
     service = WorkspaceService(data=data)
     assert service.validate().ok
@@ -402,10 +404,110 @@ def test_claimed_document_names_excludes_an_untargeted_document():
     data = _workspace_with_execution(
         dns_zones=["public-dns"],
         resources=[{"name": "vm", "resource": "vm-class", "role": "node"}],
-        execution=[{"name": "apply", "provisioner": "terraform-main", "targets": ["vm"]}],
+        execution=[{"name": "apply", "provisioner": "terraform-main", "resources": ["vm"]}],
     )
     service = WorkspaceService(data=data)
     assert service.validate().ok
     # "public-dns" is never targeted by any step, so it's excluded — and
     # "vm" (a resource) is never claimable at all regardless of targeting.
+    assert service.claimed_document_names() == set()
+
+
+# ---------------------------------------------------------------------------
+# Resource/topology-derived claiming (docs/design/workspace-execution-model.md)
+# ---------------------------------------------------------------------------
+
+
+def test_claimed_document_names_includes_a_resources_firewall_without_direct_listing():
+    """A resource's own firewalls/dns_zones/subnet are claimed via the
+    resource reference alone — no need to also list the firewall/dns
+    zone/network directly on the step."""
+    data = _workspace_with_execution(
+        firewalls=["web-fw"],
+        dns_zones=["public-dns"],
+        networks=["vnet-main"],
+        resources=[
+            {
+                "name": "vm",
+                "resource": "vm-class",
+                "role": "node",
+                "firewalls": ["web-fw"],
+                "dns_zones": ["public-dns"],
+                "subnet": {"network": "vnet-main", "subnet": "app"},
+            }
+        ],
+        execution=[{"name": "apply", "provisioner": "terraform-main", "resources": ["vm"]}],
+    )
+    service = WorkspaceService(data=data)
+    assert service.validate().ok
+    assert service.claimed_document_names() == {"web-fw", "public-dns", "vnet-main"}
+
+
+def test_claimed_document_names_includes_a_directly_listed_dns_zone_with_no_resource():
+    """The escape hatch: a dns zone with no resource reference at all,
+    listed directly via step.dns_zones, is still claimed."""
+    data = _workspace_with_execution(
+        dns_zones=["public-dns"],
+        execution=[{"name": "apply", "provisioner": "terraform-main", "dns_zones": ["public-dns"]}],
+    )
+    service = WorkspaceService(data=data)
+    assert service.validate().ok
+    assert service.claimed_document_names() == {"public-dns"}
+
+
+def test_claimed_document_names_includes_a_firewall_via_topology_expansion():
+    """A topology's component resource's firewall is claimed via
+    step.topologies alone — no direct step.resources entry needed."""
+    data = _workspace_with_execution(
+        firewalls=["web-fw"],
+        resources=[{"name": "vm", "resource": "vm-class", "role": "node", "firewalls": ["web-fw"]}],
+        topology=[{"name": "web-tier", "type": "kubernetes", "components": [{"resource": "vm"}]}],
+        execution=[{"name": "apply", "provisioner": "terraform-main", "topologies": ["web-tier"]}],
+    )
+    service = WorkspaceService(data=data)
+    assert service.validate().ok
+    assert service.claimed_document_names() == {"web-fw"}
+
+
+def test_claimed_document_names_includes_a_namespace_reached_only_via_topology():
+    """Namespace claiming extends symmetrically (point 8's "Decided
+    2026-10-10"): a namespace reached only through step.topologies — not
+    listed directly under step.namespaces — is claimed too."""
+    data = _workspace_with_execution(
+        namespaces=["apps"],
+        resources=[{"name": "vm", "resource": "vm-class", "role": "node"}],
+        topology=[
+            {
+                "name": "web-tier",
+                "type": "kubernetes",
+                "components": [{"resource": "vm"}],
+                "namespaces": [{"namespace": "apps"}],
+            }
+        ],
+        execution=[{"name": "apply", "provisioner": "terraform-main", "topologies": ["web-tier"]}],
+    )
+    service = WorkspaceService(data=data)
+    assert service.validate().ok
+    assert service.claimed_document_names() == {"apps"}
+
+
+def test_claimed_document_names_excludes_a_disabled_resources_firewall():
+    """A resource with enabled=False behaves as if absent (decided
+    2026-10-10) — its own firewalls/dns_zones are not claimed even though
+    it's named in step.resources."""
+    data = _workspace_with_execution(
+        firewalls=["web-fw"],
+        resources=[
+            {
+                "name": "vm",
+                "resource": "vm-class",
+                "role": "node",
+                "enabled": False,
+                "firewalls": ["web-fw"],
+            }
+        ],
+        execution=[{"name": "apply", "provisioner": "terraform-main", "resources": ["vm"]}],
+    )
+    service = WorkspaceService(data=data)
+    assert service.validate().ok
     assert service.claimed_document_names() == set()

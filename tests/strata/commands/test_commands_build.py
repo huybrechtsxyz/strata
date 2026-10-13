@@ -53,7 +53,7 @@ spec:
   execution:
     - name: apply_infra
       provisioner: tf_main
-      targets:
+      resources:
         - r1
   resources:
     - name: r1

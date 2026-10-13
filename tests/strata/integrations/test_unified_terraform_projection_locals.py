@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real-terraform regression test for Phase 6 of docs/work/
+"""Real-terraform regression test for Phase 6 of docs/design/
 unified-terraform-projection.md (ADR-0035) — `build_strata_locals()`'s
 generated `strata_locals.tf`, now wired into `TerraformIntegration.
 default_output()` itself (the gap found during the requirements-

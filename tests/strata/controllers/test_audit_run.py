@@ -69,7 +69,7 @@ def _solution_root(tmp_path: Path, *, remote_url: str | None = None) -> Path:
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n      scope: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n      scope: infra\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -321,7 +321,7 @@ def _solution_with_workload(
         "  providers:\n    - p1\n"
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n      scope: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n      scope: infra\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(

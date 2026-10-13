@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real-terraform regression test for Phase 5 of docs/work/
+"""Real-terraform regression test for Phase 5 of docs/design/
 unified-terraform-projection.md (ADR-0035) — `strata_variables.tf`'s
 generated `object({...})` type. A stubbed test can confirm the Python side
 produces valid JSON, but only a real `terraform validate`/`plan` can prove

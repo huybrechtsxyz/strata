@@ -91,7 +91,7 @@ def _solution_with_properties_token(tmp_path: Path) -> Path:
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(
@@ -197,7 +197,7 @@ def _solution_with_two_resource_types(tmp_path: Path) -> Path:
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n        - r2\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n        - r2\n"
         "  resources:\n    - name: r1\n      resource: r1\n    - name: r2\n      resource: r2\n",
     )
     _write(
@@ -317,7 +317,7 @@ def _solution_with_secrets_in_every_shape(tmp_path: Path) -> Path:
         "  providers:\n    - p1\n"
         "  dns_zones:\n    - public-dns\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
-        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n",
     )
     _write(

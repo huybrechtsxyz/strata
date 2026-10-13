@@ -56,7 +56,7 @@ from strata.models.deployment_model import DeploymentStageModel
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.solution_model import SolutionRemoteModel
-from strata.models.workspace_model import WorkspaceModel
+from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
 from strata.services.environment_service import merge_environment_models
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
@@ -513,8 +513,11 @@ def deploy_run(
     all_steps = workspace.spec.execution or []
 
     # Ownership (docs/design/gap_fit_v1.md gap #12): a document is "claimed" once any
-    # step's `targets` names it (`workspace_model.py`'s `validate_execution()`
-    # accepts dns/network/firewall names there since 2026-09-28, reusing
+    # step's effective dns/firewall/network set (`claimed_names()`,
+    # docs/design/workspace-execution-model.md — direct fields plus
+    # resource-derived claiming, topology-expanded) names it
+    # (`workspace_model.py`'s `validate_execution()` accepts dns/network/
+    # firewall names there since 2026-09-28, reusing
     # `validate_provisioning_steps()`'s existing shared-target ordering rule
     # for two steps that both claim one). An unclaimed document still
     # broadcasts to every step for `${var:}`/`${secret:}` (unchanged, Phase 2
@@ -522,17 +525,21 @@ def deploy_run(
     # only per-step-varying data a dns/network/firewall document could ever
     # reference. Preserves ADR-0035's own resolved decision (b): still
     # only these three categories, not generalised to every category.
+    resources_by_name = {r.name: r for r in (workspace.spec.resources or []) if r.enabled}
+    topologies_by_name = {t.name: t for t in (workspace.spec.topology or [])}
     claimed_by_category: dict[str, set[str]] = {category: set() for category in ("dns", "networks", "firewalls")}
     for step in all_steps:
+        step_claimed = claimed_names(step, resources_by_name, topologies_by_name)
         for category in claimed_by_category:
-            claimed_by_category[category] |= set(step.targets) & payload[category].keys()
+            claimed_by_category[category] |= step_claimed & payload[category].keys()
 
     for category in claimed_by_category:
         for name, doc_payload in payload[category].items():
             if name not in claimed_by_category[category] and _contains_output_token(doc_payload):
                 diagnostics.error(
-                    f"'{name}' uses '${{output:...}}' but no execution step's 'targets' names "
-                    f"this document — add it to the step that should apply it (docs/design/gap_fit_v1.md gap #12).",
+                    f"'{name}' uses '${{output:...}}' but no execution step claims this document "
+                    f"(directly or via its resources/topologies) — add it to the step that should apply "
+                    f"it (docs/design/gap_fit_v1.md gap #12).",
                     location=name,
                 )
 
@@ -652,18 +659,23 @@ def deploy_run(
         # Helm/Compose dispatch (docs/design/gap_fit_v1.md gap #13): a
         # container-capable step never goes through Terraform's
         # init/validate/plan/deploy sequence at all — it deploys every
-        # namespace its own `targets` names instead, one `deploy_namespace()`
-        # call per namespace, filtered to this integration's own module
-        # `TYPE` (mirrors v1's real `DeployerFactory.resolve_type()`: the
-        # step's own provisioner picks the tool, never inferred from
+        # namespace its effective namespace set names instead (direct
+        # `namespaces` plus topology-expanded, point 7), one
+        # `deploy_namespace()` call per namespace, filtered to this
+        # integration's own module `TYPE` (mirrors v1's real
+        # `DeployerFactory.resolve_type()`: the step's own provisioner picks
+        # the tool, never inferred from
         # namespace linkage — see docs/design/deploy-command.md's
         # "Superseded" section for the two earlier, wrong drafts).
         if Capability.CONTAINER in integration.CAPABILITIES:
-            namespaces_targeted = [graph.namespaces[name] for name in step.targets if name in graph.namespaces]
+            _, namespaces_eff = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
+            # sorted(): namespaces_eff is a set (hash order, not declaration order) — deploy order
+            # must stay deterministic across runs, not vary with PYTHONHASHSEED.
+            namespaces_targeted = [graph.namespaces[name] for name in sorted(namespaces_eff) if name in graph.namespaces]
             if not namespaces_targeted:
                 diagnostics.error(
                     f"Step '{step.name}': provisioner '{provisioner.name}' ({integration_type}) is "
-                    "container-capable but 'targets' names no namespace.",
+                    "container-capable but names no namespace (directly or via topologies).",
                     location=step.name,
                 )
                 return diagnostics
@@ -717,12 +729,13 @@ def deploy_run(
             # unchanged); every other category broadcasts as-is — no
             # per-category file-existence filtering needed any more
             # (Phase 2: `build_strata_payload()` always emits every key).
+            step_claimed = claimed_names(step, resources_by_name, topologies_by_name)
             step_payload = {
                 category: (
                     {
                         name: doc
                         for name, doc in docs.items()
-                        if name in step.targets or name not in claimed_by_category[category]
+                        if name in step_claimed or name not in claimed_by_category[category]
                     }
                     if category in claimed_by_category
                     else docs

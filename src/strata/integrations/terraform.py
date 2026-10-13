@@ -294,7 +294,7 @@ class TerraformIntegration(InfraIntegration):
         provisioner: ProvisionerModel,
         graph: ResolvedWorkspaceGraph,
     ) -> dict[str, str]:
-        """The default tfvars projection (ADR-0035, docs/work/
+        """The default tfvars projection (ADR-0035, docs/design/
         unified-terraform-projection.md Phase 4/5/6) — one `strata.auto.
         tfvars.json` file, always, replacing the old one-file-per-category
         projection entirely, plus two generated files declaring `var.strata`'s
