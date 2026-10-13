@@ -9,11 +9,10 @@
 #                 (v2/v2-beta added so alpha/beta releases can be tagged/
 #                 published from the v2 development branches without touching
 #                 main, which remains the real v1 production release line).
-#                 Builds the
-#                 Python package with uv and uploads dist/ as a GitHub artifact
-#                 for ci-release. Also builds the VS Code extension .vsix
-#                 (same artifact-as-store pattern) for ci-release's
-#                 publish-vscode job.
+#                 Builds the Python package with uv and uploads dist/ as a
+#                 GitHub artifact for ci-release. Also builds the VS Code
+#                 extension .vsix (same artifact-as-store pattern) for
+#                 ci-release's publish-vscode job.
 # ===============================================================================
 
 name: "CI Build"
