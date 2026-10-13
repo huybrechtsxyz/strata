@@ -246,6 +246,29 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-10-13: **Built alpha22** — bumped `VERSION.txt` to `2.0.0-Alpha22`
+  (normalizes to `2.0.0a22`; confirmed via `packaging.version.Version`
+  first), cut to pick up the fixes found while diagnosing why alpha21's
+  CI release pipeline failed: `ci-build.yml`'s push/pull_request triggers
+  now include `v2-beta` (the real active dev branch — `v2` was stale
+  since 2026-10-09), a genuinely pre-existing bug in
+  `test_deploy_run_no_longer_collides_on_shared_flat_category_key_names`
+  (missing the `shutil.which`/`run_command` mock every sibling test uses —
+  only ever passed locally because a real `terraform` binary happens to
+  be on PATH), and `docs/config/asset.md` added to `docs/index.rst`'s
+  "Configuration Files" toctree (was triggering a Sphinx `toc.not_included`
+  warning). Full check suite green via `scripts/Check.ps1
+  -SkipDocsBuild`: ruff lint/format, mypy (155 files), import-linter,
+  pytest (2522 passed). Hit the documented stale-dist-info sharp edge
+  again (expected on every version-string change) — `uv sync
+  --reinstall-package xyz-strata --index-strategy unsafe-best-match` +
+  `uv sync --all-extras --index-strategy unsafe-best-match`; green after.
+  `uv build --index-strategy unsafe-best-match` produced
+  `xyz_strata-2.0.0a22-py3-none-any.whl`/`.tar.gz`; installed into a
+  fresh isolated `uv venv`, confirmed `strata version` → `2.0.0a22` and
+  `strata --help` unchanged. Verification venv removed after. Tag+push
+  intentionally left for explicit user confirmation, same as every prior
+  alpha.
 - 2026-10-13: **Built alpha21** — bumped `VERSION.txt` to `2.0.0-Alpha21`
   (normalizes to `2.0.0a21`; confirmed via `packaging.version.Version`
   first), cut right after the `ProvisioningStepModel.targets` breaking
