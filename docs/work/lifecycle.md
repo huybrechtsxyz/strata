@@ -1,10 +1,18 @@
 # Lifecycle Hooks — Design
 
-- Status: draft — nothing implemented. v2 models lifecycle on seven kinds
-  and executes it nowhere. This doc captures the current state, the real v1
-  mechanism it would be ported from, and the open questions that must be
-  answered first; it does **not** propose a design yet.
-- Last updated: 2026-09-25
+- Status: draft — gate question 1 answered (2026-10-14): **zero real
+  demand**, both haven and `cfg-int-deployment` grepped directly for
+  `lifecycle:`/hook usage, nothing found. Per this doc's own "a 'no' answer
+  closes most of what follows" framing, items 2-9 are not being pursued.
+  The real need that prompted this investigation ("run a script at a
+  point in the pipeline") is instead served by
+  [script-provisioner.md](../design/script-provisioner.md) — the already-decided,
+  already-reserved `ProvisionerType.SCRIPT` with no executor, using the
+  execution step graph's own `depends_on` for ordering rather than a
+  parallel phase-hook subsystem. This doc stays as the v1-mechanism
+  research record, not pursued further unless real hook-specific demand
+  (not just "run a script somewhere") shows up.
+- Last updated: 2026-10-14
 
 ## Overview
 
@@ -157,15 +165,18 @@ no-revision-in-place rule.
 ## Remaining Work / Open Questions
 
 Ordered roughly as they'd need answering. The first one is a gate on all the
-others.
+others — **answered 2026-10-14, see Status above: no evidence, not pursued.**
 
-1. **Does v2 want script-based lifecycle hooks at all?** Not rhetorical. They
-   are an arbitrary-code-execution surface by construction, and no
-   consumer-usage evidence has been gathered for them the way
-   [ADR-0020](../decisions/0020-v1-consumer-feature-priority.md) did for
-   commands. Check what haven and `config-deploy` actually declare
-   before designing anything. A "no, or only for phase X" answer is a
-   legitimate outcome and would close most of what follows.
+1. **Does v2 want script-based lifecycle hooks at all? — Answered: no,
+   not today.** Grepped both real tracked consumers directly (haven, both
+   v1 source and the migrated `.v2-haven` fixture; `cfg-int-deployment`)
+   for any `lifecycle:`/hook declaration — zero matches in either. Per
+   this item's own stated criterion, a "no" closes items 2-9 below; they
+   are left recorded for their research value (the real v1 mechanism, the
+   ADR-0021 D11 correction) but are not gating anything further. See
+   [script-provisioner.md](../design/script-provisioner.md) for the lighter-weight
+   mechanism that serves the actual underlying need ("run something at a
+   point in the pipeline") instead.
 2. **Hierarchy and precedence (schema-parity Issue 5).** Seven kinds can each
    declare the same phase name. Which run? In what order? Does a more
    specific scope override or append to a broader one? v1's answer is a

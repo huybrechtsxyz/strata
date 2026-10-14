@@ -58,6 +58,7 @@ from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepM
 from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
 from strata.services.environment_service import merge_environment_models
+from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
 from strata.utils.value_tokens import extract_value_tokens, referenced_output_keys, resolve_value_tokens_in_mapping
@@ -783,7 +784,7 @@ def deploy_run(
         if provisioner.output and provisioner.output.template:
             template_path = context.root / provisioner.output.template
             try:
-                integration.render_output_template(
+                rendered_output_path = integration.render_output_template(
                     path, resolved=resolved, provisioner=provisioner, graph=graph, template_path=template_path
                 )
             except jinja2.TemplateError as exc:
@@ -792,6 +793,8 @@ def deploy_run(
                     location=step.name,
                 )
                 return diagnostics
+        else:
+            rendered_output_path = None
 
         _step(f"running step '{step.name}' via {integration_type}")
         init = getattr(integration, "init", None)
@@ -836,6 +839,13 @@ def deploy_run(
                 integration_entry = index.get(PlatformKind.INTEGRATION, gitops_remote.integration)
                 if integration_entry is not None:
                     auth = cast(IntegrationModel, integration_entry.model).spec.authentication
+        elif provisioner.tool == ProvisionerType.SCRIPT.value:
+            # Unlike GitOps above, script wants upstream step outputs too
+            # (`tokens`, not bare `resolved.values`) — its `args`/`STRATA_
+            # VALUES` delivery has no reason to withhold what's already
+            # visible to this step via `${output:...}` (docs/work/
+            # script-provisioner.md Phase 4).
+            step_resolved_values = tokens
 
         plan_result = integration.plan_or_warn(
             path,
@@ -845,6 +855,7 @@ def deploy_run(
             env=env,
             auth=auth,
             resolved_values=step_resolved_values,
+            output_path=rendered_output_path,
             line_callback=_line,
             **_timeout_kwargs(step, deployment_stage, "plan"),
         )
@@ -883,6 +894,7 @@ def deploy_run(
             env=env,
             auth=auth,
             resolved_values=step_resolved_values,
+            output_path=rendered_output_path,
             line_callback=_line,
             **_timeout_kwargs(step, deployment_stage, "apply"),
         )

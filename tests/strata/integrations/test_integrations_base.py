@@ -8,7 +8,9 @@ import pytest
 
 from strata.integrations.base import Integration
 from strata.integrations.errors import IntegrationError
+from strata.models.common_models import SourceModel
 from strata.models.integration_model import IntegrationModel
+from strata.models.provisioning_model import ProvisionerModel
 from strata.utils.transport import CommandResult, HttpResult
 
 
@@ -54,6 +56,19 @@ def test_construction_without_config_is_allowed():
     integration = _CliOnly()
     assert integration.name == "widget"
     assert integration.config is None
+
+
+def test_bind_is_a_no_op_by_default():
+    """Base `Integration.bind()` (docs/work/script-provisioner.md Phase 2)
+    accepts any ProvisionerModel and changes nothing observable — every
+    existing integration inherits this unless it overrides `bind()` itself
+    (only `ScriptIntegration` does)."""
+    integration = _CliOnly()
+    provisioner = ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))
+
+    assert integration.bind(provisioner) is None
+    assert integration.name == "widget"
+    assert integration.command == "widget-cli"
 
 
 def test_construction_rejects_mismatched_type():

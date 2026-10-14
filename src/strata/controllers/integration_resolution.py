@@ -51,6 +51,12 @@ from strata.utils.errors import UsageError
 def resolve_integration(index: DocumentIndex, provisioner: ProvisionerModel) -> InfraIntegration:
     """Return the `InfraIntegration` instance `provisioner` should run against.
 
+    Calls `integration.bind(provisioner)` (base no-op, `base.py`) before
+    returning — `ScriptIntegration`'s own use case (docs/work/
+    script-provisioner.md): which interpreter to use depends on the specific
+    provisioner's `script.file`, not a fixed class-level `COMMAND`. Harmless
+    for every other integration.
+
     Args:
         index: The loaded, already-`require_valid()`-ed `DocumentIndex`.
         provisioner: The provisioner naming a tool (`.tool`) and, optionally,
@@ -82,7 +88,11 @@ def resolve_integration(index: DocumentIndex, provisioner: ProvisionerModel) -> 
         config = bind_integration_config(index, provisioner.tool, requester=f"Provisioner '{provisioner.name}'")
         integration = _construct(provisioner.tool, config, context=f"Provisioner '{provisioner.name}'")
 
-    return _require_infra_integration(f"Provisioner '{provisioner.name}': tool '{provisioner.tool}'", integration)
+    infra_integration = _require_infra_integration(
+        f"Provisioner '{provisioner.name}': tool '{provisioner.tool}'", integration
+    )
+    infra_integration.bind(provisioner)
+    return infra_integration
 
 
 def resolve_module_integration(index: DocumentIndex, module_type: str) -> InfraIntegration:

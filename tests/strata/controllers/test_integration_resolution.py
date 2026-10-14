@@ -133,6 +133,46 @@ def test_unregistered_tool_type_raises_usage_error_not_a_bare_integration_error(
 
 
 # ---------------------------------------------------------------------------
+# bind() (docs/work/script-provisioner.md Phase 2) — resolve_integration()
+# threads the resolved provisioner into integration.bind() before returning.
+# Base no-op (test_integrations_base.py); regression here confirms it's
+# wired in and harmless for every existing, non-script integration.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_integration_calls_bind(monkeypatch):
+    index = _index()
+    provisioner = _provisioner()
+    calls: list[ProvisionerModel] = []
+    original_bind = TerraformIntegration.bind
+
+    def _spy_bind(self: TerraformIntegration, bound_provisioner: ProvisionerModel) -> None:
+        calls.append(bound_provisioner)
+        original_bind(self, bound_provisioner)
+
+    monkeypatch.setattr(TerraformIntegration, "bind", _spy_bind)
+
+    integration = resolve_integration(index, provisioner)
+
+    assert calls == [provisioner]
+    assert isinstance(integration, TerraformIntegration)
+
+
+def test_resolve_integration_bind_is_harmless_for_existing_integrations():
+    """Regression: neither Terraform nor Helm overrides `bind()` — calling
+    it from `resolve_integration()` changes nothing observable."""
+    index = _index()
+
+    tf = resolve_integration(index, _provisioner(tool="terraform"))
+    assert tf.config is None
+    assert tf.command == TerraformIntegration.COMMAND
+
+    helm = resolve_integration(index, _provisioner(tool="helm"))
+    assert isinstance(helm, HelmIntegration)
+    assert helm.config is None
+
+
+# ---------------------------------------------------------------------------
 # resolve_module_integration() — ADR-0022 D5 (bare type, no named binding)
 # ---------------------------------------------------------------------------
 

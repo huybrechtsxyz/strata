@@ -302,6 +302,109 @@ def test_provisioner_gitops_is_optional():
 
 
 # ---------------------------------------------------------------------------
+# script (docs/work/script-provisioner.md Phase 1) — only valid for tool
+# 'script'; required there (nothing else says what to run). Unlike gitops,
+# 'script' is not a sync type, so `source` is still required.
+# ---------------------------------------------------------------------------
+
+
+def _minimal_script_provisioner() -> dict:
+    return {
+        "name": "deploy-script",
+        "tool": "script",
+        "source": {"remote": "infra-repo", "source_path": "scripts"},
+        "script": {"file": "deploy.py"},
+    }
+
+
+def test_provisioner_script_required_for_script_tool():
+    data = _minimal_script_provisioner()
+    del data["script"]
+    with pytest.raises(ValidationError, match="'script' is required"):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_accepted_for_script_tool():
+    model = ProvisionerModel.model_validate(_minimal_script_provisioner())
+    assert model.script.file == "deploy.py"
+    assert model.script.args is None
+
+
+def test_provisioner_script_accepts_args():
+    data = _minimal_script_provisioner()
+    data["script"]["args"] = ["--environment", "prod"]
+    model = ProvisionerModel.model_validate(data)
+    assert model.script.args == ["--environment", "prod"]
+
+
+def test_provisioner_script_requires_source():
+    """'script' is not a sync type (unlike argocd/flux) — source stays required."""
+    data = _minimal_script_provisioner()
+    del data["source"]
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_rejected_for_non_script_known_tool():
+    data = _minimal_provisioner()
+    data["script"] = {"file": "deploy.py"}
+    with pytest.raises(ValidationError, match="'script' is only valid"):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_allowed_for_unknown_tool():
+    """script isn't rejected for an unrecognized (custom plugin) tool — its
+    own plugin code, not strata core, is the consumer."""
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "custom-main",
+            "tool": "pulumi",
+            "source": {"remote": "infra-repo", "source_path": "pulumi/main"},
+            "script": {"file": "deploy.py"},
+        }
+    )
+    assert model.script.file == "deploy.py"
+
+
+@pytest.mark.parametrize("valid_file", ["deploy.ps1", "deploy.sh", "deploy.bash", "deploy.py", "deploy.bat"])
+def test_provisioner_script_accepts_every_supported_extension(valid_file):
+    data = _minimal_script_provisioner()
+    data["script"]["file"] = valid_file
+    model = ProvisionerModel.model_validate(data)
+    assert model.script.file == valid_file
+
+
+def test_provisioner_script_rejects_unsupported_extension():
+    """`.js`/`.mjs`/`.go` (in the general SCRIPT_EXTENSIONS, lifecycle hooks'
+    own set) are deliberately not in this narrower, dedicated set."""
+    data = _minimal_script_provisioner()
+    data["script"]["file"] = "deploy.js"
+    with pytest.raises(ValidationError, match="valid extension"):
+        ProvisionerModel.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "bad_file",
+    [
+        "../../../../etc/cron.d/evil.py",
+        "scripts/../../../etc/passwd.py",
+        "/etc/passwd.py",
+        "C:\\Windows\\System32\\evil.bat",
+    ],
+)
+def test_provisioner_script_rejects_path_traversal_in_file(bad_file):
+    data = _minimal_script_provisioner()
+    data["script"]["file"] = bad_file
+    with pytest.raises(ValidationError, match="relative|absolute|parent directory"):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_is_optional():
+    model = ProvisionerModel.model_validate(_minimal_provisioner())
+    assert model.script is None
+
+
+# ---------------------------------------------------------------------------
 # depends_on (ADR-0029) — names other Provisioners in the same workspace
 # whose source must be materialised first, independent of execution/targets.
 # Cross-field validation (unknown-name/cycle checks) needs sibling awareness

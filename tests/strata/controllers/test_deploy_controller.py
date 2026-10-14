@@ -906,6 +906,147 @@ def test_deploy_run_resolves_backend_configuration_tokens(tmp_path: Path):
     assert "resource_group_name=rg-prd" in init_call
 
 
+# ---------------------------------------------------------------------------
+# tool: script value delivery (docs/work/script-provisioner.md Phase 4) —
+# the widened `step_resolved_values` gate (`tokens`, not bare
+# `resolved.values`) and `output_path` threading, both additive and
+# harmless for every non-script tool (confirmed above — those tests are
+# unaffected by this section's changes).
+# ---------------------------------------------------------------------------
+
+
+def _script_solution(tmp_path: Path, *, output_template: bool = False) -> Path:
+    root = _solution(tmp_path)
+    _write(root, "scripts/deploy.py", "print('hi')\n")
+    if output_template:
+        _write(root, "payload.json.j2", '{"region": "{{ variables.REGION }}"}')
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  type: local\n  region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    output_field = "      output:\n        template: payload.json.j2\n" if output_template else ""
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: script_main\n      tool: script\n      source:\n        source_path: scripts\n"
+        "      script:\n        file: deploy.py\n        args:\n          - --environment\n"
+        "          - ${var:REGION}\n"
+        f"{output_field}"
+        "  execution:\n    - name: run_script\n      provisioner: script_main\n      resources:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    return root
+
+
+def test_deploy_run_resolves_script_args_and_delivers_strata_values_env(tmp_path: Path):
+    root = _script_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    calls: list[dict[str, object]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append({"args": list(args), "env": env})
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import pytest as _pytest
+
+    with _pytest.MonkeyPatch.context() as monkeypatch:
+        import strata.integrations.base as base_module
+
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert len(calls) == 2  # real validate() (py_compile), then deploy()
+    deploy_call = calls[-1]
+    assert "--environment" in deploy_call["args"]
+    assert "westeurope" in deploy_call["args"]  # ${var:REGION} resolved, not left as a literal token
+    assert "${var:REGION}" not in deploy_call["args"]
+    assert "STRATA_VALUES" in deploy_call["env"]
+    assert json.loads(deploy_call["env"]["STRATA_VALUES"])["REGION"] == "westeurope"
+
+
+def test_deploy_run_appends_rendered_output_path_as_the_final_script_arg(tmp_path: Path):
+    root = _script_solution(tmp_path, output_template=True)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    calls: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import pytest as _pytest
+
+    with _pytest.MonkeyPatch.context() as monkeypatch:
+        import strata.integrations.base as base_module
+
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    rendered_path = build_path / "scripts" / "payload.json"
+    assert rendered_path.exists()
+    assert calls[-1][-1] == str(rendered_path)  # deploy() is the last call (validate() ran first)
+
+
+def test_deploy_run_script_end_to_end_materialises_source_renders_skeleton_and_executes(tmp_path: Path, _capture):
+    """Phase 5 (docs/work/script-provisioner.md) — the real CLI command
+    path, not just unit-level `ScriptIntegration` calls: `build run`
+    materialises the script's own source and renders the build-time
+    `strata.auto.json` skeleton; `deploy run` then actually executes it."""
+    root = _script_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    script_path = build_path / "scripts" / "deploy.py"
+    assert script_path.exists()
+    assert script_path.read_text() == "print('hi')\n"
+
+    skeleton = json.loads((build_path / "scripts" / "strata.auto.json").read_text())
+    assert skeleton["variables"] == {"REGION": "westeurope"}
+    assert "secrets" not in skeleton
+
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert len(_capture) == 2  # real validate() (py_compile), then deploy()
+    deploy_call = _capture[-1]
+    assert deploy_call[0] == "/usr/bin/python3"
+    assert str(script_path) in deploy_call
+    assert "--environment" in deploy_call
+    assert "westeurope" in deploy_call
+
+
 def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: Path):
     """ADR-0035 Phase 7: a '${var:KEY}' inside a DNS record's value (or a
     network/firewall field) is delivered as part of the one unified

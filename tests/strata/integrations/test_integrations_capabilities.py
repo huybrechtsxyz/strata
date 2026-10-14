@@ -637,11 +637,23 @@ def test_every_infra_integration_declares_a_resolved_value_delivery_mechanism():
     #: `output.template` escape hatch (ADR-0023 D3 — tool-agnostic by design).
     gitops_exception = {"BaseGitOpsIntegration", "ArgoCDIntegration", "FluxIntegration"}
 
+    #: ScriptIntegration (docs/work/script-provisioner.md Phase 4, shipped)
+    #: has a real mechanism — a `STRATA_VALUES` env var carrying the whole
+    #: resolved `resolved_values` map, built in `deploy()`/`plan()` — but
+    #: it's neither of the two this test guards for: `ENV_VAR_PREFIX` is a
+    #: one-env-var-*per-key* convention reserved for a tool's own *native*
+    #: contract (Terraform's real `TF_VAR_<name>`, which script has none
+    #: of); `STRATA_VALUES` is one whole-map env var instead, deliberately
+    #: a third pattern, not a gap. Permanent exception, not "remove once
+    #: shipped" — nothing about Phase 4 landing changes which of these two
+    #: specific mechanisms applies.
+    script_exception = {"ScriptIntegration"}
+
     checked = _all_infra_integration_types()
     assert checked, "No real InfraIntegration subclasses found — the walk itself is broken."
 
     for cls in checked:
-        if cls.__name__ in gitops_exception:
+        if cls.__name__ in gitops_exception or cls.__name__ in script_exception:
             continue
         has_env_var_delivery = cls.ENV_VAR_PREFIX is not None
         has_container_delivery = Capability.CONTAINER in cls.CAPABILITIES
@@ -666,6 +678,7 @@ def test_every_infra_integration_type_is_a_known_real_integration():
         "TerraformIntegration",
         "HelmIntegration",
         "ComposeIntegration",
+        "ScriptIntegration",
         "BaseGitOpsIntegration",
         "ArgoCDIntegration",
         "FluxIntegration",

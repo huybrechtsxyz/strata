@@ -27,6 +27,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     SourceModel,
+    validate_script_file,
 )
 from strata.models.reference_fields import References, RemoteReference
 from strata.utils.builtin_types import SYNC_PROVISIONER_TYPES, TERRAFORM_COMPATIBLE_TYPES, ProvisionerType
@@ -100,6 +101,30 @@ class ProvisionerGitOpsModel(PlatformBaseModel):
         return validate_relative_path(v)
 
 
+#: Narrower than the general SCRIPT_EXTENSIONS (common_models.py) — this
+#: tool's own supported interpreters only (ps1/sh/bash/py/bat), not the
+#: lifecycle-hook set's .js/.mjs/.go (docs/work/script-provisioner.md).
+SCRIPT_PROVISIONER_EXTENSIONS = frozenset({".ps1", ".sh", ".bash", ".py", ".bat"})
+
+
+class ProvisionerScriptModel(PlatformBaseModel):
+    """Only valid when a Provisioner's `tool` is 'script' (docs/work/script-provisioner.md)."""
+
+    file: str = Field(description="Script path, relative to this provisioner's 'source' directory")
+    args: list[str] | None = Field(None, description="Arguments passed to the script")
+
+    @field_validator("file")
+    @classmethod
+    def validate_file(cls, v: str) -> str:
+        """Solution-relative containment + a supported extension — reuses
+        `validate_script_file()` (common_models.py), same function
+        `ScriptPathModel.file` already calls, narrowed to this tool's own
+        extension set. Filesystem existence is deliberately not checked —
+        same precedent as `ScriptPathModel`: the file may live in a remote
+        not yet materialised."""
+        return validate_script_file(v, allowed=SCRIPT_PROVISIONER_EXTENSIONS)
+
+
 class OutputModel(PlatformBaseModel):
     """The Jinja2 full-file-template escape hatch (ADR-0023 D3;
     docs/design/value-token-resolution.md's "Value Supply Mechanisms", option
@@ -132,9 +157,10 @@ class ProvisionerModel(PlatformBaseModel):
     custom tool name must remain schema-valid (same reasoning as
     `Module.spec.type`, ADR-0009 Decision 9). Fields below that are only
     meaningful for a specific known tool (`backend` for terraform,
-    `properties` for ansible) are only rejected when `tool` is a
-    *recognized* built-in that's known to be wrong — an unrecognized `tool`
-    (a possible custom plugin) is never rejected by these checks.
+    `properties` for ansible, `script` for script) are only rejected when
+    `tool` is a *recognized* built-in that's known to be wrong — an
+    unrecognized `tool` (a possible custom plugin) is never rejected by
+    these checks.
     """
 
     name: PlatformName = Field(description="Unique provisioner name")
@@ -156,6 +182,9 @@ class ProvisionerModel(PlatformBaseModel):
     )
     gitops: ProvisionerGitOpsModel | None = Field(
         None, description="GitOps push destination. Only valid when tool is a sync type ('argocd', 'flux')."
+    )
+    script: ProvisionerScriptModel | None = Field(
+        None, description="Script file + args to run. Required when tool is 'script'."
     )
     configuration: dict[str, Any] | None = Field(
         None, description="Tool-specific passthrough configuration, not validated by strata."
@@ -269,6 +298,24 @@ class ProvisionerModel(PlatformBaseModel):
                 return self
             if known not in SYNC_PROVISIONER_TYPES:
                 raise ValueError(f"Provisioner '{self.name}': 'gitops' is only valid for tool 'argocd' or 'flux'.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_script_required_and_scoped(self) -> "ProvisionerModel":
+        """`script` is required for tool 'script' (nothing else says what to
+        run) and rejected for every other *recognized* built-in — same
+        recognized-vs-custom leniency as `validate_backend_only_for_terraform`/
+        `validate_properties_only_for_ansible` above (docs/work/
+        script-provisioner.md).
+        """
+        try:
+            known = ProvisionerType(self.tool)
+        except ValueError:
+            return self  # unrecognized — plugin's own code decides
+        if known == ProvisionerType.SCRIPT and self.script is None:
+            raise ValueError(f"Provisioner '{self.name}': 'script' is required for tool 'script'.")
+        if known != ProvisionerType.SCRIPT and self.script is not None:
+            raise ValueError(f"Provisioner '{self.name}': 'script' is only valid for tool 'script'.")
         return self
 
     @model_validator(mode="after")

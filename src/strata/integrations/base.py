@@ -27,6 +27,7 @@ from packaging.specifiers import SpecifierSet
 
 from strata.integrations.errors import IntegrationError
 from strata.models.integration_model import IntegrationModel
+from strata.models.provisioning_model import ProvisionerModel
 from strata.utils.transport import (
     EXECUTABLE_NOT_FOUND,
     NO_RESPONSE,
@@ -101,6 +102,15 @@ class Integration(ABC):
             )
         self.config = config
         self._transport: str | None = None
+
+    def bind(self, provisioner: ProvisionerModel) -> None:
+        """Optional: give this instance provisioner-specific context it
+        needs before `is_available()`/`command` can resolve (docs/work/
+        script-provisioner.md — `ScriptIntegration`'s own use case, which
+        interpreter a specific `script.file` needs). Base no-op; every
+        existing integration is unaffected.
+        """
+        del provisioner
 
     @property
     def name(self) -> str:

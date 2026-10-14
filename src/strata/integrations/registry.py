@@ -40,6 +40,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
     "compose": ("strata.integrations.compose", "ComposeIntegration"),
     "helm": ("strata.integrations.helm", "HelmIntegration"),
+    "script": ("strata.integrations.script", "ScriptIntegration"),
     "argocd": ("strata.integrations.gitops", "ArgoCDIntegration"),
     "flux": ("strata.integrations.gitops", "FluxIntegration"),
     "webhook": ("strata.integrations.webhook", "WebhookIntegration"),
