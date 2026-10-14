@@ -23,9 +23,11 @@ are missing" — they're unrelated facts that happen to show up in the same
 method.
 
 This doc scopes the fix to Terraform's own missing categories only. It does
-**not** design `OutputProfileModel`/`emits` itself — see
-[output-profile-model.md](../work/output-profile-model.md) for that
-separate, not-yet-started step.
+not design `OutputProfileModel`/`emits` itself — see
+[output-profile-model.md](../archive/output-profile-model.md) for that
+investigation (archived 2026-10-14: the undeclared-variable problem it
+existed to solve no longer applies once ADR-0035's unified projection
+replaced the old per-category file shape).
 
 ### Where each input actually goes
 
@@ -442,7 +444,7 @@ reads `graph.version.spec.promotion` directly from it, no separate lookup.
 - The old unconditional `build_time_keys()`/`resolve_values()` call (which attempted real network calls to integration-backed stores on every `build run`, with the result silently discarded) was removed as redundant once the local, no-network `merge_environment_models()` walk existed. Replaced by an opt-in `--resolve` flag: without it, `build run` only ever reads `constant`/`environment` stores (no network beyond `sync_source()`); with it, every declared key - including secrets and integration-backed stores - gets a real pass/fail validation via `Diagnostics`, but resolved values are never written to disk either way.
 - The declaration inventory (`resolved.yaml`) is deliberately a plain, non-auto-loaded YAML file, not Terraform `*.auto.tfvars.json` like v1 - v1's shape forces every consuming repo to also declare matching `variable "required_variables" {}` blocks (or accept a `terraform plan` error), a coupling strata should not reintroduce.
 - `--env-file PATH` (repeatable) was added for local-dev parity with CI (which already exports real `ENVIRONMENT`-store values via the pipeline) - merged into `os.environ` via `setdefault()` so an already-exported real value always wins over a file's value.
-- `OutputProfileModel`/`emits`-based category gating is deliberately out of scope here - see [output-profile-model.md](../work/output-profile-model.md) for that separate, not-yet-started design.
+- `OutputProfileModel`/`emits`-based category gating is out of scope here — see [output-profile-model.md](../archive/output-profile-model.md) (archived 2026-10-14, superseded by ADR-0035's unified projection before it was ever built).
 - 2026-10-06: `resolved.yaml` gained a sixth, optional `promotion` key (docs/work/promotion.md Phase 4) - `{workspace, ring, order, wave?, version}`, written only when the deployment's `spec.version` resolved to a `Version` document tagged with a ring. Answers "did my deployment land where I meant it to" (deployment-scoped, human-intent) - a different question from `strata validate`'s own cross-document ring/order/wave consistency checks (docs/work/promotion.md Phase 2), which run independently of any one deployment. `ResolvedWorkspaceGraph` gained a `version: VersionModel | None` field to carry the already-pin-aware resolved document through to `write_resolved_manifest()`.
 - 2026-10-08: Added a worked example (shared Azure Application Gateway WAF
   policy, one `omp_gateway` list on the Workspace plus one `tenant_gateway`

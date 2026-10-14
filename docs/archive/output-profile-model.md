@@ -1,15 +1,31 @@
 # Output Profile Model (`emits` gating) — Design
 
-- Status: draft — design itself still fully applicable and unimplemented
-  (`emits`/`OutputProfileModel`, the two wiring points, the verified
-  Terraform auto-load-vs-env-var behavior, the "env-var-only delivery"
-  alternative). **One conclusion corrected 2026-10-12**: this doc
-  previously pointed to ADR-0002's Interface/Injection as the eventual
-  fix for `emits`'s key-granularity gap (Remaining Work item 6) — that
-  mechanism is now confirmed dead/archived, not "not yet built," so the
-  gap is permanent for `emits`, strengthening the case for the
-  alternative. See Related Decisions and item 6.
-- Last updated: 2026-10-12
+- Status: **Archived (2026-10-14) — problem structurally eliminated by
+  ADR-0035, not built.** This whole doc's premise is `default_output()`
+  writing 13 separate per-category `*.auto.tfvars.json` files, each a
+  potential "undeclared variable" warning source against foreign `.tf`
+  code. That shape no longer exists: ADR-0035's unified projection
+  (`terraform_projection.py`'s `default_output()`, confirmed by direct
+  read 2026-10-14) now writes exactly **one** `strata.auto.tfvars.json`
+  holding a single `strata` object, and — critically — auto-generates
+  the matching `strata_variables.tf` `variable "strata" {}` declaration
+  itself whenever the root doesn't already declare its own, so the
+  written payload and its declared type can never drift. There is no
+  longer any "foreign root doesn't declare these categories" scenario
+  for `emits`/the rename alternative to gate or avoid — the undeclared-
+  variable warning this entire design exists to prevent cannot occur in
+  the normal (non-opt-out) case by construction. The remaining edge case
+  (a root that declares its **own** `variable "strata"` with an
+  incompatible type) is a type-conversion *error*, not a warning, and
+  neither `emits` nor the rename alternative addresses it — that's the
+  root author's own documented trade-off for opting out (ADR-0035). Kept
+  here as the full investigation record (the verified real-Terraform
+  auto-load-vs-env-var behavior, the real `cfg-deployment` evidence,
+  ADR-0002's Interface/Injection dead-end) rather than deleted — nothing
+  in it is wrong, it was simply written and refined against a shape of
+  `terraform_projection.py` that ADR-0035 (landed 2026-10-10,
+  independently) replaced out from under it. No code to write.
+- Last updated: 2026-10-14
 
 ## Overview
 
