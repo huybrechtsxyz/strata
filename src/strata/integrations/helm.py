@@ -159,7 +159,7 @@ class HelmIntegration(InfraIntegration):
                 )
                 continue
 
-            # Output pre-flight (docs/work/output-declarations.md Phase
+            # Output pre-flight (docs/design/output-declarations.md Phase
             # 3) — every '${output:STEP.KEY}' this module's own rendered
             # values reference must already be in `tokens` before
             # resolution is attempted. Unlike deploy_controller.py's

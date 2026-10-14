@@ -182,7 +182,7 @@ class ComposeIntegration(InfraIntegration):
 
         document = yaml.safe_load(compose_file.read_text()) or {}
 
-        # Output pre-flight (docs/work/output-declarations.md Phase 3) —
+        # Output pre-flight (docs/design/output-declarations.md Phase 3) —
         # every '${output:STEP.KEY}' the merged document references must
         # already be in `tokens` before resolution is attempted. Unlike
         # Helm's per-module loop, Compose already merged every module into

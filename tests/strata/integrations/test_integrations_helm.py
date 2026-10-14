@@ -757,7 +757,7 @@ def test_deploy_namespace_unresolvable_token_reports_a_diagnostic_and_skips(monk
 
 
 def test_deploy_namespace_output_preflight_skips_only_the_offending_module(monkeypatch, tmp_path: Path):
-    """docs/work/output-declarations.md Phase 3 — a module referencing a
+    """docs/design/output-declarations.md Phase 3 — a module referencing a
     missing '${output:...}' key is skipped with a specific diagnostic;
     every OTHER module in the same namespace still deploys (unlike
     deploy_controller.py's Terraform steps, which abort the whole run)."""

@@ -198,7 +198,7 @@ def test_extract_value_tokens_accepts_a_bare_single_segment_value_token():
 
 
 # ---------------------------------------------------------------------------
-# referenced_output_keys() — docs/work/output-declarations.md Phase 1, the
+# referenced_output_keys() — docs/design/output-declarations.md Phase 1, the
 # per-step output pre-flight check's key-extraction helper.
 # ---------------------------------------------------------------------------
 

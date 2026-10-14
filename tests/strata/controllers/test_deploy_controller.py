@@ -1744,7 +1744,7 @@ def test_deploy_run_reports_a_diagnostic_when_a_backend_configuration_token_is_u
     """A referenced key genuinely missing from `tokens` (here: an upstream
     step's Terraform output never produced it) must not escape as a bare
     `ValueError`. Caught earlier now than the 2026-10-12 fix that first
-    closed this crash (docs/work/output-declarations.md Phase 2, 2026-10-14):
+    closed this crash (docs/design/output-declarations.md Phase 2, 2026-10-14):
     the output pre-flight check reports a clean, specific diagnostic before
     `resolve_value_tokens_in_mapping()` is even called — the backend.
     configuration call site's own `except ValueError` remains as
@@ -1776,7 +1776,7 @@ def test_deploy_run_reports_a_diagnostic_when_a_backend_configuration_token_is_u
 
 
 def test_deploy_run_output_preflight_reports_every_missing_key_in_one_pass(tmp_path: Path, monkeypatch):
-    """docs/work/output-declarations.md Phase 2 — the concrete proof this
+    """docs/design/output-declarations.md Phase 2 — the concrete proof this
     phase adds real value over the already-shipped (2026-10-12)
     first-error-only exception catch: a step referencing TWO distinct
     missing '${output:...}' keys, one via backend.configuration and one via

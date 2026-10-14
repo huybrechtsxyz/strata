@@ -27,10 +27,10 @@
   (1)-(3) now relate to that shipped mechanism. **The literal `KEY` half
   of `${output:STEP.KEY}` (never validated by any of the above — only
   `STEP` was) is now checked too, dynamically at `deploy run` time**:
-  [output-declarations.md](output-declarations.md)'s 4-phase pre-flight
-  check (Phases 1-3 shipped 2026-10-14) reports every referenced key
-  missing from a step's/module's own collected outputs, before any
-  resolution or file-write is attempted.
+  [output-declarations.md](../design/output-declarations.md)'s 4-phase
+  pre-flight check (Phases 1-3 shipped 2026-10-14) reports every
+  referenced key missing from a step's/module's own collected outputs,
+  before any resolution or file-write is attempted.
 - Last updated: 2026-10-14
 
 
@@ -1029,8 +1029,8 @@ each to the same `unresolved_value_tokens()` call uniformly.
    false rejection at `strata validate` time, not add new key-checking;
    the literal `KEY` half is since validated, but dynamically at `deploy
    run` time rather than statically here —
-   [output-declarations.md](output-declarations.md)'s own Phases 1-3,
-   shipped 2026-10-14); `output_claimed=False`
+   [output-declarations.md](../design/output-declarations.md)'s own
+   Phases 1-3, shipped 2026-10-14); `output_claimed=False`
    (default, every existing caller unaffected) → today's exact
    `unsupported_value_token_kind` message, unchanged wording, still
    correctly fires for a genuinely-unclaimed document.
@@ -1168,8 +1168,9 @@ just ones with a real remote Terraform backend; needs its own configured
 backend rather than piggy-backing on the IaC tool's own state) — (1)/(2)
 remain independently valid ideas (a static, structural "can this ever
 work" check is a different question from "does the durable record
-actually exist," the same distinction [output-declarations.md](output-declarations.md)
-later drew for key-level checking), but (3) specifically should be
+actually exist," the same distinction
+[output-declarations.md](../design/output-declarations.md) later drew for
+key-level checking), but (3) specifically should be
 considered superseded, not merely deferred, should (1)/(2) ever get
 picked back up.
 
@@ -1934,9 +1935,9 @@ were — small, independently-testable, full check suite after each.
   literal `KEY` half was still wholly unvalidated ("matches ADR-0006's
   own admission that Context does not solve output validation"), true
   when written (2026-10-12) but superseded two days later:
-  [output-declarations.md](output-declarations.md)'s own Phases 1-3
-  shipped a dynamic pre-flight check at `deploy run` time (`deploy_
-  controller.py`'s Terraform path, `helm.py`/`compose.py`'s own
+  [output-declarations.md](../design/output-declarations.md)'s own
+  Phases 1-3 shipped a dynamic pre-flight check at `deploy run` time
+  (`deploy_controller.py`'s Terraform path, `helm.py`/`compose.py`'s own
   `deploy_namespace()`) that reports every referenced key missing from
   a step's/module's own collected outputs before any resolution is
   attempted. Added forward pointers at both locations rather than

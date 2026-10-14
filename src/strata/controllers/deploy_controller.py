@@ -726,7 +726,7 @@ def deploy_run(
             for category, docs in payload.items()
         }
 
-        # Output pre-flight (docs/work/output-declarations.md) — every
+        # Output pre-flight (docs/design/output-declarations.md) — every
         # '${output:STEP.KEY}' this step's own payload references must
         # already be in `tokens` (this invocation's outputs, merged with
         # any durable record above) before any resolution/file-write is

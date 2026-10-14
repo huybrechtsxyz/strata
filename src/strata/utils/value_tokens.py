@@ -146,7 +146,7 @@ def referenced_output_keys(node: object) -> set[str]:
     Same recursive dict/list/str walk shape as `deploy_controller.py`'s
     `_contains_output_token()` (a presence test), but collects every key
     instead of just testing for one — the per-step output pre-flight check
-    (docs/work/output-declarations.md) diffs this against a step's real,
+    (docs/design/output-declarations.md) diffs this against a step's real,
     collected `tokens` before attempting resolution. Lives in `utils`, not
     next to `_contains_output_token()`, so both `strata.controllers` and
     `strata.integrations` (Helm/Compose's own `deploy_namespace()`) can use

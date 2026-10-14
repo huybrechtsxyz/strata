@@ -10,10 +10,10 @@
   model — plus `DeploymentOutputStore` (ADR-0036) for the cross-run case
   this doc never anticipated at all. `${step:step_name.output_key}`
   shipped as `${output:step.key}`. The one piece that wasn't dead —
-  Outputs Declaration — was split out to its own *active* design doc,
-  [output-declarations.md](../work/output-declarations.md), before this one was
-  archived. Kept here as the full investigation record rather than
-  deleted.
+  Outputs Declaration — was split out to its own design doc,
+  [output-declarations.md](../design/output-declarations.md), before this one
+  was archived, and has since shipped in full. Kept here as the full
+  investigation record rather than deleted.
 - Last updated: 2026-10-12
 
 ## Overview
@@ -117,15 +117,14 @@ implementation of this doc.
   persists every step's output across invocations specifically so a later,
   separate `deploy run` can resume consuming an earlier one's results.
   Nobody wrote this connection down before this re-check.
-- **Outputs Declaration — the one piece that's still a real, open gap.**
-  This doc's own Remaining Work list named it directly ("a ground truth to
-  validate `${step:...}`'s key against, symmetric to Interface... open,
-  unscheduled") and it's still true today: nothing declares *"step1 will
-  produce `vm_ip`"* anywhere, so a typo'd `${output:step1.vm_ipp}` passes
-  `strata validate` cleanly and only fails deep inside an actual
-  `deploy run`. Unlike the other four concepts, this one was never
-  superseded by anything — split out to its own design doc:
-  [output-declarations.md](../work/output-declarations.md).
+- **Outputs Declaration — the one piece that was a real, open gap, now
+  shipped.** This doc's own Remaining Work list named it directly ("a
+  ground truth to validate `${step:...}`'s key against, symmetric to
+  Interface... open, unscheduled"). Unlike the other four concepts, this
+  one was never superseded by anything — split out to its own design doc,
+  [output-declarations.md](../design/output-declarations.md), which went
+  on to ship a dynamic `deploy run`-time pre-flight check closing exactly
+  this gap.
 
 ## Build-time vs. deploy-time Context — what exists today, grounded against `build_run()`
 
@@ -242,8 +241,8 @@ even have noticed.
   `DeploymentOutputStore`, the real (differently-shaped) realization of
   this doc's deploy-time Context, and the answer to the resumability
   question below
-- [output-declarations.md](../work/output-declarations.md) — the one surviving
-  open item, split out to its own design doc
+- [output-declarations.md](../design/output-declarations.md) — the one
+  surviving open item, split out to its own design doc and since shipped
 
 ## Remaining Work / Open Questions
 
@@ -270,9 +269,9 @@ even have noticed.
 - ~~Resumability of a partially-completed multi-stage deploy across
   separate CLI invocations~~ — **RESOLVED**, see "Re-check against the
   real codebase" above: `DeploymentOutputStore` (ADR-0036) is the answer.
-- **"Outputs declaration" — the one item still open.** Split out to
-  [output-declarations.md](../work/output-declarations.md) for its own design
-  thought, rather than left as a single unscheduled bullet here.
+- ~~**"Outputs declaration" — the one item still open.**~~ — **RESOLVED**,
+  split out to [output-declarations.md](../design/output-declarations.md)
+  for its own design thought, which has since shipped in full.
 
 ## Changelog
 
@@ -319,5 +318,5 @@ even have noticed.
   "resumability across invocations" open question in the process, never
   previously connected. The one surviving, still-genuinely-open item —
   Outputs Declaration — split out to its own design doc,
-  [output-declarations.md](../work/output-declarations.md). No code changed;
-  documentation only.
+  [output-declarations.md](../design/output-declarations.md). No code
+  changed; documentation only.

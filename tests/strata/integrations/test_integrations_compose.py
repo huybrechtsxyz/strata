@@ -512,7 +512,7 @@ def test_deploy_namespace_unresolvable_token_reports_a_diagnostic(monkeypatch, t
 
 
 def test_deploy_namespace_output_preflight_aborts_the_whole_namespace(monkeypatch, tmp_path: Path):
-    """docs/work/output-declarations.md Phase 3 — a missing '${output:...}'
+    """docs/design/output-declarations.md Phase 3 — a missing '${output:...}'
     key in the merged compose document aborts the whole namespace, same
     granularity the existing `ValueError`-catch path above already uses
     (unlike Helm, Compose has already merged every module into one
