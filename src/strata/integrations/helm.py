@@ -42,7 +42,7 @@ from strata.models.namespace_model import NamespaceModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
-from strata.utils.value_tokens import resolve_value_tokens_tracking_secrets
+from strata.utils.value_tokens import referenced_output_keys, resolve_value_tokens_tracking_secrets
 
 
 class HelmIntegration(InfraIntegration):
@@ -157,6 +157,29 @@ class HelmIntegration(InfraIntegration):
                     f"Namespace '{namespace.meta.name}', module '{item.reference.name}': {chart_error}",
                     location=item.reference.name,
                 )
+                continue
+
+            # Output pre-flight (docs/work/output-declarations.md Phase
+            # 3) — every '${output:STEP.KEY}' this module's own rendered
+            # values reference must already be in `tokens` before
+            # resolution is attempted. Unlike deploy_controller.py's
+            # Terraform steps, one bad module here only skips itself —
+            # the rest of the namespace still deploys (matches the
+            # severity the 2026-10-12 ValueError fix already established
+            # for this path).
+            referenced = referenced_output_keys(_render_values(item.module))
+            missing = sorted(key for key in referenced if key not in tokens)
+            if missing:
+                for key in missing:
+                    upstream_step, _, output_key = key.partition(".")
+                    available = sorted(k.split(".", 1)[1] for k in tokens if k.startswith(f"{upstream_step}."))
+                    diagnostics.error(
+                        f"Namespace '{namespace.meta.name}', module '{item.reference.name}': "
+                        f"'${{output:{key}}}' references step '{upstream_step}', but "
+                        f"'{output_key}' was not produced by it (or any durable record). "
+                        f"Available from '{upstream_step}': {available}",
+                        location=item.reference.name,
+                    )
                 continue
 
             try:

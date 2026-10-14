@@ -19,6 +19,8 @@
  */
 
 import { execFile } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { promisify } from 'util';
 import * as vscode from 'vscode';
 
@@ -66,10 +68,10 @@ export interface GraphData {
     edges: GraphEdge[];
 }
 
-/** The CLI itself could not be found on `strata.cliPath` (ENOENT). */
+/** The CLI itself could not be found on `strata.cliPath` (ENOENT), nor in a workspace `.venv`. */
 export class StrataCLINotFoundError extends Error {
     constructor(cliPath: string) {
-        super(`strata CLI not found (looked for '${cliPath}'). Set "strata.cliPath" if it is not on PATH.`);
+        super(`strata CLI not found (looked for '${cliPath}'). Set "strata.cliPath" if it is not on PATH or in a workspace .venv.`);
     }
 }
 
@@ -83,8 +85,34 @@ export class StrataCLIError extends Error {
     }
 }
 
-function getCliPath(): string {
-    return vscode.workspace.getConfiguration('strata').get<string>('cliPath', 'strata');
+const DEFAULT_CLI_PATH = 'strata';
+const VENV_DIR_NAMES = ['.venv', 'venv'];
+
+function getConfiguredCliPath(): string {
+    return vscode.workspace.getConfiguration('strata').get<string>('cliPath', DEFAULT_CLI_PATH);
+}
+
+/** A `strata` binary inside a workspace-local virtualenv, if one exists. Only consulted when `strata.cliPath` is left at its default. */
+function findVenvCliPath(cwd: string): string | undefined {
+    const binDir = process.platform === 'win32' ? 'Scripts' : 'bin';
+    const exeName = process.platform === 'win32' ? 'strata.exe' : 'strata';
+
+    for (const venvName of VENV_DIR_NAMES) {
+        const candidate = path.join(cwd, venvName, binDir, exeName);
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    return undefined;
+}
+
+/** Resolve the CLI path to invoke: an explicit `strata.cliPath` always wins, else fall back to a workspace `.venv`/`venv`, else plain `strata` on PATH. */
+function resolveCliPath(cwd: string): string {
+    const configured = getConfiguredCliPath();
+    if (configured !== DEFAULT_CLI_PATH) {
+        return configured;
+    }
+    return findVenvCliPath(cwd) ?? DEFAULT_CLI_PATH;
 }
 
 /** Node attaches `.stdout`/`.stderr`/`.code` to the rejection of a failed `execFile`. */
@@ -99,7 +127,7 @@ export class StrataClient {
 
     /** Run one `strata` subcommand and parse its JSON envelope. */
     private async run<T>(args: string[]): Promise<Envelope<T>> {
-        const cliPath = getCliPath();
+        const cliPath = resolveCliPath(this.cwd);
         const [command, ...rest] = cliPath.split(' ');
 
         try {
@@ -138,7 +166,7 @@ export class StrataClient {
 
     /** `strata version` — a bare string, not an envelope. */
     async version(): Promise<string> {
-        const cliPath = getCliPath();
+        const cliPath = resolveCliPath(this.cwd);
         const [command, ...rest] = cliPath.split(' ');
         const { stdout } = await execFileAsync(command, [...rest, 'version'], { cwd: this.cwd });
         return stdout.trim();

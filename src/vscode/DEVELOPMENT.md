@@ -10,8 +10,10 @@ How to set up, build, debug, and extend this extension. For what it does and how
 - **Node.js** 18+ and **npm** 9+ (`node --version`, `npm --version`).
 - **VS Code** 1.90 or later.
 - The **strata CLI** runnable somehow — this repository's own `uv`-managed checkout works (see
-  [Get Started](../../.github/CONTRIBUTING.md#get-started)): `uv sync --group dev`, then point
-  `strata.cliPath` at `"uv run strata"`.
+  [Get Started](../../.github/CONTRIBUTING.md#get-started)): `uv sync --group dev`. The extension
+  auto-detects a workspace `.venv`/`venv` (e.g. the `.venv/Scripts/strata.exe` that `uv sync`
+  produces) when `strata.cliPath` is left at its default — no manual configuration needed in that
+  case; set `strata.cliPath` explicitly only to override (e.g. `"uv run strata"`).
 
 ## Setup
 

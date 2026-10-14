@@ -87,7 +87,7 @@
         "strata.cliPath": {
           "type": "string",
           "default": "strata",
-          "description": "Path to the strata CLI. Use 'uv run strata' for uv-managed projects."
+          "description": "Path to the strata CLI. Leave as 'strata' to auto-detect a workspace .venv/venv before falling back to PATH, or set an explicit override such as 'uv run strata'."
         },
         "strata.validateOnSave": {
           "type": "boolean",

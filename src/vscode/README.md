@@ -20,10 +20,11 @@ yet) include.
 ## Requirements
 
 - VS Code 1.90 or later.
-- The `strata` CLI available to run — either on `PATH`, or reachable via
-  [`strata.cliPath`](#configuration) (e.g. `"uv run strata"` for a `uv`-managed checkout — see
-  [Get Started](../../.github/CONTRIBUTING.md#get-started) in this repository's own contributing
-  guide).
+- The `strata` CLI available to run — either on `PATH`, in a workspace `.venv`/`venv` (auto-detected
+  when `strata.cliPath` is left at its default, e.g. the `.venv/Scripts/strata.exe` that `uv sync`
+  produces — see [Get Started](../../.github/CONTRIBUTING.md#get-started) in this repository's own
+  contributing guide), or reachable via an explicit [`strata.cliPath`](#configuration) override
+  (e.g. `"uv run strata"`).
 - A solution: a `strata.yaml` at or above the open workspace folder (see
   [the Solution document](../../docs/config/solution.md) and
   [ADR-0015](../../docs/decisions/0015-solution-manifest-and-document-discovery.md)). The
@@ -78,10 +79,10 @@ file watcher doesn't already know to re-check (the view does not watch the files
 
 ## Configuration
 
-| Setting                 | Type    | Default    | Description                                                                |
-| ----------------------- | ------- | ---------- | -------------------------------------------------------------------------- |
-| `strata.cliPath`        | string  | `"strata"` | Path to the `strata` CLI. Use `"uv run strata"` for a uv-managed checkout. |
-| `strata.validateOnSave` | boolean | `true`     | Re-validate the whole solution whenever a YAML file is saved.              |
+| Setting                 | Type    | Default    | Description                                                                                                                                                  |
+| ----------------------- | ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `strata.cliPath`        | string  | `"strata"` | Path to the `strata` CLI. Default auto-detects a workspace `.venv`/`venv` before falling back to `PATH`; set explicitly to override, e.g. `"uv run strata"`. |
+| `strata.validateOnSave` | boolean | `true`     | Re-validate the whole solution whenever a YAML file is saved.                                                                                                |
 
 ## Troubleshooting
 
@@ -89,8 +90,8 @@ file watcher doesn't already know to re-check (the view does not watch the files
 
 The CLI could not be run. Hover the status bar item for the exact error. Most commonly:
 
-- `strata` is not on `PATH` — set `strata.cliPath`, e.g. `"uv run strata"` or an absolute path to
-  the executable.
+- `strata` is not on `PATH` and no workspace `.venv`/`venv` was found — set `strata.cliPath`, e.g.
+  `"uv run strata"` or an absolute path to the executable.
 - The configured command exists but isn't the `strata` CLI — check `strata.cliPath` is spelled
   correctly.
 

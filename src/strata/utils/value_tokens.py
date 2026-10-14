@@ -138,6 +138,41 @@ def extract_value_tokens(value: str) -> list[tuple[str, str]]:
     return [(m.group("kind"), m.group("key")) for m in VALUE_TOKEN_PATTERN.finditer(stripped)]
 
 
+def referenced_output_keys(node: object) -> set[str]:
+    """Return every ``${output:STEP.KEY}`` token's ``"STEP.KEY"`` string found
+    anywhere in `node` (a raw dns/networks/firewalls/module-services payload,
+    or any nested piece of one).
+
+    Same recursive dict/list/str walk shape as `deploy_controller.py`'s
+    `_contains_output_token()` (a presence test), but collects every key
+    instead of just testing for one — the per-step output pre-flight check
+    (docs/work/output-declarations.md) diffs this against a step's real,
+    collected `tokens` before attempting resolution. Lives in `utils`, not
+    next to `_contains_output_token()`, so both `strata.controllers` and
+    `strata.integrations` (Helm/Compose's own `deploy_namespace()`) can use
+    it without crossing this codebase's own layering (ADR-0003) — `utils`
+    is the lowest layer both sit above.
+
+    Malformed candidates are ignored here, same assumption
+    `extract_value_tokens()` itself already makes — already rejected at
+    Phase 1 schema validation, so anything reaching this point is either
+    well-formed or belongs to a document that never validated.
+    """
+    if isinstance(node, str):
+        return {key for kind, key in extract_value_tokens(node) if kind == "output"}
+    if isinstance(node, dict):
+        keys: set[str] = set()
+        for value in node.values():
+            keys |= referenced_output_keys(value)
+        return keys
+    if isinstance(node, list):
+        keys = set()
+        for item in node:
+            keys |= referenced_output_keys(item)
+        return keys
+    return set()
+
+
 def validate_cidr_or_token(value: str) -> None:
     """Validate a CIDR/IP-or-Value-binding string.
 

@@ -511,6 +511,73 @@ def test_deploy_namespace_unresolvable_token_reports_a_diagnostic(monkeypatch, t
     assert "did not resolve to a value" in diagnostics.errors[0].message
 
 
+def test_deploy_namespace_output_preflight_aborts_the_whole_namespace(monkeypatch, tmp_path: Path):
+    """docs/work/output-declarations.md Phase 3 — a missing '${output:...}'
+    key in the merged compose document aborts the whole namespace, same
+    granularity the existing `ValueError`-catch path above already uses
+    (unlike Helm, Compose has already merged every module into one
+    document by this point — there is no single offending module to skip)."""
+    calls: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+
+    module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
+    namespace_dir = tmp_path / "hearth"
+    namespace_dir.mkdir(parents=True)
+    (namespace_dir / "docker-compose.yml").write_text(
+        yaml.safe_dump({"services": {"portainer": {"environment": {"IP": "${output:infra.other_ip}"}}}})
+    )
+    resolved_module = _resolved("portainer", module, namespace_dir / "portainer")
+
+    diagnostics = ComposeIntegration().deploy_namespace(
+        _namespace("hearth"), [resolved_module], tokens={"infra.vm_ip": "10.0.0.1"}, dry_run=False
+    )
+
+    assert not diagnostics.ok
+    message = diagnostics.errors[0].message
+    assert "'${output:infra.other_ip}'" in message
+    assert "Available from 'infra': ['vm_ip']" in message
+    assert calls == []
+
+
+def test_deploy_namespace_output_preflight_runs_under_dry_run_too(monkeypatch, tmp_path: Path):
+    """The output pre-flight check is unconditional, placed before the
+    `if dry_run:` branch — a missing key must be reported, and `docker`
+    must never run at all, under a dry-run preview exactly as under a
+    real deploy."""
+    calls: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+
+    module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
+    namespace_dir = tmp_path / "hearth"
+    namespace_dir.mkdir(parents=True)
+    (namespace_dir / "docker-compose.yml").write_text(
+        yaml.safe_dump({"services": {"portainer": {"environment": {"IP": "${output:infra.other_ip}"}}}})
+    )
+    resolved_module = _resolved("portainer", module, namespace_dir / "portainer")
+
+    diagnostics = ComposeIntegration().deploy_namespace(
+        _namespace("hearth"), [resolved_module], tokens={"infra.vm_ip": "10.0.0.1"}, dry_run=True
+    )
+
+    assert not diagnostics.ok
+    assert "'${output:infra.other_ip}'" in diagnostics.errors[0].message
+    assert calls == []
+
+
 def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: Path):
     """`dry_run` is a real preview now: it writes the resolved
     `docker-compose.yml` (same real input a deploy would use) and calls

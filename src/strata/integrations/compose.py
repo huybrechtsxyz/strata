@@ -56,7 +56,7 @@ from strata.models.module_model import ModuleCheckModel, ModuleMountModel
 from strata.models.namespace_model import NamespaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
-from strata.utils.value_tokens import resolve_value_tokens_renaming_secrets
+from strata.utils.value_tokens import referenced_output_keys, resolve_value_tokens_renaming_secrets
 
 
 class ComposeIntegration(InfraIntegration):
@@ -181,6 +181,27 @@ class ComposeIntegration(InfraIntegration):
             return diagnostics
 
         document = yaml.safe_load(compose_file.read_text()) or {}
+
+        # Output pre-flight (docs/work/output-declarations.md Phase 3) —
+        # every '${output:STEP.KEY}' the merged document references must
+        # already be in `tokens` before resolution is attempted. Unlike
+        # Helm's per-module loop, Compose already merged every module into
+        # this one document — a missing key aborts the whole namespace,
+        # same granularity the existing error paths below already use.
+        referenced = referenced_output_keys(document)
+        missing = sorted(key for key in referenced if key not in tokens)
+        if missing:
+            for key in missing:
+                upstream_step, _, output_key = key.partition(".")
+                available = sorted(k.split(".", 1)[1] for k in tokens if k.startswith(f"{upstream_step}."))
+                diagnostics.error(
+                    f"Namespace '{namespace.meta.name}': '${{output:{key}}}' references step "
+                    f"'{upstream_step}', but '{output_key}' was not produced by it (or any durable "
+                    f"record). Available from '{upstream_step}': {available}",
+                    location=str(namespace.meta.name),
+                )
+            return diagnostics
+
         try:
             resolved_document, secrets = resolve_compose_values(document, tokens)
         except ValueError as exc:

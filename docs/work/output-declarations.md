@@ -1,13 +1,15 @@
 # Output Declarations — Work
 
-- Status: proposed — design sketch only, nothing built, no decisions
-  finalized. **Leading direction (2026-10-12): a dynamic per-step
-  pre-flight check inside `deploy_controller.py`, requiring no new schema
-  field at all** — found to be strictly better than the original
-  declared-schema-field sketch (no double-bookkeeping/drift risk, checks
-  real collected data instead of a separate claim about it). That
-  original sketch is kept below as an analyzed alternative, not deleted.
-- Last updated: 2026-10-12
+- Status: **design decided, 4-phase Implementation Plan written
+  (2026-10-14); all 4 phases shipped (2026-10-14) — feature complete.**
+  Leading direction (2026-10-12): a
+  dynamic per-step pre-flight check inside `deploy_controller.py`,
+  requiring no new schema field at all — found to be strictly better than
+  the original declared-schema-field sketch (no double-bookkeeping/drift
+  risk, checks real collected data instead of a separate claim about it).
+  That original sketch is kept below as an analyzed alternative, not
+  deleted.
+- Last updated: 2026-10-14
 - Split out from: [provisioning-injection-model.md](../archive/provisioning-injection-model.md)'s
   "Outputs declaration" remaining-work item — the one piece of that doc's
   Interface/Injection/Grant/Translation/Context design that survived a
@@ -303,22 +305,187 @@ unchanged.
   (dynamic) direction only needs to look at one step's own payload at a
   time, already in scope inside the existing loop.
 
+## Implementation Plan
+
+**Baseline already shipped, not part of this plan:** the 2026-10-12
+uncaught-`ValueError` fix (see above) already makes a missing/typo'd
+`${output:...}` key fail as a clean `Diagnostic` instead of a crash, at
+every real call site (Terraform backend config, the unified
+`strata.auto.tfvars.json` rewrite, Helm/Compose module values). What
+this plan adds on top is strictly a **quality/completeness** improvement,
+not a new safety property: today's fix reports the *first* bad key
+`resolve_value_tokens()` happens to hit, mid-resolution, with whatever
+generic message `value_tokens.py` produces (`"Value token '${output:X}'
+... did not resolve to a value"`). This plan collects *every* bad key
+across the whole step in one pass, before any resolution attempt, with a
+message naming the referencing step and the expected upstream producer.
+
+- [x] **Phase 1 — `referenced_output_keys()` helper, `strata/utils/
+  value_tokens.py`.** Done 2026-10-14. Deliberately placed in `utils`, not
+  next to its structural sibling `_contains_output_token()` in
+  `deploy_controller.py` — this codebase's own layering (`commands >
+  controllers > services > integrations > models > utils > logging`,
+  ADR-0003) means `strata.integrations` (Phase 3 below) can never import
+  from `strata.controllers`; `utils` is the lowest common layer both
+  Phase 2 and Phase 3 can reach.
+  - `referenced_output_keys(node: object) -> set[str]` — same recursive
+    dict/list/str walk shape as `_contains_output_token()`, collecting
+    `key` (the full `"STEP.KEY"` string) from every `extract_value_tokens()`
+    match where `kind == "output"`, unioned across the whole structure.
+    Assumes well-formed tokens only (malformed syntax is already rejected
+    at Phase 1 schema validation — same assumption `_contains_output_token()`
+    already makes, not a new one).
+  - Tests in `test_utils_value_tokens.py` (6 new): empty/no-token payload
+    (dict/list/string forms all tested), a single flat-string key, keys
+    nested across dicts and lists, mixed token kinds (only `output`
+    collected — `var`/`secret`/`feature`/`value` all present in the same
+    payload and ignored), a key appearing twice (de-duplicated via
+    `set`), scalar non-string leaves (`int`/`bool`/`None`) walked without
+    error. Full check suite green: mypy (155 files), ruff, import-linter
+    (1 kept, 0 broken), pytest (2532 passed, up from 2526).
+- [x] **Phase 2 — wire the check into `deploy_controller.py`'s Terraform
+  path.** Done 2026-10-14. `step_payload` (and its `step_claimed`
+  dependency) hoisted out of `if integration.ENV_VAR_PREFIX is not None:`
+  to run unconditionally, right before the new pre-flight check; the
+  existing block now just reuses the already-computed value. The check
+  itself runs immediately after that hoist, before `provisioner.backend`'s
+  `resolve_value_tokens_in_mapping()` call and before the tfvars rewrite:
+  `referenced_output_keys()` over `provisioner.backend.configuration`
+  (or `{}`) unioned with `step_payload`, every key not already in `tokens`
+  reported as its own `diagnostics.error(...)` (step name, the missing
+  `STEP.KEY`, and every key actually available from that upstream step),
+  then `return diagnostics` — matching the design sketch exactly, no
+  deviations.
+  - Runs under `dry_run` (matching `_merge_durable_outputs()`'s own
+    dry-run-inclusive behavior — only `smoke_test` short-circuits before
+    `tokens` is even computed, unchanged).
+  - Tests in `test_deploy_controller.py`: `test_deploy_run_resolves_
+    output_token_from_upstream_step` (pre-existing, unchanged — a real
+    produced key still resolves and deploys normally); `test_deploy_run_
+    reports_a_diagnostic_when_a_backend_configuration_token_is_unresolved`
+    (pre-existing, **updated** — now caught by this phase's pre-flight
+    check earlier than the old `ValueError`-catch path it used to hit, so
+    its assertion was rewritten to the new, more specific message instead
+    of the old generic "did not resolve to a value" text; the old
+    exception-catch call site is now unreachable for this exact scenario
+    but kept as defense-in-depth for other value-token kinds); new
+    `test_deploy_run_output_preflight_reports_every_missing_key_in_one_
+    pass` — a step referencing **two** distinct missing keys, one via
+    `backend.configuration` and one via a DNS document claimed through
+    `dns_zones` (part of `step_payload`), both reported in the same
+    `deploy run` — the concrete, testable proof this phase adds real
+    value over the already-shipped first-error-only fix. Full check suite
+    green: mypy (155 files), ruff check + format, import-linter (1 kept,
+    0 broken), pytest (2533 passed, up from 2532). Both real-world
+    fixtures (`.v2-haven` 52/0, `.v2-cfg` 82/0 + 24 accepted warnings)
+    re-validated clean, no regression.
+- [x] **Phase 3 — wire the same check into Helm/Compose's own
+  `deploy_namespace()`.** Done 2026-10-14. Turned out the two integrations
+  need different diagnostic granularity, not identical code: Helm's own
+  `deploy_namespace()` loops per-module (one `helm upgrade` each), so its
+  check runs inside that loop, right before `resolve_module_values()`,
+  scanning `referenced_output_keys(_render_values(item.module))` — a
+  missing key reports a diagnostic and `continue`s to the next module
+  (skip-only-the-offending-module, matching the already-shipped
+  2026-10-12 `ValueError` fix's own severity for this path). Compose
+  already merges every module into **one** `docker-compose.yml` before
+  this point (`deploy_namespace()`'s own docstring: "exactly one `docker
+  stack deploy` per namespace, not per module") — there is no single
+  offending module left to skip, so its check scans the merged `document`
+  once and `return diagnostics` on a miss, aborting the whole namespace
+  deploy — the same granularity its existing `ValueError`-catch path
+  already uses, not a new, inconsistent behavior.
+  - Both call sites import `referenced_output_keys` from `strata.utils.
+    value_tokens` (same Phase 1 helper, no duplication) and use the
+    identical diagnostic message shape Phase 2 established (step/module
+    name, the missing `STEP.KEY`, every key actually available from that
+    upstream step).
+  - Tests: `test_deploy_namespace_output_preflight_skips_only_the_
+    offending_module` (Helm) — two modules, one referencing a real
+    produced key and one referencing a missing key; confirms the good
+    module's `helm upgrade` still ran (exactly one real call, naming
+    'good' not 'bad') while the bad module is reported and skipped.
+    `test_deploy_namespace_output_preflight_aborts_the_whole_namespace`
+    (Compose) — one missing key in the merged document; confirms zero
+    `docker stack deploy` calls happened (whole namespace aborted, not a
+    partial deploy). Full check suite green: mypy (155 files), ruff check
+    + format, import-linter (1 kept, 0 broken), pytest (2535 passed, up
+    from 2533). Both real-world fixtures (`.v2-haven` 52/0, `.v2-cfg`
+    82/0 + 24 accepted warnings) re-validated clean, no regression.
+- [x] **Phase 4 — documentation.** Done 2026-10-14. Updated this doc's
+  own `Status` line to the fully-shipped state above. Re-checked
+  `deploy-command.md`'s own status summary and found two genuinely stale
+  spots (its header, and the "Concrete implementation plan" step 3 note)
+  both still claiming the literal `KEY` half of `${output:STEP.KEY}` was
+  wholly unvalidated ("matches ADR-0006's own admission that Context does
+  not solve output validation") — true when written 2026-10-12, superseded
+  two days later by Phases 1-3 here; added forward pointers at both
+  locations rather than rewriting the historical claims in place (they
+  were accurate descriptions of that specific 2026-10-12 fix, only the
+  reader's takeaway needed updating). Confirmed (again) no
+  `docs/work/gap_fit_v1.md` entry belongs here — this is a new feature
+  with no v1 precedent to be "behind" on, not a parity gap. No code
+  changed; documentation only.
+
+## Code Review (2026-10-14, post-Phase-4)
+
+A review of the full Phases 1-3 diff (`deploy_controller.py`, `helm.py`,
+`compose.py`, `value_tokens.py` + tests) found no functional bugs. Check
+placement is correct in all three integrations (after the container-
+capability dispatch in `deploy_controller.py`, so Helm/Compose steps
+never hit the Terraform-path check twice; before any `dry_run` branching
+in all three, so a dry-run preview gets the same protection a real
+deploy does), and each integration's abort granularity matches that
+integration's own pre-existing `ValueError`-catch precedent at the same
+call site, not a new, invented severity model.
+
+Four minor, non-blocking observations surfaced, disposed of as follows:
+
+1. **Double computation in Helm** — `_render_values(item.module)` runs
+   once in the pre-flight check and again inside `resolve_module_values()`.
+   Deliberate (keeps both functions pure/side-effect-free per their own
+   existing docstrings) and cheap given realistic module sizes. **Not
+   changed** — the duplication is the right tradeoff here, not an
+   oversight.
+2. **Cosmetic edge case in the "Available from" diagnostic hint** — it's
+   derived by splitting `tokens` dict keys on the first `.`; a
+   `${var:}`/`${secret:}`/`${feature:}` key name that itself contained a
+   literal `.` matching an upstream step's name as a prefix (e.g. a var
+   named `infra.foo`) could appear in the hint as if it were a real
+   output. Doesn't affect missing-key *detection*, only the hint text,
+   and the ambiguity is inherited from the pre-existing `tokens` merge
+   design (`{**resolved.values, **visible_outputs}`), not introduced by
+   this feature. Strata's own var/secret naming convention is
+   `UPPER_SNAKE_CASE`, making a real collision implausible. **Not
+   changed** — flagged for awareness, not worth a defensive fix for a
+   naming collision this codebase's own conventions already avoid.
+3. **Test gap: no test proved the check still fires under `dry_run=True`**
+   for any of the three integrations. **Fixed 2026-10-14** — added
+   `test_deploy_run_output_preflight_runs_under_dry_run_too`
+   (`test_deploy_controller.py`), `test_deploy_namespace_output_preflight_
+   runs_under_dry_run_too` (both `test_integrations_helm.py` and
+   `test_integrations_compose.py`). Each confirms both halves: the
+   diagnostic still fires, and the underlying tool (`terraform`/`helm`/
+   `docker`) is never invoked at all for the affected step/module/
+   namespace — not merely skipped past a later dry-run-specific branch.
+   Full check suite green: mypy (155 files), ruff check + format,
+   import-linter (1 kept, 0 broken), pytest (2538 passed, up from 2535).
+4. **Slightly widened scope** — `deploy_controller.py`'s `step_payload`
+   computation is now unconditional (previously only computed when
+   `integration.ENV_VAR_PREFIX is not None`). Harmless today (every
+   non-container integration is Terraform, which always sets that
+   prefix) but worth remembering if a future `ENV_VAR_PREFIX = None`,
+   non-container tool is ever added — it will now also pay this
+   computation's cost. **Not changed** — this is the correct design
+   (the check must see every Terraform-shaped step's real payload
+   regardless of delivery mechanism), just noted for future-reader
+   awareness.
+
 ## Remaining Work / Open Questions
 
-- **Leading direction still needs: the exact key-extraction helper** —
-  something like `_referenced_output_keys(payload) -> set[str]`, mirroring
-  `_contains_output_token()`'s existing recursive walk but collecting
-  every `${output:...}` key found rather than just testing presence, so
-  the new check can diff it against `tokens`. Not yet written.
-- **Exact diagnostic wording** for a step referencing a missing key —
-  should name the referencing step, the missing key, and ideally the
-  upstream step it was expected to come from (parseable directly from
-  the token's own `"STEP.KEY"` shape). Not yet precisely worded.
-- **The separate uncaught-`ValueError` bug** (see above) — worth fixing
-  regardless of whether this check gets built; a proper pre-flight check
-  would also remove the only path that currently reaches it for the
-  `output` token kind specifically, but `var`/`secret`/`feature`/`value`
-  tokens would still be able to hit it today.
+- **None — all 4 phases shipped 2026-10-14.** See the Implementation Plan
+  above for the key-extraction helper and diagnostic wording (Phase 1/2),
+  and both the Terraform and Helm/Compose wiring (Phase 2/3).
 - **Does this need its own ADR** — leaning no, more strongly than the
   schema-field alternative did: this is an extension of an existing,
   already-built function (`_merge_durable_outputs()`'s own neighborhood),
@@ -330,6 +497,33 @@ unchanged.
 
 ## Changelog
 
+- 2026-10-14: **Post-Phase-4 code review** — reviewed the full Phases 1-3
+  diff, found no functional bugs; 4 minor observations recorded in the
+  new "Code Review" section above. Of those, one was a genuine test gap
+  (no test proved the pre-flight check still fires, and the underlying
+  tool is never invoked, under `dry_run=True`) — fixed with 3 new tests,
+  one per integration. The other three (Helm's double `_render_values()`
+  call, a cosmetic edge case in the "Available from" hint's dotted-key
+  splitting, and `step_payload`'s now-unconditional computation) were
+  deliberately left as-is — each is either the correct tradeoff already,
+  or a pre-existing characteristic this feature inherited rather than
+  introduced. Full check suite green: mypy (155 files), ruff check +
+  format, import-linter (1 kept, 0 broken), pytest (2538 passed, up from
+  2535).
+- 2026-10-14: **Built Phase 4 — documentation wrap-up. All 4 phases now
+  shipped; feature complete.** Updated this doc's own `Status` line and
+  `Remaining Work` section to the fully-shipped state. Re-checked
+  `deploy-command.md` per the plan's own instruction and found two
+  genuinely stale spots (its header, and the "Concrete implementation
+  plan" step 3 note) still claiming the literal `KEY` half of
+  `${output:STEP.KEY}` was wholly unvalidated — true when written
+  2026-10-12, superseded two days later by Phases 1-3 here. Added
+  forward pointers at both locations plus a dated Changelog entry there,
+  rather than rewriting the historical claims in place (accurate
+  descriptions of that specific 2026-10-12 fix at the time — only the
+  reader's takeaway needed updating). Confirmed, again, no
+  `docs/work/gap_fit_v1.md` entry belongs here. No code changed;
+  documentation only.
 - 2026-10-12: Created, split out of `provisioning-injection-model.md`'s
   "Outputs declaration" remaining-work item after a re-check found it was
   the one piece of that doc's design that wasn't dead. Design sketch
@@ -352,6 +546,66 @@ unchanged.
   built, must be static regex/HCL scanning instead (same technique
   `terraform.py`'s `_STRATA_VARIABLE_DECLARATION` already uses), never a
   real `terraform` invocation.
+- 2026-10-14: **Wrote the 4-phase Implementation Plan** ("create and
+  design an implementation plan") for the leading (dynamic) direction —
+  Phase 1 (`referenced_output_keys()` helper, placed in `strata/utils/
+  value_tokens.py` rather than next to `_contains_output_token()` in
+  `deploy_controller.py`, since `strata.integrations` can never import
+  from `strata.controllers`, ADR-0003 layering, and Phase 3 needs it from
+  `helm.py`/`compose.py`), Phase 2 (wire into `deploy_controller.py`'s
+  Terraform path, hoisting `step_payload`'s computation so both
+  `backend.configuration` and the unified tfvars payload are covered in
+  one pre-flight pass), Phase 3 (same check in Helm/Compose's own
+  `deploy_namespace()`, skip-only-the-offending-module severity matching
+  the already-shipped ValueError fix), Phase 4 (docs only, no new
+  `gap_fit_v1.md` entry — confirmed this is a new feature, not a v1
+  parity gap). Clarified precisely what this plan adds on top of the
+  already-shipped 2026-10-12 fix: not a new safety property (missing keys
+  already fail cleanly today) but comprehensiveness (every bad key in one
+  pass, not just the first) and better diagnostic wording. Superseded the
+  "exact key-extraction helper"/"exact diagnostic wording" Remaining Work
+  items, both now resolved by the plan. No code changed; documentation
+  only.
+- 2026-10-14: **Built Phase 3** — wired `referenced_output_keys()` into
+  `HelmIntegration.deploy_namespace()` (`helm.py`) and
+  `ComposeIntegration.deploy_namespace()` (`compose.py`). Found the two
+  integrations genuinely need different diagnostic granularity rather
+  than identical code: Helm's per-module loop reports a missing key and
+  skips only that module, letting every other module in the namespace
+  still deploy; Compose has already merged all modules into one
+  `docker-compose.yml` by this point, so a missing key aborts the whole
+  namespace — matching each integration's own existing `ValueError`-catch
+  severity at the same call site, not a new inconsistency. One new test
+  per integration, each proving the respective granularity empirically
+  (Helm: the good module's `helm upgrade` really ran, naming only 'good';
+  Compose: zero `docker stack deploy` calls happened at all). Full check
+  suite green: mypy (155 files), ruff check + format, import-linter (1
+  kept, 0 broken), pytest (2535 passed, up from 2533). Both `.v2-haven`
+  and `.v2-cfg` re-validated clean, no regression. Phase 4 (docs only)
+  still to come.
+- 2026-10-14: **Built Phase 2** — wired `referenced_output_keys()` into
+  `deploy_controller.py`'s Terraform delivery path. `step_payload`
+  (previously computed only inside the `ENV_VAR_PREFIX` tfvars-rewrite
+  branch) hoisted to run unconditionally; a new pre-flight check right
+  after it unions `referenced_output_keys()` over `provisioner.backend.
+  configuration` and `step_payload`, reports every key missing from
+  `tokens` as its own diagnostic (naming the real keys available from
+  that upstream step), then returns before any resolution/file-write is
+  attempted. One pre-existing test's assertion updated (the pre-flight
+  check now catches its scenario earlier, with a better message, than the
+  old generic `ValueError`-catch path it used to exercise). One new test
+  proves the comprehensiveness this phase adds: two distinct missing keys
+  (one via `backend.configuration`, one via a claimed DNS document) both
+  reported in a single `deploy run`. Full check suite green: mypy (155
+  files), ruff check + format, import-linter (1 kept, 0 broken), pytest
+  (2533 passed, up from 2532). Both `.v2-haven` and `.v2-cfg` re-validated
+  clean, no regression. Phases 3-4 still to come.
+- 2026-10-14: **Built Phase 1** — `referenced_output_keys()` added to
+  `strata/utils/value_tokens.py` (recursive dict/list/str walk, collects
+  every `${output:STEP.KEY}` token's `"STEP.KEY"` string, ignores every
+  other token kind). 6 new tests in `test_utils_value_tokens.py`. Full
+  check suite green: mypy (155 files), ruff, import-linter (1 kept, 0
+  broken), pytest (2532 passed). Phases 2-4 still to come.
 - 2026-10-12: **Found a strictly better direction, superseding the
   declared-schema-field sketch as the leading recommendation** — a
   dynamic per-step pre-flight check inside `deploy_controller.py`'s

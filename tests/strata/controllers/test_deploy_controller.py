@@ -1743,9 +1743,13 @@ def test_deploy_run_resolves_output_token_from_upstream_step(tmp_path: Path, mon
 def test_deploy_run_reports_a_diagnostic_when_a_backend_configuration_token_is_unresolved(tmp_path: Path, monkeypatch):
     """A referenced key genuinely missing from `tokens` (here: an upstream
     step's Terraform output never produced it) must not escape as a bare
-    `ValueError` — `resolve_value_tokens_in_mapping()` raises one, and
-    `deploy_controller.py`'s backend.configuration call site must catch it
-    and report a clean diagnostic instead of crashing with a raw traceback."""
+    `ValueError`. Caught earlier now than the 2026-10-12 fix that first
+    closed this crash (docs/work/output-declarations.md Phase 2, 2026-10-14):
+    the output pre-flight check reports a clean, specific diagnostic before
+    `resolve_value_tokens_in_mapping()` is even called — the backend.
+    configuration call site's own `except ValueError` remains as
+    defense-in-depth for any other value-token kind, unreachable for this
+    exact `${output:...}` scenario now."""
     root = _output_chained_solution(tmp_path)
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
@@ -1765,7 +1769,128 @@ def test_deploy_run_reports_a_diagnostic_when_a_backend_configuration_token_is_u
     diagnostics = deploy_run(_context(root), "app", build_path)
 
     assert not diagnostics.ok
-    assert "did not resolve to a value" in diagnostics.messages()[0]
+    message = diagnostics.messages()[0]
+    assert "'${output:apply_infra.vm_ip}'" in message
+    assert "references step 'apply_infra'" in message
+    assert "was not produced by it" in message
+
+
+def test_deploy_run_output_preflight_reports_every_missing_key_in_one_pass(tmp_path: Path, monkeypatch):
+    """docs/work/output-declarations.md Phase 2 — the concrete proof this
+    phase adds real value over the already-shipped (2026-10-12)
+    first-error-only exception catch: a step referencing TWO distinct
+    missing '${output:...}' keys, one via backend.configuration and one via
+    a claimed DNS document (part of `step_payload`), must report BOTH in a
+    single `deploy run`, not just whichever call site happens to raise
+    first."""
+    root = _solution(tmp_path)
+    _write(root, "infra_a/main.tf", "# root module\n")
+    _write(root, "infra_b/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  type: local\n  region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "dns.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: dns\nmeta:\n  name: public-dns\nspec:\n"
+        "  zones:\n    - name: example.com\n      records:\n"
+        "        - name: '@'\n          type: A\n          value: '${output:apply_infra.public_ip}'\n"
+        "      default_tags:\n        environment: prd\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  dns_zones:\n    - public-dns\n"
+        "  provisioners:\n"
+        "    - name: tf_infra\n      tool: terraform\n      source:\n        source_path: infra_a\n"
+        "    - name: tf_apps\n      tool: terraform\n      source:\n        source_path: infra_b\n"
+        "      backend:\n        type: local\n        configuration:\n"
+        "          host: ${output:apply_infra.vm_ip}\n"
+        "  execution:\n"
+        "    - name: apply_infra\n      provisioner: tf_infra\n      resources:\n        - r1\n"
+        "    - name: apply_apps\n      provisioner: tf_apps\n      resources:\n        - r1\n"
+        "      dns_zones:\n        - public-dns\n"
+        "      depends_on:\n        - apply_infra\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "output":
+            # apply_infra's real Terraform output never declares either
+            # 'vm_ip' or 'public_ip' — both of apply_apps's references stay
+            # unresolved.
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert not diagnostics.ok
+    messages = " ".join(diagnostics.messages())
+    assert "'${output:apply_infra.vm_ip}'" in messages
+    assert "'${output:apply_infra.public_ip}'" in messages
+
+
+def test_deploy_run_output_preflight_runs_under_dry_run_too(tmp_path: Path, monkeypatch):
+    """The output pre-flight check is unconditional, placed before any
+    `dry_run` branching — a missing key must be reported, and the
+    referencing step's own `terraform` commands must never run, under
+    `--dry-run` exactly as under a real run (not merely skipped past)."""
+    root = _output_chained_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    calls: list[tuple[list[str], Path | None]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append((list(args), cwd))
+        if args[1] == "output":
+            # apply_infra's real Terraform output never declares 'vm_ip' —
+            # apply_apps's backend.configuration still references it.
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, dry_run=True)
+
+    assert not diagnostics.ok
+    assert "'${output:apply_infra.vm_ip}'" in diagnostics.messages()[0]
+    # apply_apps's own tool is never invoked at all — not even a dry-run
+    # init/validate/plan — the check runs before any of that.
+    assert not any(cwd is not None and cwd.name == "infra_b" for _, cwd in calls)
 
 
 def test_deploy_run_reports_a_diagnostic_when_a_strata_payload_token_is_unresolved(tmp_path: Path, monkeypatch):

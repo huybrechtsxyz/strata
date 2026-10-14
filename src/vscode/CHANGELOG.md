@@ -4,7 +4,17 @@ All notable changes to this extension are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project follows the same versioning as
 the `strata` CLI it wraps.
 
+## [Unreleased]
+
+### Added
+
+- **Workspace `.venv` auto-detection** — when `strata.cliPath` is left at its default (`"strata"`),
+  the CLI wrapper now checks for `.venv`/`venv` (`Scripts/strata.exe` on Windows, `bin/strata`
+  elsewhere) in the workspace folder before falling back to `PATH`. An explicit `strata.cliPath`
+  override still always wins.
+
 ## [0.0.1] — 2026-10-01
+
 
 Initial scaffold. Wraps v2's CLI surface as it exists today — `validate`, `graph`, `version` — not
 a port of [v1's extension](https://github.com/huybrechtsxyz/strata/tree/main/src/vscode); see

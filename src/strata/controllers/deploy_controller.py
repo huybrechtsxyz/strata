@@ -60,7 +60,7 @@ from strata.models.workspace_model import WorkspaceModel, claimed_names, effecti
 from strata.services.environment_service import merge_environment_models
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
-from strata.utils.value_tokens import extract_value_tokens, resolve_value_tokens_in_mapping
+from strata.utils.value_tokens import extract_value_tokens, referenced_output_keys, resolve_value_tokens_in_mapping
 
 #: Minimum length a resolved secret value must have before `_redact()`
 #: will replace it out of streamed subprocess output — a short secret
@@ -703,6 +703,50 @@ def deploy_run(
             _step(f"deployed step '{step.name}' via {integration_type}")
             continue
 
+        # This step's own view: dns/networks/firewalls filtered to
+        # what it claims plus whatever nobody claims (gap #12,
+        # unchanged); every other category broadcasts as-is — no
+        # per-category file-existence filtering needed any more
+        # (Phase 2: `build_strata_payload()` always emits every key).
+        # Computed unconditionally (not just when `integration.ENV_VAR_
+        # PREFIX is not None`, below) so the output pre-flight check right
+        # after it can scan this step's real payload regardless of which
+        # delivery mechanism the tool uses.
+        step_claimed = claimed_names(step, resources_by_name, topologies_by_name)
+        step_payload = {
+            category: (
+                {
+                    name: doc
+                    for name, doc in docs.items()
+                    if name in step_claimed or name not in claimed_by_category[category]
+                }
+                if category in claimed_by_category
+                else docs
+            )
+            for category, docs in payload.items()
+        }
+
+        # Output pre-flight (docs/work/output-declarations.md) — every
+        # '${output:STEP.KEY}' this step's own payload references must
+        # already be in `tokens` (this invocation's outputs, merged with
+        # any durable record above) before any resolution/file-write is
+        # attempted below. Reports every missing key in one pass, not
+        # just the first `resolve_value_tokens()` happens to hit.
+        backend_configuration = provisioner.backend.configuration if provisioner.backend is not None else {}
+        referenced = referenced_output_keys(backend_configuration) | referenced_output_keys(step_payload)
+        missing = sorted(key for key in referenced if key not in tokens)
+        if missing:
+            for key in missing:
+                upstream_step, _, output_key = key.partition(".")
+                available = sorted(k.split(".", 1)[1] for k in tokens if k.startswith(f"{upstream_step}."))
+                diagnostics.error(
+                    f"Step '{step.name}': '${{output:{key}}}' references step '{upstream_step}', but "
+                    f"'{output_key}' was not produced by it (or any durable record). "
+                    f"Available from '{upstream_step}': {available}",
+                    location=step.name,
+                )
+            return diagnostics
+
         backend_config: dict[str, str] = {}
         if provisioner.backend is not None:
             try:
@@ -726,24 +770,6 @@ def deploy_run(
         # it, rather than injecting a meaningless `"NoneD ns"`-shaped env
         # var.
         if integration.ENV_VAR_PREFIX is not None:
-            # This step's own view: dns/networks/firewalls filtered to
-            # what it claims plus whatever nobody claims (gap #12,
-            # unchanged); every other category broadcasts as-is — no
-            # per-category file-existence filtering needed any more
-            # (Phase 2: `build_strata_payload()` always emits every key).
-            step_claimed = claimed_names(step, resources_by_name, topologies_by_name)
-            step_payload = {
-                category: (
-                    {
-                        name: doc
-                        for name, doc in docs.items()
-                        if name in step_claimed or name not in claimed_by_category[category]
-                    }
-                    if category in claimed_by_category
-                    else docs
-                )
-                for category, docs in payload.items()
-            }
             try:
                 resolved_payload, strata_secrets = rewrite_strata_payload(
                     step_payload, tokens, sensitive_output_keys=visible_sensitive_outputs

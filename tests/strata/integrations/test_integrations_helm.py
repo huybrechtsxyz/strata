@@ -756,6 +756,100 @@ def test_deploy_namespace_unresolvable_token_reports_a_diagnostic_and_skips(monk
     assert "did not resolve to a value" in diagnostics.errors[0].message
 
 
+def test_deploy_namespace_output_preflight_skips_only_the_offending_module(monkeypatch, tmp_path: Path):
+    """docs/work/output-declarations.md Phase 3 — a module referencing a
+    missing '${output:...}' key is skipped with a specific diagnostic;
+    every OTHER module in the same namespace still deploys (unlike
+    deploy_controller.py's Terraform steps, which abort the whole run)."""
+    calls: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+
+    good_module = _module(
+        "good",
+        services=[
+            ModuleServiceModel(
+                name="server", environment=[ModuleServiceEnvironmentModel(key="IP", value="${output:infra.vm_ip}")]
+            )
+        ],
+    )
+    bad_module = _module(
+        "bad",
+        services=[
+            ModuleServiceModel(
+                name="server", environment=[ModuleServiceEnvironmentModel(key="IP", value="${output:infra.other_ip}")]
+            )
+        ],
+    )
+    good_dir = tmp_path / "apps" / "good"
+    bad_dir = tmp_path / "apps" / "bad"
+    good_dir.mkdir(parents=True)
+    bad_dir.mkdir(parents=True)
+    (good_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "good", "namespace": "apps"}))
+    (bad_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "bad", "namespace": "apps"}))
+    resolved_modules = [
+        _resolved_module("good", good_module, good_dir),
+        _resolved_module("bad", bad_module, bad_dir),
+    ]
+
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(), resolved_modules, tokens={"infra.vm_ip": "10.0.0.1"}, dry_run=False
+    )
+
+    assert not diagnostics.ok
+    message = diagnostics.errors[0].message
+    assert "module 'bad'" in message
+    assert "'${output:infra.other_ip}'" in message
+    assert "Available from 'infra': ['vm_ip']" in message
+    # The good module still deployed — one real `helm upgrade` call, for 'good' only.
+    assert len(calls) == 1
+    assert "good" in calls[0]
+    assert "bad" not in calls[0]
+
+
+def test_deploy_namespace_output_preflight_runs_under_dry_run_too(monkeypatch, tmp_path: Path):
+    """The output pre-flight check is unconditional, placed before the
+    `if dry_run:` branch — a missing key must be reported, and `helm`
+    must never run at all for that module, under a dry-run preview
+    exactly as under a real deploy."""
+    calls: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+
+    module = _module(
+        "bad",
+        services=[
+            ModuleServiceModel(
+                name="server", environment=[ModuleServiceEnvironmentModel(key="IP", value="${output:infra.other_ip}")]
+            )
+        ],
+    )
+    module_dir = tmp_path / "apps" / "bad"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "bad", "namespace": "apps"}))
+    resolved_module = _resolved_module("bad", module, module_dir)
+
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(), [resolved_module], tokens={"infra.vm_ip": "10.0.0.1"}, dry_run=True
+    )
+
+    assert not diagnostics.ok
+    assert "'${output:infra.other_ip}'" in diagnostics.errors[0].message
+    assert calls == []
+
+
 def test_deploy_namespace_unresolvable_chart_remote_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):
     _capture(monkeypatch)
     module = _module(source=SourceModel(remote="missing", chart_name="authentik"))

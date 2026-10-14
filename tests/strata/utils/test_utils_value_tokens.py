@@ -10,6 +10,7 @@ from strata.utils.value_tokens import (
     extract_value_tokens,
     find_malformed_value_tokens,
     has_value_tokens,
+    referenced_output_keys,
     resolve_value_tokens,
     resolve_value_tokens_in_mapping,
     resolve_value_tokens_renaming_secrets,
@@ -194,6 +195,56 @@ def test_extract_value_tokens_accepts_a_bare_single_segment_value_token():
     `value_reference_invalid_path`, not here."""
     assert extract_value_tokens("${value:onlyonesegment}") == [("value", "onlyonesegment")]
     assert find_malformed_value_tokens("${value:onlyonesegment}") == []
+
+
+# ---------------------------------------------------------------------------
+# referenced_output_keys() — docs/work/output-declarations.md Phase 1, the
+# per-step output pre-flight check's key-extraction helper.
+# ---------------------------------------------------------------------------
+
+
+def test_referenced_output_keys_empty_payload_returns_empty_set():
+    assert referenced_output_keys({}) == set()
+    assert referenced_output_keys([]) == set()
+    assert referenced_output_keys("no tokens here") == set()
+
+
+def test_referenced_output_keys_finds_a_single_key_in_a_flat_string():
+    assert referenced_output_keys("${output:provision_infra.vm_ip}") == {"provision_infra.vm_ip"}
+
+
+def test_referenced_output_keys_finds_keys_nested_in_dicts_and_lists():
+    payload = {
+        "backend": {
+            "resource_group_name": "${output:provision_infra.rg_name}",
+            "tags": ["static", "${output:provision_infra.env_tag}"],
+        },
+        "other": "literal",
+    }
+    assert referenced_output_keys(payload) == {"provision_infra.rg_name", "provision_infra.env_tag"}
+
+
+def test_referenced_output_keys_ignores_non_output_token_kinds():
+    payload = {
+        "a": "${var:REGION}",
+        "b": "${secret:DB_PASSWORD}",
+        "c": "${feature:ENABLE_X}",
+        "d": "${value:tenant.c0062.meta.name}",
+        "e": "${output:provision_infra.vm_ip}",
+    }
+    assert referenced_output_keys(payload) == {"provision_infra.vm_ip"}
+
+
+def test_referenced_output_keys_deduplicates_a_repeated_key():
+    payload = ["${output:provision_infra.vm_ip}", "${output:provision_infra.vm_ip}"]
+    assert referenced_output_keys(payload) == {"provision_infra.vm_ip"}
+
+
+def test_referenced_output_keys_handles_scalar_non_string_leaves():
+    """Ints/bools/None leaves (real passthrough payload shapes) are simply
+    not strings — walked without error, contribute no keys."""
+    payload = {"count": 3, "enabled": True, "note": None, "url": "${output:step1.endpoint}"}
+    assert referenced_output_keys(payload) == {"step1.endpoint"}
 
 
 def test_resolve_value_tokens_raises_on_an_unresolved_value_token():

@@ -24,8 +24,14 @@
   durably persists outputs via a pluggable key/value backend instead of
   re-querying a Terraform step's own remote backend live — see the
   "Status" section below this design's own body for exactly how steps
-  (1)-(3) now relate to that shipped mechanism.
-- Last updated: 2026-10-12
+  (1)-(3) now relate to that shipped mechanism. **The literal `KEY` half
+  of `${output:STEP.KEY}` (never validated by any of the above — only
+  `STEP` was) is now checked too, dynamically at `deploy run` time**:
+  [output-declarations.md](output-declarations.md)'s 4-phase pre-flight
+  check (Phases 1-3 shipped 2026-10-14) reports every referenced key
+  missing from a step's/module's own collected outputs, before any
+  resolution or file-write is attempted.
+- Last updated: 2026-10-14
 
 
 See also: [docs/design/deploy-plan-preview.md](../design/deploy-plan-preview.md)
@@ -1018,9 +1024,13 @@ each to the same `unresolved_value_tokens()` call uniformly.
 3. **`unresolved_value_tokens()`** (`environment_service.py`) — new
    `output_claimed: bool = False` parameter. When checking a token of
    kind `"output"`: `output_claimed=True` → accept it (key existence
-   still unvalidatable — matches ADR-0006's own admission that Context
-   "does not solve output validation" — this only fixes the false
-   rejection, not add new key-checking); `output_claimed=False`
+   still unvalidatable *here* — matches ADR-0006's own admission that
+   Context "does not solve output validation" — this only fixes the
+   false rejection at `strata validate` time, not add new key-checking;
+   the literal `KEY` half is since validated, but dynamically at `deploy
+   run` time rather than statically here —
+   [output-declarations.md](output-declarations.md)'s own Phases 1-3,
+   shipped 2026-10-14); `output_claimed=False`
    (default, every existing caller unaffected) → today's exact
    `unsupported_value_token_kind` message, unchanged wording, still
    correctly fires for a genuinely-unclaimed document.
@@ -1918,4 +1928,20 @@ were — small, independently-testable, full check suite after each.
   `HelmIntegration`/`ComposeIntegration.ENV_VAR_PREFIX is None` assertion
   added to each class's existing contract test. Full check suite green:
   mypy 107 files, ruff clean, import-linter 1/0, pytest 1214 passed.
+- 2026-10-14: **Status header and the Cross-invocation output access
+  section's step-3 note refreshed** (output-declarations.md Phase 4,
+  docs-only) — both had gone stale claiming `${output:STEP.KEY}`'s
+  literal `KEY` half was still wholly unvalidated ("matches ADR-0006's
+  own admission that Context does not solve output validation"), true
+  when written (2026-10-12) but superseded two days later:
+  [output-declarations.md](output-declarations.md)'s own Phases 1-3
+  shipped a dynamic pre-flight check at `deploy run` time (`deploy_
+  controller.py`'s Terraform path, `helm.py`/`compose.py`'s own
+  `deploy_namespace()`) that reports every referenced key missing from
+  a step's/module's own collected outputs before any resolution is
+  attempted. Added forward pointers at both locations rather than
+  rewriting the historical claim in place — it was accurate for the
+  2026-10-12 fix being described at that point in time, only the
+  reader's takeaway needed updating. No code changed; documentation
+  only.
 
