@@ -26,14 +26,20 @@ existence already vetted; an unresolved reference produces no duplicate
 finding here — `validate_references` already reported it.
 """
 
+from itertools import combinations
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
+
+from jsonschema.exceptions import SchemaError
+from referencing.exceptions import Unresolvable
 
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
 from strata.integrations.capabilities import KeyValueStoreIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.registry import get_class as get_integration_class
+from strata.logging.config import get_logger
+from strata.models.attributeconfig_model import AttributeConfigModel
 from strata.models.common_models import PlatformBaseModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
 from strata.models.deployment_model import DeploymentModel
@@ -51,6 +57,13 @@ from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
+from strata.services.attributeconfig_evaluator import (
+    ATTRIBUTECONFIG_INVALID_CODE,
+    build_validator,
+    evaluate_selector,
+    selectors_compatible,
+    translate_validation_error,
+)
 from strata.services.deployment_service import DeploymentService
 from strata.services.environment_service import EnvironmentService, unresolved_value_tokens
 from strata.services.provider_service import ProviderService
@@ -59,6 +72,8 @@ from strata.services.tenant_service import TenantService
 from strata.services.workspace_service import WorkspaceService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
+
+log = get_logger(__name__)
 
 
 def run_semantic_checks(
@@ -92,7 +107,7 @@ def run_semantic_checks(
             other Configuration-backed check here already uses.
 
     Returns:
-        Every finding, from all twelve checks combined.
+        Every finding, from all thirteen checks combined.
     """
     resolved = resolved_deployments or {}
     diagnostics = Diagnostics()
@@ -100,6 +115,8 @@ def run_semantic_checks(
     diagnostics.extend(_check_tenants(index))
     diagnostics.extend(_check_providers(index))
     diagnostics.extend(_check_resources(index))
+    diagnostics.extend(_check_attributeconfigs(index))
+    diagnostics.extend(_check_attributeconfig_conflicts(index))
     diagnostics.extend(_check_workspaces(index))
     diagnostics.extend(_check_environments(index))
     diagnostics.extend(_check_deployment_value_tokens(index, resolved))
@@ -360,6 +377,149 @@ def _check_providers(index: DocumentIndex) -> Diagnostics:
         config = cast(ProviderConfigModel, config_entry.model)
         diagnostics.extend(service.validate_against_provider_config(config), source=str(entry.source))
     return diagnostics
+
+
+# ---------------------------------------------------------------------------
+# attributeconfig -> target kind: JSON Schema validation of properties/
+# custom/configuration blocks (docs/design/dynamic-configuration-validation.md)
+# ---------------------------------------------------------------------------
+
+
+def _check_attributeconfigs(index: DocumentIndex) -> Diagnostics:
+    """Apply every `attributeconfig` document's schema to its matching
+    documents (D7: conjunctive, no merge — every match is checked
+    independently and all must pass).
+
+    A matching document that doesn't set `target.block` at all is checked as
+    an empty object (`{}`), not skipped — the failure mode this feature
+    exists to catch is a document that omits a required attribute entirely,
+    not only one that sets it with the wrong shape.
+
+    D8's visibility: every `(document, schema)` pair actually evaluated is
+    traced via `log.info()` (stderr, `--verbose` only); a schema matching
+    zero documents gets `diagnostics.warning()` instead — a guardrail that
+    silently never runs is indistinguishable from one that always passes.
+    """
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.ATTRIBUTECONFIG):
+        attributeconfig = cast(AttributeConfigModel, entry.model)
+        target = attributeconfig.spec.target
+
+        try:
+            validator = build_validator(attributeconfig.spec.schema_)
+        except SchemaError as exc:
+            diagnostics.error(
+                f"attributeconfig '{entry.ref.name}': invalid schema: {exc.message}",
+                source=str(entry.source),
+                location="spec.schema",
+                code=ATTRIBUTECONFIG_INVALID_CODE,
+            )
+            continue
+
+        selector = target.selector or {}
+        matches = [candidate for candidate in index.all_of(target.kind) if evaluate_selector(candidate.model, selector)]
+        if not matches:
+            diagnostics.warning(
+                f"attributeconfig '{entry.ref.name}': selector matched no '{target.kind.value}' document — "
+                "this schema is not guarding anything.",
+                source=str(entry.source),
+                location="spec.target.selector",
+                code="attributeconfig_unused",
+            )
+            continue
+
+        for candidate in matches:
+            log.info("attributeconfig applied", document=str(candidate.ref), schema=str(entry.ref))
+            spec = getattr(candidate.model, "spec", None)
+            value = getattr(spec, target.block, None) or {}
+            try:
+                errors = list(validator.iter_errors(value))
+            except Unresolvable as exc:
+                diagnostics.error(
+                    f"attributeconfig '{entry.ref.name}': schema references an external resource, which is "
+                    f"not allowed: {exc}",
+                    source=str(candidate.source),
+                    location=f"spec.{target.block}",
+                    code=ATTRIBUTECONFIG_INVALID_CODE,
+                )
+                continue
+
+            for error in errors:
+                code, message, relative_location = translate_validation_error(error)
+                location = f"spec.{target.block}.{relative_location}" if relative_location else f"spec.{target.block}"
+                diagnostics.error(message, source=str(candidate.source), location=location, code=code)
+    return diagnostics
+
+
+def _check_attributeconfig_conflicts(index: DocumentIndex) -> Diagnostics:
+    """Load-time duplicate-attribute check (Q12/Q16).
+
+    Two `attributeconfig` documents targeting the same `(kind, block)` and
+    declaring a schema for the same top-level `schema.properties` key are
+    almost certainly an authoring mistake if their selectors can ever match
+    the same document — D7 means both would apply in full, independently,
+    with no merge to resolve a disagreement between them. Scoped to
+    top-level `properties` keys only, never recursive: D7's own reasoning
+    already settled that closure (`additionalProperties`) applies within an
+    attribute's own subtree, where exactly one document was ever meant to
+    own it.
+
+    Runs once per `validate`, pairwise over every `(kind, block)` group —
+    not per target document — since this is purely a property of the
+    `attributeconfig` documents themselves, nothing else needs to be loaded.
+    """
+    diagnostics = Diagnostics()
+    by_target: dict[tuple[PlatformKind, str], list[IndexEntry]] = {}
+    for entry in index.all_of(PlatformKind.ATTRIBUTECONFIG):
+        target = cast(AttributeConfigModel, entry.model).spec.target
+        by_target.setdefault((target.kind, target.block), []).append(entry)
+
+    for group in by_target.values():
+        for first, second in combinations(group, 2):
+            diagnostics.extend(_check_attributeconfig_pair_conflict(first, second))
+    return diagnostics
+
+
+def _check_attributeconfig_pair_conflict(first: IndexEntry, second: IndexEntry) -> Diagnostics:
+    """One pair's half of `_check_attributeconfig_conflicts()` — split out so
+    the per-shared-key loop stays a single, readable branch.
+    """
+    diagnostics = Diagnostics()
+    first_model = cast(AttributeConfigModel, first.model)
+    second_model = cast(AttributeConfigModel, second.model)
+
+    first_keys = _schema_top_level_properties(first_model.spec.schema_)
+    second_keys = _schema_top_level_properties(second_model.spec.schema_)
+    shared_keys = first_keys & second_keys
+    if not shared_keys:
+        return diagnostics
+
+    if not selectors_compatible(first_model.spec.target.selector or {}, second_model.spec.target.selector or {}):
+        return diagnostics
+
+    target = first_model.spec.target
+    for key in sorted(shared_keys):
+        diagnostics.error(
+            f"attributeconfig '{first.ref.name}' and '{second.ref.name}' both declare a schema for "
+            f"'{target.kind.value}.spec.{target.block}.{key}', and their selectors can match the same "
+            "document — pick one schema, or narrow the selectors so they can never both apply.",
+            source=str(first.source),
+            location=f"spec.schema.properties.{key}",
+            code="attributeconfig_conflict",
+        )
+    return diagnostics
+
+
+def _schema_top_level_properties(schema: dict[str, Any]) -> set[str]:
+    """Top-level `properties` keys of a schema, or an empty set if absent or
+    not shaped like an object — `attributeconfig.spec.schema` is an
+    unvalidated `dict[str, Any]` at this point (`_check_attributeconfigs()`'s
+    own `build_validator()` call is what would reject a malformed schema as
+    `attributeconfig_invalid`, but that's a separate, independent pass — this
+    check must not assume it already ran, or crash if it hasn't).
+    """
+    properties = schema.get("properties")
+    return set(properties.keys()) if isinstance(properties, dict) else set()
 
 
 def _check_resources(index: DocumentIndex) -> Diagnostics:

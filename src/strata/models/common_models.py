@@ -51,6 +51,7 @@ class PlatformKind(str, Enum):
     CONFIGURATION = "configuration"
     PROVIDERCONFIG = "providerconfig"
     TOPOLOGYCONFIG = "topologyconfig"
+    ATTRIBUTECONFIG = "attributeconfig"
     PROVIDER = "provider"
     RESOURCE = "resource"
     DNS = "dns"

@@ -1,0 +1,287 @@
+# Dynamic Configuration Validation (`attributeconfig`) — Design
+
+- Status: current
+- Last updated: 2026-10-15
+
+## Overview
+
+Strata has roughly eighteen models carrying a loosely-typed passthrough
+blob — `spec.properties`, `spec.configuration`, `spec.custom`, each typed
+`dict[str, Any] | None`. These exist on purpose (`resource` deliberately
+never abstracted the real cloud resource type, ADR-0004, and the same
+restraint is why `provider`/`module`/`namespace`/`firewall`/`environment`
+all carry one too) — but Pydantic never recurses into an `Any`-typed dict,
+so everything inside one is unvalidated: a typo, a missing required key, or
+a malformed value reaches the provisioner untouched. The motivating real
+case (a Terraform workload-identity component) states the cost directly in
+its own `variables.tf` comment: *"A malformed subject is accepted by Entra
+ID and by Terraform; it only surfaces as pods failing to obtain a token at
+runtime, with nothing in the plan or the apply log to point at. Rejecting
+it here turns a production runtime failure into a plan error."*
+
+`attributeconfig` is a standalone kind that declares a real JSON Schema
+(2020-12) fragment and enforces it, automatically, against every matching
+document's targeted `properties`/`custom`/`configuration` block — the
+moment the schema ships, with no action required from whoever authored the
+target document. It generalizes, and replaces, a narrower mechanism that
+used to live embedded inside `providerconfig` (see "Relationship to
+`providerconfig`" below).
+
+## Current Design
+
+### Document shape
+
+```yaml
+apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: <name>
+spec:
+  target:
+    kind: <PlatformKind>              # e.g. environment, resource
+    block: properties | custom | configuration  # whichever blob field this kind actually has
+    selector:                         # optional; omitted = every document of this kind
+      <field.path>: <required-value>  # equality only, no wildcards/regex
+  schema:                             # verbatim JSON Schema (2020-12), passed through near-raw
+    type: object
+    properties: { ... }
+```
+
+### Scope
+
+Covers `properties`/`custom` on every kind, plus `configuration`
+specifically where that's the blob's real field name (`resource.spec.
+configuration`). `features`/`variables` are excluded — both are typed
+lists (`FeatureStoreModel`/`VariableStoreModel`) with their own per-field
+Pydantic validation already, not loosely-typed blobs.
+
+### Schema language
+
+Real JSON Schema draft 2020-12, evaluated by the already-shipped
+`jsonschema` library (now an explicit direct dependency, alongside
+`referencing` — previously only transitive via
+`cyclonedx-python-lib[json-validation]`). Authors write genuine JSON
+Schema (`type`, `properties`, `patternProperties`, `required`,
+`additionalProperties`, `if`/`then`, `dependentRequired`, ...) directly —
+no strata-invented vocabulary.
+
+**Hard security requirement.** The evaluator (`attributeconfig_evaluator.
+py`'s `build_validator()`) always constructs
+`Draft202012Validator(schema, registry=referencing.Registry())` — an empty,
+non-retrieving registry — and never calls the bare `jsonschema.validate()`
+convenience function. `spec.schema` is untrusted, author-supplied content;
+a validator that resolves an unrecognized `$ref` by fetching it would let
+that content make strata itself issue an outbound HTTP request to an
+attacker-chosen URL while validating a document. Confirmed directly
+against the real library (4.26.0): an external `$ref` passes
+`check_schema()` uninspected (ref resolution is lazy, not performed at
+compile time) but raises `referencing.exceptions.Unresolvable` the moment a
+document is actually evaluated against it — reported as an invalid schema
+(`attributeconfig_invalid`), never fetched.
+
+Load-time schema validity is one call, `Draft202012Validator.
+check_schema()`, uniform for every keyword in the fragment.
+
+### Binding / selection
+
+`target.kind` + `target.block` + optional `target.selector` (a
+field-path-to-required-value equality dict; omitted = matches every
+document of that kind). No name-based registration anywhere — the check
+scans the document index directly (`_check_attributeconfigs()` in
+`semantic_checks.py`) by what each schema targets, the same pattern
+`providerconfig` already used.
+
+**Push, not pull.** The alternative binding model — the target document
+explicitly lists which schema(s) apply to it, defaulting to unrestricted —
+was rejected: it breaks the automatic, un-opt-outable enforcement that
+makes this feature worth building. Every pre-existing document (45+ real
+`properties` documents across this repo's consumer fixtures) would stay
+completely unchecked until someone remembered to opt in.
+
+### Evaluation semantics
+
+- **No merge.** Every schema whose target and selector match a document is
+  evaluated independently; all must pass. Monotonic — adding a schema can
+  only ever tighten validation, never loosen it. An unset block is checked
+  as `{}`, not skipped, so `required` still fires for a document that
+  omits the block entirely.
+- **Duplicate-attribute check** (load time, `_check_attributeconfig_
+  conflicts()`): fires when two schemas target the same `(kind, block)`,
+  declare the same top-level `properties` key, and their selectors are
+  *compatible* — for every field path present in both selectors, the
+  required values agree (`selectors_compatible()`; a selector-less
+  selector is vacantly compatible with anything). Diagnostic code
+  `attributeconfig_conflict`, `.error()` severity.
+- **Applied-schema visibility**: every `(document, schema)` application is
+  logged via `log.info()` under `--verbose` (same channel as
+  `version_pins.py`/`sbom_controller.py`); a schema matching zero
+  documents gets `diagnostics.warning()`, code `attributeconfig_unused` —
+  a silently-inert guardrail is otherwise indistinguishable from one that
+  always passes.
+
+### Diagnostics
+
+`ValidationError.validator` maps to a stable code
+(`attributeconfig_evaluator.translate_validation_error()`):
+
+| `validator` keyword    | Code                                |
+| ---------------------- | ----------------------------------- |
+| `pattern`              | `attributeconfig_pattern_mismatch`  |
+| `required`             | `attributeconfig_field_missing`     |
+| `additionalProperties` | `attributeconfig_field_not_allowed` |
+| `type`                 | `attributeconfig_type_mismatch`     |
+| anything else          | `attributeconfig_validation_error`  |
+
+Plus `attributeconfig_invalid` (schema fails to compile, or references an
+unresolvable external resource), `attributeconfig_unused` (warning — a
+schema's selector matched nothing), and `attributeconfig_conflict` (two
+schemas claim the same attribute with overlapping selectors). Location
+comes from `ValidationError.absolute_path`, dot-joined with `.` — never
+`.json_path`, which quotes non-identifier property names in a way
+`fieldLocation.ts` cannot parse back to a YAML range. Schema-level
+findings (`attributeconfig_invalid`, `attributeconfig_unused`) attribute
+to the `attributeconfig` document itself; per-document validation
+failures attribute to the subject document being checked.
+
+### Relationship to `providerconfig`
+
+`providerconfig` previously carried its own embedded, regex-only schema
+sub-feature for `resource.spec.configuration` — retired outright (ADR-0041)
+in favor of ordinary `attributeconfig` documents keyed by
+`target.selector: {spec.provider_type, spec.resource_type}`, with strictly
+more power (real types, nesting, cross-field `if`/`then`) and nothing
+lost. `providerconfig`'s resource-type/region name registry
+(`ProviderConfigResourceModel.name`, `additional_regions`/
+`additional_resources`) is a different, non-overlapping concern — an
+enum/allow-list check on a *structured* field, never in `attributeconfig`'s
+own blob-shaped scope — and stays permanently.
+
+### Where it lives (layering)
+
+The shared evaluator (`attributeconfig_evaluator.py`) lives in
+`strata.services`, never `strata.controllers`, per the enforced
+import-linter layering contract (`services` sits below `controllers`; a
+lower layer can never import a higher one). `semantic_checks.py`
+orchestrates (scans the index, calls the evaluator, assembles
+diagnostics); it does not implement checks itself. Selector evaluation
+(`evaluate_selector()`) mirrors `controllers.references._walk()`'s
+traversal convention (segment-split + `getattr`, `[]`-suffix iterating a
+list) without reusing it directly — `_walk()`'s own contract (multi-yield,
+string-only leaves) doesn't fit a single scalar-equality check, and the
+layering contract blocks direct reuse regardless (`references.py` lives in
+`controllers/`, a layer the evaluator could never import).
+
+### Known limits
+
+Never expressible by this mechanism, standard or native schema language:
+
+1. **Key-collision invariants** (e.g. two map keys that collide after a
+   character rewrite) — need a transform-then-compare step no schema
+   language expresses.
+2. **Cross-document invariants** (one document's field must equal
+   another document's field) — no schema targeting one document can
+   constrain another.
+
+Cross-field invariants *within* a single document's targeted block are
+expressible via JSON Schema's `if`/`then`/`dependentRequired` — confirmed
+against real consumer data, not a theoretical limitation.
+
+A derived existence/typo check against a Terraform root's `variables.tf`
+(the same shape as v1's real `terraform_input_validator.py`) is a
+separate, complementary feature — it only ever answers "does this key
+exist," never "does this key's value have the right shape." Not part of
+this design.
+
+Out of scope, no consumer asking yet: surfacing the applied-schema set in
+`validate --output json`'s `data` payload for tooling (e.g. "this block is
+guarded by schema X").
+
+## Related Decisions
+
+- [ADR-0040](../decisions/0040-attributeconfig-standalone-kind.md) — the
+  standalone kind, push binding, JSON Schema choice, and the non-retrieving
+  registry requirement.
+- [ADR-0041](../decisions/0041-retire-providerconfig-embedded-schema.md) —
+  retiring `providerconfig`'s embedded schema sub-feature in favor of this.
+- [ADR-0004](../decisions/0004-resource-model-design-decisions.md) — why
+  `resource` keeps a loosely-typed passthrough instead of modeling cloud
+  resource types (the reason this problem exists at all).
+- [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md) /
+  [ADR-0014](../decisions/0014-provider-topology-config-standalone-kinds.md)
+  — the standalone-kind-over-embedded-list precedent this follows.
+
+## History
+
+- Originated from an archived `access-management.md` proposal (four new
+  access-management kinds); checking it against real consumers found the
+  opposite need — access management already works today as an ordinary
+  `environment.spec.properties` blob, it just isn't validated. Real,
+  repeated, shape-only demand was catalogued across two consumer
+  fixtures (`aks_config`, `subnets`, `vnet_peers`, `appgateway_config`,
+  `kv_platform_config`) beyond the original motivating example, which
+  turned out to be unpopulated everywhere in both fixtures checked.
+- Resolved generic-vs-bespoke in favor of generic, as a deliberate,
+  narrow exception to `policy-engine-architecture.md`'s
+  bespoke-indefinitely resolution: a shape check needs nothing but the
+  document already in the index, unlike policy evaluation, which needs a
+  heterogeneous external data source (SBOM/CVE/Checkov/Terraform
+  plan/LLM) for nearly every real check. Every invariant the evidence
+  gathering surfaced that this design still can't express
+  (key-collision, cross-field-across-documents) is semantic, not shape —
+  exactly the kind that stays bespoke either way.
+- Rejected a strata-native schema language (an earlier sketch used
+  `children`/`entries`/`key_pattern`/`type`) in favor of real JSON Schema
+  2020-12 via the already-shipped `jsonschema` library — no new
+  dependency, strictly more power (real booleans, arbitrary-key maps via
+  `patternProperties`, nesting at every level). Going standard surfaced a
+  real risk the native sketch never had: the library's default registry
+  resolves an unrecognized `$ref` via a live network fetch rather than
+  refusing, confirmed directly in `jsonschema`'s own source — mitigated
+  by always constructing an empty, non-retrieving `referencing.Registry()`
+  and never calling the bare `jsonschema.validate()` helper.
+- Considered deriving schemas from a Terraform root's `variables.tf`
+  (v1 has real, shipped logic along these lines). Verified directly
+  against v1's actual source: it only ever derives variable existence and
+  required-vs-optional, never a variable's value-shape/pattern content —
+  exactly the information this design does *not* need help with. Recorded
+  as a separate, worth-building complement, not pursued as a derivation
+  source for `attributeconfig` schemas.
+- Rejected a pull (opt-in) binding model — the target document explicitly
+  listing which schemas apply to it — in favor of push (the schema scans
+  the index for its own targets): a pull model would leave every
+  pre-existing document unchecked until someone remembered to opt in,
+  defeating the point of an automatic guardrail.
+- Rejected one standalone kind per target kind (`environmentconfig`,
+  `moduleconfig`, ... mirroring `providerconfig`/`topologyconfig`'s
+  per-subject naming) in favor of one kind with a `target.kind` field —
+  every such kind would do the identical job, differing only in which
+  kind it targets, at a fraction of the model/service/scaffolded-schema/
+  doc surface and with no per-future-kind companion tax.
+- Rejected merging multiple matching schemas into one effective schema
+  (the way `environment` merges) in favor of no-merge, conjunctive
+  evaluation: `environment`'s own merge precedent is shallow/key-level/
+  last-wins, and applied to schemas would let one schema silently weaken
+  another's constraint with no way to notice — conjunctive evaluation is
+  monotonic (adding a schema can only tighten, never loosen). This made a
+  load-time duplicate-attribute check necessary (`attributeconfig_
+  conflict`) for two schemas claiming the same top-level attribute with
+  overlapping selectors.
+- No-merge means selector correctness becomes the schema author's
+  responsibility, which is only safe if visible: every `(document,
+  schema)` application traces via `log.info()` under `--verbose`, and a
+  schema matching zero documents warns rather than passing silently.
+- Retired `providerconfig`'s embedded `resource.spec.configuration` schema
+  sub-feature (`ProviderConfigSchemaField`, `.configuration`,
+  `.additional_configurations`, and four diagnostic codes) once backward
+  compatibility was confirmed not to matter (strata-v2 pre-release,
+  `2.0.0a23`) — see ADR-0041. Its resource-type/region name-registry role
+  is a different, non-overlapping concern and was kept.
+- Verified, rather than assumed, two implementation details against the
+  real installed libraries before relying on them: an external `$ref`
+  raises `referencing.exceptions.Unresolvable` at evaluation time (not
+  `Unretrievable`, and not at `check_schema()`'s compile time — ref
+  resolution is lazy); and the VS Code extension's `fieldLocation.ts`
+  already resolves a dot-joined `ValidationError.absolute_path`-shaped
+  location correctly with zero code changes, confirmed by invoking the
+  compiled module directly against a realistic diagnostic location, not
+  just by reading its source.

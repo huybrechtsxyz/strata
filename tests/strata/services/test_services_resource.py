@@ -26,19 +26,14 @@ def _configuration_with_kamatera_pointer() -> ConfigurationModel:
     )
 
 
-def _kamatera_provider_config(configuration_schema: dict | None = None) -> ProviderConfigModel:
-    resource_entry = {"name": "virtual_machine"}
-    if configuration_schema is not None:
-        resource_entry["configuration"] = configuration_schema
-        resource_entry["additional_configurations"] = False
-
+def _kamatera_provider_config() -> ProviderConfigModel:
     return ProviderConfigModel.model_validate(
         {
             "meta": {"name": "kamatera"},
             "spec": {
                 "description": "Kamatera cloud provider",
                 "regions": [{"name": "eu-west"}],
-                "resources": [resource_entry],
+                "resources": [{"name": "virtual_machine"}],
             },
         }
     )
@@ -71,29 +66,3 @@ def test_resource_service_rejects_unknown_resource_type():
     result = service.validate_against_provider_config(_kamatera_provider_config())
     assert not result.ok
     assert any("is not valid for provider" in m for m in result.messages())
-
-
-def test_resource_service_validates_configuration_schema():
-    """Deep check: configuration fields are checked against the provider's declared schema."""
-    data = _minimal_resource_data()
-    data["spec"]["configuration"] = {"disk_size": "not-a-number"}
-    provider_config = _kamatera_provider_config({"disk_size": {"pattern": r"^\d+$", "required": True}})
-
-    service = ResourceService(data=data)
-    service.validate()
-    result = service.validate_against_provider_config(provider_config)
-    assert not result.ok
-    assert any("does not match required pattern" in m for m in result.messages())
-
-
-def test_resource_service_rejects_disallowed_configuration_field():
-    """Deep check: an undeclared configuration field is rejected when additional_configurations is False."""
-    data = _minimal_resource_data()
-    data["spec"]["configuration"] = {"unexpected_field": "value"}
-    provider_config = _kamatera_provider_config({"disk_size": {"pattern": r"^\d+$", "required": False}})
-
-    service = ResourceService(data=data)
-    service.validate()
-    result = service.validate_against_provider_config(provider_config)
-    assert not result.ok
-    assert any("is not allowed for resource type" in m for m in result.messages())

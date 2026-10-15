@@ -1884,3 +1884,410 @@ spec:
 def test_dns_zone_declared_once_is_not_flagged(tmp_path):
     context = _resolve(_base_solution(tmp_path))
     assert not any(d.code == "dns_zone_declared_twice" for d in context.diagnostics.warnings)
+
+
+# ---------------------------------------------------------------------------
+# attributeconfig -> target kind: JSON Schema validation of properties/
+# custom/configuration blocks (docs/design/dynamic-configuration-validation.md)
+# Phase 3)
+# ---------------------------------------------------------------------------
+
+_OWNER_SCHEMA = """  schema:
+    type: object
+    required: [owner]
+    additionalProperties: false
+    properties:
+      owner:
+        type: string
+        pattern: "^[a-z-]+$"
+      retries:
+        type: integer
+"""
+
+
+def _solution_with_resource_and_attributeconfig(
+    tmp_path: Path, *, resource_spec: str = "", schema_yaml: str = _OWNER_SCHEMA, selector: str = ""
+) -> Path:
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write(
+        root,
+        "resource.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: resource
+meta:
+  name: storage-account
+spec:
+  provider_type: azure
+  resource_type: storage_account
+{resource_spec}""",
+    )
+    _write(
+        root,
+        "attributeconfig.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: resource-custom-owner
+spec:
+  target:
+    kind: resource
+    block: custom
+{selector}{schema_yaml}""",
+    )
+    return root
+
+
+def test_attributeconfig_passing_case(tmp_path):
+    root = _solution_with_resource_and_attributeconfig(tmp_path, resource_spec="  custom:\n    owner: platform-team\n")
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_attributeconfig_pattern_mismatch_is_caught(tmp_path):
+    root = _solution_with_resource_and_attributeconfig(tmp_path, resource_spec="  custom:\n    owner: Platform_Team\n")
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_pattern_mismatch" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_field_missing_is_caught_when_block_is_entirely_unset(tmp_path):
+    """A document that omits `custom:` entirely is checked as `{}`, not
+    skipped — the common omission case `required` exists to catch."""
+    root = _solution_with_resource_and_attributeconfig(tmp_path, resource_spec="")
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_field_missing" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_field_not_allowed_is_caught(tmp_path):
+    root = _solution_with_resource_and_attributeconfig(
+        tmp_path, resource_spec="  custom:\n    owner: platform-team\n    extra: nope\n"
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_field_not_allowed" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_type_mismatch_is_caught(tmp_path):
+    root = _solution_with_resource_and_attributeconfig(
+        tmp_path, resource_spec='  custom:\n    owner: platform-team\n    retries: "nope"\n'
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_type_mismatch" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_falls_back_for_an_unmapped_keyword(tmp_path):
+    schema = """  schema:
+    type: object
+    properties:
+      tier:
+        type: string
+        enum: [standard, premium]
+"""
+    root = _solution_with_resource_and_attributeconfig(
+        tmp_path, resource_spec="  custom:\n    tier: gold\n", schema_yaml=schema
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_validation_error" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_invalid_schema_is_caught(tmp_path):
+    schema = """  schema:
+    type: not-a-real-type
+"""
+    root = _solution_with_resource_and_attributeconfig(tmp_path, schema_yaml=schema)
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_invalid" for d in context.diagnostics.errors)
+    # Attributed to the schema document itself, not the (never-checked) resource.
+    assert any("resource-custom-owner" in m for m in context.diagnostics.messages())
+
+
+def test_attributeconfig_unused_warns_when_selector_matches_nothing(tmp_path):
+    selector = "    selector:\n      spec.provider_type: ghost\n"
+    root = _solution_with_resource_and_attributeconfig(tmp_path, selector=selector)
+    context = _resolve(root)
+    assert context.ok  # warning, not an error — does not fail validate
+    assert any(d.code == "attributeconfig_unused" for d in context.diagnostics.warnings)
+
+
+def test_attributeconfig_selector_scopes_to_matching_documents_only(tmp_path):
+    """Two resources, only one matching the selector — the other is
+    untouched even though it would fail the same schema."""
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write(
+        root,
+        "resource.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: resource
+meta:
+  name: storage-account
+spec:
+  provider_type: azure
+  resource_type: storage_account
+  custom:
+    owner: platform-team
+""",
+    )
+    _write(
+        root,
+        "resource2.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: resource
+meta:
+  name: other-account
+spec:
+  provider_type: hetzner
+  resource_type: storage_account
+""",
+    )
+    _write(
+        root,
+        "attributeconfig.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: resource-custom-owner
+spec:
+  target:
+    kind: resource
+    block: custom
+    selector:
+      spec.provider_type: azure
+{_OWNER_SCHEMA}""",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_attributeconfig_cross_field_if_then_fails_when_condition_applies(tmp_path):
+    schema = """  schema:
+    type: object
+    properties:
+      tier:
+        type: string
+      sla:
+        type: string
+    if:
+      properties:
+        tier:
+          const: premium
+    then:
+      required: [sla]
+"""
+    root = _solution_with_resource_and_attributeconfig(
+        tmp_path, resource_spec="  custom:\n    tier: premium\n", schema_yaml=schema
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_field_missing" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_cross_field_if_then_passes_when_condition_does_not_apply(tmp_path):
+    schema = """  schema:
+    type: object
+    properties:
+      tier:
+        type: string
+      sla:
+        type: string
+    if:
+      properties:
+        tier:
+          const: premium
+    then:
+      required: [sla]
+"""
+    root = _solution_with_resource_and_attributeconfig(
+        tmp_path, resource_spec="  custom:\n    tier: standard\n", schema_yaml=schema
+    )
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_attributeconfig_no_merge_both_independent_schemas_are_applied(tmp_path):
+    """D7: two schemas targeting the same (kind, block) are both evaluated
+    independently — neither short-circuits the other."""
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write(
+        root,
+        "resource.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: resource
+meta:
+  name: storage-account
+spec:
+  provider_type: azure
+  resource_type: storage_account
+  custom:
+    owner: Platform_Team
+""",
+    )
+    _write(
+        root,
+        "attributeconfig-owner.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: resource-custom-owner
+spec:
+  target:
+    kind: resource
+    block: custom
+{_OWNER_SCHEMA}""",
+    )
+    _write(
+        root,
+        "attributeconfig-extra.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: resource-custom-no-extra-keys
+spec:
+  target:
+    kind: resource
+    block: custom
+  schema:
+    type: object
+    maxProperties: 0
+""",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    codes = [d.code for d in context.diagnostics.errors]
+    assert "attributeconfig_pattern_mismatch" in codes  # from resource-custom-owner
+    assert "attributeconfig_validation_error" in codes  # maxProperties, from resource-custom-no-extra-keys
+
+
+# ---------------------------------------------------------------------------
+# attributeconfig -> attributeconfig: duplicate-attribute load-time check
+# (docs/design/dynamic-configuration-validation.md Phase 4, Q12/Q16)
+# ---------------------------------------------------------------------------
+
+
+def _write_attributeconfig(
+    root: Path, filename: str, name: str, *, selector_yaml: str = "", properties_yaml: str
+) -> None:
+    _write(
+        root,
+        filename,
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: {name}
+spec:
+  target:
+    kind: resource
+    block: custom
+{selector_yaml}  schema:
+    type: object
+    properties:
+{properties_yaml}
+""",
+    )
+
+
+def test_attributeconfig_conflict_fires_for_same_attribute_and_compatible_selectors(tmp_path):
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write_attributeconfig(root, "ac1.yaml", "ac-owner-a", properties_yaml="      owner:\n        type: string\n")
+    _write_attributeconfig(root, "ac2.yaml", "ac-owner-b", properties_yaml="      owner:\n        type: string\n")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)
+    messages = context.diagnostics.messages()
+    assert any("ac-owner-a" in m and "ac-owner-b" in m and "resource.spec.custom.owner" in m for m in messages)
+
+
+def test_attributeconfig_conflict_silent_when_selectors_disagree_on_a_shared_path(tmp_path):
+    """Mutually exclusive selectors: no document could ever satisfy both,
+    so declaring the same attribute under both is safe, not a conflict."""
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write_attributeconfig(
+        root,
+        "ac1.yaml",
+        "ac-owner-a",
+        selector_yaml="    selector:\n      spec.provider_type: azure\n",
+        properties_yaml="      owner:\n        type: string\n",
+    )
+    _write_attributeconfig(
+        root,
+        "ac2.yaml",
+        "ac-owner-b",
+        selector_yaml="    selector:\n      spec.provider_type: hetzner\n",
+        properties_yaml="      owner:\n        type: string\n",
+    )
+
+    context = _resolve(root)
+    assert not any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_conflict_fires_for_a_selector_less_schema_vs_a_selectored_one(tmp_path):
+    """Vacant compatibility (Q16): a selector-less selector has no shared
+    keys with anything, so it is compatible with any other selector."""
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write_attributeconfig(root, "ac1.yaml", "ac-owner-a", properties_yaml="      owner:\n        type: string\n")
+    _write_attributeconfig(
+        root,
+        "ac2.yaml",
+        "ac-owner-b",
+        selector_yaml="    selector:\n      spec.provider_type: azure\n",
+        properties_yaml="      owner:\n        type: string\n",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_conflict_silent_for_disjoint_top_level_attributes(tmp_path):
+    """Control case: same (kind, block), compatible (unset) selectors, but
+    no top-level `properties` key in common — nothing to conflict over."""
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write_attributeconfig(root, "ac1.yaml", "ac-owner", properties_yaml="      owner:\n        type: string\n")
+    _write_attributeconfig(root, "ac2.yaml", "ac-region", properties_yaml="      region:\n        type: string\n")
+
+    context = _resolve(root)
+    assert not any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_conflict_check_does_not_crash_on_a_malformed_properties_shape(tmp_path):
+    """Regression: `schema.properties` is an unvalidated `dict[str, Any]` —
+    a document declaring it as something other than a mapping (e.g. a typo)
+    must not crash the conflict check; `_check_attributeconfigs()`'s own
+    schema-compile check reports it as `attributeconfig_invalid` instead."""
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write(
+        root,
+        "ac1.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: ac-malformed
+spec:
+  target:
+    kind: resource
+    block: custom
+  schema:
+    type: object
+    properties: not-a-mapping
+""",
+    )
+    _write_attributeconfig(root, "ac2.yaml", "ac-owner", properties_yaml="      owner:\n        type: string\n")
+
+    context = _resolve(root)  # must not raise
+    assert not context.ok
+    assert any(d.code == "attributeconfig_invalid" for d in context.diagnostics.errors)
+    assert not any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)

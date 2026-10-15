@@ -16,8 +16,9 @@ several times, under different local names) via `WorkspaceResourceModel`.
 - `spec.storage` — optional VM-style storage config: `install_path`, `disks[]` (`{name, size,
   label, mount}`), `volumes[]` (`{name, path}` — must sit under one of `disks[]`'s mount points),
   `parameters` (free-form)
-- `spec.configuration` — passthrough, validated against the matching `ProviderConfig` resource
-  entry's field patterns
+- `spec.configuration` — passthrough; shape-validated against any matching
+  [`attributeconfig`](attributeconfig.md) document (`target.kind: resource`, `target.block:
+  configuration`), not against `providerconfig` directly
 - `spec.default_tags` / `spec.custom_tags` — cloud tags (both optional)
 - `spec.custom` — free-form data, not consumed by any provisioner
 - `spec.lifecycle` — optional IaC workflow hook phases

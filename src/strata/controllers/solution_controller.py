@@ -43,6 +43,7 @@ from strata.models.common_models import PlatformBaseModel, PlatformKind
 from strata.models.solution_model import SolutionModel
 from strata.services.artifact_service import ArtifactService
 from strata.services.asset_service import AssetService
+from strata.services.attributeconfig_service import AttributeConfigService
 from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
@@ -80,6 +81,7 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.CONFIGURATION: ConfigurationService,
     PlatformKind.PROVIDERCONFIG: ProviderConfigService,
     PlatformKind.TOPOLOGYCONFIG: TopologyConfigService,
+    PlatformKind.ATTRIBUTECONFIG: AttributeConfigService,
     PlatformKind.PROVIDER: ProviderService,
     PlatformKind.RESOURCE: ResourceService,
     PlatformKind.DNS: DnsService,

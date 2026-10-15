@@ -19,7 +19,7 @@ obvious to a general audience over the more precise but less familiar
 Kubernetes "Class" convention, e.g. `StorageClass`).
 """
 
-from typing import Any, Union
+from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
@@ -31,19 +31,6 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
-
-
-class ProviderConfigSchemaField(PlatformBaseModel):
-    """A configuration schema field with pattern and required flag.
-
-    All field values are validated as strings against the `pattern` regex.
-    There is no native boolean type — use `pattern: "^(true|false)$"` and pass
-    `"true"` or `"false"` as the value in resource configuration.
-    """
-
-    pattern: str = Field(description="Regex pattern that field values must match")
-    required: bool = Field(True, description="Whether this field is required in resource configuration")
-    description: str | None = Field(None, description="Description of what this field represents")
 
 
 class ProviderConfigRegionModel(PlatformBaseModel):
@@ -74,14 +61,6 @@ class ProviderConfigResourceModel(PlatformBaseModel):
         description="Resource subcategory (e.g., virtualmachine, blob, api_gateway)",
     )
     description: str | None = Field(None, description="Description of the resource type")
-    additional_configurations: bool = Field(
-        False,
-        description="Allow configuration fields not listed in the schema for this resource",
-    )
-    configuration: dict[str, Union[str, ProviderConfigSchemaField]] | None = Field(
-        None,
-        description="Resource-specific configuration schema (pattern string or structured field)",
-    )
 
 
 class ProviderConfigSpecModel(PlatformBaseModel):

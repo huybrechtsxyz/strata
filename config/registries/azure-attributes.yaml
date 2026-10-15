@@ -1,0 +1,63 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: azure-storage-account-configuration
+  annotations:
+    description: "Replaces the old providerconfig-embedded schema for storage_account (docs/design/dynamic-configuration-validation.md, D5 option c)."
+spec:
+  target:
+    kind: resource
+    block: configuration
+    selector:
+      spec.provider_type: azure
+      spec.resource_type: storage_account
+  schema:
+    type: object
+    required: [account_tier]
+    additionalProperties: false
+    properties:
+      account_tier:
+        type: string
+        pattern: "^(Standard|Premium)$"
+---
+apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: azure-key-vault-configuration
+  annotations:
+    description: "Replaces the old providerconfig-embedded schema for key_vault (docs/design/dynamic-configuration-validation.md, D5 option c)."
+spec:
+  target:
+    kind: resource
+    block: configuration
+    selector:
+      spec.provider_type: azure
+      spec.resource_type: key_vault
+  schema:
+    type: object
+    required: [sku_name]
+    properties:
+      sku_name:
+        type: string
+        pattern: "^(standard|premium)$"
+---
+apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: azure-application-gateway-configuration
+  annotations:
+    description: "Replaces the old providerconfig-embedded schema for application_gateway (docs/design/dynamic-configuration-validation.md, D5 option c)."
+spec:
+  target:
+    kind: resource
+    block: configuration
+    selector:
+      spec.provider_type: azure
+      spec.resource_type: application_gateway
+  schema:
+    type: object
+    required: [sku_tier]
+    properties:
+      sku_tier:
+        type: string
+        pattern: "^(Standard_v2|WAF_v2)$"

@@ -18,6 +18,8 @@ dependencies = [
     "cyclonedx-python-lib[json-validation]>=7.0,<12",
     "packageurl-python>=0.11,<2",
     "python-hcl2>=8.0",
+    "jsonschema>=4.20,<5",
+    "referencing>=0.30,<1",
     "azure-identity>=1.15",
     "azure-keyvault-secrets>=4.7",
     "azure-appconfiguration>=1.6",
@@ -50,6 +52,7 @@ dev = [
     "nox",
     "types-PyYAML",
     "types-requests",
+    "types-jsonschema",
 ]
 
 [project.scripts]
