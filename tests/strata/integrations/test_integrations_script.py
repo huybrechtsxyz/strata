@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `ScriptIntegration` (docs/work/script-provisioner.md Phase 3)."""
+"""Tests for `ScriptIntegration` (docs/design/script-provisioner.md)."""
 
 import shutil
 import sys
@@ -238,6 +238,20 @@ def test_validate_ps1_parses_without_executing(monkeypatch, tmp_path: Path):
     assert args[0] == "pwsh"
     assert args[1] == "-NoProfile"
     assert "ParseFile" in args[3]
+
+
+def test_validate_ps1_escapes_single_quotes_in_the_path(monkeypatch, tmp_path: Path):
+    """Regression (found on code review, 2026-10-15) — `script.file` isn't
+    restricted to quote-free names by schema validation (only path
+    traversal/extension are checked); an unescaped single quote would break
+    out of the single-quoted PowerShell string this builds and let the rest
+    of the filename run as arbitrary PowerShell code."""
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(shutil, "which", lambda name: "pwsh" if name == "pwsh" else None)
+    _bound("it's-evil.ps1").validate(tmp_path)
+    parse_arg = captured["args"][3]
+    expected_path = str(tmp_path / "it's-evil.ps1").replace("'", "''")
+    assert f"ParseFile('{expected_path}'," in parse_arg
 
 
 def test_validate_bat_is_a_no_op_success_without_running_anything(monkeypatch, tmp_path: Path):

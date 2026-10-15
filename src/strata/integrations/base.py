@@ -105,7 +105,7 @@ class Integration(ABC):
 
     def bind(self, provisioner: ProvisionerModel) -> None:
         """Optional: give this instance provisioner-specific context it
-        needs before `is_available()`/`command` can resolve (docs/work/
+        it needs before `is_available()`/`command` can resolve (docs/design/
         script-provisioner.md — `ScriptIntegration`'s own use case, which
         interpreter a specific `script.file` needs). Base no-op; every
         existing integration is unaffected.

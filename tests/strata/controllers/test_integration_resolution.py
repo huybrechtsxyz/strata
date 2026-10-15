@@ -133,7 +133,7 @@ def test_unregistered_tool_type_raises_usage_error_not_a_bare_integration_error(
 
 
 # ---------------------------------------------------------------------------
-# bind() (docs/work/script-provisioner.md Phase 2) — resolve_integration()
+# bind() (docs/design/script-provisioner.md) — resolve_integration()
 # threads the resolved provisioner into integration.bind() before returning.
 # Base no-op (test_integrations_base.py); regression here confirms it's
 # wired in and harmless for every existing, non-script integration.

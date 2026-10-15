@@ -907,7 +907,7 @@ def test_deploy_run_resolves_backend_configuration_tokens(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# tool: script value delivery (docs/work/script-provisioner.md Phase 4) —
+# tool: script value delivery (docs/design/script-provisioner.md) —
 # the widened `step_resolved_values` gate (`tokens`, not bare
 # `resolved.values`) and `output_path` threading, both additive and
 # harmless for every non-script tool (confirmed above — those tests are
@@ -1020,7 +1020,7 @@ def test_deploy_run_appends_rendered_output_path_as_the_final_script_arg(tmp_pat
 
 
 def test_deploy_run_script_end_to_end_materialises_source_renders_skeleton_and_executes(tmp_path: Path, _capture):
-    """Phase 5 (docs/work/script-provisioner.md) — the real CLI command
+    """Phase 5 (docs/design/script-provisioner.md) — the real CLI command
     path, not just unit-level `ScriptIntegration` calls: `build run`
     materialises the script's own source and renders the build-time
     `strata.auto.json` skeleton; `deploy run` then actually executes it."""

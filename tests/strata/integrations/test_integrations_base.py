@@ -59,7 +59,7 @@ def test_construction_without_config_is_allowed():
 
 
 def test_bind_is_a_no_op_by_default():
-    """Base `Integration.bind()` (docs/work/script-provisioner.md Phase 2)
+    """Base `Integration.bind()` (docs/design/script-provisioner.md)
     accepts any ProvisionerModel and changes nothing observable — every
     existing integration inherits this unless it overrides `bind()` itself
     (only `ScriptIntegration` does)."""

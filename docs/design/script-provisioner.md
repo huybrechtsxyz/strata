@@ -263,9 +263,12 @@ def validate(
     elif suffix in (".sh", ".bash"):
         argv = [interpreter, "-n", str(script_path)]
     else:  # .ps1 - parse only, via the AST parser, never invokes the script body
+        # Single quotes doubled - schema validation only checks path
+        # traversal/extension, not quote characters in the filename.
+        escaped_path = str(script_path).replace("'", "''")
         parse = (
             "$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile"
-            f"('{script_path}',[ref]$null,[ref]$e); if($e){{$e|%{{Write-Error $_}};exit 1}}"
+            f"('{escaped_path}',[ref]$null,[ref]$e); if($e){{$e|%{{Write-Error $_}};exit 1}}"
         )
         argv = [interpreter, "-NoProfile", "-Command", parse]
     return self.run(*argv[1:], cwd=path, env=env, line_callback=line_callback)
@@ -506,3 +509,11 @@ Two small, additive controller changes:
   `shutil.which("bash")` found neither it nor the alternate `Git\usr\bin`
   location). `_interpreter_argv()` now checks both well-known install
   locations before falling back to the bare `"bash"` literal.
+- `validate()`'s `.ps1` parse-only `-Command` string interpolates
+  `script_path` directly into a single-quoted PowerShell string literal —
+  schema validation only checks path traversal and extension, never quote
+  characters, so an unescaped single quote in `script.file` would break
+  out of that literal and let the rest of the filename run as arbitrary
+  PowerShell. Found on code review (not exploited, not reported) — fixed
+  by doubling embedded single quotes before interpolating, PowerShell's
+  own escaping convention for a single-quoted string.

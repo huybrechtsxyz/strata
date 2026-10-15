@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Script integration (docs/work/script-provisioner.md) — the first real
+"""Script integration (docs/design/script-provisioner.md) — the first real
 executor for `ProvisionerType.SCRIPT`, long reserved but, until now, dead:
 `tool: script` passed `strata validate` cleanly and then failed at `build
 run`/`deploy run` with a plain "no integration registered" error.
@@ -7,8 +7,8 @@ run`/`deploy run` with a plain "no integration registered" error.
 Unlike every other `InfraIntegration`, this class has no fixed binary
 (`COMMAND`) — the interpreter needed depends on the bound provisioner's own
 `script.file` extension (`.ps1`/`.sh`/`.bash`/`.py`/`.bat`), resolved via
-`bind()` (`Integration.bind()`, base no-op elsewhere, docs/work/
-script-provisioner.md Phase 2) rather than a class-level constant.
+`bind()` (`Integration.bind()`, base no-op elsewhere, docs/design/
+script-provisioner.md) rather than a class-level constant.
 
 `init()` is deliberately not defined — there is no provider/backend/state
 for a script to initialize (see the design doc's init/validate/plan/deploy
@@ -174,7 +174,10 @@ class ScriptIntegration(InfraIntegration):
         than raising."""
         assert self._script is not None
         args = self._script.args or []
-        return args if tokens is None else [resolve_value_tokens(a, dict(tokens)) for a in args]
+        if tokens is None:
+            return args
+        values = dict(tokens)  # built once, not once per arg
+        return [resolve_value_tokens(a, values) for a in args]
 
     @staticmethod
     def _values_env(tokens: Mapping[str, str] | None) -> dict[str, str]:
@@ -184,7 +187,7 @@ class ScriptIntegration(InfraIntegration):
         own `TF_VAR_*` delivery already accepts (a process's own
         environment, not disk). Not split secret-vs-non-secret: a flat
         `tokens` dict carries no such distinction by the time it reaches
-        here (docs/work/script-provisioner.md Phase 4's own finding).
+        here (docs/design/script-provisioner.md's own finding).
         `{}` when `tokens` is `None` — no mechanism to deliver, nothing
         silently injected."""
         return {} if tokens is None else {"STRATA_VALUES": json.dumps(dict(tokens))}
@@ -212,9 +215,14 @@ class ScriptIntegration(InfraIntegration):
         elif suffix in (".sh", ".bash"):
             argv = [interpreter, "-n", str(script_path)]
         else:  # .ps1 - parse only, via the AST parser, never invokes the script body
+            # Single quotes doubled - a script.file containing one (schema
+            # validation only checks path traversal/extension, not this)
+            # would otherwise break out of the single-quoted PowerShell
+            # string and inject arbitrary code into this -Command string.
+            escaped_path = str(script_path).replace("'", "''")
             parse = (
                 "$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile"
-                f"('{script_path}',[ref]$null,[ref]$e); if($e){{$e|%{{Write-Error $_}};exit 1}}"
+                f"('{escaped_path}',[ref]$null,[ref]$e); if($e){{$e|%{{Write-Error $_}};exit 1}}"
             )
             argv = [interpreter, "-NoProfile", "-Command", parse]
         return self.run(*argv[1:], cwd=path, env=env, line_callback=line_callback)

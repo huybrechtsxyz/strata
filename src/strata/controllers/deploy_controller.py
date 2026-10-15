@@ -843,8 +843,8 @@ def deploy_run(
             # Unlike GitOps above, script wants upstream step outputs too
             # (`tokens`, not bare `resolved.values`) — its `args`/`STRATA_
             # VALUES` delivery has no reason to withhold what's already
-            # visible to this step via `${output:...}` (docs/work/
-            # script-provisioner.md Phase 4).
+            # visible to this step via `${output:...}` (docs/design/
+            # script-provisioner.md).
             step_resolved_values = tokens
 
         plan_result = integration.plan_or_warn(

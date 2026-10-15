@@ -52,7 +52,7 @@ def resolve_integration(index: DocumentIndex, provisioner: ProvisionerModel) -> 
     """Return the `InfraIntegration` instance `provisioner` should run against.
 
     Calls `integration.bind(provisioner)` (base no-op, `base.py`) before
-    returning — `ScriptIntegration`'s own use case (docs/work/
+    returning — `ScriptIntegration`'s own use case (docs/design/
     script-provisioner.md): which interpreter to use depends on the specific
     provisioner's `script.file`, not a fixed class-level `COMMAND`. Harmless
     for every other integration.

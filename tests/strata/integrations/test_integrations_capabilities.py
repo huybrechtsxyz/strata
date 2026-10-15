@@ -637,7 +637,7 @@ def test_every_infra_integration_declares_a_resolved_value_delivery_mechanism():
     #: `output.template` escape hatch (ADR-0023 D3 — tool-agnostic by design).
     gitops_exception = {"BaseGitOpsIntegration", "ArgoCDIntegration", "FluxIntegration"}
 
-    #: ScriptIntegration (docs/work/script-provisioner.md Phase 4, shipped)
+    #: ScriptIntegration (docs/design/script-provisioner.md, shipped)
     #: has a real mechanism — a `STRATA_VALUES` env var carrying the whole
     #: resolved `resolved_values` map, built in `deploy()`/`plan()` — but
     #: it's neither of the two this test guards for: `ENV_VAR_PREFIX` is a

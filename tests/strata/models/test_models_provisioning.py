@@ -302,7 +302,7 @@ def test_provisioner_gitops_is_optional():
 
 
 # ---------------------------------------------------------------------------
-# script (docs/work/script-provisioner.md Phase 1) — only valid for tool
+# script (docs/design/script-provisioner.md) — only valid for tool
 # 'script'; required there (nothing else says what to run). Unlike gitops,
 # 'script' is not a sync type, so `source` is still required.
 # ---------------------------------------------------------------------------

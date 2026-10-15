@@ -103,12 +103,12 @@ class ProvisionerGitOpsModel(PlatformBaseModel):
 
 #: Narrower than the general SCRIPT_EXTENSIONS (common_models.py) — this
 #: tool's own supported interpreters only (ps1/sh/bash/py/bat), not the
-#: lifecycle-hook set's .js/.mjs/.go (docs/work/script-provisioner.md).
+#: lifecycle-hook set's .js/.mjs/.go (docs/design/script-provisioner.md).
 SCRIPT_PROVISIONER_EXTENSIONS = frozenset({".ps1", ".sh", ".bash", ".py", ".bat"})
 
 
 class ProvisionerScriptModel(PlatformBaseModel):
-    """Only valid when a Provisioner's `tool` is 'script' (docs/work/script-provisioner.md)."""
+    """Only valid when a Provisioner's `tool` is 'script' (docs/design/script-provisioner.md)."""
 
     file: str = Field(description="Script path, relative to this provisioner's 'source' directory")
     args: list[str] | None = Field(None, description="Arguments passed to the script")
@@ -305,7 +305,7 @@ class ProvisionerModel(PlatformBaseModel):
         """`script` is required for tool 'script' (nothing else says what to
         run) and rejected for every other *recognized* built-in — same
         recognized-vs-custom leniency as `validate_backend_only_for_terraform`/
-        `validate_properties_only_for_ansible` above (docs/work/
+        `validate_properties_only_for_ansible` above (docs/design/
         script-provisioner.md).
         """
         try:
