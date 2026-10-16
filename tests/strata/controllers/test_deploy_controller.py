@@ -174,6 +174,148 @@ def test_deploy_run_dry_run_calls_init_validate_plan_but_not_deploy(tmp_path: Pa
     assert commands == ["init", "validate", "plan"]
 
 
+def test_deploy_run_stop_after_setup_calls_only_init(tmp_path: Path, _capture):
+    """`stop_after="setup"` backs `deploy setup`
+    (docs/design/deploy-pipeline-stage-commands.md) — stops right after
+    `init()`, never reaching `validate`/`plan`/`deploy`."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stop_after="setup")
+
+    assert diagnostics.ok, diagnostics.messages()
+    commands = [call[1] for call in _capture]
+    assert commands == ["init"]
+
+
+def test_deploy_run_stop_after_check_calls_init_then_validate(tmp_path: Path, _capture):
+    """`stop_after="check"` backs `deploy check` — stops right after
+    `validate()`, never reaching `plan`/`deploy`."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stop_after="check")
+
+    assert diagnostics.ok, diagnostics.messages()
+    commands = [call[1] for call in _capture]
+    assert commands == ["init", "validate"]
+
+
+def test_deploy_run_stop_after_setup_gracefully_skips_container_capable_step(tmp_path: Path, _capture):
+    """A container-capable (Helm) step has no init/validate phase at all —
+    `stop_after` must report a graceful skip, never an error, and never
+    call `deploy_namespace()`."""
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stop_after="setup")
+
+    assert diagnostics.ok, diagnostics.messages()
+    tf_commands = [call[1] for call in _capture if call[0] == "terraform"]
+    assert tf_commands == ["init"]
+    assert not any(call[0] == "helm" for call in _capture)
+
+
+def test_deploy_run_stop_after_check_gracefully_skips_container_capable_step(tmp_path: Path, _capture):
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stop_after="check")
+
+    assert diagnostics.ok, diagnostics.messages()
+    tf_commands = [call[1] for call in _capture if call[0] == "terraform"]
+    assert tf_commands == ["init", "validate"]
+    assert not any(call[0] == "helm" for call in _capture)
+
+
+def test_deploy_run_use_saved_plan_hard_errors_when_plan_file_missing(tmp_path: Path, _capture):
+    """`use_saved_plan` backs `deploy apply` — must never silently fall
+    back to computing a fresh plan when no saved `<step>.tfplan` exists."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, use_saved_plan=True)
+
+    assert not diagnostics.ok
+    assert any("no saved plan found" in e.message for e in diagnostics.errors)
+    commands = [call[1] for call in _capture]
+    assert commands == ["init"]  # init runs; validate/plan/apply never reached
+
+
+def test_deploy_run_use_saved_plan_applies_existing_plan_without_revalidating_or_replanning(tmp_path: Path, _capture):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    (build_path / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, use_saved_plan=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    commands = [call[1] for call in _capture]
+    assert commands == ["init", "apply", "output"]  # validate/plan skipped entirely
+    apply_call = next(call for call in _capture if call[1] == "apply")
+    assert "apply_infra.tfplan" in apply_call
+
+
+def test_deploy_run_use_saved_plan_cross_invocation_output_handoff(tmp_path: Path, monkeypatch):
+    """Each step applied via `use_saved_plan=True` in its OWN separate
+    `deploy_run()` call — simulating two separate `deploy apply`
+    invocations (e.g. two separate CI jobs). The downstream step's
+    `${output:apply_infra.vm_ip}` token must resolve via the durable
+    `DeploymentOutputStore`, not any in-memory state from the first call
+    — directly covers docs/design/deploy-pipeline-stage-commands.md's
+    Implementation Plan Phase 3 item 5."""
+    backend_cls = _register_fake_output_store_backend(monkeypatch)
+    root = _output_chained_solution(tmp_path)
+    workspace_path = root / "workspace.yaml"
+    workspace_path.write_text(
+        workspace_path.read_text(encoding="utf-8").replace(
+            "spec:\n  providers:", "spec:\n  output_store: fake-output-store\n  providers:"
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    (build_path / "infra_a" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
+
+    calls: list[tuple[list[str], Path | None]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append((list(args), cwd))
+        if args[1] == "output":
+            if cwd is not None and cwd.name == "infra_a":
+                payload = json.dumps({"vm_ip": {"value": "10.0.0.5", "type": "string", "sensitive": False}})
+                return CommandResult(returncode=0, stdout=payload, stderr="")
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    # First separate invocation: apply only apply_infra, from its saved plan.
+    diagnostics_a = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="apply_infra")
+    assert diagnostics_a.ok, diagnostics_a.messages()
+    assert "strata/deployment-outputs/app" in backend_cls.shared_data
+
+    # Second, SEPARATE invocation (fresh deploy_run() call, no shared
+    # in-memory state with the first) — apply_apps' backend.configuration
+    # references `${output:apply_infra.vm_ip}`, which only exists because
+    # the first invocation durably recorded it.
+    (build_path / "infra_b" / "apply_apps.tfplan").write_text("fake plan", encoding="utf-8")
+    diagnostics_b = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="apply_apps")
+    assert diagnostics_b.ok, diagnostics_b.messages()
+
+    apps_commands = [call[1] for call, cwd in calls if cwd is not None and cwd.name == "infra_b"]
+    assert apps_commands == ["init", "apply", "output"]
+
+
 def test_deploy_run_dry_run_plan_failure_is_a_hard_error(tmp_path: Path, monkeypatch):
     root = _terraform_solution(tmp_path)
     build_path = tmp_path / "build"

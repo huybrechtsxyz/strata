@@ -25,7 +25,7 @@ import re
 from collections.abc import Callable, Mapping
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import jinja2
 
@@ -307,6 +307,8 @@ def deploy_run(
     force: bool = False,
     dry_run: bool = False,
     smoke_test: bool = False,
+    stop_after: Literal["setup", "check"] | None = None,
+    use_saved_plan: bool = False,
     stage: str | None = None,
     scope: str | None = None,
     on_step: Callable[[str], None] | None = None,
@@ -352,6 +354,33 @@ def deploy_run(
             `init`/`validate`/`plan`/`deploy` at all — zero tool contact,
             no auth needed. Mutually exclusive with `dry_run` (enforced by
             `deploy_command.py`, not here).
+        stop_after: Stops every resolved step right after `init()`
+            (`"setup"`) or right after `validate()` (`"check"`) succeeds —
+            backs `deploy setup`/`deploy check`
+            (docs/design/deploy-pipeline-stage-commands.md). `None`
+            (default) does not stop early here; `dry_run`/`smoke_test`
+            already cover the other two real stopping points ("plan" and
+            zero-contact respectively) and are unaffected by this
+            parameter. A container-capable (Helm/Compose) step has no
+            init/validate phase to begin with and is reported as a
+            graceful skip, never an error, for either value. Mutually
+            exclusive with `dry_run`/`smoke_test` (enforced by
+            `deploy_command.py`, not here).
+        use_saved_plan: Skips `validate()`/`plan_or_warn()` entirely after
+            `init()` and applies the `<step>.tfplan` already on disk at
+            `build_path` — backs `deploy apply`
+            (docs/design/deploy-pipeline-stage-commands.md). Hard-errors
+            (a `Diagnostic`, not a crash) if that file does not exist —
+            never silently falls back to computing a fresh plan, since
+            the entire point is to apply *exactly* a previously reviewed
+            plan. A container-capable (Helm/Compose) step has no
+            saved-plan-file concept at all — `deploy_namespace()` just
+            does a real (`dry_run=False`) deploy, with no guarantee it
+            matches whatever an earlier `deploy plan` showed (an
+            acknowledged tool limitation, not something this flag papers
+            over). Mutually exclusive with `dry_run`/`smoke_test`/
+            `stop_after` (enforced by `deploy_command.py`, not here,
+            matching every other mutual-exclusivity rule above).
         stage: Restrict to the one step named `stage`.
         scope: Restrict to steps whose `ProvisioningStepModel.scope`
             matches (docs/design/deploy-command.md's resolved `scope`
@@ -669,6 +698,11 @@ def deploy_run(
         # namespace linkage — see docs/design/deploy-command.md's
         # "Superseded" section for the two earlier, wrong drafts).
         if Capability.CONTAINER in integration.CAPABILITIES:
+            if stop_after is not None:
+                _step(
+                    f"step '{step.name}' via {integration_type} has no {stop_after} phase (container-capable) — skipped"
+                )
+                continue
             _, namespaces_eff = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
             # sorted(): namespaces_eff is a set (hash order, not declaration order) — deploy order
             # must stay deterministic across runs, not vary with PYTHONHASHSEED.
@@ -809,14 +843,35 @@ def deploy_run(
             if not init_result.is_successful:
                 diagnostics.error(f"Step '{step.name}': init failed — {init_result.stderr}", location=step.name)
                 return diagnostics
-        validate = getattr(integration, "validate", None)
-        if validate is not None:
-            validate_result = validate(
-                path, env=env, line_callback=_line, **_timeout_kwargs(step, deployment_stage, "check")
-            )
-            if not validate_result.is_successful:
-                diagnostics.error(f"Step '{step.name}': validate failed — {validate_result.stderr}", location=step.name)
+        if stop_after == "setup":
+            _step(f"setup complete for step '{step.name}' via {integration_type} (stop-after-setup)")
+            continue
+        if use_saved_plan:
+            # Deliberately skips `validate()` AND `plan_or_warn()` below —
+            # `deploy apply` must apply *exactly* the plan a human or
+            # automated gate already reviewed, never a freshly recomputed
+            # one (docs/design/deploy-pipeline-stage-commands.md).
+            saved_plan_path = path / f"{step.name}.tfplan"
+            if not saved_plan_path.exists():
+                diagnostics.error(
+                    f"Step '{step.name}': no saved plan found at '{saved_plan_path}' — run 'deploy plan' first.",
+                    location=step.name,
+                )
                 return diagnostics
+        else:
+            validate = getattr(integration, "validate", None)
+            if validate is not None:
+                validate_result = validate(
+                    path, env=env, line_callback=_line, **_timeout_kwargs(step, deployment_stage, "check")
+                )
+                if not validate_result.is_successful:
+                    diagnostics.error(
+                        f"Step '{step.name}': validate failed — {validate_result.stderr}", location=step.name
+                    )
+                    return diagnostics
+            if stop_after == "check":
+                _step(f"check complete for step '{step.name}' via {integration_type} (stop-after-check)")
+                continue
 
         # Real credentials for a GitOps remote (docs/design/
         # gitops-integration.md Implementation Plan Phase 5) — resolved
@@ -847,46 +902,47 @@ def deploy_run(
             # script-provisioner.md).
             step_resolved_values = tokens
 
-        plan_result = integration.plan_or_warn(
-            path,
-            diagnostics=diagnostics,
-            location=step.name,
-            out_file=f"{step.name}.tfplan",
-            env=env,
-            auth=auth,
-            resolved_values=step_resolved_values,
-            output_path=rendered_output_path,
-            line_callback=_line,
-            **_timeout_kwargs(step, deployment_stage, "plan"),
-        )
-        if plan_result is None:
-            # No real plan preview available for this integration. Under
-            # `--dry-run` that's a graceful skip — a warning was already
-            # recorded by `plan_or_warn()`; move on to the next step
-            # rather than aborting the whole run (docs/work/
-            # deploy-plan-preview.md §3: "if the IaC/provisioner supports
-            # it, otherwise not"). On a real apply, `plan()` is a required
-            # prerequisite, not an optional preview — silently skipping
-            # `deploy()` here would report the run as successful having
-            # never actually deployed this step, so this is a hard error
-            # instead, matching Helm/Compose's `deploy_namespace()`, which
-            # only ever calls `plan_or_warn()` inside its own `dry_run`
-            # branch and goes straight to `deploy()` otherwise.
-            if dry_run:
-                continue
-            diagnostics.error(
-                f"Step '{step.name}': plan is required before apply, but no plan preview is available for "
-                f"'{integration_type}' — cannot proceed with apply.",
+        if not use_saved_plan:
+            plan_result = integration.plan_or_warn(
+                path,
+                diagnostics=diagnostics,
                 location=step.name,
+                out_file=f"{step.name}.tfplan",
+                env=env,
+                auth=auth,
+                resolved_values=step_resolved_values,
+                output_path=rendered_output_path,
+                line_callback=_line,
+                **_timeout_kwargs(step, deployment_stage, "plan"),
             )
-            return diagnostics
-        if not plan_result.is_successful:
-            diagnostics.error(f"Step '{step.name}': plan failed — {plan_result.stderr}", location=step.name)
-            return diagnostics
+            if plan_result is None:
+                # No real plan preview available for this integration. Under
+                # `--dry-run` that's a graceful skip — a warning was already
+                # recorded by `plan_or_warn()`; move on to the next step
+                # rather than aborting the whole run (docs/work/
+                # deploy-plan-preview.md §3: "if the IaC/provisioner supports
+                # it, otherwise not"). On a real apply, `plan()` is a required
+                # prerequisite, not an optional preview — silently skipping
+                # `deploy()` here would report the run as successful having
+                # never actually deployed this step, so this is a hard error
+                # instead, matching Helm/Compose's `deploy_namespace()`, which
+                # only ever calls `plan_or_warn()` inside its own `dry_run`
+                # branch and goes straight to `deploy()` otherwise.
+                if dry_run:
+                    continue
+                diagnostics.error(
+                    f"Step '{step.name}': plan is required before apply, but no plan preview is available for "
+                    f"'{integration_type}' — cannot proceed with apply.",
+                    location=step.name,
+                )
+                return diagnostics
+            if not plan_result.is_successful:
+                diagnostics.error(f"Step '{step.name}': plan failed — {plan_result.stderr}", location=step.name)
+                return diagnostics
 
-        if dry_run:
-            _step(f"planned step '{step.name}' via {integration_type} (dry-run, no apply)")
-            continue
+            if dry_run:
+                _step(f"planned step '{step.name}' via {integration_type} (dry-run, no apply)")
+                continue
 
         deploy_result = integration.deploy(
             path,

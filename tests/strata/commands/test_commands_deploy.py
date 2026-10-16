@@ -266,7 +266,7 @@ def test_follow_ndjson_streams_line_and_progress_events_to_stdout(runner, soluti
     """`--follow ndjson` (requires `--output json`) streams one JSON event
     per subprocess line and per progress message to stdout, ending with
     the normal `build_envelope()` result as the final line — unchanged
-    from plain `--output json`, not a bespoke shape (docs/work/
+    from plain `--output json`, not a bespoke shape (docs/archive/
     ndjson-output.md's "Final event shape" decision)."""
     _build(runner, solution)
     result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "ndjson", "--output", "json")
@@ -491,3 +491,283 @@ def test_change_approval_flags_without_the_base_trio_exit_two(runner, solution, 
     )
     assert result.exit_code == EXIT_USAGE
     assert _stub_terraform == []
+
+
+# ---------------------------------------------------------------------------
+# `deploy setup`/`deploy check` (docs/design/deploy-pipeline-stage-commands.md)
+# ---------------------------------------------------------------------------
+
+
+def test_deploy_setup_calls_only_init(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "setup", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init"]
+
+
+def test_deploy_check_calls_init_then_validate(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "check", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "validate"]
+
+
+def test_deploy_check_unknown_deployment_exits_two(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "check", "ghost-deployment", "--path", str(solution)])
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_deploy_check_step_failure_exits_three(runner, solution, monkeypatch):
+    _build(runner, solution)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "validate":
+            return CommandResult(returncode=1, stdout="", stderr="validate exploded")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    result = runner.invoke(cli, ["deploy", "check", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_VALIDATION
+
+
+def test_deploy_setup_and_check_forward_stage_and_scope(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "setup", "app", "--path", str(solution), "--stage", "apply_infra"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    result = runner.invoke(cli, ["deploy", "check", "app", "--path", str(solution), "--scope", "infra"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+
+def test_deploy_check_help_lists_check_not_validate(runner):
+    """`check` is the canonical, documented name; `validate` is a hidden
+    alias (docs/design/deploy-pipeline-stage-commands.md's naming-collision
+    resolution) — must not clutter `--help`'s command list. (The word
+    "validate" legitimately appears in `check`'s own help text, describing
+    what it runs — only the command *list* itself must omit a "validate"
+    entry.)"""
+    result = runner.invoke(cli, ["deploy", "--help"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "check" in result.output
+    assert not any(line.strip().startswith("validate") for line in result.output.splitlines())
+
+
+def test_deploy_validate_hidden_alias_behaves_identically_to_check(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "validate", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "validate"]
+
+
+def test_deploy_setup_gracefully_skips_container_capable_step(runner, tmp_path, _stub_terraform):
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(root, "charts/authentik/Chart.yaml", "name: authentik\n")
+    _write(root, "provider.yaml", PROVIDER)
+    _write(root, "resource.yaml", RESOURCE)
+    _write(
+        root,
+        "module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    source_path: charts/authentik\n  type: helm\n"
+        "  default_labels:\n    app: authentik\n  services:\n    - name: server\n",
+    )
+    _write(
+        root,
+        "namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: apps\nspec:\n"
+        "  default_labels:\n    app: apps\n  modules:\n    - name: auth\n      module: authentik\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n  namespaces:\n    - apps\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
+        "      scope: infra\n"
+        "    - name: deploy_apps\n      provisioner: helm_main\n      namespaces:\n        - apps\n"
+        "      scope: apps\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(root, "environment.yaml", ENVIRONMENT)
+    _write(root, "deployment.yaml", DEPLOYMENT)
+
+    _build(runner, root)
+    result = runner.invoke(cli, ["deploy", "setup", "app", "--path", str(root)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    tf_commands = [call[1] for call in _stub_terraform if call[0] == "terraform"]
+    assert tf_commands == ["init"]
+    assert not any(call[0] == "helm" for call in _stub_terraform)
+
+
+# ---------------------------------------------------------------------------
+# `deploy apply` (docs/design/deploy-pipeline-stage-commands.md)
+# ---------------------------------------------------------------------------
+
+
+def test_deploy_apply_missing_plan_file_exits_three_not_a_traceback(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "apply", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_VALIDATION, result.output
+    assert "no saved plan found" in result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init"]
+
+
+def test_deploy_apply_applies_an_existing_saved_plan(runner, solution, tmp_path, _stub_terraform):
+    _build(runner, solution)
+    (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
+
+    result = runner.invoke(cli, ["deploy", "apply", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "apply", "output"]
+
+
+def test_deploy_apply_force_flag_is_accepted_and_currently_inert(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
+
+    result = runner.invoke(cli, ["deploy", "apply", "app", "--path", str(solution), "--force"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    apply_call = next(call for call in _stub_terraform if call[1] == "apply")
+    assert "-auto-approve" not in apply_call
+
+
+def test_deploy_apply_forwards_stage_and_scope(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
+
+    result = runner.invoke(
+        cli, ["deploy", "apply", "app", "--path", str(solution), "--stage", "apply_infra", "--scope", "infra"]
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+
+def test_deploy_apply_change_reference_flags_populate_the_manifest(runner, solution, _stub_terraform):
+    from strata.utils import layout
+
+    _build(runner, solution)
+    (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "apply",
+            "app",
+            "--path",
+            str(solution),
+            "--change-system",
+            "jira",
+            "--change-id",
+            "OPS-1234",
+            "--change-reason",
+            "planned maintenance",
+        ],
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    manifest_path = next(layout.audit_dir(solution).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"system": "jira"' in manifest_text
+    assert '"id": "OPS-1234"' in manifest_text
+
+
+def test_deploy_apply_partial_change_reference_flags_exit_two_before_deploy_runs(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(
+        cli,
+        ["deploy", "apply", "app", "--path", str(solution), "--change-system", "jira"],
+    )
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []  # deploy_run() must never have been called
+
+
+# ---------------------------------------------------------------------------
+# `deploy plan` (docs/design/deploy-pipeline-stage-commands.md)
+# ---------------------------------------------------------------------------
+
+
+def test_deploy_plan_calls_init_validate_plan_but_not_apply(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "validate", "plan"]
+
+
+def test_deploy_plan_saves_a_tfplan_file(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    plan_call = next(call for call in _stub_terraform if call[1] == "plan")
+    assert "-out" in plan_call and "apply_infra.tfplan" in plan_call
+
+
+def test_deploy_plan_streams_console_output_by_default_without_follow(runner, solution, _stub_terraform_streaming):
+    """Unlike every other deploy subcommand, `deploy plan` streams the
+    diff to the console WITHOUT needing `--follow` — its own `--follow`
+    option defaults to `"console"`, mirroring real `terraform plan`'s
+    interactive UX (docs/design/deploy-pipeline-stage-commands.md)."""
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" in result.output
+
+
+def test_deploy_plan_explicit_follow_ndjson_still_overrides_the_console_default(
+    runner, solution, _stub_terraform_streaming
+):
+    _build(runner, solution)
+    result = runner.invoke(
+        cli, ["deploy", "plan", "app", "--path", str(solution), "--follow", "ndjson", "--output", "json"]
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert '"event": "line"' in result.output
+
+
+def test_deploy_plan_output_json_reroutes_the_default_console_stream_to_stderr(
+    runner, solution, _stub_terraform_streaming
+):
+    """No flag fully silences the default stream — `--output json` reroutes
+    it to stderr instead, same precedent `deploy run --follow --output json`
+    already established, so stdout stays exactly one JSON document."""
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution), "--output", "json"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" in result.stderr
+    assert "terraform │" not in result.stdout
+    json.loads(result.stdout)
+
+
+def test_deploy_plan_unknown_deployment_exits_two(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "ghost-deployment", "--path", str(solution)])
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_deploy_plan_plan_failure_exits_three(runner, solution, monkeypatch):
+    _build(runner, solution)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "plan":
+            return CommandResult(returncode=1, stdout="", stderr="plan exploded")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_VALIDATION

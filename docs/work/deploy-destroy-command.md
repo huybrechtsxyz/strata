@@ -1,7 +1,7 @@
 # `strata deploy destroy` Command — Work
 
-- Status: draft
-- Last updated: 2026-10-09
+- Status: draft — fully designed (2026-10-16), nothing implemented yet
+- Last updated: 2026-10-16
 
 ## Overview
 
@@ -50,6 +50,44 @@ this doc, not that one, is `destroy`'s real home:
   `deploy run`'s (`deploy-command.md`'s own documented current state) —
   it has one concrete, real job here: `integration.destroy(path,
   auto_approve=force, ...)`.
+
+## Real evidence — v1's real stage-selection module confirms the
+ordering and gating design below (2026-10-16)
+
+Read `strata/utils/stage_selection.py` directly (the one module v1
+shares between `deploy run` and `deploy destroy` for "which stages run,
+and why the others do not") rather than designing ordering/gating from
+first principles:
+
+- **`StageSelectionMode.DESTROY` never gates on `enabled`** — the real
+  module's own docstring: *"Never gate — gating a teardown would strand
+  infrastructure created while the flag was on."* Confirms the design
+  below (no `enabled`-based filtering for destroy) is not a guess; v1
+  reached the identical conclusion for the identical reason. (Side
+  finding, out of this doc's scope: v2's `deploy_run()` today honors
+  `DeploymentStageModel.enabled` nowhere at all, not even for a normal
+  deploy.)
+- **v1 itself never decided reverse dependency order — and says so.**
+  The same docstring, continued: *"Declaration order, because a correct
+  teardown needs the reverse order and that is a decision ADR-0083 does
+  not make."* v1's real `order_stages()` (Kahn's algorithm, ready nodes
+  dequeued in declaration order) is called unreversed for `DESTROY` —
+  an acknowledged gap in v1's own shipped code, not a deliberate choice
+  to keep declaration order. **v2 is not copying this gap**: the
+  orchestrator pseudocode below reverses `ordered_by_depends_on()`'s
+  existing output — tearing down a step's dependents before the step
+  itself, the actually-correct behavior v1 admits it never built.
+- **Confirmed via v1's real Helm/Compose deployers** (`helm_deployer.py`/
+  `compose_deployer.py`) exactly how a `destroy_namespace()`-shaped
+  method should work per tool: `HelmDeployer.destroy()` loops `helm
+  uninstall --namespace <ns> <release>` once per module/release
+  attached to the stage; `ComposeDeployer.destroy()` is one `docker
+  stack rm <namespace>` call (Compose already merges every module in a
+  namespace into one stack at build time, so there is nothing to loop
+  over). Preview equivalent (v1's real `plan_destroy` step): Helm checks
+  installed-ness via `helm get manifest`; Compose checks the running-
+  stack list — neither is a real diff, both just report "would remove"
+  vs. "not installed."
 
 ## Current Design — already built, confirmed by reading the code directly
 
@@ -127,10 +165,15 @@ destroy_run(context, deployment_name, build_path, *, force, dry_run, stage=None,
   ├─ deployment, workspace, environments, resolved = (identical to deploy_run()'s own setup — same
   │     resolve_deployment()/reachable_environments()/resolve_values() calls, no new resolution logic)
   ├─ steps = ordered_by_depends_on(workspace.spec.execution)
-  ├─ steps = list(reversed(steps))                 # NEW: teardown order is the inverse of build order —
-  │                                                 #      destroy a step's dependents before the step itself
+  ├─ steps = list(reversed(steps))                 # Decided (2026-10-16), confirmed against v1's real
+  │                                                 #      stage_selection.py: v1 itself never reverses this
+  │                                                 #      (its own docstring admits ADR-0083 never decided
+  │                                                 #      it) — v2 does not copy that gap. Tear down a
+  │                                                 #      step's dependents before the step itself.
   ├─ steps = [s for s in steps if stage is None or s.name == stage]
   ├─ steps = [s for s in steps if scope is None or s.scope == scope]
+  │     # no `enabled` filtering — matches v1's real StageSelectionMode.DESTROY exactly: gating a
+  │     # teardown would strand infrastructure created while the flag was on.
   │
   ├─ for step in steps:
   │    integration = resolve_integration(index, find_provisioner(workspace, step.provisioner))
@@ -144,11 +187,32 @@ destroy_run(context, deployment_name, build_path, *, force, dry_run, stage=None,
   │    else:
   │        if not dry_run:
   │            integration.init(path, backend_config=backend_config, env=env)   # still needed — destroy must target the real state
+  │            integration.validate(path, env=env)                             # Decided (2026-10-16): include check/validate, unlike
+  │                                                                             #      v1's real [setup, destroy] (no check) — cheap,
+  │                                                                             #      harmless, keeps the sequence symmetric with
+  │                                                                             #      deploy run's own init → validate → plan → deploy.
   │            result = integration.destroy(path, auto_approve=force, env=env)  # NO saved-plan-file step — destroy has none
   │        else:
+  │            integration.init(path, backend_config=backend_config, env=env)
+  │            integration.validate(path, env=env)
   │            integration.plan_or_warn(path, destroy=True, env=env, diagnostics=diagnostics, location=step.name)  # terraform plan -destroy preview
   │    on_step(f"... destroyed {step.name} ...")
   │
+  ├─ if diagnostics.ok and not dry_run:
+  │     output_store.clear(s.name for s in steps)   # NEW (2026-10-16): DeploymentOutputStore gets a new
+  │                                                  #      clear(steps) method — same CAS read-modify-write
+  │                                                  #      loop record() already uses, popping the destroyed
+  │                                                  #      steps' keys instead of adding one, then put(). No
+  │                                                  #      new KeyValueStoreIntegration capability needed —
+  │                                                  #      get()/put(if_version=...) is already sufficient.
+  │                                                  #      Called once, after the whole run succeeds, not per
+  │                                                  #      step, so a partial failure leaves every already-
+  │                                                  #      recorded output intact for a retry. Prevents a later
+  │                                                  #      `deploy run` of new infrastructure from reading stale
+  │                                                  #      pre-destroy outputs still inside the trust window.
+  │                                                  #      The audit trail itself (manifest, SIEM/audit-sink
+  │                                                  #      distribution) is untouched — append-only history,
+  │                                                  #      same as `deploy run` today.
   └─ return diagnostics
 ```
 
@@ -225,15 +289,12 @@ Deliberately **not** carried over from `deploy_run()`:
    `finalize_and_distribute_deploy_audit()` for `action="destroy"`; the
    renderer (`audit_event_rendering.py`) is already destroy-aware, so this
    is glue work, not new rendering logic.
-6. **Open question: is this `strata deploy destroy` or `strata destroy
-   run`?** Both names appear across existing comments (`audit_run.py`
-   says "`deploy destroy`"; `gitops-integration.md` says "`deploy
-   destroy`/`strata destroy run`" as if undecided). `deploy destroy` reads
-   more naturally as a subcommand of the existing `deploy` group
-   (consistent with v1's own real CLI shape, confirmed in
-   `v1-consumer-usage.md`'s Tier 2 list: `deploy status/history/health/
-   destroy` are all `deploy`-group subcommands) — tentative preference,
-   not yet decided.
+6. **Naming — resolved (2026-10-16): `strata deploy destroy`.** Decided
+   in favor of a subcommand on the existing `deploy` group, not a
+   separate top-level `strata destroy run` — matches v1's own real CLI
+   shape (`v1-consumer-usage.md`'s Tier 2 list: `deploy status/history/
+   health/destroy` are all `deploy`-group subcommands) and avoids a
+   second top-level command group for one verb.
 7. **Timeout wiring** — once `destroy()` has a real call site,
    `_timeout_kwargs(step, stage, "destroy")` (the same helper
    `deploy_controller.py` already uses for `setup`/`check`/`plan`/`apply`)
@@ -247,6 +308,18 @@ Deliberately **not** carried over from `deploy_run()`:
    standing) has real-world demand — no evidence either way yet from
    either reference consumer (neither uses `deploy destroy` at all today,
    per Tier 2 classification).
+10. **`DeploymentOutputStore.clear()`** (new method,
+    `deployment_output_store.py`) — decided 2026-10-16. Same CAS
+    read-modify-write loop `record()` already uses, popping the
+    destroyed steps' keys instead of adding one, then `put()` — no new
+    `KeyValueStoreIntegration` capability needed
+    (`get()`/`put(if_version=...)` is already sufficient). Called once,
+    after the whole run succeeds, not per step, so a partial failure
+    leaves every already-recorded output intact for a retry. Prevents a
+    later `deploy run` of new infrastructure from reading stale
+    pre-destroy outputs still inside the trust window. The audit trail
+    itself (manifest, SIEM/audit-sink distribution) is untouched —
+    append-only history, same as `deploy run` today.
 
 ## Changelog
 
@@ -263,3 +336,25 @@ Deliberately **not** carried over from `deploy_run()`:
   container path). Restated `deploy-command.md`'s own phase 7
   `--force`/`-auto-approve` finding here since it's `destroy`-specific
   and belongs in this doc, not duplicated as new research.
+- 2026-10-16: **Fully designed, consolidated from a separate parallel
+  investigation.** A different pass had started re-investigating
+  `deploy destroy` from scratch under `deploy-command.md`, without
+  initially finding this doc already existed — merged here rather than
+  left duplicated. Read v1's real `stage_selection.py` directly:
+  confirmed `StageSelectionMode.DESTROY` never gates on `enabled` (v1's
+  own stated reason, matching this doc's design unchanged) and, more
+  significantly, that v1 itself **never reverses step order for
+  destroy** — its own docstring admits a correct teardown needs reverse
+  dependency order but that ADR-0083 never decided it, so v1 silently
+  keeps declaration order. This doc's own reverse-order design (written
+  2026-10-09, before this evidence was read) is confirmed correct, not
+  merely assumed — v2 does not copy v1's gap. Decided two more pieces
+  beyond what v1's evidence settles: include a `check`/`validate` step
+  in the sequence (`setup → check → destroy`, not v1's `setup →
+  destroy`) for symmetry with `deploy run`'s own `init → validate →
+  plan → deploy`; and clear `DeploymentOutputStore`'s durable records
+  for destroyed steps once the whole run succeeds (new `clear()` method,
+  item 10 above — no new integration capability needed), leaving the
+  audit trail itself untouched. Resolved item 6's naming question:
+  `strata deploy destroy`, a `deploy`-group subcommand, matching v1's
+  own real CLI shape exactly.

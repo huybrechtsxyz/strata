@@ -30,8 +30,10 @@
   [output-declarations.md](../design/output-declarations.md)'s 4-phase
   pre-flight check (Phases 1-3 shipped 2026-10-14) reports every
   referenced key missing from a step's/module's own collected outputs,
-  before any resolution or file-write is attempted.
-- Last updated: 2026-10-14
+  before any resolution or file-write is attempted. **`deploy destroy`**
+  has its own dedicated doc, [deploy-destroy-command.md](deploy-destroy-command.md)
+  (not duplicated here) — fully designed as of 2026-10-16, nothing built.
+- Last updated: 2026-10-16
 
 
 See also: [docs/design/deploy-plan-preview.md](../design/deploy-plan-preview.md)
@@ -65,6 +67,13 @@ is the orchestrator and CLI layer wiring them together, plus a handful of
 deploy-time-only mechanisms every prior `build run`-era design doc
 explicitly deferred here (token substitution, `output.template`'s actual
 render).
+
+For pipelines that want each phase of this sequence as its own CI
+stage/approval gate — a `plan` stage reviewed before a separate, later
+`apply` stage — see
+[deploy-pipeline-stage-commands.md](../design/deploy-pipeline-stage-commands.md):
+`deploy setup`/`deploy check`/`deploy plan`/`deploy apply`, additive
+subcommands on top of the one atomic `deploy run` this doc designs.
 
 ## Real evidence — confirmed CLI shape and workflow patterns (both repos)
 
@@ -1335,6 +1344,22 @@ picked back up.
    confirming a real, unresolvable artifact reference is now caught with
    the bad name in the message). Full check suite green (1128 tests,
    mypy 107 files, 0 broken import-linter contracts).
+10. **`deploy destroy` — moved to its own doc.** Has a dedicated,
+    pre-existing, more detailed work doc —
+    [deploy-destroy-command.md](deploy-destroy-command.md) — created
+    2026-10-09, before this item's own 2026-10-16 investigation found
+    it. Don't duplicate here: that doc now carries every real finding
+    (v1's real `--force`/`-auto-approve`/ordering/gating evidence, the
+    `destroy_namespace()` need, the `DeploymentOutputStore.clear()`
+    design) and the full Implementation design. This item stays only as
+    a pointer so this doc's own Remaining Work list doesn't silently
+    omit that `destroy` exists as a tracked gap.
+11. **`setup`/`check`/`plan`/`apply` as separate pipeline-stage
+    subcommands — designed and fully implemented in its own doc.** See
+    [deploy-pipeline-stage-commands.md](../design/deploy-pipeline-stage-commands.md)
+    (graduated to `docs/design/` 2026-10-16, all 6 implementation phases
+    shipped) — not re-derived here; this doc's own orchestrator is what
+    those four subcommands slice into narrower invocations.
 
 ## Implementation Plan
 
@@ -1945,4 +1970,24 @@ were — small, independently-testable, full check suite after each.
   2026-10-12 fix being described at that point in time, only the
   reader's takeaway needed updating. No code changed; documentation
   only.
+- 2026-10-16: **`deploy destroy` investigated, then consolidated into its
+  own pre-existing doc** — per direct request to look at the deploy
+  pipeline's full stage set including `destroy`. Found
+  [deploy-destroy-command.md](deploy-destroy-command.md) already existed
+  (created 2026-10-09) with a more detailed investigation than this
+  doc's own first pass produced — moved every new finding there instead
+  of duplicating (v1's real `StageSelectionMode.DESTROY`/`order_stages()`
+  evidence for reverse dependency order and never-gating-on-`enabled`,
+  the `destroy_namespace()` design, the `DeploymentOutputStore.clear()`
+  decision) and trimmed this doc's own Remaining Work item 10 down to a
+  one-paragraph pointer. See that doc directly for `destroy`'s real,
+  current design — not re-derived here.
+- 2026-10-16: **`deploy setup`/`check`/`plan`/`apply` designed,
+  implemented (6 phases), and graduated to**
+  [deploy-pipeline-stage-commands.md](../design/deploy-pipeline-stage-commands.md)
+  — four additive subcommands slicing this doc's own `deploy run`
+  orchestrator into narrower, CI-gate-friendly invocations. Added a
+  cross-reference in this doc's Overview and a new Remaining Work item 11
+  pointing to the graduated doc, rather than re-describing a now-finished
+  feature here.
 

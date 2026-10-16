@@ -128,7 +128,7 @@ def make_reporter(
         compact: Force single-line JSON (`indent=None`) instead of the
             default pretty-print — needed when the final envelope must
             stay consistent with other newline-delimited JSON already on
-            stdout (`--follow ndjson`, docs/work/ndjson-output.md). No
+            stdout (`--follow ndjson`, docs/archive/ndjson-output.md). No
             effect under `console`.
 
     Returns:
