@@ -1549,7 +1549,7 @@ a v2 ADR/implementation:
 - **Deploy-log is no longer unbuilt-on ground in v2 — corrected 2026-09-30.**
   This doc originally said v2 had no `deploy run` command yet; that's stale.
   `strata deploy run` is built and tested (ADR-0027,
-  [`deploy-command.md`](deploy-command.md)) — per-stage results, timings,
+  [`deploy-command.md`](../design/deploy-command.md)) — per-stage results, timings,
   errors all already exist at runtime, just never persisted as a
   `DeployLogModel`-shaped record. A deploy-log design can proceed now; it
   does not need to wait on anything else.

@@ -38,7 +38,7 @@
 
 ## Overview
 
-`${output:step.key}` (docs/work/deploy-command.md's "Cross-step output
+`${output:step.key}` (docs/design/deploy-command.md's "Cross-step output
 context") only ever resolves today when `step` ran *in the same `deploy
 run` invocation* as the step referencing it — `deploy_controller.py`'s
 `step_outputs: dict[str, dict[str, str]]` is purely in-memory, rebuilt
@@ -560,7 +560,7 @@ not started:
 - [deploy-time-output-sensitivity-gaps.md](deploy-time-output-sensitivity-gaps.md) —
   gap 1 (sensitive `${output:}` handling, done) lives there; this doc is
   gap 2, split out once its scope grew past "a gap."
-- [docs/work/deploy-command.md](../work/deploy-command.md) — the
+- [docs/design/deploy-command.md](../design/deploy-command.md) — the
   existing `${output:...}` cross-step token design this extends.
 - `src/strata/integrations/capabilities.py`'s `StoreIntegration` — the
   existing pluggable-backend-by-registry pattern this reuses structurally.

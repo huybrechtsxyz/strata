@@ -823,8 +823,8 @@ test call sites needed updating.
 - 2026-09-27: **Full-review finding: `store: artifact`'s `value` has zero
   cross-reference validation — resolved the same day.** Found while
   reviewing this feature and `deploy run` together end to end
-  (docs/work/deploy-command.md's Remaining Work item 9 has the full
-  write-up). Fixed with a new `EnvironmentService.
+  (docs/design/deploy-command.md has the full write-up). Fixed with a new
+  `EnvironmentService.
   validate_artifact_references()`, wired into `semantic_checks.py` as an
   8th cross-document check — the same precedent `WorkspaceService.
   validate_topology_references()` already established for a

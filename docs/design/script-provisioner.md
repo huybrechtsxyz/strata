@@ -29,7 +29,8 @@ zero-real-demand finding).
   this safely. Revisit if a real namespace-attached script-module need
   shows up.
 - `strata deploy destroy` — doesn't exist for any tool yet
-  ([deploy-destroy-command.md](deploy-destroy-command.md));
+  ([deploy-command.md](deploy-command.md)'s "`deploy destroy` — designed,
+  not implemented" section);
   `ScriptIntegration.destroy()` raises `IntegrationError`, matching every
   other integration's "not supported" precedent.
 - `.js`/`.mjs`/`.go` (in the general `SCRIPT_EXTENSIONS` constant, used by
@@ -273,8 +274,8 @@ def validate(
         argv = [interpreter, "-NoProfile", "-Command", parse]
     return self.run(*argv[1:], cwd=path, env=env, line_callback=line_callback)
 
-def destroy(self, path: Path, **kwargs: Any) -> CommandResult:
-    raise IntegrationError(f"{self.name} does not support destroy (docs/work/deploy-destroy-command.md)")
+    def destroy(self, path: Path, **kwargs: Any) -> CommandResult:
+        raise IntegrationError(f"{self.name} does not support destroy (docs/design/deploy-command.md)")
 ```
 
 `plan()`/`deploy()` are covered together with value delivery below, since
@@ -471,8 +472,9 @@ Two small, additive controller changes:
   of; its gate-question finding (zero real lifecycle-hook demand) is why
   this doc doesn't port v1's phase-hook executor, only the plain "run a
   script" primitive.
-- [deploy-destroy-command.md](deploy-destroy-command.md) — why
-  `destroy()` raises rather than attempting anything.
+- [deploy-command.md](deploy-command.md) — why `destroy()` raises rather
+  than attempting anything (its "`deploy destroy` — designed, not
+  implemented" section).
 
 ## History
 

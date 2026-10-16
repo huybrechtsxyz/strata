@@ -155,7 +155,7 @@ out for early/internal testing — "installable and internally coherent," not
   build output rendering's remaining phases (see
   [build-command.md](build-command.md)), `deploy run`'s
   confirmed `store: artifact` gap (see
-  [deploy-command.md](deploy-command.md) Remaining Work item 8), and the
+  [deploy-command.md](../design/deploy-command.md) Remaining Work item 8), and the
   Tier 2 commands (`init`/`repo`/`profile`/`config`/`audit`/`tools`) starting
   to land.
 
@@ -177,7 +177,7 @@ example or synthetic tests. Concretely, before the first beta:
    categories — land (see [build-command.md](build-command.md)
    for current phase status).
 4. `deploy run`'s confirmed `store: artifact`-at-deploy-time gap closes (see
-   [deploy-command.md](deploy-command.md) Remaining Work). Locking,
+   [deploy-command.md](../design/deploy-command.md) Remaining Work). Locking,
    SIEM/audit, whole-run timeout, and `--force`'s advisory-gate consumption
    stay deliberately deferred through beta — hardening, not correctness,
    and no real consumer evidence forces them yet.

@@ -396,7 +396,7 @@ deploy-time-only" (ADR-0022 D4).
 - [docs/work/remotes.md](../work/remotes.md) — `resolve_remote()`'s
   current pull-only scope; this design's `push_file()` is the first
   push-direction primitive.
-- [docs/work/deploy-command.md](../work/deploy-command.md) — cross-step
+- [docs/design/deploy-command.md](deploy-command.md) — cross-step
   outputs, whose `collect_step_outputs()` this design's `output()` method
   stays compatible with.
 - `src/strata/models/auth_models.py` — `AuthenticationModel`'s existing

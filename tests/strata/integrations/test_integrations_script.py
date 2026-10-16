@@ -319,7 +319,7 @@ def test_deploy_without_args(monkeypatch, tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# destroy() — deferred (docs/work/deploy-destroy-command.md)
+# destroy() — deferred (docs/design/deploy-command.md)
 # ---------------------------------------------------------------------------
 
 

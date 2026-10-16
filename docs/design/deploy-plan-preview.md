@@ -286,9 +286,9 @@ dry_run or smoke_test`.
   NDJSON trigger-mechanism decision (`--follow ndjson`, requiring
   `--output json`) this doc's "Streaming" section summarizes the shipped
   result of.
-- [deploy-command.md](../work/deploy-command.md) — the main `deploy run`
-  work doc, still in progress for unrelated concerns (locking, SIEM,
-  whole-run timeout).
+- [deploy-command.md](deploy-command.md) — the main `deploy run` design
+  doc; unrelated concerns (locking, SIEM, whole-run timeout) remain
+  deliberately deferred there.
 - [cli-output-mode-interactions.md](../archive/cli-output-mode-interactions.md) —
   the real cfgint bug report and fix (`--follow` silently inert under
   `--output json`), plus the general `--output`/`--quiet`/`--verbose`

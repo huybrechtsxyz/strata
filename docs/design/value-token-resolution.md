@@ -78,7 +78,7 @@ document *strata itself owns*, not a third-party tool's native config
 `TerraformDeployer`/`HelmDeployer`, never any build-time builder). A 4th
 kind, `${output:step.key}` (a prior step's collected outputs, dependency-
 scoped), is being added for `deploy run` specifically —
-[deploy-command.md](../work/deploy-command.md)'s "Cross-step output context"
+[deploy-command.md](deploy-command.md)'s "Cross-step output context"
 section. **A 5th kind, `${value:kind.name.path}` (a cross-document
 reference, not tied to a specific `deploy run` step) was added later**,
 fully implemented as of 2026-09-29 —
@@ -109,7 +109,7 @@ secret."
 ## Current Design
 
 - **Syntax**: `${kind:KEY}` where `kind` is `var`, `secret`, or `feature`
-  (also `output`, [Context](../archive/provisioning-injection-model.md)/[deploy-command.md](../work/deploy-command.md)'s
+  (also `output`, [Context](../archive/provisioning-injection-model.md)/[deploy-command.md](deploy-command.md)'s
   own dedicated design; also `value` — [cross-document-value-references.md](cross-document-value-references.md),
   a solution-wide `${value:kind.name.path.to.field}` reference into another
   already-loaded document's own literal field, not an Environment-declared
@@ -605,7 +605,7 @@ real problems, both now fixed above:
    for non-secret leaves and assembles `--set-string` argv (new
    `set_string=` kwarg on `plan()`/`.deploy()`, escaped per v1's real
    `_escape_set_value()`) for secret-shaped ones — see
-   `docs/work/deploy-command.md`'s "Helm/Compose orchestration"
+   `docs/design/deploy-command.md`'s "Helm/Compose orchestration"
    section for the full orchestrator-side design/implementation.
 5. **Compose**: rewrite the compose file for non-secret leaves (same
    escape-aware resolution); bare `${KEY}` rename + `env:` kwarg for

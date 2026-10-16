@@ -24,7 +24,8 @@ strata deploy apply DEPLOYMENT   # init -> applies the saved <step>.tfplan exact
 `deploy run` is **not replaced or deprecated** — it remains the one-shot
 convenience path for the common case; these four are strictly additive.
 `deploy destroy` is a fully separate, independently designed command —
-see [deploy-destroy-command.md](../work/deploy-destroy-command.md).
+see [deploy-command.md](deploy-command.md)'s "`deploy destroy` —
+designed, not implemented" section.
 
 **Internal evidence this split follows an existing seam, not a foreign
 one**: `DeploymentStageTimeoutsModel` (`deployment_model.py`) already
@@ -135,8 +136,8 @@ computes one instead — and since it also shows the diff by default, it
 is a strict superset of v1's viewer behavior for the common case. The one
 gap relative to v1 — re-viewing an already-saved plan from a prior
 invocation without recomputing it — is tracked separately in
-[deploy-operational-commands.md](../work/deploy-operational-commands.md),
-not resolved here.
+[deploy-command.md](deploy-command.md)'s "Other `deploy` subcommands"
+section, not resolved here.
 
 ### Cross-invocation state handoff
 
@@ -180,18 +181,13 @@ something strata can paper over.
 
 ## Related Decisions
 
-- [deploy-command.md](../work/deploy-command.md) — `deploy run`'s own
-  full design; this doc only adds phase-level granularity on top of the
-  same orchestrator, never redesigning it.
-- [deploy-destroy-command.md](../work/deploy-destroy-command.md) — the
-  separately designed `deploy destroy` command; unaffected by this
-  design.
+- [deploy-command.md](deploy-command.md) — `deploy run`'s own full
+  design (plus `deploy destroy`'s design and a survey of v1's other
+  `deploy` subcommands); this doc only adds phase-level granularity on
+  top of the same orchestrator, never redesigning it.
 - [deploy-plan-preview.md](deploy-plan-preview.md) — `--smoke-test`/
   `--dry-run`/real-apply execution modes `deploy run` itself still has;
   `deploy plan` reuses `--dry-run`'s own computation under the hood.
-- [deploy-operational-commands.md](../work/deploy-operational-commands.md)
-  — v1's real, differently-scoped `deploy plan` (a saved-plan viewer),
-  and the other v1 operational subcommands surveyed for overlap.
 - [ADR-0027](../decisions/0027-strata-deploy-run.md) — the one-atomic-
   orchestrator-per-invocation decision this design narrows one invocation
   at a time, without reopening.

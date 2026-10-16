@@ -19,7 +19,7 @@
   extends), [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)
   (the original Value-token decision), [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md)
   (`(kind, name)` document identity — this design's addressing scheme),
-  [deploy-command.md](../work/deploy-command.md) (`${output:}`'s own dedicated
+  [deploy-command.md](deploy-command.md) (`${output:}`'s own dedicated
   design, the closest precedent for a token kind resolved outside
   `value_tokens.py` itself)
 

@@ -15,7 +15,7 @@
   [ADR-0023](0023-build-output-rendering.md) (what `build run` already
   wrote to disk before this command executes against it)
 
-See also: [docs/work/deploy-command.md](../work/deploy-command.md)
+See also: [docs/design/deploy-command.md](../design/deploy-command.md)
 (full design history, real evidence from both reference repos, and every
 correction made along the way — this ADR summarizes the outcome, that doc
 is the living record)

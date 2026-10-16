@@ -18,7 +18,7 @@ than a bare "not supported" stub. `plan()` is a safe, non-executing preview
 — it cannot be a bare raise, since `deploy_controller.py`'s real-apply path
 hard-errors when `plan()` returns no preview at all (`plan_or_warn()`'s own
 docstring). `destroy()` raises; `strata deploy destroy` doesn't exist for
-any tool yet (docs/work/deploy-destroy-command.md).
+any tool yet (docs/design/deploy-command.md).
 
 Value delivery (Phase 4): `default_output()` writes a build-time-only
 `strata.auto.json` skeleton (`variables`/`flags`/`properties`/`custom`,
@@ -271,4 +271,4 @@ class ScriptIntegration(InfraIntegration):
         # self.run() prepends self.command - argv[0] already equals that by construction
 
     def destroy(self, path: Path, **kwargs: Any) -> CommandResult:
-        raise IntegrationError(f"{self.name} does not support destroy (docs/work/deploy-destroy-command.md)")
+        raise IntegrationError(f"{self.name} does not support destroy (docs/design/deploy-command.md)")

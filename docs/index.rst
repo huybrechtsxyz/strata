@@ -36,6 +36,7 @@ strata-v2
    config/firewall
    config/dns
    config/topologyconfig
+   config/attributeconfig
    config/workspace
    config/module
    config/namespace

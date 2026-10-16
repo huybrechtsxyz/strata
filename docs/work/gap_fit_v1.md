@@ -509,9 +509,9 @@ durable, reviewable record.
 
 ### 9. ~~The deploy-time Value-token resolver is designed for every kind, but only implemented for one field~~ — RESOLVED
 
-- **Found in:** [docs/design/value-token-resolution.md](value-token-resolution.md)
+- **Found in:** [docs/design/value-token-resolution.md](../design/value-token-resolution.md)
   itself, cross-checked against `deploy_controller.py` and
-  [docs/work/deploy-command.md](deploy-command.md) — not found via
+  [docs/design/deploy-command.md](../design/deploy-command.md) — not found via
   a haven document, but the underlying reason gaps #1 and #8 can't actually
   be closed by a schema-correct rewrite alone.
 - **Status:** implemented (2026-09-28) — every kind now resolves at
@@ -841,7 +841,7 @@ durable, reviewable record.
   *found*, before Compose's own `deploy_namespace()` was implemented the
   same week (Full Solution Phase 5) — left as-is below as the historical
   record of what was actually broken; see gap #9's own final status and
-  `docs/work/deploy-command.md`'s "Helm/Compose orchestration" section
+  `docs/design/deploy-command.md`'s "Helm/Compose orchestration" section
   for the finished design. At the time this was found: `ProvisionerModel`
   (`provisioning_model.py`) has no
   release/chart/namespace field of any kind — `HelmIntegration.plan()`/
@@ -873,7 +873,7 @@ durable, reviewable record.
   orchestrator will consume, rather than blocking on this larger,
   separate gap.
 - **Design completed and corrected twice 2026-09-28, implemented same day**
-  (see [docs/work/deploy-command.md](deploy-command.md)'s
+  (see [docs/design/deploy-command.md](../design/deploy-command.md)'s
   "Helm/Compose orchestration" section for the full design history), per
   direct request to design this the way v1 avoided tool-type branching,
   not around it, then per direct pushback that got the mechanism right.
@@ -1036,7 +1036,7 @@ durable, reviewable record.
 ### 16. ~~`strata validate` rejected every `${output:...}` token unconditionally, even ones gap #12 already made work~~ — RESOLVED
 
 - **Found in:** not a haven/config-deploy document — found while
-  designing `docs/work/deploy-command.md`'s "Cross-invocation output
+  designing `docs/design/deploy-command.md`'s "Cross-invocation output
   access" section (2026-09-29): reviewing that design against real code
   before writing new checks on top of it, `unresolved_value_tokens()`
   (`environment_service.py`, the function `strata validate`'s Phase 2 pass
@@ -1355,8 +1355,8 @@ and the provider/providerconfig/topologyconfig registry split.
 - [docs/decisions/0011-topology-and-provisioning-decoupling.md](../decisions/0011-topology-and-provisioning-decoupling.md)
 - [docs/decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)
 - [docs/decisions/0015-solution-manifest-and-document-discovery.md](../decisions/0015-solution-manifest-and-document-discovery.md)
-- [docs/work/deploy-command.md](deploy-command.md)
-- [docs/design/value-token-resolution.md](value-token-resolution.md) — the
+- [docs/design/deploy-command.md](../design/deploy-command.md)
+- [docs/design/value-token-resolution.md](../design/value-token-resolution.md) — the
   Per-Kind Status table and Remaining Work section gaps #1/#8/#9/#10 are all
   grounded in
 - `src/strata/controllers/semantic_checks.py`'s `unresolved_value_tokens()`
@@ -1633,7 +1633,7 @@ and the provider/providerconfig/topologyconfig registry split.
   type branching. Designed a `deploy_namespace()` deploy-time counterpart
   with the identical shape, consuming gap #9 Phase 4's
   `resolve_module_values()`. Full write-up in
-  `docs/work/deploy-command.md`'s new "Helm/Compose orchestration"
+  `docs/design/deploy-command.md`'s new "Helm/Compose orchestration"
   section. Design only — nothing implemented yet.
 - 2026-09-28: **Corrected gap #13's design twice more.** First, validated
   against literal-name coupling (per request) and found the pseudocode
@@ -1649,7 +1649,7 @@ and the provider/providerconfig/topologyconfig registry split.
   `integration.CAPABILITIES` (`"infrastructure"` vs `"container"`) instead
   — one integration resolution, shared by both branches, `step.provisioner`
   always meaningful (resolving the previous draft's own "unused field"
-  consequence). Full history kept visible in `docs/work/deploy-command.md`'s
+  consequence). Full history kept visible in `docs/design/deploy-command.md`'s
   new "Superseded" subsection rather than silently overwritten. Design
   only, still nothing implemented.
 - 2026-09-28: **Resolved gap #2**, per request ("good. design, plan,
@@ -1754,7 +1754,7 @@ and the provider/providerconfig/topologyconfig registry split.
   excluded from that check is the concrete evidence tying it to this
   migration pass.
 - 2026-09-29: **Found and resolved gap #16**, discovered while reviewing
-  the "Cross-invocation output access" design (`docs/work/deploy-command.md`)
+  the "Cross-invocation output access" design (`docs/design/deploy-command.md`)
   before implementing new checks on top of it, per request ("lets review
   the design first"). `unresolved_value_tokens()` still unconditionally
   rejected every `${output:...}` token — confirmed empirically against
