@@ -246,6 +246,39 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-10-16: **Built alpha24** — bumped `VERSION.txt` to `2.0.0-Alpha24`
+  (normalizes to `2.0.0a24`; confirmed via `packaging.version.Version`
+  first), cut after the `deploy setup`/`check`/`plan`/`apply` pipeline-
+  stage-commands feature (6 implementation phases, additive on top of
+  `deploy run` — see
+  [deploy-pipeline-stage-commands.md](../design/deploy-pipeline-stage-commands.md))
+  and a docs consolidation pass that merged `deploy-command.md`/
+  `deploy-destroy-command.md`/`deploy-operational-commands.md` into one
+  new [deploy-command.md](../design/deploy-command.md). Considered
+  bumping straight to beta1 instead — checked this doc's own Decision 7
+  bar first: not met (same gaps as every prior alpha's check — `.v2-haven`/
+  `.v2-cfg` only proven against `validate`, not both `build run`/`deploy
+  run` end to end against both real consumers, and `v2-beta`/`main`
+  haven't been merged) — bumped the next alpha instead. Also fixed a
+  real, pre-existing (unrelated) Sphinx docs-build failure found while
+  running `scripts/Check.ps1`: `docs/config/attributeconfig.md` was
+  never added to `docs/index.rst`'s toctree (left over from an earlier
+  session's attributeconfig feature) — added it, confirmed a clean
+  `sphinx-build -W --keep-going` with exit code 0 afterward. Full check
+  suite green: mypy (159 files), ruff check, ruff format, import-linter,
+  pytest (2670 passed), CLI smoke test, Sphinx docs build. Hit the
+  documented stale-dist-info sharp edge again (expected on every
+  version-string change) — `uv sync --reinstall-package xyz-strata
+  --index-strategy unsafe-best-match` + `uv sync --all-extras
+  --index-strategy unsafe-best-match`; green after (`strata version`
+  confirmed `2.0.0a24` via a real subprocess call, not just in-process).
+  `uv build --index-strategy unsafe-best-match` produced
+  `xyz_strata-2.0.0a24-py3-none-any.whl`/`.tar.gz`; installed into a
+  fresh isolated `uv venv`, confirmed `strata version` → `2.0.0a24`,
+  `strata --help`'s command list, and `strata deploy --help` lists the
+  new `setup`/`check`/`plan`/`apply` subcommands (`validate` correctly
+  hidden). Verification venv removed after. Tag+push intentionally left
+  for explicit user confirmation, same as every prior alpha.
 - 2026-10-13: **Built alpha23** — bumped `VERSION.txt` to `2.0.0-Alpha23`
   (normalizes to `2.0.0a23`; confirmed via `packaging.version.Version`
   first), cut after a full gap-tracker review session (`docs/work/
