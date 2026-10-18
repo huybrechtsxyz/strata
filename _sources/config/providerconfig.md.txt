@@ -17,11 +17,13 @@ its own file, own PR, own reviewer.
   (mirrors Azure's own "geography" concept) — referenced by [`tenant.md`](tenant.md)'s
   `spec.geographies`.
 - `spec.additional_regions` — allow regions not listed above (default `false`)
-- `spec.resources[]` — supported resource types, each `{name, category, subcategory, description,
-  additional_configurations, configuration}` — `configuration` is a map of field name to a regex
-  pattern (or a structured `{pattern, required, description}`) that a `Resource` document's own
-  `spec.configuration` values must match
+- `spec.resources[]` — supported resource types, each `{name, category, subcategory, description}`
 - `spec.additional_resources` — allow resource types not listed above (default `false`)
+
+Shape validation for a resource's own `spec.configuration` values (previously an embedded,
+regex-only schema here) is now a separate [`attributeconfig`](attributeconfig.md) document, keyed
+by a `{spec.provider_type, spec.resource_type}` selector — strictly more capable (real JSON
+Schema types, nesting, cross-field checks) and not duplicated here.
 
 ## Example
 
@@ -47,17 +49,14 @@ spec:
       category: storage
       subcategory: blob
       description: "Azure Storage Account"
-      additional_configurations: false
-      configuration:
-        account_tier: "^(Standard|Premium)$"
     - name: virtual_machine
       category: compute
       subcategory: virtualmachine
       description: "Azure Virtual Machine"
-      additional_configurations: true
 ```
 
 ## Notes
 
-- There is no native boolean configuration-field type — use `pattern: "^(true|false)$"` and pass
-  the literal string `"true"`/`"false"` as the value.
+- Shape constraints on a resource type's `spec.configuration` are declared as separate
+  [`attributeconfig`](attributeconfig.md) documents, not here — see that doc's Example for the
+  equivalent of this file's old embedded `storage_account` schema.

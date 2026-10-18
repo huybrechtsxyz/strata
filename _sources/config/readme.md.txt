@@ -18,6 +18,8 @@ see [docs/design/v2-schema-overview.md](../design/v2-schema-overview.md).
 
 - [providerconfig.md](providerconfig.md) — valid regions/resource types per provider type
 - [topologyconfig.md](topologyconfig.md) — expected component roles per topology type
+- [attributeconfig.md](attributeconfig.md) — a JSON Schema fragment enforced against a targeted
+  `properties`/`custom`/`configuration` block of every matching document
 
 **Infrastructure:**
 

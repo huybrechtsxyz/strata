@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ProviderConfig (kind: providerconfig) &mdash; strata 2.0.0-Alpha23 documentation</title>
+  <title>ProviderConfig (kind: providerconfig) &mdash; strata 2.0.0-Alpha24 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=7c049e68"></script>
+      <script src="../_static/documentation_options.js?v=b78d0ea5"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -78,6 +78,7 @@
 <li class="toctree-l1"><a class="reference internal" href="firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="attributeconfig.html">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
@@ -139,11 +140,13 @@ its own file, own PR, own reviewer.</p>
 (mirrors Azure’s own “geography” concept) — referenced by <a class="reference internal" href="tenant.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">tenant.md</span></code></span></a>’s
 <code class="docutils literal notranslate"><span class="pre">spec.geographies</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.additional_regions</span></code> — allow regions not listed above (default <code class="docutils literal notranslate"><span class="pre">false</span></code>)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.resources[]</span></code> — supported resource types, each <code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">category,</span> <span class="pre">subcategory,</span> <span class="pre">description,</span> <span class="pre">additional_configurations,</span> <span class="pre">configuration}</span></code> — <code class="docutils literal notranslate"><span class="pre">configuration</span></code> is a map of field name to a regex
-pattern (or a structured <code class="docutils literal notranslate"><span class="pre">{pattern,</span> <span class="pre">required,</span> <span class="pre">description}</span></code>) that a <code class="docutils literal notranslate"><span class="pre">Resource</span></code> document’s own
-<code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> values must match</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.resources[]</span></code> — supported resource types, each <code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">category,</span> <span class="pre">subcategory,</span> <span class="pre">description}</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.additional_resources</span></code> — allow resource types not listed above (default <code class="docutils literal notranslate"><span class="pre">false</span></code>)</p></li>
 </ul>
+<p>Shape validation for a resource’s own <code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> values (previously an embedded,
+regex-only schema here) is now a separate <a class="reference internal" href="attributeconfig.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">attributeconfig</span></code></span></a> document, keyed
+by a <code class="docutils literal notranslate"><span class="pre">{spec.provider_type,</span> <span class="pre">spec.resource_type}</span></code> selector — strictly more capable (real JSON
+Schema types, nesting, cross-field checks) and not duplicated here.</p>
 </section>
 <section id="example">
 <h2>Example<a class="headerlink" href="#example" title="Link to this heading"></a></h2>
@@ -168,22 +171,19 @@ pattern (or a structured <code class="docutils literal notranslate"><span class=
 <span class="w">      </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage</span>
 <span class="w">      </span><span class="nt">subcategory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">blob</span>
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Azure</span><span class="nv"> </span><span class="s">Storage</span><span class="nv"> </span><span class="s">Account"</span>
-<span class="w">      </span><span class="nt">additional_configurations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">account_tier</span><span class="p">:</span><span class="w"> </span><span class="s">"^(Standard|Premium)$"</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">virtual_machine</span>
 <span class="w">      </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">compute</span>
 <span class="w">      </span><span class="nt">subcategory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">virtualmachine</span>
 <span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Azure</span><span class="nv"> </span><span class="s">Virtual</span><span class="nv"> </span><span class="s">Machine"</span>
-<span class="w">      </span><span class="nt">additional_configurations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p>There is no native boolean configuration-field type — use <code class="docutils literal notranslate"><span class="pre">pattern:</span> <span class="pre">&quot;^(true|false)$&quot;</span></code> and pass
-the literal string <code class="docutils literal notranslate"><span class="pre">&quot;true&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;false&quot;</span></code> as the value.</p></li>
+<li><p>Shape constraints on a resource type’s <code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> are declared as separate
+<a class="reference internal" href="attributeconfig.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">attributeconfig</span></code></span></a> documents, not here — see that doc’s Example for the
+equivalent of this file’s old embedded <code class="docutils literal notranslate"><span class="pre">storage_account</span></code> schema.</p></li>
 </ul>
 </section>
 </section>
