@@ -11,9 +11,13 @@ with what runtime behavior*. `strata build run`/`strata deploy run` both take a 
 - `spec.environments[]` — [`environment`](environment.md) documents, merged left-to-right (later wins)
 - `spec.tenant` — optional [`tenant`](tenant.md) reference; its defaults merge in first
 - `spec.extends` — another deployment document (typically `partial: true`) whose spec is merged
-  in before this one's (child wins; stages merge by step name; `environments` lists append base-first)
+  in before this one's (child wins; nested blocks deep-merge; stages merge by step name and
+  `providers` by slot; `environments` lists append base-first; other lists are replaced)
 - `spec.partial` — `true` marks a base deployment as not independently deployable (a leaf picks it
   up via `extends`)
+- `spec.providers[]` — rebind [`workspace`](workspace.md) provider slots for this deployment, each
+  `{slot, provider}`: the workspace's `spec.providers[].slot` and the [`provider`](provider.md)
+  document to use instead of the slot's default — see "Rebinding a provider" below
 - `spec.locking` — deployment lock configuration
 - `spec.layers` — deployment layer/scope segments
 - `spec.stages[]` — runtime parameters per provisioning step, each:
@@ -57,10 +61,52 @@ spec:
   tenant: c0062
 ```
 
+## Rebinding a provider
+
+A [`workspace`](workspace.md) declares provider *slots* with a default document. A deployment
+rebinds a slot to deploy the same workspace to another region or account — IaC code still
+addresses `strata.providers.<slot>`; only the bound document (and its region, tags,
+configuration) changes. Put the binding in a reusable `partial` base so every deployment in that
+region just extends it:
+
+```yaml
+kind: deployment
+meta:
+  name: region-north
+spec:
+  partial: true
+  extends: deploy-base
+  providers:
+    - slot: azure
+      provider: azure-north     # another provider document of type azure
+---
+kind: deployment
+meta:
+  name: prd-north-deployment
+spec:
+  extends: region-north
+  environments: [prd]
+  tenant: c0062
+```
+
+- **Rebind only** — the bound document is used as-is; there is no field patching. Per-deployment
+  values belong in [`environment`](environment.md) documents.
+- Bindings merge by `slot` across `extends` (child wins), so a leaf can rebind another slot
+  without dropping the base's.
+- A tenant's `geographies` are checked against the **bound** provider's region, so a deployment
+  can serve a tenant restricted to another geography only once it rebinds to a provider there.
+- `strata validate` reports `provider_slot_unknown` (slot not declared by the workspace) and
+  `provider_type_mismatch` (bound provider's `spec.type` differs from the slot's default) as
+  errors, and `provider_binding_redundant` (binds the slot's own default) as a warning. A
+  `partial` base is only judged once merged into the deployment that extends it, and the
+  redundant warning is skipped for a document that itself uses `extends` (resetting a base's
+  binding back to the default is legitimate).
+
 ## Notes
 
-- `extends` composes *structure* (stages, workspace); `environments` composes *values* — a
-  deployment can extend a base for its stage recipe while merging its own, different environment list.
+- `extends` composes *structure* (stages, workspace, provider bindings); `environments` composes
+  *values* — a deployment can extend a base for its stage recipe while merging its own, different
+  environment list.
 - `versions`, `promotion`, `gates` are declared in the model (for CLI parity with real invocations)
   but have zero real production usage and no execution engine behind them yet.
 - Run `strata values get prd-deployment KEY...` before `build run`/`deploy run` to see exactly

@@ -126,7 +126,7 @@ def test_unknown_document_reference_is_an_error(tmp_path):
     result = _check(tmp_path, provider="does-not-exist")
     assert not result.ok
     assert result.errors[0].code == "unknown_reference"
-    assert result.errors[0].location == "spec.providers.0"
+    assert result.errors[0].location == "spec.providers.0.provider"
 
 
 def test_unknown_remote_is_an_error(tmp_path):
@@ -213,7 +213,7 @@ def test_workspace_references_are_discovered_from_its_own_fields():
 
     paths = {rule.path for rule in extract_references(WorkspaceModel)}
     assert paths == {
-        "spec.providers[]",
+        "spec.providers[].provider",
         "spec.topology[].components[].modules[].module",
         "spec.namespaces[]",
         "spec.firewalls[]",

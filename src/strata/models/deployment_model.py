@@ -215,6 +215,20 @@ class DeploymentLayersModel(PlatformBaseModel):
     )
 
 
+class DeploymentProviderBindingModel(PlatformBaseModel):
+    """Rebind one workspace provider slot to another Provider document for this
+    deployment (docs/design/provider-slots.md) — e.g. the same workspace
+    deployed to a second Azure region. Rebind only: the bound document is used
+    as-is, never field-patched. No bare-string shorthand: a binding is only
+    meaningful when it differs from the workspace's default.
+    """
+
+    slot: PlatformName = Field(description="Workspace provider slot to rebind (spec.providers[].slot)")
+    provider: Annotated[PlatformName, References(PlatformKind.PROVIDER)] = Field(
+        description="Provider document bound to the slot for this deployment"
+    )
+
+
 class DeploymentSpecModel(PlatformBaseModel):
     """Deployment specification: what to deploy, where, and how it behaves at runtime."""
 
@@ -226,8 +240,9 @@ class DeploymentSpecModel(PlatformBaseModel):
     extends: Annotated[PlatformName, References(PlatformKind.DEPLOYMENT)] | None = Field(
         None,
         description="Name of a base Deployment document whose spec is merged into this one before "
-        "validation. Child always wins: top-level fields are replaced, `stages` merge by `step`, "
-        "`environments` append after the base's. Circular chains are rejected. Distinct from "
+        "validation. Child always wins: nested blocks deep-merge per leaf key, `stages` merge by `step`, "
+        "`environments` append after the base's, other lists are replaced. Circular chains are rejected. "
+        "Distinct from "
         "`environments` layering, which composes *values*; this composes *structure*.",
     )
     workspace: Annotated[PlatformName, References(PlatformKind.WORKSPACE)] | None = Field(
@@ -259,6 +274,11 @@ class DeploymentSpecModel(PlatformBaseModel):
     stages: list[DeploymentStageModel] | None = Field(
         None, description="Runtime parameters per workspace provisioning step"
     )
+    providers: list[DeploymentProviderBindingModel] | None = Field(
+        None,
+        description="Rebind workspace provider slots to other Provider documents for this deployment. "
+        "Merged by `slot` across `extends` (child wins), so a partial base can bind a region once.",
+    )
     lifecycle: CommonLifecycleModel | None = Field(None, description="Deployment lifecycle phases")
     properties: dict[str, Any] | None = Field(
         None, description="Deployment properties, the last merge layer over tenant and environment properties"
@@ -282,6 +302,13 @@ class DeploymentSpecModel(PlatformBaseModel):
         """A repeated environment reference would merge twice."""
         if self.environments:
             check_unique_names(self.environments, "environment references in deployment")
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_provider_slots(self) -> "DeploymentSpecModel":
+        """A slot bound twice would be ambiguous."""
+        if self.providers:
+            check_unique_names([b.slot for b in self.providers], "provider slot bindings in deployment")
         return self
 
     @model_validator(mode="after")

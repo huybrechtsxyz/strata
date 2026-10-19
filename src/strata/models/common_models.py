@@ -2,11 +2,21 @@
 """Common models, enums, and reusable types for Strata v2."""
 
 import warnings
+from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, StringConstraints, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    StringConstraints,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
 from strata.models.reference_fields import References, RemoteReference
 from strata.utils.path_safety import validate_relative_path
@@ -41,6 +51,23 @@ PlatformName = Annotated[
 
 # Variable key type for dictionary keys (environment variables, configurations)
 VariableKey = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+
+
+def scalar_shorthand_schema(scalar_type: Any) -> Callable[[dict[str, Any]], None]:
+    """`json_schema_extra` for a model that also accepts a bare scalar.
+
+    A `model_validator(mode="before")` that coerces `"x"` into the object form is
+    invisible to `model_json_schema()`, so the exported editor schema
+    (`.strata/schemas/`) would flag every use of the shorthand. This rewrites the
+    model's schema to `anyOf: [<scalar_type>, <object form>]`.
+    """
+
+    def extend(schema: dict[str, Any]) -> None:
+        object_form = dict(schema)
+        schema.clear()
+        schema["anyOf"] = [TypeAdapter(scalar_type).json_schema(), object_form]
+
+    return extend
 
 
 # Enumeration of supported platform kinds

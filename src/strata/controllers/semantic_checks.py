@@ -69,7 +69,7 @@ from strata.services.environment_service import EnvironmentService, unresolved_v
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
-from strata.services.workspace_service import WorkspaceService
+from strata.services.workspace_service import WorkspaceService, effective_providers
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 
@@ -138,7 +138,8 @@ def _check_deployments(
 ) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
+        raw = cast(DeploymentModel, entry.model)
+        deployment = resolved.get(entry.ref.name, raw)
         if deployment.spec.workspace:
             workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
             if workspace_entry is not None:
@@ -147,6 +148,10 @@ def _check_deployments(
                 diagnostics.extend(service.validate_stages_against_workspace(workspace), source=str(entry.source))
         diagnostics.extend(_check_deployment_layers(index, entry, deployment, root), source=str(entry.source))
         diagnostics.extend(_check_deployment_tenant_geography(index, deployment), source=str(entry.source))
+        diagnostics.extend(
+            _check_deployment_provider_bindings(index, deployment, uses_extends=raw.spec.extends is not None),
+            source=str(entry.source),
+        )
     return diagnostics
 
 
@@ -259,7 +264,7 @@ def _check_deployment_tenant_geography(index: DocumentIndex, deployment: Deploym
 
     allowed_geographies = set(tenant.spec.geographies)
 
-    for provider_name in workspace.spec.providers:
+    for provider_name in dict.fromkeys(effective_providers(workspace, deployment).values()):
         provider_entry = index.get(PlatformKind.PROVIDER, provider_name)
         if provider_entry is None:
             continue  # reference existence already reports this
@@ -280,6 +285,76 @@ def _check_deployment_tenant_geography(index: DocumentIndex, deployment: Deploym
                 f"'{provider.spec.region}' (geography '{region.geography}'), which is not in "
                 f"tenant '{tenant.meta.name}''s allowed geographies: {sorted(allowed_geographies)}",
                 code="tenant_geography_mismatch",
+            )
+    return diagnostics
+
+
+def _check_deployment_provider_bindings(
+    index: DocumentIndex, deployment: DeploymentModel, *, uses_extends: bool
+) -> Diagnostics:
+    """Check a deployment's `spec.providers` slot bindings against its workspace
+    (docs/design/provider-slots.md).
+
+    - `provider_slot_unknown` (error) — the slot is not declared by the workspace;
+      `effective_providers()` ignores it, so without this it would silently do nothing.
+    - `provider_type_mismatch` (error) — the bound Provider's `spec.type` differs from
+      the slot's default; rebinding is for another region/account of the same
+      platform, and IaC addressed through the slot expects that platform.
+    - `provider_binding_redundant` (warning) — the binding names the slot's own
+      default. Skipped when the *raw* document uses `extends`: after the merge a
+      child resetting a base's binding back to the default is indistinguishable
+      from a pointless one, and resetting is legitimate.
+
+    Only a deployable (non-`partial`) document is checked: a partial base's
+    workspace may still be overridden by whichever leaf extends it, so judging its
+    slots against its own `workspace` could be a false positive — the leaf's merged
+    result is checked instead. Existence of the bound Provider document is
+    `validate_references`' job, so a missing one is skipped here.
+    """
+    diagnostics = Diagnostics()
+    bindings = deployment.spec.providers
+    if not bindings or deployment.spec.partial or deployment.spec.workspace is None:
+        return diagnostics
+    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+    if workspace_entry is None:
+        return diagnostics  # reference existence already reports this
+    workspace = cast(WorkspaceModel, workspace_entry.model)
+    defaults = {slot.slot: slot.provider for slot in workspace.spec.providers}
+    # The merged binding may come from a base in another file; the finding is attributed to this one.
+    inherited = " (the binding may be inherited through 'extends')" if uses_extends else ""
+
+    for binding in bindings:
+        default_name = defaults.get(binding.slot)
+        if default_name is None:
+            diagnostics.error(
+                f"Deployment '{deployment.meta.name}': provider binding names slot '{binding.slot}', which "
+                f"workspace '{workspace.meta.name}' does not declare. Available: {sorted(defaults)}{inherited}",
+                location="spec.providers",
+                code="provider_slot_unknown",
+            )
+            continue
+        if binding.provider == default_name:
+            if not uses_extends:
+                diagnostics.warning(
+                    f"Deployment '{deployment.meta.name}': provider binding for slot '{binding.slot}' names "
+                    f"'{binding.provider}', which is already the workspace default — it has no effect.",
+                    location="spec.providers",
+                    code="provider_binding_redundant",
+                )
+            continue
+        bound_entry = index.get(PlatformKind.PROVIDER, binding.provider)
+        default_entry = index.get(PlatformKind.PROVIDER, default_name)
+        if bound_entry is None or default_entry is None:
+            continue  # reference existence already reports this
+        bound_type = cast(ProviderModel, bound_entry.model).spec.type
+        default_type = cast(ProviderModel, default_entry.model).spec.type
+        if bound_type != default_type:
+            diagnostics.error(
+                f"Deployment '{deployment.meta.name}': slot '{binding.slot}' defaults to '{default_name}' "
+                f"(type '{default_type}'), but is bound to '{binding.provider}' (type '{bound_type}') — a "
+                "binding must keep the provider type." + inherited,
+                location="spec.providers",
+                code="provider_type_mismatch",
             )
     return diagnostics
 
@@ -789,7 +864,7 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
 
         owner = "+".join(deployment.spec.environments or []) or "(none)"
         documents: list[tuple[PlatformBaseModel, bool, Path]] = _documents_reachable_from_workspace(
-            index, deployment.spec.workspace
+            index, deployment.spec.workspace, deployment
         )
         documents.append((deployment, False, entry.source))
         if deployment.spec.tenant:
@@ -848,7 +923,7 @@ def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> 
 
 
 def _documents_reachable_from_workspace(
-    index: DocumentIndex, workspace_name: str | None
+    index: DocumentIndex, workspace_name: str | None, deployment: DeploymentModel | None = None
 ) -> list[tuple[PlatformBaseModel, bool, Path]]:
     """Every document a workspace renders or configures — DNS/Network/
     Firewall/Module (rendered artifacts) plus the workspace document itself
@@ -893,7 +968,7 @@ def _documents_reachable_from_workspace(
         (PlatformKind.DNS, spec.dns_zones),
         (PlatformKind.NETWORK, spec.networks),
         (PlatformKind.FIREWALL, spec.firewalls),
-        (PlatformKind.PROVIDER, spec.providers),
+        (PlatformKind.PROVIDER, list(dict.fromkeys(effective_providers(workspace, deployment).values()))),
     ):
         for name in names or []:
             found = index.get(kind, name)

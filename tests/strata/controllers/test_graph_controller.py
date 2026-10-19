@@ -65,7 +65,7 @@ def test_resolved_reference_is_an_edge(tmp_path):
     assert edge.source_kind == "workspace"
     assert edge.source_name == "main"
     assert edge.target_name == "azure-main"
-    assert edge.location == "spec.providers.0"
+    assert edge.location == "spec.providers.0.provider"
     assert edge.resolved is True
 
 
@@ -113,3 +113,29 @@ def test_no_references_is_an_empty_list(tmp_path):
     context = open_solution(root)
 
     assert build_reference_graph(context.controller.index) == []
+
+
+def test_deployment_provider_binding_is_an_edge(tmp_path):
+    """A deployment's provider binding is a reference like any other — shown, resolved or not."""
+    root = _solution(tmp_path)
+    (root / "provider-other.yaml").write_text(PROVIDER.replace("azure-main", "azure-other"), encoding="utf-8")
+    (root / "workspace.yaml").write_text(
+        WORKSPACE.format(provider="azure-main", remote="infra").replace(
+            "    - azure-main\n", "    - {slot: azure, provider: azure-main}\n"
+        ),
+        encoding="utf-8",
+    )
+    (root / "deployment.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: north\nspec:\n"
+        "  workspace: main\n  environments: [prd]\n"
+        "  providers:\n    - {slot: azure, provider: azure-other}\n    - {slot: dns, provider: ghost}\n",
+        encoding="utf-8",
+    )
+
+    edges = build_reference_graph(open_solution(root).controller.index)
+
+    bindings = [e for e in edges if e.source_kind == "deployment" and e.target_kind == "provider"]
+    assert {(e.location, e.target_name, e.resolved) for e in bindings} == {
+        ("spec.providers.0.provider", "azure-other", True),
+        ("spec.providers.1.provider", "ghost", False),
+    }

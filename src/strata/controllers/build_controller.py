@@ -82,6 +82,7 @@ from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
+from strata.services.workspace_service import effective_providers
 from strata.utils.dependency_order import topological_order
 from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.env_file import load_env_file
@@ -139,6 +140,22 @@ def _lookup_all(index: DocumentIndex, kind: PlatformKind, names: list[str] | Non
     return result
 
 
+def _lookup_provider_slots(
+    index: DocumentIndex, workspace: WorkspaceModel, deployment: DeploymentModel | None
+) -> dict[str, ProviderModel]:
+    """`{slot: provider model}` — keyed by slot, not document name, so IaC addresses
+    `strata.providers.<slot>` regardless of which document `deployment` binds
+    (docs/design/provider-slots.md). Same silent-skip contract as
+    `_lookup_all()`.
+    """
+    result: dict[str, ProviderModel] = {}
+    for slot, provider_name in effective_providers(workspace, deployment).items():
+        entry = index.get(PlatformKind.PROVIDER, provider_name)
+        if entry is not None:
+            result[slot] = cast(ProviderModel, entry.model)
+    return result
+
+
 def build_resolved_workspace_graph(
     index: DocumentIndex,
     workspace: WorkspaceModel,
@@ -172,7 +189,7 @@ def build_resolved_workspace_graph(
     module_names = [ref.module for namespace in namespaces.values() for ref in (namespace.spec.modules or [])]
     return ResolvedWorkspaceGraph(
         workspace=workspace,
-        providers=cast(dict[str, ProviderModel], _lookup_all(index, PlatformKind.PROVIDER, workspace.spec.providers)),
+        providers=_lookup_provider_slots(index, workspace, deployment),
         resources=cast(dict[str, ResourceModel], _lookup_all(index, PlatformKind.RESOURCE, resource_names)),
         namespaces=namespaces,
         firewalls=cast(dict[str, FirewallModel], _lookup_all(index, PlatformKind.FIREWALL, workspace.spec.firewalls)),

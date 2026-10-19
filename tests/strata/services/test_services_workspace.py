@@ -2,9 +2,50 @@
 """Tests for WorkspaceService loading and validation."""
 
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel
+from strata.models.deployment_model import DeploymentModel
 from strata.models.network_model import NetworkModel
 from strata.models.topology_config_model import TopologyConfigModel
-from strata.services.workspace_service import WorkspaceService
+from strata.models.workspace_model import WorkspaceModel
+from strata.services.workspace_service import WorkspaceService, effective_providers
+
+
+def _slotted_workspace() -> WorkspaceModel:
+    return WorkspaceModel.model_validate(
+        {
+            "meta": {"name": "apim"},
+            "spec": {
+                "providers": ["azure-shared", {"slot": "azure", "provider": "azure-westeurope"}],
+                "provisioners": [{"name": "tf", "tool": "terraform", "source": {"source_path": "infra"}}],
+            },
+        }
+    )
+
+
+def _deployment_binding(*bindings: dict) -> DeploymentModel:
+    return DeploymentModel.model_validate(
+        {"meta": {"name": "d"}, "spec": {"workspace": "apim", "environments": ["prd"], "providers": list(bindings)}}
+    )
+
+
+def test_effective_providers_without_deployment_is_the_workspace_default():
+    assert effective_providers(_slotted_workspace(), None) == {
+        "azure-shared": "azure-shared",
+        "azure": "azure-westeurope",
+    }
+
+
+def test_effective_providers_overlays_deployment_binding():
+    deployment = _deployment_binding({"slot": "azure", "provider": "azure-americas"})
+    assert effective_providers(_slotted_workspace(), deployment) == {
+        "azure-shared": "azure-shared",
+        "azure": "azure-americas",
+    }
+
+
+def test_effective_providers_ignores_unknown_slot():
+    """Reporting an unknown slot is validation's job; it never adds a provider here."""
+    deployment = _deployment_binding({"slot": "ghost", "provider": "azure-americas"})
+    assert "ghost" not in effective_providers(_slotted_workspace(), deployment)
 
 
 def test_workspace_service_validates_from_data():
@@ -27,7 +68,7 @@ def test_workspace_service_validates_from_data():
     assert result.ok
     assert result.messages() == []
     assert service.model is not None
-    assert service.model.spec.providers[0] == "azure-main"
+    assert service.model.spec.providers[0].provider == "azure-main"
 
 
 def _workspace_with_topology(**topology_overrides) -> dict:

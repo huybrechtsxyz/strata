@@ -21,8 +21,10 @@ from strata.controllers.build_controller import (
 from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.controllers.source_sync import SourceSyncError
+from strata.integrations.terraform_projection import build_strata_payload
 from strata.models.checkov_model import CheckovFindingModel, CheckovScanResultModel
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
+from strata.models.deployment_model import DeploymentModel
 from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleSpecModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderSpecModel
@@ -223,6 +225,73 @@ def test_build_resolved_workspace_graph_walks_providers():
     assert graph.providers == {"p1": provider}
     assert graph.resources == {}
     assert graph.modules == {}
+
+
+def test_build_resolved_workspace_graph_keys_providers_by_slot():
+    """A slot naming a different document is keyed by the slot (strata.providers.<slot>)."""
+    index = DocumentIndex()
+    provider = ProviderModel(
+        meta=ProviderMetaModel(name="azure-westeurope"),
+        spec=ProviderSpecModel(type="local", region="local"),
+    )
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.PROVIDER, name="azure-westeurope"),
+            model=provider,
+            source=Path("p.yaml"),
+        )
+    )
+    workspace = WorkspaceModel(
+        meta=WorkspaceMetaModel(name="ws"),
+        spec=WorkspaceSpecModel(
+            providers=[{"slot": "azure", "provider": "azure-westeurope"}],
+            provisioners=[ProvisionerModel(name="tf", tool="terraform", source=SourceModel(source_path="infra"))],
+        ),
+    )
+
+    graph = build_resolved_workspace_graph(index, workspace)
+
+    assert graph.providers == {"azure": provider}
+
+
+def test_build_resolved_workspace_graph_applies_deployment_provider_binding():
+    """Same workspace, second region: the slot keeps its key, the bound document supplies the
+    region, and the projection names which document is bound."""
+    index = DocumentIndex()
+    for name, region in (("azure-westeurope", "westeurope"), ("azure-americas", "eastus2")):
+        index.add(
+            IndexEntry(
+                ref=DocumentRef(kind=PlatformKind.PROVIDER, name=name),
+                model=ProviderModel(
+                    meta=ProviderMetaModel(name=name), spec=ProviderSpecModel(type="azure", region=region)
+                ),
+                source=Path(f"{name}.yaml"),
+            )
+        )
+    workspace = WorkspaceModel(
+        meta=WorkspaceMetaModel(name="apim"),
+        spec=WorkspaceSpecModel(
+            providers=[{"slot": "azure", "provider": "azure-westeurope"}],
+            provisioners=[ProvisionerModel(name="tf", tool="terraform", source=SourceModel(source_path="infra"))],
+        ),
+    )
+    deployment = DeploymentModel.model_validate(
+        {
+            "meta": {"name": "apim-americas-prd"},
+            "spec": {
+                "workspace": "apim",
+                "environments": ["prd"],
+                "providers": [{"slot": "azure", "provider": "azure-americas"}],
+            },
+        }
+    )
+
+    graph = build_resolved_workspace_graph(index, workspace, deployment=deployment)
+
+    assert list(graph.providers) == ["azure"]
+    projected = build_strata_payload(graph)["providers"]["azure"]
+    assert projected["region"] == "eastus2"
+    assert projected["provider"] == "azure-americas"
 
 
 def test_build_resolved_workspace_graph_walks_modules_via_namespaces():

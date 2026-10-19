@@ -308,6 +308,227 @@ def test_deployment_provider_geography_mismatch_is_caught(tmp_path):
     assert any("eastus2" in m and "geography 'us'" in m and "c0062" in m for m in messages)
 
 
+def _us_tenant_with_us_provider(root: Path) -> None:
+    """A us-only tenant, plus a second provider document in eastus2 the deployment can bind."""
+    _add_us_region_to_azure_config(root)
+    tenant_path = root / "tenant.yaml"
+    tenant_path.write_text(tenant_path.read_text(encoding="utf-8").replace("[europe]", "[us]"), encoding="utf-8")
+    _write(
+        root,
+        "provider-us.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: provider
+meta:
+  name: azure-us
+spec:
+  type: azure
+  region: eastus2
+""",
+    )
+
+
+def test_geography_check_uses_workspace_default_without_binding(tmp_path):
+    """Unbound, the workspace's westeurope default is checked — and fails a us-only tenant."""
+    root = _base_solution(tmp_path)
+    _us_tenant_with_us_provider(root)
+
+    context = _resolve(root)
+    assert any("westeurope" in m and "c0062" in m for m in context.diagnostics.messages())
+
+
+def test_geography_check_uses_deployment_provider_binding(tmp_path):
+    """The same workspace deploys for a us-only tenant once its slot is rebound —
+    the binding inherited from a partial base via `extends`."""
+    root = _base_solution(tmp_path)
+    _us_tenant_with_us_provider(root)
+    _write(
+        root,
+        "deployment-us-base.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: us-base
+spec:
+  partial: true
+  providers:
+    - slot: azure-main
+      provider: azure-us
+""",
+    )
+    path = root / "deployment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("spec:\n", "spec:\n  extends: us-base\n", 1), encoding="utf-8"
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+# ---------------------------------------------------------------------------
+# Deployment -> Workspace provider slots (docs/design/provider-slots.md)
+# ---------------------------------------------------------------------------
+
+
+def _provider_doc(root: Path, name: str, provider_type: str = "azure", region: str = "westeurope") -> None:
+    _write(
+        root,
+        f"{name}.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: provider
+meta:
+  name: {name}
+spec:
+  type: {provider_type}
+  region: {region}
+""",
+    )
+
+
+def _bind_in_deployment(root: Path, *bindings: tuple[str, str]) -> None:
+    """Add `spec.providers` bindings to the base solution's deployment."""
+    lines = "".join(f"    - slot: {slot}\n      provider: {provider}\n" for slot, provider in bindings)
+    path = root / "deployment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("  tenant: c0062\n", f"  tenant: c0062\n  providers:\n{lines}", 1),
+        encoding="utf-8",
+    )
+
+
+def _extend_deployment(root: Path, base: str) -> None:
+    path = root / "deployment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("spec:\n", f"spec:\n  extends: {base}\n", 1), encoding="utf-8"
+    )
+
+
+def _partial_base(root: Path, name: str, body: str) -> None:
+    _write(
+        root,
+        f"{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: {name}\nspec:\n  partial: true\n{body}",
+    )
+
+
+def _findings(context) -> dict[str, str]:
+    """`{code: severity}` for every provider-binding finding."""
+    found = {d.code: "error" for d in context.diagnostics.errors if d.code and d.code.startswith("provider_")}
+    found.update({d.code: "warning" for d in context.diagnostics.warnings if d.code and d.code.startswith("provider_")})
+    return found
+
+
+def test_provider_binding_to_same_type_is_clean(tmp_path):
+    root = _base_solution(tmp_path)
+    _provider_doc(root, "azure-other")
+    _bind_in_deployment(root, ("azure-main", "azure-other"))
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _findings(context) == {}
+
+
+def test_provider_binding_unknown_slot_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _provider_doc(root, "azure-other")
+    _bind_in_deployment(root, ("ghost", "azure-other"))
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _findings(context) == {"provider_slot_unknown": "error"}
+    assert any("ghost" in m and "azure-main" in m for m in context.diagnostics.messages())
+
+
+def test_provider_binding_type_mismatch_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _provider_doc(root, "aws-main", provider_type="aws", region="us-east-1")
+    _bind_in_deployment(root, ("azure-main", "aws-main"))
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _findings(context) == {"provider_type_mismatch": "error"}
+
+
+def test_provider_binding_to_the_default_is_a_warning(tmp_path):
+    root = _base_solution(tmp_path)
+    _bind_in_deployment(root, ("azure-main", "azure-main"))
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()  # a warning, not a failure
+    assert _findings(context) == {"provider_binding_redundant": "warning"}
+
+
+def test_provider_binding_reset_to_default_via_extends_is_not_flagged(tmp_path):
+    """A leaf may legitimately reset a base's binding back to the workspace default."""
+    root = _base_solution(tmp_path)
+    _provider_doc(root, "azure-other")
+    _partial_base(root, "other-base", "  providers:\n    - slot: azure-main\n      provider: azure-other\n")
+    _extend_deployment(root, "other-base")
+    _bind_in_deployment(root, ("azure-main", "azure-main"))
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _findings(context) == {}
+
+
+def test_unknown_slot_inherited_through_extends_is_reported(tmp_path):
+    root = _base_solution(tmp_path)
+    _provider_doc(root, "azure-other")
+    _partial_base(root, "ghost-base", "  providers:\n    - slot: ghost\n      provider: azure-other\n")
+    _extend_deployment(root, "ghost-base")
+
+    context = _resolve(root)
+    assert _findings(context) == {"provider_slot_unknown": "error"}
+    assert any("inherited through 'extends'" in m for m in context.diagnostics.messages())
+
+
+def test_partial_base_provider_bindings_are_not_checked_on_their_own(tmp_path):
+    """A partial base's workspace may be overridden by a leaf, so it is only judged merged."""
+    root = _base_solution(tmp_path)
+    _provider_doc(root, "azure-other")
+    _partial_base(
+        root, "lonely-base", "  workspace: main\n  providers:\n    - slot: ghost\n      provider: azure-other\n"
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _findings(context) == {}
+
+
+def _two_slots_on_one_provider(root: Path) -> None:
+    """Workspace slots `a` and `b` both default to the `azure-main` document."""
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "providers: [azure-main]",
+            "providers:\n    - {slot: a, provider: azure-main}\n    - {slot: b, provider: azure-main}",
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_two_slots_sharing_a_provider_report_a_geography_mismatch_once(tmp_path):
+    root = _base_solution(tmp_path)
+    _add_us_region_to_azure_config(root)
+    path = root / "provider.yaml"
+    path.write_text(path.read_text(encoding="utf-8").replace("region: westeurope", "region: eastus2"), encoding="utf-8")
+    _two_slots_on_one_provider(root)
+
+    context = _resolve(root)
+    assert sum("eastus2" in m for m in context.diagnostics.messages()) == 1
+
+
+def test_two_slots_sharing_a_provider_report_a_token_once(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "provider.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  configuration:\n    tenant_id: '${var:GHOST_SHARED_VAR}'\n",
+        encoding="utf-8",
+    )
+    _two_slots_on_one_provider(root)
+
+    context = _resolve(root)
+    assert sum("GHOST_SHARED_VAR" in m for m in context.diagnostics.messages()) == 1
+
+
 def test_deployment_with_no_tenant_skips_geography_check(tmp_path):
     root = _base_solution(tmp_path)
     _add_us_region_to_azure_config(root)

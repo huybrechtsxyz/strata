@@ -1,0 +1,14 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: prd-north-deployment
+  annotations:
+    description: "Production instance in North Europe — same workspace as prd-deployment"
+  tags: ["production"]
+spec:
+  extends: region-north
+
+  environments:
+    - prd
+
+  tenant: c0062

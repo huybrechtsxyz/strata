@@ -5,12 +5,15 @@ from pathlib import Path
 
 import pytest
 
+from strata.controllers.deployment_resolution import resolve_deployment_chains
 from strata.controllers.solution_controller import (
     DocumentRef,
     SolutionController,
     find_solution_root,
 )
 from strata.models.common_models import PlatformKind
+from strata.models.workspace_model import WorkspaceModel
+from strata.services.workspace_service import effective_providers
 
 MANIFEST = """\
 apiVersion: strata.huybrechts.xyz/v2
@@ -337,3 +340,21 @@ def test_shipped_example_solution_loads_cleanly():
         "key-vault",
         "app-gateway-waf",
     }
+
+
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_rebinds_the_provider_slot_for_the_second_region():
+    """The same workspace targets westeurope by default and northeurope through the
+    `region-north` base — the example doubles as the provider-slot dogfood."""
+    controller = SolutionController(_repo_config_dir())
+    assert controller.load().ok
+    resolved, diagnostics = resolve_deployment_chains(controller.index)
+    assert diagnostics.ok, diagnostics.messages()
+    workspace_entry = controller.index.get(PlatformKind.WORKSPACE, "main")
+    assert workspace_entry is not None
+    workspace = workspace_entry.model
+    assert isinstance(workspace, WorkspaceModel)
+
+    assert effective_providers(workspace, resolved["prd-deployment"]) == {"azure": "azure-main"}
+    assert effective_providers(workspace, resolved["prd-north-deployment"]) == {"azure": "azure-north"}
+    assert "region-north" not in resolved  # a partial base is never deployable on its own

@@ -116,14 +116,17 @@ def _strata_tenant(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 
 
 def _strata_providers(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """`strata.providers` — name -> {type, region, display_name,
+    """`strata.providers` — slot -> {provider, type, region, display_name,
     description, labels, tags, configuration, custom, default_tags} per
-    `ProviderSpecModel`/`ProviderMetaModel`."""
+    `ProviderSpecModel`/`ProviderMetaModel`. Keyed by workspace slot, so a
+    deployment rebinding a slot (docs/design/provider-slots.md) leaves IaC
+    code unchanged; `provider` names the document actually bound."""
     payload: dict[str, Any] = {}
     for name, provider in graph.providers.items():
         spec = provider.spec
         meta = provider.meta
         payload[name] = {
+            "provider": meta.name,
             "type": spec.type,
             "region": spec.region,
             "display_name": spec.display_name,

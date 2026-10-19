@@ -1572,6 +1572,59 @@ def test_deploy_run_no_longer_collides_on_shared_flat_category_key_names(tmp_pat
     assert strata["workspace"]["name"] == "main"
 
 
+def test_deploy_run_projects_the_deployments_provider_binding(tmp_path: Path, _capture):
+    """A deployment rebinding a workspace provider slot reaches the deploy-time payload:
+    keyed by the slot, holding the bound document (docs/design/provider-slots.md)."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    for name in ("p1", "p2"):
+        _write(
+            root,
+            f"provider-{name}.yaml",
+            f"apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: {name}\nspec:\n"
+            "  type: local\n  region: local\n",
+        )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  provider_type: local\n  resource_type: server\n  category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - {slot: primary, provider: p1}\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: unused\n      store: constant\n      value: x\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n"
+        "  providers:\n    - {slot: primary, provider: p2}\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    on_disk = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())
+    providers = on_disk["strata"]["providers"]
+    assert list(providers) == ["primary"]
+    assert providers["primary"]["provider"] == "p2"
+
+
 def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: Path):
     """docs/design/gap_fit_v1.md gap #17 / value-token-resolution.md's "Decision
     (2026-09-29)": a '${var:}'/'${secret:}' token inside a Provider's

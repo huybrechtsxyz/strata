@@ -27,6 +27,31 @@ def test_deployment_minimal_is_valid():
     assert model.kind.value == "deployment"
 
 
+def test_deployment_accepts_provider_bindings():
+    data = _minimal_deployment()
+    data["spec"]["providers"] = [{"slot": "azure", "provider": "azure-americas"}]
+    model = DeploymentModel.model_validate(data)
+    assert model.spec.providers[0].slot == "azure"
+    assert model.spec.providers[0].provider == "azure-americas"
+
+
+def test_deployment_rejects_duplicate_provider_slot_bindings():
+    data = _minimal_deployment()
+    data["spec"]["providers"] = [
+        {"slot": "azure", "provider": "azure-americas"},
+        {"slot": "azure", "provider": "azure-brazil"},
+    ]
+    with pytest.raises(ValidationError, match="provider slot bindings"):
+        DeploymentModel.model_validate(data)
+
+
+def test_deployment_provider_binding_has_no_bare_string_shorthand():
+    data = _minimal_deployment()
+    data["spec"]["providers"] = ["azure-americas"]
+    with pytest.raises(ValidationError):
+        DeploymentModel.model_validate(data)
+
+
 def test_deployment_rejects_mismatched_kind():
     """A document declaring another kind is rejected (ADR-0016)."""
     data = _minimal_deployment()

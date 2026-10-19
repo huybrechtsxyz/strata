@@ -34,6 +34,12 @@ spec:
 
 ## Notes
 
+- A workspace binds a provider document to a named *slot* (`spec.providers[]`), and a
+  [`deployment`](deployment.md) can rebind the slot to a different provider document — typically
+  another region of the same platform (one document per region, e.g. `azure-main` in westeurope
+  and `azure-north` in northeurope). The replacement must have the same `spec.type` as the slot's
+  default. See [workspace.md](workspace.md)'s "Provider slots".
+
 - No `spec.references` (unlike v1): a provider no longer declares required variable/secret *key
   names* separately — any value that needs to vary by environment is a `${var:}`/`${secret:}`/
   `${feature:}` token directly in the relevant field, checked against a real `Environment` in

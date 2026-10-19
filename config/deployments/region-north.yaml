@@ -1,0 +1,22 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: region-north
+  annotations:
+    description: "Reusable base — deploys the workspace to North Europe instead of its default region"
+  tags: ["base", "partial"]
+spec:
+  # An intermediate link in the `extends` chain: it inherits the workspace and
+  # stages from deploy-base and adds one thing — the provider slot binding.
+  # Every deployment that should run in this region extends this document.
+  partial: true
+  extends: deploy-base
+
+  # Rebinds the workspace's `azure` provider slot (workspaces/main.yaml) to
+  # another Provider document of the same type. IaC code still addresses
+  # `strata.providers.azure`; only the bound document changes. Bindings merge
+  # by `slot` across `extends` (child wins), so a leaf can rebind other slots
+  # without losing this one.
+  providers:
+    - slot: azure
+      provider: azure-north

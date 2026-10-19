@@ -8,7 +8,12 @@ spec:
   #   provisioners - with what: tool definitions
   #   execution    - what runs, in what order
   providers:
-    - azure-main
+    # A named slot with a default Provider document. IaC code addresses the
+    # slot (`strata.providers.azure`), so a deployment can rebind it to another
+    # region without the code changing (deployments/region-north.yaml). A bare
+    # name (`- azure-main`) is shorthand for a slot named after its document.
+    - slot: azure
+      provider: azure-main
   namespaces:
     - hearth
   provisioners:

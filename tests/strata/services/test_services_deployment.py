@@ -138,6 +138,59 @@ def test_merge_stages_are_merged_by_step():
     assert [s["step"] for s in merged["stages"]] == ["infra", "apps", "extra"]
 
 
+def test_merge_providers_keeps_base_bindings_for_other_slots():
+    """Binding one slot in the child does not drop the base's other slots."""
+    merged = merge_deployment_specs(
+        {"providers": [{"slot": "azure", "provider": "azure-americas"}]},
+        {"providers": [{"slot": "dns", "provider": "dns-americas"}]},
+    )
+    assert merged["providers"] == [
+        {"slot": "azure", "provider": "azure-americas"},
+        {"slot": "dns", "provider": "dns-americas"},
+    ]
+
+
+def test_merge_providers_child_wins_on_same_slot():
+    """Same slot in base and child: the child's binding wins, position kept."""
+    merged = merge_deployment_specs(
+        {"providers": [{"slot": "azure", "provider": "azure-americas"}, {"slot": "dns", "provider": "dns-base"}]},
+        {"providers": [{"slot": "azure", "provider": "azure-brazil"}]},
+    )
+    assert merged["providers"] == [
+        {"slot": "azure", "provider": "azure-brazil"},
+        {"slot": "dns", "provider": "dns-base"},
+    ]
+
+
+def test_merge_unkeyed_lists_are_replaced():
+    """A list not in the merge-key table is still replaced wholesale."""
+    merged = merge_deployment_specs(
+        {"configurations": ["base-config"]},
+        {"configurations": ["child-config"]},
+    )
+    assert merged["configurations"] == ["child-config"]
+
+
+def test_merge_keyed_list_never_merges_keyless_items():
+    """An item without its key has no identity, so it is kept as-is rather than collapsed into another."""
+    merged = merge_deployment_specs(
+        {"providers": [{"provider": "a"}]},
+        {"providers": [{"provider": "b"}, {"slot": "azure", "provider": "c"}]},
+    )
+    assert merged["providers"] == [{"provider": "a"}, {"provider": "b"}, {"slot": "azure", "provider": "c"}]
+
+
+def test_merge_tenant_defaults_layer_keeps_the_deployments_provider_bindings():
+    """Tenant defaults merge underneath a deployment via the same function; they carry no
+    `providers`, so the deployment's bindings must pass through untouched."""
+    merged = merge_deployment_specs(
+        {"environments": ["tenant-env"], "properties": {}, "custom": {}},
+        {"environments": ["prd"], "providers": [{"slot": "azure", "provider": "azure-north"}]},
+    )
+    assert merged["providers"] == [{"slot": "azure", "provider": "azure-north"}]
+    assert merged["environments"] == ["tenant-env", "prd"]
+
+
 def test_merge_environments_append_base_first():
     """Base environments come first so the child's win at value resolution."""
     merged = merge_deployment_specs(

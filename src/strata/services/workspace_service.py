@@ -2,11 +2,27 @@
 """Service for loading and validating workspace configuration."""
 
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel
+from strata.models.deployment_model import DeploymentModel
 from strata.models.network_model import NetworkModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
+
+
+def effective_providers(workspace: WorkspaceModel, deployment: DeploymentModel | None) -> dict[str, str]:
+    """`{slot: provider document name}` — the workspace's defaults, overlaid by
+    the deployment's bindings (docs/design/provider-slots.md).
+
+    A binding naming a slot the workspace does not declare is ignored here;
+    reporting it is Phase 2 validation's job (`provider_slot_unknown`).
+    """
+    binding = {slot.slot: slot.provider for slot in workspace.spec.providers}
+    if deployment is not None:
+        for bound in deployment.spec.providers or []:
+            if bound.slot in binding:
+                binding[bound.slot] = bound.provider
+    return binding
 
 
 class WorkspaceService(BaseService[WorkspaceModel]):

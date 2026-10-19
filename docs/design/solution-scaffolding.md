@@ -238,17 +238,33 @@ def is_package_owned(dest_relative_path: str) -> bool:
 (not just an editable/source checkout) actually contains the template
 tree. Untested today because nothing ships non-`.py` package data yet.
 
+### JSON Schema export + VS Code `yaml.schemas` wiring (added 2026-10-02)
+
+`ScaffoldController._export_schemas()` writes one JSON Schema per
+registered kind (`model_cls.model_json_schema()`, unmodified) to
+`.strata/schemas/<kind>.json`, plus a synthesized umbrella
+(`.strata/schemas/strata.json`) that dispatches to the matching per-kind
+file via an `if`/`then` chain keyed on the document's own `kind:` value —
+one `yaml.schemas` mapping covers every kind at once, instead of one
+entry per kind/directory glob. `SERVICE_BY_KIND` (`solution_controller.py`)
+is reused as the one source of truth for "every registered kind" —
+deliberately not a second, separately-maintained kind list (v1 had two
+independent lists for this exact feature that silently drifted apart).
+Called unconditionally at the end of `_scaffold()`, so both `init` and
+`update` always regenerate every schema file — same "package-owned,
+always refreshed" rule as the rest of `.strata/`, never hand-edited.
+`dot.vscode/settings.json` is shipped as real scaffold content (user-owned,
+write-once like `.github/`) pre-wired with
+`"yaml.schemas": {".strata/schemas/strata.json": ["**/*.yaml", "**/*.yml"]}`,
+so a freshly-scaffolded repo gets real editor autocomplete/inline
+validation with zero extra steps.
+
 ## Deliberately out of scope
 
 - **v1's full `dot.github/` tree** (Copilot agent/skills/prompts/
   instructions, `workflows/deploy.yml`) — unrelated to audit-trail Layer
   1; a separate future decision if v2 wants to scaffold AI-agent
   customization or CI workflows too.
-- **`.devcontainer/`, `.vscode/` scaffolding** — not evidenced as needed
-  by this design's motivating problem.
-- **JSON Schema generation/export** (`_generate_schemas()`, v1's
-  `.strata/schemas/*.json`) — v2 has no equivalent mechanism or consumer
-  for it today; a separate feature if ever needed.
 - **Every other `strata sln *` subcommand** v1 has
   (`add_deployment`/`remove_deployment`/`list_deployments`/
   `scan_deployments`/`export_template`/`doctor`) — none relate to
@@ -264,3 +280,14 @@ tree. Untested today because nothing ships non-`.py` package data yet.
 - `strata.yaml` is user-owned and `init` is idempotent - re-running it on an existing solution leaves `meta.name`/identity untouched (unlike v1, which reloads and rewrites it); `init` is simply "create `strata.yaml` if missing, then run the same refresh `update()` does."
 - Command naming (`sln init`/`sln update`) kept v1's names as-is - no competing v2 convention existed yet to prefer something else.
 - Shipped scaffold content deliberately starts narrow (just the two audit-trail-relevant `.github/` files) - v1's much larger `.github/` tree (Copilot agent/skills/prompts, CI workflow) is a separate, unrelated concern left out for now.
+- **Correction (2026-10-18, docs-only):** this doc's own "Deliberately out
+  of scope" section claimed `.vscode/` scaffolding and JSON Schema
+  export/`yaml.schemas` wiring had no v2 equivalent — stale since
+  2026-10-02 (commit `133fe98`, "Implement JSON Schema export and update
+  documentation for schema management"), which built exactly that
+  (`ScaffoldController._export_schemas()`, `dot.vscode/settings.json`)
+  but never circled back to update this doc's own scope-boundary list.
+  Found while answering a question about whether v1's VS Code extension
+  gap `strata.exportSchemas` could be closed via `sln init`/`sln update`
+  — it already is, on the CLI/backend side (`docs/work/gap_fit_v1_vscode.md`
+  gap #2 updated to match).

@@ -2,8 +2,16 @@
 """Tests for ScaffoldController (docs/design/solution-scaffolding.md)."""
 
 import json
+import shutil
+from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
+import jsonschema
 import pytest
+import yaml
+from referencing import Registry, Resource
+from referencing.jsonschema import DRAFT202012
 
 from strata.controllers.scaffold_controller import ScaffoldController
 from strata.controllers.solution_controller import SERVICE_BY_KIND
@@ -147,3 +155,42 @@ def test_init_wires_vscode_yaml_schemas_setting(tmp_path):
 
     settings = json.loads((tmp_path / ".vscode" / "settings.json").read_text(encoding="utf-8"))
     assert settings["yaml.schemas"][".strata/schemas/strata.json"] == ["**/*.yaml", "**/*.yml"]
+
+
+def _repo_config_dir() -> Path:
+    return Path(__file__).resolve().parents[3] / "config"
+
+
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_validates_against_its_exported_schemas(tmp_path):
+    """The editor schema must accept every document the example ships, shorthand forms included
+    (provider slots, version pins) — a bare-string shorthand invisible to the schema is flagged
+    in the editor even though `strata validate` accepts it."""
+    root = tmp_path / "config"
+    shutil.copytree(_repo_config_dir(), root)
+    ScaffoldController(root).update()
+    schemas = root / ".strata" / "schemas"
+
+    def retrieve(uri: str) -> Resource:
+        path = Path(url2pathname(urlparse(uri).path))
+        return Resource.from_contents(json.loads(path.read_text(encoding="utf-8")), default_specification=DRAFT202012)
+
+    umbrella = json.loads((schemas / "strata.json").read_text(encoding="utf-8"))
+    umbrella["$id"] = (schemas / "strata.json").as_uri()
+    validator = jsonschema.Draft202012Validator(umbrella, registry=Registry(retrieve=retrieve))
+
+    failures: list[str] = []
+    kinds: set[str] = set()
+    for file in sorted(root.rglob("*.yaml")):
+        if {".strata", "templates", "vendor"} & set(file.relative_to(root).parts):
+            continue
+        for document in yaml.safe_load_all(file.read_text(encoding="utf-8")):
+            if not isinstance(document, dict) or "kind" not in document:
+                continue
+            kinds.add(document["kind"])
+            errors = list(validator.iter_errors(json.loads(json.dumps(document, default=str))))
+            if errors:
+                failures.append(f"{file.relative_to(root).as_posix()} ({document['kind']}): {errors[0].message[:200]}")
+
+    assert {"workspace", "deployment", "version"} <= kinds  # guards against a vacuous pass
+    assert not failures, failures

@@ -70,13 +70,14 @@ from datetime import date
 from enum import Enum
 from typing import Annotated, Any
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, StringConstraints, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    scalar_shorthand_schema,
     validate_kind_matches,
 )
 from strata.models.reference_fields import References
@@ -121,6 +122,10 @@ class VersionPinModel(PlatformBaseModel):
 
     Both forms produce the same model, so consumers never branch on shape.
     """
+
+    model_config = ConfigDict(
+        json_schema_extra=scalar_shorthand_schema(Annotated[str, StringConstraints(min_length=1)])
+    )
 
     version: str = Field(min_length=1, description="The pinned value: image reference, chart version, or git ref")
     status: VersionPinStatus = Field(

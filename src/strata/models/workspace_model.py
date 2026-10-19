@@ -9,8 +9,9 @@ A `Deployment` (not yet built, the "container instance") executes that
 recipe against a specific `Environment` — it does not invent new tool
 bindings, only supplies runtime parameters.
 
-**References are names, not paths.** `spec.providers`/`namespaces`/
-`firewalls`/`dns_zones`/`networks`/`topology` are plain document names, and
+**References are names, not paths.** `spec.namespaces`/
+`firewalls`/`dns_zones`/`networks`/`topology` are plain document names
+(`spec.providers` too, via its bare-string slot shorthand), and
 `WorkspaceResourceModel.resource` names the Resource document an instance is
 built from. These were `{name, file}` wrappers, which conflated *identity*
 ("which Provider do I mean") with *location* ("where its YAML sits") and
@@ -25,7 +26,7 @@ rather than being restated at every reference site.
 
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from strata.models.checkov_model import CheckovPolicyModel
 from strata.models.common_models import (
@@ -35,6 +36,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    scalar_shorthand_schema,
     validate_kind_matches,
 )
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
@@ -356,6 +358,36 @@ class WorkspaceMetaModel(PlatformBaseModel):
     tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
 
 
+class WorkspaceProviderModel(PlatformBaseModel):
+    """A named provider slot with its default Provider document
+    (docs/design/provider-slots.md).
+
+    `slot` is the stable key IaC code addresses (`strata.providers.<slot>`);
+    `provider` is the document bound by default. A deployment may rebind the
+    slot to another Provider document of the same type, so the same workspace
+    can target a second region/account without its IaC code changing.
+
+    A bare string is shorthand for a slot named after its own document —
+    `azure-main` means `{slot: azure-main, provider: azure-main}` — so a
+    workspace that never rebinds anything reads exactly as before.
+    """
+
+    model_config = ConfigDict(json_schema_extra=scalar_shorthand_schema(PlatformName))
+
+    slot: PlatformName = Field(description="Stable slot name; IaC addresses the provider as strata.providers.<slot>")
+    provider: Annotated[PlatformName, References(PlatformKind.PROVIDER)] = Field(
+        description="Name of the Provider document bound to this slot by default"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_scalar_shorthand(cls, value: Any) -> Any:
+        """Treat a bare string as `{slot: <string>, provider: <string>}`."""
+        if isinstance(value, str):
+            return {"slot": value, "provider": value}
+        return value
+
+
 class WorkspaceSpecModel(PlatformBaseModel):
     """Workspace specification: the static declaration of everything a solution needs.
 
@@ -391,8 +423,11 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "tagging policy.",
     )
 
-    providers: list[Annotated[PlatformName, References(PlatformKind.PROVIDER)]] = Field(
-        ..., min_length=1, description="Provider document names"
+    providers: list[WorkspaceProviderModel] = Field(
+        ...,
+        min_length=1,
+        description="Provider slots: a Provider document name, or {slot, provider} to give the slot a stable "
+        "name a deployment can rebind (docs/design/provider-slots.md)",
     )
     provisioners: list[ProvisionerModel] = Field(..., min_length=1, description="Provisioner (tool) definitions")
     execution: list[ProvisioningStepModel] | None = Field(
@@ -466,7 +501,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
     @model_validator(mode="after")
     def validate_unique_names(self) -> "WorkspaceSpecModel":
         """Validate that names are unique within each list."""
-        check_unique_names(self.providers, "provider names")
+        check_unique_names([p.slot for p in self.providers], "provider slots")
         check_unique_names([p.name for p in self.provisioners], "provisioner names")
         if self.topology:
             check_unique_names([t.name for t in self.topology], "topology names")

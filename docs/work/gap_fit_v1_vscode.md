@@ -1,7 +1,7 @@
 # v1 -> v2 VS Code Extension Coverage Gaps
 
 - Status: living - update in place as items are ported, deliberately deferred, or decided against
-- Last updated: 2026-10-14 (created)
+- Last updated: 2026-10-18
 
 ## Overview
 
@@ -42,14 +42,31 @@ schema.
   a document (triggering the existing whole-solution validate) could still be added cheaply; that
   part is `Undecided`.
 
-### 2. Schema export & wiring (`strata.exportSchemas`)
+### 2. ~~Schema export & wiring (`strata.exportSchemas`)~~ — MOSTLY RESOLVED (backend side)
 
 - **v1:** one-click JSON Schema export + wiring into VS Code's YAML schema association, enabling
   autocomplete/inline validation in the editor itself (separate from `strata validate`).
-- **v2 today:** nothing - no schema export command, no `yaml.schemas` wiring.
-- **Status:** `No v2 backend yet` (no `strata schema export`-equivalent command exists). Worth
-  real value even before the rest of the gap list - autocomplete is a big quality-of-life win and
-  doesn't depend on build/deploy/audit landing first.
+- **v2 today:** the backend already does this — and does it automatically, not as a separate
+  manual step. `ScaffoldController._export_schemas()` (`scaffold_controller.py`, added 2026-10-02)
+  writes one JSON Schema per registered kind plus an umbrella `kind:`-dispatching schema to
+  `.strata/schemas/`, every time `strata sln init`/`strata sln update` runs (`.strata/` is
+  package-owned, always regenerated — confirmed real, tested:
+  `test_init_exports_one_schema_file_per_registered_kind`,
+  `test_update_regenerates_schemas_even_if_hand_edited`). The shipped `dot.vscode/settings.json`
+  scaffold template is pre-wired with `"yaml.schemas": {".strata/schemas/strata.json": ["**/*.yaml",
+  "**/*.yml"]}` (`test_init_wires_vscode_yaml_schemas_setting`) — a freshly-scaffolded repo gets
+  real editor autocomplete/inline validation with zero extra steps, no separate export command
+  needed at all. (`docs/design/solution-scaffolding.md` had a stale "Deliberately out of scope"
+  note claiming neither existed — corrected 2026-10-18; this doc's own status was equally stale
+  until the same correction.)
+- **Status:** `CLI ready, not wired` for the one genuine remaining gap — the **extension itself**
+  has no command that invokes `sln init`/`sln update` at all (confirmed: `sln` is listed as
+  "not yet wired into the extension" in `extension.ts`'s own header comment). A user gets the
+  schema/`yaml.schemas` benefit automatically once they've run `sln init`/`sln update` from a
+  terminal, but there's no one-click `strata.exportSchemas`-equivalent command inside the editor —
+  wiring one would just shell out to `sln update` (reusing the existing CLI, not a new backend
+  capability) and could double as the extension's first `sln`-group command generally (see gap #4's
+  "readiness/guide view" note, which has the same underlying "no `sln` wiring yet" root cause).
 
 ### 3. Build / Deploy commands (dry-run + run, stage-based)
 

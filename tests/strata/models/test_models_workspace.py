@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for WorkspaceModel YAML validation."""
 
+import jsonschema
 import pytest
 from pydantic import ValidationError
 
@@ -27,7 +28,8 @@ def test_workspace_minimal_is_valid():
     """A minimal workspace document (only required fields) validates successfully."""
     model = WorkspaceModel.model_validate(_minimal_workspace())
     assert model.meta.name == "myapp-workspace"
-    assert model.spec.providers[0] == "azure-main"
+    assert model.spec.providers[0].slot == "azure-main"
+    assert model.spec.providers[0].provider == "azure-main"
     assert model.spec.provisioners[0].tool == "terraform"
     assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
     assert model.kind.value == "workspace"
@@ -116,6 +118,51 @@ def test_workspace_rejects_duplicate_provider_names():
     data["spec"]["providers"].append(data["spec"]["providers"][0])
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
+
+
+def test_workspace_provider_slot_object_form():
+    """A slot may name a different default document than itself."""
+    data = _minimal_workspace()
+    data["spec"]["providers"] = [{"slot": "azure", "provider": "azure-westeurope"}]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.providers[0].slot == "azure"
+    assert model.spec.providers[0].provider == "azure-westeurope"
+
+
+def test_workspace_provider_slots_mix_bare_and_object_forms():
+    data = _minimal_workspace()
+    data["spec"]["providers"] = ["azure-shared", {"slot": "azure", "provider": "azure-westeurope"}]
+    model = WorkspaceModel.model_validate(data)
+    assert [(p.slot, p.provider) for p in model.spec.providers] == [
+        ("azure-shared", "azure-shared"),
+        ("azure", "azure-westeurope"),
+    ]
+
+
+def test_workspace_rejects_duplicate_provider_slots_across_forms():
+    """Uniqueness is on the slot, whichever form declares it."""
+    data = _minimal_workspace()
+    data["spec"]["providers"] = ["azure", {"slot": "azure", "provider": "azure-westeurope"}]
+    with pytest.raises(ValidationError, match="provider slots"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_allows_two_slots_on_the_same_document():
+    data = _minimal_workspace()
+    data["spec"]["providers"] = [
+        {"slot": "primary", "provider": "azure-main"},
+        {"slot": "secondary", "provider": "azure-main"},
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert len(model.spec.providers) == 2
+
+
+def test_workspace_provider_json_schema_accepts_bare_string():
+    """Exported editor schema must not flag the shorthand every existing workspace uses."""
+    schema = WorkspaceModel.model_json_schema()
+    document = WorkspaceModel.model_validate(_minimal_workspace()).model_dump(mode="json", exclude_none=True)
+    document["spec"]["providers"] = ["azure-main", {"slot": "azure", "provider": "azure-westeurope"}]
+    jsonschema.validate(document, schema)
 
 
 def test_workspace_rejects_duplicate_provisioner_names():

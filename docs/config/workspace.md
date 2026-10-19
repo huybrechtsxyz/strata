@@ -8,7 +8,10 @@ parameters.
 
 ## Schema
 
-- `spec.providers[]` — names of [`provider`](provider.md) documents this workspace uses
+- `spec.providers[]` — provider **slots**: each is a [`provider`](provider.md) document name, or
+  `{slot, provider}` to give the slot a stable name distinct from its default document. IaC code
+  addresses the slot (`strata.providers.<slot>`); a [`deployment`](deployment.md) can rebind it to
+  another provider document of the same type — see "Provider slots" below
 - `spec.resources[]` — workspace-local resource instances, each:
   - `name` — the workspace-local instance name
   - `resource` — the [`resource`](resource.md) document it's built from (or `managed_by: provisioner`
@@ -44,7 +47,8 @@ meta:
   name: main
 spec:
   providers:
-    - azure-main
+    - slot: azure
+      provider: azure-main
   namespaces:
     - hearth
   provisioners:
@@ -81,6 +85,26 @@ spec:
     managed-by: strata
 ```
 
+## Provider slots
+
+A `spec.providers[]` entry is a named **slot** with a default provider document:
+
+```yaml
+providers:
+  - slot: azure              # stable key — IaC code addresses strata.providers.azure
+    provider: azure-main     # default Provider document (westeurope)
+  - azure-shared             # bare name = slot and document share the name
+```
+
+- `slot` is unique within the workspace; two slots may point at the same document.
+- A bare string is shorthand for `{slot: <name>, provider: <name>}`, so a workspace that never
+  rebinds anything reads exactly as before and keeps its `strata.providers.<name>` keys.
+- The same workspace can target another region or account without its IaC code changing: a
+  [`deployment`](deployment.md) rebinds the slot (`spec.providers[]` there). Prefer an explicit
+  slot name (`azure`) over one named after a specific region's document (`azure-main`) when you
+  expect to rebind — otherwise `strata.providers.azure-main` would silently point at another
+  region.
+
 ## Topology grouping
 
 Each `spec.topology[]` entry is a named grouping of resources and namespaces that conceptually
@@ -106,8 +130,9 @@ must be marked as the `main` slot.
 
 ## Notes
 
-- Three sibling keys answer three different questions: `providers` (where — which account),
-  `provisioners` (with what — tool definitions), `execution` (what runs, in what order).
+- Three sibling keys answer three different questions: `providers` (where — which account, as
+  rebindable slots), `provisioners` (with what — tool definitions), `execution` (what runs, in
+  what order).
 - `execution` names steps ordered by `depends_on`, not a numeric `priority` (ADR-0011) — `strata
   deploy run` executes steps in that dependency order.
 - A [`deployment`](deployment.md)'s `stages[]` reference `execution[].name` for runtime parameters
