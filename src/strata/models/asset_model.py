@@ -20,7 +20,7 @@ be meaningless for an asset.
 
 from typing import Annotated, Any
 
-from pydantic import ConfigDict, Field, StringConstraints, field_validator, model_validator
+from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
@@ -29,14 +29,14 @@ from strata.models.common_models import (
     PlatformVersion,
     validate_kind_matches,
 )
-from strata.models.reference_fields import RemoteReference
+from strata.models.reference_fields import References, RemoteReference
 from strata.models.solution_model import RemoteFetch, RemoteType
-from strata.utils.path_safety import validate_no_path_traversal, validate_not_option_like, validate_relative_path
-
-
-def _hide_unsupported_integration(schema: dict[str, Any]) -> None:
-    """Drop `integration` from the exported schema so the editor flags it instead of offering it."""
-    schema.get("properties", {}).pop("integration", None)
+from strata.utils.path_safety import (
+    validate_no_path_traversal,
+    validate_no_url_credentials,
+    validate_not_option_like,
+    validate_relative_path,
+)
 
 
 class AssetLocationModel(PlatformBaseModel):
@@ -45,11 +45,9 @@ class AssetLocationModel(PlatformBaseModel):
 
     Lets one small asset document per customer point at that customer's own
     repository without growing the manifest. A `SolutionRemoteModel` minus
-    `name` (the asset's own name is the identity) and minus what the first
-    version cannot honour: only `type: git`, and no `integration` yet.
+    `name` (the asset's own name is the identity) and minus what it cannot
+    honour: only `type: git`.
     """
-
-    model_config = ConfigDict(json_schema_extra=_hide_unsupported_integration)
 
     type: RemoteType = Field(RemoteType.GIT, description="Only 'git' is supported for an asset location")
     url: str = Field(min_length=1, description="Git repository URL")
@@ -63,10 +61,12 @@ class AssetLocationModel(PlatformBaseModel):
         description="'strata' clones it; 'external' means CI already checked it out at "
         ".strata/assets/<asset name>/<reference> and strata only reads it.",
     )
-    integration: PlatformName | None = Field(
+    integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         None,
-        description="Reserved for credentials via an Integration. Not supported yet: setting it is an "
-        "error rather than being silently ignored. Use fetch: external or ambient git credentials.",
+        description="Name of an Integration providing credentials for cloning this repository (must declare "
+        "the 'sources' capability). Omit for a public repository or ambient git credentials. Credentials "
+        "are never inline: the url must not embed a password. Ignored with fetch: external, which clones "
+        "nothing.",
     )
 
     @field_validator("type")
@@ -90,17 +90,7 @@ class AssetLocationModel(PlatformBaseModel):
     def validate_url_not_option_like(cls, v: str) -> str:
         """`url` is a positional argument to `git clone`; see `validate_not_option_like()`."""
         validate_not_option_like(v, "url")
-        return v
-
-    @field_validator("integration")
-    @classmethod
-    def validate_integration_unsupported(cls, v: str | None) -> str | None:
-        """No read-path caller passes credentials yet, so accepting it would silently do nothing."""
-        if v is not None:
-            raise ValueError(
-                "'integration' is not supported on an asset location yet; use fetch: external, "
-                "or ambient git credentials."
-            )
+        validate_no_url_credentials(v, "url")
         return v
 
 

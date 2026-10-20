@@ -1,0 +1,15 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: integration
+meta:
+  name: git-customers
+spec:
+  type: git
+  capabilities: [sources]
+  description: "Read access to the customers' own git repositories (assets/c0062-api.yaml). One shared identity; a customer with a distinct identity gets an integration document of its own. The token is read from the CUSTOMER_GIT_TOKEN secret (environments/prd.yaml); a build job maps its CI secret to that environment variable."
+  required: false
+  enabled: true
+  authentication:
+    method: token
+    token:
+      token: CUSTOMER_GIT_TOKEN
+      username: build-bot

@@ -84,6 +84,29 @@ _USERNAME_ENV_VAR = "STRATA_GIT_ASKPASS_USERNAME"
 #: passphrase` was modelled but never actually consulted).
 _PASSPHRASE_ENV_VAR = "STRATA_SSH_ASKPASS_PASSPHRASE"
 
+#: Authentication methods `prepare_git_credentials()` can deliver to git. `cli` means "whatever git
+#: already has", i.e. ambient; any other method (oauth2, aws, ...) is ignored by it.
+FETCH_METHODS = ("token", "ssh_key", "cli")
+
+
+def credential_keys(auth: AuthenticationModel | None) -> tuple[str, ...]:
+    """Every declared key `prepare_git_credentials()` reads for `auth`.
+
+    A caller resolves exactly these before calling it, so a key reference that does not resolve is
+    reported up front instead of falling back silently: `known_hosts` is included whenever it is
+    set, because referencing it means the host key must be pinned.
+    """
+    if auth is None:
+        return ()
+    if auth.method == "token":
+        assert auth.token is not None  # guaranteed by AuthenticationModel's own validator
+        return (auth.token.token,)
+    if auth.method == "ssh_key":
+        assert auth.ssh_key is not None  # guaranteed by AuthenticationModel's own validator
+        key = auth.ssh_key
+        return tuple(ref for ref in (key.private_key, key.passphrase, key.known_hosts) if ref)
+    return ()
+
 
 def prepare_git_credentials(
     auth: AuthenticationModel | None, resolved_values: Mapping[str, str] | None = None

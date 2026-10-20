@@ -7,11 +7,14 @@ spec:
   # The definition lives here, in the config repository; the files live in the
   # customer's repository. No `remotes:` entry in strata.yaml is needed, so a
   # new customer is one small document like this plus one deployment binding it.
-  # Building a deployment that binds this asset needs read access to the URL
-  # (or `fetch: external` with a checkout at .strata/assets/c0062-api/<reference>).
+  # Building a deployment that binds this asset clones the URL with the token that
+  # `git-customers` reads from the CUSTOMER_GIT_TOKEN secret (environments/prd.yaml).
+  # With `fetch: external` instead, CI places a checkout at .strata/assets/c0062-api/<reference>
+  # and no credentials are needed.
   location:
     type: git
     url: https://git.example.com/customers/c0062-api.git
     reference: v1.4.0
     fetch: strata
+    integration: git-customers
   source_path: openapi

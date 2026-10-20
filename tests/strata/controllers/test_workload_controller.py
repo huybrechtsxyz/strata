@@ -323,6 +323,62 @@ def test_resolve_artifact_services_raises_when_artifact_reference_does_not_resol
 # ---------------------------------------------------------------------------
 
 
+def test_build_workload_modules_clones_a_module_source_with_the_resolved_credentials(tmp_path: Path, monkeypatch):
+    from strata.controllers import remote_resolution as remote_resolution_module
+    from strata.controllers.remote_credentials import FetchCredentials
+    from strata.models.auth_models import AuthenticationModel, TokenAuthenticationModel
+    from strata.models.solution_model import RemoteType, SolutionRemoteModel
+    from strata.utils.transport import CommandResult
+
+    token = "ghp_workloadtoken123"
+    envs: list[dict[str, str]] = []
+
+    def _fake_git(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        envs.append(dict(env or {}))
+        if args[:2] == ["git", "clone"]:
+            _write(Path(args[-1]) / "charts" / "authentik" / "Chart.yaml", "name: authentik")
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    class _Resolver:
+        calls: list[tuple[str, str]] = []
+
+        def for_integration(self, name, *, owner):
+            self.calls.append((name, owner))
+            auth = AuthenticationModel(method="token", token=TokenAuthenticationModel(token="GIT_TOKEN"))
+            return FetchCredentials(auth=auth, values={"GIT_TOKEN": token})
+
+        def redact(self, text):
+            return text
+
+    monkeypatch.setattr(remote_resolution_module, "run_command", _fake_git)
+    remote = SolutionRemoteModel(
+        name="infra",
+        type=RemoteType.GIT,
+        url="https://example.com/org/charts.git",
+        reference="main",
+        integration="customer-git",
+        description=None,
+    )
+    module = _module("authentik", source=SourceModel(remote="infra", source_path="charts/authentik"))
+    resolver = _Resolver()
+    root = tmp_path / "sln"
+    root.mkdir()
+
+    build_workload_modules(
+        _index(module),
+        root,
+        remotes={"infra": remote},
+        namespace=_namespace(ModuleReferenceModel(name="auth", module="authentik")),
+        resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build",
+        credentials=resolver,
+    )
+
+    assert resolver.calls == [("customer-git", "remote 'infra'")]
+    assert envs[0]["STRATA_GIT_ASKPASS_TOKEN"] == token
+    assert (tmp_path / "build" / "apps" / "auth" / "Chart.yaml").is_file()
+
+
 def test_build_workload_modules_materialises_source_and_writes_helm_output(tmp_path: Path):
     root = tmp_path / "sln"
     _write(root / "charts" / "authentik" / "Chart.yaml", "name: authentik")

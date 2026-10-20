@@ -19,6 +19,7 @@ silently go stale.
 from strata.controllers.audit_read import AuditReadError
 from strata.controllers.build_controller import BuildCleanError
 from strata.controllers.deployment_output_store import OutputRecordNotFoundError, OutputRecordStaleError
+from strata.controllers.remote_credentials import RemoteCredentialError
 from strata.controllers.remote_resolution import RemoteResolutionError
 from strata.controllers.source_sync import SourceSyncError
 from strata.utils.errors import StrataError, SystemError, UsageError, ValidationError
@@ -46,6 +47,7 @@ EXIT_CODE_BY_ERROR: dict[type[StrataError], int] = {
     ValidationError: EXIT_VALIDATION,
     SystemError: EXIT_FAILURE,
     RemoteResolutionError: EXIT_FAILURE,
+    RemoteCredentialError: EXIT_FAILURE,
     SourceSyncError: EXIT_FAILURE,
     BuildCleanError: EXIT_FAILURE,
     AuditReadError: EXIT_FAILURE,

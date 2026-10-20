@@ -333,9 +333,7 @@ spec:
 `AssetLocationModel` is a `SolutionRemoteModel` minus `name` (the asset's name is the
 identity), minus what the first version cannot honour: only `type: git`
 (`resolve_remote()` fetches nothing else), `reference` required and traversal-checked,
-and `integration` rejected with a message rather than silently ignored (no read-path
-caller passes credentials yet; use `fetch: external` or ambient git credentials).
-`location` and `remote` are mutually exclusive.
+and `integration` for credentials (below). `location` and `remote` are mutually exclusive.
 
 `sync_asset()` builds a `SolutionRemoteModel` named after the asset from the location and
 calls `resolve_remote(..., checkout_path=layout.asset_checkout_path(...))`, so the
@@ -356,19 +354,65 @@ asset has no `location` (pin its remote under `pins.remotes` instead), and error
 Templated URLs stay rejected: each customer document spells its own URL, which is
 boilerplate but explicit and easy to grep.
 
+**Credentials.** `location.integration` (and a manifest remote's `integration`) names a
+`kind: integration` document with the `sources` capability whose `spec.authentication`
+(`token` or `ssh_key`) names keys of `secrets` the deployment reaches. One mechanism serves
+every build-time clone (assets, provisioner sources and their dependencies, workload
+modules):
+
+- `RemoteCredentialResolver` (`controllers/remote_credentials.py`) is created once per
+  `build_run()` and passed down to `sync_asset()`, `sync_source()` and `sync_module_source()`.
+  `resolve_remote()` asks it through a callable only when a clone is about to run, so
+  `--dry-run`, an existing checkout, `fetch: external` and an unset integration read
+  nothing. The result is cached per integration.
+- It resolves only the keys the authentication references (`git_push.credential_keys()`,
+  next to `prepare_git_credentials()` which consumes them, with a test that keeps the two in
+  step). Without `--resolve` each key must use a store `build run` may read without a
+  network call (`value_controller.is_direct_store()`: constant, environment, GitHub,
+  artifact); a Key Vault or Infisical-backed token needs `--resolve`.
+- It is strict: an unknown or disabled integration, one without `sources`, an authentication
+  method git cannot use (`oauth2`, ...), an undeclared or unresolvable key, and a declared
+  `known_hosts` that does not resolve (never trust-on-first-use) are all a
+  `RemoteCredentialError` (a `SystemError`, exit 1) naming the asset or remote, before any
+  `git` call.
+- The value reaches git only through the subprocess environment (a temporary `GIT_ASKPASS`
+  helper or a `0600` key file, removed afterwards), never argv, `resolved.yaml`, the tfvars
+  output or the SBOM. A failed clone's error text has every resolved value of six or more
+  characters replaced by `***`.
+- A `url` with a password, or an http(s) username that looks like a token, is rejected on both
+  models (`validate_no_url_credentials()`, a heuristic for the token form: known prefixes or 32+
+  token characters); `git@host:org/repo.git`, `ssh://git@host/...` and an ordinary `user@` pass.
+
+Per-customer credentials are per-integration: a shared identity is one integration document
+named by many assets; a distinct identity is one small integration document each. Templating
+the key references per customer is not built, pending evidence it is needed. See
+[integrations/git.md](../integrations/git.md) for the user-facing guide and
+[remotes-at-scale.md](../work/remotes-at-scale.md) for how it was designed.
+
 ### Validation
 
 `_check_slot_bindings()` (`semantic_checks.py`) holds the rules provider and asset
 bindings share; each noun is a thin wrapper, and the provider's `provider_type_mismatch`
 is an `on_rebound` callback because only providers have a type to compare.
 
-| Code                      | Severity | When                                                                                    |
-| ------------------------- | -------- | --------------------------------------------------------------------------------------- |
-| `asset_slot_unknown`      | error    | the deployment binds a slot its workspace does not declare                              |
-| `asset_binding_redundant` | warning  | the binding names the slot's own default (skipped when the raw document uses `extends`) |
+| Code                                 | Severity | When                                                                                         |
+| ------------------------------------ | -------- | -------------------------------------------------------------------------------------------- |
+| `asset_slot_unknown`                 | error    | the deployment binds a slot its workspace does not declare                                   |
+| `asset_binding_redundant`            | warning  | the binding names the slot's own default (skipped when the raw document uses `extends`)      |
+| `asset_integration_not_sources`      | error    | `location.integration` names an integration without the `sources` capability                 |
+| `asset_integration_disabled`         | error    | `location.integration` names a disabled integration and `fetch` is `strata`                  |
+| `asset_integration_auth_unsupported` | error    | the integration's authentication method cannot authenticate git (`fetch: strata`)            |
+| `fetch_credential_key_undeclared`    | error    | a deployment clones this asset with an integration whose key its environments do not declare |
+| `remote_integration_ignored`         | warning  | `location.integration` is set with `fetch: external` (nothing is cloned)                     |
 
 A `partial` document is judged only once merged into the deployment that extends it, and
-existence of the bound document is the generic reference check's job.
+existence of the bound document is the generic reference check's job. The same goes for
+`location.integration`: a missing document is the generic `unknown_reference`. The matching
+check for a manifest remote's `integration` (`remote_integration_unknown`,
+`remote_integration_not_sources`, plus `remote_integration_disabled` and
+`remote_integration_auth_unsupported` as warnings, since GitOps and audit pushes also use it)
+lives in `_check_remote_integrations()`. `fetch_credential_key_undeclared` is checked per
+deployment, against the assets its workspace steps select.
 
 ### Deliberately out of scope
 
@@ -376,10 +420,8 @@ existence of the bound document is the generic reference check's job.
   rebind only, as for providers; see
   [workspace-overrides.md](../work/workspace-overrides.md).
 - **Asset locations other than git** (OCI, Helm): `resolve_remote()` fetches only git.
-- **Credentials through `location.integration`** — rejected until the read-path
-  credential wiring exists. A manifest `remote` keeps the existing
-  `remote`/`resolve_remote()`/`SourceIntegration` route
-  ([remotes.md](../work/remotes.md)).
+- **Per-customer templating of credential key references** — not built; a distinct identity
+  is one integration document each, until there is evidence that is too many.
 - **A per-asset `target_path`**: the destination stays a fixed convention, since it
   would put a path back into every customer's asset file.
 - **Structural validation of a variant's on-disk shape** (e.g. "must

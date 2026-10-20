@@ -625,6 +625,337 @@ def test_provider_and_asset_findings_stay_separate(tmp_path):
     assert _findings(context) == {"provider_binding_redundant": "warning"}
 
 
+# ---------------------------------------------------------------------------
+# Manifest remote -> Integration (docs/work/remotes-at-scale.md C4)
+# ---------------------------------------------------------------------------
+
+
+def _remote_with_integration(root: Path, integration: str | None) -> None:
+    integration_line = f"      integration: {integration}\n" if integration else ""
+    _write(
+        root,
+        "strata.yaml",
+        MANIFEST.replace(
+            "spec: {}\n",
+            "spec:\n  remotes:\n    - name: infra\n      type: git\n      url: https://example.com/infra.git\n"
+            f"      reference: main\n{integration_line}",
+        ),
+    )
+
+
+def _remote_integration_findings(context) -> dict[str, str]:
+    codes = {"remote_integration_unknown", "remote_integration_not_sources"}
+    return {d.code: "error" for d in context.diagnostics.errors if d.code in codes}
+
+
+def test_remote_integration_with_the_sources_capability_is_clean(tmp_path):
+    root = _base_solution(tmp_path)
+    _git_integration(root, "corp-git", "[sources]")
+    _remote_with_integration(root, "corp-git")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _remote_integration_findings(context) == {}
+
+
+def test_remote_without_an_integration_has_no_finding(tmp_path):
+    root = _base_solution(tmp_path)
+    _remote_with_integration(root, None)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _remote_integration_findings(context) == {}
+
+
+def test_remote_integration_that_does_not_exist_is_an_error_with_a_hint(tmp_path):
+    root = _base_solution(tmp_path)
+    _git_integration(root, "corp-git", "[sources]")
+    _remote_with_integration(root, "corp-gti")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _remote_integration_findings(context) == {"remote_integration_unknown": "error"}
+    finding = next(d for d in context.diagnostics.errors if d.code == "remote_integration_unknown")
+    assert "did you mean 'corp-git'" in finding.message
+    assert finding.location == "spec.remotes.0.integration"
+    assert finding.source is not None and finding.source.endswith("strata.yaml")
+
+
+def test_remote_integration_without_the_sources_capability_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _git_integration(root, "corp-git", "[secrets]")
+    _remote_with_integration(root, "corp-git")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _remote_integration_findings(context) == {"remote_integration_not_sources": "error"}
+    assert any("declares: secrets" in m for m in context.diagnostics.messages())
+
+
+# ---------------------------------------------------------------------------
+# Asset location -> Integration (docs/work/remotes-at-scale.md C3)
+# ---------------------------------------------------------------------------
+
+
+def _git_integration(root: Path, name: str, capabilities: str) -> None:
+    _write(
+        root,
+        f"integration-{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: {name}\nspec:\n"
+        f"  type: git\n  capabilities: {capabilities}\n",
+    )
+
+
+def _location_asset(root: Path, *, integration: str | None, fetch: str = "strata") -> None:
+    integration_line = f"    integration: {integration}\n" if integration else ""
+    _write(
+        root,
+        "asset-c0062-api.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: c0062-api\nspec:\n  source_path: api\n"
+        f"  location:\n    url: https://example.com/c0062.git\n    reference: v1\n    fetch: {fetch}\n{integration_line}",
+    )
+
+
+def _location_findings(context) -> dict[str, str]:
+    codes = {"asset_integration_not_sources", "remote_integration_ignored"}
+    found = {d.code: "error" for d in context.diagnostics.errors if d.code in codes}
+    found.update({d.code: "warning" for d in context.diagnostics.warnings if d.code in codes})
+    return found
+
+
+def test_asset_location_integration_with_the_sources_capability_is_clean(tmp_path):
+    root = _base_solution(tmp_path)
+    _git_integration(root, "customer-git", "[sources]")
+    _location_asset(root, integration="customer-git")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _location_findings(context) == {}
+
+
+def test_asset_location_integration_without_the_sources_capability_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _git_integration(root, "customer-git", "[secrets]")
+    _location_asset(root, integration="customer-git")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _location_findings(context) == {"asset_integration_not_sources": "error"}
+    assert any("declares: secrets" in m for m in context.diagnostics.messages())
+
+
+def test_asset_location_integration_that_does_not_exist_is_a_reference_error_only(tmp_path):
+    root = _base_solution(tmp_path)
+    _location_asset(root, integration="ghost-git")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _location_findings(context) == {}
+    assert any(d.code == "unknown_reference" and "ghost-git" in d.message for d in context.diagnostics.errors)
+
+
+def test_asset_location_integration_with_fetch_external_is_a_warning(tmp_path):
+    root = _base_solution(tmp_path)
+    _git_integration(root, "customer-git", "[sources]")
+    _location_asset(root, integration="customer-git", fetch="external")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _location_findings(context) == {"remote_integration_ignored": "warning"}
+
+
+def test_asset_location_url_with_a_password_fails_loading_without_printing_it(tmp_path):
+    root = _base_solution(tmp_path)
+    _location_asset(root, integration=None)
+    path = root / "asset-c0062-api.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("https://example.com", "https://bot:s3cr3tpw@example.com"),
+        encoding="utf-8",
+    )
+
+    context = open_solution(root)
+
+    assert not context.ok
+    assert any("must not embed a password" in m for m in context.diagnostics.messages())
+    assert "s3cr3tpw" not in repr(context.diagnostics.messages())
+
+
+_TOKEN_AUTH = "  authentication:\n    method: token\n    token:\n      token: CUSTOMER_GIT_TOKEN\n"
+_OAUTH_AUTH = "  authentication:\n    method: oauth2\n    oauth2:\n      client_id: A\n      client_secret: B\n"
+
+
+def _fetch_integration(root: Path, *, auth: str = _TOKEN_AUTH, enabled: bool = True) -> None:
+    _write(
+        root,
+        "integration-customer-git.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: customer-git\nspec:\n"
+        f"  type: git\n  capabilities: [sources]\n  enabled: {str(enabled).lower()}\n{auth}",
+    )
+
+
+def _select_asset_in_step(root: Path) -> None:
+    """The workspace declares slot `api` (default `c0062-api`) and its execution step selects it."""
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        .replace("providers: [azure-main]", "providers: [azure-main]\n  assets:\n    - {slot: api, asset: c0062-api}")
+        .replace(
+            "      provisioner: tf\n      resources: [storage-account]\n",
+            "      provisioner: tf\n      resources: [storage-account]\n      assets: [api]\n",
+        ),
+        encoding="utf-8",
+    )
+
+
+def _declare_git_token(root: Path) -> None:
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + "  secrets:\n    - key: CUSTOMER_GIT_TOKEN\n      store: environment\n      value: CUSTOMER_REPOS_PAT\n",
+        encoding="utf-8",
+    )
+
+
+def _credential_findings(context) -> dict[str, str]:
+    codes = {
+        "fetch_credential_key_undeclared",
+        "asset_integration_disabled",
+        "asset_integration_auth_unsupported",
+        "remote_integration_disabled",
+        "remote_integration_auth_unsupported",
+    }
+    found = {d.code: "error" for d in context.diagnostics.errors if d.code in codes}
+    found.update({d.code: "warning" for d in context.diagnostics.warnings if d.code in codes})
+    return found
+
+
+def test_a_cloned_assets_credential_key_declared_in_the_environment_is_clean(tmp_path):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root)
+    _location_asset(root, integration="customer-git")
+    _select_asset_in_step(root)
+    _declare_git_token(root)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _credential_findings(context) == {}
+
+
+def test_a_cloned_assets_undeclared_credential_key_is_reported_per_deployment(tmp_path):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root)
+    _location_asset(root, integration="customer-git")
+    _select_asset_in_step(root)
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _credential_findings(context) == {"fetch_credential_key_undeclared": "error"}
+    finding = next(d for d in context.diagnostics.errors if d.code == "fetch_credential_key_undeclared")
+    assert "CUSTOMER_GIT_TOKEN" in finding.message
+    assert "'prd-deployment'" in finding.message and "'c0062-api'" in finding.message
+    assert finding.location == "spec.environments"
+
+
+def test_an_undeclared_credential_key_is_reported_for_an_asset_cloned_through_a_manifest_remote(tmp_path):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root)
+    _remote_with_integration(root, "customer-git")
+    _write(
+        root,
+        "asset-c0062-api.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: c0062-api\nspec:\n"
+        "  remote: infra\n  source_path: api\n",
+    )
+    _select_asset_in_step(root)
+
+    context = _resolve(root)
+    assert _credential_findings(context) == {"fetch_credential_key_undeclared": "error"}
+
+
+def test_credential_keys_are_not_checked_when_nothing_is_cloned(tmp_path):
+    """`fetch: external` clones nothing, and an asset no execution step selects is never synced."""
+    root = _base_solution(tmp_path)
+    _fetch_integration(root)
+    _location_asset(root, integration="customer-git", fetch="external")
+    _select_asset_in_step(root)
+    external = _resolve(root)
+    assert _credential_findings(external) == {}
+
+    unselected_root = _base_solution(tmp_path / "other")
+    _fetch_integration(unselected_root)
+    _location_asset(unselected_root, integration="customer-git")
+    unselected = _resolve(unselected_root)
+    assert _credential_findings(unselected) == {}
+
+
+def test_a_partial_deployments_credential_keys_are_not_checked_on_their_own(tmp_path):
+    """A partial base may get its environments from the leaf that extends it, so only the merged result is judged."""
+    root = _base_solution(tmp_path)
+    _fetch_integration(root)
+    _location_asset(root, integration="customer-git")
+    _select_asset_in_step(root)
+    path = root / "deployment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("spec:\n", "spec:\n  partial: true\n", 1), encoding="utf-8"
+    )
+
+    context = _resolve(root)
+    assert _credential_findings(context) == {}
+
+
+def test_a_disabled_integration_on_an_asset_location_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root, enabled=False)
+    _location_asset(root, integration="customer-git")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _credential_findings(context) == {"asset_integration_disabled": "error"}
+
+
+def test_an_unsupported_authentication_method_on_an_asset_location_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root, auth=_OAUTH_AUTH)
+    _location_asset(root, integration="customer-git")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _credential_findings(context) == {"asset_integration_auth_unsupported": "error"}
+    assert any("supported: token, ssh_key, cli" in m for m in context.diagnostics.messages())
+
+
+def test_a_disabled_or_unsupported_integration_is_not_flagged_when_nothing_is_cloned(tmp_path):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root, auth=_OAUTH_AUTH, enabled=False)
+    _location_asset(root, integration="customer-git", fetch="external")
+
+    context = _resolve(root)
+    assert _credential_findings(context) == {}
+
+
+def test_a_disabled_or_unsupported_integration_on_a_manifest_remote_is_only_a_warning(tmp_path):
+    """GitOps and audit pushes also use a remote's integration and ignore `enabled`."""
+    root = _base_solution(tmp_path)
+    _fetch_integration(root, auth=_OAUTH_AUTH, enabled=False)
+    _remote_with_integration(root, "customer-git")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _credential_findings(context) == {
+        "remote_integration_disabled": "warning",
+        "remote_integration_auth_unsupported": "warning",
+    }
+
+
+def test_asset_location_without_an_integration_has_no_finding(tmp_path):
+    root = _base_solution(tmp_path)
+    _location_asset(root, integration=None, fetch="external")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _location_findings(context) == {}
+
+
 def _two_slots_on_one_provider(root: Path) -> None:
     """Workspace slots `a` and `b` both default to the `azure-main` document."""
     path = root / "workspace.yaml"

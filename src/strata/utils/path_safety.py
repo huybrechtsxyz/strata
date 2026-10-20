@@ -13,9 +13,38 @@ cover — a path assembled from runtime-supplied parts, or a glob match
 strata never saw as a literal string at all.
 """
 
+import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from strata.utils.repo_refs import split_repo_ref
+
+#: A username on an http(s) URL that is really a token: a well-known token prefix, or a long
+#: unbroken run of token characters. A plain account or organisation name (`git@`, an Azure DevOps
+#: `myorg@`) is neither, so it passes.
+_TOKEN_USERNAME = re.compile(r"(?:gh[pousr]_|github_pat_|glpat-|xox[abp]-)\S+|[A-Za-z0-9_\-]{32,}")
+
+
+def validate_no_url_credentials(value: str, what: str) -> None:
+    """Raise ``ValueError`` if `value` is a URL embedding a password, or a token as its http(s) username.
+
+    Credentials belong in an Integration, never in a document or a process list. An `scp`-style
+    `git@host:org/repo.git`, `ssh://git@host/...` and an ordinary `user@` carry no secret and pass; a
+    personal access token is often pasted as `https://<token>@host/...` with no password, which the
+    username check catches (heuristically: known prefixes, or 32+ token characters). The message never
+    repeats `value`, which would print the secret.
+    """
+    if "://" not in value:
+        return
+    try:
+        parts = urlsplit(value)
+        password, username = parts.password, parts.username
+    except ValueError:
+        return  # not parseable as a URL, so there is no userinfo to find
+    if password:
+        raise ValueError(f"{what} must not embed a password or token; configure credentials through an Integration.")
+    if parts.scheme in ("http", "https") and username and _TOKEN_USERNAME.fullmatch(username):
+        raise ValueError(f"{what} must not embed a password or token; configure credentials through an Integration.")
 
 
 def validate_no_path_traversal(value: str) -> None:

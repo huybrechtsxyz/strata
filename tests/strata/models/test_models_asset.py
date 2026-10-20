@@ -5,6 +5,9 @@ import pytest
 from pydantic import ValidationError
 
 from strata.models.asset_model import AssetModel
+from strata.models.common_models import PlatformKind
+from strata.models.reference_fields import extract_references
+from strata.services.base_service import diagnostics_from_validation_error
 
 
 def _location() -> dict:
@@ -71,15 +74,47 @@ def test_asset_location_rejects_a_url_or_reference_git_would_read_as_an_option(f
         AssetModel.model_validate(_located_asset(**{field: value}))
 
 
-def test_asset_location_schema_does_not_offer_the_unsupported_integration_field():
+def test_asset_location_schema_offers_the_integration_field():
     location = AssetModel.model_json_schema()["$defs"]["AssetLocationModel"]
-    assert "integration" not in location["properties"]
+    assert "integration" in location["properties"]
     assert location.get("additionalProperties") is False
 
 
-def test_asset_location_rejects_integration_rather_than_ignoring_it():
-    with pytest.raises(ValidationError, match="not supported on an asset location yet"):
-        AssetModel.model_validate(_located_asset(integration="corp-git"))
+def test_asset_location_accepts_an_integration():
+    model = AssetModel.model_validate(_located_asset(integration="corp-git"))
+    assert model.spec.location.integration == "corp-git"
+
+
+def test_asset_location_integration_is_a_reference_to_an_integration_document():
+    rules = {(rule.path, rule.kind) for rule in extract_references(AssetModel)}
+    assert ("spec.location.integration", PlatformKind.INTEGRATION) in rules
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "git@github.com:org/repo.git",
+        "ssh://git@host/org/repo.git",
+        "https://host/org/repo.git",
+        "https://user@host/r.git",
+    ],
+)
+def test_asset_location_accepts_urls_without_a_password(url: str):
+    assert AssetModel.model_validate(_located_asset(url=url)).spec.location.url == url
+
+
+def test_asset_location_rejects_a_password_in_the_url_without_echoing_it():
+    with pytest.raises(ValidationError, match="must not embed a password") as excinfo:
+        AssetModel.model_validate(_located_asset(url="https://bot:s3cr3tpw@host/org/repo.git"))
+    # What `strata validate` prints is built from these, which omit `input`.
+    assert "s3cr3tpw" not in repr(diagnostics_from_validation_error(excinfo.value).messages())
+
+
+def test_asset_location_rejects_a_token_pasted_as_the_username():
+    token = "ghp_AbCd1234EfGh5678IjKl"
+    with pytest.raises(ValidationError, match="must not embed a password or token") as excinfo:
+        AssetModel.model_validate(_located_asset(url=f"https://{token}@github.com/org/repo.git"))
+    assert token not in repr(diagnostics_from_validation_error(excinfo.value).messages())
 
 
 def test_asset_location_rejects_unknown_fields():

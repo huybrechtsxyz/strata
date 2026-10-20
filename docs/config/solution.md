@@ -13,8 +13,11 @@ not by discovery itself.
 - `spec.remotes[]` — named external artifact sources, each:
   - `name` — referenced elsewhere as `@<name>/<path>`
   - `type` — `local`, `git`, `oci`, or `helm`
-  - `url` — the source location
+  - `url` — the source location; must not embed a password or token (use an integration for credentials)
   - `fetch` — `strata` (strata materializes it) or `external` (already placed by CI/elsewhere)
+  - `integration` — optional name of an [integration](integration.md) providing credentials; it must
+    exist and declare the `sources` capability, or validation fails. Not valid for `type: local`.
+    See [integrations/git.md](../integrations/git.md)
   - `description` — optional, human-readable
 
 ## Example

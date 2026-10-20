@@ -929,9 +929,9 @@ def test_build_run_materialises_a_shared_dependency_only_once(tmp_path: Path, mo
     real_sync_source = build_controller_module.sync_source
     calls: list[str] = []
 
-    def _counting_sync_source(root_, build_path_, source, remotes):
+    def _counting_sync_source(root_, build_path_, source, remotes, **kwargs):
         calls.append(source.source_path)
-        return real_sync_source(root_, build_path_, source, remotes)
+        return real_sync_source(root_, build_path_, source, remotes, **kwargs)
 
     monkeypatch.setattr(build_controller_module, "sync_source", _counting_sync_source)
 
@@ -1038,6 +1038,30 @@ def _capture_materialised_dict(monkeypatch):
 
     monkeypatch.setattr(build_controller_module, "materialise_provisioner_sources", _capturing_materialise)
     return captured
+
+
+def test_build_run_passes_one_credential_resolver_to_every_provisioner_source_clone(tmp_path: Path, monkeypatch):
+    """Dependency-only provisioners (`depends_on`) and execution-step provisioners clone through different
+    call sites; both must carry the build's resolver or a private remote silently uses ambient git auth."""
+    from strata.controllers import build_controller as build_controller_module
+    from strata.controllers.remote_credentials import RemoteCredentialResolver
+
+    root = _terraform_solution_with_dependency(tmp_path)
+    real_sync_source = build_controller_module.sync_source
+    seen: dict[str, object] = {}
+
+    def _spy(root_, build_path_, source, remotes, **kwargs):
+        seen[source.source_path] = kwargs.get("credentials")
+        return real_sync_source(root_, build_path_, source, remotes, **kwargs)
+
+    monkeypatch.setattr(build_controller_module, "sync_source", _spy)
+
+    diagnostics = build_run(_context(root), "app", tmp_path / "build")
+
+    assert diagnostics.ok
+    assert {"components", "primitives", "infra"} <= set(seen)  # two dependencies and the step's own source
+    assert all(isinstance(resolver, RemoteCredentialResolver) for resolver in seen.values())
+    assert len({id(resolver) for resolver in seen.values()}) == 1
 
 
 def test_build_run_captures_every_execution_step_provisioners_source_path(tmp_path: Path, monkeypatch):
@@ -2319,3 +2343,131 @@ def test_build_run_dry_run_reports_output_template_would_validate(tmp_path: Path
 # `context.require_valid()` would never pass with one missing. `build_run()`'s
 # own `if deployment.spec.workspace is None` check is a defensive backstop
 # for that reason, not a reachable path via a valid solution.
+
+# ---------------------------------------------------------------------------
+# build_run() + clone credentials (docs/work/remotes-at-scale.md C2)
+# ---------------------------------------------------------------------------
+
+_GIT_TOKEN = "ghp_buildtimetoken123"
+
+
+def _credentialed_remote_solution(tmp_path: Path, *, secret_store: str = "environment") -> Path:
+    """`_terraform_solution_with_remote()` whose remote names an integration with a token read from `secret_store`."""
+    root = _terraform_solution_with_remote(tmp_path)
+    _write(
+        root,
+        "strata.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: solution\nmeta:\n  name: test-solution\nspec:\n"
+        "  remotes:\n    - name: infra-remote\n      type: git\n"
+        "      url: https://example.com/org/infra.git\n      reference: main\n      integration: customer-git\n",
+    )
+    _write(
+        root,
+        "integrations/customer-git.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: customer-git\nspec:\n"
+        "  type: git\n  capabilities: [sources]\n  authentication:\n    method: token\n"
+        "    token:\n      token: CUSTOMER_GIT_TOKEN\n      username: build-bot\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        f"  secrets:\n    - key: CUSTOMER_GIT_TOKEN\n      store: {secret_store}\n      value: BUILD_TEST_GIT_PAT\n",
+    )
+    return root
+
+
+def _capturing_clone(calls: list[dict]):
+    def _run(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append({"args": list(args), "env": dict(env or {})})
+        return _fake_clone_run_command(args, cwd=cwd, env=env, timeout=timeout, input=input)
+
+    return _run
+
+
+def test_build_run_clones_with_the_integrations_credentials_and_never_writes_them(tmp_path: Path, monkeypatch):
+    from strata.controllers import remote_resolution as remote_resolution_module
+
+    monkeypatch.setenv("BUILD_TEST_GIT_PAT", _GIT_TOKEN)
+    calls: list[dict] = []
+    monkeypatch.setattr(remote_resolution_module, "run_command", _capturing_clone(calls))
+    root = _credentialed_remote_solution(tmp_path)
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    clone = next(call for call in calls if call["args"][:2] == ["git", "clone"])
+    assert clone["env"]["STRATA_GIT_ASKPASS_TOKEN"] == _GIT_TOKEN
+    assert not any(_GIT_TOKEN in arg for call in calls for arg in call["args"])
+    assert (build_path / "infra" / "main.tf").exists()
+    leaked = [p for p in build_path.rglob("*") if p.is_file() and _GIT_TOKEN in p.read_text(errors="ignore")]
+    assert leaked == []
+
+
+def test_build_run_dry_run_and_cached_checkouts_resolve_no_credentials(tmp_path: Path, monkeypatch):
+    from strata.controllers import remote_resolution as remote_resolution_module
+    from strata.utils import layout
+
+    monkeypatch.delenv("BUILD_TEST_GIT_PAT", raising=False)  # resolving the credential would fail
+    calls: list[dict] = []
+    monkeypatch.setattr(remote_resolution_module, "run_command", _capturing_clone(calls))
+    root = _credentialed_remote_solution(tmp_path)
+
+    build_run(_context(root), "app", tmp_path / "dry", dry_run=True)
+
+    checkout = layout.remote_checkout_path(root, "infra-remote", "main")
+    (checkout / "infra").mkdir(parents=True)
+    (checkout / "infra" / "main.tf").write_text("# cached\n", encoding="utf-8")
+    diagnostics = build_run(_context(root), "app", tmp_path / "build")
+
+    assert diagnostics.ok
+    assert calls == []
+
+
+def test_build_run_without_the_credential_value_fails_naming_the_variable(tmp_path: Path, monkeypatch):
+    from strata.controllers import remote_resolution as remote_resolution_module
+    from strata.controllers.remote_credentials import RemoteCredentialError
+
+    monkeypatch.delenv("BUILD_TEST_GIT_PAT", raising=False)
+    calls: list[dict] = []
+    monkeypatch.setattr(remote_resolution_module, "run_command", _capturing_clone(calls))
+    root = _credentialed_remote_solution(tmp_path)
+
+    with pytest.raises(RemoteCredentialError, match="BUILD_TEST_GIT_PAT"):
+        build_run(_context(root), "app", tmp_path / "build")
+
+    assert calls == []
+
+
+def test_build_run_integration_backed_credential_needs_resolve(tmp_path: Path, monkeypatch):
+    from strata.controllers import remote_resolution as remote_resolution_module
+    from strata.controllers.remote_credentials import RemoteCredentialError
+
+    monkeypatch.setattr(remote_resolution_module, "run_command", _capturing_clone([]))
+    root = _credentialed_remote_solution(tmp_path, secret_store="infisical")
+
+    with pytest.raises(RemoteCredentialError, match="--resolve"):
+        build_run(_context(root), "app", tmp_path / "build")
+
+
+@pytest.mark.parametrize("resolve", [False, True])
+def test_build_run_creates_the_resolver_with_the_resolve_flag_and_pin(tmp_path: Path, monkeypatch, resolve: bool):
+    from strata.controllers import build_controller as build_controller_module
+    from strata.controllers import remote_resolution as remote_resolution_module
+
+    monkeypatch.setenv("BUILD_TEST_GIT_PAT", _GIT_TOKEN)
+    monkeypatch.setattr(remote_resolution_module, "run_command", _capturing_clone([]))
+    created: list[dict] = []
+    real = build_controller_module.RemoteCredentialResolver
+
+    def _spy(context, deployment_name, **kwargs):
+        created.append({"deployment": deployment_name, **kwargs})
+        return real(context, deployment_name, **kwargs)
+
+    monkeypatch.setattr(build_controller_module, "RemoteCredentialResolver", _spy)
+    root = _credentialed_remote_solution(tmp_path)
+
+    build_run(_context(root), "app", tmp_path / "build", resolve=resolve)
+
+    assert created == [{"deployment": "app", "allow_stores": resolve, "pin": None}]

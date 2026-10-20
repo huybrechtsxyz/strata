@@ -23,8 +23,10 @@ any execution step runs.
   - `type` — only `git` (the default)
   - `fetch` — `strata` (default) clones it; `external` means CI already checked it out at
     `.strata/assets/<asset name>/<reference>` and strata only reads it
-  - `integration` — not supported yet; setting it is an error, not silently ignored. Use
-    `fetch: external` or ambient git credentials
+  - `integration` — optional name of an [integration](integration.md) that authenticates the clone
+    (it must declare the `sources` capability; a token or SSH key read from a secret). Omit it for a
+    public repository or ambient git credentials. Ignored, with a warning, when `fetch: external`.
+    The `url` must not embed a password or token. See [integrations/git.md](../integrations/git.md)
 - `spec.description` — optional description for documentation purposes
 
 ## Examples
@@ -55,6 +57,7 @@ spec:
     type: git
     url: https://git.example.com/customers/c0062-api.git
     reference: v1.4.0
+    integration: git-customers   # optional: credentials for a private repository
   source_path: openapi
 ```
 

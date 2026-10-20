@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from strata.controllers.integration_resolution import resolve_module_integration
+from strata.controllers.remote_credentials import RemoteCredentialResolver
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import describe_source, sync_module_source
@@ -178,6 +179,7 @@ def build_workload_modules(
     deployment: DeploymentModel | None = None,
     dry_run: bool = False,
     on_step: Callable[[str], None] | None = None,
+    credentials: RemoteCredentialResolver | None = None,
 ) -> None:
     """Render every module `namespace` declares (ADR-0022 D6).
 
@@ -238,6 +240,8 @@ def build_workload_modules(
         on_step: Called with a one-line progress message per module
             materialised and per type-group rendered — real work when
             `dry_run` is `False`, planned work when it's `True`.
+        credentials: Resolves `remote.integration`'s credentials when a module's source needs a clone;
+            `None` (default) clones with ambient git credentials only.
 
     Raises:
         UsageError: a module reference does not resolve, `module.spec.type`
@@ -272,7 +276,7 @@ def build_workload_modules(
                 f"for namespace '{namespace.meta.name}'"
             )
         else:
-            sync_module_source(root, module_dir, module.spec.source, remotes)
+            sync_module_source(root, module_dir, module.spec.source, remotes, credentials=credentials)
             _step(f"materialised module '{reference.name}' for namespace '{namespace.meta.name}' at {module_dir}")
 
         by_type.setdefault(module.spec.type, []).append(

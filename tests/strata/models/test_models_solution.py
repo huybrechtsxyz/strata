@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from strata.models.solution_model import SolutionModel
+from strata.services.base_service import diagnostics_from_validation_error
 
 
 def _minimal_solution() -> dict:
@@ -129,6 +130,25 @@ def test_solution_remote_rejects_a_url_or_reference_git_would_read_as_an_option(
     data["spec"]["remotes"] = [remote]
     with pytest.raises(ValidationError, match="must not start with '-'"):
         SolutionModel.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "url", ["git@github.com:org/infra.git", "ssh://git@host/infra.git", "https://user@host/infra.git"]
+)
+def test_solution_remote_accepts_urls_without_a_password(url):
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "infra", "type": "git", "url": url, "reference": "v1"}]
+    assert SolutionModel.model_validate(data).spec.remotes[0].url == url
+
+
+def test_solution_remote_rejects_a_password_in_the_url_without_echoing_it():
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "infra", "type": "git", "url": "https://bot:s3cr3tpw@host/infra.git", "reference": "v1"}
+    ]
+    with pytest.raises(ValidationError, match="must not embed a password") as excinfo:
+        SolutionModel.model_validate(data)
+    assert "s3cr3tpw" not in repr(diagnostics_from_validation_error(excinfo.value).messages())
 
 
 def test_solution_remote_accepts_reference_with_internal_slash():

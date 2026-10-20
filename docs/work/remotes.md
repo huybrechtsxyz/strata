@@ -1,9 +1,10 @@
 # Remotes — Design
 
 - Status: current — `resolve_remote()` implemented for `local` and `git`
-  remotes (both `fetch: strata` and `fetch: external`); `oci`/`helm` and
-  credentialed (private-repo) fetches not yet built.
-- Last updated: 2026-09-24
+  remotes (both `fetch: strata` and `fetch: external`), including credentialed
+  (private-repo) clones through the remote's `integration`; `oci`/`helm` fetches
+  not yet built.
+- Last updated: 2026-10-20
 
 ## Overview
 
@@ -81,10 +82,12 @@ now fills this in for `local` and `git` remotes.
   - `type: git`, `fetch: strata`, nothing checked out yet → real
     `git clone`/`git checkout <reference>` via `strata.utils.transport.run_command()`
     (no new subprocess machinery — reused directly, the same way
-    `TerraformIntegration`/etc. already do). No credential handling — relies
-    entirely on whatever git already has configured locally (SSH
-    agent/credential helper); a private repo with nothing configured fails
-    with git's own error message.
+    `TerraformIntegration`/etc. already do). Credentials: ambient by default (SSH
+    agent/credential helper); a private repo with nothing configured fails with
+    git's own error message. A remote's `integration` supplies a token or SSH key
+    instead, resolved lazily only when a clone runs — see
+    [remotes-at-scale.md](remotes-at-scale.md) and
+    [integrations/git.md](../integrations/git.md).
   - `type: oci`/`helm` → a clear `RemoteResolutionError` naming what's
     missing, not a silent no-op or a crash.
   - `RemoteResolutionError` classified as a `SystemError` (not
@@ -94,10 +97,10 @@ now fills this in for `local` and `git` remotes.
 
 ### What still does not exist
 
-- No `SourceIntegration`/equivalent ABC for the `"sources"` capability, so
-  `integration:`-declared credentials on a remote have nothing to bind to —
-  `git clone` only works today against a remote git already has local
-  credentials for.
+- ~~No `SourceIntegration`/equivalent ABC for the `"sources"` capability~~ — not needed:
+  fetching needs only the integration document's `spec.authentication`, as GitOps and
+  audit already use it, so `RemoteCredentialResolver` reads that directly and no ABC
+  was added.
 - No `type: oci`/`helm` fetch mechanism.
 - Not wired into `sync_source()` yet — that function itself does not exist
   (`build-command.md`'s D3).
@@ -148,13 +151,10 @@ In dependency order — each step only needs the ones before it:
    which is correct for tags/SHAs but means a branch ref's checkout can go
    stale across long-lived local development. Revisit once that is a
    real, observed problem, not preemptively.
-4. **`SourceIntegration` ABC (or equivalent)** for the `"sources"`
-   capability — the credential-supplying half (`remote.integration`).
-   `resolve_remote()`'s `_git_clone()` currently relies entirely on
-   whatever git already has configured locally; a private repo with no
-   local git auth fails with git's own error message rather than a
-   strata-managed credential injection. Needed before private remotes
-   work via `fetch: strata`.
+4. ~~`SourceIntegration` ABC (or equivalent) for the `"sources"` capability~~ — done
+   without an ABC: `RemoteCredentialResolver` turns the remote's `integration` into
+   credentials for `resolve_remote()`, validated by `strata validate`
+   (`remote_integration_unknown`/`_not_sources`).
 5. **`type: oci`/`helm`** — pull mechanisms, likely much later than git
    given zero confirmed real usage of either in any checked workspace so
    far (same "don't build ahead of evidence" discipline as ADR-0023's
@@ -187,3 +187,7 @@ not a scheduled phase; update it as each numbered item above lands.
   production pattern that needs private-repo auth (`config-deploy`'s
   GHE remotes) already avoids strata-managed credentials entirely via
   `fetch: external`, so there is no real consumer for this yet.
+- 2026-10-20: Item 4 built after all, for the per-customer asset case
+  ([remotes-at-scale.md](remotes-at-scale.md)): no ABC, a per-build
+  `RemoteCredentialResolver` that reads the integration's `authentication`.
+  `fetch: external` remains the choice when CI already has the repository.

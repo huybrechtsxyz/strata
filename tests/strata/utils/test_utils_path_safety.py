@@ -14,6 +14,7 @@ from strata.utils.path_safety import (
     resolve_within,
     validate_file_ref_no_traversal,
     validate_no_path_traversal,
+    validate_no_url_credentials,
     validate_relative_path,
 )
 
@@ -153,3 +154,48 @@ def test_resolve_within_rejects_an_absolute_path_elsewhere(tmp_path: Path):
     other.mkdir()
     with pytest.raises(ValueError, match="resolves outside"):
         resolve_within(root, other / "file.txt")
+
+
+# ---------------------------------------------------------------------------
+# validate_no_url_credentials()
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "https://host/org/repo.git",
+        "https://user@host/org/repo.git",
+        "https://myorg@dev.azure.com/myorg/project/_git/repo",
+        "ssh://git@host:2222/org/repo.git",
+        "ssh://" + "a" * 40 + "@host/org/repo.git",  # only http(s) usernames are checked
+        "git@github.com:org/repo.git",
+        "../relative/local/path",
+        "oci://registry.example.com/charts",
+        "https://[::1/repo.git",  # not parseable, so there is no userinfo to find
+    ],
+)
+def test_url_credentials_allowed_without_a_password(value):
+    validate_no_url_credentials(value, "url")
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "ghp_AbCd1234EfGh5678IjKl",
+        "github_pat_11ABCDEFG0abcdefghijkl",
+        "glpat-AbCdEfGhIjKlMnOp",
+        "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",  # a 52-character Azure DevOps style token
+    ],
+)
+def test_a_token_used_as_the_http_username_is_rejected_and_never_echoed(token):
+    with pytest.raises(ValueError, match="must not embed a password or token") as excinfo:
+        validate_no_url_credentials(f"https://{token}@host/org/repo.git", "url")
+    assert token not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("value", ["https://u:pw@host/r.git", "http://:pw@host/r.git", "ssh://git:pw@host/r.git"])
+def test_url_with_a_password_is_rejected_and_never_echoed(value):
+    with pytest.raises(ValueError, match="url must not embed a password") as excinfo:
+        validate_no_url_credentials(value, "url")
+    assert "pw" not in str(excinfo.value).replace("password", "")

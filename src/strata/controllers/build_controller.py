@@ -41,6 +41,7 @@ import yaml
 from strata.controllers.checkov_controller import evaluate_checkov_policy
 from strata.controllers.integration_resolution import resolve_integration
 from strata.controllers.policy_results import write_policy_results
+from strata.controllers.remote_credentials import RemoteCredentialResolver
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
 from strata.controllers.sbom_controller import evaluate_cve_policy, write_sbom
 from strata.controllers.solution_context import SolutionContext
@@ -372,6 +373,7 @@ def materialise_provisioner_sources(
     *,
     dry_run: bool = False,
     on_step: Callable[[str], None] | None = None,
+    credentials: RemoteCredentialResolver | None = None,
 ) -> Path | None:
     """Recursively sync `provisioner.depends_on`'s own sources first, then
     `provisioner`'s own (ADR-0029 — docs/design/provisioner-source-dependencies.md).
@@ -423,6 +425,7 @@ def materialise_provisioner_sources(
             materialised,
             dry_run=dry_run,
             on_step=on_step,
+            credentials=credentials,
         )
     source_path: Path | None = None
     if provisioner.source is not None:
@@ -433,7 +436,7 @@ def materialise_provisioner_sources(
                     f"(dependency, {describe_source(provisioner.source)})"
                 )
         else:
-            source_path = sync_source(context.root, build_path, provisioner.source, remotes)
+            source_path = sync_source(context.root, build_path, provisioner.source, remotes, credentials=credentials)
             if on_step:
                 on_step(f"materialised provisioner '{provisioner.name}' source at {source_path} (dependency)")
     materialised[provisioner.name] = source_path
@@ -598,6 +601,9 @@ def build_run(
         else {}
     )
     remotes = apply_remote_version_pins(remotes, version)
+    # One per build: lazy, so a build that clones nothing resolves no credential; `--resolve` also
+    # lets a credential come from an integration-backed store.
+    credentials = RemoteCredentialResolver(context, deployment_name, allow_stores=resolve, pin=pin)
 
     # Assets (docs/design/asset-management.md Phases 3-4) — every asset slot
     # actually selected by this build's execution steps, statically
@@ -624,7 +630,9 @@ def build_run(
             _step(f"would materialise asset '{asset_name}'{into_slot} (source_path '{asset.spec.source_path}')")
         else:
             try:
-                asset_path = sync_asset(context.root, build_path, asset, graph.properties, remotes, slot=slot)
+                asset_path = sync_asset(
+                    context.root, build_path, asset, graph.properties, remotes, slot=slot, credentials=credentials
+                )
             except SourceSyncError as exc:
                 if slot == asset_name:
                     raise
@@ -653,6 +661,7 @@ def build_run(
                 materialised,
                 dry_run=dry_run,
                 on_step=on_step,
+                credentials=credentials,
             )
         integration = resolve_integration(index, provisioner)
         integration_type = type(integration).__name__
@@ -694,7 +703,7 @@ def build_run(
             # resolved graph directly, nothing to materialise first.
             source_path = build_path / step.name
         else:
-            source_path = sync_source(context.root, build_path, provisioner.source, remotes)
+            source_path = sync_source(context.root, build_path, provisioner.source, remotes, credentials=credentials)
             _step(f"materialised provisioner '{step.name}' source at {source_path}")
 
         # Extends `materialised` (ADR-0029, seeded above) to also cover
@@ -753,6 +762,7 @@ def build_run(
             deployment=deployment,
             dry_run=dry_run,
             on_step=on_step,
+            credentials=credentials,
         )
 
     # SBOM generation (docs/design/sbom-generation.md Phase 1) — runs dead

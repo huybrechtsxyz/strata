@@ -39,12 +39,15 @@ escape hatch if a real need for rendering appears.
 """
 
 import shutil
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from strata.controllers.remote_resolution import resolve_remote
+from strata.controllers.remote_credentials import RemoteCredentialResolver
+from strata.controllers.remote_resolution import RemoteResolutionError, resolve_remote
 from strata.integrations.resolved_context import ResolvedAssetInfo
 from strata.models.asset_model import AssetModel
+from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import SourceModel
 from strata.models.solution_model import SolutionRemoteModel
 from strata.utils import layout
@@ -87,6 +90,30 @@ class SourceSyncError(SystemError):
     """A `SourceModel` could not be materialised into the build directory."""
 
 
+def _resolve_repo(
+    root: Path,
+    remote: SolutionRemoteModel | None,
+    credentials: RemoteCredentialResolver | None,
+    *,
+    integration: str | None,
+    owner: str,
+    checkout_path: Path | None = None,
+) -> Path:
+    """`resolve_remote()` with `integration`'s credentials resolved only if a clone happens."""
+    if credentials is None or not integration:
+        return resolve_remote(root, remote, checkout_path=checkout_path)
+
+    def provider() -> tuple[AuthenticationModel | None, Mapping[str, str] | None]:
+        fetched = credentials.for_integration(integration, owner=owner)
+        return fetched.auth, fetched.values
+
+    try:
+        return resolve_remote(root, remote, checkout_path=checkout_path, credentials=provider)
+    except RemoteResolutionError as exc:
+        # git's own stderr can echo a credential; `from None` also drops the unredacted original.
+        raise RemoteResolutionError(credentials.redact(str(exc))) from None
+
+
 def describe_source(source: SourceModel) -> str:
     """One-line human-readable summary of `source`, for `--dry-run` reporting.
 
@@ -106,6 +133,8 @@ def sync_source(
     build_path: Path,
     source: SourceModel,
     remotes: dict[str, SolutionRemoteModel],
+    *,
+    credentials: RemoteCredentialResolver | None = None,
 ) -> Path:
     """Copy `source`'s files into `build_path`, resolving its remote first.
 
@@ -118,6 +147,8 @@ def sync_source(
             `build run` invocation and reused across every `sync_source()`
             call, the same way `ResolvedWorkspaceGraph` is assembled once
             and passed down (ADR-0022 D1a).
+        credentials: Resolves `remote.integration`'s credentials for a clone; `None` (default) clones
+            with ambient git credentials only.
 
     Returns:
         The directory `source`'s files were copied into.
@@ -140,7 +171,13 @@ def sync_source(
         if remote is None:
             raise SourceSyncError(f"Source names remote '{source.remote}', which is not declared in this solution.")
 
-    repo_root = resolve_remote(root, remote)
+    repo_root = _resolve_repo(
+        root,
+        remote,
+        credentials,
+        integration=remote.integration if remote else None,
+        owner=f"remote '{source.remote}'",
+    )
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
     origin = repo_root / source.source_path
     destination = build_path / (source.target_path or source.source_path)
@@ -219,6 +256,7 @@ def sync_asset(
     remotes: dict[str, SolutionRemoteModel],
     *,
     slot: str | None = None,
+    credentials: RemoteCredentialResolver | None = None,
 ) -> Path:
     """Copy `asset`'s files into `build_path/assets/<slot>/`, filling its
     `source_path` template against `properties` first (docs/design/
@@ -258,6 +296,8 @@ def sync_asset(
         remotes: Every declared remote, keyed by name.
         slot: The workspace asset slot being filled; keys the destination so the
             on-disk path stays stable when a slot is bound to another document.
+        credentials: Resolves the asset's `location.integration` / `remote.integration` credentials for a
+            clone; `None` (default) clones with ambient git credentials only.
 
     Returns:
         The directory `asset`'s files were copied into
@@ -303,7 +343,7 @@ def sync_asset(
     remote = None
     if asset.spec.location is not None:
         location = asset.spec.location
-        repo_root = resolve_remote(
+        repo_root = _resolve_repo(
             root,
             SolutionRemoteModel(
                 name=asset.meta.name,
@@ -314,6 +354,9 @@ def sync_asset(
                 integration=None,
                 description=None,
             ),
+            credentials,
+            integration=location.integration,
+            owner=f"asset '{asset.meta.name}'",
             checkout_path=layout.asset_checkout_path(root, asset.meta.name, location.reference),
         )
     else:
@@ -324,7 +367,13 @@ def sync_asset(
                     f"Asset '{asset.meta.name}' names remote '{asset.spec.remote}', "
                     "which is not declared in this solution."
                 )
-        repo_root = resolve_remote(root, remote)
+        repo_root = _resolve_repo(
+            root,
+            remote,
+            credentials,
+            integration=remote.integration if remote else None,
+            owner=f"asset '{asset.meta.name}'",
+        )
     destination = build_path / "assets" / (slot or asset.meta.name)
 
     if not _has_glob_magic(filled_path):
@@ -387,6 +436,8 @@ def sync_module_source(
     module_dir: Path,
     source: SourceModel,
     remotes: dict[str, SolutionRemoteModel],
+    *,
+    credentials: RemoteCredentialResolver | None = None,
 ) -> None:
     """Materialise a workload module's chart source into `module_dir`
     (ADR-0022 D6/D7), if it has one to copy.
@@ -420,6 +471,8 @@ def sync_module_source(
             to copy.
         source: The module's `spec.source`.
         remotes: Every declared remote, keyed by name.
+        credentials: Resolves `remote.integration`'s credentials for a clone; `None` (default) clones
+            with ambient git credentials only.
 
     Raises:
         SourceSyncError: `source` names a remote that is not declared, its
@@ -436,7 +489,13 @@ def sync_module_source(
         if remote is None:
             raise SourceSyncError(f"Source names remote '{source.remote}', which is not declared in this solution.")
 
-    repo_root = resolve_remote(root, remote)
+    repo_root = _resolve_repo(
+        root,
+        remote,
+        credentials,
+        integration=remote.integration if remote else None,
+        owner=f"remote '{source.remote}'",
+    )
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
     origin = repo_root / source.source_path
 

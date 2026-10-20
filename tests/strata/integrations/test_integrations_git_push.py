@@ -20,7 +20,7 @@ import pytest
 
 from strata.integrations import git_push as git_push_module
 from strata.integrations.errors import IntegrationError
-from strata.integrations.git_push import prepare_git_credentials, push_file
+from strata.integrations.git_push import credential_keys, prepare_git_credentials, push_file
 from strata.models.auth_models import (
     AuthenticationModel,
     CLIAuthenticationModel,
@@ -447,6 +447,64 @@ def test_prepare_git_credentials_token_without_username_falls_back_to_token_for_
     assert result.stdout.strip() == "ghp_supersecrettoken"
 
     cleanup()
+
+
+# ---------------------------------------------------------------------------
+# credential_keys() — what a caller must resolve before prepare_git_credentials()
+# ---------------------------------------------------------------------------
+
+
+def test_credential_keys_none_and_cli_need_nothing():
+    assert credential_keys(None) == ()
+    assert credential_keys(AuthenticationModel(method="cli", cli=CLIAuthenticationModel())) == ()
+
+
+def test_credential_keys_token():
+    auth = AuthenticationModel(method="token", token=TokenAuthenticationModel(token="GIT_TOKEN", username="bot"))
+    assert credential_keys(auth) == ("GIT_TOKEN",)
+
+
+def test_credential_keys_ssh_key_lists_only_the_keys_that_are_set():
+    only_key = AuthenticationModel(method="ssh_key", ssh_key=SSHKeyAuthenticationModel(private_key="K"))
+    everything = AuthenticationModel(
+        method="ssh_key",
+        ssh_key=SSHKeyAuthenticationModel(private_key="K", passphrase="P", known_hosts="H"),
+    )
+    assert credential_keys(only_key) == ("K",)
+    assert credential_keys(everything) == ("K", "P", "H")
+
+
+@pytest.mark.parametrize(
+    "auth",
+    [
+        AuthenticationModel(method="token", token=TokenAuthenticationModel(token="GIT_TOKEN", username="bot")),
+        AuthenticationModel(
+            method="ssh_key",
+            ssh_key=SSHKeyAuthenticationModel(private_key="K", passphrase="P", known_hosts="H"),
+        ),
+    ],
+)
+def test_credential_keys_is_exactly_what_prepare_git_credentials_reads(auth):
+    """Drift guard: if `prepare_git_credentials()` starts reading a new key, `credential_keys()` must
+    list it, or callers would resolve too little and fail only when git runs.
+
+    The first key is required (dropping it raises). Optional keys are silently skipped when absent
+    (which is why a caller must resolve them up front), so for those the guard checks that each one
+    visibly changes what git is given."""
+    keys = credential_keys(auth)
+    values = {key: f"value-of-{key}" for key in keys}
+
+    env, cleanup = prepare_git_credentials(auth, values)  # exactly the declared keys is enough
+    try:
+        if auth.method == "ssh_key":
+            assert "SSH_ASKPASS" in env  # passphrase consumed
+            assert "UserKnownHostsFile=" in env["GIT_SSH_COMMAND"]  # known_hosts consumed
+    finally:
+        cleanup()
+
+    without_required = {k: v for k, v in values.items() if k != keys[0]}
+    with pytest.raises(IntegrationError, match="did not resolve to a value"):
+        prepare_git_credentials(auth, without_required)
 
 
 def test_push_file_threads_ssh_key_credentials_through_every_git_call(tmp_path: Path, monkeypatch):

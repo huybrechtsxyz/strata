@@ -10,6 +10,7 @@ import pytest
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import (
     build_value_references,
+    is_direct_store,
     list_values,
     merge_workspace_environment_deployment_properties,
     reachable_environments,
@@ -2553,3 +2554,39 @@ def test_secret_status_unknown_deployment_raises_usage_error(tmp_path):
 
     with pytest.raises(UsageError, match="No deployment named 'ghost'"):
         secret_status(_context(root), "ghost")
+
+
+# ---------------------------------------------------------------------------
+# is_direct_store() — the stores `build run` reads without --resolve
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "store",
+    [
+        VariableStoreModel(key="K", store=VariableStoreType.CONSTANT, value="v"),
+        VariableStoreModel(key="K", store=VariableStoreType.ENVIRONMENT, value="V"),
+        VariableStoreModel(key="K", store=VariableStoreType.ARTIFACT, value="api", field="image_tag"),
+        SecretStoreModel(key="K", store=SecretStoreType.CONSTANT, value="v"),
+        SecretStoreModel(key="K", store=SecretStoreType.ENVIRONMENT, value="V"),
+        SecretStoreModel(key="K", store=SecretStoreType.GITHUB, value="V"),
+        FeatureStoreModel(key="K", store=FeatureStoreType.CONSTANT, value="True"),
+        FeatureStoreModel(key="K", store=FeatureStoreType.ENVIRONMENT, value="V"),
+    ],
+)
+def test_is_direct_store_true_for_stores_a_plain_build_may_read(store):
+    assert is_direct_store(store)
+
+
+@pytest.mark.parametrize(
+    "store",
+    [
+        VariableStoreModel(key="K", store=VariableStoreType.INFISICAL, value="v"),
+        VariableStoreModel(key="K", store=VariableStoreType.HASHICORP_VAULT, value="v"),
+        SecretStoreModel(key="K", store=SecretStoreType.AZURE_KEYVAULT, value="v"),
+        SecretStoreModel(key="K", store=SecretStoreType.INFISICAL, value="v"),
+        FeatureStoreModel(key="K", store=FeatureStoreType.FLAGSMITH, value="v"),
+    ],
+)
+def test_is_direct_store_false_for_integration_backed_stores(store):
+    assert not is_direct_store(store)

@@ -28,7 +28,7 @@ allowed (ADR-0003: a higher layer, `controllers/`, may import a lower one).
 """
 
 import shutil
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from strata.integrations.errors import IntegrationError
@@ -41,6 +41,9 @@ from strata.utils.transport import run_command
 
 _GIT_CLONE_TIMEOUT = 300
 _GIT_CHECKOUT_TIMEOUT = 60
+
+#: Returns `(auth, resolved_values)` for a clone; asked for only when one is about to run.
+CredentialProvider = Callable[[], tuple[AuthenticationModel | None, Mapping[str, str] | None]]
 
 
 class RemoteResolutionError(SystemError):
@@ -60,6 +63,7 @@ def resolve_remote(
     auth: AuthenticationModel | None = None,
     resolved_values: Mapping[str, str] | None = None,
     checkout_path: Path | None = None,
+    credentials: CredentialProvider | None = None,
 ) -> Path:
     """Resolve `remote` to an existing directory on disk.
 
@@ -78,17 +82,23 @@ def resolve_remote(
         checkout_path: Where the checkout lives when it is not a manifest remote's
             own `.strata/remotes/<name>/<ref>` — an asset's `spec.location`
             (docs/design/asset-management.md) passes its own. Ignored for `type: local`.
+        credentials: Asked for `auth`/`resolved_values` only when a clone is actually about to run, so an
+            existing checkout, `fetch: external`, `type: local` and a `None` remote never resolve
+            anything (docs/work/remotes-at-scale.md C2). Mutually exclusive with `auth`/`resolved_values`.
 
     Returns:
         An existing directory. Never a path that might not exist yet — every
         branch below either finds one or raises.
 
     Raises:
+        ValueError: `credentials` is given together with `auth` or `resolved_values`.
         RemoteResolutionError: `fetch: external` names a path nothing has
             checked out yet, the remote's `type` has no fetch mechanism
             built (`oci`/`helm` — see docs/design/remotes.md), or the git
             clone/checkout itself failed.
     """
+    if credentials is not None and (auth is not None or resolved_values is not None):
+        raise ValueError("Pass either `credentials` or `auth`/`resolved_values`, not both.")
     if remote is None:
         return root
 
@@ -120,6 +130,8 @@ def resolve_remote(
             "yet (only 'git' is implemented) — see docs/design/remotes.md."
         )
 
+    if credentials is not None:
+        auth, resolved_values = credentials()
     return _git_clone(remote, checkout_path, auth=auth, resolved_values=resolved_values)
 
 

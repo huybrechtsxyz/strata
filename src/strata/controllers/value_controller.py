@@ -65,6 +65,18 @@ _CONSTANT_TYPES = {VariableStoreType.CONSTANT, SecretStoreType.CONSTANT, Feature
 _ENVIRONMENT_TYPES = {VariableStoreType.ENVIRONMENT, SecretStoreType.ENVIRONMENT, FeatureStoreType.ENVIRONMENT}
 
 
+def is_direct_store(store: VariableStoreModel | SecretStoreModel | FeatureStoreModel) -> bool:
+    """True when `store` is read with no integration and no network call: a constant, an environment
+    variable (a CI secret mapped to one, or `--env-file`), the GitHub secret store, or an in-solution
+    artifact. `build run` reads only these unless `--resolve` is given."""
+    return (
+        store.store in _CONSTANT_TYPES
+        or store.store in _ENVIRONMENT_TYPES
+        or store.store == SecretStoreType.GITHUB
+        or store.store == VariableStoreType.ARTIFACT
+    )
+
+
 class _Resolvers:
     """Lazily-constructed, reused across every key in one `resolve_values` call.
 

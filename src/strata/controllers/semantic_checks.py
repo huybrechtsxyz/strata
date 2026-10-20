@@ -27,6 +27,7 @@ finding here — `validate_references` already reported it.
 """
 
 from collections.abc import Callable
+from difflib import get_close_matches
 from itertools import combinations
 from pathlib import Path
 from typing import Any, cast
@@ -38,22 +39,24 @@ from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
 from strata.integrations.capabilities import KeyValueStoreIntegration
 from strata.integrations.errors import IntegrationError
+from strata.integrations.git_push import FETCH_METHODS, credential_keys
 from strata.integrations.registry import get_class as get_integration_class
 from strata.logging.config import get_logger
+from strata.models.asset_model import AssetModel
 from strata.models.attributeconfig_model import AttributeConfigModel
 from strata.models.common_models import PlatformBaseModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
 from strata.models.environment_model import EnvironmentModel
-from strata.models.integration_model import IntegrationModel
+from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.network_model import NetworkModel
 from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
-from strata.models.solution_model import RemoteType, SolutionModel
+from strata.models.solution_model import RemoteFetch, RemoteType, SolutionModel
 from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.version_model import VersionModel
@@ -70,8 +73,9 @@ from strata.services.environment_service import EnvironmentService, unresolved_v
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
-from strata.services.workspace_service import WorkspaceService, effective_providers
+from strata.services.workspace_service import WorkspaceService, effective_assets, effective_providers
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.layout import manifest_path
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 
 log = get_logger(__name__)
@@ -112,7 +116,7 @@ def run_semantic_checks(
     """
     resolved = resolved_deployments or {}
     diagnostics = Diagnostics()
-    diagnostics.extend(_check_deployments(index, resolved, root))
+    diagnostics.extend(_check_deployments(index, resolved, root, solution))
     diagnostics.extend(_check_tenants(index))
     diagnostics.extend(_check_providers(index))
     diagnostics.extend(_check_resources(index))
@@ -122,6 +126,8 @@ def run_semantic_checks(
     diagnostics.extend(_check_environments(index))
     diagnostics.extend(_check_deployment_value_tokens(index, resolved))
     diagnostics.extend(_check_remotes(index, solution))
+    diagnostics.extend(_check_asset_locations(index))
+    diagnostics.extend(_check_remote_integrations(index, solution, root))
     diagnostics.extend(_check_value_references(index))
     diagnostics.extend(_check_paths(index, root))
     diagnostics.extend(_check_version_workspace(index, resolved))
@@ -135,7 +141,10 @@ def run_semantic_checks(
 
 
 def _check_deployments(
-    index: DocumentIndex, resolved: dict[str, DeploymentModel], root: Path | None = None
+    index: DocumentIndex,
+    resolved: dict[str, DeploymentModel],
+    root: Path | None = None,
+    solution: SolutionModel | None = None,
 ) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
@@ -157,6 +166,7 @@ def _check_deployments(
             _check_deployment_asset_bindings(index, deployment, uses_extends=raw.spec.extends is not None),
             source=str(entry.source),
         )
+        diagnostics.extend(_check_deployment_fetch_credentials(index, deployment, solution), source=str(entry.source))
     return diagnostics
 
 
@@ -376,6 +386,88 @@ def _check_deployment_asset_bindings(
         defaults_of=lambda workspace: {a.slot: a.asset for a in workspace.spec.assets or []},
         uses_extends=uses_extends,
     )
+
+
+def _fetch_integration_problems(integration: IntegrationModel) -> list[tuple[str, str]]:
+    """`(code suffix, description)` for what stops `integration` from authenticating a git fetch.
+
+    The build-time resolver (`remote_credentials.py`) refuses both, so `strata validate` reports them
+    before a pipeline does.
+    """
+    spec = integration.spec
+    problems: list[tuple[str, str]] = []
+    if not spec.enabled:
+        problems.append(("disabled", "is disabled (spec.enabled: false)"))
+    auth = spec.authentication
+    if auth is not None and auth.method not in FETCH_METHODS:
+        problems.append(
+            (
+                "auth_unsupported",
+                f"uses authentication method '{auth.method}', which cannot authenticate a git fetch "
+                f"(supported: {', '.join(FETCH_METHODS)})",
+            )
+        )
+    return problems
+
+
+def _check_deployment_fetch_credentials(
+    index: DocumentIndex, deployment: DeploymentModel, solution: SolutionModel | None
+) -> Diagnostics:
+    """Every credential key of an integration this deployment clones with is declared in its environments.
+
+    A build clones only the assets its workspace's execution steps select, bound through the deployment
+    (`effective_assets()`), and a clone reads the integration's `spec.authentication` keys from the
+    deployment's environments. A key declared nowhere fails the build of that one deployment, so for
+    hundreds of per-customer deployments `fetch_credential_key_undeclared` is reported here instead.
+
+    Skips what the build skips: a `partial` deployment, an asset with no clone to make (`fetch: external`,
+    the solution's own repository, a `local` remote), and a deployment with no resolvable environment
+    (nothing to check against). Whether a key's store is readable without `--resolve` is a build-time
+    question and is not checked here.
+    """
+    diagnostics = Diagnostics()
+    if deployment.spec.partial or deployment.spec.workspace is None:
+        return diagnostics
+    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+    declared_by_kind = _merged_declared_keys(index, deployment)
+    if workspace_entry is None or declared_by_kind is None:
+        return diagnostics
+    workspace = cast(WorkspaceModel, workspace_entry.model)
+    declared = set().union(*declared_by_kind.values())
+    remotes = {remote.name: remote for remote in (solution.spec.remotes or [])} if solution is not None else {}
+    bound = effective_assets(workspace, deployment)
+    selected = sorted({slot for step in workspace.spec.execution or [] for slot in step.assets or []})
+
+    reported: set[tuple[str, str]] = set()
+    for slot in selected:
+        asset_entry = index.get(PlatformKind.ASSET, bound.get(slot, ""))
+        if asset_entry is None:
+            continue
+        asset = cast(AssetModel, asset_entry.model)
+        integration_name: str | None = None
+        if asset.spec.location is not None:
+            if asset.spec.location.fetch is not RemoteFetch.EXTERNAL:
+                integration_name = asset.spec.location.integration
+        elif asset.spec.remote is not None:
+            remote = remotes.get(asset.spec.remote)
+            if remote is not None and remote.type is RemoteType.GIT and remote.fetch is not RemoteFetch.EXTERNAL:
+                integration_name = remote.integration
+        integration_entry = index.get(PlatformKind.INTEGRATION, integration_name) if integration_name else None
+        if integration_name is None or integration_entry is None:
+            continue
+        auth = cast(IntegrationModel, integration_entry.model).spec.authentication
+        for key in credential_keys(auth):
+            if key in declared or (integration_name, key) in reported:
+                continue
+            reported.add((integration_name, key))
+            diagnostics.error(
+                f"Deployment '{deployment.meta.name}': asset '{asset.meta.name}' (slot '{slot}') is cloned with "
+                f"integration '{integration_name}', whose credential key '{key}' is not declared in any "
+                "environment this deployment reaches.",
+                location="spec.environments",
+                code="fetch_credential_key_undeclared",
+            )
+    return diagnostics
 
 
 def _check_deployment_provider_bindings(
@@ -1131,6 +1223,105 @@ def _check_remotes(index: DocumentIndex, solution: SolutionModel | None) -> Diag
             location="spec.source.remote",
             code="oci_remote_missing_reference",
         )
+    return diagnostics
+
+
+# ---------------------------------------------------------------------------
+# Asset location -> Integration: credentials for cloning an asset's own repository
+# (docs/work/remotes-at-scale.md C3).
+# ---------------------------------------------------------------------------
+
+
+def _check_remote_integrations(index: DocumentIndex, solution: SolutionModel | None, root: Path | None) -> Diagnostics:
+    """Every manifest remote's `integration` names a real document that declares `sources`.
+
+    The manifest is never indexed, so the generic reference check cannot see this field. Without
+    this a typo silently fell back to ambient git credentials: the read path ignored the field, and
+    GitOps and audit pushes resolve it leniently (a missing document means "no credentials").
+    """
+    diagnostics = Diagnostics()
+    if solution is None:
+        return diagnostics
+    source = str(manifest_path(root)) if root is not None else None
+    names = sorted(index.names_of(PlatformKind.INTEGRATION))
+    for position, remote in enumerate(solution.spec.remotes or []):
+        if remote.integration is None:
+            continue
+        location = f"spec.remotes.{position}.integration"
+        entry = index.get(PlatformKind.INTEGRATION, remote.integration)
+        if entry is None:
+            close = get_close_matches(remote.integration, names, n=1, cutoff=0.6)
+            hint = f" (did you mean '{close[0]}'?)" if close else ""
+            diagnostics.error(
+                f"Remote '{remote.name}': integration '{remote.integration}' is not declared{hint}.",
+                source=source,
+                location=location,
+                code="remote_integration_unknown",
+            )
+            continue
+        capabilities = cast(IntegrationModel, entry.model).spec.capabilities
+        if Capability.SOURCES not in capabilities:
+            declared = ", ".join(sorted(capabilities)) or "none"
+            diagnostics.error(
+                f"Remote '{remote.name}': integration '{remote.integration}' does not declare the 'sources' "
+                f"capability (declares: {declared}), so it cannot authenticate access to this remote.",
+                source=source,
+                location=location,
+                code="remote_integration_not_sources",
+            )
+        # Only warnings: GitOps and audit pushes also use a remote's integration and ignore `enabled`.
+        for suffix, description in _fetch_integration_problems(cast(IntegrationModel, entry.model)):
+            diagnostics.warning(
+                f"Remote '{remote.name}': integration '{remote.integration}' {description}, so a build "
+                "will not use it to clone this remote.",
+                source=source,
+                location=location,
+                code=f"remote_integration_{suffix}",
+            )
+    return diagnostics
+
+
+def _check_asset_locations(index: DocumentIndex) -> Diagnostics:
+    """`location.integration` must declare the `sources` capability, and is pointless with `fetch: external`.
+
+    Existence is already reported by the generic reference check, so an unknown name produces no
+    finding here. Only an asset location is warned about for `fetch: external`: a manifest remote
+    may also be pushed to by GitOps or audit, which does use its integration.
+    """
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.ASSET):
+        location = cast(AssetModel, entry.model).spec.location
+        if location is None or location.integration is None:
+            continue
+        integration = index.get(PlatformKind.INTEGRATION, location.integration)
+        if integration is not None:
+            capabilities = cast(IntegrationModel, integration.model).spec.capabilities
+            if Capability.SOURCES not in capabilities:
+                declared = ", ".join(sorted(capabilities)) or "none"
+                diagnostics.error(
+                    f"Integration '{location.integration}' does not declare the 'sources' capability "
+                    f"(declares: {declared}), so it cannot authenticate cloning this asset's repository.",
+                    source=str(entry.source),
+                    location="spec.location.integration",
+                    code="asset_integration_not_sources",
+                )
+            if location.fetch is RemoteFetch.STRATA:
+                for suffix, description in _fetch_integration_problems(cast(IntegrationModel, integration.model)):
+                    diagnostics.error(
+                        f"Integration '{location.integration}' {description}, so this asset's repository "
+                        "cannot be cloned with it.",
+                        source=str(entry.source),
+                        location="spec.location.integration",
+                        code=f"asset_integration_{suffix}",
+                    )
+        if location.fetch is RemoteFetch.EXTERNAL:
+            diagnostics.warning(
+                "'integration' is ignored with fetch: external: CI checks the repository out, so strata "
+                "clones nothing and needs no credentials.",
+                source=str(entry.source),
+                location="spec.location.integration",
+                code="remote_integration_ignored",
+            )
     return diagnostics
 
 

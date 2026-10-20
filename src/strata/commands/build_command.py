@@ -117,6 +117,12 @@ def build_run_command(
     beyond fetching sources) — an unset 'environment'-store variable is simply omitted from
     output, not a failure. --resolve additionally attempts every declared value, including
     secrets and integration-backed stores, and reports any that fail.
+
+    Cloning a private repository uses the credentials of the `integration` its remote or asset
+    names. Those must be readable without --resolve (a constant or an environment variable,
+    such as a CI secret); a token held in Key Vault or another integration-backed store needs
+    --resolve. Nothing is read for a source that is not cloned (--dry-run, an existing checkout,
+    fetch: external).
     """
     with command_run("build run", output=output, quiet=quiet, verbose=verbose) as run:
         context = open_solution(resolve_work_path(path)).require_valid()

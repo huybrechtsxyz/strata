@@ -34,6 +34,10 @@ spec:
       store: constant
       value: "example-not-a-real-secret"
       description: "Placeholder — the authentik module's real secret would come from an integration-backed store"
+    - key: CUSTOMER_GIT_TOKEN
+      store: environment
+      value: CUSTOMER_REPOS_PAT
+      description: "Read-only token for the customers' git repositories (integrations/git-customers.yaml). Only needed while building a deployment that clones one; a CI secret mapped to the CUSTOMER_REPOS_PAT environment variable. An integration-backed store (Key Vault) also works with `build run --resolve`."
     - key: APPGW_CERT_SECRET_ID
       store: azure-keyvault
       value: "https://kv-example.vault.azure.net/secrets/appgw-cert"

@@ -1,8 +1,9 @@
 # Remotes at Scale (per-customer repositories) — Work
 
-- Status: in-progress — Option 3b built as the asset `location` (see
-  [asset-management.md](../design/asset-management.md)); credentials, per-customer rings and
-  per-customer Terraform/Helm code (below) are still open
+- Status: in-progress — Option 3b built as the asset `location`, with credentials for every
+  build-time clone (see [asset-management.md](../design/asset-management.md) and
+  [integrations/git.md](../integrations/git.md)); per-customer rings and per-customer
+  Terraform/Helm code (below) are still open
 - Last updated: 2026-10-20
 
 ## Overview
@@ -28,9 +29,9 @@ per-tenant fan-out:
   that reintroduced `chart_repository` as an inline escape hatch).
 - `strata.yaml` is the single bootstrap document. 300 entries there means every customer
   onboarding edits the shared solution manifest.
-- No per-remote credentials exist yet: `remote.integration` is schema-only — the `"sources"`
-  capability has no ABC ([remotes.md](remotes.md) item 4); `git clone` relies on whatever git auth
-  is configured locally.
+- No per-remote credentials existed when this was written: `remote.integration` was schema-only —
+  the `"sources"` capability has no ABC ([remotes.md](remotes.md) item 4); `git clone` relied on
+  whatever git auth was configured locally. Built since (C5, see the credentials design below).
 
 This doc enumerates the options for declaring per-customer sources, before any is chosen.
 
@@ -387,6 +388,155 @@ per-customer path/tag. Strata declares **one** remote and selects per customer v
 - **−** Requires OCI remote fetch (not built — [remotes.md](remotes.md) item 5) and a publish step
   in all 300 customer pipelines.
 
+## Design — credentials for fetching (C5, Q2)
+
+Status: built (C1–C5). Applies to every build-time clone (`resolve_remote()`), so one
+mechanism serves a manifest remote's `integration` and an asset `location.integration` alike.
+The finished design is folded into [asset-management.md](../design/asset-management.md)
+("Credentials"); this section keeps the reasoning and the plan.
+
+### What the code does today (verified)
+
+- `resolve_remote(..., auth, resolved_values)` exists and, when given them, turns an
+  `AuthenticationModel` (`method: token` / `ssh_key`) into git environment variables through
+  `git_push.prepare_git_credentials()`: a `GIT_ASKPASS` helper or a `GIT_SSH_COMMAND` key file in a
+  `0600` temp directory that is removed afterwards. Never argv, never the build output.
+- None of the read-path callers passes them: `sync_source()`, `sync_asset()` (two call sites) and
+  `sync_module_source()` in `source_sync.py` all clone with ambient git credentials only.
+- Precedent for the lookup: the GitOps step (`deploy_controller.py`) and the audit git sink
+  (`audit_run._resolve_git_sink_auth()`) turn `remote.integration` into the integration document's
+  `spec.authentication`. A missing name silently becomes "ambient", and nothing checks the
+  integration exists or declares `sources`.
+- The key references inside `AuthenticationModel` (`token.token`, `ssh_key.private_key`, `passphrase`,
+  `known_hosts`) name declared environment variables or secrets, resolved by `resolve_values()`.
+- **At build time nothing is resolved.** `build_run()` builds `ValueResolution` empty, and
+  `--resolve` only *validates* (its result is not used for rendering). The `build run` contract is
+  "without `--resolve`, only `constant`/`environment` values are read, no network beyond fetching
+  sources", and ADR-0022 requires that secrets never reach the build output. Cloning is a build-time
+  step, so credentials are needed exactly where the codebase deliberately has no values.
+- `Capability.SOURCES` exists with no ABC. That is fine: fetching needs only the document's
+  `authentication`, the same as GitOps and audit, so no new integration class is required.
+
+### Decisions
+
+- **D1 — One mechanism, two entry points.** `SolutionRemoteModel.integration` and
+  `AssetLocationModel.integration` resolve identically, wired at all three `source_sync` callers, so
+  C5 is closed for sources and modules too, not only assets.
+- **D2 — A per-build resolver, lazy and cached.** A new `controllers/remote_credentials.py` holds a
+  `RemoteCredentialResolver` created once in `build_run()` and passed down as an optional argument
+  (default `None` = ambient, so every existing caller is unchanged). Asking it for an integration
+  looks up the document, reads `spec.authentication`, resolves **only the keys that auth references**
+  through `resolve_values(..., keys=[...])`, and caches the result per integration. It is asked only
+  when a clone will actually happen, so an existing checkout, `fetch: external` or an unset
+  integration costs no resolution and no network. The knowledge of which keys an auth uses is a new
+  `credential_keys(auth)` in `git_push.py`, next to `prepare_git_credentials()` which consumes them,
+  so the two cannot drift.
+- **D3 — Keep the build contract.** Without `--resolve`, a credential key must be declared with a
+  `constant` or `environment` store (a CI secret mapped to an environment variable, or
+  `--env-file` locally). A key backed by an integration store (Key Vault, Infisical) fails with a
+  message naming the key and its store and saying to run `build run --resolve`. With `--resolve`,
+  any store works.
+- **D4 — Strict for the new path.** An unknown integration name, or one without the `sources`
+  capability, is an error, never a silent fall back to ambient. For `location.integration` the field
+  becomes `References(PlatformKind.INTEGRATION)`, so the generic reference check and `strata graph`
+  edges come free, plus one `sources`-capability check. The GitOps and audit lookups keep their
+  existing lenient behaviour; making manifest remotes strict too is a separate, behaviour-changing step.
+- **D5 — `fetch: external` ignores credentials.** Nothing is fetched, so setting `integration`
+  there is a warning (`remote_integration_ignored`), not an error.
+- **D6 — No secrets in URLs.** `url` with a password (`https://user:token@host/...`) is rejected for
+  both models; an `scp`-style `git@host:org/repo.git` and a bare `user@` are fine. Credentials belong
+  in an integration.
+- **D7 — Per-customer credentials are per-integration.** A shared identity is one integration document
+  named by many assets; a distinct identity per customer is one small integration document each. No
+  templating of key references per customer until there is evidence it is needed (Q-c).
+- **D8 — Secret hygiene.** Resolved values live only in the git subprocess environment and the
+  temp files `prepare_git_credentials()` already cleans up. Error text from a failed clone is passed
+  through a redaction of the resolved values before it is raised. Nothing goes into
+  `resolved.yaml`, `strata.auto.tfvars.json`, logs or the SBOM.
+
+```mermaid
+sequenceDiagram
+  participant B as build_run
+  participant S as sync_asset / sync_source
+  participant R as RemoteCredentialResolver
+  participant V as resolve_values
+  participant G as resolve_remote
+  B->>S: sync (resolver)
+  S->>R: credentials for integration "customer-git"?
+  Note over S,R: only when a clone is needed
+  R->>R: integration doc -> spec.authentication
+  R->>V: resolve credential_keys(auth) only
+  V-->>R: values (environment store, or any store with --resolve)
+  R-->>S: (auth, values)
+  S->>G: resolve_remote(remote, auth, values)
+  G->>G: prepare_git_credentials, git clone, cleanup
+```
+
+### Plan
+
+- [x] **C1 — Helper + resolver.** `credential_keys(auth)` (`integrations/git_push.py`),
+  `is_direct_store()` (`controllers/value_controller.py`) and `RemoteCredentialResolver` /
+  `RemoteCredentialError` (`controllers/remote_credentials.py`, a `SystemError`, exit 1) with the D3
+  gate, caching, D4 lookup errors and D8 redaction. Decided while building it: an authentication
+  method other than token / ssh_key / cli, a disabled integration, and a declared `known_hosts`
+  that does not resolve are all errors (no silent fall back to ambient credentials or to
+  trust-on-first-use). Unit tests: token and ssh key sets, `environment` store resolves,
+  integration-backed store gated and allowed under `--resolve`, unknown integration, disabled, no
+  `sources` capability, cache hit, lazy (no resolution without a name), redaction, and a drift guard
+  between `credential_keys()` and `prepare_git_credentials()`.
+- [x] **C2 — Wire it.** `resolve_remote()` takes a lazy `credentials` callable, asked only when a
+  clone is about to run (so an existing checkout, `fetch: external`, `type: local` and a remote
+  without an integration resolve nothing). `sync_source()`, `sync_asset()` and `sync_module_source()`
+  take an optional `credentials` resolver (default `None` = ambient, every existing caller
+  unchanged) and share one `_resolve_repo()` that also redacts a failed clone's error text (D8).
+  `build_run()` creates one `RemoteCredentialResolver` per build (`allow_stores=resolve`, `pin=pin`)
+  and passes it to every clone site: assets, provisioner sources, their `depends_on` sources and
+  workload modules (`materialise_provisioner_sources()`, `build_workload_modules()`).
+  `sync_asset()` passes `location.integration` (always `None` until C3 lifts the model's rejection)
+  or the declared remote's `integration`. Consequence to know: a manifest remote that names an
+  integration is now looked up, strictly, the first time it is cloned (before, the read path ignored
+  the field); C4 later moves that check to validation. With `--resolve` a credential key is resolved
+  a second time (once by the full validation, once here). Tests: fake `git` for each of the three
+  sync functions and the asset `location` path, laziness, ambient fallbacks, credential error before
+  any git call, redacted clone failure, and end to end through `build_run()` (token in the clone
+  environment and not in argv or any build output, dry run and cached checkouts resolve nothing,
+  `--resolve` flag reaches the resolver). Resolve-once and temp-file cleanup are covered by the C1
+  resolver tests and the `credential_env` tests.
+- [x] **C3 — Enable `location.integration`.** The model no longer rejects it and the schema offers
+  it. It is `References(PlatformKind.INTEGRATION)`, so the generic check reports a missing document
+  and `strata graph` draws the edge. A new `_check_asset_locations()` semantic check adds
+  `asset_integration_not_sources` (error). D6: `validate_no_url_credentials()` rejects a password in
+  `url` on both `AssetLocationModel` and `SolutionRemoteModel` (an `scp`-style `git@host:...` and a
+  bare `user@` pass); the loader's diagnostics already omit the offending input, so the password is
+  not echoed. D5 refinement: `remote_integration_ignored` (warning, `fetch: external` with an
+  integration) applies to an asset `location` only, not to a manifest remote, because GitOps and
+  audit push to a manifest remote and do use its integration even when it is `fetch: external`.
+- [x] **C4 — Harden manifest remotes** (behaviour change). New `_check_remote_integrations()` in
+  `semantic_checks.py`, because the manifest is not indexed and the generic reference check cannot
+  see it: `remote_integration_unknown` (with a did-you-mean hint) and `remote_integration_not_sources`,
+  both errors, located at `spec.remotes.<n>.integration` in `strata.yaml`. This applies to every
+  remote, including those only used by GitOps or audit pushes: their lookups ignored a missing
+  integration and fell back to ambient credentials, so a typo went unnoticed. A solution whose remote
+  names an integration without `sources` now fails `strata validate` until the capability is added.
+  The GitOps and audit runtime lookups themselves are unchanged.
+- [x] **C5 — Docs + dogfood.** `config/integrations/git-customers.yaml` (token read from the
+  `CUSTOMER_GIT_TOKEN` secret, an `environment`-store secret in `environments/prd.yaml`) is used by
+  `assets/c0062-api.yaml`; `strata validate` passes (32 documents) and `strata graph` shows the
+  edge. `build run --dry-run` of `prd-c0062-deployment` resolves nothing. User docs:
+  [integrations/git.md](../integrations/git.md) (new), `asset.md`, `solution.md`, `integration.md`,
+  `remotes.md`, and the `build run` help text. The finished design is folded into
+  `asset-management.md` ("Credentials", the validation table, the out-of-scope list) and the
+  `v2-schema-overview.md` asset row. C5 and Q2 are closed here.
+
+### Open questions for this design
+
+- ~~**Q-a — Gate on `--resolve` (D3)?**~~ Yes, built: without `--resolve` a credential key must use
+  a constant/environment/GitHub/artifact store. The cost is that a Key Vault-backed token needs
+  `--resolve` in the build job.
+- ~~**Q-b — Strict manifest remotes (C4)?**~~ Yes, built as its own step (C4).
+- **Q-c — Per-customer key references without 300 integration documents?** Deferred: needs real
+  evidence of distinct per-customer credentials before adding templating to key references.
+
 ## Related Decisions
 
 - [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md) — solution manifest,
@@ -402,8 +552,9 @@ per-customer path/tag. Strata declares **one** remote and selects per customer v
 - **Q1 — Are customer repo URLs conventional?** Less relevant now that Option 4 is rejected —
   a per-customer declaration is unavoidable; the question is only *where* it lives
   (Options 1/3), or whether it is avoided by CI/registry (Options 6/7).
-- **Q2 — Credentials: uniform or per customer?** One identity with read access to all 300 favours
-  6/7; distinct per customer favours 1 with a per-remote `integration`.
+- ~~**Q2 — Credentials: uniform or per customer?**~~ Answered and built (C5): both work through the
+  integration an asset or remote names; a shared identity is one document, a distinct identity per
+  customer is one small document each. Templating the key references per customer is Q-c.
 - **Q3 — Who fetches?** If the shared pipeline can check out the customer repo itself
   (`fetch: external`), strata never needs credentials — Option 6 is viable today as a stopgap.
 - ~~**Q4 — Pinning.**~~ Answered by R2: each customer has its own versions. Remaining sub-question:
@@ -456,3 +607,27 @@ per-customer path/tag. Strata declares **one** remote and selects per customer v
   credentials deferred to C5), together with asset slots and per-deployment binding — see
   [asset-management.md](../design/asset-management.md). Per-customer Terraform/Helm code
   (`SourceModel`, Q5) is not covered by it.
+- 2026-10-20: Designed credentials for fetching (C5/Q2): one resolver for every build-time clone,
+  lazy and cached, keeping the `--resolve` contract, strict lookup for the new path, no secrets in
+  URLs. Plan C1-C5 and open questions Q-a to Q-c added.
+- 2026-10-20: C1 built: `credential_keys()`, `is_direct_store()` and `RemoteCredentialResolver`. Not
+  wired to any clone yet (C2). Unsupported auth methods, disabled integrations and an unresolvable
+  declared `known_hosts` are errors; `RemoteCredentialError` is a `SystemError` (exit 1).
+- 2026-10-20: C2 built: every build-time clone (assets, provisioner sources and dependencies, workload
+  modules) authenticates through one lazy, cached `RemoteCredentialResolver` created in `build_run()`.
+  Nothing changes for a build without a remote or asset `integration`.
+- 2026-10-20: C3 built: `location.integration` is accepted and validated (existence, `sources`
+  capability, warning with `fetch: external`); a password in a remote or location `url` is rejected.
+  D5 narrowed to asset locations, since a manifest remote's integration also serves GitOps/audit push.
+- 2026-10-20: C4 built: a manifest remote's `integration` must exist and declare `sources`, checked at
+  `strata validate`. Behaviour change for any solution relying on an unchecked name.
+- 2026-10-20: C5 done: dogfood integration in `config/`, `integrations/git.md`, the design folded into
+  asset-management.md. C5 and Q2 closed. Still open here: per-customer rings (Q4, Q6, Q7), per-customer
+  Terraform/Helm code (Q5) and Q-c.
+- 2026-10-20: Code review of C1-C5 fixed: (1) tests now cover the `depends_on` and workload module
+  clone sites; (2) `strata validate` also reports a disabled integration, an unsupported authentication
+  method (errors for an asset `location`, warnings for a manifest remote, which GitOps/audit also use)
+  and `fetch_credential_key_undeclared` per deployment; (3) the URL guard also rejects an http(s)
+  username that looks like a token (heuristic; an Azure DevOps `org@` still passes); (4)
+  `resolve_remote(credentials=...)` takes a plain `(auth, values)` callable, no longer imports
+  `remote_credentials`, and rejects being combined with `auth`/`resolved_values`.
