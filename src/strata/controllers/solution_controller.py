@@ -182,6 +182,19 @@ def find_solution_root(start: Path) -> Path | None:
     return None
 
 
+# libyaml's safe loader (same constructors, no arbitrary tags) parses about 5x faster than the pure-Python one.
+_FAST_LOADER: Any = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def _parse_documents(text: str) -> list[Any]:
+    """Every YAML document in `text`, parsed safely."""
+    try:
+        return list(yaml.load_all(text, Loader=_FAST_LOADER))
+    except yaml.YAMLError:
+        # libyaml's messages drop the offending line; the pure-Python loader's keep it.
+        return list(yaml.load_all(text, Loader=yaml.SafeLoader))
+
+
 def _is_strata_document(raw: object) -> bool:
     """True when `raw` is a mapping carrying a strata `apiVersion`."""
     if not isinstance(raw, dict):
@@ -297,7 +310,7 @@ class SolutionController:
     def _load_file(self, path: Path) -> None:
         """Parse one file and index every strata document inside it."""
         try:
-            documents = list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
+            documents = _parse_documents(path.read_text(encoding="utf-8"))
         except (OSError, yaml.YAMLError) as exc:
             self.diagnostics.error(f"cannot parse YAML: {exc}", source=str(path), code="unparseable")
             return

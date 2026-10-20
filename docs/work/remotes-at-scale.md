@@ -722,3 +722,9 @@ rule).
   `strata graph` and `validate` grow about 16x and 5x for a 3.3x size increase; it is now a per-kind set.
   C6 holds at 300 and well beyond. Remaining cost at scale is YAML parsing (pure-Python PyYAML), not
   strata's own checks.
+- 2026-10-20: Solution loading parses with libyaml's safe loader (`CSafeLoader`) when PyYAML has it,
+  falling back to the pure-Python loader if it is missing and, on a parse error, to re-parse with it
+  because libyaml's messages omit the offending line. Measured on 3030 generated files: parse 1.9 s to
+  0.36 s, `open_solution` 3.7 s to 1.9 s (the rest is schema validation and file I/O). The two loaders
+  returned identical results, and identical error types, for all 175 YAML files in the repo; both reject
+  `!!python/...` tags.

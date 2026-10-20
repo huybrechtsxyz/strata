@@ -124,6 +124,33 @@ def test_load_reports_missing_manifest(tmp_path):
     assert any("strata.yaml" in m for m in result.messages())
 
 
+def test_load_reports_unparseable_yaml_with_the_offending_line(tmp_path):
+    """libyaml's own message omits the line; the diagnostic must still show it."""
+    root = _solution(tmp_path)
+    (root / "broken.yaml").write_text("apiVersion: strata.huybrechts.xyz/v2\nkind: a: b\n", encoding="utf-8")
+
+    result = SolutionController(root).load()
+
+    assert not result.ok
+    finding = next(d for d in result.errors if d.code == "unparseable")
+    assert "broken.yaml" in (finding.source or "")
+    assert "kind: a: b" in finding.message
+
+
+def test_load_never_constructs_python_objects_from_yaml_tags(tmp_path):
+    root = _solution(tmp_path)
+    marker = tmp_path / "must-not-exist"
+    (root / "evil.yaml").write_text(
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta: !!python/object/apply:os.mkdir ['{marker.as_posix()}']\n",
+        encoding="utf-8",
+    )
+
+    result = SolutionController(root).load()
+
+    assert not marker.exists()
+    assert any(d.code == "unparseable" for d in result.errors)
+
+
 def test_load_skips_non_strata_yaml_silently(tmp_path):
     """Helm values, CI pipelines and k8s manifests must not break discovery."""
     root = _solution(tmp_path)
