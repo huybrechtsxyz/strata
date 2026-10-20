@@ -1,9 +1,11 @@
 # Remotes at Scale (per-customer repositories) — Work
 
-- Status: in-progress — Option 3b built as the asset `location`, with credentials for every
-  build-time clone (see [asset-management.md](../design/asset-management.md) and
-  [integrations/git.md](../integrations/git.md)); per-customer promotion is designed, not built
-  (below); per-customer Terraform/Helm code is still open
+- Status: done for now — per-customer repositories work end to end: asset `location`, per-deployment
+  binding, per-asset pins, credentials for every build-time clone (see
+  [asset-management.md](../design/asset-management.md) and
+  [integrations/git.md](../integrations/git.md)), measured at 300 and 1000 customers. Deferred, each
+  waiting on a real need: selective promotion (designed in [promotion.md](promotion.md), Phases 7-10),
+  per-customer Terraform/Helm code (Q5), and templated credential keys (Q-c)
 - Last updated: 2026-10-20
 
 ## Overview
@@ -625,9 +627,15 @@ rule).
   where do they live — per-customer `kind: version` documents (V1/V3 friction), per-customer keys
   in shared ring version documents (no friction, see caveat under V1–V3), or a new layered
   version (platform + customer)? (Tenant `properties` dropped with Options 4/5.)
-- **Q6 — Version composition.** Should a deployment be able to combine a shared platform version
-  with a per-customer version (e.g. `Deployment.spec.version` as a list, or `Version.extends`)?
-  Without it, R2 means duplicating platform pins per customer (V1).
+- ~~**Q6 — Version composition.**~~ Closed for now (2026-10-20), not needed. The question was whether a
+  deployment should combine a shared platform version with a per-customer one (`Deployment.spec.version`
+  as a list, or `Version.extends`); today it names exactly one `kind: version` document and
+  `VersionSpecModel` has no `extends`. With per-customer asset pins keyed by asset name in a shared ring
+  document, a customer's own API ref needs no second document, so nothing duplicates. It would matter
+  only for a customer that must differ from its ring on a *platform* pin (an image, chart or remote
+  ref): that customer needs a document of its own holding every platform pin again. Revisit when more
+  than about five customers need that. The natural shape then is `Version.extends` (a base plus
+  key-by-key overrides, mirroring how deployments merge via `extends`), not a list-valued `version`.
 - **Q7 — Promotion per customer.** Does each customer promote independently through rings
   (then V3's slot model needs a customer dimension), or do customers ride the platform's
   rollout with only their API ref varying?
@@ -728,3 +736,7 @@ rule).
   0.36 s, `open_solution` 3.7 s to 1.9 s (the rest is schema validation and file I/O). The two loaders
   returned identical results, and identical error types, for all 175 YAML files in the repo; both reject
   `!!python/...` tags.
+- 2026-10-20: Closed remotes at scale for now. Q6 (version composition) closed as not needed while
+  customers differ only in their API ref; the revisit trigger is recorded on the question. Deferred and
+  waiting on a real need: selective promotion (promotion.md Phases 7-10), per-customer Terraform/Helm
+  code (Q5), templated credential keys (Q-c).
