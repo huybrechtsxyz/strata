@@ -1,7 +1,7 @@
 # Promotion — Work
 
-- Status: draft
-- Last updated: 2026-10-06
+- Status: draft — selective promotion (Phases 7-10) designed, not built
+- Last updated: 2026-10-20
 
 ## Overview
 
@@ -224,6 +224,97 @@ Still genuinely open:
   that anything finish first (that stays deferred). It only removes
   copy-paste risk from a step that's otherwise mandatory and manual.
 - Ships alongside `promote status`, or right after it?
+
+### Selective promotion — a pin on its own cadence (`--pin`)
+
+**The need (decided 2026-10-20, [remotes-at-scale.md](remotes-at-scale.md) Q7): a customer must be
+able to move through rings on its own cadence**, not only ride the ring's. With per-customer
+`pins.assets.<customer>-api` keys in one shared version document per ring there is no customer
+dimension to add to the model: the customer is already the pin key. What is missing is a way to
+promote *some* keys.
+
+**Verified against the shipped code (250 customers, three ring documents):** `promote apply qas`
+copied all 251 common keys in one go (250 customer refs plus a platform pin) — `--wave` is the only
+selector — and rewrote every one to the structured form with `reviewed: today`, including the 240
+whose value did not change. `promote status` printed 753 rows. So today a customer can only be
+moved by hand-editing its pin in the target ring document.
+
+**Decisions**
+
+- **S1 — One selector, `--pin PATTERN`, repeatable.** A pattern is matched, case-sensitively with
+  `fnmatch.fnmatchcase` (`*`, `?`, `[...]`), against `category/target` — the spelling `promote status`
+  already prints and `check_version_pins()` already uses as a location, so a row can be pasted
+  straight into the flag. `assets/c0062-api` is one customer, `assets/c10*` a cohort, `remotes/*`
+  the platform's remotes. A pattern whose category part has no wildcard must be one of
+  `PIN_CATEGORIES` (a typo such as `asset/c0062-api` is an error naming the valid categories, not a
+  silent no-match). Glob rather than regex or a customer-aware shorthand: the pin key is already
+  the customer name, and a `--tenant` shorthand would need deployment-to-asset resolution that is
+  not a pin concept.
+- **S2 — Without `--pin`, nothing changes.** Every common key is copied, exactly as Phase 5 settled.
+- **S3 — A selection narrows the common set; it never widens it.** Selected = common keys that match
+  at least one pattern, so promotion still never creates a key (that stays `version update`'s job).
+  Errors are collected and reported before anything is written: a pattern that matches **no pin in
+  the source** document, or that matches source pins **none of which exist in the target**, is a
+  `UsageError` naming the pattern (the second adds "promote never creates a key; use `strata version
+  update`"). A pattern that selects at least one common key but also matches source-only keys
+  promotes the common ones and lists the rest as `skipped` — a ring document may legitimately lag a
+  newly onboarded customer.
+- **S4 — A copied key is treated as today.** `status` becomes `current`, `reviewed` today, `reason`
+  dropped, `available` untouched (Phase 5). Unselected pins keep their value, status, comments, order
+  and quoting; the diff is exactly the selected keys.
+- **S5 — `--dry-run`.** `apply` writes a file and a pattern now chooses which keys, so the preview
+  is the safety net: it reports each key with the target's current value and the value it would take,
+  and writes nothing. Useful for a whole-ring promotion too (it shows the 250-key diff before it
+  happens).
+- **S6 — `--changed-only`.** Skip a selected key whose target value already equals the source's, so
+  pins nothing happened to are not stamped `reviewed: today` (and a `held`/`unverified` status on an
+  unchanged pin is left alone: nothing was promoted). Opt-in and composable with `--pin`; the
+  default stays "every common key" because that is Phase 5's settled rule and still applies to a
+  whole-ring promotion, where the point is that the ring now matches its predecessor.
+- **S7 — Waves work as today.** The pattern applies inside the wave documents `--wave` selects, and
+  the source ring is chosen as Phase 5 does: an early customer in a split ring is
+  `promote apply prd --wave canary --pin assets/c0224-api`.
+- **S8 — Skew is the caller's choice.** Nothing cross-checks a customer pin against the platform
+  pins. Promotion remains a mechanical copy-forward with no gating (still deferred, see Remaining Work).
+- **S9 — `promote status` takes the same filters.** `--pin PATTERN` (repeatable, same grammar) and
+  `--ring RING` (repeatable). The `← behind` marker is computed on the whole view and the rows are
+  filtered afterwards, so a filter never changes what a row means. `promote status main --pin
+  assets/c0062-api` answers "where is this customer?" across rings. A filter matching nothing
+  prints a note and still exits 0 (status shows, it does not fail).
+- **S10 — One matcher.** `select_pins(patterns, keys)` in `promotion_controller.py` owns the
+  grammar, the category check and the error text; `apply_promotion()` and `promote status` both
+  call it.
+
+**Rejected**
+
+- A `wave` per customer (one version document per customer per ring): brings back the duplicated
+  platform pins and the `(ring, order, wave)` slot clashes remotes-at-scale.md records as V1/V3.
+- `--exclude`: "everything but the customers" is `--pin 'remotes/*' --pin 'images/*' --pin 'charts/*'`;
+  an exclude flag would add precedence rules for no case that needs them yet.
+- Regex patterns: harder to quote on every shell for no extra reach over the glob.
+
+**User-facing shape**
+
+```text
+$ strata promote status main --pin 'assets/c0062-api'
+  ring  order  wave  target            version  status
+  dev   1      -     assets/c0062-api  v1.5.0   current
+  qas   2      -     assets/c0062-api  v1.4.0   current
+  prd   3      -     assets/c0062-api  v1.4.0   current
+
+$ strata promote apply main qas --pin 'assets/c0062-api' --dry-run
+  'qas' <- 'ring-dev' in versions/ring-qas.yaml (dry run, nothing written)
+  ~  assets.c0062-api  v1.4.0 -> v1.5.0
+
+$ strata promote apply main qas --pin 'assets/c0062-api'
+  ~  assets.c0062-api  v1.4.0 -> v1.5.0  (status: current)
+```
+
+`~` is a changed value, `=` one that already matched (only shown without `--changed-only`), `-` a
+skipped key. `--output json` keeps the existing `copied` entries (`category`, `target`, `value`) and
+adds `previous`, `changed`, `skipped`, `selection` and `dry_run`.
+
+Shell note: quote patterns (`'assets/c10*'`); PowerShell and POSIX shells treat the unquoted form differently.
 
 ### Validating that the right "promotions" get created
 
@@ -900,6 +991,49 @@ doc's own Phase 1 can start.
   **The Implementation Plan's all six phases are now shipped** — the MVP
   (Phases 1-3) plus the three "valuable but not blocking" phases (4-6).
 
+### Phase 7 — selection core: `--pin` and `--dry-run` on `promote apply`
+
+- [ ] `select_pins(patterns, keys)` in `promotion_controller.py`: glob matching on `category/target`,
+  category typo check against `PIN_CATEGORIES`, the two pattern errors from S3, collected into one
+  `UsageError`.
+- [ ] `apply_promotion(..., pins=None, dry_run=False)`. `pins=None` is today's behaviour exactly. The
+  selection is applied to `_common_pin_keys()`; nothing is written when `dry_run` or when any pattern
+  errored.
+- [ ] `ApplyResult` gains `previous` per key, `skipped`, `selection` and `dry_run`; `copied` entries keep
+  `(category, target, value)` and gain the previous value, so the JSON stays additive.
+- [ ] `promote apply --pin PATTERN` (repeatable) and `--dry-run`; console renders `~`/`-` lines.
+- **Tests (controller):** exact, glob and multiple patterns select the right union; no `--pin` still
+  copies everything (regression); a pattern matching no source pin errors; one matching only
+  source-only pins errors with the "never creates" text; a glob with some source-only matches
+  promotes the rest and lists `skipped`; a category typo errors; several bad patterns are reported
+  together and nothing is written; unselected pins are byte-identical after the write (comments and
+  quoting survive); `--dry-run` leaves the file unchanged; `--wave` plus `--pin` on a split ring.
+- **Tests (CLI):** the flags reach the controller, JSON carries the new fields, exit codes as today.
+- **Done when:** the check suite is clean and a 250-customer scratch solution promotes one customer's
+  pin with exactly one entry changed in the diff.
+
+### Phase 8 — `--changed-only`
+
+- [ ] `apply_promotion(..., changed_only=False)`: drop keys whose target value equals the source's;
+  an unchanged pin keeps its `status`/`reviewed`. Reported as `=` unchanged entries only when the flag
+  is absent.
+- **Tests:** an unchanged pin is untouched (including a `held` status); a changed one is rewritten;
+  composes with `--pin`; zero changed keys is a reported outcome, not an error.
+
+### Phase 9 — `promote status --pin` / `--ring`
+
+- [ ] Same matcher (S10) filters `build_status_rows()` output after `← behind` is computed; `--ring`
+  repeatable; JSON echoes `filters`.
+- **Tests:** `--pin` shows one customer across rings; `--behind` marks are unchanged by a filter;
+  a filter matching nothing prints a note and exits 0; a category typo is a usage error.
+
+### Phase 10 — docs, scale and closing Q7
+
+- [ ] `docs/config/version.md` and the `promote` help text; examples above.
+- [ ] Extend `test_scale_per_customer.py`: three ring documents, promote one customer of 300 and assert
+  only that pin changed and the call stays well under a second.
+- [ ] Close Q7 in [remotes-at-scale.md](remotes-at-scale.md); record "Shipped as" entries here.
+
 ## Related Decisions
 
 - [ADR-0019](../decisions/0019-version-pinning.md) — dropped `spec.ring`
@@ -1140,3 +1274,10 @@ doc's own Phase 1 can start.
   does not apply here, since repeat runs into the same path are the
   intended CI use case, not an accident to guard against). 2 new tests.
   Full check suite clean, 2161 tests.
+- 2026-10-20: Designed selective promotion (Phases 7-10) for customers that must move through
+  rings on their own cadence ([remotes-at-scale.md](remotes-at-scale.md) Q7). Checked first against
+  the shipped code with 250 per-customer pins in three ring documents: `promote apply` is all-or-nothing
+  per ring (251 keys copied, 250 rewritten with `reviewed: today`, 240 of them unchanged) and
+  `promote status` printed 753 rows. Decided: no customer dimension in the model; a repeatable
+  `--pin` glob on `category/target` for `apply` and `status`, `--dry-run`, and an opt-in
+  `--changed-only`; a wave per customer rejected.

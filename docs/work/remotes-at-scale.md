@@ -2,8 +2,8 @@
 
 - Status: in-progress — Option 3b built as the asset `location`, with credentials for every
   build-time clone (see [asset-management.md](../design/asset-management.md) and
-  [integrations/git.md](../integrations/git.md)); per-customer rings and per-customer
-  Terraform/Helm code (below) are still open
+  [integrations/git.md](../integrations/git.md)); per-customer promotion is designed, not built
+  (below); per-customer Terraform/Helm code is still open
 - Last updated: 2026-10-20
 
 ## Overview
@@ -537,6 +537,70 @@ sequenceDiagram
 - **Q-c — Per-customer key references without 300 integration documents?** Deferred: needs real
   evidence of distinct per-customer credentials before adding templating to key references.
 
+## Design — per-customer promotion (Q7)
+
+Status: designed, nothing built. The full design, with the plan and tests per phase, lives in
+[promotion.md](promotion.md) ("Selective promotion", Phases 7-10); this section is the part that
+belongs to the per-customer story.
+
+### Where this stands (verified 2026-10-20)
+
+- Ring promotion is built: `ring`/`order`/`wave` tags on `kind: version`, `strata promote
+  status|apply|view` (promotion.md Phases 1-6, shipped 2026-10-06). **No real solution uses it yet**:
+  `config/` has no `promotion:` tags and `promote status` reports 0 rings there. The numbers below
+  come from running the shipped commands on generated documents, not from a live rollout.
+- The decision that a customer must be able to move through rings on its own cadence is a stated
+  need (2026-10-20), not yet an observed one. That is why this is designed but not scheduled.
+
+### The gap
+
+Pins keyed by customer in one shared version document per ring need no customer dimension in the
+model: the customer is already the pin key (`pins.assets.c0062-api`). With 250 customers in three
+ring documents, `promote apply qas` copied all 251 common keys (250 customers and a platform pin)
+and rewrote every one with `reviewed: today`, 240 of them unchanged, because `--wave` is the only
+selector. `promote status` printed 753 rows. A single customer can only be moved by hand-editing
+its pin in the target ring document.
+
+### Decisions
+
+- **One selector.** `--pin PATTERN`, repeatable, a case-sensitive glob on `category/target`, the
+  spelling `promote status` prints (`assets/c0062-api`, `assets/c10*`, `remotes/*`). A category
+  typo is an error, not a silent no-match. Without `--pin` nothing changes.
+- **A selection only narrows.** It picks among keys both ring documents already declare, so
+  promotion still never creates a key. A pattern matching no source pin, or only pins absent from the
+  target, is an error reported before anything is written; a glob that also catches source-only
+  keys promotes the common ones and lists the rest as skipped.
+- **Copied keys are treated as today** (`status: current`, `reviewed: today`); unselected pins stay
+  byte-identical, so the diff is exactly the selected keys.
+- **`--dry-run`** previews old value to new value and writes nothing.
+- **`--changed-only`** (opt-in) skips keys whose target value already matches, so untouched pins are
+  not re-stamped.
+- **`promote status --pin / --ring`** uses the same matcher and filters after the `behind` marker is
+  computed, so `promote status main --pin assets/c0062-api` shows one customer across rings.
+- **Waves work unchanged** inside `--wave`; a canary customer is
+  `promote apply prd --wave canary --pin assets/c0224-api`.
+- **Rejected:** a wave per customer (one version document per customer per ring brings back V1 and
+  V3), `--exclude`, regex patterns.
+
+```text
+$ strata promote apply main qas --pin 'assets/c0062-api' --dry-run
+  'qas' <- 'ring-dev' in versions/ring-qas.yaml (dry run, nothing written)
+  ~  assets.c0062-api  v1.4.0 -> v1.5.0
+```
+
+### Plan
+
+- [ ] **P7 — `--pin` and `--dry-run` on `promote apply`**, with one shared matcher
+  (`select_pins()`). Small and independent of the rest, so it can ship alone.
+- [ ] **P8 — `--changed-only`.**
+- [ ] **P9 — `promote status --pin / --ring`.**
+- [ ] **P10 — docs, a 300-customer scale case in `test_scale_per_customer.py`, close Q7.**
+
+Nothing here is scheduled while no solution uses rings. The cheapest useful step is P7 alone; P8 and
+P9 wait for a real rollout to show what is wanted. Open: should `--changed-only` become the default
+once `--pin` is given (kept opt-in so a whole-ring promotion keeps its settled "every common key"
+rule).
+
 ## Related Decisions
 
 - [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md) — solution manifest,
@@ -567,6 +631,21 @@ sequenceDiagram
 - **Q7 — Promotion per customer.** Does each customer promote independently through rings
   (then V3's slot model needs a customer dimension), or do customers ride the platform's
   rollout with only their API ref varying?
+  *Investigated 2026-10-20* with 250 customers pinned in three ring documents (dev/qas/prd, one
+  shared document per ring, `pins.assets.<customer>-api`): the model needs **no customer dimension**,
+  because the customer is already a pin key. What exists today is all-or-nothing per ring:
+  `promote apply qas` copied all 251 common keys (250 customer refs plus the platform `infra` pin) in
+  0.2 s, with `--wave` as the only selector, so customers ride the train. It also rewrote every pin
+  to the structured form with `reviewed: today`, including the 240 whose value did not change (a
+  250-entry diff for 10 real changes; `promotion.md` chose "every common key" deliberately).
+  `promote status` printed 753 rows for 250 customers x 3 rings. The mechanisms for an independent
+  customer, cheapest first: key-scoped promotion (`promote apply ... --pin assets/c0062-api`,
+  repeatable) with no model change; a `wave` per customer (one version document per customer per ring,
+  which brings back V1/V3, so not recommended); editing that customer's pin in the target ring
+  document directly (works now). **Decided 2026-10-20: customers do need to promote on their own
+  cadence.** Designed as key-scoped promotion (`promote apply --pin`, `--dry-run`, `--changed-only`,
+  and `promote status --pin/--ring`), no model change: see
+  [promotion.md](promotion.md) "Selective promotion" and Phases 7-10.
 - **Q5 — Scope.** Assets only, or also `SourceModel` (per-customer Terraform/Helm code)? Any change
   at `resolve_remote()` level covers both; a change on `AssetSpecModel` alone does not.
 - Options are not exclusive — e.g. Option 1 for the declaration with Option 6 as a stopgap
@@ -631,6 +710,9 @@ sequenceDiagram
   username that looks like a token (heuristic; an Azure DevOps `org@` still passes); (4)
   `resolve_remote(credentials=...)` takes a plain `(auth, values)` callable, no longer imports
   `remote_credentials`, and rejects being combined with `auth`/`resolved_values`.
+- 2026-10-20: Q7 investigated and decided: customers must be able to promote on their own cadence.
+  Designed as key-scoped promotion (this doc's "Design — per-customer promotion" and promotion.md
+  Phases 7-10). Noted that ring promotion itself has no real user yet, so the design is not scheduled.
 - 2026-10-20: Measured C6 (`tests/strata/controllers/test_scale_per_customer.py`, the example
   solution plus 300 generated customers: tenant, asset, deployment, one shared pins document).
   Warm-file timings at 300 / 1000 customers: load 1.2 s / 3.9 s (linear; a freshly written file's first
