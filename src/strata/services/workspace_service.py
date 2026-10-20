@@ -33,7 +33,7 @@ def effective_providers(workspace: WorkspaceModel, deployment: DeploymentModel |
 
 def effective_assets(workspace: WorkspaceModel, deployment: DeploymentModel | None) -> dict[str, str]:
     """`{slot: asset document name}` — the workspace's defaults, overlaid by the
-    deployment's bindings (docs/work/asset-slots.md). Same rule as `effective_providers()`;
+    deployment's bindings (docs/design/asset-management.md). Same rule as `effective_providers()`;
     an unknown slot is ignored here and reported by validation (`asset_slot_unknown`).
     """
     bound = [(b.slot, b.asset) for b in (deployment.spec.assets or [])] if deployment is not None else []

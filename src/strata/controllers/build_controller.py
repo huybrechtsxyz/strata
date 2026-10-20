@@ -132,7 +132,7 @@ def apply_remote_version_pins(
 
 def apply_asset_version_pin(asset: AssetModel, version: VersionModel | None) -> AssetModel:
     """Overlay `version.spec.pins.assets[<asset name>]` onto `asset.spec.location.reference`
-    (docs/work/asset-slots.md A7).
+    (docs/design/asset-management.md).
 
     Returns `asset` unchanged when there is no version, the asset declares no location of its
     own (a manifest-remote asset is pinned under `remotes`), or nothing pins it. Trusts

@@ -41,7 +41,7 @@ def _hide_unsupported_integration(schema: dict[str, Any]) -> None:
 
 class AssetLocationModel(PlatformBaseModel):
     """The git repository an asset's files live in, declared on the asset itself
-    (docs/work/asset-slots.md A7) — instead of a remote named in `strata.yaml`.
+    (docs/design/asset-management.md) — instead of a remote named in `strata.yaml`.
 
     Lets one small asset document per customer point at that customer's own
     repository without growing the manifest. A `SolutionRemoteModel` minus

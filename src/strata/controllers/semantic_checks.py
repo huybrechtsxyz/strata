@@ -306,7 +306,7 @@ def _check_slot_bindings(
     on_rebound: Callable[[str, str, str, str], Diagnostics] | None = None,
 ) -> Diagnostics:
     """The slot-binding rules shared by providers and assets (docs/design/provider-slots.md,
-    docs/work/asset-slots.md): `{noun}_slot_unknown` (error) and `{noun}_binding_redundant` (warning).
+    docs/design/asset-management.md): `{noun}_slot_unknown` (error) and `{noun}_binding_redundant` (warning).
 
     `bindings` are the deployment's `(slot, document)` pairs and `defaults_of` reads the workspace's
     `{slot: default document}`. `on_rebound(slot, default, bound, inherited)` is called for a binding that
@@ -359,7 +359,7 @@ def _check_slot_bindings(
 def _check_deployment_asset_bindings(
     index: DocumentIndex, deployment: DeploymentModel, *, uses_extends: bool
 ) -> Diagnostics:
-    """Check a deployment's `spec.assets` slot bindings against its workspace (docs/work/asset-slots.md).
+    """Check a deployment's `spec.assets` slot bindings against its workspace (docs/design/asset-management.md).
 
     - `asset_slot_unknown` (error) — the slot is not declared by the workspace;
       `effective_assets()` ignores it, so without this it would silently do nothing.

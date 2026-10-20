@@ -532,7 +532,7 @@ def test_asset_sync_failure_leaves_the_previous_slot_directory_intact(tmp_path: 
 
 
 # ---------------------------------------------------------------------------
-# sync_asset() from the asset's own `location` (docs/work/asset-slots.md A7)
+# sync_asset() from the asset's own `location` (docs/design/asset-management.md)
 # ---------------------------------------------------------------------------
 
 _NEEDS_GIT = pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")

@@ -77,7 +77,7 @@ def resolve_remote(
             prepare_git_credentials()`. Ignored when `auth` is `None`.
         checkout_path: Where the checkout lives when it is not a manifest remote's
             own `.strata/remotes/<name>/<ref>` — an asset's `spec.location`
-            (docs/work/asset-slots.md A7) passes its own. Ignored for `type: local`.
+            (docs/design/asset-management.md) passes its own. Ignored for `type: local`.
 
     Returns:
         An existing directory. Never a path that might not exist yet — every

@@ -1,7 +1,9 @@
 # Remotes at Scale (per-customer repositories) — Work
 
-- Status: draft
-- Last updated: 2026-10-19
+- Status: in-progress — Option 3b built as the asset `location` (see
+  [asset-management.md](../design/asset-management.md)); credentials, per-customer rings and
+  per-customer Terraform/Helm code (below) are still open
+- Last updated: 2026-10-20
 
 ## Overview
 

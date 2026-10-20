@@ -14,7 +14,7 @@ from strata.utils.dict_merge import deep_merge
 _EXTENDS_CONTROL_FIELDS = ("partial", "extends")
 
 #: Lists of named items merged by their identity key across `extends`
-#: (docs/design/provider-slots.md, docs/work/asset-slots.md). Not listed -> replaced wholesale.
+#: (docs/design/provider-slots.md, docs/design/asset-management.md). Not listed -> replaced wholesale.
 _LIST_MERGE_KEYS = {"stages": "step", "providers": "slot", "assets": "slot"}
 
 

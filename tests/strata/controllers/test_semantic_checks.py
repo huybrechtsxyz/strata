@@ -494,7 +494,7 @@ def test_partial_base_provider_bindings_are_not_checked_on_their_own(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Deployment -> Workspace asset slots (docs/work/asset-slots.md)
+# Deployment -> Workspace asset slots (docs/design/asset-management.md)
 # ---------------------------------------------------------------------------
 
 

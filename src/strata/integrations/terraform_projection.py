@@ -415,7 +415,7 @@ def build_strata_assets(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 
     `path` is relative to the build root; `path_from_step` is the same
     directory relative to `graph.step_root`, the directory Terraform runs in
-    (docs/work/asset-slots.md, A6). Pure string arithmetic, no filesystem.
+    (docs/design/asset-management.md). Pure string arithmetic, no filesystem.
     """
     return {
         name: {
@@ -718,7 +718,7 @@ def _render_strata_merge(var_expr: str, full_path: str, paths: list[str], indent
 
 
 # Terraform authors read these instead of joining `path.root` and `path_from_step` themselves
-# (docs/work/asset-slots.md A6). Relative on purpose: an absolute path in a resource attribute
+# (docs/design/asset-management.md). Relative on purpose: an absolute path in a resource attribute
 # differs per machine and shows up as drift.
 _STRATA_ASSETS_LOCALS = """
 locals {

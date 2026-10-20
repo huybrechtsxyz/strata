@@ -389,7 +389,7 @@ class WorkspaceProviderModel(PlatformBaseModel):
 
 
 class WorkspaceAssetModel(PlatformBaseModel):
-    """A named asset slot with its default Asset document (docs/work/asset-slots.md).
+    """A named asset slot with its default Asset document (docs/design/asset-management.md).
 
     `slot` is the stable key a step selects (`step.assets`) and IaC addresses
     (`strata.assets.<slot>`, `build_path/assets/<slot>/`); `asset` is the
@@ -505,7 +505,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
     assets: list[WorkspaceAssetModel] | None = Field(
         None,
         description="Asset slots this workspace may materialise into a build (docs/design/asset-management.md, "
-        "docs/work/asset-slots.md): an Asset document name, or {slot, asset} to give the slot a stable name. "
+        "docs/design/asset-management.md): an Asset document name, or {slot, asset} to give the slot a stable name. "
         "A step claims which slots it needs via its own 'assets' field, cross-checked in "
         "validate_execution() below (a second, independent set from 'target_names' — an asset is "
         "materialised input, not a provisioning target).",

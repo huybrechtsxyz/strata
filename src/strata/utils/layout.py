@@ -137,7 +137,7 @@ def asset_checkout_path(root: Path, asset: str, reference: str | None) -> Path:
     """Return where an asset's own `spec.location` materialises on disk, keyed by its ref.
 
     Same keying and `_unpinned` rule as `remote_checkout_path()`, under a separate root
-    (docs/work/asset-slots.md A7). Not created — this function is pure.
+    (docs/design/asset-management.md). Not created — this function is pure.
     """
     return strata_dir(root) / ASSETS_DIRNAME / asset / (reference or "_unpinned")
 

@@ -186,7 +186,7 @@ class VersionPinsModel(PlatformBaseModel):
       name`, no disambiguation logic needed. `image_name` is identity and
       is never overlaid by a pin here, same as `charts` never overlays
       `chart_name`.
-    - ``assets``  -> `AssetLocationModel.reference` (docs/work/asset-slots.md A7),
+    - ``assets``  -> `AssetLocationModel.reference` (docs/design/asset-management.md),
       only for an asset declaring its own `spec.location` with `fetch: strata`.
       An asset using a manifest `remote` is pinned through ``remotes`` instead.
 

@@ -231,7 +231,7 @@ class DeploymentProviderBindingModel(PlatformBaseModel):
 
 class DeploymentAssetBindingModel(PlatformBaseModel):
     """Rebind one workspace asset slot to another Asset document for this
-    deployment (docs/work/asset-slots.md) — e.g. a customer's own API
+    deployment (docs/design/asset-management.md) — e.g. a customer's own API
     definitions. Rebind only: the bound document is used as-is, never
     field-patched. No bare-string shorthand, same as provider bindings.
     """

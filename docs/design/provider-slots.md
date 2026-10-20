@@ -76,7 +76,7 @@ composition root — carries the choice.
 key, through one table:
 
 ```python
-_LIST_MERGE_KEYS = {"stages": "step", "providers": "slot"}
+_LIST_MERGE_KEYS = {"stages": "step", "providers": "slot", "assets": "slot"}
 ```
 
 Base items first; a child item with the same key deep-merges over it (child wins, position kept);
@@ -89,7 +89,7 @@ bindings.
 
 `effective_providers(workspace, deployment) -> {slot: provider document name}`
 (`services/workspace_service.py`) is the workspace's defaults overlaid by the deployment's
-bindings; a binding for an undeclared slot is ignored there (validation reports it). Every reader
+bindings, through a private `_overlay_bindings()` that `effective_assets()` shares; a binding for an undeclared slot is ignored there (validation reports it). Every reader
 of the workspace's providers goes through it:
 
 | Consumer                                                       | Behaviour                                                                                                                   |
@@ -137,8 +137,9 @@ and `prd-north-deployment` extending it. `strata build run` renders `strata.prov
 
 - Patching fields of a bound provider, and environment-level overrides (`environment.spec.overrides`).
   Per-deployment values belong in environments.
-- Rebinding other workspace content (assets, resources, modules) — tracked in
-  [workspace-overrides.md](../work/workspace-overrides.md), which reuses this pattern.
+- Rebinding other workspace content (resources, modules) — tracked in
+  [workspace-overrides.md](../work/workspace-overrides.md), which reuses this pattern. Assets
+  already do: see [asset-management.md](asset-management.md).
 
 ## Related Decisions
 
@@ -150,6 +151,9 @@ and `prd-north-deployment` extending it. `strata build run` renders `strata.prov
   tenant defaults) this builds on.
 - [tenant-zone-policy.md](../work/tenant-zone-policy.md) — the geography check that now evaluates
   the bound provider.
+- [asset-management.md](asset-management.md) — the same slot-and-rebind rule for assets; its
+  `_check_slot_bindings()` now holds the validation rules both share, with the provider type check
+  as an `on_rebound` callback.
 
 ## History
 
