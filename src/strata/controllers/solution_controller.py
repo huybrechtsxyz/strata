@@ -32,6 +32,7 @@ rewrite (ADR-0015).
 """
 
 from collections.abc import Iterator
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
@@ -131,6 +132,7 @@ class DocumentIndex:
 
     def __init__(self) -> None:
         self._entries: dict[DocumentRef, IndexEntry] = {}
+        self._names: dict[PlatformKind, set[str]] = {}
 
     def add(self, entry: IndexEntry) -> None:
         """Add an entry. Callers must check `get()` first — duplicates raise."""
@@ -138,6 +140,7 @@ class DocumentIndex:
             existing = self._entries[entry.ref]
             raise ValueError(f"Duplicate {entry.ref}: defined in both '{existing.source}' and '{entry.source}'")
         self._entries[entry.ref] = entry
+        self._names.setdefault(entry.ref.kind, set()).add(entry.ref.name)
 
     def get(self, kind: PlatformKind, name: str, remote: str | None = None) -> IndexEntry | None:
         """Return the entry for this identity, or None."""
@@ -156,9 +159,9 @@ class DocumentIndex:
         """
         return list(self._entries.values())
 
-    def names_of(self, kind: PlatformKind) -> set[str]:
-        """Every indexed name for one kind."""
-        return {e.ref.name for e in self._entries.values() if e.ref.kind is kind}
+    def names_of(self, kind: PlatformKind) -> AbstractSet[str]:
+        """Every indexed name for one kind. A read-only view: callers look names up per reference, so this must not scan."""
+        return self._names.get(kind, frozenset())
 
     def __len__(self) -> int:
         return len(self._entries)

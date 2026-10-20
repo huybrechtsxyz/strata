@@ -327,6 +327,21 @@ def test_document_ref_str_includes_remote_when_set():
 # ---------------------------------------------------------------------------
 
 
+def test_document_index_names_of_tracks_each_added_document_per_kind():
+    from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
+    from strata.models.asset_model import AssetModel
+
+    index = DocumentIndex()
+    assert index.names_of(PlatformKind.ASSET) == set()
+
+    for name in ("a-api", "b-api"):
+        model = AssetModel.model_validate({"meta": {"name": name}, "spec": {"source_path": "api"}})
+        index.add(IndexEntry(ref=DocumentRef(kind=PlatformKind.ASSET, name=name), model=model, source=Path(name)))
+
+    assert index.names_of(PlatformKind.ASSET) == {"a-api", "b-api"}
+    assert index.names_of(PlatformKind.TENANT) == set()
+
+
 def _repo_config_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "config"
 

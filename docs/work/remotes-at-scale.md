@@ -631,3 +631,12 @@ sequenceDiagram
   username that looks like a token (heuristic; an Azure DevOps `org@` still passes); (4)
   `resolve_remote(credentials=...)` takes a plain `(auth, values)` callable, no longer imports
   `remote_credentials`, and rejects being combined with `auth`/`resolved_values`.
+- 2026-10-20: Measured C6 (`tests/strata/controllers/test_scale_per_customer.py`, the example
+  solution plus 300 generated customers: tenant, asset, deployment, one shared pins document).
+  Warm-file timings at 300 / 1000 customers: load 1.2 s / 3.9 s (linear; a freshly written file's first
+  read costs far more than parsing it, so the test warms them), validate 0.4 s / 1.2 s, graph 0.02 s /
+  0.17 s, dry-run build of one deployment 0.1 s at either size (a build only touches its own customer).
+  Found and fixed one quadratic: `DocumentIndex.names_of()` scanned every document per reference, making
+  `strata graph` and `validate` grow about 16x and 5x for a 3.3x size increase; it is now a per-kind set.
+  C6 holds at 300 and well beyond. Remaining cost at scale is YAML parsing (pure-Python PyYAML), not
+  strata's own checks.

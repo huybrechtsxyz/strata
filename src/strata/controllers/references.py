@@ -21,6 +21,7 @@ them in the right scope; checking them here would invent failures.
 """
 
 from collections.abc import Iterator
+from collections.abc import Set as AbstractSet
 from difflib import get_close_matches
 from typing import Any
 
@@ -64,7 +65,7 @@ def references_in(model: Any, path: str) -> Iterator[tuple[str, str]]:
     yield from _walk(model, path.split("."), "")
 
 
-def _unresolved(name: str, known: set[str], target: str) -> str:
+def _unresolved(name: str, known: AbstractSet[str], target: str) -> str:
     """Explain a miss, suggesting a correction when one is plausible."""
     close = get_close_matches(name, known, n=_MAX_SUGGESTIONS, cutoff=0.6)
     if close:
