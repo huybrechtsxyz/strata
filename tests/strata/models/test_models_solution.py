@@ -120,6 +120,17 @@ def test_solution_remote_rejects_path_traversal_in_reference(bad_reference):
         SolutionModel.model_validate(data)
 
 
+@pytest.mark.parametrize("field", ["url", "reference"])
+@pytest.mark.parametrize("value", ["--upload-pack=touch pwned", "-n"])
+def test_solution_remote_rejects_a_url_or_reference_git_would_read_as_an_option(field, value):
+    remote = {"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": "v1"}
+    remote[field] = value
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [remote]
+    with pytest.raises(ValidationError, match="must not start with '-'"):
+        SolutionModel.model_validate(data)
+
+
 def test_solution_remote_accepts_reference_with_internal_slash():
     """A real git branch name like 'feature/foo' is still accepted —
     `validate_no_path_traversal()` only rejects a *leading* slash/drive

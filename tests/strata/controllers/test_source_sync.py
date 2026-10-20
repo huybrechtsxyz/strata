@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
 """Tests for `source_sync.sync_source` (ADR-0022 D3)."""
 
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from strata.controllers.source_sync import SourceSyncError, sync_asset, sync_module_source, sync_source
+from strata.controllers.remote_resolution import RemoteResolutionError
+from strata.controllers.source_sync import (
+    SourceSyncError,
+    resolved_asset_info,
+    sync_asset,
+    sync_module_source,
+    sync_source,
+)
 from strata.models.asset_model import AssetModel
 from strata.models.common_models import SourceModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
+from strata.utils import layout
 
 
 def _write(path: Path, content: str = "") -> None:
@@ -354,6 +364,26 @@ def test_asset_glob_match_cannot_escape_the_remote_root(tmp_path: Path):
         )
 
 
+def test_asset_glob_escape_is_detected_before_the_previous_slot_directory_is_cleared(tmp_path: Path):
+    root = tmp_path / "solution"
+    root.mkdir()
+    _write(tmp_path / "outside" / "secret.json", "{}")
+    build_path = tmp_path / "build"
+    _write(build_path / "assets" / "api" / "old.json", "{}")
+
+    with pytest.raises(SourceSyncError, match="resolves outside"):
+        sync_asset(
+            root,
+            build_path,
+            _asset("{deploy_tier}/*.json"),
+            properties={"deploy_tier": "../outside"},
+            remotes={},
+            slot="api",
+        )
+
+    assert (build_path / "assets" / "api" / "old.json").exists()
+
+
 # Review finding 3 — glob-aware source_path, preserving structure.
 
 
@@ -426,6 +456,188 @@ def test_module_source_unknown_remote_raises_clear_error(tmp_path: Path):
     source = SourceModel(remote="ghost", source_path="charts/authentik")
     with pytest.raises(SourceSyncError, match="not declared"):
         sync_module_source(tmp_path, tmp_path / "build" / "apps" / "authentik", source, remotes={})
+
+
+def test_resolved_asset_info_lists_files_recursively_and_sorted(tmp_path: Path):
+    build_path = tmp_path / "build"
+    _write(build_path / "assets" / "api" / "b.json", "{}")
+    _write(build_path / "assets" / "api" / "nested" / "deep.json", "{}")
+    _write(build_path / "assets" / "api" / "a.json", "{}")
+
+    info = resolved_asset_info(build_path, "api", "api-doc")
+
+    assert info.path == "assets/api"
+    assert info.asset == "api-doc"
+    assert info.files == ["a.json", "b.json", "nested/deep.json"]
+
+
+def test_resolved_asset_info_matches_what_sync_asset_materialised(tmp_path: Path):
+    root = _glob_tree(tmp_path)
+    build_path = tmp_path / "build"
+    sync_asset(root, build_path, _asset("assets/openapi"), properties={}, remotes={})
+
+    assert resolved_asset_info(build_path, "openapi", "openapi").files == ["api.json", "api.xml", "nested/deep.json"]
+
+
+def test_resolved_asset_info_missing_directory_points_at_build_run(tmp_path: Path):
+    with pytest.raises(SourceSyncError, match="Run `strata build run` first"):
+        resolved_asset_info(tmp_path / "build", "api", "api-doc")
+
+
+def test_asset_lands_under_its_slot_not_its_document_name(tmp_path: Path):
+    root = _glob_tree(tmp_path)
+    build_path = tmp_path / "build"
+
+    destination = sync_asset(root, build_path, _asset("assets/openapi"), properties={}, remotes={}, slot="api")
+
+    assert destination == build_path / "assets" / "api"
+    assert (destination / "api.json").exists()
+    assert not (build_path / "assets" / "openapi").exists()
+
+
+def test_asset_slot_directory_is_cleared_of_a_previous_builds_files(tmp_path: Path):
+    """Rebinding a slot into a reused build path must not leave the old document's files behind."""
+    root = _glob_tree(tmp_path)
+    build_path = tmp_path / "build"
+    _write(build_path / "assets" / "api" / "stale.json", "{}")
+    _write(build_path / "assets" / "api" / "old" / "deep.json", "{}")
+
+    destination = sync_asset(root, build_path, _asset("assets/openapi/*.json"), properties={}, remotes={}, slot="api")
+
+    assert sorted(p.name for p in destination.rglob("*") if p.is_file()) == ["api.json"]
+
+
+def test_asset_sync_clears_only_its_own_slot_directory(tmp_path: Path):
+    root = _glob_tree(tmp_path)
+    build_path = tmp_path / "build"
+    _write(build_path / "assets" / "other" / "keep.txt", "mine")
+    _write(build_path / "assets" / "loose.txt", "mine")
+
+    sync_asset(root, build_path, _asset("assets/openapi"), properties={}, remotes={}, slot="api")
+
+    assert (build_path / "assets" / "other" / "keep.txt").read_text() == "mine"
+    assert (build_path / "assets" / "loose.txt").read_text() == "mine"
+
+
+def test_asset_sync_failure_leaves_the_previous_slot_directory_intact(tmp_path: Path):
+    """The wipe happens only after the new source was found, so a typo does not destroy a good build."""
+    root = _glob_tree(tmp_path)
+    build_path = tmp_path / "build"
+    _write(build_path / "assets" / "api" / "old.json", "{}")
+
+    with pytest.raises(SourceSyncError, match="does not exist"):
+        sync_asset(root, build_path, _asset("assets/missing"), properties={}, remotes={}, slot="api")
+
+    assert (build_path / "assets" / "api" / "old.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# sync_asset() from the asset's own `location` (docs/work/asset-slots.md A7)
+# ---------------------------------------------------------------------------
+
+_NEEDS_GIT = pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+    )
+
+
+def _git_repo(path: Path, versions: dict[str, dict[str, str]]) -> str:
+    """A local git repository with one commit and tag per entry of `versions` (tag -> files); returns its URL."""
+    path.mkdir(parents=True)
+    _git(path, "init", "-q")
+    for tag, files in versions.items():
+        for existing in path.iterdir():
+            if existing.name != ".git":
+                shutil.rmtree(existing) if existing.is_dir() else existing.unlink()
+        for relative, content in files.items():
+            _write(path / relative, content)
+        _git(path, "add", "-A")
+        _git(path, "commit", "-q", "-m", tag)
+        _git(path, "tag", tag)
+    return str(path)
+
+
+def _located_asset(
+    name: str, url: str, reference: str, *, fetch: str = "strata", source_path: str = "api"
+) -> AssetModel:
+    return AssetModel.model_validate(
+        {
+            "meta": {"name": name},
+            "spec": {
+                "source_path": source_path,
+                "location": {"type": "git", "url": url, "reference": reference, "fetch": fetch},
+            },
+        }
+    )
+
+
+@_NEEDS_GIT
+def test_asset_location_is_cloned_at_its_reference_under_the_asset_checkout_root(tmp_path: Path):
+    url = _git_repo(tmp_path / "customer", {"v1": {"api/a.json": "one"}, "v2": {"api/b.json": "two"}})
+    root = tmp_path / "sln"
+    root.mkdir()
+
+    destination = sync_asset(root, tmp_path / "build", _located_asset("c0062-api", url, "v1"), {}, {}, slot="api")
+
+    assert sorted(p.name for p in destination.iterdir()) == ["a.json"]
+    assert layout.asset_checkout_path(root, "c0062-api", "v1").is_dir()
+    assert not layout.remotes_dir(root).exists()
+
+
+@_NEEDS_GIT
+def test_two_assets_with_their_own_repositories_get_their_own_files(tmp_path: Path):
+    first = _git_repo(tmp_path / "c1", {"v1": {"api/one.json": "1"}})
+    second = _git_repo(tmp_path / "c2", {"v1": {"api/two.json": "2"}})
+    root = tmp_path / "sln"
+    root.mkdir()
+
+    one = sync_asset(root, tmp_path / "b1", _located_asset("c1-api", first, "v1"), {}, {}, slot="api")
+    two = sync_asset(root, tmp_path / "b2", _located_asset("c2-api", second, "v1"), {}, {}, slot="api")
+
+    assert [p.name for p in one.iterdir()] == ["one.json"]
+    assert [p.name for p in two.iterdir()] == ["two.json"]
+
+
+@_NEEDS_GIT
+def test_two_slots_bound_to_one_location_asset_share_one_checkout(tmp_path: Path):
+    url = _git_repo(tmp_path / "customer", {"v1": {"api/a.json": "one"}})
+    root = tmp_path / "sln"
+    root.mkdir()
+    asset = _located_asset("c0062-api", url, "v1")
+
+    first = sync_asset(root, tmp_path / "build", asset, {}, {}, slot="api")
+    second = sync_asset(root, tmp_path / "build", asset, {}, {}, slot="api-copy")
+
+    assert [p.name for p in first.iterdir()] == [p.name for p in second.iterdir()] == ["a.json"]
+    assert [p.name for p in (layout.strata_dir(root) / "assets" / "c0062-api").iterdir()] == ["v1"]
+
+
+def test_asset_location_fetch_external_uses_the_checkout_placed_by_ci(tmp_path: Path):
+    root = tmp_path / "sln"
+    placed = layout.asset_checkout_path(root, "c0062-api", "v1")
+    _write(placed / "api" / "a.json", "from CI")
+    asset = _located_asset("c0062-api", "https://example.invalid/never-cloned.git", "v1", fetch="external")
+
+    destination = sync_asset(root, tmp_path / "build", asset, {}, {})
+
+    assert (destination / "a.json").read_text() == "from CI"
+
+
+def test_asset_location_fetch_external_without_a_checkout_names_the_expected_path(tmp_path: Path):
+    root = tmp_path / "sln"
+    root.mkdir()
+    asset = _located_asset("c0062-api", "https://example.invalid/x.git", "v1", fetch="external")
+
+    with pytest.raises(RemoteResolutionError) as raised:
+        sync_asset(root, tmp_path / "build", asset, {}, {})
+
+    assert str(layout.asset_checkout_path(root, "c0062-api", "v1")) in str(raised.value)
 
 
 def test_module_source_missing_path_raises_clear_error(tmp_path: Path):

@@ -229,6 +229,19 @@ class DeploymentProviderBindingModel(PlatformBaseModel):
     )
 
 
+class DeploymentAssetBindingModel(PlatformBaseModel):
+    """Rebind one workspace asset slot to another Asset document for this
+    deployment (docs/work/asset-slots.md) — e.g. a customer's own API
+    definitions. Rebind only: the bound document is used as-is, never
+    field-patched. No bare-string shorthand, same as provider bindings.
+    """
+
+    slot: PlatformName = Field(description="Workspace asset slot to rebind (spec.assets[].slot)")
+    asset: Annotated[PlatformName, References(PlatformKind.ASSET)] = Field(
+        description="Asset document bound to the slot for this deployment"
+    )
+
+
 class DeploymentSpecModel(PlatformBaseModel):
     """Deployment specification: what to deploy, where, and how it behaves at runtime."""
 
@@ -279,6 +292,12 @@ class DeploymentSpecModel(PlatformBaseModel):
         description="Rebind workspace provider slots to other Provider documents for this deployment. "
         "Merged by `slot` across `extends` (child wins), so a partial base can bind a region once.",
     )
+    assets: list[DeploymentAssetBindingModel] | None = Field(
+        None,
+        description="Rebind workspace asset slots to other Asset documents for this deployment. "
+        "Merged by `slot` across `extends` (child wins), so a partial base can bind some slots and a "
+        "leaf others.",
+    )
     lifecycle: CommonLifecycleModel | None = Field(None, description="Deployment lifecycle phases")
     properties: dict[str, Any] | None = Field(
         None, description="Deployment properties, the last merge layer over tenant and environment properties"
@@ -309,6 +328,13 @@ class DeploymentSpecModel(PlatformBaseModel):
         """A slot bound twice would be ambiguous."""
         if self.providers:
             check_unique_names([b.slot for b in self.providers], "provider slot bindings in deployment")
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_asset_slots(self) -> "DeploymentSpecModel":
+        """A slot bound twice would be ambiguous."""
+        if self.assets:
+            check_unique_names([b.slot for b in self.assets], "asset slot bindings in deployment")
         return self
 
     @model_validator(mode="after")

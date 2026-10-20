@@ -52,6 +52,27 @@ def test_deployment_provider_binding_has_no_bare_string_shorthand():
         DeploymentModel.model_validate(data)
 
 
+def test_deployment_accepts_asset_bindings():
+    data = _minimal_deployment()
+    data["spec"]["assets"] = [{"slot": "api", "asset": "c0062-api"}]
+    model = DeploymentModel.model_validate(data)
+    assert (model.spec.assets[0].slot, model.spec.assets[0].asset) == ("api", "c0062-api")
+
+
+def test_deployment_rejects_duplicate_asset_slot_bindings():
+    data = _minimal_deployment()
+    data["spec"]["assets"] = [{"slot": "api", "asset": "a"}, {"slot": "api", "asset": "b"}]
+    with pytest.raises(ValidationError, match="asset slot bindings"):
+        DeploymentModel.model_validate(data)
+
+
+def test_deployment_asset_binding_has_no_bare_string_shorthand():
+    data = _minimal_deployment()
+    data["spec"]["assets"] = ["c0062-api"]
+    with pytest.raises(ValidationError):
+        DeploymentModel.model_validate(data)
+
+
 def test_deployment_rejects_mismatched_kind():
     """A document declaring another kind is rejected (ADR-0016)."""
     data = _minimal_deployment()

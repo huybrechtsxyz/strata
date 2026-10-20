@@ -12,6 +12,7 @@ from strata.utils.layout import (
     REMOTES_DIRNAME,
     STRATA_DIR,
     YAML_SUFFIXES,
+    asset_checkout_path,
     audit_push_checkout_path,
     audit_read_checkout_path,
     build_dir,
@@ -63,6 +64,18 @@ def test_remote_checkouts_are_separated_by_name():
     a = remote_checkout_path(Path("/s"), "infra", "v1.0.0")
     b = remote_checkout_path(Path("/s"), "charts", "v1.0.0")
     assert a != b
+
+
+def test_asset_checkout_is_keyed_by_asset_and_reference():
+    a = asset_checkout_path(Path("/s"), "c0062-api", "v1.0.0")
+    assert a == strata_dir(Path("/s")) / "assets" / "c0062-api" / "v1.0.0"
+    assert a != asset_checkout_path(Path("/s"), "c0062-api", "v2.0.0")
+    assert a != asset_checkout_path(Path("/s"), "c0063-api", "v1.0.0")
+    assert asset_checkout_path(Path("/s"), "c0062-api", None).name == "_unpinned"
+
+
+def test_asset_checkout_never_collides_with_a_manifest_remote_of_the_same_name():
+    assert asset_checkout_path(Path("/s"), "shared", "v1") != remote_checkout_path(Path("/s"), "shared", "v1")
 
 
 def test_build_dir_is_directly_under_the_root():

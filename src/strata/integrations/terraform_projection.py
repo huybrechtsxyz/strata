@@ -28,6 +28,7 @@ D5-D7, never this projection).
 """
 
 import json
+import posixpath
 from typing import Any
 
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
@@ -405,13 +406,26 @@ def _strata_custom(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     return graph.custom
 
 
-def _strata_assets(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """`strata.assets` (docs/design/asset-management.md) — name -> {path,
-    files}, resolved once by `build_controller.py` before the step loop
-    (`ResolvedAssetInfo`). Unlike every other category, keyed only by
+def build_strata_assets(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`strata.assets` (docs/design/asset-management.md) — slot -> {asset, path,
+    path_from_step, files}, resolved once by `build_controller.py` before the
+    step loop (`ResolvedAssetInfo`). Unlike every other category, keyed only by
     assets at least one execution step actually references this build —
-    see this function's own "Deliberate deviation" note in that doc."""
-    return {name: {"path": info.path, "files": info.files} for name, info in graph.resolved_assets.items()}
+    see this function's own "Deliberate deviation" note in that doc.
+
+    `path` is relative to the build root; `path_from_step` is the same
+    directory relative to `graph.step_root`, the directory Terraform runs in
+    (docs/work/asset-slots.md, A6). Pure string arithmetic, no filesystem.
+    """
+    return {
+        name: {
+            "asset": info.asset,
+            "path": info.path,
+            "path_from_step": posixpath.relpath(info.path, start=graph.step_root),
+            "files": info.files,
+        }
+        for name, info in graph.resolved_assets.items()
+    }
 
 
 def build_strata_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
@@ -445,7 +459,7 @@ def build_strata_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
         "flags": _strata_flags(graph),
         "variables": _strata_variables(graph),
         "default_tags": _strata_default_tags(graph),
-        "assets": _strata_assets(graph),
+        "assets": build_strata_assets(graph),
     }
 
 
@@ -703,6 +717,21 @@ def _render_strata_merge(var_expr: str, full_path: str, paths: list[str], indent
     return "\n".join(lines)
 
 
+# Terraform authors read these instead of joining `path.root` and `path_from_step` themselves
+# (docs/work/asset-slots.md A6). Relative on purpose: an absolute path in a resource attribute
+# differs per machine and shows up as drift.
+_STRATA_ASSETS_LOCALS = """
+locals {
+  strata_assets = {
+    for slot, a in local.strata.assets : slot => {
+      dir   = "${path.root}/${a.path_from_step}"
+      files = { for f in a.files : f => "${path.root}/${a.path_from_step}/${f}" }
+    }
+  }
+}
+"""
+
+
 def build_strata_locals(secret_paths: list[str]) -> str:
     """Phase 6 (ADR-0035) — generates `strata_locals.tf`'s full text: a
     `local.strata` that is `var.strata` with every secret-bearing leaf
@@ -727,6 +756,6 @@ def build_strata_locals(secret_paths: list[str]) -> str:
         "# never var.strata.* - and secrets are simply never a special case.\n"
     )
     if not secret_paths:
-        return header + "\nlocals {\n  strata = var.strata\n}\n"
+        return header + "\nlocals {\n  strata = var.strata\n}\n" + _STRATA_ASSETS_LOCALS
     merge_expr = _render_strata_override("var.strata", "", secret_paths, "  ")
-    return header + "\nlocals {\n  strata = " + merge_expr + "\n}\n"
+    return header + "\nlocals {\n  strata = " + merge_expr + "\n}\n" + _STRATA_ASSETS_LOCALS

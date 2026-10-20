@@ -5,8 +5,8 @@ from strata.models.configuration_model import ConfigurationModel, ConfigurationS
 from strata.models.deployment_model import DeploymentModel
 from strata.models.network_model import NetworkModel
 from strata.models.topology_config_model import TopologyConfigModel
-from strata.models.workspace_model import WorkspaceModel
-from strata.services.workspace_service import WorkspaceService, effective_providers
+from strata.models.workspace_model import WorkspaceAssetModel, WorkspaceModel
+from strata.services.workspace_service import WorkspaceService, effective_assets, effective_providers
 
 
 def _slotted_workspace() -> WorkspaceModel:
@@ -46,6 +46,31 @@ def test_effective_providers_ignores_unknown_slot():
     """Reporting an unknown slot is validation's job; it never adds a provider here."""
     deployment = _deployment_binding({"slot": "ghost", "provider": "azure-americas"})
     assert "ghost" not in effective_providers(_slotted_workspace(), deployment)
+
+
+def test_effective_assets_without_assets_is_empty():
+    assert effective_assets(_slotted_workspace(), None) == {}
+
+
+def test_effective_assets_overlays_deployment_binding():
+    workspace = _slotted_workspace()
+    workspace.spec.assets = [
+        WorkspaceAssetModel.model_validate(x) for x in ("openapi", {"slot": "api", "asset": "api-x"})
+    ]
+    deployment = DeploymentModel.model_validate(
+        {
+            "meta": {"name": "d"},
+            "spec": {
+                "workspace": "apim",
+                "environments": ["prd"],
+                "assets": [{"slot": "api", "asset": "c0062-api"}, {"slot": "ghost", "asset": "x"}],
+            },
+        }
+    )
+
+    assert effective_assets(workspace, None) == {"openapi": "openapi", "api": "api-x"}
+    # an unknown slot is ignored here; validation reports it
+    assert effective_assets(workspace, deployment) == {"openapi": "openapi", "api": "c0062-api"}
 
 
 def test_workspace_service_validates_from_data():

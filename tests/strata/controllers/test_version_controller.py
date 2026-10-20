@@ -126,6 +126,30 @@ def test_reconcile_reports_add_candidates_for_unpinned_real_targets(tmp_path):
     assert by_key[("artifacts", "dspapi_container")].seed_value == "1.0.0"
 
 
+def test_reconcile_offers_assets_with_a_fetch_strata_location_only(tmp_path):
+    header = "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\n"
+    location = "  location:\n    type: git\n    url: https://example.com/c.git\n    reference: v1\n"
+    root = _solution(
+        tmp_path,
+        extra={
+            "version.yaml": _version_doc(),
+            "asset-a.yaml": header + "meta:\n  name: a-api\nspec:\n  source_path: api\n" + location,
+            "asset-b.yaml": header
+            + "meta:\n  name: b-api\nspec:\n  source_path: api\n"
+            + location
+            + "    fetch: external\n",
+        },
+    )
+    context = open_solution(root)
+    entry = context.controller.index.get(PlatformKind.VERSION, "prd")
+
+    rows = reconcile_version(context.controller.index, context.controller.solution, entry.model)
+
+    asset_rows = {r.name: r for r in rows if r.category == "assets"}
+    assert set(asset_rows) == {"a-api"}
+    assert (asset_rows["a-api"].action, asset_rows["a-api"].seed_value) == ("add", "v1")
+
+
 def test_reconcile_never_offers_add_for_a_target_with_no_current_value(tmp_path):
     """'sidecar' declares no image of its own — nothing honest to seed it with."""
     root = _solution(tmp_path, extra={"version.yaml": _version_doc()})

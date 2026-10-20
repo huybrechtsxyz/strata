@@ -84,7 +84,7 @@ from strata.models.reference_fields import References
 
 #: Pin categories, in the order they are reported. Each maps to exactly one
 #: field elsewhere in the schema — see `VersionPinsModel`.
-PIN_CATEGORIES = ("images", "charts", "remotes", "artifacts")
+PIN_CATEGORIES = ("images", "charts", "remotes", "artifacts", "assets")
 
 
 class VersionPinStatus(str, Enum):
@@ -186,6 +186,9 @@ class VersionPinsModel(PlatformBaseModel):
       name`, no disambiguation logic needed. `image_name` is identity and
       is never overlaid by a pin here, same as `charts` never overlays
       `chart_name`.
+    - ``assets``  -> `AssetLocationModel.reference` (docs/work/asset-slots.md A7),
+      only for an asset declaring its own `spec.location` with `fetch: strata`.
+      An asset using a manifest `remote` is pinned through ``remotes`` instead.
 
     Keys are the target's own name, so a pin is a plain identity reference
     like every other cross-document link in v2 (ADR-0015).
@@ -206,6 +209,11 @@ class VersionPinsModel(PlatformBaseModel):
         default=None,
         description="Artifact image tag pins. Key = ArtifactModel.meta.name; overlays spec.image_tag only "
         "(image_name is identity, never pinned).",
+    )
+    assets: dict[PlatformName, VersionPinModel] | None = Field(
+        default=None,
+        description="Git ref pins for an asset's own location. Key = AssetModel.meta.name; overlays "
+        "spec.location.reference. Only valid for an asset with a location and fetch: strata.",
     )
 
     def iter_pins(self) -> Iterator[tuple[str, str, VersionPinModel]]:

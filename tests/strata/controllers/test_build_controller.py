@@ -5,6 +5,7 @@
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ import yaml
 
 from strata.controllers.build_controller import (
     BuildCleanError,
+    apply_asset_version_pin,
     apply_remote_version_pins,
     build_resolved_workspace_graph,
     build_run,
@@ -22,6 +24,7 @@ from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.controllers.source_sync import SourceSyncError
 from strata.integrations.terraform_projection import build_strata_payload
+from strata.models.asset_model import AssetModel
 from strata.models.checkov_model import CheckovFindingModel, CheckovScanResultModel
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.deployment_model import DeploymentModel
@@ -480,7 +483,14 @@ def test_build_run_projects_the_asset_into_the_consuming_steps_strata_payload(tm
 
     assert diagnostics.ok
     payload = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())["strata"]
-    assert payload["assets"] == {"openapi": {"path": "assets/openapi", "files": ["openapi.json"]}}
+    assert payload["assets"] == {
+        "openapi": {
+            "asset": "openapi",
+            "path": "assets/openapi",
+            "path_from_step": "../assets/openapi",
+            "files": ["openapi.json"],
+        }
+    }
     assert set(payload) == {
         "workspace",
         "tenant",
@@ -499,6 +509,269 @@ def test_build_run_projects_the_asset_into_the_consuming_steps_strata_payload(tm
         "default_tags",
         "assets",
     }
+
+
+def test_build_run_path_from_step_resolves_from_each_steps_own_directory(tmp_path: Path):
+    """Two provisioners at different depths see different `path_from_step`
+    values, and each one really leads from that step's directory to the files."""
+    root = _asset_solution(tmp_path)
+    _write(root, "terraform/apim/main.tf", "# apim\n")
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n"
+        "    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "    - name: tf_apim\n      tool: terraform\n      source:\n        source_path: terraform/apim\n"
+        "  execution:\n"
+        "    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
+        "      assets:\n        - openapi\n"
+        "    - name: apply_apim\n      provisioner: tf_apim\n      resources:\n        - r1\n"
+        "      depends_on:\n        - apply_infra\n"
+        "      assets:\n        - openapi\n"
+        "  resources:\n    - name: r1\n      resource: r1\n"
+        "  assets:\n    - openapi\n",
+    )
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    seen = {}
+    for step_dir in ("infra", "terraform/apim"):
+        asset = json.loads((build_path / step_dir / "strata.auto.tfvars.json").read_text())["strata"]["assets"][
+            "openapi"
+        ]
+        assert asset["path"] == "assets/openapi"
+        seen[step_dir] = asset["path_from_step"]
+        assert (build_path / step_dir / asset["path_from_step"] / asset["files"][0]).read_text() == "{}"
+    assert seen == {"infra": "../assets/openapi", "terraform/apim": "../../assets/openapi"}
+
+
+def _asset_slot_solution(tmp_path: Path) -> Path:
+    """`_asset_solution` with the workspace slot `api` bound to the `openapi` document."""
+    root = _asset_solution(tmp_path)
+    workspace = (root / "workspace.yaml").read_text(encoding="utf-8")
+    workspace = workspace.replace("      assets:\n        - openapi\n", "      assets:\n        - api\n")
+    workspace = workspace.replace("  assets:\n    - openapi\n", "  assets:\n    - slot: api\n      asset: openapi\n")
+    _write(root, "workspace.yaml", workspace)
+    return root
+
+
+def test_build_run_materialises_a_slot_under_the_slot_name_not_the_document_name(tmp_path: Path):
+    root = _asset_slot_solution(tmp_path)
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    assert (build_path / "assets" / "api" / "openapi.json").read_text() == "{}"
+    assert not (build_path / "assets" / "openapi").exists()
+    payload = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())["strata"]
+    assert payload["assets"] == {
+        "api": {
+            "asset": "openapi",
+            "path": "assets/api",
+            "path_from_step": "../assets/api",
+            "files": ["openapi.json"],
+        }
+    }
+
+
+def test_build_run_asset_error_names_the_slot_when_it_differs_from_the_document(tmp_path: Path):
+    root = _asset_slot_solution(tmp_path)
+    shutil.rmtree(root / "assets")
+
+    with pytest.raises(SourceSyncError, match="Asset slot 'api': Asset 'openapi'"):
+        build_run(_context(root), "app", tmp_path / "build")
+
+
+def test_build_run_dry_run_reports_the_slot_an_asset_would_fill(tmp_path: Path):
+    root = _asset_slot_solution(tmp_path)
+    steps: list[str] = []
+
+    build_run(_context(root), "app", tmp_path / "build", dry_run=True, on_step=steps.append)
+
+    assert any("would materialise asset 'openapi' into slot 'api'" in s for s in steps)
+
+
+def _bound_asset_solution(tmp_path: Path) -> Path:
+    """`_asset_slot_solution` plus a second Asset document and deployments that rebind the slot to it:
+    `app-alt` binds it directly, `app-leaf` inherits the binding from the partial `app-base`."""
+    root = _asset_slot_solution(tmp_path)
+    _write(root, "assets/alt/openapi/alt.json", '{"alt": true}')
+    _write(
+        root,
+        "asset-alt.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: openapi-alt\nspec:\n"
+        "  source_path: assets/alt/openapi\n",
+    )
+    header = "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\n"
+    _write(
+        root,
+        "deployment-alt.yaml",
+        header + "meta:\n  name: app-alt\nspec:\n  workspace: main\n  environments:\n    - prd\n"
+        "  assets:\n    - slot: api\n      asset: openapi-alt\n",
+    )
+    _write(
+        root,
+        "deployment-base.yaml",
+        header + "meta:\n  name: app-base\nspec:\n  partial: true\n  workspace: main\n  environments:\n    - prd\n"
+        "  assets:\n    - slot: api\n      asset: openapi-alt\n",
+    )
+    _write(root, "deployment-leaf.yaml", header + "meta:\n  name: app-leaf\nspec:\n  extends: app-base\n")
+    return root
+
+
+def _built_assets(build_path: Path) -> dict:
+    return json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())["strata"]["assets"]
+
+
+def test_two_deployments_of_one_workspace_get_different_files_at_the_same_slot_path(tmp_path: Path):
+    root = _bound_asset_solution(tmp_path)
+
+    assert build_run(_context(root), "app", tmp_path / "build-default").ok
+    assert build_run(_context(root), "app-alt", tmp_path / "build-alt").ok
+
+    default = _built_assets(tmp_path / "build-default")["api"]
+    alt = _built_assets(tmp_path / "build-alt")["api"]
+    assert default["path"] == alt["path"] == "assets/api"
+    assert default["path_from_step"] == alt["path_from_step"]
+    assert (default["asset"], default["files"]) == ("openapi", ["openapi.json"])
+    assert (alt["asset"], alt["files"]) == ("openapi-alt", ["alt.json"])
+
+
+def test_build_run_inherits_an_asset_binding_through_extends(tmp_path: Path):
+    root = _bound_asset_solution(tmp_path)
+
+    assert build_run(_context(root), "app-leaf", tmp_path / "build").ok
+
+    assert _built_assets(tmp_path / "build")["api"]["asset"] == "openapi-alt"
+
+
+def test_rebuilding_into_the_same_build_path_drops_the_previous_bindings_files(tmp_path: Path):
+    root = _bound_asset_solution(tmp_path)
+    build_path = tmp_path / "build"
+    assert build_run(_context(root), "app", build_path, clean=False).ok
+    _write(build_path, "assets/mine/keep.txt", "mine")
+
+    assert build_run(_context(root), "app-alt", build_path, clean=False).ok
+
+    assert _built_assets(build_path)["api"]["files"] == ["alt.json"]
+    assert not (build_path / "assets" / "api" / "openapi.json").exists()
+    assert (build_path / "assets" / "mine" / "keep.txt").read_text() == "mine"
+
+
+def _git_repo(path: Path, versions: dict[str, dict[str, str]]) -> str:
+    """A local git repository with one commit and tag per entry of `versions` (tag -> files); returns its URL."""
+    path.mkdir(parents=True)
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+    subprocess.run([*git, "init", "-q"], cwd=path, check=True, capture_output=True)
+    for tag, files in versions.items():
+        for existing in path.iterdir():
+            if existing.name != ".git":
+                shutil.rmtree(existing) if existing.is_dir() else existing.unlink()
+        for relative, content in files.items():
+            _write(path, relative, content)
+        for command in (["add", "-A"], ["commit", "-q", "-m", tag], ["tag", tag]):
+            subprocess.run([*git, *command], cwd=path, check=True, capture_output=True)
+    return str(path)
+
+
+def _located_asset_solution(tmp_path: Path) -> Path:
+    """Two customers, each with a repository of their own and an asset document pointing at it, bound
+    to the workspace slot `api` by `app-c0062`/`app-c0063`; `app-pinned` is `app-c0062` plus a Version
+    pinning that asset to the tag `v2`. No remote is declared in strata.yaml for any of them."""
+    root = _asset_slot_solution(tmp_path)
+    c0062 = _git_repo(tmp_path / "c0062", {"v1": {"api/one.json": "1"}, "v2": {"api/two.json": "2"}})
+    c0063 = _git_repo(tmp_path / "c0063", {"v1": {"api/other.json": "3"}})
+    asset = "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: {name}\nspec:\n  source_path: api\n"
+    location = "  location:\n    type: git\n    url: '{url}'\n    reference: v1\n"
+    deployment = (
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: {name}\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n{version}"
+        "  assets:\n    - slot: api\n      asset: {asset}\n"
+    )
+    for name, url in (("c0062-api", c0062), ("c0063-api", c0063)):
+        _write(root, f"asset-{name}.yaml", asset.format(name=name) + location.format(url=url.replace("\\", "/")))
+    _write(root, "dep-c0062.yaml", deployment.format(name="app-c0062", asset="c0062-api", version=""))
+    _write(root, "dep-c0063.yaml", deployment.format(name="app-c0063", asset="c0063-api", version=""))
+    _write(
+        root,
+        "dep-pinned.yaml",
+        deployment.format(name="app-pinned", asset="c0062-api", version="  version: ring\n"),
+    )
+    _write(
+        root,
+        "version-ring.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: ring\nspec:\n"
+        "  workspace: main\n  pins:\n    assets:\n      c0062-api: v2\n",
+    )
+    return root
+
+
+_NEEDS_GIT = pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
+
+
+@_NEEDS_GIT
+def test_customers_with_their_own_repositories_need_no_manifest_remote(tmp_path: Path):
+    root = _located_asset_solution(tmp_path)
+
+    assert build_run(_context(root), "app-c0062", tmp_path / "b1").ok
+    assert build_run(_context(root), "app-c0063", tmp_path / "b2").ok
+
+    first, second = _built_assets(tmp_path / "b1")["api"], _built_assets(tmp_path / "b2")["api"]
+    assert first["path"] == second["path"] == "assets/api"
+    assert (first["asset"], first["files"]) == ("c0062-api", ["one.json"])
+    assert (second["asset"], second["files"]) == ("c0063-api", ["other.json"])
+    assert (root / ".strata" / "assets" / "c0062-api" / "v1").is_dir()
+
+
+@_NEEDS_GIT
+def test_a_version_pin_moves_one_customers_asset_to_another_reference(tmp_path: Path):
+    root = _located_asset_solution(tmp_path)
+
+    assert build_run(_context(root), "app-pinned", tmp_path / "build").ok
+
+    assert _built_assets(tmp_path / "build")["api"]["files"] == ["two.json"]
+    assert (root / ".strata" / "assets" / "c0062-api" / "v2").is_dir()
+
+
+def _located_asset_model(reference: str = "v1", *, with_location: bool = True) -> AssetModel:
+    spec: dict = {"source_path": "api"}
+    if with_location:
+        spec["location"] = {"url": "https://example.com/c.git", "reference": reference}
+    return AssetModel.model_validate({"meta": {"name": "c0062-api"}, "spec": spec})
+
+
+def _ring_version(pins: str) -> VersionModel:
+    return VersionModel.model_validate(
+        yaml.safe_load(
+            f"apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: ring\nspec:\n  workspace: main\n{pins}"
+        )
+    )
+
+
+def test_apply_asset_version_pin_overrides_the_location_reference_only():
+    asset = _located_asset_model()
+
+    pinned = apply_asset_version_pin(asset, _ring_version("  pins:\n    assets:\n      c0062-api: v2\n"))
+
+    assert pinned.spec.location.reference == "v2"
+    assert pinned.spec.location.url == asset.spec.location.url
+    assert asset.spec.location.reference == "v1"
+
+
+def test_apply_asset_version_pin_is_a_no_op_without_a_version_a_pin_or_a_location():
+    asset = _located_asset_model()
+    assert apply_asset_version_pin(asset, None) is asset
+    assert apply_asset_version_pin(asset, _ring_version("  pins: {}\n")) is asset
+    no_location = _located_asset_model(with_location=False)
+    assert (
+        apply_asset_version_pin(no_location, _ring_version("  pins:\n    assets:\n      c0062-api: v2\n"))
+        is no_location
+    )
 
 
 def test_build_run_fails_when_an_assets_on_disk_variant_is_missing(tmp_path: Path):

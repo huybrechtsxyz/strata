@@ -29,6 +29,7 @@ from typing import cast
 
 from strata.controllers.solution_controller import DocumentIndex
 from strata.logging.config import get_logger
+from strata.models.asset_model import AssetModel
 from strata.models.common_models import PlatformKind
 from strata.models.module_model import ModuleModel
 from strata.models.solution_model import RemoteFetch, SolutionModel
@@ -136,7 +137,37 @@ def check_version_pins(index: DocumentIndex, solution: SolutionModel | None) -> 
                         code="pin_not_applicable",
                     )
 
+            elif category == "assets":
+                _check_asset_pin(index, name, source=str(entry.source), location=location, diagnostics=diagnostics)
+
     return diagnostics
+
+
+def _check_asset_pin(index: DocumentIndex, name: str, *, source: str, location: str, diagnostics: Diagnostics) -> None:
+    """One `assets` pin: the asset must exist, declare its own `location`, and be `fetch: strata`."""
+    asset_entry = index.get(PlatformKind.ASSET, name)
+    if asset_entry is None:
+        diagnostics.warning(
+            f"asset pin '{name}' matched no asset document", source=source, location=location, code="stale_pin"
+        )
+        return
+    asset_location = cast(AssetModel, asset_entry.model).spec.location
+    if asset_location is None:
+        diagnostics.warning(
+            f"asset pin '{name}' targets an asset with no spec.location — the pin cannot apply "
+            "(an asset using a manifest remote is pinned under pins.remotes)",
+            source=source,
+            location=location,
+            code="pin_not_applicable",
+        )
+    elif asset_location.fetch is RemoteFetch.EXTERNAL:
+        diagnostics.error(
+            f"asset pin '{name}' targets a fetch:external location — CI places it before strata runs, "
+            "so this pin cannot take effect",
+            source=source,
+            location=location,
+            code="pin_not_applicable",
+        )
 
 
 def _known_service_names(index: DocumentIndex) -> set[str]:

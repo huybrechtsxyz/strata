@@ -20,7 +20,7 @@ be meaningless for an asset.
 
 from typing import Annotated, Any
 
-from pydantic import Field, StringConstraints, field_validator
+from pydantic import ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
@@ -30,7 +30,78 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.reference_fields import RemoteReference
-from strata.utils.path_safety import validate_relative_path
+from strata.models.solution_model import RemoteFetch, RemoteType
+from strata.utils.path_safety import validate_no_path_traversal, validate_not_option_like, validate_relative_path
+
+
+def _hide_unsupported_integration(schema: dict[str, Any]) -> None:
+    """Drop `integration` from the exported schema so the editor flags it instead of offering it."""
+    schema.get("properties", {}).pop("integration", None)
+
+
+class AssetLocationModel(PlatformBaseModel):
+    """The git repository an asset's files live in, declared on the asset itself
+    (docs/work/asset-slots.md A7) — instead of a remote named in `strata.yaml`.
+
+    Lets one small asset document per customer point at that customer's own
+    repository without growing the manifest. A `SolutionRemoteModel` minus
+    `name` (the asset's own name is the identity) and minus what the first
+    version cannot honour: only `type: git`, and no `integration` yet.
+    """
+
+    model_config = ConfigDict(json_schema_extra=_hide_unsupported_integration)
+
+    type: RemoteType = Field(RemoteType.GIT, description="Only 'git' is supported for an asset location")
+    url: str = Field(min_length=1, description="Git repository URL")
+    reference: str = Field(
+        min_length=1,
+        description="Branch, tag or commit SHA the files are taken at. A `pins.assets` entry in a Version "
+        "document overrides it (only with fetch: strata).",
+    )
+    fetch: RemoteFetch = Field(
+        RemoteFetch.STRATA,
+        description="'strata' clones it; 'external' means CI already checked it out at "
+        ".strata/assets/<asset name>/<reference> and strata only reads it.",
+    )
+    integration: PlatformName | None = Field(
+        None,
+        description="Reserved for credentials via an Integration. Not supported yet: setting it is an "
+        "error rather than being silently ignored. Use fetch: external or ambient git credentials.",
+    )
+
+    @field_validator("type")
+    @classmethod
+    def validate_git_only(cls, v: RemoteType) -> RemoteType:
+        """`resolve_remote()` can only fetch git."""
+        if v is not RemoteType.GIT:
+            raise ValueError(f"An asset location supports only type 'git', not '{v.value}'.")
+        return v
+
+    @field_validator("reference")
+    @classmethod
+    def validate_reference_no_traversal(cls, v: str) -> str:
+        """`reference` is a directory segment of the checkout path, same rule as a remote's."""
+        validate_no_path_traversal(v)
+        validate_not_option_like(v, "reference")
+        return v
+
+    @field_validator("url")
+    @classmethod
+    def validate_url_not_option_like(cls, v: str) -> str:
+        """`url` is a positional argument to `git clone`; see `validate_not_option_like()`."""
+        validate_not_option_like(v, "url")
+        return v
+
+    @field_validator("integration")
+    @classmethod
+    def validate_integration_unsupported(cls, v: str | None) -> str | None:
+        """No read-path caller passes credentials yet, so accepting it would silently do nothing."""
+        if v is not None:
+            raise ValueError(
+                "'integration' is not supported on an asset location yet; use fetch: external, "
+                "or ambient git credentials."
+            )
+        return v
 
 
 class AssetSpecModel(PlatformBaseModel):
@@ -41,6 +112,12 @@ class AssetSpecModel(PlatformBaseModel):
         None,
         description="Remote this asset's files live under (SourceModel's own field/meaning, reused "
         "unchanged). None means this solution's own repository.",
+    )
+    location: AssetLocationModel | None = Field(
+        None,
+        description="The git repository this asset's files live in, declared here rather than as a manifest "
+        "remote. Mutually exclusive with 'remote'; with neither, the files are in this solution's own "
+        "repository.",
     )
     source_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         description="Path to the file or directory, relative to the resolved remote's root. May contain "
@@ -61,6 +138,13 @@ class AssetSpecModel(PlatformBaseModel):
         .source_path` already applies. Glob wildcards pass through untouched.
         """
         return validate_relative_path(v)
+
+    @model_validator(mode="after")
+    def validate_remote_xor_location(self) -> "AssetSpecModel":
+        """The files live in one place: a manifest remote or the asset's own location, not both."""
+        if self.remote is not None and self.location is not None:
+            raise ValueError("An asset declares either 'remote' or 'location', not both.")
+        return self
 
 
 class AssetMetaModel(PlatformBaseModel):

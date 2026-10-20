@@ -23,6 +23,7 @@ import json
 import os
 import re
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -37,6 +38,7 @@ from strata.controllers.deployment_output_store import (
 )
 from strata.controllers.integration_resolution import resolve_integration, resolve_output_store_integration
 from strata.controllers.solution_context import SolutionContext
+from strata.controllers.source_sync import SourceSyncError, resolved_asset_info
 from strata.controllers.value_controller import (
     build_value_references,
     merge_workspace_environment_deployment_properties,
@@ -49,7 +51,11 @@ from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ValueResolution
-from strata.integrations.terraform_projection import build_strata_payload, rewrite_strata_payload
+from strata.integrations.terraform_projection import (
+    build_strata_assets,
+    build_strata_payload,
+    rewrite_strata_payload,
+)
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentStageModel
@@ -58,6 +64,7 @@ from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepM
 from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
 from strata.services.environment_service import merge_environment_models
+from strata.services.workspace_service import effective_assets
 from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
@@ -805,6 +812,25 @@ def deploy_run(
         # it, rather than injecting a meaningless `"NoneD ns"`-shaped env
         # var.
         if integration.ENV_VAR_PREFIX is not None:
+            # `graph` was built here without the build's `resolved_assets`, so `payload["assets"]`
+            # is empty; rebuild it from the directories `build run` materialised. Lazy and
+            # inside this block on purpose: only a step that writes the tfvars file needs them.
+            asset_names = sorted({name for s in all_steps for name in (s.assets or [])})
+            if asset_names:
+                bound_assets = effective_assets(workspace, deployment)
+                try:
+                    resolved_assets = {
+                        slot: resolved_asset_info(build_path, slot, bound_assets[slot]) for slot in asset_names
+                    }
+                except SourceSyncError as exc:
+                    diagnostics.error(f"Step '{step.name}': {exc}", location=step.name)
+                    return diagnostics
+                step_graph = replace(
+                    graph,
+                    resolved_assets=resolved_assets,
+                    step_root=path.relative_to(build_path).as_posix(),
+                )
+                step_payload = {**step_payload, "assets": build_strata_assets(step_graph)}
             try:
                 resolved_payload, strata_secrets = rewrite_strata_payload(
                     step_payload, tokens, sensitive_output_keys=visible_sensitive_outputs

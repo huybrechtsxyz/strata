@@ -45,7 +45,13 @@ from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (
 from strata.controllers.sbom_controller import evaluate_cve_policy, write_sbom
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
-from strata.controllers.source_sync import describe_source, sync_asset, sync_source
+from strata.controllers.source_sync import (
+    SourceSyncError,
+    describe_source,
+    resolved_asset_info,
+    sync_asset,
+    sync_source,
+)
 from strata.controllers.value_controller import (
     build_value_references,
     merge_workspace_environment_deployment_properties,
@@ -82,7 +88,7 @@ from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
-from strata.services.workspace_service import effective_providers
+from strata.services.workspace_service import effective_assets, effective_providers
 from strata.utils.dependency_order import topological_order
 from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.env_file import load_env_file
@@ -122,6 +128,25 @@ def apply_remote_version_pins(
         log_pin_applied("remotes", name, remote.reference, pin.version, version.meta.name)
         overlaid[name] = remote.model_copy(update={"reference": pin.version})
     return overlaid if overlaid is not None else remotes
+
+
+def apply_asset_version_pin(asset: AssetModel, version: VersionModel | None) -> AssetModel:
+    """Overlay `version.spec.pins.assets[<asset name>]` onto `asset.spec.location.reference`
+    (docs/work/asset-slots.md A7).
+
+    Returns `asset` unchanged when there is no version, the asset declares no location of its
+    own (a manifest-remote asset is pinned under `remotes`), or nothing pins it. Trusts
+    `check_version_pins()` to have rejected a `fetch: external` pin already.
+    """
+    location = asset.spec.location
+    if version is None or location is None:
+        return asset
+    pin = VersionService.from_model(version).resolve("assets", asset.meta.name)
+    if pin is None:
+        return asset
+    log_pin_applied("assets", asset.meta.name, location.reference, pin.version, version.meta.name)
+    pinned_location = location.model_copy(update={"reference": pin.version})
+    return asset.model_copy(update={"spec": asset.spec.model_copy(update={"location": pinned_location})})
 
 
 def _lookup_all(index: DocumentIndex, kind: PlatformKind, names: list[str] | None) -> dict[str, Any]:
@@ -574,39 +599,45 @@ def build_run(
     )
     remotes = apply_remote_version_pins(remotes, version)
 
-    # Assets (docs/design/asset-management.md Phases 3-4) — every asset
-    # actually referenced by this build's execution steps, statically
+    # Assets (docs/design/asset-management.md Phases 3-4) — every asset slot
+    # actually selected by this build's execution steps, statically
     # scanned and resolved once up front, the same timing properties/graph
     # already have — not lazily inside the step loop below (see that doc's
     # own "Sync mechanism" section for why).
-    asset_names = {name for step in (workspace.spec.execution or []) for name in (step.assets or [])}
+    asset_by_slot = effective_assets(workspace, deployment)
+    slot_names = {name for step in (workspace.spec.execution or []) for name in (step.assets or [])}
     resolved_assets: dict[str, ResolvedAssetInfo] = {}
-    for asset_name in sorted(asset_names):
+    for slot in sorted(slot_names):
+        asset_name = asset_by_slot.get(slot)
+        if asset_name is None:
+            # Defensive backstop, not primary validation — WorkspaceSpecModel.
+            # validate_execution()'s asset_slots check already guarantees this.
+            raise UsageError(f"Workspace '{workspace.meta.name}' references undeclared asset slot '{slot}'.")
         asset_entry = index.get(PlatformKind.ASSET, asset_name)
         if asset_entry is None:
-            # Defensive backstop, not primary validation — WorkspaceSpecModel.
-            # validate_execution()'s asset_names check already guarantees this.
-            raise UsageError(f"Workspace '{workspace.meta.name}' references undeclared asset '{asset_name}'.")
-        asset = cast(AssetModel, asset_entry.model)
-        if dry_run:
-            _step(f"would materialise asset '{asset_name}' (source_path '{asset.spec.source_path}')")
-        else:
-            asset_path = sync_asset(context.root, build_path, asset, graph.properties, remotes)
-            _step(f"materialised asset '{asset_name}' at {asset_path}")
-            resolved_assets[asset_name] = ResolvedAssetInfo(
-                path=asset_path.relative_to(build_path).as_posix(),
-                # Recursive and files-only: a glob `source_path` preserves nested structure
-                # (docs/design/asset-management.md), so a shallow listing would both hide
-                # real files and surface directory names as though they were files.
-                files=sorted(p.relative_to(asset_path).as_posix() for p in asset_path.rglob("*") if p.is_file()),
+            raise UsageError(
+                f"Workspace '{workspace.meta.name}' asset slot '{slot}' references undeclared asset '{asset_name}'."
             )
+        asset = apply_asset_version_pin(cast(AssetModel, asset_entry.model), version)
+        into_slot = f" into slot '{slot}'" if slot != asset_name else ""
+        if dry_run:
+            _step(f"would materialise asset '{asset_name}'{into_slot} (source_path '{asset.spec.source_path}')")
+        else:
+            try:
+                asset_path = sync_asset(context.root, build_path, asset, graph.properties, remotes, slot=slot)
+            except SourceSyncError as exc:
+                if slot == asset_name:
+                    raise
+                raise SourceSyncError(f"Asset slot '{slot}': {exc}") from exc
+            _step(f"materialised asset '{asset_name}'{into_slot} at {asset_path}")
+            resolved_assets[slot] = resolved_asset_info(build_path, slot, asset_name)
     if resolved_assets:
         # ResolvedWorkspaceGraph is frozen (ADR-0021 D2's immutable-handoff
         # shape) — `graph` was already assembled/written to resolved.yaml
         # above, so this replaces it with an equivalent copy carrying
         # `resolved_assets`, picked up by every `integration.prepare(...,
         # graph=graph, ...)` call in the step loop below
-        # (`_strata_assets()`, docs/design/asset-management.md Phase 4).
+        # (`build_strata_assets()`, docs/design/asset-management.md Phase 4).
         graph = replace(graph, resolved_assets=resolved_assets)
 
     materialised: dict[str, Path | None] = {}
@@ -648,7 +679,7 @@ def build_run(
                         build_path / step.name,
                         resolved=resolved,
                         provisioner=provisioner,
-                        graph=graph,
+                        graph=replace(graph, step_root=step.name),
                         template_path=template_path,
                     )
                 except IntegrationError as exc:
@@ -688,7 +719,7 @@ def build_run(
                 source_path,
                 resolved=resolved,
                 provisioner=provisioner,
-                graph=graph,
+                graph=replace(graph, step_root=source_path.relative_to(build_path).as_posix()),
                 template_path=template_path,
                 remotes=remotes,
                 root=context.root,

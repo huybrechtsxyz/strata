@@ -9,6 +9,7 @@ same pattern `test_integrations_terraform.py` already uses.
 """
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -597,6 +598,156 @@ def test_deploy_run_smoke_test_never_calls_run_command(tmp_path: Path, _capture)
 
     assert diagnostics.ok
     assert _capture == []
+
+
+def _asset_terraform_solution(tmp_path: Path) -> Path:
+    """`_terraform_solution` plus one asset selected by its single step."""
+    root = _terraform_solution(tmp_path)
+    _write(root, "assets/openapi/api.json", "{}")
+    _write(
+        root,
+        "asset.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: openapi\nspec:\n  source_path: assets/openapi\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
+        "      scope: infra\n      assets:\n        - openapi\n"
+        "  resources:\n    - name: r1\n      resource: r1\n"
+        "  assets:\n    - openapi\n",
+    )
+    return root
+
+
+def test_deploy_run_keeps_the_strata_assets_build_run_projected(tmp_path: Path, _capture):
+    """`deploy run` rewrites `strata.auto.tfvars.json` from a graph of its own;
+    Terraform plans against that file, so it must still carry `strata.assets`."""
+    root = _asset_terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    tfvars = build_path / "infra" / "strata.auto.tfvars.json"
+    built_assets = json.loads(tfvars.read_text())["strata"]["assets"]
+    assert built_assets == {
+        "openapi": {
+            "asset": "openapi",
+            "path": "assets/openapi",
+            "path_from_step": "../assets/openapi",
+            "files": ["api.json"],
+        }
+    }
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    assert json.loads(tfvars.read_text())["strata"]["assets"] == built_assets
+
+
+def test_deploy_run_keeps_a_slot_keyed_asset_as_build_run_projected_it(tmp_path: Path, _capture):
+    root = _asset_terraform_solution(tmp_path)
+    workspace = (root / "workspace.yaml").read_text(encoding="utf-8")
+    workspace = workspace.replace("        - openapi\n  resources:", "        - api\n  resources:")
+    workspace = workspace.replace("  assets:\n    - openapi\n", "  assets:\n    - slot: api\n      asset: openapi\n")
+    _write(root, "workspace.yaml", workspace)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    tfvars = build_path / "infra" / "strata.auto.tfvars.json"
+    built_assets = json.loads(tfvars.read_text())["strata"]["assets"]
+    assert list(built_assets) == ["api"]
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    assert json.loads(tfvars.read_text())["strata"]["assets"] == built_assets
+
+
+def test_deploy_run_projects_the_deployments_bound_asset(tmp_path: Path, _capture):
+    """The slot's default is `openapi`; the deployment rebinds it, and deploy must report the bound document."""
+    root = _asset_terraform_solution(tmp_path)
+    workspace = (root / "workspace.yaml").read_text(encoding="utf-8")
+    workspace = workspace.replace("        - openapi\n  resources:", "        - api\n  resources:")
+    workspace = workspace.replace("  assets:\n    - openapi\n", "  assets:\n    - slot: api\n      asset: openapi\n")
+    _write(root, "workspace.yaml", workspace)
+    _write(root, "assets/alt/alt.json", "{}")
+    _write(
+        root,
+        "asset-alt.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: openapi-alt\nspec:\n"
+        "  source_path: assets/alt\n",
+    )
+    deployment = (root / "deployment.yaml").read_text(encoding="utf-8")
+    _write(root, "deployment.yaml", deployment + "  assets:\n    - slot: api\n      asset: openapi-alt\n")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    api = json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())["strata"]["assets"]["api"]
+    assert (api["asset"], api["files"]) == ("openapi-alt", ["alt.json"])
+
+
+def test_deploy_run_path_from_step_is_per_step_and_leads_to_the_files(tmp_path: Path, _capture):
+    root = _asset_terraform_solution(tmp_path)
+    _write(root, "terraform/apim/main.tf", "# apim\n")
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n"
+        "    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "    - name: tf_apim\n      tool: terraform\n      source:\n        source_path: terraform/apim\n"
+        "  execution:\n"
+        "    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
+        "      assets:\n        - openapi\n"
+        "    - name: apply_apim\n      provisioner: tf_apim\n      resources:\n        - r1\n"
+        "      depends_on:\n        - apply_infra\n"
+        "      assets:\n        - openapi\n"
+        "  resources:\n    - name: r1\n      resource: r1\n"
+        "  assets:\n    - openapi\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    seen = {}
+    for step_dir in ("infra", "terraform/apim"):
+        asset = json.loads((build_path / step_dir / "strata.auto.tfvars.json").read_text())["strata"]["assets"][
+            "openapi"
+        ]
+        seen[step_dir] = asset["path_from_step"]
+        assert (build_path / step_dir / asset["path_from_step"] / asset["files"][0]).exists()
+    assert seen == {"infra": "../assets/openapi", "terraform/apim": "../../assets/openapi"}
+
+
+def test_deploy_run_fails_clearly_when_an_asset_directory_was_not_built(tmp_path: Path, _capture):
+    root = _asset_terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    shutil.rmtree(build_path / "assets" / "openapi")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert any("Run `strata build run` first" in message for message in diagnostics.messages())
+    assert _capture == []
+
+
+def test_deploy_run_smoke_test_does_not_need_the_asset_directories(tmp_path: Path, _capture):
+    root = _asset_terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    shutil.rmtree(build_path / "assets" / "openapi")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, smoke_test=True)
+
+    assert diagnostics.ok
 
 
 def test_deploy_run_filters_by_stage(tmp_path: Path, _capture):

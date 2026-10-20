@@ -7,6 +7,86 @@ from pydantic import ValidationError
 from strata.models.asset_model import AssetModel
 
 
+def _location() -> dict:
+    return {"type": "git", "url": "https://example.com/c0062.git", "reference": "v1.4.0"}
+
+
+def _located_asset(**location_overrides) -> dict:
+    return {
+        "meta": {"name": "c0062-api"},
+        "spec": {"source_path": "openapi", "location": {**_location(), **location_overrides}},
+    }
+
+
+def test_asset_accepts_a_location():
+    model = AssetModel.model_validate(_located_asset())
+    location = model.spec.location
+    assert (location.url, location.reference, location.fetch.value) == (
+        "https://example.com/c0062.git",
+        "v1.4.0",
+        "strata",
+    )
+
+
+def test_asset_location_type_defaults_to_git():
+    data = _located_asset()
+    del data["spec"]["location"]["type"]
+    assert AssetModel.model_validate(data).spec.location.type.value == "git"
+
+
+def test_asset_rejects_remote_and_location_together():
+    data = _located_asset()
+    data["spec"]["remote"] = "infra"
+    with pytest.raises(ValidationError, match="either 'remote' or 'location'"):
+        AssetModel.model_validate(data)
+
+
+@pytest.mark.parametrize("asset_type", ["oci", "helm", "local"])
+def test_asset_location_supports_only_git(asset_type: str):
+    with pytest.raises(ValidationError, match="only type 'git'"):
+        AssetModel.model_validate(_located_asset(type=asset_type))
+
+
+def test_asset_location_requires_a_reference():
+    data = _located_asset()
+    del data["spec"]["location"]["reference"]
+    with pytest.raises(ValidationError):
+        AssetModel.model_validate(data)
+
+
+@pytest.mark.parametrize("reference", ["../x", "/abs", "a/../b"])
+def test_asset_location_rejects_a_traversing_reference(reference: str):
+    with pytest.raises(ValidationError):
+        AssetModel.model_validate(_located_asset(reference=reference))
+
+
+def test_asset_location_allows_a_slash_in_a_branch_reference():
+    assert AssetModel.model_validate(_located_asset(reference="feature/foo")).spec.location.reference == "feature/foo"
+
+
+@pytest.mark.parametrize("field", ["url", "reference"])
+@pytest.mark.parametrize("value", ["--upload-pack=touch pwned", "-n"])
+def test_asset_location_rejects_a_url_or_reference_git_would_read_as_an_option(field: str, value: str):
+    with pytest.raises(ValidationError, match="must not start with '-'"):
+        AssetModel.model_validate(_located_asset(**{field: value}))
+
+
+def test_asset_location_schema_does_not_offer_the_unsupported_integration_field():
+    location = AssetModel.model_json_schema()["$defs"]["AssetLocationModel"]
+    assert "integration" not in location["properties"]
+    assert location.get("additionalProperties") is False
+
+
+def test_asset_location_rejects_integration_rather_than_ignoring_it():
+    with pytest.raises(ValidationError, match="not supported on an asset location yet"):
+        AssetModel.model_validate(_located_asset(integration="corp-git"))
+
+
+def test_asset_location_rejects_unknown_fields():
+    with pytest.raises(ValidationError):
+        AssetModel.model_validate(_located_asset(branch="main"))
+
+
 def _minimal_asset() -> dict:
     return {
         "meta": {"name": "openapi"},

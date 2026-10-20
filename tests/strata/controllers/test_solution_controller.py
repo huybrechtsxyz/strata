@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Tests for SolutionController — root discovery, indexing and resolution."""
 
+import json
+import shutil
 from pathlib import Path
 
 import pytest
 
+from strata.controllers.build_controller import build_run
 from strata.controllers.deployment_resolution import resolve_deployment_chains
+from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import (
     DocumentRef,
     SolutionController,
@@ -13,7 +17,7 @@ from strata.controllers.solution_controller import (
 )
 from strata.models.common_models import PlatformKind
 from strata.models.workspace_model import WorkspaceModel
-from strata.services.workspace_service import effective_providers
+from strata.services.workspace_service import effective_assets, effective_providers
 
 MANIFEST = """\
 apiVersion: strata.huybrechts.xyz/v2
@@ -358,3 +362,44 @@ def test_shipped_example_rebinds_the_provider_slot_for_the_second_region():
     assert effective_providers(workspace, resolved["prd-deployment"]) == {"azure": "azure-main"}
     assert effective_providers(workspace, resolved["prd-north-deployment"]) == {"azure": "azure-north"}
     assert "region-north" not in resolved  # a partial base is never deployable on its own
+
+
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_binds_the_asset_slot_per_customer_without_a_manifest_remote():
+    """One `api` slot, three deployments, three different Asset documents; the customer
+    assets carry their own `location`, so no `remotes:` entry in strata.yaml names them."""
+    controller = SolutionController(_repo_config_dir())
+    assert controller.load().ok
+    resolved, diagnostics = resolve_deployment_chains(controller.index)
+    assert diagnostics.ok, diagnostics.messages()
+    workspace_entry = controller.index.get(PlatformKind.WORKSPACE, "main")
+    assert workspace_entry is not None
+    workspace = workspace_entry.model
+    assert isinstance(workspace, WorkspaceModel)
+
+    assert effective_assets(workspace, resolved["prd-deployment"]) == {"api": "api-default"}
+    assert effective_assets(workspace, resolved["prd-c0062-deployment"]) == {"api": "c0062-api"}
+    assert effective_assets(workspace, resolved["prd-c0063-deployment"]) == {"api": "c0063-api"}
+    assert controller.solution is not None
+    remote_names = {remote.name for remote in controller.solution.spec.remotes or []}
+    assert not remote_names & {"c0062-api", "c0063-api"}
+
+
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_builds_offline_and_projects_the_default_asset(tmp_path):
+    """The default deployment's asset comes from the local `infra` stand-in, so the example
+    builds end to end with no network; the customer deployments need their own repositories."""
+    root = tmp_path / "config"
+    shutil.copytree(_repo_config_dir(), root, ignore=shutil.ignore_patterns(".strata", "build"))
+    context = open_solution(root)
+    assert context.ok, context.diagnostics.messages()
+
+    assert build_run(context, "prd-deployment", tmp_path / "build").ok
+
+    tfvars = json.loads((tmp_path / "build" / "terraform" / "main" / "strata.auto.tfvars.json").read_text())
+    assert tfvars["strata"]["assets"]["api"] == {
+        "asset": "api-default",
+        "path": "assets/api",
+        "path_from_step": "../../assets/api",
+        "files": ["openapi.json"],
+    }

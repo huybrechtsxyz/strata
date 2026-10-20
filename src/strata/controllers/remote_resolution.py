@@ -27,6 +27,7 @@ one capability, not two. Importing from `strata.integrations` here is
 allowed (ADR-0003: a higher layer, `controllers/`, may import a lower one).
 """
 
+import shutil
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -58,6 +59,7 @@ def resolve_remote(
     *,
     auth: AuthenticationModel | None = None,
     resolved_values: Mapping[str, str] | None = None,
+    checkout_path: Path | None = None,
 ) -> Path:
     """Resolve `remote` to an existing directory on disk.
 
@@ -73,6 +75,9 @@ def resolve_remote(
         resolved_values: Fully-resolved deploy-time values `auth`'s key
             references resolve against — see `git_push.
             prepare_git_credentials()`. Ignored when `auth` is `None`.
+        checkout_path: Where the checkout lives when it is not a manifest remote's
+            own `.strata/remotes/<name>/<ref>` — an asset's `spec.location`
+            (docs/work/asset-slots.md A7) passes its own. Ignored for `type: local`.
 
     Returns:
         An existing directory. Never a path that might not exist yet — every
@@ -94,7 +99,7 @@ def resolve_remote(
         # bundled` in v1 terms, `url: "."`).
         return (root / remote.url).resolve()
 
-    checkout_path = layout.remote_checkout_path(root, remote.name, remote.reference)
+    checkout_path = checkout_path or layout.remote_checkout_path(root, remote.name, remote.reference)
     if checkout_path.exists():
         # Already there — whether strata cloned it earlier (ref is baked
         # into the path, so an existing directory cannot be stale) or CI/a
@@ -141,13 +146,14 @@ def _git_clone(
             `resolved_values` (`IntegrationError`, caught and converted here
             — a plain `Exception`, not a `StrataError`, that would otherwise
             escape as a raw traceback instead of this module's own
-            established error type).
+            established error type). A failure removes what was cloned, so a
+            retry starts clean rather than reusing a checkout at the wrong ref.
     """
     checkout_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with credential_env(auth, resolved_values, None) as env:
             clone_result = run_command(
-                ["git", "clone", remote.url, str(checkout_path)], env=env, timeout=_GIT_CLONE_TIMEOUT
+                ["git", "clone", "--", remote.url, str(checkout_path)], env=env, timeout=_GIT_CLONE_TIMEOUT
             )
             if not clone_result.is_successful:
                 raise RemoteResolutionError(
@@ -163,5 +169,11 @@ def _git_clone(
                         f"{checkout_result.stderr.strip()}"
                     )
     except IntegrationError as exc:
+        shutil.rmtree(checkout_path, ignore_errors=True)
         raise RemoteResolutionError(f"Remote '{remote.name}': {exc}") from exc
+    except RemoteResolutionError:
+        # `resolve_remote()` trusts an existing checkout path, so a half-made one (cloned, wrong ref)
+        # would otherwise be reused on the next run.
+        shutil.rmtree(checkout_path, ignore_errors=True)
+        raise
     return checkout_path

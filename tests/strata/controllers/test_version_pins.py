@@ -151,6 +151,59 @@ def test_remote_pin_against_fetch_external_is_an_error(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _with_assets(root: Path) -> Path:
+    header = "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\n"
+    location = "  location:\n    type: git\n    url: https://example.com/c.git\n    reference: v1\n"
+    _write(root, "asset-located.yaml", header + "meta:\n  name: located-api\nspec:\n  source_path: api\n" + location)
+    _write(
+        root,
+        "asset-external.yaml",
+        header + "meta:\n  name: external-api\nspec:\n  source_path: api\n" + location + "    fetch: external\n",
+    )
+    _write(
+        root,
+        "asset-remote.yaml",
+        header + "meta:\n  name: remote-api\nspec:\n  source_path: api\n  remote: strata-remote\n",
+    )
+    return root
+
+
+def test_asset_pin_against_a_located_asset_is_clean(tmp_path):
+    root = _with_assets(_solution(tmp_path, "  pins:\n    assets:\n      located-api: v2\n"))
+    assert _resolve(root).diagnostics.messages() == []
+
+
+def test_asset_pin_matching_no_asset_is_a_warning(tmp_path):
+    root = _with_assets(_solution(tmp_path, "  pins:\n    assets:\n      ghost-api: v2\n"))
+    context = _resolve(root)
+    assert context.ok
+    assert context.diagnostics.warnings[0].code == "stale_pin"
+    assert context.diagnostics.warnings[0].location == "spec.pins.assets.ghost-api"
+
+
+def test_asset_pin_against_a_manifest_remote_asset_is_a_warning_pointing_at_remotes(tmp_path):
+    root = _with_assets(_solution(tmp_path, "  pins:\n    assets:\n      remote-api: v2\n"))
+    context = _resolve(root)
+    assert context.ok
+    warning = context.diagnostics.warnings[0]
+    assert warning.code == "pin_not_applicable"
+    assert "pins.remotes" in warning.message
+
+
+def test_asset_pin_against_a_fetch_external_location_is_an_error(tmp_path):
+    root = _with_assets(_solution(tmp_path, "  pins:\n    assets:\n      external-api: v2\n"))
+    context = _resolve(root)
+    assert not context.ok
+    error = context.diagnostics.errors[0]
+    assert error.code == "pin_not_applicable"
+    assert "fetch:external" in error.message
+
+
+# ---------------------------------------------------------------------------
+# Attribution and scope
+# ---------------------------------------------------------------------------
+
+
 def test_finding_is_attributed_to_the_version_document(tmp_path):
     context = _resolve(_solution(tmp_path, "  pins:\n    images:\n      ghost: x\n"))
     assert "version.yaml" in str(context.diagnostics.warnings[0].source)

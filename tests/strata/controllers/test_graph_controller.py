@@ -139,3 +139,26 @@ def test_deployment_provider_binding_is_an_edge(tmp_path):
         ("spec.providers.0.provider", "azure-other", True),
         ("spec.providers.1.provider", "ghost", False),
     }
+
+
+def test_deployment_asset_binding_is_an_edge(tmp_path):
+    """An asset binding is a reference like any other — shown, resolved or not."""
+    root = _solution(tmp_path)
+    (root / "asset.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: c0062-api\nspec:\n  source_path: api\n",
+        encoding="utf-8",
+    )
+    (root / "deployment.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: north\nspec:\n"
+        "  workspace: main\n  environments: [prd]\n"
+        "  assets:\n    - {slot: api, asset: c0062-api}\n    - {slot: certs, asset: ghost}\n",
+        encoding="utf-8",
+    )
+
+    edges = build_reference_graph(open_solution(root).controller.index)
+
+    bindings = [e for e in edges if e.source_kind == "deployment" and e.target_kind == "asset"]
+    assert {(e.location, e.target_name, e.resolved) for e in bindings} == {
+        ("spec.assets.0.asset", "c0062-api", True),
+        ("spec.assets.1.asset", "ghost", False),
+    }

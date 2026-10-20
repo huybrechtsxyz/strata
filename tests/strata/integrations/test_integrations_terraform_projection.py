@@ -8,6 +8,8 @@ topology, one resource, one namespace, one firewall.
 
 import json
 
+import pytest
+
 from strata.integrations.resolved_context import ResolvedAssetInfo, ResolvedWorkspaceGraph
 from strata.integrations.terraform_projection import (
     build_strata_locals,
@@ -448,10 +450,49 @@ def test_build_strata_payload_assets_present():
     graph = ResolvedWorkspaceGraph(
         workspace=_workspace(resources=[], topology_name=None),
         providers={"hetzner_dc_eu_de": _provider()},
-        resolved_assets={"openapi": ResolvedAssetInfo(path="assets/openapi", files=["openapi.json", "openapi.xml"])},
+        resolved_assets={
+            "openapi": ResolvedAssetInfo(
+                path="assets/openapi", asset="openapi-doc", files=["openapi.json", "openapi.xml"]
+            )
+        },
     )
     payload = build_strata_payload(graph)
-    assert payload["assets"] == {"openapi": {"path": "assets/openapi", "files": ["openapi.json", "openapi.xml"]}}
+    assert payload["assets"] == {
+        "openapi": {
+            "asset": "openapi-doc",
+            "path": "assets/openapi",
+            "path_from_step": "assets/openapi",
+            "files": ["openapi.json", "openapi.xml"],
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    ("step_root", "expected"),
+    [
+        (".", "assets/api"),
+        ("infra", "../assets/api"),
+        ("terraform/apim", "../../assets/api"),
+        ("a/b/c", "../../../assets/api"),
+    ],
+)
+def test_assets_path_from_step_is_relative_to_the_step_directory(step_root: str, expected: str):
+    graph = ResolvedWorkspaceGraph(
+        workspace=_workspace(resources=[], topology_name=None),
+        providers={"hetzner_dc_eu_de": _provider()},
+        resolved_assets={"api": ResolvedAssetInfo(path="assets/api", asset="api-doc", files=["api.json"])},
+        step_root=step_root,
+    )
+
+    asset = build_strata_payload(graph)["assets"]["api"]
+
+    assert asset["path"] == "assets/api"
+    assert asset["path_from_step"] == expected
+
+
+def test_build_strata_locals_always_defines_strata_assets():
+    assert "strata_assets = {" in build_strata_locals([])
+    assert "strata_assets = {" in build_strata_locals(["variables.db_password"])
 
 
 # ---------------------------------------------------------------------------

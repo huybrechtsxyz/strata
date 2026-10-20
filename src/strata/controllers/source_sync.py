@@ -43,9 +43,11 @@ from pathlib import Path
 from typing import Any
 
 from strata.controllers.remote_resolution import resolve_remote
+from strata.integrations.resolved_context import ResolvedAssetInfo
 from strata.models.asset_model import AssetModel
 from strata.models.common_models import SourceModel
 from strata.models.solution_model import SolutionRemoteModel
+from strata.utils import layout
 from strata.utils.errors import SystemError
 from strata.utils.path_conventions import fill_pattern, segment_tokens
 from strata.utils.path_safety import resolve_within
@@ -166,16 +168,62 @@ def sync_source(
     return destination
 
 
+def resolved_asset_info(build_path: Path, slot: str, asset: str) -> ResolvedAssetInfo:
+    """Describe an already-materialised asset slot directory from what is on disk.
+
+    Shared by `build run` (right after `sync_asset()`) and `deploy run`, which
+    rebuilds its own graph and so cannot reuse the build's in-memory result:
+    both must project the same `strata.assets`. `asset` is the document bound to
+    `slot` (`effective_assets()`); it is not recoverable from disk.
+
+    Raises:
+        SourceSyncError: the directory does not exist, i.e. `build run` has not
+            materialised this slot into `build_path`.
+    """
+    asset_path = build_path / "assets" / slot
+    if not asset_path.is_dir():
+        raise SourceSyncError(
+            f"Asset slot '{slot}' has not been materialised: '{asset_path}' does not exist. "
+            "Run `strata build run` first."
+        )
+    return ResolvedAssetInfo(
+        path=asset_path.relative_to(build_path).as_posix(),
+        asset=asset,
+        # Recursive and files-only: a glob `source_path` preserves nested structure
+        # (docs/design/asset-management.md), so a shallow listing would both hide
+        # real files and surface directory names as though they were files.
+        files=sorted(p.relative_to(asset_path).as_posix() for p in asset_path.rglob("*") if p.is_file()),
+    )
+
+
+def _reset_slot_directory(build_path: Path, destination: Path, asset_name: str) -> None:
+    """Remove what an earlier build left in `destination`, so every file there was written by this run.
+
+    Only the slot's own directory, never the shared `assets/` root: a custom `--build-path` is not
+    cleaned by default and may hold content this build does not own.
+    """
+    if not destination.exists() and not destination.is_symlink():
+        return
+    try:
+        resolve_within(build_path / "assets", destination)
+        shutil.rmtree(destination)
+    except (ValueError, OSError) as exc:
+        raise SourceSyncError(f"Asset '{asset_name}': could not clear '{destination}' before copying: {exc}") from exc
+
+
 def sync_asset(
     root: Path,
     build_path: Path,
     asset: AssetModel,
     properties: dict[str, Any],
     remotes: dict[str, SolutionRemoteModel],
+    *,
+    slot: str | None = None,
 ) -> Path:
-    """Copy `asset`'s files into `build_path/assets/<name>/`, filling its
+    """Copy `asset`'s files into `build_path/assets/<slot>/`, filling its
     `source_path` template against `properties` first (docs/design/
-    asset-management.md Phase 3).
+    asset-management.md Phase 3). `slot` defaults to the asset's own name,
+    which is what a bare-string workspace slot means.
 
     Structurally parallel to `sync_source()` above — same remote
     resolution, same byte-for-byte copy, same error class — with three
@@ -208,10 +256,12 @@ def sync_asset(
             `spec.properties` (`ResolvedWorkspaceGraph.properties`) —
             fills `asset.spec.source_path`'s `{name}` segment tokens.
         remotes: Every declared remote, keyed by name.
+        slot: The workspace asset slot being filled; keys the destination so the
+            on-disk path stays stable when a slot is bound to another document.
 
     Returns:
         The directory `asset`'s files were copied into
-        (`build_path/assets/<asset.meta.name>/`).
+        (`build_path/assets/<slot>/`).
 
     Raises:
         SourceSyncError: a `{name}` token has no matching `properties` key,
@@ -251,15 +301,31 @@ def sync_asset(
         raise SourceSyncError(f"Asset '{asset.meta.name}': {exc}") from exc
 
     remote = None
-    if asset.spec.remote is not None:
-        remote = remotes.get(asset.spec.remote)
-        if remote is None:
-            raise SourceSyncError(
-                f"Asset '{asset.meta.name}' names remote '{asset.spec.remote}', which is not declared in this solution."
-            )
-
-    repo_root = resolve_remote(root, remote)
-    destination = build_path / "assets" / asset.meta.name
+    if asset.spec.location is not None:
+        location = asset.spec.location
+        repo_root = resolve_remote(
+            root,
+            SolutionRemoteModel(
+                name=asset.meta.name,
+                type=location.type,
+                url=location.url,
+                reference=location.reference,
+                fetch=location.fetch,
+                integration=None,
+                description=None,
+            ),
+            checkout_path=layout.asset_checkout_path(root, asset.meta.name, location.reference),
+        )
+    else:
+        if asset.spec.remote is not None:
+            remote = remotes.get(asset.spec.remote)
+            if remote is None:
+                raise SourceSyncError(
+                    f"Asset '{asset.meta.name}' names remote '{asset.spec.remote}', "
+                    "which is not declared in this solution."
+                )
+        repo_root = resolve_remote(root, remote)
+    destination = build_path / "assets" / (slot or asset.meta.name)
 
     if not _has_glob_magic(filled_path):
         origin = repo_root / filled_path
@@ -271,6 +337,7 @@ def sync_asset(
             raise SourceSyncError(
                 f"Asset '{asset.meta.name}': path '{filled_path}' does not exist under '{repo_root}'."
             )
+        _reset_slot_directory(build_path, destination, asset.meta.name)
         destination.mkdir(parents=True, exist_ok=True)
         try:
             if origin.is_dir():
@@ -293,12 +360,15 @@ def sync_asset(
         )
 
     base_dir = repo_root / _glob_base(filled_path)
-    destination.mkdir(parents=True, exist_ok=True)
     for match in matches:
+        # Checked for every match before the slot is cleared, so an escaping one cannot cost a good earlier build.
         try:
             resolve_within(repo_root, match)
         except ValueError as exc:
             raise SourceSyncError(f"Asset '{asset.meta.name}': {exc}") from exc
+    _reset_slot_directory(build_path, destination, asset.meta.name)
+    destination.mkdir(parents=True, exist_ok=True)
+    for match in matches:
         target = destination / match.relative_to(base_dir)
         target.parent.mkdir(parents=True, exist_ok=True)
         try:

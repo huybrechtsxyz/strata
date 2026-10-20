@@ -26,6 +26,7 @@ existence already vetted; an unresolved reference produces no duplicate
 finding here — `validate_references` already reported it.
 """
 
+from collections.abc import Callable
 from itertools import combinations
 from pathlib import Path
 from typing import Any, cast
@@ -150,6 +151,10 @@ def _check_deployments(
         diagnostics.extend(_check_deployment_tenant_geography(index, deployment), source=str(entry.source))
         diagnostics.extend(
             _check_deployment_provider_bindings(index, deployment, uses_extends=raw.spec.extends is not None),
+            source=str(entry.source),
+        )
+        diagnostics.extend(
+            _check_deployment_asset_bindings(index, deployment, uses_extends=raw.spec.extends is not None),
             source=str(entry.source),
         )
     return diagnostics
@@ -289,6 +294,90 @@ def _check_deployment_tenant_geography(index: DocumentIndex, deployment: Deploym
     return diagnostics
 
 
+def _check_slot_bindings(
+    index: DocumentIndex,
+    deployment: DeploymentModel,
+    *,
+    noun: str,
+    field: str,
+    bindings: list[tuple[str, str]],
+    defaults_of: Callable[[WorkspaceModel], dict[str, str]],
+    uses_extends: bool,
+    on_rebound: Callable[[str, str, str, str], Diagnostics] | None = None,
+) -> Diagnostics:
+    """The slot-binding rules shared by providers and assets (docs/design/provider-slots.md,
+    docs/work/asset-slots.md): `{noun}_slot_unknown` (error) and `{noun}_binding_redundant` (warning).
+
+    `bindings` are the deployment's `(slot, document)` pairs and `defaults_of` reads the workspace's
+    `{slot: default document}`. `on_rebound(slot, default, bound, inherited)` is called for a binding that
+    names a different document than the slot's default, for checks only one noun has (a provider's type).
+
+    `*_binding_redundant` is skipped when the *raw* document uses `extends`: after the merge a child
+    resetting a base's binding back to the default is indistinguishable from a pointless one, and
+    resetting is legitimate.
+
+    Only a deployable (non-`partial`) document is checked: a partial base's workspace may still be
+    overridden by whichever leaf extends it, so judging its slots against its own `workspace` could be a
+    false positive — the leaf's merged result is checked instead. Existence of the bound document is
+    `validate_references`' job, so a missing one is skipped here.
+    """
+    diagnostics = Diagnostics()
+    if not bindings or deployment.spec.partial or deployment.spec.workspace is None:
+        return diagnostics
+    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+    if workspace_entry is None:
+        return diagnostics  # reference existence already reports this
+    workspace = cast(WorkspaceModel, workspace_entry.model)
+    defaults = defaults_of(workspace)
+    # The merged binding may come from a base in another file; the finding is attributed to this one.
+    inherited = " (the binding may be inherited through 'extends')" if uses_extends else ""
+
+    for slot, bound_name in bindings:
+        default_name = defaults.get(slot)
+        if default_name is None:
+            diagnostics.error(
+                f"Deployment '{deployment.meta.name}': {noun} binding names slot '{slot}', which "
+                f"workspace '{workspace.meta.name}' does not declare. Available: {sorted(defaults)}{inherited}",
+                location=f"spec.{field}",
+                code=f"{noun}_slot_unknown",
+            )
+            continue
+        if bound_name == default_name:
+            if not uses_extends:
+                diagnostics.warning(
+                    f"Deployment '{deployment.meta.name}': {noun} binding for slot '{slot}' names "
+                    f"'{bound_name}', which is already the workspace default — it has no effect.",
+                    location=f"spec.{field}",
+                    code=f"{noun}_binding_redundant",
+                )
+            continue
+        if on_rebound is not None:
+            diagnostics.extend(on_rebound(slot, default_name, bound_name, inherited))
+    return diagnostics
+
+
+def _check_deployment_asset_bindings(
+    index: DocumentIndex, deployment: DeploymentModel, *, uses_extends: bool
+) -> Diagnostics:
+    """Check a deployment's `spec.assets` slot bindings against its workspace (docs/work/asset-slots.md).
+
+    - `asset_slot_unknown` (error) — the slot is not declared by the workspace;
+      `effective_assets()` ignores it, so without this it would silently do nothing.
+    - `asset_binding_redundant` (warning) — the binding names the slot's own default.
+
+    No type check: every asset is the same kind. See `_check_slot_bindings()` for the shared rules.
+    """
+    return _check_slot_bindings(
+        index,
+        deployment,
+        noun="asset",
+        field="assets",
+        bindings=[(b.slot, b.asset) for b in deployment.spec.assets or []],
+        defaults_of=lambda workspace: {a.slot: a.asset for a in workspace.spec.assets or []},
+        uses_extends=uses_extends,
+    )
+
+
 def _check_deployment_provider_bindings(
     index: DocumentIndex, deployment: DeploymentModel, *, uses_extends: bool
 ) -> Diagnostics:
@@ -300,63 +389,39 @@ def _check_deployment_provider_bindings(
     - `provider_type_mismatch` (error) — the bound Provider's `spec.type` differs from
       the slot's default; rebinding is for another region/account of the same
       platform, and IaC addressed through the slot expects that platform.
-    - `provider_binding_redundant` (warning) — the binding names the slot's own
-      default. Skipped when the *raw* document uses `extends`: after the merge a
-      child resetting a base's binding back to the default is indistinguishable
-      from a pointless one, and resetting is legitimate.
+    - `provider_binding_redundant` (warning) — the binding names the slot's own default.
 
-    Only a deployable (non-`partial`) document is checked: a partial base's
-    workspace may still be overridden by whichever leaf extends it, so judging its
-    slots against its own `workspace` could be a false positive — the leaf's merged
-    result is checked instead. Existence of the bound Provider document is
-    `validate_references`' job, so a missing one is skipped here.
+    The first and last come from `_check_slot_bindings()`, shared with assets.
     """
-    diagnostics = Diagnostics()
-    bindings = deployment.spec.providers
-    if not bindings or deployment.spec.partial or deployment.spec.workspace is None:
-        return diagnostics
-    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-    if workspace_entry is None:
-        return diagnostics  # reference existence already reports this
-    workspace = cast(WorkspaceModel, workspace_entry.model)
-    defaults = {slot.slot: slot.provider for slot in workspace.spec.providers}
-    # The merged binding may come from a base in another file; the finding is attributed to this one.
-    inherited = " (the binding may be inherited through 'extends')" if uses_extends else ""
 
-    for binding in bindings:
-        default_name = defaults.get(binding.slot)
-        if default_name is None:
-            diagnostics.error(
-                f"Deployment '{deployment.meta.name}': provider binding names slot '{binding.slot}', which "
-                f"workspace '{workspace.meta.name}' does not declare. Available: {sorted(defaults)}{inherited}",
-                location="spec.providers",
-                code="provider_slot_unknown",
-            )
-            continue
-        if binding.provider == default_name:
-            if not uses_extends:
-                diagnostics.warning(
-                    f"Deployment '{deployment.meta.name}': provider binding for slot '{binding.slot}' names "
-                    f"'{binding.provider}', which is already the workspace default — it has no effect.",
-                    location="spec.providers",
-                    code="provider_binding_redundant",
-                )
-            continue
-        bound_entry = index.get(PlatformKind.PROVIDER, binding.provider)
+    def type_mismatch(slot: str, default_name: str, bound_name: str, inherited: str) -> Diagnostics:
+        found = Diagnostics()
+        bound_entry = index.get(PlatformKind.PROVIDER, bound_name)
         default_entry = index.get(PlatformKind.PROVIDER, default_name)
         if bound_entry is None or default_entry is None:
-            continue  # reference existence already reports this
+            return found  # reference existence already reports this
         bound_type = cast(ProviderModel, bound_entry.model).spec.type
         default_type = cast(ProviderModel, default_entry.model).spec.type
         if bound_type != default_type:
-            diagnostics.error(
-                f"Deployment '{deployment.meta.name}': slot '{binding.slot}' defaults to '{default_name}' "
-                f"(type '{default_type}'), but is bound to '{binding.provider}' (type '{bound_type}') — a "
+            found.error(
+                f"Deployment '{deployment.meta.name}': slot '{slot}' defaults to '{default_name}' "
+                f"(type '{default_type}'), but is bound to '{bound_name}' (type '{bound_type}') — a "
                 "binding must keep the provider type." + inherited,
                 location="spec.providers",
                 code="provider_type_mismatch",
             )
-    return diagnostics
+        return found
+
+    return _check_slot_bindings(
+        index,
+        deployment,
+        noun="provider",
+        field="providers",
+        bindings=[(b.slot, b.provider) for b in deployment.spec.providers or []],
+        defaults_of=lambda workspace: {s.slot: s.provider for s in workspace.spec.providers},
+        uses_extends=uses_extends,
+        on_rebound=type_mismatch,
+    )
 
 
 # ---------------------------------------------------------------------------

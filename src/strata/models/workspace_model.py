@@ -388,6 +388,32 @@ class WorkspaceProviderModel(PlatformBaseModel):
         return value
 
 
+class WorkspaceAssetModel(PlatformBaseModel):
+    """A named asset slot with its default Asset document (docs/work/asset-slots.md).
+
+    `slot` is the stable key a step selects (`step.assets`) and IaC addresses
+    (`strata.assets.<slot>`, `build_path/assets/<slot>/`); `asset` is the
+    document bound by default. A bare string is shorthand for a slot named
+    after its own document, so a workspace that never rebinds anything reads
+    exactly as before. Same shape and rule as `WorkspaceProviderModel`.
+    """
+
+    model_config = ConfigDict(json_schema_extra=scalar_shorthand_schema(PlatformName))
+
+    slot: PlatformName = Field(description="Stable slot name; steps select it and IaC addresses strata.assets.<slot>")
+    asset: Annotated[PlatformName, References(PlatformKind.ASSET)] = Field(
+        description="Name of the Asset document bound to this slot by default"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_scalar_shorthand(cls, value: Any) -> Any:
+        """Treat a bare string as `{slot: <string>, asset: <string>}`."""
+        if isinstance(value, str):
+            return {"slot": value, "asset": value}
+        return value
+
+
 class WorkspaceSpecModel(PlatformBaseModel):
     """Workspace specification: the static declaration of everything a solution needs.
 
@@ -476,13 +502,13 @@ class WorkspaceSpecModel(PlatformBaseModel):
     networks: list[Annotated[PlatformName, References(PlatformKind.NETWORK)]] | None = Field(
         None, description="Network document names"
     )
-    assets: list[Annotated[PlatformName, References(PlatformKind.ASSET)]] | None = Field(
+    assets: list[WorkspaceAssetModel] | None = Field(
         None,
-        description="Asset document names this workspace may materialise into a build (docs/design/"
-        "asset-management.md) — Phase 1 existence check, same pattern as 'namespaces'/'firewalls'/"
-        "'dns_zones'/'networks'. A step claims which of these it needs via its own 'assets' field, "
-        "cross-checked in validate_execution() below (a second, independent set from 'target_names' — "
-        "an asset is materialised input, not a provisioning target).",
+        description="Asset slots this workspace may materialise into a build (docs/design/asset-management.md, "
+        "docs/work/asset-slots.md): an Asset document name, or {slot, asset} to give the slot a stable name. "
+        "A step claims which slots it needs via its own 'assets' field, cross-checked in "
+        "validate_execution() below (a second, independent set from 'target_names' — an asset is "
+        "materialised input, not a provisioning target).",
     )
     cve_policy: CveMaxSeverityPolicyModel | None = Field(
         None,
@@ -516,7 +542,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         if self.networks:
             check_unique_names(self.networks, "network names")
         if self.assets:
-            check_unique_names(self.assets, "asset names")
+            check_unique_names([a.slot for a in self.assets], "asset slots")
         return self
 
     @model_validator(mode="after")
@@ -634,7 +660,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         on resources that reference the same firewall).
 
         `step.assets` (docs/design/asset-management.md Phase 2) is checked
-        against a second, independent `asset_names` set below — deliberately
+        against a second, independent `asset_slots` set below — deliberately
         NOT folded into any of the six fields above: an asset is
         materialised input a step consumes, not a provisioning target a
         step "acts on".
@@ -661,7 +687,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         dns_names = set(self.dns_zones or [])
         firewall_names = set(self.firewalls or [])
         network_names = set(self.networks or [])
-        asset_names = set(self.assets or [])
+        asset_slots = {a.slot for a in (self.assets or [])}
 
         errors = []
         for step in self.execution:
@@ -686,7 +712,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
                 if network not in network_names:
                     errors.append(f"Execution step '{step.name}' references undefined network '{network}'")
             for asset in step.assets or []:
-                if asset not in asset_names:
+                if asset not in asset_slots:
                     errors.append(f"Execution step '{step.name}' references undefined asset '{asset}'")
         if errors:
             raise ValueError("; ".join(errors))

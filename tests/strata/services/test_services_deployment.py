@@ -162,6 +162,28 @@ def test_merge_providers_child_wins_on_same_slot():
     ]
 
 
+def test_merge_assets_keeps_base_bindings_for_other_slots():
+    merged = merge_deployment_specs(
+        {"assets": [{"slot": "api", "asset": "region-api"}]},
+        {"assets": [{"slot": "certs", "asset": "c0062-certs"}]},
+    )
+    assert merged["assets"] == [
+        {"slot": "api", "asset": "region-api"},
+        {"slot": "certs", "asset": "c0062-certs"},
+    ]
+
+
+def test_merge_assets_child_wins_on_same_slot():
+    merged = merge_deployment_specs(
+        {"assets": [{"slot": "api", "asset": "region-api"}, {"slot": "certs", "asset": "base-certs"}]},
+        {"assets": [{"slot": "api", "asset": "c0062-api"}]},
+    )
+    assert merged["assets"] == [
+        {"slot": "api", "asset": "c0062-api"},
+        {"slot": "certs", "asset": "base-certs"},
+    ]
+
+
 def test_merge_unkeyed_lists_are_replaced():
     """A list not in the merge-key table is still replaced wholesale."""
     merged = merge_deployment_specs(

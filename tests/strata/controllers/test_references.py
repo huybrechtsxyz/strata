@@ -129,6 +129,22 @@ def test_unknown_document_reference_is_an_error(tmp_path):
     assert result.errors[0].location == "spec.providers.0.provider"
 
 
+def test_asset_slot_bound_to_a_missing_document_is_an_error(tmp_path):
+    """A slot's default document is checked like any other reference."""
+    root = _solution(tmp_path)
+    workspace = root / "workspace.yaml"
+    workspace.write_text(
+        workspace.read_text(encoding="utf-8") + "  assets:\n    - slot: api\n      asset: no-such-asset\n",
+        encoding="utf-8",
+    )
+    context = open_solution(root)
+    assert context.diagnostics.ok, context.diagnostics.messages()
+
+    result = validate_references(context.controller.index, context.controller.solution)
+
+    assert [(e.code, e.location) for e in result.errors] == [("unknown_reference", "spec.assets.0.asset")]
+
+
 def test_unknown_remote_is_an_error(tmp_path):
     """Remotes resolve against the manifest, not the document index."""
     result = _check(tmp_path, remote="nowhere")
@@ -219,7 +235,7 @@ def test_workspace_references_are_discovered_from_its_own_fields():
         "spec.firewalls[]",
         "spec.dns_zones[]",
         "spec.networks[]",
-        "spec.assets[]",
+        "spec.assets[].asset",
         "spec.resources[].resource",
         "spec.provisioners[].source.remote",
         "spec.provisioners[].integration",

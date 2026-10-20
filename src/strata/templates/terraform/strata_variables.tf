@@ -43,6 +43,7 @@ variable "strata" {
     })
 
     providers = map(object({
+      provider      = string
       type          = string
       region        = string
       display_name  = string
@@ -98,9 +99,13 @@ variable "strata" {
       custom_labels  = map(string)
     }))
 
+    # Keyed by workspace asset slot. Read it through local.strata_assets (strata_locals.tf)
+    # instead of joining paths yourself: dir and files are already relative to this root module.
     assets = map(object({
-      path  = string
-      files = list(string)
+      asset          = string       # Asset document bound to the slot for this deployment
+      path           = string       # relative to the build root, for tooling
+      path_from_step = string       # the same directory, relative to this root module
+      files          = list(string) # files below that directory, recursive, relative to it
     }))
 
     dns        = map(any)

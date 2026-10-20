@@ -10,6 +10,16 @@ from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
 
 
+def _overlay_bindings(defaults: dict[str, str], bindings: list[tuple[str, str]]) -> dict[str, str]:
+    """`defaults` with each `(slot, document)` binding applied. A binding naming a slot that
+    is not in `defaults` is ignored; reporting it is validation's job."""
+    effective = dict(defaults)
+    for slot, document in bindings:
+        if slot in effective:
+            effective[slot] = document
+    return effective
+
+
 def effective_providers(workspace: WorkspaceModel, deployment: DeploymentModel | None) -> dict[str, str]:
     """`{slot: provider document name}` — the workspace's defaults, overlaid by
     the deployment's bindings (docs/design/provider-slots.md).
@@ -17,12 +27,17 @@ def effective_providers(workspace: WorkspaceModel, deployment: DeploymentModel |
     A binding naming a slot the workspace does not declare is ignored here;
     reporting it is Phase 2 validation's job (`provider_slot_unknown`).
     """
-    binding = {slot.slot: slot.provider for slot in workspace.spec.providers}
-    if deployment is not None:
-        for bound in deployment.spec.providers or []:
-            if bound.slot in binding:
-                binding[bound.slot] = bound.provider
-    return binding
+    bound = [(b.slot, b.provider) for b in (deployment.spec.providers or [])] if deployment is not None else []
+    return _overlay_bindings({s.slot: s.provider for s in workspace.spec.providers}, bound)
+
+
+def effective_assets(workspace: WorkspaceModel, deployment: DeploymentModel | None) -> dict[str, str]:
+    """`{slot: asset document name}` — the workspace's defaults, overlaid by the
+    deployment's bindings (docs/work/asset-slots.md). Same rule as `effective_providers()`;
+    an unknown slot is ignored here and reported by validation (`asset_slot_unknown`).
+    """
+    bound = [(b.slot, b.asset) for b in (deployment.spec.assets or [])] if deployment is not None else []
+    return _overlay_bindings({a.slot: a.asset for a in (workspace.spec.assets or [])}, bound)
 
 
 class WorkspaceService(BaseService[WorkspaceModel]):

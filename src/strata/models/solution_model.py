@@ -53,7 +53,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
-from strata.utils.path_safety import validate_no_path_traversal, validate_relative_path
+from strata.utils.path_safety import validate_no_path_traversal, validate_not_option_like, validate_relative_path
 
 
 class RemoteType(str, Enum):
@@ -193,6 +193,14 @@ class SolutionRemoteModel(PlatformBaseModel):
         """
         if v is not None:
             validate_no_path_traversal(v)
+            validate_not_option_like(v, "reference")
+        return v
+
+    @field_validator("url")
+    @classmethod
+    def validate_url_not_option_like(cls, v: str) -> str:
+        """`url` is a positional argument to `git clone`; see `validate_not_option_like()`."""
+        validate_not_option_like(v, "url")
         return v
 
     @model_validator(mode="after")

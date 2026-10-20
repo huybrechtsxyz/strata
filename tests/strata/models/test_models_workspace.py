@@ -326,8 +326,55 @@ def test_workspace_rejects_duplicate_asset_names():
     """Duplicate names within spec.assets are rejected."""
     data = _minimal_workspace()
     data["spec"]["assets"] = ["openapi", "openapi"]
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="asset slots"):
         WorkspaceModel.model_validate(data)
+
+
+def test_workspace_asset_bare_string_is_a_slot_named_after_its_document():
+    data = _minimal_workspace()
+    data["spec"]["assets"] = ["openapi"]
+    model = WorkspaceModel.model_validate(data)
+    assert [(a.slot, a.asset) for a in model.spec.assets] == [("openapi", "openapi")]
+
+
+def test_workspace_asset_slots_mix_bare_and_object_forms():
+    data = _minimal_workspace()
+    data["spec"]["assets"] = ["openapi", {"slot": "api", "asset": "api-default"}]
+    model = WorkspaceModel.model_validate(data)
+    assert [(a.slot, a.asset) for a in model.spec.assets] == [("openapi", "openapi"), ("api", "api-default")]
+
+
+def test_workspace_rejects_duplicate_asset_slots_across_forms():
+    """Uniqueness is on the slot, whichever form declares it."""
+    data = _minimal_workspace()
+    data["spec"]["assets"] = ["api", {"slot": "api", "asset": "api-default"}]
+    with pytest.raises(ValidationError, match="asset slots"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_allows_two_asset_slots_on_the_same_document():
+    data = _minimal_workspace()
+    data["spec"]["assets"] = [{"slot": "a", "asset": "shared"}, {"slot": "b", "asset": "shared"}]
+    assert len(WorkspaceModel.model_validate(data).spec.assets) == 2
+
+
+def test_workspace_step_selects_an_asset_by_slot_not_by_document_name():
+    data = _workspace_with_execution(assets=["api"])
+    data["spec"]["assets"] = [{"slot": "api", "asset": "api-default"}]
+    assert WorkspaceModel.model_validate(data).spec.execution[0].assets == ["api"]
+
+    data = _workspace_with_execution(assets=["api-default"])
+    data["spec"]["assets"] = [{"slot": "api", "asset": "api-default"}]
+    with pytest.raises(ValidationError, match="references undefined asset 'api-default'"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_asset_json_schema_accepts_bare_string():
+    """Exported editor schema must not flag the shorthand every existing workspace uses."""
+    schema = WorkspaceModel.model_json_schema()
+    document = WorkspaceModel.model_validate(_minimal_workspace()).model_dump(mode="json", exclude_none=True)
+    document["spec"]["assets"] = ["openapi", {"slot": "api", "asset": "api-default"}]
+    jsonschema.validate(document, schema)
 
 
 def test_workspace_execution_step_accepts_valid_asset_reference():

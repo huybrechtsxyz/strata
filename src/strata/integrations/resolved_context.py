@@ -178,6 +178,10 @@ class ResolvedWorkspaceGraph:
     deployment: DeploymentModel | None = None
     version: VersionModel | None = None
     resolved_assets: dict[str, "ResolvedAssetInfo"] = field(default_factory=dict)
+    step_root: str = "."
+    """The directory the step reading this graph runs in, relative to the build
+    root (POSIX, e.g. 'terraform/apim'); '.' when no step is involved.
+    `build_strata_assets()` derives each asset's `path_from_step` from it."""
 
 
 @dataclass(frozen=True)
@@ -219,6 +223,8 @@ class ResolvedAssetInfo:
     """
 
     path: str
-    """Build-relative, e.g. 'assets/openapi'."""
+    """Build-relative, e.g. 'assets/openapi' (keyed by the workspace slot)."""
+    asset: str
+    """The Asset document bound to the slot for this deployment."""
     files: list[str] = field(default_factory=list)
     """Sorted filenames at that path."""

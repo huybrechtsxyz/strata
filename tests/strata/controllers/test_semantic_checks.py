@@ -493,6 +493,138 @@ def test_partial_base_provider_bindings_are_not_checked_on_their_own(tmp_path):
     assert _findings(context) == {}
 
 
+# ---------------------------------------------------------------------------
+# Deployment -> Workspace asset slots (docs/work/asset-slots.md)
+# ---------------------------------------------------------------------------
+
+
+def _asset_doc(root: Path, name: str) -> None:
+    _write(
+        root,
+        f"asset-{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: {name}\nspec:\n  source_path: api\n",
+    )
+
+
+def _asset_slot_solution(tmp_path: Path) -> Path:
+    """The base solution whose workspace declares the asset slot `api` (default `api-default`)."""
+    root = _base_solution(tmp_path)
+    _asset_doc(root, "api-default")
+    _asset_doc(root, "api-other")
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "providers: [azure-main]",
+            "providers: [azure-main]\n  assets:\n    - {slot: api, asset: api-default}",
+        ),
+        encoding="utf-8",
+    )
+    return root
+
+
+def _bind_assets(root: Path, *bindings: tuple[str, str]) -> None:
+    lines = "".join(f"    - slot: {slot}\n      asset: {asset}\n" for slot, asset in bindings)
+    path = root / "deployment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("  tenant: c0062\n", f"  tenant: c0062\n  assets:\n{lines}", 1),
+        encoding="utf-8",
+    )
+
+
+def _asset_findings(context) -> dict[str, str]:
+    """`{code: severity}` for every asset-binding finding."""
+    found = {d.code: "error" for d in context.diagnostics.errors if d.code and d.code.startswith("asset_")}
+    found.update({d.code: "warning" for d in context.diagnostics.warnings if d.code and d.code.startswith("asset_")})
+    return found
+
+
+def test_asset_binding_to_another_document_is_clean(tmp_path):
+    root = _asset_slot_solution(tmp_path)
+    _bind_assets(root, ("api", "api-other"))
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _asset_findings(context) == {}
+
+
+def test_asset_binding_unknown_slot_is_an_error(tmp_path):
+    root = _asset_slot_solution(tmp_path)
+    _bind_assets(root, ("ghost", "api-other"))
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _asset_findings(context) == {"asset_slot_unknown": "error"}
+    assert any("ghost" in m and "api" in m for m in context.diagnostics.messages())
+
+
+def test_asset_binding_to_a_workspace_without_asset_slots_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _asset_doc(root, "api-other")
+    _bind_assets(root, ("api", "api-other"))
+
+    context = _resolve(root)
+    assert _asset_findings(context) == {"asset_slot_unknown": "error"}
+
+
+def test_asset_binding_to_the_default_is_a_warning(tmp_path):
+    root = _asset_slot_solution(tmp_path)
+    _bind_assets(root, ("api", "api-default"))
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()  # a warning, not a failure
+    assert _asset_findings(context) == {"asset_binding_redundant": "warning"}
+
+
+def test_asset_binding_reset_to_default_via_extends_is_not_flagged(tmp_path):
+    root = _asset_slot_solution(tmp_path)
+    _partial_base(root, "other-base", "  assets:\n    - slot: api\n      asset: api-other\n")
+    _extend_deployment(root, "other-base")
+    _bind_assets(root, ("api", "api-default"))
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _asset_findings(context) == {}
+
+
+def test_unknown_asset_slot_inherited_through_extends_is_reported(tmp_path):
+    root = _asset_slot_solution(tmp_path)
+    _partial_base(root, "ghost-base", "  assets:\n    - slot: ghost\n      asset: api-other\n")
+    _extend_deployment(root, "ghost-base")
+
+    context = _resolve(root)
+    assert _asset_findings(context) == {"asset_slot_unknown": "error"}
+    assert any("inherited through 'extends'" in m for m in context.diagnostics.messages())
+
+
+def test_partial_base_asset_bindings_are_not_checked_on_their_own(tmp_path):
+    root = _asset_slot_solution(tmp_path)
+    _partial_base(root, "lonely-base", "  workspace: main\n  assets:\n    - slot: ghost\n      asset: api-other\n")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _asset_findings(context) == {}
+
+
+def test_asset_binding_to_a_missing_document_is_a_reference_error_not_a_binding_finding(tmp_path):
+    root = _asset_slot_solution(tmp_path)
+    _bind_assets(root, ("api", "no-such-asset"))
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _asset_findings(context) == {}
+    assert any(d.code == "unknown_reference" for d in context.diagnostics.errors)
+
+
+def test_provider_and_asset_findings_stay_separate(tmp_path):
+    root = _asset_slot_solution(tmp_path)
+    _bind_assets(root, ("ghost", "api-other"))
+    _bind_in_deployment(root, ("azure-main", "azure-main"))
+
+    context = _resolve(root)
+    assert _asset_findings(context) == {"asset_slot_unknown": "error"}
+    assert _findings(context) == {"provider_binding_redundant": "warning"}
+
+
 def _two_slots_on_one_provider(root: Path) -> None:
     """Workspace slots `a` and `b` both default to the `azure-main` document."""
     path = root / "workspace.yaml"

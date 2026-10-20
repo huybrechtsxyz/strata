@@ -45,6 +45,16 @@ def validate_no_path_traversal(value: str) -> None:
         raise ValueError(f"Path cannot contain parent directory references (..). Got: {path_str}")
 
 
+def validate_not_option_like(value: str, what: str) -> None:
+    """Raise ``ValueError`` if `value` starts with `-`.
+
+    A URL or ref handed to `git` as a positional argument would otherwise be read as an option
+    (`--upload-pack=...` runs a command), so it is rejected at the schema level.
+    """
+    if str(value).startswith("-"):
+        raise ValueError(f"{what} must not start with '-' (it would be read as a command-line option). Got: {value}")
+
+
 def validate_relative_path(value: str) -> str:
     """Validate that a path is relative and secure, and normalize it.
 

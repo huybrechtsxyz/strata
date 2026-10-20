@@ -39,6 +39,7 @@ from ruamel.yaml.comments import CommentedMap
 
 from strata.controllers.solution_controller import DocumentIndex
 from strata.models.artifact_model import ArtifactModel
+from strata.models.asset_model import AssetModel
 from strata.models.common_models import PlatformKind, PlatformVersion
 from strata.models.module_model import ModuleModel
 from strata.models.solution_model import RemoteFetch, SolutionModel
@@ -89,6 +90,17 @@ def _artifact_targets(index: DocumentIndex) -> dict[str, str | None]:
     return targets
 
 
+def _asset_targets(index: DocumentIndex) -> dict[str, str | None]:
+    """`AssetModel.meta.name` -> `spec.location.reference`, `fetch: strata` locations only — a
+    `fetch: external` location is placed before strata runs, so a pin can never take effect."""
+    targets: dict[str, str | None] = {}
+    for entry in index.all_of(PlatformKind.ASSET):
+        location = cast(AssetModel, entry.model).spec.location
+        if location is not None and location.fetch is RemoteFetch.STRATA:
+            targets[entry.ref.name] = location.reference
+    return targets
+
+
 def _inventory(index: DocumentIndex, solution: SolutionModel | None) -> dict[str, dict[str, str | None]]:
     """Every real pinnable target, by category, with its own current value."""
     return {
@@ -96,6 +108,7 @@ def _inventory(index: DocumentIndex, solution: SolutionModel | None) -> dict[str
         "charts": _chart_targets(index),
         "remotes": _remote_targets(solution),
         "artifacts": _artifact_targets(index),
+        "assets": _asset_targets(index),
     }
 
 
