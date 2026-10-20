@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deployment (kind: deployment) &mdash; strata 2.0.0-Alpha24 documentation</title>
+  <title>Deployment (kind: deployment) &mdash; strata 2.0.0-Alpha25 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b78d0ea5"></script>
+      <script src="../_static/documentation_options.js?v=13f58abc"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -82,6 +82,8 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#rebinding-a-provider">Rebinding a provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#rebinding-an-asset">Rebinding an asset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
@@ -96,6 +98,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
 </ul>
 
         </div>
@@ -135,9 +138,16 @@ with what runtime behavior</em>. <code class="docutils literal notranslate"><spa
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.environments[]</span></code> — <a class="reference internal" href="environment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">environment</span></code></span></a> documents, merged left-to-right (later wins)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> — optional <a class="reference internal" href="tenant.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">tenant</span></code></span></a> reference; its defaults merge in first</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> — another deployment document (typically <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code>) whose spec is merged
-in before this one’s (child wins; stages merge by step name; <code class="docutils literal notranslate"><span class="pre">environments</span></code> lists append base-first)</p></li>
+in before this one’s (child wins; nested blocks deep-merge; stages merge by step name and
+<code class="docutils literal notranslate"><span class="pre">providers</span></code> and <code class="docutils literal notranslate"><span class="pre">assets</span></code> by slot; <code class="docutils literal notranslate"><span class="pre">environments</span></code> lists append base-first; other lists are replaced)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.partial</span></code> — <code class="docutils literal notranslate"><span class="pre">true</span></code> marks a base deployment as not independently deployable (a leaf picks it
 up via <code class="docutils literal notranslate"><span class="pre">extends</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.providers[]</span></code> — rebind <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">workspace</span></code></span></a> provider slots for this deployment, each
+<code class="docutils literal notranslate"><span class="pre">{slot,</span> <span class="pre">provider}</span></code>: the workspace’s <code class="docutils literal notranslate"><span class="pre">spec.providers[].slot</span></code> and the <a class="reference internal" href="provider.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">provider</span></code></span></a>
+document to use instead of the slot’s default — see “Rebinding a provider” below</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.assets[]</span></code> — rebind <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">workspace</span></code></span></a> asset slots for this deployment, each
+<code class="docutils literal notranslate"><span class="pre">{slot,</span> <span class="pre">asset}</span></code>: the workspace’s <code class="docutils literal notranslate"><span class="pre">spec.assets[].slot</span></code> and the <a class="reference internal" href="asset.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">asset</span></code></span></a> document to use
+instead of the slot’s default — see “Rebinding an asset” below</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.locking</span></code> — deployment lock configuration</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.layers</span></code> — deployment layer/scope segments</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.stages[]</span></code> — runtime parameters per provisioning step, each:</p>
@@ -184,11 +194,83 @@ up via <code class="docutils literal notranslate"><span class="pre">extends</spa
 </pre></div>
 </div>
 </section>
+<section id="rebinding-a-provider">
+<h2>Rebinding a provider<a class="headerlink" href="#rebinding-a-provider" title="Link to this heading"></a></h2>
+<p>A <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">workspace</span></code></span></a> declares provider <em>slots</em> with a default document. A deployment
+rebinds a slot to deploy the same workspace to another region or account — IaC code still
+addresses <code class="docutils literal notranslate"><span class="pre">strata.providers.&lt;slot&gt;</span></code>; only the bound document (and its region, tags,
+configuration) changes. Put the binding in a reusable <code class="docutils literal notranslate"><span class="pre">partial</span></code> base so every deployment in that
+region just extends it:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">region-north</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy-base</span>
+<span class="w">  </span><span class="nt">providers</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">slot</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
+<span class="w">      </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-north</span><span class="w">     </span><span class="c1"># another provider document of type azure</span>
+<span class="nn">---</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd-north-deployment</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">region-north</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prd</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">c0062</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Rebind only</strong> — the bound document is used as-is; there is no field patching. Per-deployment
+values belong in <a class="reference internal" href="environment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">environment</span></code></span></a> documents.</p></li>
+<li><p>Bindings merge by <code class="docutils literal notranslate"><span class="pre">slot</span></code> across <code class="docutils literal notranslate"><span class="pre">extends</span></code> (child wins), so a leaf can rebind another slot
+without dropping the base’s.</p></li>
+<li><p>A tenant’s <code class="docutils literal notranslate"><span class="pre">geographies</span></code> are checked against the <strong>bound</strong> provider’s region, so a deployment
+can serve a tenant restricted to another geography only once it rebinds to a provider there.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> reports <code class="docutils literal notranslate"><span class="pre">provider_slot_unknown</span></code> (slot not declared by the workspace) and
+<code class="docutils literal notranslate"><span class="pre">provider_type_mismatch</span></code> (bound provider’s <code class="docutils literal notranslate"><span class="pre">spec.type</span></code> differs from the slot’s default) as
+errors, and <code class="docutils literal notranslate"><span class="pre">provider_binding_redundant</span></code> (binds the slot’s own default) as a warning. A
+<code class="docutils literal notranslate"><span class="pre">partial</span></code> base is only judged once merged into the deployment that extends it, and the
+redundant warning is skipped for a document that itself uses <code class="docutils literal notranslate"><span class="pre">extends</span></code> (resetting a base’s
+binding back to the default is legitimate).</p></li>
+</ul>
+</section>
+<section id="rebinding-an-asset">
+<h2>Rebinding an asset<a class="headerlink" href="#rebinding-an-asset" title="Link to this heading"></a></h2>
+<p>The same rule applies to a workspace’s <a class="reference internal" href="workspace.html"><span class="std std-doc">asset slots</span></a>: a deployment binds a slot to
+another <a class="reference internal" href="asset.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">asset</span></code></span></a> document. One workspace can then serve many customers, each with
+files in their own repository, while the Terraform code keeps reading <code class="docutils literal notranslate"><span class="pre">local.strata_assets.&lt;slot&gt;</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd-c0062-deployment</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy-base</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prd</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">c0062</span>
+<span class="w">  </span><span class="nt">assets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">slot</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">api</span>
+<span class="w">      </span><span class="nt">asset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">c0062-api</span><span class="w">       </span><span class="c1"># an asset document that carries its own git `location`</span>
+</pre></div>
+</div>
+<p>A customer is therefore one small asset document plus this deployment; <code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code> does not
+grow. Put a binding shared by many deployments in a <code class="docutils literal notranslate"><span class="pre">partial</span></code> base, as for providers.</p>
+<ul class="simple">
+<li><p><strong>Rebind only</strong>, and bindings merge by <code class="docutils literal notranslate"><span class="pre">slot</span></code> across <code class="docutils literal notranslate"><span class="pre">extends</span></code> (child wins), exactly as for
+providers.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> reports <code class="docutils literal notranslate"><span class="pre">asset_slot_unknown</span></code> (slot not declared by the workspace) as an error and
+<code class="docutils literal notranslate"><span class="pre">asset_binding_redundant</span></code> (binds the slot’s own default) as a warning, with the same <code class="docutils literal notranslate"><span class="pre">partial</span></code>
+and <code class="docutils literal notranslate"><span class="pre">extends</span></code> handling as the provider codes. A bound document that does not exist is an
+<code class="docutils literal notranslate"><span class="pre">unknown_reference</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code> reports the bound document in <code class="docutils literal notranslate"><span class="pre">strata.assets.&lt;slot&gt;.asset</span></code>; it needs the
+directories <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> produced for the same deployment.</p></li>
+</ul>
+</section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">extends</span></code> composes <em>structure</em> (stages, workspace); <code class="docutils literal notranslate"><span class="pre">environments</span></code> composes <em>values</em> — a
-deployment can extend a base for its stage recipe while merging its own, different environment list.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">extends</span></code> composes <em>structure</em> (stages, workspace, provider bindings); <code class="docutils literal notranslate"><span class="pre">environments</span></code> composes
+<em>values</em> — a deployment can extend a base for its stage recipe while merging its own, different
+environment list.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">versions</span></code>, <code class="docutils literal notranslate"><span class="pre">promotion</span></code>, <code class="docutils literal notranslate"><span class="pre">gates</span></code> are declared in the model (for CLI parity with real invocations)
 but have zero real production usage and no execution engine behind them yet.</p></li>
 <li><p>Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">values</span> <span class="pre">get</span> <span class="pre">prd-deployment</span> <span class="pre">KEY...</span></code> before <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code>/<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> to see exactly

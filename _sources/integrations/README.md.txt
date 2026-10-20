@@ -17,6 +17,13 @@ set `store:` to one of these types to resolve a real value from an external syst
 - [azure-keyvault.md](azure-keyvault.md) — `store: azure-keyvault` (secrets)
 - [azure-appconfig.md](azure-appconfig.md) — `store: azure-appconfig` (variables, features)
 
+## Source repositories
+
+A remote in `strata.yaml`, or an asset's own `location`, names an integration with the `sources`
+capability to clone a private git repository:
+
+- [git.md](git.md) — `capabilities: [sources]`, token or SSH key read from a secret
+
 ## How binding works, in one paragraph
 
 A store names a **type** (`store: infisical`), never a specific document — strata looks for a
@@ -33,5 +40,6 @@ until that design is implemented, only the environment-variable configuration ea
 is live. Each guide is written against the designed end state on purpose, so it doesn't need a
 rewrite once implementation lands — check that design doc's own Status line for current progress.
 
-None of the three integrations below use `spec.authentication` — every guide explains why up
-front, so it isn't mistaken for an oversight.
+None of the three store integrations above use `spec.authentication` — every guide explains why up
+front, so it isn't mistaken for an oversight. The git guide is the opposite: its whole point is
+`spec.authentication`.

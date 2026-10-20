@@ -1,0 +1,318 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Git (capabilities: [sources]) &mdash; strata 2.0.0-Alpha25 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=13f58abc"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Azure App Configuration (store: azure-appconfig)" href="azure-appconfig.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/attributeconfig.html">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-the-kind-integration-document">Configuring the <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code> document</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#using-it">Using it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-the-build-does">What the build does</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#validation">Validation</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/integrations/git.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="git-capabilities-sources">
+<h1>Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)<a class="headerlink" href="#git-capabilities-sources" title="Link to this heading"></a></h1>
+<p>Lets <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> clone a <strong>private</strong> git repository: a manifest <code class="docutils literal notranslate"><span class="pre">remotes:</span></code> entry in
+<code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code>, or an asset’s own <code class="docutils literal notranslate"><span class="pre">spec.location</span></code>. Without an integration, a clone uses whatever
+credentials git already has (an SSH agent, a credential helper); that stays the right choice on a
+developer machine, and for CI that checks the repository out itself (<code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">external</span></code>).</p>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>A token or SSH key with read access to the repository.</p></li>
+<li><p>That value held where a build can read it: an environment variable (a CI secret mapped to one,
+or <code class="docutils literal notranslate"><span class="pre">--env-file</span></code> locally), or, with <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span> <span class="pre">--resolve</span></code>, an integration-backed store such as
+Key Vault.</p></li>
+</ul>
+</section>
+<section id="configuring-the-kind-integration-document">
+<h2>Configuring the <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code> document<a class="headerlink" href="#configuring-the-kind-integration-document" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">spec.authentication</span></code> names <strong>keys</strong> of <code class="docutils literal notranslate"><span class="pre">secrets</span></code> declared in an
+<a class="reference internal" href="../config/environment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">environment</span></code></span></a> the deployment reaches. The values themselves never
+appear in a document.</p>
+<p>A token:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integration</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git-customers</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git</span>
+<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">sources</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">authentication</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">token</span>
+<span class="w">    </span><span class="nt">token</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CUSTOMER_GIT_TOKEN</span><span class="w">   </span><span class="c1"># the key of a secret</span>
+<span class="w">      </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build-bot</span><span class="w">         </span><span class="c1"># optional; the token answers git's password prompt</span>
+</pre></div>
+</div>
+<p>An SSH key:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git</span>
+<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">sources</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">authentication</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssh_key</span>
+<span class="w">    </span><span class="nt">ssh_key</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">private_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GIT_SSH_KEY</span><span class="w">        </span><span class="c1"># keys of secrets</span>
+<span class="w">      </span><span class="nt">passphrase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GIT_SSH_PASSPHRASE</span><span class="w">  </span><span class="c1"># optional</span>
+<span class="w">      </span><span class="nt">known_hosts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GIT_KNOWN_HOSTS</span><span class="w">    </span><span class="c1"># optional, but if set it must resolve (no trust-on-first-use)</span>
+</pre></div>
+</div>
+<p>The secrets, in the environment:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CUSTOMER_GIT_TOKEN</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CUSTOMER_REPOS_PAT</span><span class="w">   </span><span class="c1"># the build job exports this variable from its CI secret</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">method:</span> <span class="pre">cli</span></code> (or no <code class="docutils literal notranslate"><span class="pre">authentication</span></code>) means “whatever git already has”. Other methods, such as
+<code class="docutils literal notranslate"><span class="pre">oauth2</span></code>, cannot authenticate a git fetch and are an error.</p>
+</section>
+<section id="using-it">
+<h2>Using it<a class="headerlink" href="#using-it" title="Link to this heading"></a></h2>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># strata.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">remotes</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git</span>
+<span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://git.example.com/org/infra.git</span>
+<span class="w">      </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.1.0</span>
+<span class="w">      </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git-customers</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># an asset</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">location</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://git.example.com/customers/c0062-api.git</span>
+<span class="w">    </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.4.0</span>
+<span class="w">    </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git-customers</span>
+</pre></div>
+</div>
+<p>One integration serves any number of remotes and assets. A customer with a distinct identity gets
+an integration document of its own.</p>
+</section>
+<section id="what-the-build-does">
+<h2>What the build does<a class="headerlink" href="#what-the-build-does" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>The credential is read <strong>only when a clone is about to run</strong>. <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>, an existing checkout,
+<code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">external</span></code> and a remote without an <code class="docutils literal notranslate"><span class="pre">integration</span></code> read nothing.</p></li>
+<li><p>Without <code class="docutils literal notranslate"><span class="pre">--resolve</span></code>, the secret must use a <code class="docutils literal notranslate"><span class="pre">constant</span></code> or <code class="docutils literal notranslate"><span class="pre">environment</span></code> store. A token held in an
+integration-backed store fails with a message naming the key and its store; run
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span> <span class="pre">--resolve</span></code> to allow it.</p></li>
+<li><p>It is resolved once per build, however many repositories use the integration.</p></li>
+<li><p>The value reaches git only through its process environment (a temporary <code class="docutils literal notranslate"><span class="pre">GIT_ASKPASS</span></code> helper, or
+an SSH key file with <code class="docutils literal notranslate"><span class="pre">0600</span></code> permissions) and is removed afterwards. It is never on a command line,
+in the build output, or in an error message: a failed clone’s text has the value replaced by <code class="docutils literal notranslate"><span class="pre">***</span></code>.</p></li>
+</ul>
+</section>
+<section id="validation">
+<h2>Validation<a class="headerlink" href="#validation" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks, before any build:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Code</p></th>
+<th class="head"><p>Severity</p></th>
+<th class="head"><p>When</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">remote_integration_unknown</span></code></p></td>
+<td><p>error</p></td>
+<td><p>a manifest remote names an integration that does not exist</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">remote_integration_not_sources</span></code></p></td>
+<td><p>error</p></td>
+<td><p>a manifest remote’s integration does not declare <code class="docutils literal notranslate"><span class="pre">sources</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">asset_integration_not_sources</span></code></p></td>
+<td><p>error</p></td>
+<td><p>an asset <code class="docutils literal notranslate"><span class="pre">location</span></code>’s integration does not declare <code class="docutils literal notranslate"><span class="pre">sources</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">asset_integration_disabled</span></code></p></td>
+<td><p>error</p></td>
+<td><p>an asset <code class="docutils literal notranslate"><span class="pre">location</span></code> with <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">strata</span></code> names a disabled integration</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">asset_integration_auth_unsupported</span></code></p></td>
+<td><p>error</p></td>
+<td><p>an asset <code class="docutils literal notranslate"><span class="pre">location</span></code> with <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">strata</span></code> names an integration using <code class="docutils literal notranslate"><span class="pre">oauth2</span></code> or similar</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fetch_credential_key_undeclared</span></code></p></td>
+<td><p>error</p></td>
+<td><p>a deployment clones an asset with an integration whose key none of its environments declares</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">remote_integration_disabled</span></code></p></td>
+<td><p>warning</p></td>
+<td><p>a manifest remote’s integration is disabled</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">remote_integration_auth_unsupported</span></code></p></td>
+<td><p>warning</p></td>
+<td><p>a manifest remote’s integration uses a method git cannot use</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">remote_integration_ignored</span></code></p></td>
+<td><p>warning</p></td>
+<td><p>an asset <code class="docutils literal notranslate"><span class="pre">location</span></code> sets <code class="docutils literal notranslate"><span class="pre">integration</span></code> with <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">external</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>The manifest remote findings are warnings because GitOps and audit pushes also use a remote’s
+integration and ignore <code class="docutils literal notranslate"><span class="pre">enabled</span></code>. <code class="docutils literal notranslate"><span class="pre">fetch_credential_key_undeclared</span></code> looks at the assets a
+deployment’s workspace steps select (bound through the deployment), whether they are reached by
+<code class="docutils literal notranslate"><span class="pre">location</span></code> or by a manifest remote, so a missing secret in one customer’s environment is found by
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> instead of by that customer’s pipeline. Whether the key’s store is readable
+without <code class="docutils literal notranslate"><span class="pre">--resolve</span></code> is only known at build time.</p>
+<p>A missing integration on an asset <code class="docutils literal notranslate"><span class="pre">location</span></code> is the generic <code class="docutils literal notranslate"><span class="pre">unknown_reference</span></code> error. A <code class="docutils literal notranslate"><span class="pre">url</span></code> with a
+password (<code class="docutils literal notranslate"><span class="pre">https://user:token&#64;host/...</span></code>) is rejected, and so is an http(s) username that looks like
+a token (a <code class="docutils literal notranslate"><span class="pre">ghp_</span></code>/<code class="docutils literal notranslate"><span class="pre">github_pat_</span></code>/<code class="docutils literal notranslate"><span class="pre">glpat-</span></code> prefix, or 32 or more token characters, the shape of a
+personal access token pasted as <code class="docutils literal notranslate"><span class="pre">https://&lt;token&gt;&#64;host/...</span></code>). <code class="docutils literal notranslate"><span class="pre">git&#64;host:org/repo.git</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ssh://git&#64;host/...</span></code> and an ordinary <code class="docutils literal notranslate"><span class="pre">user&#64;</span></code>, such as Azure DevOps’ <code class="docutils literal notranslate"><span class="pre">https://myorg&#64;dev.azure.com/...</span></code>,
+are fine.</p>
+<p>At build time, an undeclared key or an unset environment variable fails the build, naming the asset
+or remote and the key, before any <code class="docutils literal notranslate"><span class="pre">git</span></code> call.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="azure-appconfig.html" class="btn btn-neutral float-left" title="Azure App Configuration (store: azure-appconfig)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

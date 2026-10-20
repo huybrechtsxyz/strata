@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Version (kind: version) &mdash; strata 2.0.0-Alpha24 documentation</title>
+  <title>Version (kind: version) &mdash; strata 2.0.0-Alpha25 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b78d0ea5"></script>
+      <script src="../_static/documentation_options.js?v=13f58abc"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -96,6 +96,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
 </ul>
 
         </div>
@@ -139,6 +140,9 @@ promotion/rollback/canary/floating-pin machinery is not carried over (zero real 
 when that remote is <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">strata</span></code> — an <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">external</span></code> remote is placed by CI before strata
 runs, so pinning it can’t do anything)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.pins.artifacts</span></code> — overrides an <a class="reference internal" href="artifact.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">artifact</span></code></span></a> document’s <code class="docutils literal notranslate"><span class="pre">image_tag</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.pins.assets</span></code> — overrides the git <code class="docutils literal notranslate"><span class="pre">reference</span></code> of an <a class="reference internal" href="asset.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">asset</span></code></span></a> that declares its own
+<code class="docutils literal notranslate"><span class="pre">spec.location</span></code>, keyed by the asset’s name (only valid when its <code class="docutils literal notranslate"><span class="pre">location.fetch</span></code> is <code class="docutils literal notranslate"><span class="pre">strata</span></code>; an
+asset using a manifest remote is pinned under <code class="docutils literal notranslate"><span class="pre">remotes</span></code>)</p></li>
 </ul>
 <p>Each pin is either a bare string (shorthand — nothing held back) or structured:</p>
 <ul class="simple">
@@ -169,6 +173,8 @@ runs, so pinning it can’t do anything)</p></li>
 <span class="w">      </span><span class="nt">immich</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.13.1</span>
 <span class="w">    </span><span class="nt">remotes</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">infra</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.0.0</span>
+<span class="w">    </span><span class="nt">assets</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">c0062-api</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.5.0</span>
 </pre></div>
 </div>
 </section>

@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Asset (kind: asset) &mdash; strata 2.0.0-Alpha24 documentation</title>
+  <title>Asset (kind: asset) &mdash; strata 2.0.0-Alpha25 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b78d0ea5"></script>
+      <script src="../_static/documentation_options.js?v=13f58abc"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -84,7 +84,13 @@
 <li class="toctree-l1"><a class="reference internal" href="artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#using-an-asset">Using an asset</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#from-terraform">From Terraform</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#versions">Versions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#validation">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
@@ -96,6 +102,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
 </ul>
 
         </div>
@@ -125,47 +132,129 @@
   <section id="asset-kind-asset">
 <h1>Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)<a class="headerlink" href="#asset-kind-asset" title="Link to this heading"></a></h1>
 <p>A named, reusable file-set location for plain, non-code input files a provisioner needs at build
-time (an OpenAPI contract, a certificate bundle, images, seed data) whose on-disk variant differs
-per deployment. Declared in a workspace’s <code class="docutils literal notranslate"><span class="pre">spec.assets</span></code> pool, then selected per execution step via
-<code class="docutils literal notranslate"><span class="pre">step.assets</span></code> — the same pool-then-select pattern <code class="docutils literal notranslate"><span class="pre">namespaces</span></code>/<code class="docutils literal notranslate"><span class="pre">firewalls</span></code>/<code class="docutils literal notranslate"><span class="pre">dns_zones</span></code>/<code class="docutils literal notranslate"><span class="pre">networks</span></code>
-already use. Materialised into the build output by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code>, before any execution step
-runs.</p>
+time (an OpenAPI contract, a certificate bundle, images, seed data) whose files differ per
+deployment. A <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">workspace</span></code></span></a> declares <strong>asset slots</strong> with a default asset document,
+each execution step selects the slots it needs, and a <a class="reference internal" href="deployment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">deployment</span></code></span></a> can rebind a
+slot to another asset document. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> copies the files into the build output before
+any execution step runs.</p>
 <section id="schema">
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.source_path</span></code> — path to the file or directory, relative to the resolved remote’s root. May
-contain <code class="docutils literal notranslate"><span class="pre">{name}</span></code> segment tokens, filled from the deployment’s resolved <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> at
-build time (e.g. <code class="docutils literal notranslate"><span class="pre">assets/{customer}/{deploy_tier}/openapi</span></code>) — no fixed token vocabulary, any
-<code class="docutils literal notranslate"><span class="pre">properties</span></code> key a workspace already uses works</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.remote</span></code> — optional <a class="reference internal" href="solution.html"><span class="std std-doc">remote</span></a> this asset’s files live under; omit for this
-solution’s own repository</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.source_path</span></code> — path to the file or directory, relative to the root of wherever the files
+live. May contain <code class="docutils literal notranslate"><span class="pre">{name}</span></code> segment tokens, filled from the deployment’s resolved
+<code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> at build time (e.g. <code class="docutils literal notranslate"><span class="pre">assets/{customer}/{deploy_tier}/openapi</span></code>) — no fixed token
+vocabulary, any <code class="docutils literal notranslate"><span class="pre">properties</span></code> key a workspace already uses works. May also be a glob
+(<code class="docutils literal notranslate"><span class="pre">openapi/**/*.json</span></code>) to select a subset of files</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.remote</span></code> — optional <a class="reference internal" href="solution.html"><span class="std std-doc">remote</span></a> declared in <code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code> that the files live
+under; omit for this solution’s own repository</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.location</span></code> — optional git repository the files live in, declared on the asset itself
+instead of as a manifest remote. Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">remote</span></code>:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">url</span></code> — the repository</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reference</span></code> — branch, tag or commit SHA (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">type</span></code> — only <code class="docutils literal notranslate"><span class="pre">git</span></code> (the default)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fetch</span></code> — <code class="docutils literal notranslate"><span class="pre">strata</span></code> (default) clones it; <code class="docutils literal notranslate"><span class="pre">external</span></code> means CI already checked it out at
+<code class="docutils literal notranslate"><span class="pre">.strata/assets/&lt;asset</span> <span class="pre">name&gt;/&lt;reference&gt;</span></code> and strata only reads it</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">integration</span></code> — optional name of an <a class="reference internal" href="integration.html"><span class="std std-doc">integration</span></a> that authenticates the clone
+(it must declare the <code class="docutils literal notranslate"><span class="pre">sources</span></code> capability; a token or SSH key read from a secret). Omit it for a
+public repository or ambient git credentials. Ignored, with a warning, when <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">external</span></code>.
+The <code class="docutils literal notranslate"><span class="pre">url</span></code> must not embed a password or token. See <a class="reference internal" href="../integrations/git.html"><span class="std std-doc">integrations/git.md</span></a></p></li>
+</ul>
+</li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.description</span></code> — optional description for documentation purposes</p></li>
 </ul>
 </section>
-<section id="example">
-<h2>Example<a class="headerlink" href="#example" title="Link to this heading"></a></h2>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<p>An asset whose files are in this solution’s own repository, or in a remote:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">asset</span>
 <span class="nt">meta</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openapi</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">api-default</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"OpenAPI</span><span class="nv"> </span><span class="s">contract</span><span class="nv"> </span><span class="s">files</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">Contoso</span><span class="nv"> </span><span class="s">API</span><span class="nv"> </span><span class="s">Gateway"</span>
-<span class="w">  </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="s">"assets/{customer}/{deploy_tier}/openapi"</span>
+<span class="w">  </span><span class="nt">remote</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra</span>
+<span class="w">  </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="s">"assets/{deploy_tier}/openapi"</span>
 </pre></div>
 </div>
-<p>Declared in a workspace’s pool, then selected by the step that needs it:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">assets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">openapi</span><span class="p p-Indicator">]</span>
+<p>An asset that carries its own repository — the definition lives in the config repository, the
+files in the customer’s:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">asset</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">c0062-api</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">location</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git</span>
+<span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://git.example.com/customers/c0062-api.git</span>
+<span class="w">    </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.4.0</span>
+<span class="w">    </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git-customers</span><span class="w">   </span><span class="c1"># optional: credentials for a private repository</span>
+<span class="w">  </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openapi</span>
+</pre></div>
+</div>
+</section>
+<section id="using-an-asset">
+<h2>Using an asset<a class="headerlink" href="#using-an-asset" title="Link to this heading"></a></h2>
+<p>The workspace names a slot, a step selects it, and a deployment may rebind it
+(see <a class="reference internal" href="workspace.html"><span class="std std-doc">workspace</span></a> “Asset slots” and <a class="reference internal" href="deployment.html"><span class="std std-doc">deployment</span></a> “Rebinding an asset”):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># workspace</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">assets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">slot</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">api</span>
+<span class="w">      </span><span class="nt">asset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">api-default</span>
 <span class="w">  </span><span class="nt">execution</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">publish_api</span>
 <span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform_apim</span>
 <span class="w">      </span><span class="nt">resources</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">apim</span><span class="p p-Indicator">]</span>
-<span class="w">      </span><span class="nt">assets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">openapi</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">assets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">api</span><span class="p p-Indicator">]</span>
+<span class="nn">---</span>
+<span class="c1"># deployment</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy-base</span>
+<span class="w">  </span><span class="nt">assets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">slot</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">api</span>
+<span class="w">      </span><span class="nt">asset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">c0062-api</span>
 </pre></div>
 </div>
-<p>Materialised at build time to <code class="docutils literal notranslate"><span class="pre">build_path/assets/openapi/</span></code>, and projected into every consuming
-step’s <code class="docutils literal notranslate"><span class="pre">var.strata</span></code> as <code class="docutils literal notranslate"><span class="pre">strata.assets.openapi.{path,</span> <span class="pre">files}</span></code> — a provisioner’s own code can read
-<code class="docutils literal notranslate"><span class="pre">local.strata.assets.openapi.files</span></code> instead of globbing a hardcoded relative path.</p>
+<p>The files are copied to <code class="docutils literal notranslate"><span class="pre">build_path/assets/&lt;slot&gt;/</span></code> — keyed by the slot, so the path is the same
+whichever document is bound. Rebuilding into a build path that already holds an earlier build
+replaces that slot’s directory, so files from a previously bound document never linger.</p>
+<section id="from-terraform">
+<h3>From Terraform<a class="headerlink" href="#from-terraform" title="Link to this heading"></a></h3>
+<p>Read the slot through <code class="docutils literal notranslate"><span class="pre">local.strata_assets</span></code>, which strata generates for you:</p>
+<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="nf">file</span><span class="p">(</span><span class="nv">local.strata_assets.api.files</span><span class="p">[</span><span class="s2">"openapi.json"</span><span class="p">])</span><span class="c1">      # one file</span>
+<span class="nf">fileset</span><span class="p">(</span><span class="nv">local.strata_assets.api.dir</span><span class="p">,</span><span class="w"> </span><span class="s2">"**/*.json"</span><span class="p">)</span><span class="c1">        # or search the directory</span>
+</pre></div>
+</div>
+<p>The same code works for every customer; only the bound asset document differs. The paths are
+relative to the Terraform root module’s directory, so they keep working wherever the build output
+is moved. Wrap <code class="docutils literal notranslate"><span class="pre">dir</span></code> in <code class="docutils literal notranslate"><span class="pre">abspath()</span></code> if something needs an absolute path.</p>
+<p><code class="docutils literal notranslate"><span class="pre">local.strata_assets</span></code> is generated alongside <code class="docutils literal notranslate"><span class="pre">local.strata</span></code>; a root module that declares its own
+<code class="docutils literal notranslate"><span class="pre">variable</span> <span class="pre">&quot;strata&quot;</span></code> opts out of both and takes care of its own paths.</p>
+</section>
+</section>
+<section id="versions">
+<h2>Versions<a class="headerlink" href="#versions" title="Link to this heading"></a></h2>
+<p>A <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> document can move an asset that declares its own <code class="docutils literal notranslate"><span class="pre">location</span></code> to another
+git reference without editing the asset document:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">pins</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">assets</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">c0062-api</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.5.0</span>
+</pre></div>
+</div>
+<p>A pin only applies to an asset with a <code class="docutils literal notranslate"><span class="pre">location</span></code> and <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">strata</span></code>. An asset that uses a manifest
+<code class="docutils literal notranslate"><span class="pre">remote</span></code> is pinned under <code class="docutils literal notranslate"><span class="pre">pins.remotes</span></code> instead.</p>
+</section>
+<section id="validation">
+<h2>Validation<a class="headerlink" href="#validation" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>A slot a deployment rebinds must be declared by its workspace: <code class="docutils literal notranslate"><span class="pre">asset_slot_unknown</span></code> (error)</p></li>
+<li><p>Rebinding a slot to its own default has no effect: <code class="docutils literal notranslate"><span class="pre">asset_binding_redundant</span></code> (warning)</p></li>
+<li><p>A bound or default asset document that does not exist is an <code class="docutils literal notranslate"><span class="pre">unknown_reference</span></code></p></li>
+<li><p>A missing <code class="docutils literal notranslate"><span class="pre">{name}</span></code> token with no matching <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> key, a path or glob that matches
+nothing, or a repository that cannot be fetched is a build-time error only</p></li>
+</ul>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
@@ -176,9 +265,9 @@ applies to a plain file copy.</p></li>
 <li><p>Not the same as <a class="reference internal" href="artifact.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">artifact</span></code></span></a>: an artifact is a container image reference strata
 never fetches (the registry pulls it at deploy time); an asset is the opposite — strata <strong>must</strong>
 copy real files onto disk at build time.</p></li>
-<li><p>A missing <code class="docutils literal notranslate"><span class="pre">{name}</span></code> token with no matching <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> key, or a missing on-disk variant
-after filling, is a build-time error only — not also a <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> Phase 2 warning,
-matching every other kind (Phase 2 does no real filesystem check for any kind today).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> must have run before <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code>: deploy reads the asset directories
+the build produced and reports a missing one instead of projecting an empty <code class="docutils literal notranslate"><span class="pre">strata.assets</span></code>.</p></li>
+<li><p>Design and history: <span class="xref myst">docs/design/asset-management.md</span>.</p></li>
 </ul>
 </section>
 </section>

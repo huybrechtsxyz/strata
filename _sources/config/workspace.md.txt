@@ -8,7 +8,13 @@ parameters.
 
 ## Schema
 
-- `spec.providers[]` — names of [`provider`](provider.md) documents this workspace uses
+- `spec.providers[]` — provider **slots**: each is a [`provider`](provider.md) document name, or
+  `{slot, provider}` to give the slot a stable name distinct from its default document. IaC code
+  addresses the slot (`strata.providers.<slot>`); a [`deployment`](deployment.md) can rebind it to
+  another provider document of the same type — see "Provider slots" below
+- `spec.assets[]` — asset **slots**: each is an [`asset`](asset.md) document name, or `{slot, asset}`
+  to give the slot a stable name distinct from its default document. A step selects slots through
+  its own `assets`, and a [`deployment`](deployment.md) can rebind a slot — see "Asset slots" below
 - `spec.resources[]` — workspace-local resource instances, each:
   - `name` — the workspace-local instance name
   - `resource` — the [`resource`](resource.md) document it's built from (or `managed_by: provisioner`
@@ -33,6 +39,7 @@ parameters.
   fields is required. A resource's own `firewalls`/`dns_zones`/`subnet.network` are claimed
   automatically once that resource is effectively in scope (direct or via `topologies[]`) — no
   need to also list them directly on the step.
+  `assets[]` selects the asset slots this step needs (see "Asset slots").
 - `spec.default_tags` — default cloud tags for resources created by this workspace
 
 ## Example
@@ -44,7 +51,8 @@ meta:
   name: main
 spec:
   providers:
-    - azure-main
+    - slot: azure
+      provider: azure-main
   namespaces:
     - hearth
   provisioners:
@@ -81,6 +89,51 @@ spec:
     managed-by: strata
 ```
 
+## Provider slots
+
+A `spec.providers[]` entry is a named **slot** with a default provider document:
+
+```yaml
+providers:
+  - slot: azure              # stable key — IaC code addresses strata.providers.azure
+    provider: azure-main     # default Provider document (westeurope)
+  - azure-shared             # bare name = slot and document share the name
+```
+
+- `slot` is unique within the workspace; two slots may point at the same document.
+- A bare string is shorthand for `{slot: <name>, provider: <name>}`, so a workspace that never
+  rebinds anything reads exactly as before and keeps its `strata.providers.<name>` keys.
+- The same workspace can target another region or account without its IaC code changing: a
+  [`deployment`](deployment.md) rebinds the slot (`spec.providers[]` there). Prefer an explicit
+  slot name (`azure`) over one named after a specific region's document (`azure-main`) when you
+  expect to rebind — otherwise `strata.providers.azure-main` would silently point at another
+  region.
+
+## Asset slots
+
+A `spec.assets[]` entry is a named **slot** with a default [`asset`](asset.md) document, and an
+execution step selects the slots it needs:
+
+```yaml
+assets:
+  - slot: api                # stable key — steps select it, IaC code reads local.strata_assets.api
+    asset: api-default       # default Asset document
+  - openapi                  # bare name = slot and document share the name
+execution:
+  - name: publish_api
+    provisioner: terraform_apim
+    resources: [apim]
+    assets: [api]            # selects the slot
+```
+
+- `slot` is unique within the workspace; two slots may point at the same document. A step
+  selects a **slot**, never a document name directly.
+- A bare string is shorthand for `{slot: <name>, asset: <name>}`, so a workspace that never
+  rebinds anything reads exactly as before.
+- Only slots a step selects are materialised and projected, so an unused slot costs nothing.
+- A [`deployment`](deployment.md) rebinds the slot to another asset document, so one workspace can
+  serve many customers whose files live in different repositories.
+
 ## Topology grouping
 
 Each `spec.topology[]` entry is a named grouping of resources and namespaces that conceptually
@@ -106,8 +159,9 @@ must be marked as the `main` slot.
 
 ## Notes
 
-- Three sibling keys answer three different questions: `providers` (where — which account),
-  `provisioners` (with what — tool definitions), `execution` (what runs, in what order).
+- Three sibling keys answer three different questions: `providers` (where — which account, as
+  rebindable slots), `provisioners` (with what — tool definitions), `execution` (what runs, in
+  what order).
 - `execution` names steps ordered by `depends_on`, not a numeric `priority` (ADR-0011) — `strata
   deploy run` executes steps in that dependency order.
 - A [`deployment`](deployment.md)'s `stages[]` reference `execution[].name` for runtime parameters

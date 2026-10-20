@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Integrations — How to Configure Each One &mdash; strata 2.0.0-Alpha24 documentation</title>
+  <title>Integrations — How to Configure Each One &mdash; strata 2.0.0-Alpha25 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b78d0ea5"></script>
+      <script src="../_static/documentation_options.js?v=13f58abc"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -89,6 +89,7 @@
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Integrations — How to Configure Each One</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#secret-variable-feature-stores">Secret/variable/feature stores</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#source-repositories">Source repositories</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#how-binding-works-in-one-paragraph">How binding works, in one paragraph</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#what-s-real-vs-what-s-not-yet">What’s real vs. what’s not yet</a></li>
 </ul>
@@ -96,6 +97,7 @@
 <li class="toctree-l1"><a class="reference internal" href="infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
 </ul>
 
         </div>
@@ -141,6 +143,14 @@ set <code class="docutils literal notranslate"><span class="pre">store:</span></
 <li><p><a class="reference internal" href="azure-appconfig.html"><span class="std std-doc">azure-appconfig.md</span></a> — <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code> (variables, features)</p></li>
 </ul>
 </section>
+<section id="source-repositories">
+<h2>Source repositories<a class="headerlink" href="#source-repositories" title="Link to this heading"></a></h2>
+<p>A remote in <code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code>, or an asset’s own <code class="docutils literal notranslate"><span class="pre">location</span></code>, names an integration with the <code class="docutils literal notranslate"><span class="pre">sources</span></code>
+capability to clone a private git repository:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="git.html"><span class="std std-doc">git.md</span></a> — <code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>, token or SSH key read from a secret</p></li>
+</ul>
+</section>
 <section id="how-binding-works-in-one-paragraph">
 <h2>How binding works, in one paragraph<a class="headerlink" href="#how-binding-works-in-one-paragraph" title="Link to this heading"></a></h2>
 <p>A store names a <strong>type</strong> (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>), never a specific document — strata looks for a
@@ -156,8 +166,9 @@ never a silent guess. You never need an explicit reference field on the store it
 until that design is implemented, only the environment-variable configuration each guide documents
 is live. Each guide is written against the designed end state on purpose, so it doesn’t need a
 rewrite once implementation lands — check that design doc’s own Status line for current progress.</p>
-<p>None of the three integrations below use <code class="docutils literal notranslate"><span class="pre">spec.authentication</span></code> — every guide explains why up
-front, so it isn’t mistaken for an oversight.</p>
+<p>None of the three store integrations above use <code class="docutils literal notranslate"><span class="pre">spec.authentication</span></code> — every guide explains why up
+front, so it isn’t mistaken for an oversight. The git guide is the opposite: its whole point is
+<code class="docutils literal notranslate"><span class="pre">spec.authentication</span></code>.</p>
 </section>
 </section>
 

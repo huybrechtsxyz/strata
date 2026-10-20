@@ -56,3 +56,4 @@ strata-v2
    integrations/infisical
    integrations/azure-keyvault
    integrations/azure-appconfig
+   integrations/git

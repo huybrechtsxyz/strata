@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Provider (kind: provider) &mdash; strata 2.0.0-Alpha24 documentation</title>
+  <title>Provider (kind: provider) &mdash; strata 2.0.0-Alpha25 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b78d0ea5"></script>
+      <script src="../_static/documentation_options.js?v=13f58abc"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -96,6 +96,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
 </ul>
 
         </div>
@@ -160,6 +161,11 @@ arguments), never validated by strata</p></li>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
 <ul class="simple">
+<li><p>A workspace binds a provider document to a named <em>slot</em> (<code class="docutils literal notranslate"><span class="pre">spec.providers[]</span></code>), and a
+<a class="reference internal" href="deployment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">deployment</span></code></span></a> can rebind the slot to a different provider document — typically
+another region of the same platform (one document per region, e.g. <code class="docutils literal notranslate"><span class="pre">azure-main</span></code> in westeurope
+and <code class="docutils literal notranslate"><span class="pre">azure-north</span></code> in northeurope). The replacement must have the same <code class="docutils literal notranslate"><span class="pre">spec.type</span></code> as the slot’s
+default. See <a class="reference internal" href="workspace.html"><span class="std std-doc">workspace.md</span></a>’s “Provider slots”.</p></li>
 <li><p>No <code class="docutils literal notranslate"><span class="pre">spec.references</span></code> (unlike v1): a provider no longer declares required variable/secret <em>key
 names</em> separately — any value that needs to vary by environment is a <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/
 <code class="docutils literal notranslate"><span class="pre">${feature:}</span></code> token directly in the relevant field, checked against a real <code class="docutils literal notranslate"><span class="pre">Environment</span></code> in

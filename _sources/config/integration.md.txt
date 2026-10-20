@@ -14,7 +14,10 @@ real integration (Infisical, Azure Key Vault, Azure App Configuration).
 - `spec.type` — the specific tool/service (`terraform`, `vault`, `azure-keyvault`, `bitwarden`,
   `git`, or a custom plugin name) — an open string, not a closed enum
 - `spec.capabilities` — what this integration provides: `variables`, `secrets`, `features`,
-  `infrastructure`, `container`, `sources`, or an `x-`-prefixed extension strata doesn't dispatch on
+  `infrastructure`, `container`, `sources`, or an `x-`-prefixed extension strata doesn't dispatch on.
+  `sources` is what a remote in `strata.yaml` or an asset's `spec.location` needs from its
+  `integration`: credentials for cloning a private git repository (see
+  [integrations/git.md](../integrations/git.md))
 - `spec.required` — whether this integration must be available for platform operation (default `false`)
 - `spec.enabled` — whether it's active (default `true`)
 - `spec.authentication` — same shape as [provider.md](provider.md)'s
@@ -39,6 +42,24 @@ spec:
   required: true
   enabled: true
   version: ">= 1.7"
+```
+
+An integration that authenticates cloning private git repositories (`authentication` names keys of
+secrets, never values):
+
+```yaml
+apiVersion: strata.huybrechts.xyz/v2
+kind: integration
+meta:
+  name: git-customers
+spec:
+  type: git
+  capabilities: [sources]
+  authentication:
+    method: token
+    token:
+      token: CUSTOMER_GIT_TOKEN
+      username: build-bot
 ```
 
 ## Notes

@@ -16,6 +16,9 @@ promotion/rollback/canary/floating-pin machinery is not carried over (zero real 
   when that remote is `fetch: strata` — an `fetch: external` remote is placed by CI before strata
   runs, so pinning it can't do anything)
 - `spec.pins.artifacts` — overrides an [`artifact`](artifact.md) document's `image_tag`
+- `spec.pins.assets` — overrides the git `reference` of an [`asset`](asset.md) that declares its own
+  `spec.location`, keyed by the asset's name (only valid when its `location.fetch` is `strata`; an
+  asset using a manifest remote is pinned under `remotes`)
 
 Each pin is either a bare string (shorthand — nothing held back) or structured:
 
@@ -46,6 +49,8 @@ spec:
       immich: 0.13.1
     remotes:
       infra: v1.0.0
+    assets:
+      c0062-api: v1.5.0
 ```
 
 ## Notes
