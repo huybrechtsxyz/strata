@@ -1,0 +1,23 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: prd-c0062-deployment
+  annotations:
+    description: "Production instance serving customer c0062's own API definitions"
+  tags: ["production"]
+spec:
+  extends: deploy-base
+
+  environments:
+    - prd
+
+  tenant: c0062
+
+  # Takes the pins in versions/prd.yaml, including `pins.assets` for c0062-api.
+  version: prd
+
+  # Rebinds the workspace's `api` asset slot (workspaces/main.yaml). IaC code
+  # still reads `local.strata_assets.api`; only the bound document changes.
+  assets:
+    - slot: api
+      asset: c0062-api

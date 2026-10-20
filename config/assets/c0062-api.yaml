@@ -1,0 +1,17 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: asset
+meta:
+  name: c0062-api
+spec:
+  description: "Customer c0062's own API definitions"
+  # The definition lives here, in the config repository; the files live in the
+  # customer's repository. No `remotes:` entry in strata.yaml is needed, so a
+  # new customer is one small document like this plus one deployment binding it.
+  # Building a deployment that binds this asset needs read access to the URL
+  # (or `fetch: external` with a checkout at .strata/assets/c0062-api/<reference>).
+  location:
+    type: git
+    url: https://git.example.com/customers/c0062-api.git
+    reference: v1.4.0
+    fetch: strata
+  source_path: openapi

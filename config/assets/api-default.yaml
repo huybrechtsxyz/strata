@@ -1,0 +1,10 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: asset
+meta:
+  name: api-default
+spec:
+  description: "Default API contract the workspace's `api` slot is filled with"
+  # No `location`: the files live in a manifest remote, here the local stand-in
+  # `infra` (strata.yaml), so `strata build run prd-deployment` works offline.
+  remote: infra
+  source_path: assets/api

@@ -32,6 +32,11 @@ spec:
       # Only valid because that remote is `fetch: strata` — a `fetch: external`
       # remote is placed by CI before strata runs, so pinning it cannot work.
       infra: v1.0.0
+    assets:
+      # Overrides `location.reference` of an asset that declares its own `location`
+      # (assets/c0062-api.yaml) — move one customer without touching their asset
+      # document. Like `remotes`, only valid for `fetch: strata`.
+      c0062-api: v1.5.0
     # No `tools:` category. CI installs the tool binaries (setup-terraform,
     # setup-helm), so strata cannot make a tool be a given version. The version
     # a recipe expects lives on the provisioner as an assertion instead.

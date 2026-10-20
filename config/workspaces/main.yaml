@@ -16,6 +16,13 @@ spec:
       provider: azure-main
   namespaces:
     - hearth
+  assets:
+    # A named slot with a default Asset document. The step below selects the slot, and
+    # IaC code reads it as `local.strata_assets.api`. A deployment rebinds it to another
+    # document (deployments/prd-c0062.yaml) without the code changing. A bare name
+    # (`- openapi`) is shorthand for a slot named after its document.
+    - slot: api
+      asset: api-default
   provisioners:
     - name: terraform-main
       tool: terraform
@@ -54,6 +61,8 @@ spec:
         - web-vm
         - security-kv
         - edge-waf
+      assets:
+        - api
   topology:
     - name: main-topology
       type: kubernetes
