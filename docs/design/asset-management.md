@@ -1,7 +1,7 @@
 # Asset Management (non-code, per-environment input files) — Design
 
 - Status: current
-- Last updated: 2026-10-13
+- Last updated: 2026-10-20
 
 ## Overview
 
@@ -20,6 +20,15 @@ file-set location whose `source_path` templates against a deployment's own
 resolved `properties` at build time, materialised into the build output by
 `strata build run` before any execution step runs, and projected into
 `var.strata` alongside every other document category.
+
+Two later additions extend the same feature to one workspace serving many
+customers, each with their own files. A workspace's assets are **named
+slots** with a default document, and a deployment rebinds a slot to another
+Asset document (the rule [provider-slots.md](provider-slots.md) already
+established for providers). An asset document can also carry its own git
+`location`, so a customer's files can live in the customer's repository
+without a `remotes:` entry in `strata.yaml` per customer. A customer is then
+one small asset document plus one deployment.
 
 ## Current Design
 
@@ -71,38 +80,51 @@ collide, since a token name is `\w+` and so can never contain a comma.
 
 `source_path` must be relative. An absolute path or one containing `..`
 is rejected at document-load time by the same `validate_relative_path()`
-guard `SourceModel.source_path` already uses — `remote` is how an asset
-points outside this solution's own repository.
+guard `SourceModel.source_path` already uses — `remote` (or `location`, below)
+is how an asset points outside this solution's own repository.
 
-### Workspace wiring: pool + per-step selection
+### Workspace wiring: slots + per-step selection
 
-`WorkspaceSpecModel.assets` (the pool) and `ProvisioningStepModel.assets`
-(the per-step selection) follow the exact two-layer pattern
+`WorkspaceSpecModel.assets` (the slots) and `ProvisioningStepModel.assets`
+(the per-step selection) follow the two-layer pattern
 `namespaces`/`firewalls`/`dns_zones`/`networks` (pool) +
 `ProvisioningStepModel.targets` (selection) already establish — a
-workspace declares *what it may use* (cross-document existence, Phase 1
-via `References(PlatformKind.ASSET)`), a step declares *what it,
+workspace declares *what it may use*, a step declares *what it,
 specifically, needs this run* (same-document existence, checked by a
-second, independent `asset_names` set in
+second, independent `asset_slots` set in
 `WorkspaceSpecModel.validate_execution()`, deliberately not merged into
 the existing `target_names` set — an asset is materialised input a step
-consumes, not a provisioning target a step acts on):
+consumes, not a provisioning target a step acts on).
+
+Each `spec.assets[]` entry is a `WorkspaceAssetModel {slot, asset}`: `slot`
+is the stable key a step selects and IaC addresses, `asset` the document
+bound by default. A bare string is shorthand for a slot named after its own
+document (a `mode="before"` coercion plus the shared
+`scalar_shorthand_schema()` so the editor schema accepts it), which keeps
+every workspace written before slots existed valid and its
+`strata.assets.<name>` keys unchanged. `References(PlatformKind.ASSET)` sits
+on `asset`, so existence checks and `strata graph` edges follow
+(`spec.assets.N.asset`). A step selects a **slot**, never a document name:
 
 ```yaml
 spec:
-  assets: [openapi]
+  assets:
+    - slot: api
+      asset: api-default
+    - openapi                # bare name = slot and document share the name
   execution:
     - name: publish_api
       provisioner: terraform_apim
-      targets: [apim]
-      assets: [openapi]
+      resources: [apim]
+      assets: [api]
 ```
 
 ### Build-time sync (`sync_asset()`)
 
 `build_controller.py`'s `build_run()` statically scans every
 `step.assets` across `workspace.spec.execution` into one `set[str]` of
-asset names genuinely needed by *this* build, and resolves each exactly
+slots genuinely needed by *this* build, resolves each slot to its
+bound Asset document (`effective_assets()`, below), and resolves each exactly
 once via `sync_asset()` (`source_sync.py`) — right after `remotes` are
 assembled, before the provisioning step loop starts, the same timing
 `properties`/`graph` already have. This is deliberately *not* lazy
@@ -139,25 +161,35 @@ with three differences from `sync_source()`:
   path only assembled at build time: a `{name}` token filled with
   `../../..` (or an absolute value), or a glob match the pattern never
   named literally. Both are rejected before anything is copied.
-- The destination is always `build_path/assets/<asset-name>/` — keyed by
-  asset name only, **never** path-mirrored the way `sync_source()`
+- The destination is always `build_path/assets/<slot>/` — keyed by
+  the workspace slot only, **never** path-mirrored the way `sync_source()`
   preserves a provisioner's own relative repo layout (that convention
   exists solely to keep sibling Terraform modules' relative
   `source = "../.."`-style references working; an asset has no such
   sibling-composition need, and only one variant is ever resolved per
-  build, so there's no collision to avoid either). A single-file source
+  build, so there's no collision to avoid either). Keying by slot rather
+  than by document keeps the on-disk path stable when a deployment rebinds
+  the slot. A single-file source
   still lands inside this directory (preserving its own filename), so the
   destination is always a directory regardless of whether the source was
   one file or a tree — matching ADR-0025's rule that strata supplies
   input, never rewrites or templates the consumer's code to discover it
   by some other means.
+- **The slot's own directory is cleared immediately before copying** (never the
+  shared `assets/` root). `strata.assets.*.files` is listed from disk, and a custom
+  `--build-path` is not cleaned by default, so without this a rebuild after a
+  rebind would keep, and report, the previous document's files. The clear runs
+  only after the new source was found, so a mistyped path does not destroy a
+  good earlier build, and it is guarded by `resolve_within()`. Sibling
+  directories under `assets/` are left alone: a custom build path may hold
+  content this build does not own.
 
 ### `strata.assets` projection
 
 `ResolvedAssetInfo` (`resolved_context.py`, alongside `ResolvedModule`) —
-a plain `path`/`files` pair — is populated by the same asset-sync loop
-above: after each successful copy, it lists the destination directory's
-sorted filenames and stores the result in a new
+a plain `path`/`asset`/`files` triple — is populated by the same asset-sync loop
+above through `resolved_asset_info()` (`source_sync.py`), which lists the
+slot directory's sorted filenames **from what is on disk** and stores the result in a new
 `ResolvedWorkspaceGraph.resolved_assets: dict[str, ResolvedAssetInfo]`
 field. Since `ResolvedWorkspaceGraph` is frozen (the same immutable
 controller-resolves/integration-only-reads split
@@ -169,28 +201,32 @@ right before the provisioning step loop, so every
 populated field. Skipped entirely on `dry_run` — nothing is actually
 copied, so there is nothing real to list.
 
-`_strata_assets()` (`terraform_projection.py`) projects this into
-`var.strata` as a sixteenth key (`"assets": _strata_assets(graph)`),
+`build_strata_assets()` (`terraform_projection.py`) projects this into
+`var.strata` as a sixteenth key (`"assets": build_strata_assets(graph)`),
 alongside the other fifteen `build_strata_payload()` already produced
 (`workspace`, `tenant`, `providers`, `resources`, `namespaces`, `modules`,
 `dns`, `networks`, `firewalls`, `topologies`, `properties`, `custom`,
 `flags`, `variables`, `default_tags`) — matching
 [ADR-0035](../decisions/0035-unified-terraform-projection.md)'s "every
 category always present, empty when unused" rule in every way but one:
-`strata.assets` is **deliberately** keyed only by names at least one
-execution step's `step.assets` actually references in *this* build, not
-the full `workspace.spec.assets` pool — unlike `namespaces`/`firewalls`/
+`strata.assets` is **deliberately** keyed only by slots at least one
+execution step's `step.assets` actually selects in *this* build, not
+the full `workspace.spec.assets` list — unlike `namespaces`/`firewalls`/
 `dns_zones`/`networks` (pure YAML data, always safe to project
 unconditionally), an asset entry requires real filesystem resolution, and
 eagerly resolving every declared-but-unreferenced pool entry would turn a
 harmless, currently-unused pool declaration into a hard build failure the
 moment that entry's variant doesn't exist on disk yet. A provisioner reads
 the result as an ordinary Terraform value instead of globbing a hardcoded
-relative path:
+relative path. Each entry is keyed by slot:
 
-```hcl
-local.strata.assets.openapi.path   # "assets/openapi", relative to the build root
-local.strata.assets.openapi.files  # ["api.json", "nested/deep.json"]
+```json
+"api": {
+  "asset": "c0062-api",                   // the document bound to the slot for this deployment
+  "path": "assets/api",                   // relative to the build root, for tooling
+  "path_from_step": "../../assets/api",   // the same directory, relative to the step's Terraform root
+  "files": ["openapi.json", "nested/deep.json"]
+}
 ```
 
 `files` is a **recursive, files-only** listing of what actually landed,
@@ -199,24 +235,153 @@ preserved nested structure, and never reports a directory name as though
 it were a file.
 
 `strata_variables.tf`'s generated type carries the matching
-`assets = map(object({ path = string, files = list(string) }))` entry,
-alongside `modules`. Nothing secret-shaped here (a filename is not a
+`assets = map(object({ asset, path, path_from_step, files }))` entry,
+alongside `modules`, commented per field. Nothing secret-shaped here (a filename is not a
 value needing `strata_secrets` treatment), and nothing is written into
-`resolved.yaml` for this — an asset's build-output path is a filesystem
-location a provisioner's own code already knows how to reach via the
-destination convention above; `strata.assets` is additive, read-only
-metadata about that same location, not a replacement for it.
+`resolved.yaml` for this — `strata.assets` is additive, read-only
+metadata about the files in the build output.
+
+### Reading assets from Terraform
+
+`path` is relative to the **build root**, but Terraform runs with its working
+directory at the step's provisioner directory, a different depth per provisioner
+(`terraform/apim` is two levels down, `infra` one). Reading `path` from HCL would
+mean hard-coding that depth, the very thing the projection exists to avoid, and
+`strata.assets` is broadcast to every step even though two steps can sit at
+different depths.
+
+So the projection also carries `path_from_step`, computed per step from
+`ResolvedWorkspaceGraph.step_root` (the step's directory relative to the build
+root) with `posixpath.relpath()` — pure string arithmetic, no filesystem. `build_run()`
+and `deploy_run()` each pass their own `step_root` per step (`dataclasses.replace()`).
+
+**Working principle: strata mechanisms stay out of Terraform.** An author should
+write ordinary HCL against plain values, so the interface is a generated local,
+not the raw fields. `strata_locals.tf` (alongside `local.strata`) defines
+`local.strata_assets.<slot>` with `dir` and a `files` map, both already joined to
+`path.root`:
+
+```hcl
+file(local.strata_assets.api.files["openapi.json"])
+fileset(local.strata_assets.api.dir, "**/*.json")
+```
+
+The same code works for every customer. Terraform has no user-defined functions, so a
+generated local is the available primitive. The values stay **relative** on purpose:
+an absolute path inside a resource attribute differs per machine and shows up as
+drift (`file()` returns content, so it is safe; a `source = ...` style attribute is
+not), and a consumer that needs one wraps it in `abspath()`. A root that declares its
+own `variable "strata"` skips both generated files and writes its own paths, the
+existing opt-out rule.
+
+### Per-deployment binding (asset slots)
+
+A deployment rebinds a slot with `spec.assets: [{slot, asset}]`
+(`DeploymentAssetBindingModel`), the rule provider slots already set
+([provider-slots.md](provider-slots.md), [workspace-overrides](../work/workspace-overrides.md)):
+the workspace declares slots with defaults, the deployment rebinds by name,
+**rebind only** (no field patching; use `{name}` templating for a variant inside
+one repository, a different document for a different structure), and reuse goes
+through `extends`/`partial`. The deployment, not the environment, carries it: it is
+a document selection like `workspace:` or `version:`.
+
+```yaml
+kind: deployment
+meta: { name: prd-c0062-deployment }
+spec:
+  extends: deploy-base
+  assets:
+    - slot: api
+      asset: c0062-api
+```
+
+`merge_deployment_specs()` merges `assets` by `slot` through the same merge-key table
+as `stages` and `providers`. `effective_assets(workspace, deployment) -> {slot:
+document}` (`workspace_service.py`) overlays the bindings on the workspace defaults,
+on the same private helper as `effective_providers()`; a binding for an undeclared
+slot is ignored there and reported by validation.
+
+`deploy run` rebuilds its own graph, so it must not lose what `build run` projected
+(it did, once: `strata.assets` was `{}` at deploy time, so Terraform planned against
+an empty map). It rebuilds `resolved_assets` from the directories on disk, using
+`effective_assets()` for the `asset` name, lazily inside the per-step block that
+writes `strata.auto.tfvars.json` with that step's own `step_root`. Container steps
+(Helm/Compose) and `--smoke-test` never write that file, so they never require the
+directories; a missing one is an error telling the user to run `strata build run`,
+not a silently empty projection. Known limit, accepted: if a deployment's bindings
+change between `build run` and `deploy run`, the directory on disk is stale and deploy
+cannot tell — the existing build/deploy contract for every rendered artifact.
+
+### Asset location (`spec.location`)
+
+Binding by reference alone leaves one `remotes:` entry in `strata.yaml` per customer
+repository; location alone gives a shared workspace no way to choose which customer's
+asset it uses. Together they make a customer one asset document (in the config
+repository) plus one deployment:
+
+```yaml
+kind: asset
+meta: { name: c0062-api }
+spec:
+  location:
+    type: git
+    url: https://git.example.com/customers/c0062-api.git
+    reference: v1.4.0
+  source_path: openapi
+```
+
+`AssetLocationModel` is a `SolutionRemoteModel` minus `name` (the asset's name is the
+identity), minus what the first version cannot honour: only `type: git`
+(`resolve_remote()` fetches nothing else), `reference` required and traversal-checked,
+and `integration` rejected with a message rather than silently ignored (no read-path
+caller passes credentials yet; use `fetch: external` or ambient git credentials).
+`location` and `remote` are mutually exclusive.
+
+`sync_asset()` builds a `SolutionRemoteModel` named after the asset from the location and
+calls `resolve_remote(..., checkout_path=layout.asset_checkout_path(...))`, so the
+checkout is `.strata/assets/<asset name>/<ref>`, a separate root from
+`.strata/remotes/`, and an asset name can never collide with a manifest remote name. For
+`fetch: external`, CI places the checkout at exactly that path and the error names it.
+(An existing checkout is reused without checking its URL, as for manifest remotes: a URL
+changed at an unchanged ref is not detected.)
+
+**Versions.** Without a pin the version is `location.reference` in the asset document.
+`pins.assets[<asset name>]` in a `kind: version` document overrides it
+(`apply_asset_version_pin()` in `build_run()`), so one shared ring document can carry a
+pin per customer. `check_version_pins()` warns on a pin matching no asset, warns when the
+asset has no `location` (pin its remote under `pins.remotes` instead), and errors for a
+`fetch: external` location, the same rule as remotes. `version update` and `scaffold
+--from` include `fetch: strata` locations in their inventory.
+
+Templated URLs stay rejected: each customer document spells its own URL, which is
+boilerplate but explicit and easy to grep.
+
+### Validation
+
+`_check_slot_bindings()` (`semantic_checks.py`) holds the rules provider and asset
+bindings share; each noun is a thin wrapper, and the provider's `provider_type_mismatch`
+is an `on_rebound` callback because only providers have a type to compare.
+
+| Code                      | Severity | When                                                                                    |
+| ------------------------- | -------- | --------------------------------------------------------------------------------------- |
+| `asset_slot_unknown`      | error    | the deployment binds a slot its workspace does not declare                              |
+| `asset_binding_redundant` | warning  | the binding names the slot's own default (skipped when the raw document uses `extends`) |
+
+A `partial` document is judged only once merged into the deployment that extends it, and
+existence of the bound document is the generic reference check's job.
 
 ### Deliberately out of scope
 
-- **Version pinning** (a `kind: version`-style `pins.assets` overlay) — no
-  real evidence an asset variant's `source_path`/`remote` needs
-  point-in-time pin/audit tracking the way an image tag does; an asset
-  variant is already pinned by its own declared `source_path` (whatever
-  is on disk there *is* the version). Revisit if a real case needs it.
-- **Credentialed remote fetch for assets** — already fully solved by the
-  existing `remote`/`resolve_remote()`/`SourceIntegration` mechanism
-  ([remotes.md](../work/remotes.md)); nothing asset-specific needed.
+- **Rebinding resources or modules**, and field patching of a bound asset —
+  rebind only, as for providers; see
+  [workspace-overrides.md](../work/workspace-overrides.md).
+- **Asset locations other than git** (OCI, Helm): `resolve_remote()` fetches only git.
+- **Credentials through `location.integration`** — rejected until the read-path
+  credential wiring exists. A manifest `remote` keeps the existing
+  `remote`/`resolve_remote()`/`SourceIntegration` route
+  ([remotes.md](../work/remotes.md)).
+- **A per-asset `target_path`**: the destination stays a fixed convention, since it
+  would put a path back into every customer's asset file.
 - **Structural validation of a variant's on-disk shape** (e.g. "must
   contain an `openapi.json`") — no evidenced need; a provisioner's own
   code is the only thing that knows what it expects to find.
@@ -232,8 +397,13 @@ metadata about that same location, not a replacement for it.
 ## Related Decisions
 
 - [ADR-0012](../decisions/0012-workspace-model-design-decisions.md) —
-  `WorkspaceSpecModel`'s pool-of-names pattern, reused unchanged for
-  `assets`.
+  `WorkspaceSpecModel`'s pool-of-names pattern, the base the slots extend.
+- [provider-slots.md](provider-slots.md) — the slot-and-rebind rule asset slots reuse:
+  `effective_*()`, the merge-key table, the shorthand schema helper, the validation shape.
+- [workspace-overrides.md](../work/workspace-overrides.md) — why rebinding lives on the
+  deployment, and the rule shared by every category.
+- [remotes-at-scale.md](../work/remotes-at-scale.md) — the 300-customer premise behind
+  `location`.
 - [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md) —
   `ProvisioningStepModel.targets`, the precedent `ProvisioningStepModel
   .assets`'s own cross-check in `validate_execution()` mirrors directly.
@@ -376,3 +546,42 @@ metadata about that same location, not a replacement for it.
   literal `assets/True/openapi` segment. `None` deliberately falls through
   instead of raising there, so that a missing key and a null value both
   reach `fill_pattern()`'s clearer "unknown token" error.
+- Slots, per-deployment binding, a self-contained `location` and `path_from_step` came
+  from one scenario: a single APIM workspace for roughly 300 customers, each needing their
+  own API definitions bound to the same step. Grounding it against the code found three
+  defects, fixed first because slots made them worse: `deploy run` rebuilt its graph
+  without `resolved_assets` (Terraform planned against `strata.assets = {}`, reproduced
+  end to end); the packaged Terraform type omitted the `provider` attribute provider slots
+  had added (Terraform silently drops attributes an `object` type does not declare, so no
+  test that merely *accepts* a payload could notice, which is why a parity test now compares
+  the payload with the type in both directions); and `path` was relative to the build root
+  while Terraform runs in the step's directory.
+- Layout: a per-slot subdirectory under the single `build_path/assets/` root beat copying
+  straight into it. Direct copy would allow collisions between two assets, need a manifest
+  written at build time (deploy could not tell which files belong to a slot), and push
+  namespacing into each customer repository. If it is ever adopted instead: detect collisions
+  within one run, in memory (never by "file exists on disk"), treat identical bytes as a no-op
+  and different bytes as an error naming both sources.
+- The first idea for the stale-file problem was to wipe `build_path/assets/`. Review found
+  that too broad: a custom `--build-path` is deliberately not cleaned because it may hold
+  content the build does not own. Hence the per-slot wipe, after the new source is found.
+- Making the Terraform path usable: documenting the convention left a hard-coded `..` count in
+  every consumer; an absolute path in the tfvars goes stale when the build output is moved
+  between a build job and a deploy job; a `TF_VAR_` variable set by `deploy run` was verified
+  against Terraform 1.12.2 to work, but only exists when strata runs Terraform (a plain
+  `terraform plan` in the build directory then fails), cannot override a field of `var.strata`
+  because `*.auto.tfvars.json` outranks `TF_VAR_*`, and buys nothing `abspath()` does not;
+  an `abs_path` written at deploy time duplicates `abspath()` and would make the build-time
+  and deploy-time files disagree. A relative `path_from_step` plus a generated local won, and
+  the principle that strata mechanisms stay out of Terraform is why the interface is the
+  local rather than the field.
+- Where the files' location lives: inline on the deployment would need an either-or binding,
+  a replace-by-key merge mode and synthetic checkout names, and could not be pinned; a
+  templated remote URL was already rejected in remotes-at-scale.md. A `location` on the asset
+  document, with the document in the config repository and the files in the customer's, needs
+  none of that. Checking it under its own `.strata/assets/` root (rather than naming the
+  synthetic remote `asset-<name>`, which could still collide with a manifest remote) is why
+  `resolve_remote()` gained an optional `checkout_path`.
+- Factoring the slot-binding check once there were two users, with an `on_rebound` callback for
+  the one provider-only rule, kept the provider check's tests unchanged: the proof the refactor
+  preserved behaviour.

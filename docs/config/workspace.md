@@ -12,6 +12,9 @@ parameters.
   `{slot, provider}` to give the slot a stable name distinct from its default document. IaC code
   addresses the slot (`strata.providers.<slot>`); a [`deployment`](deployment.md) can rebind it to
   another provider document of the same type — see "Provider slots" below
+- `spec.assets[]` — asset **slots**: each is an [`asset`](asset.md) document name, or `{slot, asset}`
+  to give the slot a stable name distinct from its default document. A step selects slots through
+  its own `assets`, and a [`deployment`](deployment.md) can rebind a slot — see "Asset slots" below
 - `spec.resources[]` — workspace-local resource instances, each:
   - `name` — the workspace-local instance name
   - `resource` — the [`resource`](resource.md) document it's built from (or `managed_by: provisioner`
@@ -36,6 +39,7 @@ parameters.
   fields is required. A resource's own `firewalls`/`dns_zones`/`subnet.network` are claimed
   automatically once that resource is effectively in scope (direct or via `topologies[]`) — no
   need to also list them directly on the step.
+  `assets[]` selects the asset slots this step needs (see "Asset slots").
 - `spec.default_tags` — default cloud tags for resources created by this workspace
 
 ## Example
@@ -104,6 +108,31 @@ providers:
   slot name (`azure`) over one named after a specific region's document (`azure-main`) when you
   expect to rebind — otherwise `strata.providers.azure-main` would silently point at another
   region.
+
+## Asset slots
+
+A `spec.assets[]` entry is a named **slot** with a default [`asset`](asset.md) document, and an
+execution step selects the slots it needs:
+
+```yaml
+assets:
+  - slot: api                # stable key — steps select it, IaC code reads local.strata_assets.api
+    asset: api-default       # default Asset document
+  - openapi                  # bare name = slot and document share the name
+execution:
+  - name: publish_api
+    provisioner: terraform_apim
+    resources: [apim]
+    assets: [api]            # selects the slot
+```
+
+- `slot` is unique within the workspace; two slots may point at the same document. A step
+  selects a **slot**, never a document name directly.
+- A bare string is shorthand for `{slot: <name>, asset: <name>}`, so a workspace that never
+  rebinds anything reads exactly as before.
+- Only slots a step selects are materialised and projected, so an unused slot costs nothing.
+- A [`deployment`](deployment.md) rebinds the slot to another asset document, so one workspace can
+  serve many customers whose files live in different repositories.
 
 ## Topology grouping
 

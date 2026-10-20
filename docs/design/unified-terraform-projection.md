@@ -57,6 +57,17 @@ _sources_declare_own_strata_variable()`, a plain regex scan, no HCL
 parsing) — a consumer who wants full control over the type takes on its
 own secret-merging too, not just its own type.
 
+`strata_locals.tf` also defines `local.strata_assets`, the form a Terraform author is meant to
+read assets through: per slot, `dir` and a `files` map from each file name to its path, both
+relative to the root module (`path.root` plus the step-relative `path_from_step` the projection
+emits). It keeps the path arithmetic out of every consumer; see
+[asset-management.md](asset-management.md).
+
+```hcl
+file(local.strata_assets.api.files["openapi.json"])
+fileset(local.strata_assets.api.dir, "**/*.json")
+```
+
 `strata.default_tags` is the solution-wide tag baseline, hoisted out of
 `workspace` to sit alongside `properties`/`custom`/`flags`/`variables`
 (`WorkspaceSpecModel.default_tags` is cross-cutting, not workspace-scoped
@@ -65,7 +76,7 @@ data). Every other `default_tags` (`providers.<name>.default_tags`,
 entry's own) stays where it is — those are genuinely per-entity
 baselines.
 
-**Every one of the fifteen top-level keys is always present**, empty
+**Every one of the sixteen top-level keys is always present**, empty
 (`{}`) when unused rather than omitted — this is what lets the generated
 type stay strict with no top-level `optional()`. The one exception:
 `tenant` collapses to a bare `{}` (zero keys, not just empty values) when

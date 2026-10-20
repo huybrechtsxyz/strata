@@ -1,8 +1,9 @@
 # Workspace Overrides (per-deployment rebinding of workspace content) — Work
 
-- Status: in-progress — providers done and graduated to
-  [provider-slots.md](../design/provider-slots.md); assets (and any other category) still open
-- Last updated: 2026-10-19
+- Status: in-progress — providers and assets done and graduated to
+  [provider-slots.md](../design/provider-slots.md) and
+  [asset-management.md](../design/asset-management.md); any other category still open
+- Last updated: 2026-10-20
 
 > Formerly `environment-overrides.md`. The decision below is that rebinding lives on the
 > **deployment**, not the environment.
@@ -27,8 +28,9 @@ Two concrete needs hit the same gap:
 - **Providers** — one workspace deployed to different regions/accounts (westeurope vs
   northeurope). **Done** — see [provider-slots.md](../design/provider-slots.md).
 - **Assets** — one APIM workspace, ~300 customers, each needing its own asset (API definitions)
-  bound to the same step slot. Open — see [remotes-at-scale.md](remotes-at-scale.md), Option 3b,
-  S1. It is the next category and reuses the pattern below.
+  bound to the same step slot. **Done** — see
+  [asset-management.md](../design/asset-management.md); the location half is Option 3b in
+  [remotes-at-scale.md](remotes-at-scale.md).
 
 This doc keeps the **scope decisions and the shared rule** that apply to every category; each
 category graduates to its own design doc once built.
@@ -83,7 +85,7 @@ same category as `workspace:` or `version:`, which already live on the deploymen
 6. **Every list of named items merges by its identity key** across `extends` (and any other
    layering): same key → child wins (deep-merged), new key → appended. Plain value lists replace.
    One rule for every key, declared once (a merge-key table), not a special case per field.
-   Built for `stages` and `providers`; extending it is Q7.
+   Built for `stages`, `providers` and `assets`; extending it is Q7.
 
 ### How `extends` merges (verified, `merge_deployment_specs()`)
 
@@ -93,7 +95,7 @@ same category as `workspace:` or `version:`, which already live on the deploymen
 | Shape                                          | Rule                                                                                                             |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | Dicts (`locking`, `properties`, `custom`, ...) | Deep-merged per leaf key (`deep_merge`), child wins — deliberately diverges from v1, which replaced whole values |
-| `stages`, `providers`                          | Merged by key (`_LIST_MERGE_KEYS`: `step`, `slot`), new keys appended                                            |
+| `stages`, `providers`, `assets`                | Merged by key (`_LIST_MERGE_KEYS`: `step`, `slot`, `slot`), new keys appended                                    |
 | `environments`                                 | Base list, then child's (deduplicated) — later wins at value resolution                                          |
 | Any other list                                 | **Replaced wholesale** by the child's                                                                            |
 
@@ -115,9 +117,9 @@ by key; an unkeyed list replaces.**
 
 So "the same merge as environments" — later wins *per key* — is exactly the expectation, and it
 should hold for **every** keyed list, not only providers. `merge_deployment_specs()` now does this
-through one merge-key table (`stages`→`step`, `providers`→`slot`); `environments`/`configurations`
-(name lists) keep append-dedupe; anything not in the table replaces. The remaining keyed lists
-(`health_checks`→`name`, a future `assets`→`slot`) are Q7. Alternative considered: make bindings
+through one merge-key table (`stages`→`step`, `providers`→`slot`, `assets`→`slot`); `environments`/`configurations`
+(name lists) keep append-dedupe; anything not in the table replaces. The remaining keyed list
+(`health_checks`→`name`) is Q7. Alternative considered: make bindings
 **maps** (`providers: {azure: azure-north}`) — per-key via `deep_merge` with zero new code, but
 inconsistent with the list shape on the workspace side.
 
@@ -125,15 +127,15 @@ inconsistent with the list shape on the workspace side.
 
 ### Scope inventory — v1 categories vs v2
 
-| v1 `overrides.*`          | What it did (v1)                                                      | v2 today                                                    | Candidate?                                                  |
-| ------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| `providers`               | Swap provider **file** per env + patch provider properties (ADR-0036) | `{slot, provider}` slots + `deployment.spec.providers`      | **Done** — [provider-slots.md](../design/provider-slots.md) |
-| `remotes`                 | Override a remote's `reference` only                                  | Covered by `version.spec.pins.remotes`                      | Probably no — overlaps version pins                         |
-| `resources`               | count / configuration / enabled per resource                          | None                                                        | Later, evidence needed                                      |
-| `modules`                 | enabled / slot_type / configuration / per-service image               | Images covered by `pins.images`; rest none                  | Later, evidence needed                                      |
-| `properties`              | Override workspace properties                                         | Environment `properties` already merged into the deployment | Already covered                                             |
-| `includes`/`output_files` | Terraform file merging / output shaping                               | Not ported (pure build machinery)                           | No                                                          |
-| *(new)* `assets`          | —                                                                     | None                                                        | **Yes — next** (remotes-at-scale.md)                        |
+| v1 `overrides.*`          | What it did (v1)                                                      | v2 today                                                    | Candidate?                                                      |
+| ------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
+| `providers`               | Swap provider **file** per env + patch provider properties (ADR-0036) | `{slot, provider}` slots + `deployment.spec.providers`      | **Done** — [provider-slots.md](../design/provider-slots.md)     |
+| `remotes`                 | Override a remote's `reference` only                                  | Covered by `version.spec.pins.remotes`                      | Probably no — overlaps version pins                             |
+| `resources`               | count / configuration / enabled per resource                          | None                                                        | Later, evidence needed                                          |
+| `modules`                 | enabled / slot_type / configuration / per-service image               | Images covered by `pins.images`; rest none                  | Later, evidence needed                                          |
+| `properties`              | Override workspace properties                                         | Environment `properties` already merged into the deployment | Already covered                                                 |
+| `includes`/`output_files` | Terraform file merging / output shaping                               | Not ported (pure build machinery)                           | No                                                              |
+| *(new)* `assets`          | —                                                                     | `{slot, asset}` slots + `deployment.spec.assets`            | **Done** — [asset-management.md](../design/asset-management.md) |
 
 
 ## Related Decisions
@@ -145,17 +147,15 @@ inconsistent with the list shape on the workspace side.
 - [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md) — identity is
   `(kind, meta.name)`, never a file; why a rebind needs a stable slot name.
 - [remotes-at-scale.md](remotes-at-scale.md) — the asset slot-binding need (Option 3b, S1) that
-  is the next category.
+  became asset slots plus `location`: [asset-management.md](../design/asset-management.md).
 - v1 ADR-0036 (`strata/docs/decisions/0036-workspace-provider-environment-overrides.md`, the v1
   repo) — the original provider-override design.
 
 ## Remaining Work / Open Questions
 
-- **Assets.** Design `deployment.spec.assets` (`{slot, asset}`) with a workspace-side slot, the
-  merge-by-`slot` entry in `_LIST_MERGE_KEYS`, and the self-contained asset location from
-  remotes-at-scale.md Option 3b. Today `WorkspaceSpecModel.assets` is a pool of document names
-  and `step.assets` selects from it, so the slot layer needs a shape that keeps existing
-  workspaces valid (bare-name shorthand, as for providers).
+- **Assets.** Built and graduated: workspace slots, `deployment.spec.assets`, the `assets: slot`
+  merge key, validation, the self-contained asset `location` (remotes-at-scale.md Option 3b) and
+  `pins.assets` — see [asset-management.md](../design/asset-management.md).
 - **Q7 — Remaining keyed lists.** Add `health_checks`→`name` (inside a merged stage, today
   replaced) and decide whether `configurations` (a name list) should append like `environments`.
   Changes behaviour for stages that set `health_checks` in both base and child, so it needs its
@@ -180,3 +180,8 @@ inconsistent with the list shape on the workspace side.
   constraints, technical design, plan) moved there as design + History. Renamed from
   `environment-overrides.md`. Q1-Q5 closed (need confirmed; deployment binding; rebind only;
   `extends` precedence; `slot`/`provider` field names kept).
+- 2026-10-19: Assets designed as the next category.
+- 2026-10-20: Assets built in six phases (deploy/type/path fixes, workspace slots, deployment
+  bindings, asset `location` with `pins.assets`, validation, docs + dogfood) and graduated to
+  [asset-management.md](../design/asset-management.md). The shared merge-key table now covers
+  `assets`.

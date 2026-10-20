@@ -450,3 +450,7 @@ per-customer path/tag. Strata declares **one** remote and selects per customer v
   today. Q8 reworded (S1 vs S4); Q10 added.
 - 2026-10-19: S1 chosen over S4 — bindings on the deployment (`deployment.spec.assets`),
   environments stay values-only; decided in workspace-overrides.md. Q8/Q10 answered.
+- 2026-10-20: Option 3b built as the asset `location` (git only, own checkout root, `pins.assets`,
+  credentials deferred to C5), together with asset slots and per-deployment binding — see
+  [asset-management.md](../design/asset-management.md). Per-customer Terraform/Helm code
+  (`SourceModel`, Q5) is not covered by it.

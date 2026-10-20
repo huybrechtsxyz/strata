@@ -12,12 +12,15 @@ with what runtime behavior*. `strata build run`/`strata deploy run` both take a 
 - `spec.tenant` — optional [`tenant`](tenant.md) reference; its defaults merge in first
 - `spec.extends` — another deployment document (typically `partial: true`) whose spec is merged
   in before this one's (child wins; nested blocks deep-merge; stages merge by step name and
-  `providers` by slot; `environments` lists append base-first; other lists are replaced)
+  `providers` and `assets` by slot; `environments` lists append base-first; other lists are replaced)
 - `spec.partial` — `true` marks a base deployment as not independently deployable (a leaf picks it
   up via `extends`)
 - `spec.providers[]` — rebind [`workspace`](workspace.md) provider slots for this deployment, each
   `{slot, provider}`: the workspace's `spec.providers[].slot` and the [`provider`](provider.md)
   document to use instead of the slot's default — see "Rebinding a provider" below
+- `spec.assets[]` — rebind [`workspace`](workspace.md) asset slots for this deployment, each
+  `{slot, asset}`: the workspace's `spec.assets[].slot` and the [`asset`](asset.md) document to use
+  instead of the slot's default — see "Rebinding an asset" below
 - `spec.locking` — deployment lock configuration
 - `spec.layers` — deployment layer/scope segments
 - `spec.stages[]` — runtime parameters per provisioning step, each:
@@ -101,6 +104,37 @@ spec:
   `partial` base is only judged once merged into the deployment that extends it, and the
   redundant warning is skipped for a document that itself uses `extends` (resetting a base's
   binding back to the default is legitimate).
+
+## Rebinding an asset
+
+The same rule applies to a workspace's [asset slots](workspace.md): a deployment binds a slot to
+another [`asset`](asset.md) document. One workspace can then serve many customers, each with
+files in their own repository, while the Terraform code keeps reading `local.strata_assets.<slot>`:
+
+```yaml
+kind: deployment
+meta:
+  name: prd-c0062-deployment
+spec:
+  extends: deploy-base
+  environments: [prd]
+  tenant: c0062
+  assets:
+    - slot: api
+      asset: c0062-api       # an asset document that carries its own git `location`
+```
+
+A customer is therefore one small asset document plus this deployment; `strata.yaml` does not
+grow. Put a binding shared by many deployments in a `partial` base, as for providers.
+
+- **Rebind only**, and bindings merge by `slot` across `extends` (child wins), exactly as for
+  providers.
+- `strata validate` reports `asset_slot_unknown` (slot not declared by the workspace) as an error and
+  `asset_binding_redundant` (binds the slot's own default) as a warning, with the same `partial`
+  and `extends` handling as the provider codes. A bound document that does not exist is an
+  `unknown_reference`.
+- `strata deploy run` reports the bound document in `strata.assets.<slot>.asset`; it needs the
+  directories `strata build run` produced for the same deployment.
 
 ## Notes
 
