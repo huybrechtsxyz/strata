@@ -22,7 +22,7 @@ Compose/Helm to implement methods they have no use for.
 import json
 import os
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -38,6 +38,7 @@ from strata.controllers.deployment_output_store import (
 )
 from strata.controllers.integration_resolution import resolve_integration, resolve_output_store_integration
 from strata.controllers.solution_context import SolutionContext
+from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import SourceSyncError, resolved_asset_info
 from strata.controllers.value_controller import (
     build_value_references,
@@ -49,8 +50,9 @@ from strata.controllers.value_controller import (
 )
 from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
-from strata.integrations.errors import IntegrationError
-from strata.integrations.resolved_context import ValueResolution
+from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError
+from strata.integrations.helm import RegistryCredentials, credentials_from_authentication
+from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.integrations.terraform_projection import (
     build_strata_assets,
     build_strata_payload,
@@ -61,7 +63,7 @@ from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentStageModel
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
-from strata.models.solution_model import SolutionRemoteModel
+from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
 from strata.services.environment_service import merge_environment_models
 from strata.services.workspace_service import effective_assets
@@ -306,6 +308,58 @@ def _merge_durable_outputs(
     return True
 
 
+def _chart_registry_credentials(
+    index: DocumentIndex,
+    remotes: Mapping[str, SolutionRemoteModel],
+    modules: Iterable[ResolvedModule],
+    values: Mapping[str, str],
+    *,
+    step_name: str,
+    diagnostics: Diagnostics,
+) -> dict[str, RegistryCredentials]:
+    """Credentials for the helm/oci remotes `modules` pull charts from, keyed by remote name (ADR-0042).
+
+    Only a remote some module actually pulls a chart from, and only one that names an integration: a remote
+    nothing deploys from never fails the run. The password is read from the deploy's already-resolved `values`, so it
+    needs no store access of its own. Every problem is an error on `diagnostics` naming the remote and integration.
+    """
+    used = sorted(
+        {
+            item.module.spec.source.remote
+            for item in modules
+            if item.module.spec.source.chart_name is not None and item.module.spec.source.remote is not None
+        }
+    )
+    credentials: dict[str, RegistryCredentials] = {}
+    for name in used:
+        remote = remotes.get(name)
+        if remote is None or remote.integration is None or remote.type not in (RemoteType.HELM, RemoteType.OCI):
+            continue
+        owner = f"Step '{step_name}': remote '{name}' (integration '{remote.integration}')"
+        entry = index.get(PlatformKind.INTEGRATION, remote.integration)
+        if entry is None:
+            diagnostics.error(
+                f"{owner}: integration is not declared.", location=step_name, code="helm_registry_credentials_invalid"
+            )
+            continue
+        spec = cast(IntegrationModel, entry.model).spec
+        if not spec.enabled:
+            diagnostics.error(
+                f"{owner}: integration is disabled (spec.enabled: false).",
+                location=step_name,
+                code="helm_registry_credentials_invalid",
+            )
+            continue
+        try:
+            found = credentials_from_authentication(spec.authentication, values, owner=owner)
+        except IntegrationError as exc:
+            diagnostics.error(str(exc), location=step_name, code="helm_registry_credentials_invalid")
+            continue
+        if found is not None:
+            credentials[name] = found
+    return credentials
+
+
 def deploy_run(
     context: SolutionContext,
     deployment_name: str,
@@ -439,6 +493,8 @@ def deploy_run(
         if on_step is not None:
             on_step(message)
 
+    # Helm runs with `cwd` set to a module directory, so a relative `--build-path` would resolve twice.
+    build_path = build_path.absolute()
     index = context.controller.index
 
     deployment = resolve_deployment(context, deployment_name, version_pin=pin)
@@ -705,10 +761,8 @@ def deploy_run(
         # namespace linkage — see docs/design/deploy-command.md's
         # "Superseded" section for the two earlier, wrong drafts).
         if Capability.CONTAINER in integration.CAPABILITIES:
-            if stop_after is not None:
-                _step(
-                    f"step '{step.name}' via {integration_type} has no {stop_after} phase (container-capable) — skipped"
-                )
+            if stop_after == "setup":
+                _step(f"step '{step.name}' via {integration_type} has no setup phase (container-capable) — skipped")
                 continue
             _, namespaces_eff = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
             # sorted(): namespaces_eff is a set (hash order, not declaration order) — deploy order
@@ -723,12 +777,58 @@ def deploy_run(
                     location=step.name,
                 )
                 return diagnostics
+            container_targets = [
+                (namespace, modules)
+                for namespace in namespaces_targeted
+                if (modules := resolve_namespace_modules(index, namespace, build_path).get(integration.TYPE, []))
+            ]
             _step(f"running step '{step.name}' via {integration_type}")
-            for namespace in namespaces_targeted:
-                by_type = resolve_namespace_modules(index, namespace, build_path)
-                modules = by_type.get(integration.TYPE, [])
-                if not modules:
+            if not use_saved_plan:
+                # The container counterpart to Terraform's `validate()` (ADR-0043);
+                # `deploy apply` skips it, as it skips `validate()`.
+                has_check_phase = True
+                for namespace, modules in container_targets:
+                    try:
+                        check_diagnostics = integration.check_namespace(
+                            namespace,
+                            modules,
+                            tokens=tokens,
+                            env=env,
+                            line_callback=_line,
+                            **_timeout_kwargs(step, deployment_stage, "check"),
+                        )
+                    except CheckPhaseUnsupportedError:
+                        has_check_phase = False
+                        break
+                    except IntegrationError as exc:
+                        diagnostics.error(
+                            f"Step '{step.name}': check failed — {exc}", location=step.name, code="check_failed"
+                        )
+                        return diagnostics
+                    diagnostics.extend(check_diagnostics)
+                if not diagnostics.ok:
+                    return diagnostics
+                if stop_after == "check":
+                    if not has_check_phase:
+                        _step(
+                            f"step '{step.name}' via {integration_type} has no check phase (container-capable) — skipped"
+                        )
+                    elif container_targets:
+                        _step(f"check complete for step '{step.name}' via {integration_type} (stop-after-check)")
+                    else:
+                        _step(f"step '{step.name}' via {integration_type} has no modules to check — skipped")
                     continue
+            chart_credentials = _chart_registry_credentials(
+                index,
+                remotes,
+                [item for _, modules in container_targets for item in modules],
+                resolved.values,
+                step_name=step.name,
+                diagnostics=diagnostics,
+            )
+            if not diagnostics.ok:
+                return diagnostics
+            for namespace, modules in container_targets:
                 diagnostics.extend(
                     integration.deploy_namespace(
                         namespace,
@@ -738,6 +838,7 @@ def deploy_run(
                         remotes=remotes,
                         env=env,
                         line_callback=_line,
+                        registry_credentials=chart_credentials,
                     )
                 )
             if not diagnostics.ok:

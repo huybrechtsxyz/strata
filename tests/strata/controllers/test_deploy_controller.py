@@ -17,6 +17,7 @@ import pytest
 from strata.controllers.build_controller import build_run
 from strata.controllers.deploy_controller import deploy_run, tf_var_env
 from strata.controllers.solution_context import open_solution
+from strata.integrations.helm import _repo_alias
 from strata.integrations.resolved_context import ValueResolution
 from strata.utils.errors import UsageError
 from strata.utils.transport import CommandResult
@@ -220,7 +221,8 @@ def test_deploy_run_stop_after_setup_gracefully_skips_container_capable_step(tmp
     assert not any(call[0] == "helm" for call in _capture)
 
 
-def test_deploy_run_stop_after_check_gracefully_skips_container_capable_step(tmp_path: Path, _capture):
+def test_deploy_run_stop_after_check_lints_container_capable_step_without_deploying(tmp_path: Path, _capture):
+    """`deploy check` runs the Helm check phase (`helm lint`) and stops there — never `helm upgrade`."""
     root = _helm_solution(tmp_path)
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
@@ -230,7 +232,334 @@ def test_deploy_run_stop_after_check_gracefully_skips_container_capable_step(tmp
     assert diagnostics.ok, diagnostics.messages()
     tf_commands = [call[1] for call in _capture if call[0] == "terraform"]
     assert tf_commands == ["init", "validate"]
-    assert not any(call[0] == "helm" for call in _capture)
+    helm_calls = [call for call in _capture if call[0] == "helm"]
+    assert [call[1] for call in helm_calls] == ["lint"]
+    assert helm_calls[0][-1] == str(build_path / "apps" / "auth")
+
+
+def _fake_helm(monkeypatch, *, lint_returncode: int = 0, lint_stdout: str = "ok"):
+    """Stub `run_command` so `helm lint` can fail on demand; records `(argv, timeout)` per call."""
+    calls: list[tuple[list[str], int]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append((list(args), timeout))
+        if args[:2] == ["helm", "lint"]:
+            return CommandResult(returncode=lint_returncode, stdout=lint_stdout, stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return calls
+
+
+def test_deploy_run_accepts_a_relative_build_path(tmp_path: Path, monkeypatch):
+    """Helm runs with `cwd` in the module directory, so every path it is given must be absolute."""
+    calls = _fake_helm(monkeypatch)
+    root = _helm_solution(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    build_run(_context(root), "app", Path("build"))
+
+    diagnostics = deploy_run(_context(root), "app", Path("build"), force=True, stage="deploy_apps")
+
+    assert diagnostics.ok, diagnostics.messages()
+    lint, upgrade = (argv for argv, _ in calls if argv[0] == "helm")
+    module_dir = str(tmp_path / "build" / "apps" / "auth")
+    assert lint[-1] == module_dir
+    assert upgrade[-1] == module_dir
+    assert upgrade[upgrade.index("-f") + 1] == str(Path(module_dir) / "values.yaml")
+
+
+def test_deploy_run_check_with_no_modules_of_the_type_does_not_claim_a_check_happened(tmp_path: Path, monkeypatch):
+    calls = _fake_helm(monkeypatch)
+    monkeypatch.setattr("strata.controllers.deploy_controller.resolve_namespace_modules", lambda *args: {})
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    steps: list[str] = []
+
+    diagnostics = deploy_run(
+        _context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check", on_step=steps.append
+    )
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert any("has no modules to check" in step for step in steps)
+    assert not any("check complete" in step for step in steps)
+    assert [argv for argv, _ in calls if argv[0] == "helm"] == []
+
+
+def test_deploy_run_a_failing_helm_lint_stops_the_step_before_it_deploys(tmp_path: Path, monkeypatch):
+    calls = _fake_helm(
+        monkeypatch, lint_returncode=1, lint_stdout="==> Linting x\n[INFO] icon\n[ERROR] templates/: boom\n"
+    )
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+
+    assert not diagnostics.ok
+    [error] = diagnostics.items
+    assert error.code == "helm_lint_failed"
+    assert "[ERROR] templates/: boom" in error.message
+    assert "[INFO] icon" not in error.message
+    assert [argv[1] for argv, _ in calls if argv[0] == "helm"] == ["lint"]
+
+
+def test_deploy_run_use_saved_plan_does_not_lint_a_container_step(tmp_path: Path, monkeypatch):
+    calls = _fake_helm(monkeypatch, lint_returncode=1)
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="deploy_apps")
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [argv[1] for argv, _ in calls if argv[0] == "helm"] == ["upgrade"]
+
+
+def test_deploy_run_check_phase_uses_the_check_timeout(tmp_path: Path, monkeypatch):
+    calls = _fake_helm(monkeypatch)
+    monkeypatch.setenv("STRATA_TIMEOUT_DEPLOY_APPS_CHECK", "7")
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check")
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [(argv[1], timeout) for argv, timeout in calls if argv[0] == "helm"] == [("lint", 7)]
+
+
+def test_deploy_run_integration_without_a_check_phase_is_skipped_not_failed(tmp_path: Path, monkeypatch):
+    from strata.integrations.errors import CheckPhaseUnsupportedError
+    from strata.integrations.helm import HelmIntegration
+
+    def _no_check(self, *args, **kwargs):
+        raise CheckPhaseUnsupportedError("no check phase")
+
+    calls = _fake_helm(monkeypatch)
+    monkeypatch.setattr(HelmIntegration, "check_namespace", _no_check)
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    steps: list[str] = []
+
+    check = deploy_run(
+        _context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check", on_step=steps.append
+    )
+    run = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+
+    assert check.ok and run.ok
+    assert any("has no check phase" in step for step in steps)
+    assert [argv[1] for argv, _ in calls if argv[0] == "helm"] == ["upgrade"]
+
+
+def test_deploy_run_a_real_integration_error_during_a_check_is_a_failure_not_a_skip(tmp_path: Path, monkeypatch):
+    from strata.integrations.errors import IntegrationError
+    from strata.integrations.helm import HelmIntegration
+
+    def _broken_check(self, *args, **kwargs):
+        raise IntegrationError("helm is misconfigured")
+
+    calls = _fake_helm(monkeypatch)
+    monkeypatch.setattr(HelmIntegration, "check_namespace", _broken_check)
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    steps: list[str] = []
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", on_step=steps.append)
+
+    [error] = diagnostics.items
+    assert error.code == "check_failed" and "helm is misconfigured" in error.message
+    assert not any("has no check phase" in step for step in steps)
+    assert [argv for argv, _ in calls if argv[0] == "helm"] == []
+
+
+_PROGET_SECRET = "s3cret-key-123"
+
+
+def _proget_solution(
+    tmp_path: Path,
+    *,
+    authentication: str = "    method: token\n    token:\n      token: PROGET_API_KEY\n      username: api\n",
+    secrets: str = f"  secrets:\n    - key: PROGET_API_KEY\n      store: constant\n      value: {_PROGET_SECRET}\n",
+    remote_integration: str | None = "proget",
+) -> Path:
+    """`_helm_solution()` with its one module pulling a chart from a helm remote that names an integration."""
+    root = _helm_solution(tmp_path)
+    integration_line = f"      integration: {remote_integration}\n" if remote_integration else ""
+    _write(
+        root,
+        "strata.yaml",
+        MANIFEST.replace(
+            "spec: {}",
+            "spec:\n  remotes:\n    - name: proget-charts\n      type: helm\n"
+            f"      url: https://proget.example.com/helm/charts\n{integration_line}",
+        ),
+    )
+    _write(
+        root,
+        "integration.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: proget\nspec:\n"
+        f"  type: proget\n  capabilities: [sources]\n  authentication:\n{authentication}",
+    )
+    spec = f"spec:\n{secrets}" if secrets else "spec: {}\n"
+    _write(
+        root,
+        "environment.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\n{spec}",
+    )
+    _write(
+        root,
+        "module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    remote: proget-charts\n    chart_name: gatus\n    chart_version: 1.0.0\n  type: helm\n"
+        "  default_labels:\n    app: authentik\n  services:\n    - name: server\n",
+    )
+    return root
+
+
+def _fake_helm_calls(monkeypatch, *, stream: str | None = None):
+    """Stub `run_command`, recording argv, env and stdin per call; `stream` is echoed to a `line_callback` if given."""
+    calls: list[dict] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append({"args": list(args), "env": dict(env) if env is not None else None, "input": input})
+        if stream is not None and line_callback is not None and args[1] == "upgrade":
+            line_callback("stdout", stream)
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return calls
+
+
+def _deploy_apps(root: Path, tmp_path: Path, **kwargs):
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    return deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", **kwargs)
+
+
+def test_deploy_run_authenticates_to_a_private_chart_registry_from_the_integration(tmp_path: Path, monkeypatch):
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = _deploy_apps(_proget_solution(tmp_path), tmp_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    repo_add, upgrade = calls
+    url = "https://proget.example.com/helm/charts"
+    assert repo_add["args"] == [
+        "helm",
+        "repo",
+        "add",
+        _repo_alias(url),
+        url,
+        "--force-update",
+        "--username",
+        "api",
+        "--password-stdin",
+    ]
+    assert repo_add["input"] == _PROGET_SECRET
+    assert upgrade["args"][1] == "upgrade" and upgrade["args"][-2:] == ["--version", "1.0.0"]
+    assert upgrade["env"]["HELM_REPOSITORY_CONFIG"] == repo_add["env"]["HELM_REPOSITORY_CONFIG"]
+    for call in calls:
+        assert _PROGET_SECRET not in " ".join(call["args"]) + " ".join((call["env"] or {}).values())
+
+
+def test_deploy_run_dry_run_previews_with_the_same_registry_credentials(tmp_path: Path, monkeypatch):
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = _deploy_apps(_proget_solution(tmp_path), tmp_path, dry_run=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "--dry-run" in calls[1]["args"] and calls[0]["input"] == _PROGET_SECRET
+
+
+def test_deploy_run_never_streams_the_registry_password(tmp_path: Path, monkeypatch):
+    _fake_helm_calls(monkeypatch, stream=f"pulling with {_PROGET_SECRET}")
+    lines: list[str] = []
+
+    _deploy_apps(_proget_solution(tmp_path), tmp_path, on_line=lambda tool, stream, text: lines.append(text))
+
+    assert lines == ["pulling with ***"]
+
+
+def test_deploy_run_remote_without_an_integration_pulls_anonymously(tmp_path: Path, monkeypatch):
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = _deploy_apps(_proget_solution(tmp_path, remote_integration=None), tmp_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "--username" not in calls[0]["args"] and calls[0]["input"] is None
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({"secrets": ""}, "no value for 'PROGET_API_KEY'"),
+        ({"authentication": "    method: token\n    token:\n      token: PROGET_API_KEY\n"}, "needs 'username'"),
+        (
+            {"authentication": "    method: ssh_key\n    ssh_key:\n      private_key: PROGET_API_KEY\n"},
+            "method 'ssh_key' cannot authenticate a chart registry",
+        ),
+    ],
+)
+def test_deploy_run_unusable_registry_credentials_fail_before_any_helm_call(
+    tmp_path: Path, monkeypatch, overrides, expected
+):
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = _deploy_apps(_proget_solution(tmp_path, **overrides), tmp_path)
+
+    assert not diagnostics.ok
+    [error] = diagnostics.items
+    assert error.code == "helm_registry_credentials_invalid"
+    assert error.message.startswith("Step 'deploy_apps': remote 'proget-charts' (integration 'proget'): ")
+    assert expected in error.message
+    assert calls == []
+
+
+def test_deploy_run_check_phase_does_not_need_the_registry_credentials(tmp_path: Path, monkeypatch):
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = _deploy_apps(_proget_solution(tmp_path, secrets=""), tmp_path, stop_after="check")
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [call["args"][1] for call in calls] == []  # a registry chart is not linted, and nothing was pulled
+
+
+def test_deploy_run_only_resolves_credentials_for_remotes_a_module_pulls_from(tmp_path: Path, monkeypatch):
+    calls = _fake_helm_calls(monkeypatch)
+    root = _proget_solution(tmp_path)
+    _write(
+        root,
+        "strata.yaml",
+        MANIFEST.replace(
+            "spec: {}",
+            "spec:\n  remotes:\n"
+            "    - name: proget-charts\n      type: helm\n      url: https://proget.example.com/helm/charts\n"
+            "      integration: proget\n"
+            "    - name: unused\n      type: helm\n      url: https://unused.example.com/charts\n"
+            "      integration: unused-registry\n",
+        ),
+    )
+    _write(
+        root,
+        "unused-integration.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: unused-registry\nspec:\n"
+        "  type: proget\n  capabilities: [sources]\n  authentication:\n    method: token\n"
+        "    token:\n      token: NOT_DECLARED_ANYWHERE\n      username: api\n",
+    )
+
+    diagnostics = _deploy_apps(root, tmp_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert calls[0]["input"] == _PROGET_SECRET
 
 
 def test_deploy_run_use_saved_plan_hard_errors_when_plan_file_missing(tmp_path: Path, _capture):
@@ -3239,7 +3568,9 @@ def test_deploy_run_deploys_container_capable_step_namespaces_in_sorted_order(tm
     diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok, diagnostics.messages()
-    helm_namespaces = [call[call.index("--namespace") + 1] for call in _capture if call[0] == "helm"]
+    helm_namespaces = [
+        call[call.index("--namespace") + 1] for call in _capture if call[0] == "helm" and call[1] == "upgrade"
+    ]
     assert helm_namespaces == ["aaa", "zzz"]
 
 
@@ -3256,12 +3587,14 @@ def test_deploy_run_dispatches_container_capable_step_to_deploy_namespace(tmp_pa
     tf_commands = [call[1] for call in _capture if call[0] == "terraform"]
     assert tf_commands == ["init", "validate", "plan", "apply", "output"]
 
-    # The Helm step never goes through init/validate/plan at all - straight
-    # to one `helm upgrade` per namespace module.
+    # The Helm step never goes through init/validate/plan, but it is linted first (the container
+    # counterpart to `validate`), then one `helm upgrade` per namespace module.
     helm_calls = [call for call in _capture if call[0] == "helm"]
-    assert len(helm_calls) == 1
+    assert [call[1] for call in helm_calls] == ["lint", "upgrade"]
     module_dir = build_path / "apps" / "auth"
-    assert helm_calls[0] == [
+    assert helm_calls[0][:3] == ["helm", "lint", "-f"]
+    assert helm_calls[0][-1] == str(module_dir)
+    assert helm_calls[1] == [
         "helm",
         "upgrade",
         "--install",
@@ -3295,12 +3628,12 @@ def test_deploy_run_dry_run_previews_container_capable_step_via_plan(tmp_path: P
     tf_commands = [call[1] for call in _capture if call[0] == "terraform"]
     assert tf_commands == ["init", "validate", "plan"]
 
-    # Helm step: one real preview call, `--dry-run`, never `deploy()`'s
+    # Helm step: lint, then one real preview call, `--dry-run`, never `deploy()`'s
     # `--install --create-namespace --wait --atomic --timeout 5m` shape.
     helm_calls = [call for call in _capture if call[0] == "helm"]
-    assert len(helm_calls) == 1
+    assert [call[1] for call in helm_calls] == ["lint", "upgrade"]
     module_dir = build_path / "apps" / "auth"
-    assert helm_calls[0] == [
+    assert helm_calls[1] == [
         "helm",
         "upgrade",
         "--dry-run",
@@ -3324,7 +3657,7 @@ def test_deploy_run_filters_helm_steps_by_scope_like_terraform_steps(tmp_path: P
 
     assert any("deploy_apps" in s for s in steps)
     assert not any("apply_infra" in s for s in steps)
-    assert [call[0] for call in _capture] == ["helm"]
+    assert [call[:2] for call in _capture] == [["helm", "lint"], ["helm", "upgrade"]]
 
 
 def test_deploy_run_container_step_with_no_matching_namespace_target_errors(tmp_path: Path, _capture):

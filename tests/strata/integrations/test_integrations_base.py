@@ -226,6 +226,35 @@ def test_run_forwards_line_callback_to_run_command(monkeypatch):
     assert captured["line_callback"] is _cb
 
 
+def test_run_forwards_input_to_run_command_and_defaults_to_none(monkeypatch):
+    seen: list[object] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=300, input=None, line_callback=None):
+        seen.append((list(args), input))
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    integration = _CliOnly(_config(command="widget-cli"))
+
+    integration.run("login", input="s3cret-value")
+    integration.run("version")
+
+    assert seen == [(["widget-cli", "login"], "s3cret-value"), (["widget-cli", "version"], None)]
+
+
+def test_run_delivers_input_on_stdin_never_in_the_arguments():
+    import sys
+
+    integration = _CliOnly(_config(command=sys.executable))
+
+    result = integration.run("-c", "import sys; print(sys.stdin.read().upper())", input="hunter2")
+
+    assert result.is_successful
+    assert result.payload.strip() == "HUNTER2"
+
+
 def test_request_reports_a_missing_endpoint_without_raising():
     result = _NetworkedOnly().request("GET", "/v1/kv/x")
     assert isinstance(result, HttpResult)

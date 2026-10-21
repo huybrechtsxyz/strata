@@ -77,7 +77,9 @@ parameters).
   documents against their schemas, independent of any one deployment or
   IaC tool; `deploy check` only asks the underlying IaC tool whether one
   deployment's already-rendered config passes its own validation.
-  Container-capable steps: same graceful skip as `setup`.
+  Container-capable steps: Helm lints each local chart (`check_namespace()`, `helm lint`
+  against the built chart with a temporary overlay of the resolved non-secret values); an
+  integration with no check phase (Compose) is a graceful skip.
 - **`deploy plan`** — adds `plan()`, saving `<step>.tfplan`. Streams the
   plan's own diff to the console **by default** (its own `--follow`
   option defaults to `"console"`, unlike every other deploy subcommand,
@@ -198,6 +200,12 @@ something strata can paper over.
   — the real implementation.
 
 ## History
+
+- Container-capable steps were first skipped by `check` as well as `setup` (Helm/Compose had no `validate()`
+  equivalent). Helm gained one in 2026-10 (`check_namespace()`, see [helm-chart-deployment.md](helm-chart-deployment.md) and
+  [ADR-0043](../decisions/0043-helm-lint-as-the-container-check-phase.md)): `check`,
+  `plan` and `run` lint local charts before dry-running or deploying, `apply` does not (as it skips `validate()`),
+  and `setup` still skips. A lint `[ERROR]` now fails a Helm `deploy run` before anything is deployed.
 
 - An initial investigation (2026-10-09) found no phase-level granularity
   existed at all: `deploy run` was one atomic sequence per invocation,

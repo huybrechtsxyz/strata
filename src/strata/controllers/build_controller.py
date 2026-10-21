@@ -750,7 +750,7 @@ def build_run(
     # namespace the workspace references is already resolved onto `graph`
     # (build_resolved_workspace_graph()), so no extra index walk is needed.
     for namespace in graph.namespaces.values():
-        build_workload_modules(
+        workload_diagnostics = build_workload_modules(
             index,
             context.root,
             remotes,
@@ -764,6 +764,7 @@ def build_run(
             on_step=on_step,
             credentials=credentials,
         )
+        diagnostics.extend(workload_diagnostics)
 
     # SBOM generation (docs/design/sbom-generation.md Phase 1) — runs dead
     # last, after every provisioner/workload module is materialised and

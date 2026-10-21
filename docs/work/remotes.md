@@ -2,8 +2,10 @@
 
 - Status: current — `resolve_remote()` implemented for `local` and `git`
   remotes (both `fetch: strata` and `fetch: external`), including credentialed
-  (private-repo) clones through the remote's `integration`; `oci`/`helm` fetches
-  not yet built.
+  (private-repo) clones through the remote's `integration`; `oci`/`helm` remotes are not
+  fetched by strata (Helm pulls a chart itself at deploy), but a private chart registry
+  authenticates through the remote's `integration` (docs/integrations/chart-registries.md);
+  fetching a non-chart OCI artifact is not yet built.
 - Last updated: 2026-10-20
 
 ## Overview

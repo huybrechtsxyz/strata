@@ -410,7 +410,8 @@ existence of the bound document is the generic reference check's job. The same g
 `location.integration`: a missing document is the generic `unknown_reference`. The matching
 check for a manifest remote's `integration` (`remote_integration_unknown`,
 `remote_integration_not_sources`, plus `remote_integration_disabled` and
-`remote_integration_auth_unsupported` as warnings, since GitOps and audit pushes also use it)
+`remote_integration_auth_unsupported` as warnings for a git remote, since GitOps and audit pushes also use it;
+for a `helm`/`oci` remote they are errors, plus `remote_integration_username_required`)
 lives in `_check_remote_integrations()`. `fetch_credential_key_undeclared` is checked per
 deployment, against the assets its workspace steps select.
 

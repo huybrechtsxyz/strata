@@ -246,6 +246,31 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-10-21: **Unreleased since alpha25 (not a build)** — the Helm/OCI chart work ([helm-chart-deployment.md](../design/helm-chart-deployment.md)),
+  to be cut in the next alpha. Behaviour changes worth putting in its notes: a pinned `chart_version`/`pins.charts` now
+  reaches `helm` as `--version` (a chart that used to float to the latest release installs the pinned one); a `helm lint`
+  `[ERROR]` on a built local chart now fails `deploy check`/`plan`/`run` before anything is deployed; HTTP chart repositories
+  are registered with `--force-update` under a new, collision-free alias (old aliases on a machine are simply unused); for a
+  `helm`/`oci` remote a mis-declared integration (unknown, not `sources`, disabled, a method other than `token`/`cli`, or a
+  token without `username`) is now a `strata validate` error. New: a private chart registry (ProGet, Nexus, ACR, ...)
+  authenticates through the remote's integration ([chart-registries.md](../integrations/chart-registries.md)), and a
+  `configuration` key a local chart's `values.yaml` does not declare is a build warning. Full suite green at the time of
+  writing (2978 passed, mypy, ruff, import-linter, `sphinx -W`).
+- 2026-10-20: **Built alpha25** — bumped `VERSION.txt` to `2.0.0-Alpha25` (normalizes to `2.0.0a25`;
+  confirmed via `packaging.version.Version` first; the file has no trailing newline, as before), cut after
+  the per-customer repositories work ([remotes-at-scale.md](remotes-at-scale.md)): asset `location`
+  credentials for every build-time clone with the new `strata validate` checks, a 300-customer scale test
+  that found and fixed a quadratic `DocumentIndex.names_of()`, loading with libyaml's safe loader (about 2x
+  faster `open_solution`), and the selective-promotion design (not built). Beta not considered in this bump.
+  Full check suite green: mypy (160 files), ruff check, ruff format, import-linter, pytest (2914 passed),
+  Sphinx docs build with `-W`. Hit the stale-dist-info sharp edge again (expected on every version-string
+  change): `uv sync --reinstall-package xyz-strata --index-strategy unsafe-best-match` dropped the docs
+  extras as documented, `uv sync --all-extras --index-strategy unsafe-best-match` restored them, and
+  `strata version` then reported `2.0.0a25`. `uv build --index-strategy unsafe-best-match` produced
+  `xyz_strata-2.0.0a25-py3-none-any.whl`/`.tar.gz`; installed into a fresh isolated `uv venv`, confirmed
+  `strata version` → `2.0.0a25`, `strata --help`'s command list, and `strata validate` against `config/`
+  (32 documents, 3 warnings). Verification venv removed after. The bump commit is tagged
+  `v2.0.0-alpha25`.
 - 2026-10-16: **Built alpha24** — bumped `VERSION.txt` to `2.0.0-Alpha24`
   (normalizes to `2.0.0a24`; confirmed via `packaging.version.Version`
   first), cut after the `deploy setup`/`check`/`plan`/`apply` pipeline-

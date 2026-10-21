@@ -185,9 +185,14 @@ class Integration(ABC):
         cwd: Path | None = None,
         env: Mapping[str, str] | None = None,
         timeout: int = 300,
+        input: str | None = None,
         line_callback: Callable[[str, str], None] | None = None,
     ) -> CommandResult:
         """Run `command` with `args` (see `strata.utils.transport.run_command`).
+
+        `input`: text written to the command's stdin, for secret material that must not appear in
+        `args` (visible in `ps`/Task Manager), such as a registry password. Forwarded to
+        `run_command()`, which never logs it.
 
         `line_callback`: when given, called as `(stream, line)` for every
         line of output as it arrives — forwarded straight through to
@@ -202,7 +207,9 @@ class Integration(ABC):
                 stdout="",
                 stderr=f"{self.name}: no command configured for the 'cli' transport",
             )
-        return run_command([command, *args], cwd=cwd, env=env, timeout=timeout, line_callback=line_callback)
+        return run_command(
+            [command, *args], cwd=cwd, env=env, timeout=timeout, input=input, line_callback=line_callback
+        )
 
     # ------------------------------------------------------------------
     # networked transports (http, sdk, ...)

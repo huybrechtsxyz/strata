@@ -40,6 +40,7 @@ from strata.controllers.value_references import resolve_document_value_reference
 from strata.integrations.capabilities import KeyValueStoreIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.git_push import FETCH_METHODS, credential_keys
+from strata.integrations.helm import REGISTRY_AUTH_METHODS
 from strata.integrations.registry import get_class as get_integration_class
 from strata.logging.config import get_logger
 from strata.models.asset_model import AssetModel
@@ -388,18 +389,36 @@ def _check_deployment_asset_bindings(
     )
 
 
-def _fetch_integration_problems(integration: IntegrationModel) -> list[tuple[str, str]]:
-    """`(code suffix, description)` for what stops `integration` from authenticating a git fetch.
+def _fetch_integration_problems(
+    integration: IntegrationModel, remote_type: RemoteType | None = None
+) -> list[tuple[str, str]]:
+    """`(code suffix, description)` for what stops `integration` from authenticating a fetch.
 
-    The build-time resolver (`remote_credentials.py`) refuses both, so `strata validate` reports them
-    before a pipeline does.
+    For a git remote or asset the build-time resolver (`remote_credentials.py`) refuses both, so `strata validate`
+    reports them before a pipeline does. For a `helm`/`oci` remote it is deploy that pulls the chart, only `token`
+    (or ambient `cli`) can authenticate a chart registry, and the token needs a literal `username`
+    (ADR-0042).
     """
     spec = integration.spec
+    chart_registry = remote_type in (RemoteType.HELM, RemoteType.OCI)
     problems: list[tuple[str, str]] = []
     if not spec.enabled:
         problems.append(("disabled", "is disabled (spec.enabled: false)"))
     auth = spec.authentication
-    if auth is not None and auth.method not in FETCH_METHODS:
+    if chart_registry:
+        if auth is not None and auth.method not in REGISTRY_AUTH_METHODS:
+            problems.append(
+                (
+                    "auth_unsupported",
+                    f"uses authentication method '{auth.method}', which cannot authenticate a chart registry "
+                    f"(supported: {', '.join(REGISTRY_AUTH_METHODS)})",
+                )
+            )
+        elif auth is not None and auth.method == "token" and auth.token is not None and not auth.token.username:
+            problems.append(
+                ("username_required", "uses token authentication without 'username', which a chart registry needs")
+            )
+    elif auth is not None and auth.method not in FETCH_METHODS:
         problems.append(
             (
                 "auth_unsupported",
@@ -1269,8 +1288,19 @@ def _check_remote_integrations(index: DocumentIndex, solution: SolutionModel | N
                 location=location,
                 code="remote_integration_not_sources",
             )
-        # Only warnings: GitOps and audit pushes also use a remote's integration and ignore `enabled`.
-        for suffix, description in _fetch_integration_problems(cast(IntegrationModel, entry.model)):
+        # Only warnings for a git remote: GitOps and audit pushes also use its integration and ignore `enabled`.
+        # Nothing else uses a chart registry's integration, so there a problem is a definite deploy failure.
+        chart_registry = remote.type in (RemoteType.HELM, RemoteType.OCI)
+        for suffix, description in _fetch_integration_problems(cast(IntegrationModel, entry.model), remote.type):
+            if chart_registry:
+                diagnostics.error(
+                    f"Remote '{remote.name}': integration '{remote.integration}' {description}, so a deploy "
+                    "cannot authenticate to this registry with it.",
+                    source=source,
+                    location=location,
+                    code=f"remote_integration_{suffix}",
+                )
+                continue
             diagnostics.warning(
                 f"Remote '{remote.name}': integration '{remote.integration}' {description}, so a build "
                 "will not use it to clone this remote.",

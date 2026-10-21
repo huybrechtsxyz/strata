@@ -10,6 +10,8 @@ own unit tests).
 
 from pathlib import Path
 
+import pytest
+
 from strata.controllers.solution_context import open_solution
 from strata.utils.diagnostics import Severity
 
@@ -945,6 +947,95 @@ def test_a_disabled_or_unsupported_integration_on_a_manifest_remote_is_only_a_wa
         "remote_integration_disabled": "warning",
         "remote_integration_auth_unsupported": "warning",
     }
+
+
+_TOKEN_WITH_USERNAME = _TOKEN_AUTH + "      username: api\n"
+_SSH_AUTH = "  authentication:\n    method: ssh_key\n    ssh_key:\n      private_key: K\n"
+_CLI_AUTH = "  authentication:\n    method: cli\n    cli:\n      use_cli: true\n"
+
+
+def _chart_remote_with_integration(root: Path, remote_type: str = "helm") -> None:
+    url = "oci://proget.example.com/feeds/charts" if remote_type == "oci" else "https://proget.example.com/helm/charts"
+    _write(
+        root,
+        "strata.yaml",
+        MANIFEST.replace(
+            "spec: {}\n",
+            f"spec:\n  remotes:\n    - name: charts\n      type: {remote_type}\n      url: {url}\n"
+            "      integration: customer-git\n",
+        ),
+    )
+
+
+def _chart_registry_findings(context) -> dict[str, str]:
+    codes = {
+        "remote_integration_username_required",
+        "remote_integration_auth_unsupported",
+        "remote_integration_disabled",
+    }
+    found = {d.code: "error" for d in context.diagnostics.errors if d.code in codes}
+    found.update({d.code: "warning" for d in context.diagnostics.warnings if d.code in codes})
+    return found
+
+
+@pytest.mark.parametrize("remote_type", ["helm", "oci"])
+@pytest.mark.parametrize("auth", [_TOKEN_WITH_USERNAME, _CLI_AUTH], ids=["token-with-username", "cli"])
+def test_a_chart_registry_remote_with_usable_credentials_is_clean(tmp_path, remote_type, auth):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root, auth=auth)
+    _chart_remote_with_integration(root, remote_type)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _chart_registry_findings(context) == {}
+
+
+@pytest.mark.parametrize("remote_type", ["helm", "oci"])
+def test_a_chart_registry_token_without_a_username_is_an_error(tmp_path, remote_type):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root, auth=_TOKEN_AUTH)
+    _chart_remote_with_integration(root, remote_type)
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _chart_registry_findings(context) == {"remote_integration_username_required": "error"}
+    message = next(m for m in context.diagnostics.messages() if "without 'username'" in m)
+    assert "Remote 'charts'" in message and "chart registry" in message and "customer-git" in message
+
+
+@pytest.mark.parametrize("auth", [_SSH_AUTH, _OAUTH_AUTH], ids=["ssh_key", "oauth2"])
+def test_a_chart_registry_cannot_be_authenticated_with_an_unsupported_method(tmp_path, auth):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root, auth=auth)
+    _chart_remote_with_integration(root)
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _chart_registry_findings(context) == {"remote_integration_auth_unsupported": "error"}
+    assert any(
+        "cannot authenticate a chart registry (supported: token, cli)" in m for m in context.diagnostics.messages()
+    )
+
+
+def test_a_disabled_integration_on_a_chart_registry_remote_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _fetch_integration(root, auth=_TOKEN_WITH_USERNAME, enabled=False)
+    _chart_remote_with_integration(root)
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _chart_registry_findings(context) == {"remote_integration_disabled": "error"}
+
+
+def test_a_git_remote_token_without_a_username_is_still_fine(tmp_path):
+    """Only a chart registry needs the literal username; a git token answers git's password prompt alone."""
+    root = _base_solution(tmp_path)
+    _fetch_integration(root, auth=_TOKEN_AUTH)
+    _remote_with_integration(root, "customer-git")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert _chart_registry_findings(context) == {}
 
 
 def test_asset_location_without_an_integration_has_no_finding(tmp_path):

@@ -20,9 +20,11 @@ set `store:` to one of these types to resolve a real value from an external syst
 ## Source repositories
 
 A remote in `strata.yaml`, or an asset's own `location`, names an integration with the `sources`
-capability to clone a private git repository:
+capability to clone a private git repository, or to pull a chart from a private chart registry:
 
 - [git.md](git.md) — `capabilities: [sources]`, token or SSH key read from a secret
+- [chart-registries.md](chart-registries.md) — `capabilities: [sources]`, username and token for an
+  HTTP chart repository or OCI registry (ProGet, Nexus, ACR, ...)
 
 ## How binding works, in one paragraph
 

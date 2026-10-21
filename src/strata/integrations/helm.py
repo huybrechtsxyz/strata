@@ -26,16 +26,23 @@ run`'s job, not `build run`'s (ADR-0023's value-substitution table), and no
 `deploy run` exists yet.
 """
 
+import hashlib
 import re
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import ExitStack
+from dataclasses import dataclass, field
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
 from strata.integrations.capabilities import InfraIntegration
-from strata.integrations.errors import IntegrationError
+from strata.integrations.errors import IntegrationError, RegistryAuthError
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
+from strata.models.auth_models import AuthenticationModel
 from strata.models.integration_model import Capability
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
@@ -105,6 +112,7 @@ class HelmIntegration(InfraIntegration):
         remotes: dict[str, SolutionRemoteModel] | None = None,
         env: dict[str, str] | None = None,
         line_callback: Callable[[str, str], None] | None = None,
+        registry_credentials: Mapping[str, "RegistryCredentials"] | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
         """Deploy every Helm module in `modules` (docs/design/gap_fit_v1.md gap #13).
@@ -125,10 +133,41 @@ class HelmIntegration(InfraIntegration):
         instead of `self.deploy(...)` — never both. A tool-unsupported
         preview is a warning, not a failure (`plan_or_warn()`'s own
         contract); a real plan failure is still an error.
+
+        `registry_credentials` (ADR-0042), keyed by remote name: a module whose
+        `chartRemote` has an entry authenticates to that registry (password on stdin only) inside a
+        temporary Helm config that every helm call for the module shares and that is removed when this
+        returns, so the password never reaches the user's own Helm config. A failed login is an error
+        for that module (`helm_registry_auth_failed`); the others still run.
         """
         del kwargs
+        with ExitStack() as isolated:
+            return self._deploy_modules(
+                namespace,
+                modules,
+                tokens=tokens,
+                dry_run=dry_run,
+                remotes=remotes or {},
+                env=env,
+                line_callback=line_callback,
+                registry_credentials=registry_credentials or {},
+                isolated=isolated,
+            )
+
+    def _deploy_modules(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        tokens: dict[str, str],
+        dry_run: bool,
+        remotes: dict[str, SolutionRemoteModel],
+        env: dict[str, str] | None,
+        line_callback: Callable[[str, str], None] | None,
+        registry_credentials: Mapping[str, "RegistryCredentials"],
+        isolated: ExitStack,
+    ) -> Diagnostics:
         diagnostics = Diagnostics()
-        remotes = remotes or {}
         for item in modules:
             meta_file = item.source_path / "meta.yaml"
             values_file = item.source_path / "values.yaml"
@@ -144,18 +183,37 @@ class HelmIntegration(InfraIntegration):
             release = str(meta.get("releaseName") or item.reference.name)
             release_namespace = str(meta.get("namespace") or namespace.meta.name)
 
+            credentials = None
+            if meta.get("chartRemote") is not None:
+                credentials = registry_credentials.get(str(meta["chartRemote"]))
+            module_env = {**(env or {}), **_isolated_helm_env(isolated)} if credentials is not None else env
+
             if meta.get("chartName") is None:
                 # A git-based/local chart `source` (`_render_meta()` omits
                 # chart coordinates entirely for this case) — the module's
                 # own already-materialised directory *is* the chart.
                 chart: str | None = str(item.source_path)
                 chart_error: str | None = None
+                chart_error_code: str | None = None
             else:
-                chart, chart_error = _resolve_chart(self, meta, remotes, env=env)
+                chart_error_code = None
+                try:
+                    chart, chart_error = _resolve_chart(
+                        self,
+                        meta,
+                        remotes,
+                        env=module_env,
+                        diagnostics=diagnostics,
+                        location=item.reference.name,
+                        credentials=credentials,
+                    )
+                except RegistryAuthError as exc:
+                    chart, chart_error, chart_error_code = None, str(exc), "helm_registry_auth_failed"
             if chart_error:
                 diagnostics.error(
                     f"Namespace '{namespace.meta.name}', module '{item.reference.name}': {chart_error}",
                     location=item.reference.name,
+                    code=chart_error_code,
                 )
                 continue
 
@@ -191,6 +249,7 @@ class HelmIntegration(InfraIntegration):
                 )
                 continue
             set_string = list(secrets.items())
+            chart_version = str(meta["chartVersion"]) if meta.get("chartVersion") is not None else None
 
             if resolved_values:
                 values_file.write_text(yaml.safe_dump(resolved_values, sort_keys=False, default_flow_style=False))
@@ -206,8 +265,9 @@ class HelmIntegration(InfraIntegration):
                     release=release,
                     namespace=release_namespace,
                     chart=chart,
+                    version=chart_version,
                     set_string=set_string,
-                    env=env,
+                    env=module_env,
                     line_callback=line_callback,
                 )
                 if plan_result is not None and not plan_result.is_successful:
@@ -223,8 +283,9 @@ class HelmIntegration(InfraIntegration):
                 release=release,
                 namespace=release_namespace,
                 chart=chart,
+                version=chart_version,
                 set_string=set_string,
-                env=env,
+                env=module_env,
                 line_callback=line_callback,
             )
             if not result.is_successful:
@@ -232,6 +293,64 @@ class HelmIntegration(InfraIntegration):
                     f"Namespace '{namespace.meta.name}', module '{item.reference.name}': "
                     f"helm upgrade failed — {result.stderr}",
                     location=item.reference.name,
+                )
+        return diagnostics
+
+    def check_namespace(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        tokens: dict[str, str],
+        env: dict[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
+        timeout: int = 60,
+        **kwargs: Any,
+    ) -> Diagnostics:
+        """`helm lint` every local-chart module in `modules` (ADR-0043).
+
+        Lints the built module directory with a temporary `-f` overlay of the resolved non-secret values,
+        so it sees what `deploy_namespace()` will. Secret-shaped leaves stay as literal tokens: lint needs no
+        secret, so none reaches disk or argv. The overlay lives outside the build directory, which a check
+        must not alter. A `${output:}` whose upstream step has not applied yet gets a placeholder, because a
+        check must not depend on infrastructure that does not exist yet. Registry charts are skipped: `helm
+        lint` cannot lint a remote chart. Only `[ERROR]` findings fail (lint exits non-zero on nothing else).
+        """
+        del kwargs
+        diagnostics = Diagnostics()
+        for item in modules:
+            label = f"Namespace '{namespace.meta.name}', module '{item.reference.name}'"
+            meta_file = item.source_path / "meta.yaml"
+            if not meta_file.exists():
+                diagnostics.error(
+                    f"{label}: meta.yaml not found — run 'strata build run' first.", location=item.reference.name
+                )
+                continue
+            if (yaml.safe_load(meta_file.read_text()) or {}).get("chartName") is not None:
+                continue
+
+            missing = referenced_output_keys(_render_values(item.module)) - tokens.keys()
+            try:
+                resolved_values, _ = resolve_module_values(item.module, {**dict.fromkeys(missing, "lint"), **tokens})
+            except ValueError as exc:
+                diagnostics.error(f"{label}: {exc}", location=item.reference.name)
+                continue
+
+            with tempfile.TemporaryDirectory(prefix="strata-lint-") as tmp:
+                overlay = Path(tmp) / "values.yaml"
+                overlay.write_text(yaml.safe_dump(resolved_values, sort_keys=False, default_flow_style=False))
+                result = self.lint(
+                    overlay, chart=str(item.source_path), timeout=timeout, env=env, line_callback=line_callback
+                )
+            if not result.is_successful:
+                lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+                # Without `[ERROR]` lines (a missing Chart.yaml, say) lint's own message is on stdout, not stderr.
+                findings = [line for line in lines if "[ERROR]" in line] or [
+                    line for line in lines if not line.startswith(("==>", "[INFO]", "[WARNING]"))
+                ]
+                detail = " | ".join(findings) or result.stderr.strip() or result.stdout.strip()
+                diagnostics.error(
+                    f"{label}: helm lint failed — {detail}", location=item.reference.name, code="helm_lint_failed"
                 )
         return diagnostics
 
@@ -339,14 +458,19 @@ class HelmIntegration(InfraIntegration):
     # extras beyond InfraIntegration — real v1 deployer steps
     # ------------------------------------------------------------------
 
-    def lint(self, path: Path, *, chart: str, timeout: int = 60, env: Mapping[str, str] | None = None) -> CommandResult:
+    def lint(
+        self,
+        path: Path,
+        *,
+        chart: str,
+        timeout: int = 60,
+        env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
+    ) -> CommandResult:
         """`helm lint -f path chart`. v1's `check` step."""
-        return self.run("lint", "-f", str(path), chart, cwd=path.parent, env=env, timeout=timeout)
-
-    def repo_update(self, *, timeout: int = 60, env: Mapping[str, str] | None = None) -> CommandResult:
-        """`helm repo update`. v1's `setup` step (repo registration/aliasing is
-        deployer-layer — this only refreshes already-added repos)."""
-        return self.run("repo", "update", env=env, timeout=timeout)
+        return self.run(
+            "lint", "-f", str(path), chart, cwd=path.parent, env=env, timeout=timeout, line_callback=line_callback
+        )
 
     def get_manifest(
         self, *, release: str, namespace: str, timeout: int = 60, env: Mapping[str, str] | None = None
@@ -365,6 +489,43 @@ class HelmIntegration(InfraIntegration):
 # prepare_namespace() rendering — pure, so it's testable without touching
 # disk (same split `default_output()`/`prepare()` already draw).
 # ----------------------------------------------------------------------
+
+
+def read_chart_values(chart_dir: Path) -> dict[str, Any]:
+    """A local chart's own `values.yaml` as a dict; `{}` when absent, unparseable or not a mapping."""
+    try:
+        data = yaml.safe_load((chart_dir / "values.yaml").read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def check_configuration_keys(configuration: Mapping[str, Any], chart_values: Mapping[str, Any]) -> list[str]:
+    """Findings for `configuration` keys a chart's default `values.yaml` does not declare.
+
+    Ported from v1's `check_helm_values()` (warnings only): top-level keys plus one nested level, with a
+    close-match suggestion. An empty default mapping (`env: {}`) is a free-form bag, so its children are not
+    checked. No chart defaults means nothing to check against.
+    """
+    if not chart_values:
+        return []
+
+    def _unknown(key: str, known: Mapping[str, Any], path: str) -> str:
+        message = f"configuration key '{path}' is not in the chart's values.yaml"
+        close = get_close_matches(key, sorted(known), n=1, cutoff=0.6)
+        if close:
+            message += f" (did you mean '{path.removesuffix(key)}{close[0]}'?)"
+        return message
+
+    findings: list[str] = []
+    for key, value in configuration.items():
+        if key not in chart_values:
+            findings.append(_unknown(key, chart_values, key))
+            continue
+        default = chart_values[key]
+        if isinstance(value, dict) and isinstance(default, dict) and default:
+            findings.extend(_unknown(child, default, f"{key}.{child}") for child in value if child not in default)
+    return findings
 
 
 def _render_values(module: ModuleModel) -> dict[str, Any]:
@@ -501,24 +662,67 @@ def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, A
 # ----------------------------------------------------------------------
 # deploy_namespace() helpers — chart reference resolution + --set-string
 # argv assembly (docs/design/gap_fit_v1.md gap #13). Ported from v1's real
-# `helm_deployer.py` (`_sanitize_repo_name()`/`_escape_set_value()`), not
-# redesigned — same evidence-over-assumption reasoning as the argv shapes
+# `helm_deployer.py` (`_escape_set_value()`), not redesigned — same
+# evidence-over-assumption reasoning as the argv shapes
 # `plan()`/`deploy()`/`destroy()` already copied verbatim.
 # ----------------------------------------------------------------------
 
 
-def _sanitize_repo_name(url: str) -> str:
-    """Derive a Helm-compatible repo alias from a chart registry URL.
+@dataclass(frozen=True)
+class RegistryCredentials:
+    """Username and password for a private chart registry (ADR-0042)."""
 
-    Ported verbatim from v1's real `helm_deployer.py`: strips the scheme,
-    replaces non-alphanumeric characters with `-`, truncates to 20 chars —
-    `helm repo add` needs a short, stable, filesystem/CLI-safe alias, not
-    the raw URL.
+    username: str
+    password: str = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if not self.username or not self.password:
+            raise ValueError("registry credentials need a non-empty username and password")
+
+
+#: Authentication methods a chart registry accepts; `cli` means the operator already logged in.
+REGISTRY_AUTH_METHODS = ("token", "cli")
+
+
+def credentials_from_authentication(
+    auth: AuthenticationModel | None, values: Mapping[str, str], *, owner: str
+) -> RegistryCredentials | None:
+    """The credentials `auth` describes, read from the deploy's resolved `values`.
+
+    `None` for no authentication or `method: cli`: Helm then uses whatever login it already has. Unlike a git
+    fetch, a chart registry needs the literal `username` beside the token.
+
+    Raises:
+        IntegrationError: an unsupported method, no `username`, or no value for the token's key. `owner` names the
+            remote and integration in the message; the password never appears in it.
     """
-    name = re.sub(r"^https?://", "", url)
-    name = re.sub(r"[^a-zA-Z0-9]", "-", name)
-    name = name.strip("-")
-    return name[:20]
+    if auth is None or auth.method == "cli":
+        return None
+    if auth.method != "token":
+        raise IntegrationError(
+            f"{owner}: authentication method '{auth.method}' cannot authenticate a chart registry "
+            f"(supported: {', '.join(REGISTRY_AUTH_METHODS)})"
+        )
+    assert auth.token is not None  # guaranteed by AuthenticationModel's own validator
+    if not auth.token.username:
+        raise IntegrationError(f"{owner}: a chart registry needs 'username' beside the token (a literal, not a key)")
+    password = values.get(auth.token.token)
+    if not password:
+        raise IntegrationError(f"{owner}: no value for '{auth.token.token}', the key its token authentication names")
+    return RegistryCredentials(username=auth.token.username, password=password)
+
+
+def _repo_alias(url: str) -> str:
+    """Derive a collision-free Helm repo alias from a chart registry URL.
+
+    A readable prefix plus 8 hex characters of the URL's hash. v1 truncated the
+    sanitised URL to 20 characters, so two registries sharing that prefix got
+    one alias — and with `--force-update` the second would overwrite the first.
+    """
+    host_and_path = re.sub(r"^https?://", "", url)
+    prefix = re.sub(r"[^a-zA-Z0-9]", "-", host_and_path).strip("-")[:12].rstrip("-")
+    digest = hashlib.sha1(url.rstrip("/").encode(), usedforsecurity=False).hexdigest()[:8]
+    return f"{prefix}-{digest}"
 
 
 def _escape_set_value(value: str) -> str:
@@ -546,8 +750,35 @@ def _set_string_args(set_string: "Sequence[tuple[str, str]] | None") -> list[str
     return args
 
 
+def _isolated_helm_env(stack: ExitStack) -> dict[str, str]:
+    """Helm state variables pointing at a temporary directory that `stack` removes.
+
+    `repo add --password-stdin` persists the password in plain text in `repositories.yaml`, and credentials only
+    work in the config they were added to, so every helm call for one credentialed module shares this directory.
+    """
+    root = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="strata-helm-")))
+    return {
+        "HELM_REPOSITORY_CONFIG": str(root / "repositories.yaml"),
+        "HELM_REPOSITORY_CACHE": str(root / "repository-cache"),
+        "HELM_REGISTRY_CONFIG": str(root / "registry.json"),
+        "HELM_CACHE_HOME": str(root / "cache"),
+    }
+
+
+def _scrub(text: str, credentials: RegistryCredentials) -> str:
+    return text.replace(credentials.password, "***")
+
+
 def _chart_ref_from_url(
-    integration: "HelmIntegration", url: str, chart_name: str, *, is_oci: bool, env: dict[str, str] | None
+    integration: "HelmIntegration",
+    url: str,
+    chart_name: str,
+    *,
+    is_oci: bool,
+    env: dict[str, str] | None,
+    diagnostics: Diagnostics | None = None,
+    location: str | None = None,
+    credentials: RegistryCredentials | None = None,
 ) -> str:
     """Build the real `helm upgrade` chart argument from a resolved registry
     URL — shared by both `chartRemote` (a `SolutionRemoteModel` lookup) and
@@ -556,14 +787,65 @@ def _chart_ref_from_url(
     come from, never in what happens once both are known.
 
     No `helm repo add` needed for an OCI registry — Helm resolves `oci://`
-    refs natively. Otherwise, register a repo alias first (`helm repo add
-    <alias> <url>`, ignoring failure — may already be registered, matches
-    v1's own "best effort" comment).
+    refs natively. Otherwise register the repo alias and refresh its index in
+    one call (`helm repo add --force-update`): a plain `repo add` skips an
+    alias that already exists, leaving a stale index that cannot resolve a
+    newer pinned `--version` (docs/design/helm-chart-deployment.md). A failure is a
+    warning, not an error — a cached index may still satisfy the pin.
+
+    With `credentials` (gap 5) the registration also authenticates — `repo add --username --password-stdin`
+    for HTTP, `registry login` for OCI, the password on stdin only — and a failure raises, because without
+    the credentials the chart cannot be fetched at all.
+
+    Raises:
+        RegistryAuthError: authenticating with `credentials` failed (the password is scrubbed from the message).
     """
     if is_oci:
+        if credentials is not None:
+            host = urlsplit(url).netloc
+            result = integration.run(
+                "registry",
+                "login",
+                host,
+                "--username",
+                credentials.username,
+                "--password-stdin",
+                input=credentials.password,
+                env=env,
+                timeout=60,
+            )
+            if not result.is_successful:
+                raise RegistryAuthError(
+                    _scrub(f"could not log in to chart registry '{host}' — {result.stderr.strip()}", credentials)
+                )
         return f"{url.rstrip('/')}/{chart_name}"
-    alias = _sanitize_repo_name(url)
-    integration.run("repo", "add", alias, url, env=env, timeout=60)
+    alias = _repo_alias(url)
+    if credentials is not None:
+        result = integration.run(
+            "repo",
+            "add",
+            alias,
+            url,
+            "--force-update",
+            "--username",
+            credentials.username,
+            "--password-stdin",
+            input=credentials.password,
+            env=env,
+            timeout=60,
+        )
+        if not result.is_successful:
+            raise RegistryAuthError(
+                _scrub(f"could not authenticate to chart repository '{url}' — {result.stderr.strip()}", credentials)
+            )
+        return f"{alias}/{chart_name}"
+    result = integration.run("repo", "add", alias, url, "--force-update", env=env, timeout=60)
+    if not result.is_successful and diagnostics is not None:
+        diagnostics.warning(
+            f"could not refresh chart repository '{url}', continuing with any cached index — {result.stderr.strip()}",
+            location=location,
+            code="helm_repo_refresh_failed",
+        )
     return f"{alias}/{chart_name}"
 
 
@@ -573,6 +855,9 @@ def _resolve_chart(
     remotes: dict[str, SolutionRemoteModel],
     *,
     env: dict[str, str] | None,
+    diagnostics: Diagnostics | None = None,
+    location: str | None = None,
+    credentials: RegistryCredentials | None = None,
 ) -> tuple[str | None, str | None]:
     """Resolve `meta.yaml`'s chart coordinates into a real `helm upgrade`
     chart reference, or return an error message.
@@ -599,8 +884,14 @@ def _resolve_chart(
       sniffing v1 always did (v2's typed remotes only exist for the
       `chartRemote` path).
 
+    `credentials` apply to the `chartRemote` path only: an inline `chartRepository` has no integration to
+    name them.
+
     Returns:
         `(chart_ref, None)` on success, `(None, error_message)` on failure.
+
+    Raises:
+        RegistryAuthError: `credentials` were given and the registry rejected them.
     """
     chart_name = meta.get("chartName")
     remote_name = meta.get("chartRemote")
@@ -616,14 +907,31 @@ def _resolve_chart(
         remote = remotes.get(str(remote_name))
         if remote is None:
             return None, f"chart remote '{remote_name}' is not declared in this solution's remotes."
-        if remote.type is RemoteType.OCI:
-            return _chart_ref_from_url(integration, remote.url, chart_name, is_oci=True, env=env), None
-        if remote.type is RemoteType.HELM:
-            return _chart_ref_from_url(integration, remote.url, chart_name, is_oci=False, env=env), None
-        return None, f"chart remote '{remote_name}' has type '{remote.type.value}', not a valid Helm chart source."
+        if remote.type not in (RemoteType.OCI, RemoteType.HELM):
+            return None, f"chart remote '{remote_name}' has type '{remote.type.value}', not a valid Helm chart source."
+        chart_ref = _chart_ref_from_url(
+            integration,
+            remote.url,
+            chart_name,
+            is_oci=remote.type is RemoteType.OCI,
+            env=env,
+            diagnostics=diagnostics,
+            location=location,
+            credentials=credentials,
+        )
+        return chart_ref, None
 
     if inline_repository is not None:
         url = str(inline_repository)
-        return _chart_ref_from_url(integration, url, chart_name, is_oci=url.startswith("oci://"), env=env), None
+        chart_ref = _chart_ref_from_url(
+            integration,
+            url,
+            chart_name,
+            is_oci=url.startswith("oci://"),
+            env=env,
+            diagnostics=diagnostics,
+            location=location,
+        )
+        return chart_ref, None
 
     return None, "meta.yaml has 'chartName' but no 'chartRemote'/'chartRepository' — cannot resolve a chart registry."

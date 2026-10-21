@@ -13,6 +13,21 @@ class IntegrationError(Exception):
     """
 
 
+class CheckPhaseUnsupportedError(IntegrationError):
+    """An integration has no namespace-scoped check phase (`InfraIntegration.check_namespace()`).
+
+    A subclass, so `deploy_run()` can treat exactly this as "nothing to check" while any other
+    `IntegrationError` raised during a check stays a real failure.
+    """
+
+
+class RegistryAuthError(IntegrationError):
+    """Authenticating to a chart registry with the configured credentials failed (ADR-0042).
+
+    Never carries the password: callers scrub it before raising.
+    """
+
+
 class ValueResolutionError(Exception):
     """A store backend could not resolve a key: auth failure, network error,
     missing secret, or an unimplemented store type.

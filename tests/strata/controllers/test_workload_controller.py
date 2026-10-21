@@ -399,6 +399,71 @@ def test_build_workload_modules_materialises_source_and_writes_helm_output(tmp_p
     assert meta["releaseName"] == "auth"
 
 
+def _helm_module_with_configuration(configuration: dict, *, source: SourceModel | None = None) -> ModuleModel:
+    return ModuleModel(
+        meta=ModuleMetaModel(name="app"),
+        spec=ModuleSpecModel(
+            source=source or SourceModel(source_path="charts/app"),
+            type="helm",
+            services=[ModuleServiceModel(name="app")],
+            configuration=configuration,
+            default_labels={},
+        ),
+    )
+
+
+def _build_with_chart_defaults(tmp_path: Path, module: ModuleModel, chart_values: str | None):
+    root = tmp_path / "sln"
+    _write(root / "charts" / "app" / "Chart.yaml", "name: app")
+    if chart_values is not None:
+        _write(root / "charts" / "app" / "values.yaml", chart_values)
+    return build_workload_modules(
+        _index(module),
+        root,
+        remotes={},
+        namespace=_namespace(ModuleReferenceModel(name="app", module="app")),
+        resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build",
+    )
+
+
+def test_build_workload_modules_warns_on_configuration_keys_a_local_chart_does_not_declare(tmp_path: Path):
+    module = _helm_module_with_configuration({"replicaCnt": 2, "image": {"tagg": "1.0"}})
+
+    diagnostics = _build_with_chart_defaults(tmp_path, module, "replicaCount: 1\nimage:\n  tag: latest\n")
+
+    assert diagnostics.ok
+    messages = [item.message for item in diagnostics.items]
+    assert len(messages) == 2
+    assert "'replicaCnt'" in messages[0] and "did you mean 'replicaCount'" in messages[0]
+    assert "'image.tagg'" in messages[1] and "did you mean 'image.tag'" in messages[1]
+    assert {item.code for item in diagnostics.items} == {"helm_unknown_configuration_key"}
+    # The check read the chart's own defaults, not the values.yaml prepare_namespace() then overwrote.
+    assert "replicaCnt" in (tmp_path / "build" / "apps" / "app" / "values.yaml").read_text()
+
+
+def test_build_workload_modules_is_quiet_when_every_configuration_key_is_declared(tmp_path: Path):
+    module = _helm_module_with_configuration({"replicaCount": 2, "image": {"tag": "1.0"}})
+
+    diagnostics = _build_with_chart_defaults(tmp_path, module, "replicaCount: 1\nimage:\n  tag: latest\n")
+
+    assert diagnostics.items == []
+
+
+def test_build_workload_modules_skips_the_key_check_without_chart_defaults(tmp_path: Path):
+    module = _helm_module_with_configuration({"anything": 1})
+
+    assert _build_with_chart_defaults(tmp_path, module, None).items == []
+
+
+def test_build_workload_modules_skips_the_key_check_for_a_registry_chart(tmp_path: Path):
+    module = _helm_module_with_configuration(
+        {"anything": 1}, source=SourceModel(chart_repository="https://charts.example.com", chart_name="app")
+    )
+
+    assert _build_with_chart_defaults(tmp_path, module, "replicaCount: 1\n").items == []
+
+
 def test_build_workload_modules_dry_run_writes_nothing(tmp_path: Path):
     root = tmp_path / "sln"
     _write(root / "charts" / "authentik" / "Chart.yaml", "name: authentik")

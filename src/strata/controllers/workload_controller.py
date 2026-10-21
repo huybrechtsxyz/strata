@@ -31,6 +31,7 @@ from strata.controllers.source_sync import describe_source, sync_module_source
 from strata.controllers.value_controller import resolve_artifact_field
 from strata.controllers.version_pins import log_pin_applied
 from strata.integrations.errors import IntegrationError
+from strata.integrations.helm import check_configuration_keys, read_chart_values
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.models.common_models import ModuleReferenceModel, PlatformKind
 from strata.models.deployment_model import DeploymentModel
@@ -39,6 +40,7 @@ from strata.models.namespace_model import NamespaceModel
 from strata.models.solution_model import SolutionRemoteModel
 from strata.models.version_model import VersionModel
 from strata.services.version_service import VersionService
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 
 
@@ -180,7 +182,7 @@ def build_workload_modules(
     dry_run: bool = False,
     on_step: Callable[[str], None] | None = None,
     credentials: RemoteCredentialResolver | None = None,
-) -> None:
+) -> Diagnostics:
     """Render every module `namespace` declares (ADR-0022 D6).
 
     Resolves and materialises each module's source first, then groups by
@@ -243,6 +245,9 @@ def build_workload_modules(
         credentials: Resolves `remote.integration`'s credentials when a module's source needs a clone;
             `None` (default) clones with ambient git credentials only.
 
+    Returns:
+        Warnings only (a `configuration` key a local Helm chart does not declare) — never an error.
+
     Raises:
         UsageError: a module reference does not resolve, `module.spec.type`
             is unset, its resolved integration is not infra/container-capable,
@@ -255,6 +260,7 @@ def build_workload_modules(
             on_step(message)
 
     by_type: dict[str, list[ResolvedModule]] = {}
+    diagnostics = Diagnostics()
 
     for reference in namespace.spec.modules or []:
         if not reference.enabled:
@@ -278,6 +284,14 @@ def build_workload_modules(
         else:
             sync_module_source(root, module_dir, module.spec.source, remotes, credentials=credentials)
             _step(f"materialised module '{reference.name}' for namespace '{namespace.meta.name}' at {module_dir}")
+            if module.spec.type == "helm" and module.spec.source.chart_name is None and module.spec.configuration:
+                # Read before prepare_namespace() overwrites the copied chart's values.yaml.
+                for finding in check_configuration_keys(module.spec.configuration, read_chart_values(module_dir)):
+                    diagnostics.warning(
+                        f"Namespace '{namespace.meta.name}', module '{reference.name}': {finding}",
+                        location=reference.name,
+                        code="helm_unknown_configuration_key",
+                    )
 
         by_type.setdefault(module.spec.type, []).append(
             ResolvedModule(reference=reference, module=module, source_path=module_dir)
@@ -299,6 +313,7 @@ def build_workload_modules(
             # integration that has not implemented prepare_namespace() yet.
             raise UsageError(f"Namespace '{namespace.meta.name}', module type '{module_type}': {exc}") from exc
         _step(f"rendered {module_type} workload for namespace '{namespace.meta.name}'")
+    return diagnostics
 
 
 def resolve_namespace_modules(

@@ -57,3 +57,4 @@ strata-v2
    integrations/azure-keyvault
    integrations/azure-appconfig
    integrations/git
+   integrations/chart-registries

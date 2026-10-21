@@ -904,8 +904,10 @@ durable, reviewable record.
   `build_workload_modules()` already builds at build time, rebuilt
   identically in `deploy_controller.py`). `RemoteType.OCI` needs no `helm
   repo add` (`oci://` refs resolve natively); `RemoteType.HELM` gets a
-  `helm repo add <alias> <url>` first, alias derived by
-  `_sanitize_repo_name()` (ported verbatim from v1). A git-based/local
+  `helm repo add <alias> <url> --force-update` first (refreshes a stale
+  index; alias from `_repo_alias()`, a prefix plus a URL hash — v1's
+  20-character `_sanitize_repo_name()` truncation could collide, see
+  [helm-chart-deployment.md](../design/helm-chart-deployment.md)). A git-based/local
   chart `source` (no `chartName` in `meta.yaml`) skips chart-remote
   resolution entirely — the module's own already-materialised
   `source_path` **is** the chart. A new deploy-time module-resolution

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from strata.integrations.base import Integration
-from strata.integrations.errors import IntegrationError
+from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError
 from strata.integrations.resolved_context import (
     KeyValueEntry,
     ResolvedModule,
@@ -418,6 +418,33 @@ class InfraIntegration(Integration):
         """
         del namespace, modules, tokens, dry_run, env, kwargs
         raise IntegrationError(f"{self.name} does not support namespace-scoped module deployment (deploy_namespace).")
+
+    def check_namespace(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        tokens: dict[str, str],
+        env: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> Diagnostics:
+        """Check every module in `modules` without deploying anything — the container-capable
+        counterpart to Terraform's `validate()` (ADR-0043).
+
+        Same not-abstract/raise-by-default shape as `deploy_namespace()`: an integration with no check
+        phase (Compose) raises `CheckPhaseUnsupportedError`, and `deploy_run()` reports that as "no check
+        phase" instead of failing. Any other `IntegrationError` is a real failure of the check itself.
+
+        Returns:
+            One error per module that failed its check; the rest of `modules` is still checked.
+
+        Raises:
+            CheckPhaseUnsupportedError: This integration has no namespace-scoped check phase.
+        """
+        del namespace, modules, tokens, env, kwargs
+        raise CheckPhaseUnsupportedError(
+            f"{self.name} does not support namespace-scoped module checking (check_namespace)."
+        )
 
     @abstractmethod
     def plan(self, path: Path, **kwargs: Any) -> CommandResult:
