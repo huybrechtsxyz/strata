@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Git (capabilities: [sources]) &mdash; strata 2.0.0-Alpha25 documentation</title>
+  <title>Git (capabilities: [sources]) &mdash; strata 2.0.0-Alpha26 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=13f58abc"></script>
+      <script src="../_static/documentation_options.js?v=240d00d6"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -23,6 +23,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Chart registries (capabilities: [sources])" href="chart-registries.html" />
     <link rel="prev" title="Azure App Configuration (store: azure-appconfig)" href="azure-appconfig.html" /> 
 </head>
 
@@ -98,6 +99,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#validation">Validation</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="chart-registries.html">Chart registries (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
 </ul>
 
         </div>
@@ -269,7 +271,8 @@ in the build output, or in an error message: a failed clone’s text has the val
 </tbody>
 </table>
 <p>The manifest remote findings are warnings because GitOps and audit pushes also use a remote’s
-integration and ignore <code class="docutils literal notranslate"><span class="pre">enabled</span></code>. <code class="docutils literal notranslate"><span class="pre">fetch_credential_key_undeclared</span></code> looks at the assets a
+integration and ignore <code class="docutils literal notranslate"><span class="pre">enabled</span></code>. (For a <code class="docutils literal notranslate"><span class="pre">helm</span></code> or <code class="docutils literal notranslate"><span class="pre">oci</span></code> remote the same findings are errors; see
+<a class="reference internal" href="chart-registries.html"><span class="std std-doc">chart-registries.md</span></a>.) <code class="docutils literal notranslate"><span class="pre">fetch_credential_key_undeclared</span></code> looks at the assets a
 deployment’s workspace steps select (bound through the deployment), whether they are reached by
 <code class="docutils literal notranslate"><span class="pre">location</span></code> or by a manifest remote, so a missing secret in one customer’s environment is found by
 <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> instead of by that customer’s pipeline. Whether the key’s store is readable
@@ -290,6 +293,7 @@ or remote and the key, before any <code class="docutils literal notranslate"><sp
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="azure-appconfig.html" class="btn btn-neutral float-left" title="Azure App Configuration (store: azure-appconfig)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="chart-registries.html" class="btn btn-neutral float-right" title="Chart registries (capabilities: [sources])" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

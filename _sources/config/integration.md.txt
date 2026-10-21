@@ -17,7 +17,8 @@ real integration (Infisical, Azure Key Vault, Azure App Configuration).
   `infrastructure`, `container`, `sources`, or an `x-`-prefixed extension strata doesn't dispatch on.
   `sources` is what a remote in `strata.yaml` or an asset's `spec.location` needs from its
   `integration`: credentials for cloning a private git repository (see
-  [integrations/git.md](../integrations/git.md))
+  [integrations/git.md](../integrations/git.md)) or pulling a chart from a private chart registry (see
+  [integrations/chart-registries.md](../integrations/chart-registries.md))
 - `spec.required` — whether this integration must be available for platform operation (default `false`)
 - `spec.enabled` — whether it's active (default `true`)
 - `spec.authentication` — same shape as [provider.md](provider.md)'s

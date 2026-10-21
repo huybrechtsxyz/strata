@@ -116,7 +116,8 @@ an integration document of its own.
 | `remote_integration_ignored`          | warning  | an asset `location` sets `integration` with `fetch: external`                                |
 
 The manifest remote findings are warnings because GitOps and audit pushes also use a remote's
-integration and ignore `enabled`. `fetch_credential_key_undeclared` looks at the assets a
+integration and ignore `enabled`. (For a `helm` or `oci` remote the same findings are errors; see
+[chart-registries.md](chart-registries.md).) `fetch_credential_key_undeclared` looks at the assets a
 deployment's workspace steps select (bound through the deployment), whether they are reached by
 `location` or by a manifest remote, so a missing secret in one customer's environment is found by
 `strata validate` instead of by that customer's pipeline. Whether the key's store is readable

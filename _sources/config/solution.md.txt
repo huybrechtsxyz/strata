@@ -17,7 +17,8 @@ not by discovery itself.
   - `fetch` — `strata` (strata materializes it) or `external` (already placed by CI/elsewhere)
   - `integration` — optional name of an [integration](integration.md) providing credentials; it must
     exist and declare the `sources` capability, or validation fails. Not valid for `type: local`.
-    See [integrations/git.md](../integrations/git.md)
+    See [integrations/git.md](../integrations/git.md) for a private git remote and
+    [integrations/chart-registries.md](../integrations/chart-registries.md) for a `helm`/`oci` registry
   - `description` — optional, human-readable
 
 ## Example

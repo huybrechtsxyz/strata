@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Integration (kind: integration) &mdash; strata 2.0.0-Alpha25 documentation</title>
+  <title>Integration (kind: integration) &mdash; strata 2.0.0-Alpha26 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=13f58abc"></script>
+      <script src="../_static/documentation_options.js?v=240d00d6"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -97,6 +97,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/chart-registries.html">Chart registries (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
 </ul>
 
         </div>
@@ -142,7 +143,8 @@ real integration (Infisical, Azure Key Vault, Azure App Configuration).</p>
 <code class="docutils literal notranslate"><span class="pre">infrastructure</span></code>, <code class="docutils literal notranslate"><span class="pre">container</span></code>, <code class="docutils literal notranslate"><span class="pre">sources</span></code>, or an <code class="docutils literal notranslate"><span class="pre">x-</span></code>-prefixed extension strata doesn’t dispatch on.
 <code class="docutils literal notranslate"><span class="pre">sources</span></code> is what a remote in <code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code> or an asset’s <code class="docutils literal notranslate"><span class="pre">spec.location</span></code> needs from its
 <code class="docutils literal notranslate"><span class="pre">integration</span></code>: credentials for cloning a private git repository (see
-<a class="reference internal" href="../integrations/git.html"><span class="std std-doc">integrations/git.md</span></a>)</p></li>
+<a class="reference internal" href="../integrations/git.html"><span class="std std-doc">integrations/git.md</span></a>) or pulling a chart from a private chart registry (see
+<a class="reference internal" href="../integrations/chart-registries.html"><span class="std std-doc">integrations/chart-registries.md</span></a>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.required</span></code> — whether this integration must be available for platform operation (default <code class="docutils literal notranslate"><span class="pre">false</span></code>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.enabled</span></code> — whether it’s active (default <code class="docutils literal notranslate"><span class="pre">true</span></code>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.authentication</span></code> — same shape as <a class="reference internal" href="provider.html"><span class="std std-doc">provider.md</span></a>’s</p></li>
