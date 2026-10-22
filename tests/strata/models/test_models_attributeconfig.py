@@ -56,7 +56,7 @@ _SPEC_MODEL_BY_KIND = {
     PlatformKind.WORKSPACE: WorkspaceSpecModel,
 }
 
-_BLOCK_NAMES = ("properties", "custom", "configuration")
+_BLOCK_NAMES = ("properties", "custom", "configuration", "variables", "features")
 
 
 def _minimal_attributeconfig() -> dict:
@@ -108,6 +108,8 @@ def test_attributeconfig_rejects_invalid_block():
         ("resource", "configuration"),
         ("environment", "properties"),
         ("environment", "custom"),
+        ("environment", "variables"),
+        ("environment", "features"),
     ],
 )
 def test_attributeconfig_accepts_pair_the_kind_actually_has(kind, block):
@@ -138,9 +140,29 @@ def test_attributeconfig_rejects_any_block_for_a_kind_with_none():
         AttributeConfigModel.model_validate(data)
 
 
-@pytest.mark.parametrize("block", ["properties", "custom"])
-def test_attributeconfig_accepts_effective_view_on_deployment_properties_or_custom(block):
-    """`view: effective` is accepted for the one combination it has a merge for."""
+def test_attributeconfig_rejects_secrets_as_a_block_outright():
+    """'secrets' is never a valid `block` value, for any kind/view — a failing schema's message can echo the
+    offending value, and a `store: constant` secret's value IS the literal secret."""
+    data = _minimal_attributeconfig()
+    data["spec"]["target"]["block"] = "secrets"
+    with pytest.raises(ValidationError):
+        AttributeConfigModel.model_validate(data)
+
+
+def test_attributeconfig_document_view_rejects_variables_on_a_kind_without_them():
+    """`deployment` has no `variables` field of its own (only `environment` does) — `view: document` still
+    rejects it, same as any other kind/block mismatch."""
+    data = _minimal_attributeconfig()
+    data["spec"]["target"] = {"kind": "deployment", "block": "variables"}
+    with pytest.raises(ValidationError, match="block 'variables' does not exist on kind 'deployment'"):
+        AttributeConfigModel.model_validate(data)
+
+
+@pytest.mark.parametrize("block", ["properties", "custom", "variables", "features"])
+def test_attributeconfig_accepts_effective_view_on_deployment(block):
+    """`view: effective` is accepted for every block it has a merge for — including `variables`/`features`,
+    even though `deployment` itself has no such field (the design-gap fix: `validate_block_exists_on_kind()`
+    no longer applies to `view: effective` at all, docs/work/environment-value-metadata.md)."""
     data = _minimal_attributeconfig()
     data["spec"]["target"] = {"kind": "deployment", "block": block, "view": "effective"}
     model = AttributeConfigModel.model_validate(data)
@@ -156,7 +178,8 @@ def test_attributeconfig_rejects_effective_view_for_non_deployment_kind():
 
 
 def test_attributeconfig_rejects_effective_view_for_configuration_block():
-    """`view: effective` has no merge defined for `configuration` (only `properties`/`custom`)."""
+    """`view: effective` has no merge defined for `configuration` (only `properties`/`custom`/`variables`/
+    `features`)."""
     data = _minimal_attributeconfig()
     data["spec"]["target"] = {"kind": "firewall", "block": "configuration", "view": "effective"}
     with pytest.raises(ValidationError, match="view: effective is only supported for target.kind: deployment"):

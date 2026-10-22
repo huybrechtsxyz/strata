@@ -66,12 +66,14 @@ from strata.services.attributeconfig_evaluator import (
     ATTRIBUTECONFIG_INVALID_CODE,
     build_validator,
     evaluate_selector,
+    reshape_block_value,
     selectors_compatible,
     translate_validation_error,
 )
 from strata.services.deployment_service import DeploymentService
 from strata.services.environment_service import (
     EnvironmentService,
+    merge_environment_models,
     merge_workspace_environment_deployment_properties,
     unresolved_value_tokens,
 )
@@ -648,11 +650,13 @@ def _check_attributeconfigs(index: DocumentIndex, resolved: dict[str, Deployment
     `target.view` (default `document`) picks which data a schema is checked
     against: `document` evaluates each matching document's own block in
     isolation (`_check_attributeconfig_document_view()`, unchanged since
-    Phase 1); `effective` evaluates the merged `properties`/`custom` of each
-    deployable deployment instead (`_check_attributeconfig_effective_view()`,
-    docs/work/environment-value-metadata.md Phase 4) — the fix for a
+    Phase 1); `effective` evaluates the merged blob of each deployable
+    deployment instead (`_check_attributeconfig_effective_view()`,
+    docs/work/environment-value-metadata.md) — the fix for a
     `required` schema misfiring on a layered environment whose blanks are
-    filled in by a tenant/workspace default further up the chain.
+    filled in by a tenant/workspace default (`properties`/`custom`) or
+    another environment in the same merge (`variables`/`features`) further
+    up the chain.
 
     D8's visibility: every `(document, schema)` pair actually evaluated is
     traced via `log.info()` (stderr, `--verbose` only); a schema matching
@@ -707,7 +711,7 @@ def _check_attributeconfig_document_view(
     for candidate in matches:
         log.info("attributeconfig applied", document=str(candidate.ref), schema=str(entry.ref))
         spec = getattr(candidate.model, "spec", None)
-        value = getattr(spec, target.block, None) or {}
+        value = reshape_block_value(getattr(spec, target.block, None), target.block)
         try:
             errors = list(validator.iter_errors(value))
         except Unresolvable as exc:
@@ -734,12 +738,13 @@ def _check_attributeconfig_effective_view(
     attributeconfig: AttributeConfigModel,
     validator: Any,
 ) -> Diagnostics:
-    """`target.view: effective` (Phase 2 already restricts this to
-    `target.kind: deployment` and `target.block: properties`/`custom`):
-    checked against the merged `workspace -> environments -> deployment` blob
-    of every *deployable* deployment (a `partial: true` base is skipped — it
-    is not deployable and may lack required fields by design), instead of
-    the deployment document's own fragment.
+    """`target.view: effective` (the model restricts this to `target.kind: deployment`, and `target.block`
+    one of `properties`/`custom`/`variables`/`features`): checked against the merged blob of every
+    *deployable* deployment (a `partial: true` base is skipped — it is not deployable and may lack required
+    fields by design), instead of the deployment document's own fragment. `properties`/`custom` merge
+    `workspace -> environments -> deployment`; `variables`/`features` merge only the reachable environments
+    (`_merged_effective_value()` — neither has a workspace- or deployment-level field to merge in, docs/
+    work/environment-value-metadata.md's `variables`/`features` design, Phase 3).
 
     Findings attribute to the deployment's own source, and the message names
     the deployment so an `effective`-view finding is never mistaken for a
@@ -758,18 +763,10 @@ def _check_attributeconfig_effective_view(
             continue
         matched_any = True
 
-        workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-        if workspace_entry is None:
-            continue  # unresolved reference already reported by validate_references
-        workspace = cast(WorkspaceModel, workspace_entry.model)
+        merged = _merged_effective_value(index, deployment, target.block)
+        if merged is None:
+            continue  # unresolved workspace reference already reported by validate_references
 
-        environments: list[EnvironmentModel] = []
-        for name in _reachable_environment_names(index, deployment):
-            env_entry = index.get(PlatformKind.ENVIRONMENT, name)
-            if env_entry is not None:
-                environments.append(cast(EnvironmentModel, env_entry.model))
-
-        merged = merge_workspace_environment_deployment_properties(workspace, environments, deployment, target.block)
         log.info("attributeconfig applied", document=str(deployment_entry.ref), schema=str(entry.ref))
         try:
             errors = list(validator.iter_errors(merged))
@@ -802,6 +799,37 @@ def _check_attributeconfig_effective_view(
             code="attributeconfig_unused",
         )
     return diagnostics
+
+
+def _merged_effective_value(index: DocumentIndex, deployment: DeploymentModel, block: str) -> dict[str, Any] | None:
+    """The reshaped, schema-ready merged blob for `view: effective` + `block`, scoped to `deployment`.
+
+    `variables`/`features` have no workspace- or deployment-level field to merge in (only `Environment`
+    declares them, confirmed via `environment_model.py` — docs/work/environment-value-metadata.md's
+    `variables`/`features` design) — just the reachable environments, via the same `merge_environment_
+    models()` `_merged_declared_keys()` already uses, reshaped the same way `document` view's keys are
+    (`reshape_block_value()`, Phase 2). `properties`/`custom` keep the existing three-layer merge.
+
+    Returns `None` when an unresolved `deployment.spec.workspace` reference blocks the `properties`/
+    `custom` merge — already reported by `validate_references`, not re-reported here.
+    """
+    environments: list[EnvironmentModel] = []
+    for name in _reachable_environment_names(index, deployment):
+        env_entry = index.get(PlatformKind.ENVIRONMENT, name)
+        if env_entry is not None:
+            environments.append(cast(EnvironmentModel, env_entry.model))
+
+    if block in ("variables", "features"):
+        variables, _secrets, features = merge_environment_models(environments)
+        stores = variables.values() if block == "variables" else features.values()
+        return reshape_block_value(list(stores), block)
+
+    assert deployment.spec.workspace is not None  # callers already skip workspace-less deployments
+    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+    if workspace_entry is None:
+        return None
+    workspace = cast(WorkspaceModel, workspace_entry.model)
+    return merge_workspace_environment_deployment_properties(workspace, environments, deployment, block)
 
 
 def _check_attributeconfig_conflicts(index: DocumentIndex) -> Diagnostics:

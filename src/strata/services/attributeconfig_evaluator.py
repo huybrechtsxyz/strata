@@ -130,3 +130,21 @@ def selectors_compatible(first: dict[str, str], second: dict[str, str]) -> bool:
     both, so declaring the same attribute under both is safe, not a conflict.
     """
     return all(first[key] == second[key] for key in first.keys() & second.keys())
+
+
+def reshape_block_value(raw: Any, block: str) -> dict[str, Any]:
+    """The JSON-shaped object a schema actually evaluates against for `target.block`.
+
+    `properties`/`custom`/`configuration` are already `dict[str, Any] | None` — pass through unchanged
+    (`{}` for unset, matching D7's "an unset block is checked as `{}`, not skipped"). `variables`/
+    `features` are `list[VariableStoreModel | FeatureStoreModel] | None` instead — not JSON-shaped at all,
+    so `jsonschema` would reject the list itself (`type: object` expected) rather than checking per-key
+    rules. Reshaped into the same `{key: value}` shape every other block already has, keyed by each
+    entry's own `key` (uniqueness within one list is enforced by `EnvironmentSpecModel.
+    validate_unique_keys()`), with the *whole* store entry dumped — `value`/`type` are both typed `Any`
+    on the real models, so a rule may need `store`/`type` alongside `value` (docs/work/
+    environment-value-metadata.md's `variables`/`features` design).
+    """
+    if block in ("variables", "features"):
+        return {item.key: item.model_dump(mode="json", by_alias=True) for item in (raw or [])}
+    return raw or {}

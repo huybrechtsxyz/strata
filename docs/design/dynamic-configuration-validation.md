@@ -1,7 +1,7 @@
 # Dynamic Configuration Validation (`attributeconfig`) — Design
 
 - Status: current
-- Last updated: 2026-10-22
+- Last updated: 2026-10-22 (variables/features)
 
 ## Overview
 
@@ -39,7 +39,7 @@ meta:
 spec:
   target:
     kind: <PlatformKind>              # e.g. environment, resource
-    block: properties | custom | configuration  # whichever blob field this kind actually has
+    block: properties | custom | configuration | variables | features  # whichever block this kind actually has
     view: document | effective        # optional, default document — see "Evaluation semantics"
     selector:                         # optional; omitted = every document of this kind
       <field.path>: <required-value>  # equality only, no wildcards/regex
@@ -50,11 +50,16 @@ spec:
 
 ### Scope
 
-Covers `properties`/`custom` on every kind, plus `configuration`
-specifically where that's the blob's real field name (`resource.spec.
-configuration`). `features`/`variables` are excluded — both are typed
-lists (`FeatureStoreModel`/`VariableStoreModel`) with their own per-field
-Pydantic validation already, not loosely-typed blobs.
+Covers `properties`/`custom` on every kind, `configuration` specifically where that's the blob's real field
+name (`resource.spec.configuration`), and `variables`/`features` on `environment` — both are
+`list[VariableStoreModel | FeatureStoreModel] | None`, not a `dict[str, Any]` blob like the other three,
+so they are reshaped into the same `{key: value}` shape before evaluation (`reshape_block_value()`,
+"Evaluation semantics" below). `secrets` is excluded **permanently, as a security boundary, not merely
+unaddressed scope**: a failing schema's `ValidationError.message` can echo the offending value back in
+`strata validate`'s plain-text output, and a `store: constant` secret's `value` *is* the literal secret —
+validating it the same way would mean a secret's real value can end up in a CI log the moment an author's
+pattern typo makes it fail. `secrets` is simply never a member of `target.block`'s `Literal`, so this is
+enforced structurally, not by a runtime check that could be bypassed or forgotten.
 
 `(kind, block)` pairs are validated at load, not merely accepted because
 `block` is a member of a shared `Literal` — `AttributeConfigTargetModel`'s
@@ -67,7 +72,10 @@ load (`block 'properties' does not exist on kind 'resource' (has:
 configuration, custom)`) — before this check existed, such a pair passed
 load-time validation and then silently evaluated every document of that
 kind against `{}` forever, with no diagnostic ever pointing at the actual
-mistake (the `attributeconfig` document's own `target.block`).
+mistake (the `attributeconfig` document's own `target.block`). This table only governs `view:
+document` — `view: effective` always targets `kind: deployment` regardless of which block, including
+`variables`/`features`, which `DeploymentSpecModel` has no field for at all (only `EnvironmentSpecModel`
+does); its own validity rule (below) is independent of this table.
 
 ### Schema language
 
@@ -116,20 +124,22 @@ completely unchecked until someone remembered to opt in.
 
 - **`target.view` (default `document`).** `document` evaluates every
   matching document's own `target.block` fragment in isolation, as above.
-  `effective` — only valid for `target.kind: deployment` and
-  `target.block: properties`/`custom` (rejected at load for anything else,
-  since no merge exists for `configuration` or for any other kind) —
-  instead evaluates the fully merged `workspace -> environments ->
-  deployment` blob of every *deployable* (non-`partial`) deployment the
-  selector matches, via the same `merge_workspace_environment_deployment_
-  properties()` build/deploy already use to produce what Terraform
-  receives (`environment_service.py`). This exists because a per-document
-  schema misfires on a layered environment: a value left blank at one leaf
-  because a layer above it (a tenant default, ADR-0024; a workspace
-  default) fills it in reads as genuinely missing under `document`, even
-  though the deployment that actually resolves is perfectly valid. A
-  `partial: true` deployment is skipped outright — it is not deployable
-  and may lack required fields by design, the same reasoning
+  `effective` — only valid for `target.kind: deployment` (rejected at load for anything else, since no merge
+  exists for `configuration` or for any other kind) — instead evaluates the fully merged blob of every
+  *deployable* (non-`partial`) deployment the selector matches. The merge source differs by block:
+  `properties`/`custom` merge `workspace -> environments -> deployment`, via the same
+  `merge_workspace_environment_deployment_properties()` build/deploy already use to produce what Terraform
+  receives (`environment_service.py`); `variables`/`features` merge only the deployment's reachable
+  environments, via `merge_environment_models()` (the same primitive `_check_deployment_value_tokens()`
+  already uses) — neither has a workspace- or deployment-level field to merge in, since only
+  `EnvironmentSpecModel` declares them. Either way, the result is reshaped the same way `document` view's
+  `variables`/`features` are (`reshape_block_value()`) before the schema runs. This exists because a
+  per-document schema misfires on a layered environment: a value left blank at one leaf because a layer
+  above it (a tenant default, ADR-0024; a workspace default; another environment in the same merge) fills
+  it in reads as genuinely missing under `document`, even though the deployment that actually resolves is
+  perfectly valid — confirmed against a real recorded defect (a blank Terraform variable that silently
+  disabled private endpoints while its sibling variable was set). A `partial: true` deployment is skipped
+  outright — it is not deployable and may lack required fields by design, the same reasoning
   `_check_deployment_layers()` already applies elsewhere. An `effective`-
   view finding's message and location name the deployment whose merged
   blob failed (`merged blob of deployment '<name>'`), so it is never
@@ -224,6 +234,13 @@ Never expressible by this mechanism, standard or native schema language:
 2. **Cross-document invariants** (one document's field must equal
    another document's field) — no schema targeting one document can
    constrain another.
+3. **Cross-block invariants** (a `features` key gating a `variables` key, e.g. a feature flag that must be
+   on for a variable to be required) — `target.block` is one block per schema; `variables`/`features`/
+   `properties` are never composed into one object a schema is evaluated against. Same-block cross-key
+   rules (two `variables` keys, or two `properties` keys) *are* expressible, via `if`/`then`, same as any
+   other block.
+4. **"These two keys are equal"** (an alias/copy-of invariant) — JSON Schema has no cross-property
+   equality keyword; same limitation as #2, one level down.
 
 Cross-field invariants *within* a single document's targeted block are
 expressible via JSON Schema's `if`/`then`/`dependentRequired` — confirmed
@@ -353,3 +370,30 @@ guarded by schema X").
   passed validation silently and evaluated every document of that kind
   against `{}` forever, with the finding blaming the documents rather
   than the actual mistake in the `attributeconfig` document itself.
+- Extended to `variables`/`features` (2026-10-22, docs/work/
+  environment-value-metadata.md's own 4-phase plan, now folded in here) —
+  the deferred half of the previous entry, same-block cross-key rules only
+  (the real recorded defect, `vnet_name`/`vnet_private_endpoints_subnet_name`,
+  is a same-block pair). `secrets` was deliberately never added to `target.
+  block`'s `Literal` at all: a failing schema's message can echo the
+  offending value, and a `store: constant` secret's `value` *is* the
+  literal secret — a structural exclusion, not unaddressed scope.
+  Representation is the whole store entry (`model_dump(mode="json",
+  by_alias=True)`), not just `.value` — both are typed `Any` on the real
+  models, so a rule may need `store`/`type` alongside `value`. Building
+  this found the shipped `(kind, block)` load-time check (previous entry)
+  and the `view: effective` validity check actually contradicted each
+  other for this specific extension: `DeploymentSpecModel` has no
+  `variables`/`features` field at all (only `EnvironmentSpecModel` does),
+  so the `(kind, block)` check would have rejected the exact pairing
+  `effective` view needs, before the `effective`-view check ever got a
+  chance to accept it — fixed by scoping the `(kind, block)` check to
+  `view: document` only; `effective` view's validity has always been (and
+  now explicitly is) an independent rule. Also found, by testing
+  end-to-end rather than only at the model layer: widening the model
+  ahead of wiring up the real merge made a genuine crash reachable for the
+  first time (`deep_merge()` cannot merge a `list[VariableStoreModel]`,
+  confirmed via a real repro) — closed with a temporary guard during the
+  one release between the model change and the merge landing, removed
+  once the real merge (`merge_environment_models()`, reused unchanged from
+  `_check_deployment_value_tokens()`) was wired in.

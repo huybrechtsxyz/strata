@@ -1,8 +1,10 @@
 # Environment Value Metadata — Work
 
-- Status: draft — problem and evidence recorded; the attributeconfig-over-merged-`properties`/`custom` sub-design
-  (topic 1) is fully built and documented in [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)
-  (`target.view: document | effective`); topics 2-4 and the genuinely open questions under topic 1 remain undecided
+- Status: draft — problem and evidence recorded; both attributeconfig sub-designs under topic 1 (`properties`/
+  `custom`, and `variables`/`features`) are fully built and documented in
+  [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)
+  (`target.view: document | effective` across five blocks, `secrets` permanently excluded); the cross-block half, and
+  topic 1's own remaining open questions (default view, provenance attribution), stay undecided, as do topics 2-4
 - Last updated: 2026-10-22
 - Related: [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)
   (`attributeconfig`: the closest existing mechanism, scoped to `properties`/`custom`/`configuration` only),
@@ -96,15 +98,6 @@ Two distinct sub-problems:
 - *Cross-key combinations* ("when `enable_aks` is true, `aks_cluster_id` is non-empty", "these two keys are equal").
   Not expressible by any existing mechanism, and the real defect above is of this kind.
 
-Open shapes (not chosen):
-
-- Extend `attributeconfig` to also target `variables`/`features`, evaluated against the **merged** environment of a
-  deployment (a leaf alone is meaningless: its blanks are filled or overridden by the layers above it).
-- A small dedicated rule type, `required_when` / `forbidden_when` over `(feature | variable) -> (variable)`, kept
-  deliberately narrow so it does not become a policy engine.
-- Move the data into `properties` and use what exists. Cheapest, but does not help `features`, and a feature flag is
-  almost always the "when" side.
-
 There are two evaluation points, and they differ. `_check_deployment_value_tokens()` in `semantic_checks.py` walks each
 deployment's **merged** environment, so the merged data is available there. `_check_attributeconfigs()` instead
 evaluates each **document on its own** (tested 2026-10-21: a schema requiring a property fails a layer that lacks it,
@@ -133,9 +126,21 @@ actual merged, deployable result instead.
 - Should `effective` become the default for `properties`/`custom` on the layered kinds? Per-document `required` on them
   is almost never what an author means, but flipping the default is breaking. Nothing in the repo relies on it today.
 - Attributing a finding to the layer that set the value.
-- The cross-block extension (`variables`/`features` composed with `properties`, topic 1 item 2 above) is the same
-  `effective` view with a different block name. This design stops at `properties`/`custom`, but uses a
-  deployment-kind target so that extension is additive rather than a redesign.
+- ~~The cross-block extension (`variables`/`features` composed with `properties`)~~ — same-block `variables`/`features`
+  support is now designed below (decided 2026-10-22); the *cross-block* half (a feature gating a variable) is still
+  open, see that design's own "Out of scope" note.
+
+#### `attributeconfig` over `variables`/`features` — DONE, now in docs/design/
+
+Built as a 4-phase plan (widen `block` + fix the view/table coupling, reshape + document view, effective view,
+docs) — all four shipped 2026-10-22, full check suite clean at every phase (mypy/ruff/lint-imports/pytest, 3045
+tests at completion). The mechanism, final shape, representation, and the secrets-exclusion rationale are now
+documented in [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)'s "Scope",
+"Evaluation semantics" and "Known limits" sections, and its History — not repeated here. Covers the same-block half
+of topic 1's "Requirements" problem for `variables`/`features`, including the real recorded defect
+(`vnet_private_endpoints_subnet_name` blank while `vnet_name` was set — reproduced and caught end-to-end). The
+cross-block case (a `features` key gating a `variables` key) remains explicitly out of scope — see the design doc's
+"Known limits" #3.
 
 ### 2. Alias or copy-of
 
@@ -254,14 +259,19 @@ Evidence first, per repo convention; nothing below is a commitment.
    Do this before designing, since conversion may shrink the problem.
 4. ~~Decide the scope question for topic 1's `properties`/`custom` half~~ — resolved by building it: `target.view:
    effective` (2026-10-22, see topic 1) covers the layered-blob half without waiting on the `variables`/`features`
-   question. What's still open is only the `variables`/`features` half — extend `attributeconfig` further (item 2's
-   three bullets above), add a narrow dedicated rule, or move the data to `properties` instead.
+   question. ~~What's still open is only the `variables`/`features` half~~ — the same-block half of that (single-value
+   shape + same-block cross-key, including the recorded real defect) is now designed (2026-10-22, see topic 1's
+   second design) via the same `attributeconfig`/`view: effective` mechanism, widened rather than a new rule type.
+   Only the cross-block half (a feature gating a variable) remains undecided — still a dedicated rule, or a later
+   composed-object widening of the same mechanism.
 5. Decide whether naming budgets belong in strata at all (topic 4).
 6. Decide whether, and how, an upstream step's output reaches a downstream step's inputs (the adjacent section above).
    cfg-int works around it with the Key Vault for now, so this is not blocking; the trigger to revisit is when that
    workaround is dropped.
-7. Only then pick a first slice. The recorded defect (blank value that silently disabled private endpoints) makes
-   cross-key requirements the strongest candidate; provenance has the largest volume but no defect behind it.
+7. ~~Only then pick a first slice~~ — picked: cross-key requirements (topic 1), on the strength of the recorded defect
+   (blank value that silently disabled private endpoints) — now built for `properties`/`custom` and designed for
+   `variables`/`features`. Provenance (topic 3) remains the largest-volume, no-defect-behind-it runner-up; topics 2/4
+   and the adjacent upstream-output section are all still untouched.
 
 ## Changelog
 
@@ -311,3 +321,42 @@ Evidence first, per repo convention; nothing below is a commitment.
   5-phase plan down to a short pointer at the design doc (per `docs/work/README.md`'s "superseded content doesn't stay
   duplicated" convention) — kept the "Open questions" list, since those are still genuinely unresolved. The 5-phase
   plan itself is closed; topic 1's remaining open items (3, 4 partially, 7) and topics 2-4 are untouched by it.
+- 2026-10-22: designed the `variables`/`features` extension (same-block half only). Key decisions: secrets excluded
+  deliberately (a failing schema's message can echo the offending value, and a `store: constant` secret's `value` IS
+  the literal secret — a real leak path, not just unaddressed scope); representation is the full
+  `store.model_dump(mode="json", by_alias=True)` per key, not just `.value` (both are typed `Any`, confirmed against
+  the real models, so a rule may need `store`/`type` alongside `value`); the effective-view merge for these two blocks
+  reuses the already-existing `merge_environment_models()` (no workspace/deployment layer — confirmed `variables`/
+  `secrets`/`features` exist ONLY on `EnvironmentSpecModel`, nowhere else). Surfaced a real contradiction in the
+  shipped Phase 1/2 validators that only this extension exposes: `validate_block_exists_on_kind()`'s "does `target.
+  kind`'s own spec have this field" question is simply false for `kind: deployment, block: variables` (deployment has
+  no such field at all — the effective merge source is a different kind than the target), so that validator now needs
+  to apply only to `view: document`. 4-phase implementation plan written (widen block + fix the validator coupling;
+  reshape + document view; effective view; docs). Nothing built yet — design only, per explicit instruction this
+  time ("create the design", not "implement").
+- 2026-10-22: Phase 1 of the `variables`/`features` extension implemented — model widened, validator coupling fixed
+  (the design gap). Verifying it end-to-end (not just at the model layer) found a real, now-reachable crash in the
+  already-shipped Phase 4 evaluator (`deep_merge()` on a `list[VariableStoreModel]`) — guarded with a clean
+  "not yet implemented" diagnostic plus a regression test reproducing the exact crash. 7 new tests total (6 model, 1
+  semantic_checks). Full check suite clean (3032 passed); `config/` unaffected. Phases 2-4 of this extension remain
+  unbuilt.
+- 2026-10-22: Phase 2 of the `variables`/`features` extension implemented — `reshape_block_value()` (new, in
+  `attributeconfig_evaluator.py`) + `_check_attributeconfig_document_view()` wired to call it. `document`-view
+  schemas on `variables`/`features` are now actually usable (previously accepted by the model but never evaluated
+  meaningfully). 10 new tests (6 unit, 4 integration). Full check suite clean (3042 passed); `config/` unaffected.
+  Phase 3 (the `effective`-view merge — what currently just reports "not yet implemented") is the remaining piece.
+- 2026-10-22: Phase 3 of the `variables`/`features` extension implemented — `_merged_effective_value()` (new) branches
+  the merge by block; the Phase 1 crash-guard is gone, superseded by real evaluation. Reproduced the real recorded
+  defect's exact shape end-to-end (fails when it should, passes when the condition doesn't apply, survives a
+  multi-environment merge). Verified the real diagnostic code via a standalone repro before writing the test
+  assertion (`attributeconfig_validation_error`, not `attributeconfig_field_missing` — the key is declared, just
+  blank, so `minLength` fails, not `required`). 4 new tests replacing the 1 now-moot crash-guard test. Full check
+  suite clean (3045 passed); `config/` unaffected. Only Phase 4 (docs) remains for this extension.
+- 2026-10-22: Phase 4 (docs) of the `variables`/`features` extension implemented — graduated into
+  [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)'s "Document shape" (block list
+  grows to five), "Scope" (the secrets-exclusion security rationale, moved here verbatim from this doc), "Evaluation
+  semantics" (effective-view merge source differs by block), "Known limits" (cross-block and alias/copy-of now listed
+  explicitly), and a new `History` entry. Collapsed this doc's variables/features design + 4-phase plan down to a
+  short pointer, same treatment the `properties`/`custom` design got in Phase 5 of its own plan. Both attributeconfig
+  sub-designs under topic 1 are now fully built and documented — nothing left to implement under topic 1 except the
+  cross-block case and the two genuinely open questions (default view, provenance attribution).

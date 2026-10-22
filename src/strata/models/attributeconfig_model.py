@@ -28,7 +28,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 
-#: Which `properties`/`custom`/`configuration` fields each kind's own top-level
+#: Which `properties`/`custom`/`configuration`/`variables`/`features` fields each kind's own top-level
 #: `*SpecModel` actually declares — verified directly against those classes
 #: (2026-10-22, docs/work/environment-value-metadata.md), not merely assumed
 #: from `block`'s own `Literal`. A same-named field on a NESTED sub-model
@@ -37,13 +37,20 @@ from strata.models.common_models import (
 #: (candidate.model, "spec", None)` in `_check_attributeconfigs()` only ever
 #: reads the top-level spec. Every kind absent here (`asset`, `attributeconfig`,
 #: `configuration`, `dns`, `network`, `providerconfig`, `solution`,
-#: `topologyconfig`, `version`) has none of the three at that level — `solution`
+#: `topologyconfig`, `version`) has none of the five at that level — `solution`
 #: is additionally never indexed at all (semantic_checks.py), so it could never
 #: be a reachable target either way.
+#:
+#: Only consulted for `view: document` (see `validate_block_exists_on_kind()`)
+#: — `view: effective` always merges from a different source than `target.
+#: kind`'s own spec for `variables`/`features` (only `EnvironmentSpecModel`
+#: declares those, never `DeploymentSpecModel`), so this table does not, and
+#: cannot, describe effective-view validity; `secrets` is deliberately never a
+#: `block` value at all (see `AttributeConfigTargetModel.block`'s own docstring).
 BLOCKS_BY_KIND: dict[PlatformKind, frozenset[str]] = {
     PlatformKind.ARTIFACT: frozenset({"properties", "custom", "configuration"}),
     PlatformKind.DEPLOYMENT: frozenset({"properties", "custom"}),
-    PlatformKind.ENVIRONMENT: frozenset({"properties", "custom"}),
+    PlatformKind.ENVIRONMENT: frozenset({"properties", "custom", "variables", "features"}),
     PlatformKind.TENANT: frozenset({"properties", "custom", "configuration"}),
     PlatformKind.WORKSPACE: frozenset({"properties", "custom", "configuration"}),
     PlatformKind.FIREWALL: frozenset({"custom", "configuration"}),
@@ -54,14 +61,22 @@ BLOCKS_BY_KIND: dict[PlatformKind, frozenset[str]] = {
     PlatformKind.RESOURCE: frozenset({"custom", "configuration"}),
 }
 
+#: `view: effective` block/kind validity (docs/work/environment-value-metadata.md) — independent of
+#: `BLOCKS_BY_KIND`: `target.kind` is always `deployment` regardless of which of these blocks is checked, since
+#: `deployment` is the one thing every merge (`properties`/`custom`'s workspace+environments+deployment,
+#: `variables`/`features`'s environments-only) is scoped against, not necessarily the kind that owns the field.
+_EFFECTIVE_VIEW_BLOCKS: frozenset[str] = frozenset({"properties", "custom", "variables", "features"})
+
 
 class AttributeConfigTargetModel(PlatformBaseModel):
     """What this schema validates: which kind, which block, and (optionally)
     which documents of that kind, via a selector."""
 
     kind: PlatformKind = Field(description="The kind of document this schema targets (e.g. 'environment').")
-    block: Literal["properties", "custom", "configuration"] = Field(
-        description="Which passthrough blob field on the targeted kind this schema validates."
+    block: Literal["properties", "custom", "configuration", "variables", "features"] = Field(
+        description="Which passthrough blob field on the targeted kind this schema validates. 'secrets' is "
+        "deliberately never a valid value — a failing schema's message can echo the offending value verbatim, "
+        "and a `store: constant` secret's value IS the literal secret (docs/work/environment-value-metadata.md)."
     )
     selector: dict[str, str] | None = Field(
         None,
@@ -71,17 +86,24 @@ class AttributeConfigTargetModel(PlatformBaseModel):
     view: Literal["document", "effective"] = Field(
         "document",
         description="'document' (default): evaluate each matching document's own block in isolation, "
-        "unchanged behaviour. 'effective': evaluate the merged `properties`/`custom` of each deployable "
-        "deployment (workspace -> environments -> deployment) instead — only valid for "
-        "`kind: deployment` and `block: properties`/`custom`.",
+        "unchanged behaviour. 'effective': evaluate the merged `properties`/`custom`/`variables`/`features` of "
+        "each deployable deployment instead — only valid for `kind: deployment`.",
     )
 
     @model_validator(mode="after")
     def validate_block_exists_on_kind(self) -> "AttributeConfigTargetModel":
-        """Reject a `(kind, block)` pair naming a field `kind`'s own spec model
+        """`view: document` only: reject a `(kind, block)` pair naming a field `kind`'s own spec model
         doesn't have — such a pair used to pass load-time validation and then
         silently evaluate every document of `kind` against `{}` forever
-        (docs/work/environment-value-metadata.md's "Two real gaps" #2)."""
+        (docs/work/environment-value-metadata.md's "Two real gaps" #2).
+
+        Does not apply to `view: effective`: its merge source is never
+        literally `target.kind`'s own spec for `variables`/`features` (only
+        `EnvironmentSpecModel` declares those, never `DeploymentSpecModel`) —
+        `validate_effective_view_supported()` is the sole validity rule there.
+        """
+        if self.view != "document":
+            return self
         allowed = BLOCKS_BY_KIND.get(self.kind, frozenset())
         if self.block not in allowed:
             has = ", ".join(sorted(allowed)) if allowed else "none"
@@ -89,14 +111,19 @@ class AttributeConfigTargetModel(PlatformBaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_effective_view_is_deployment_properties_or_custom(self) -> "AttributeConfigTargetModel":
-        """`view: effective` only has a merge to evaluate against for `deployment.properties`/`.custom`
-        (`merge_workspace_environment_deployment_properties()`) — no such merge exists for `configuration`,
-        or for any other kind's `properties`/`custom` (docs/work/environment-value-metadata.md Phase 2)."""
-        if self.view == "effective" and (self.kind != PlatformKind.DEPLOYMENT or self.block == "configuration"):
+    def validate_effective_view_supported(self) -> "AttributeConfigTargetModel":
+        """`view: effective` only has a merge to evaluate against for `kind: deployment` + a block in
+        `_EFFECTIVE_VIEW_BLOCKS` — `properties`/`custom` via `merge_workspace_environment_deployment_
+        properties()`, `variables`/`features` via `merge_environment_models()` (docs/work/
+        environment-value-metadata.md's `variables`/`features` design). No merge exists for `configuration`,
+        or for any block on any other kind."""
+        if self.view == "effective" and (
+            self.kind != PlatformKind.DEPLOYMENT or self.block not in _EFFECTIVE_VIEW_BLOCKS
+        ):
             raise ValueError(
                 "view: effective is only supported for target.kind: deployment and "
-                f"target.block: properties/custom (got kind: '{self.kind.value}', block: '{self.block}')"
+                f"target.block: {', '.join(sorted(_EFFECTIVE_VIEW_BLOCKS))} "
+                f"(got kind: '{self.kind.value}', block: '{self.block}')"
             )
         return self
 

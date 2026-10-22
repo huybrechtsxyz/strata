@@ -3170,6 +3170,284 @@ def test_attributeconfig_effective_view_finding_names_the_deployment(tmp_path):
     )
 
 
+_VNET_SAME_BLOCK_IF_THEN_SCHEMA = """  schema:
+    type: object
+    if:
+      required: [VNET_NAME]
+      properties:
+        VNET_NAME:
+          properties:
+            value: { minLength: 1 }
+    then:
+      required: [VNET_PRIVATE_ENDPOINTS_SUBNET_NAME]
+      properties:
+        VNET_PRIVATE_ENDPOINTS_SUBNET_NAME:
+          properties:
+            value: { minLength: 1 }
+"""
+
+
+def _write_deployment_variables_effective_attributeconfig(root: Path) -> None:
+    """The real recorded defect's shape (docs/work/environment-value-metadata.md's Evidence section):
+    `vnet_private_endpoints_subnet_name` must be set whenever `vnet_name` is — both are **variables**, a
+    same-block cross-key rule."""
+    _write(
+        root,
+        "attributeconfig.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: deployment-vnet-subnet-required
+spec:
+  target:
+    kind: deployment
+    block: variables
+    view: effective
+{_VNET_SAME_BLOCK_IF_THEN_SCHEMA}""",
+    )
+
+
+def test_attributeconfig_effective_view_variables_fails_the_recorded_real_defect_shape(tmp_path):
+    """`vnet_name` set, `vnet_private_endpoints_subnet_name` left blank — the exact real defect this whole
+    doc started from, now caught by `view: effective` on `variables`."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "environment.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec:
+  variables:
+    - key: PUBLIC_IP
+      store: constant
+      value: "1.2.3.4"
+    - key: VNET_NAME
+      store: constant
+      value: "vnet-prd"
+    - key: VNET_PRIVATE_ENDPOINTS_SUBNET_NAME
+      store: constant
+      value: ""
+""",
+    )
+    _write_deployment_variables_effective_attributeconfig(root)
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_validation_error" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_effective_view_variables_passes_when_condition_does_not_apply(tmp_path):
+    """`vnet_name` unset — the `if` condition never applies, so the blank subnet name is fine."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "environment.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec:
+  variables:
+    - key: PUBLIC_IP
+      store: constant
+      value: "1.2.3.4"
+    - key: VNET_NAME
+      store: constant
+      value: ""
+    - key: VNET_PRIVATE_ENDPOINTS_SUBNET_NAME
+      store: constant
+      value: ""
+""",
+    )
+    _write_deployment_variables_effective_attributeconfig(root)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_attributeconfig_effective_view_variables_merges_multiple_environments(tmp_path):
+    """Two environments, each setting one half of the pair — the merge (not either environment alone) is
+    what makes this pass, same multi-environment convention `merge_environment_models()`'s own tests use."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "environment.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec:
+  variables:
+    - key: PUBLIC_IP
+      store: constant
+      value: "1.2.3.4"
+    - key: VNET_PRIVATE_ENDPOINTS_SUBNET_NAME
+      store: constant
+      value: "subnet-prd"
+""",
+    )
+    _write(
+        root,
+        "environment-base.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: base
+spec:
+  variables:
+    - key: VNET_NAME
+      store: constant
+      value: "vnet-prd"
+""",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: prd-deployment
+spec:
+  workspace: main
+  tenant: c0062
+  environments: [base, prd]
+  stages:
+    - step: provision-infra
+""",
+    )
+    _write_deployment_variables_effective_attributeconfig(root)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_attributeconfig_effective_view_features_block_evaluates_the_merged_environment(tmp_path):
+    """Same mechanism, `features` block — proves the branch isn't hardcoded to `variables`."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "environment.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec:
+  variables:
+    - key: PUBLIC_IP
+      store: constant
+      value: "1.2.3.4"
+  features:
+    - key: ENABLE_AKS
+      store: constant
+      value: "true"
+""",
+    )
+    _write(
+        root,
+        "attributeconfig.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: deployment-feature-required
+spec:
+  target:
+    kind: deployment
+    block: features
+    view: effective
+  schema:
+    type: object
+    required: [ENABLE_AKS]
+""",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+# ---------------------------------------------------------------------------
+# attributeconfig -> environment: document view on variables/features
+# (docs/work/environment-value-metadata.md's `variables`/`features` design, Phase 2)
+# ---------------------------------------------------------------------------
+
+
+def _write_environment_variable_attributeconfig(root: Path, *, block: str, schema_yaml: str) -> None:
+    _write(
+        root,
+        "attributeconfig.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: environment-{block}-check
+spec:
+  target:
+    kind: environment
+    block: {block}
+  schema:
+{schema_yaml}""",
+    )
+
+
+def test_attributeconfig_document_view_variables_passes_when_key_declared(tmp_path):
+    """`_base_solution()`'s `prd` environment declares `PUBLIC_IP` — `required: [PUBLIC_IP]` passes."""
+    root = _base_solution(tmp_path)
+    _write_environment_variable_attributeconfig(
+        root, block="variables", schema_yaml="    type: object\n    required: [PUBLIC_IP]\n"
+    )
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_attributeconfig_document_view_variables_fails_when_key_missing(tmp_path):
+    """The same schema, requiring a key `prd` never declares, fails — proving the check actually inspects
+    the reshaped `{key: ...}` object rather than vacuously passing on a non-dict value."""
+    root = _base_solution(tmp_path)
+    _write_environment_variable_attributeconfig(
+        root, block="variables", schema_yaml="    type: object\n    required: [MISSING_VAR]\n"
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_field_missing" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_document_view_variables_checks_the_full_dumped_store_entry(tmp_path):
+    """A rule against `store` (not just `value`) proves the whole entry is dumped, not only `.value` —
+    `_base_solution()`'s `PUBLIC_IP` variable is `store: constant`."""
+    root = _base_solution(tmp_path)
+    _write_environment_variable_attributeconfig(
+        root,
+        block="variables",
+        schema_yaml=(
+            "    type: object\n"
+            "    properties:\n"
+            "      PUBLIC_IP:\n"
+            "        type: object\n"
+            "        properties:\n"
+            '          store: { const: "environment" }\n'
+        ),
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_validation_error" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_document_view_features_pass_and_fail(tmp_path):
+    """Same mechanism, `features` block — `_base_solution()` declares none, so `required` on any key fails,
+    and a schema with no `required` passes against the resulting `{}`."""
+    root = _base_solution(tmp_path)
+    _write_environment_variable_attributeconfig(
+        root, block="features", schema_yaml="    type: object\n    required: [ENABLE_AKS]\n"
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_field_missing" for d in context.diagnostics.errors)
+
+    _write_environment_variable_attributeconfig(root, block="features", schema_yaml="    type: object\n")
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
 # ---------------------------------------------------------------------------
 # attributeconfig -> attributeconfig: duplicate-attribute load-time check
 # (docs/design/dynamic-configuration-validation.md Phase 4, Q12/Q16)
