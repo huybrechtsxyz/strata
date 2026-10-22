@@ -51,11 +51,9 @@ from strata.models.store_model import (
 )
 from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
-from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.dict_merge import deep_merge
 from strata.utils.errors import UsageError
 from strata.utils.secret_generator import generate_secret, mask_secret
 from strata.utils.value_tokens import has_value_tokens, resolve_value_tokens
@@ -390,31 +388,6 @@ def build_value_references(
         for key, store in secrets.items()
     ]
     return variable_refs, feature_refs, secret_refs
-
-
-def merge_workspace_environment_deployment_properties(
-    workspace: WorkspaceModel,
-    environments: list[EnvironmentModel],
-    deployment: DeploymentModel,
-    source: str,
-) -> dict[str, Any]:
-    """Deep-merge `{source}` (`"properties"` or `"custom"`):
-    `workspace.spec.{source}` -> each reachable `environment.spec.{source}`
-    in order -> `deployment.spec.{source}` (docs/design/
-    build-time-value-categories.md, Q3 - a deliberate improvement over v1's
-    real, docstring-contradicting behaviour, which never merges the
-    deployment's own value at all).
-
-    No `overrides.{source}` step, unlike v1: `EnvironmentSpecModel` has no
-    `overrides` field in v2 at all - confirmed via its own module docstring,
-    deliberately not ported (0 of 26 real environment documents used it,
-    ADR-0003's minimal-slice policy).
-    """
-    result: dict[str, Any] = dict(getattr(workspace.spec, source, None) or {})
-    for environment in environments:
-        result = deep_merge(result, getattr(environment.spec, source, None) or {})
-    result = deep_merge(result, getattr(deployment.spec, source, None) or {})
-    return result
 
 
 def resolve_values(

@@ -18,7 +18,7 @@ mean validating untrusted schema content without that safeguard in place.
 
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
@@ -27,6 +27,32 @@ from strata.models.common_models import (
     PlatformVersion,
     validate_kind_matches,
 )
+
+#: Which `properties`/`custom`/`configuration` fields each kind's own top-level
+#: `*SpecModel` actually declares — verified directly against those classes
+#: (2026-10-22, docs/work/environment-value-metadata.md), not merely assumed
+#: from `block`'s own `Literal`. A same-named field on a NESTED sub-model
+#: (`DnsZoneModel.custom`, `FirewallRuleModel.custom`,
+#: `WorkspaceResourceModel.configuration`, ...) does not count — `getattr
+#: (candidate.model, "spec", None)` in `_check_attributeconfigs()` only ever
+#: reads the top-level spec. Every kind absent here (`asset`, `attributeconfig`,
+#: `configuration`, `dns`, `network`, `providerconfig`, `solution`,
+#: `topologyconfig`, `version`) has none of the three at that level — `solution`
+#: is additionally never indexed at all (semantic_checks.py), so it could never
+#: be a reachable target either way.
+BLOCKS_BY_KIND: dict[PlatformKind, frozenset[str]] = {
+    PlatformKind.ARTIFACT: frozenset({"properties", "custom", "configuration"}),
+    PlatformKind.DEPLOYMENT: frozenset({"properties", "custom"}),
+    PlatformKind.ENVIRONMENT: frozenset({"properties", "custom"}),
+    PlatformKind.TENANT: frozenset({"properties", "custom", "configuration"}),
+    PlatformKind.WORKSPACE: frozenset({"properties", "custom", "configuration"}),
+    PlatformKind.FIREWALL: frozenset({"custom", "configuration"}),
+    PlatformKind.INTEGRATION: frozenset({"custom", "configuration"}),
+    PlatformKind.MODULE: frozenset({"custom", "configuration"}),
+    PlatformKind.NAMESPACE: frozenset({"custom", "configuration"}),
+    PlatformKind.PROVIDER: frozenset({"custom", "configuration"}),
+    PlatformKind.RESOURCE: frozenset({"custom", "configuration"}),
+}
 
 
 class AttributeConfigTargetModel(PlatformBaseModel):
@@ -42,6 +68,37 @@ class AttributeConfigTargetModel(PlatformBaseModel):
         description="Optional field-path -> required-value equality constraints. Omitted means every "
         "document of `kind` matches. Equality only — no wildcards or regex.",
     )
+    view: Literal["document", "effective"] = Field(
+        "document",
+        description="'document' (default): evaluate each matching document's own block in isolation, "
+        "unchanged behaviour. 'effective': evaluate the merged `properties`/`custom` of each deployable "
+        "deployment (workspace -> environments -> deployment) instead — only valid for "
+        "`kind: deployment` and `block: properties`/`custom`.",
+    )
+
+    @model_validator(mode="after")
+    def validate_block_exists_on_kind(self) -> "AttributeConfigTargetModel":
+        """Reject a `(kind, block)` pair naming a field `kind`'s own spec model
+        doesn't have — such a pair used to pass load-time validation and then
+        silently evaluate every document of `kind` against `{}` forever
+        (docs/work/environment-value-metadata.md's "Two real gaps" #2)."""
+        allowed = BLOCKS_BY_KIND.get(self.kind, frozenset())
+        if self.block not in allowed:
+            has = ", ".join(sorted(allowed)) if allowed else "none"
+            raise ValueError(f"block '{self.block}' does not exist on kind '{self.kind.value}' (has: {has})")
+        return self
+
+    @model_validator(mode="after")
+    def validate_effective_view_is_deployment_properties_or_custom(self) -> "AttributeConfigTargetModel":
+        """`view: effective` only has a merge to evaluate against for `deployment.properties`/`.custom`
+        (`merge_workspace_environment_deployment_properties()`) — no such merge exists for `configuration`,
+        or for any other kind's `properties`/`custom` (docs/work/environment-value-metadata.md Phase 2)."""
+        if self.view == "effective" and (self.kind != PlatformKind.DEPLOYMENT or self.block == "configuration"):
+            raise ValueError(
+                "view: effective is only supported for target.kind: deployment and "
+                f"target.block: properties/custom (got kind: '{self.kind.value}', block: '{self.block}')"
+            )
+        return self
 
 
 class AttributeConfigSpecModel(PlatformBaseModel):

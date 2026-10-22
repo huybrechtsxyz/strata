@@ -1,7 +1,7 @@
 # Dynamic Configuration Validation (`attributeconfig`) — Design
 
 - Status: current
-- Last updated: 2026-10-15
+- Last updated: 2026-10-22
 
 ## Overview
 
@@ -40,6 +40,7 @@ spec:
   target:
     kind: <PlatformKind>              # e.g. environment, resource
     block: properties | custom | configuration  # whichever blob field this kind actually has
+    view: document | effective        # optional, default document — see "Evaluation semantics"
     selector:                         # optional; omitted = every document of this kind
       <field.path>: <required-value>  # equality only, no wildcards/regex
   schema:                             # verbatim JSON Schema (2020-12), passed through near-raw
@@ -54,6 +55,19 @@ specifically where that's the blob's real field name (`resource.spec.
 configuration`). `features`/`variables` are excluded — both are typed
 lists (`FeatureStoreModel`/`VariableStoreModel`) with their own per-field
 Pydantic validation already, not loosely-typed blobs.
+
+`(kind, block)` pairs are validated at load, not merely accepted because
+`block` is a member of a shared `Literal` — `AttributeConfigTargetModel`'s
+`BLOCKS_BY_KIND` table (`attributeconfig_model.py`) pins exactly which
+block(s) each kind's own top-level `*SpecModel` actually declares, checked
+against those classes directly by a dedicated test so it cannot silently
+drift. A pair naming a field the kind doesn't have (e.g. `resource` +
+`properties` — `resource` only has `custom`/`configuration`) is rejected at
+load (`block 'properties' does not exist on kind 'resource' (has:
+configuration, custom)`) — before this check existed, such a pair passed
+load-time validation and then silently evaluated every document of that
+kind against `{}` forever, with no diagnostic ever pointing at the actual
+mistake (the `attributeconfig` document's own `target.block`).
 
 ### Schema language
 
@@ -100,22 +114,51 @@ completely unchecked until someone remembered to opt in.
 
 ### Evaluation semantics
 
-- **No merge.** Every schema whose target and selector match a document is
+- **`target.view` (default `document`).** `document` evaluates every
+  matching document's own `target.block` fragment in isolation, as above.
+  `effective` — only valid for `target.kind: deployment` and
+  `target.block: properties`/`custom` (rejected at load for anything else,
+  since no merge exists for `configuration` or for any other kind) —
+  instead evaluates the fully merged `workspace -> environments ->
+  deployment` blob of every *deployable* (non-`partial`) deployment the
+  selector matches, via the same `merge_workspace_environment_deployment_
+  properties()` build/deploy already use to produce what Terraform
+  receives (`environment_service.py`). This exists because a per-document
+  schema misfires on a layered environment: a value left blank at one leaf
+  because a layer above it (a tenant default, ADR-0024; a workspace
+  default) fills it in reads as genuinely missing under `document`, even
+  though the deployment that actually resolves is perfectly valid. A
+  `partial: true` deployment is skipped outright — it is not deployable
+  and may lack required fields by design, the same reasoning
+  `_check_deployment_layers()` already applies elsewhere. An `effective`-
+  view finding's message and location name the deployment whose merged
+  blob failed (`merged blob of deployment '<name>'`), so it is never
+  confused with a `document`-view finding on the same deployment document.
+  Which layer actually set the offending value is not tracked (`deep_merge`
+  keeps no provenance) — a known gap, not a bug.
+- **No merge across schemas.** Every schema whose target and selector match a document is
   evaluated independently; all must pass. Monotonic — adding a schema can
   only ever tighten validation, never loosen it. An unset block is checked
   as `{}`, not skipped, so `required` still fires for a document that
-  omits the block entirely.
+  omits the block entirely. (This is a separate axis from `target.view`
+  above, which picks *what data* a single schema checks — no-merge-across-
+  schemas is about *how many* schemas apply to that data, and always
+  applies regardless of view.)
 - **Duplicate-attribute check** (load time, `_check_attributeconfig_
-  conflicts()`): fires when two schemas target the same `(kind, block)`,
-  declare the same top-level `properties` key, and their selectors are
-  *compatible* — for every field path present in both selectors, the
+  conflicts()`): fires when two schemas target the same `(kind, block,
+  view)`, declare the same top-level `properties` key, and their selectors
+  are *compatible* — for every field path present in both selectors, the
   required values agree (`selectors_compatible()`; a selector-less
-  selector is vacantly compatible with anything). Diagnostic code
+  selector is vacantly compatible with anything). `view` is part of the
+  group key: a `document`-view and an `effective`-view schema on the same
+  block check different data (one document's own fragment vs. a
+  deployment's merged blob) and can never conflict. Diagnostic code
   `attributeconfig_conflict`, `.error()` severity.
 - **Applied-schema visibility**: every `(document, schema)` application is
   logged via `log.info()` under `--verbose` (same channel as
   `version_pins.py`/`sbom_controller.py`); a schema matching zero
-  documents gets `diagnostics.warning()`, code `attributeconfig_unused` —
+  documents (or, for `effective`, zero deployable deployments) gets
+  `diagnostics.warning()`, code `attributeconfig_unused` —
   a silently-inert guardrail is otherwise indistinguishable from one that
   always passes.
 
@@ -285,3 +328,28 @@ guarded by schema X").
   location correctly with zero code changes, confirmed by invoking the
   compiled module directly against a realistic diagnostic location, not
   just by reading its source.
+- Added `target.view: document | effective` (2026-10-22,
+  docs/work/environment-value-metadata.md's 5-phase plan, now folded in
+  here) — a `document`-view `required` schema misfires on a layered
+  environment, since `properties`/`custom` deep-merge `workspace ->
+  environments -> deployment` (and a tenant's own base layer, ADR-0024)
+  and a per-document schema only ever sees one fragment of that chain. A
+  real cfg-int defect motivated it: a blank `vnet_private_endpoints_subnet_name`
+  silently disabled private endpoints because nothing checked that a
+  required value was actually present once every layer was applied. Scoped
+  deliberately narrow — only `target.kind: deployment` +
+  `target.block: properties`/`custom`, since that is the one `(kind,
+  block)` pair with an existing, build/deploy-shared merge function
+  (`merge_workspace_environment_deployment_properties()`) to evaluate
+  against; extending to `variables`/`features` (a different, wider
+  problem — see the work doc) was deliberately left for later, not
+  bundled in. Required moving that merge function from `strata.
+  controllers.value_controller` to `strata.services.environment_service`
+  first, so `semantic_checks.py` could reach it without recreating the
+  controller-layer import cycle `value_references.py` already documents.
+  Also added, as a prerequisite found while building this: a load-time
+  check that a schema's `(kind, block)` pair actually exists on that
+  kind's spec model (see "Scope" above) — before this fix, a typo'd pair
+  passed validation silently and evaluated every document of that kind
+  against `{}` forever, with the finding blaming the documents rather
+  than the actual mistake in the `attributeconfig` document itself.

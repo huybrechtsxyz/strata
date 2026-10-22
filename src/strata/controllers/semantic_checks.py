@@ -70,7 +70,11 @@ from strata.services.attributeconfig_evaluator import (
     translate_validation_error,
 )
 from strata.services.deployment_service import DeploymentService
-from strata.services.environment_service import EnvironmentService, unresolved_value_tokens
+from strata.services.environment_service import (
+    EnvironmentService,
+    merge_workspace_environment_deployment_properties,
+    unresolved_value_tokens,
+)
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
@@ -121,7 +125,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_tenants(index))
     diagnostics.extend(_check_providers(index))
     diagnostics.extend(_check_resources(index))
-    diagnostics.extend(_check_attributeconfigs(index))
+    diagnostics.extend(_check_attributeconfigs(index, resolved))
     diagnostics.extend(_check_attributeconfig_conflicts(index))
     diagnostics.extend(_check_workspaces(index))
     diagnostics.extend(_check_environments(index))
@@ -636,15 +640,19 @@ def _check_providers(index: DocumentIndex) -> Diagnostics:
 # ---------------------------------------------------------------------------
 
 
-def _check_attributeconfigs(index: DocumentIndex) -> Diagnostics:
+def _check_attributeconfigs(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
     """Apply every `attributeconfig` document's schema to its matching
     documents (D7: conjunctive, no merge — every match is checked
     independently and all must pass).
 
-    A matching document that doesn't set `target.block` at all is checked as
-    an empty object (`{}`), not skipped — the failure mode this feature
-    exists to catch is a document that omits a required attribute entirely,
-    not only one that sets it with the wrong shape.
+    `target.view` (default `document`) picks which data a schema is checked
+    against: `document` evaluates each matching document's own block in
+    isolation (`_check_attributeconfig_document_view()`, unchanged since
+    Phase 1); `effective` evaluates the merged `properties`/`custom` of each
+    deployable deployment instead (`_check_attributeconfig_effective_view()`,
+    docs/work/environment-value-metadata.md Phase 4) — the fix for a
+    `required` schema misfiring on a layered environment whose blanks are
+    filled in by a tenant/workspace default further up the chain.
 
     D8's visibility: every `(document, schema)` pair actually evaluated is
     traced via `log.info()` (stderr, `--verbose` only); a schema matching
@@ -654,7 +662,6 @@ def _check_attributeconfigs(index: DocumentIndex) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.ATTRIBUTECONFIG):
         attributeconfig = cast(AttributeConfigModel, entry.model)
-        target = attributeconfig.spec.target
 
         try:
             validator = build_validator(attributeconfig.spec.schema_)
@@ -667,63 +674,161 @@ def _check_attributeconfigs(index: DocumentIndex) -> Diagnostics:
             )
             continue
 
-        selector = target.selector or {}
-        matches = [candidate for candidate in index.all_of(target.kind) if evaluate_selector(candidate.model, selector)]
-        if not matches:
-            diagnostics.warning(
-                f"attributeconfig '{entry.ref.name}': selector matched no '{target.kind.value}' document — "
-                "this schema is not guarding anything.",
-                source=str(entry.source),
-                location="spec.target.selector",
-                code="attributeconfig_unused",
+        if attributeconfig.spec.target.view == "effective":
+            diagnostics.extend(
+                _check_attributeconfig_effective_view(index, resolved, entry, attributeconfig, validator)
+            )
+        else:
+            diagnostics.extend(_check_attributeconfig_document_view(index, entry, attributeconfig, validator))
+    return diagnostics
+
+
+def _check_attributeconfig_document_view(
+    index: DocumentIndex, entry: IndexEntry, attributeconfig: AttributeConfigModel, validator: Any
+) -> Diagnostics:
+    """`target.view: document` (default): every matching document of
+    `target.kind` is checked against its own `target.block`, in isolation —
+    the original (and only, pre-Phase-4) evaluation path.
+    """
+    diagnostics = Diagnostics()
+    target = attributeconfig.spec.target
+    selector = target.selector or {}
+    matches = [candidate for candidate in index.all_of(target.kind) if evaluate_selector(candidate.model, selector)]
+    if not matches:
+        diagnostics.warning(
+            f"attributeconfig '{entry.ref.name}': selector matched no '{target.kind.value}' document — "
+            "this schema is not guarding anything.",
+            source=str(entry.source),
+            location="spec.target.selector",
+            code="attributeconfig_unused",
+        )
+        return diagnostics
+
+    for candidate in matches:
+        log.info("attributeconfig applied", document=str(candidate.ref), schema=str(entry.ref))
+        spec = getattr(candidate.model, "spec", None)
+        value = getattr(spec, target.block, None) or {}
+        try:
+            errors = list(validator.iter_errors(value))
+        except Unresolvable as exc:
+            diagnostics.error(
+                f"attributeconfig '{entry.ref.name}': schema references an external resource, which is "
+                f"not allowed: {exc}",
+                source=str(candidate.source),
+                location=f"spec.{target.block}",
+                code=ATTRIBUTECONFIG_INVALID_CODE,
             )
             continue
 
-        for candidate in matches:
-            log.info("attributeconfig applied", document=str(candidate.ref), schema=str(entry.ref))
-            spec = getattr(candidate.model, "spec", None)
-            value = getattr(spec, target.block, None) or {}
-            try:
-                errors = list(validator.iter_errors(value))
-            except Unresolvable as exc:
-                diagnostics.error(
-                    f"attributeconfig '{entry.ref.name}': schema references an external resource, which is "
-                    f"not allowed: {exc}",
-                    source=str(candidate.source),
-                    location=f"spec.{target.block}",
-                    code=ATTRIBUTECONFIG_INVALID_CODE,
-                )
-                continue
+        for error in errors:
+            code, message, relative_location = translate_validation_error(error)
+            location = f"spec.{target.block}.{relative_location}" if relative_location else f"spec.{target.block}"
+            diagnostics.error(message, source=str(candidate.source), location=location, code=code)
+    return diagnostics
 
-            for error in errors:
-                code, message, relative_location = translate_validation_error(error)
-                location = f"spec.{target.block}.{relative_location}" if relative_location else f"spec.{target.block}"
-                diagnostics.error(message, source=str(candidate.source), location=location, code=code)
+
+def _check_attributeconfig_effective_view(
+    index: DocumentIndex,
+    resolved: dict[str, DeploymentModel],
+    entry: IndexEntry,
+    attributeconfig: AttributeConfigModel,
+    validator: Any,
+) -> Diagnostics:
+    """`target.view: effective` (Phase 2 already restricts this to
+    `target.kind: deployment` and `target.block: properties`/`custom`):
+    checked against the merged `workspace -> environments -> deployment` blob
+    of every *deployable* deployment (a `partial: true` base is skipped — it
+    is not deployable and may lack required fields by design), instead of
+    the deployment document's own fragment.
+
+    Findings attribute to the deployment's own source, and the message names
+    the deployment so an `effective`-view finding is never mistaken for a
+    `document`-view one on the same document.
+    """
+    diagnostics = Diagnostics()
+    target = attributeconfig.spec.target
+    selector = target.selector or {}
+    matched_any = False
+
+    for deployment_entry in index.all_of(PlatformKind.DEPLOYMENT):
+        deployment = resolved.get(deployment_entry.ref.name, cast(DeploymentModel, deployment_entry.model))
+        if deployment.spec.partial or deployment.spec.workspace is None:
+            continue
+        if not evaluate_selector(deployment, selector):
+            continue
+        matched_any = True
+
+        workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+        if workspace_entry is None:
+            continue  # unresolved reference already reported by validate_references
+        workspace = cast(WorkspaceModel, workspace_entry.model)
+
+        environments: list[EnvironmentModel] = []
+        for name in _reachable_environment_names(index, deployment):
+            env_entry = index.get(PlatformKind.ENVIRONMENT, name)
+            if env_entry is not None:
+                environments.append(cast(EnvironmentModel, env_entry.model))
+
+        merged = merge_workspace_environment_deployment_properties(workspace, environments, deployment, target.block)
+        log.info("attributeconfig applied", document=str(deployment_entry.ref), schema=str(entry.ref))
+        try:
+            errors = list(validator.iter_errors(merged))
+        except Unresolvable as exc:
+            diagnostics.error(
+                f"attributeconfig '{entry.ref.name}': schema references an external resource, which is "
+                f"not allowed: {exc}",
+                source=str(deployment_entry.source),
+                location=f"spec.{target.block}",
+                code=ATTRIBUTECONFIG_INVALID_CODE,
+            )
+            continue
+
+        for error in errors:
+            code, message, relative_location = translate_validation_error(error)
+            location = f"spec.{target.block}.{relative_location}" if relative_location else f"spec.{target.block}"
+            diagnostics.error(
+                f"merged blob of deployment '{deployment_entry.ref.name}': {message}",
+                source=str(deployment_entry.source),
+                location=location,
+                code=code,
+            )
+
+    if not matched_any:
+        diagnostics.warning(
+            f"attributeconfig '{entry.ref.name}': selector matched no deployable '{target.kind.value}' document — "
+            "this schema is not guarding anything.",
+            source=str(entry.source),
+            location="spec.target.selector",
+            code="attributeconfig_unused",
+        )
     return diagnostics
 
 
 def _check_attributeconfig_conflicts(index: DocumentIndex) -> Diagnostics:
     """Load-time duplicate-attribute check (Q12/Q16).
 
-    Two `attributeconfig` documents targeting the same `(kind, block)` and
-    declaring a schema for the same top-level `schema.properties` key are
+    Two `attributeconfig` documents targeting the same `(kind, block, view)`
+    and declaring a schema for the same top-level `schema.properties` key are
     almost certainly an authoring mistake if their selectors can ever match
     the same document — D7 means both would apply in full, independently,
     with no merge to resolve a disagreement between them. Scoped to
     top-level `properties` keys only, never recursive: D7's own reasoning
     already settled that closure (`additionalProperties`) applies within an
     attribute's own subtree, where exactly one document was ever meant to
-    own it.
+    own it. `view` is part of the group key (Phase 4): a `document`-view and
+    an `effective`-view schema on the same block check different data (one
+    document's own fragment vs. a deployment's merged blob) and can never
+    conflict.
 
-    Runs once per `validate`, pairwise over every `(kind, block)` group —
-    not per target document — since this is purely a property of the
+    Runs once per `validate`, pairwise over every `(kind, block, view)` group
+    — not per target document — since this is purely a property of the
     `attributeconfig` documents themselves, nothing else needs to be loaded.
     """
     diagnostics = Diagnostics()
-    by_target: dict[tuple[PlatformKind, str], list[IndexEntry]] = {}
+    by_target: dict[tuple[PlatformKind, str, str], list[IndexEntry]] = {}
     for entry in index.all_of(PlatformKind.ATTRIBUTECONFIG):
         target = cast(AttributeConfigModel, entry.model).spec.target
-        by_target.setdefault((target.kind, target.block), []).append(entry)
+        by_target.setdefault((target.kind, target.block, target.view), []).append(entry)
 
     for group in by_target.values():
         for first, second in combinations(group, 2):
@@ -975,6 +1080,10 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
     exists and declares it — same "skip rather than guess a policy that was
     never declared" rule `_check_workspace_topology_components()` already
     uses for `spec.topologies`.
+
+    Also rejects a non-`${value:}` token inside a store's own `value`
+    (`validate_store_value_tokens()`): `validate` used to accept it and
+    `deploy run` then failed to resolve it.
     """
     diagnostics = Diagnostics()
     artifact_names = set(index.names_of(PlatformKind.ARTIFACT))
@@ -989,6 +1098,7 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
         environment = cast(EnvironmentModel, entry.model)
         service = EnvironmentService.from_model(environment)
         diagnostics.extend(service.validate_artifact_references(artifact_names), source=str(entry.source))
+        diagnostics.extend(service.validate_store_value_tokens(), source=str(entry.source))
         if security is not None:
             diagnostics.extend(service.validate_allowed_stores(security), source=str(entry.source))
     return diagnostics

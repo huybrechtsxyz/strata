@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """Service for loading and validating environment configuration."""
 
+from collections.abc import Sequence
 from typing import Any
 
 from strata.models.common_models import PlatformBaseModel
 from strata.models.configuration_model import ConfigurationSecurityModel
+from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel, VariableStoreType
+from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.dict_merge import deep_merge
 from strata.utils.value_tokens import VALUE_TOKEN_KINDS, extract_value_tokens, find_malformed_value_tokens
 
 #: Maps a Value token's kind to the environment store that declares it.
 _STORE_BY_TOKEN_KIND = {"var": "variables", "secret": "secrets", "feature": "features"}
+
+#: Token kinds a store's own `value` is never resolved against (only `${value:}` is).
+_UNSUPPORTED_STORE_VALUE_TOKEN_KINDS = frozenset({"var", "secret", "feature", "output"})
 
 
 class EnvironmentService(BaseService[EnvironmentModel]):
@@ -100,6 +107,45 @@ class EnvironmentService(BaseService[EnvironmentModel]):
                     location="spec.variables",
                     code="undefined_artifact",
                 )
+        return diagnostics
+
+    def validate_store_value_tokens(self) -> Diagnostics:
+        """Reject a `${var:}`/`${secret:}`/`${feature:}`/`${output:}` token in a
+        variable/secret/feature's own `value`.
+
+        `resolve_values()` resolves a `store: constant` value only against
+        `${value:}` references, so any other token there is accepted by the
+        generic token walk (the key is declared) but never resolves: it fails
+        `deploy run` with `value_resolution_failed` and reaches Terraform as the
+        literal token text. Chaining one key through another would also need
+        cycle detection, which `${value:}` avoids by requiring a literal target.
+
+        Returns:
+            One error per offending token, located at the store's `value`.
+        """
+        diagnostics = Diagnostics()
+        self._ensure_validated()
+        assert self.model is not None
+        spec = self.model.spec
+        groups: list[tuple[str, str, Sequence[VariableStoreModel | SecretStoreModel | FeatureStoreModel]]] = [
+            ("Variable", "variables", spec.variables or []),
+            ("Secret", "secrets", spec.secrets or []),
+            ("Feature", "features", spec.features or []),
+        ]
+        for noun, section, stores in groups:
+            for position, store in enumerate(stores):
+                for _path, text in _iter_strings(store.value):
+                    for kind, key in extract_value_tokens(text):
+                        if kind not in _UNSUPPORTED_STORE_VALUE_TOKEN_KINDS:
+                            continue
+                        diagnostics.error(
+                            f"{noun} '{store.key}': '${{{kind}:{key}}}' in a store's own value is not "
+                            "supported — it would never resolve. A value is a literal, an environment "
+                            "variable name or a store key; use '${value:kind.name.path}' to reference another "
+                            "document's field, or escape a literal as '$${...}'.",
+                            location=f"spec.{section}[{position}].value",
+                            code="store_value_token_unsupported",
+                        )
         return diagnostics
 
     def validate_allowed_stores(self, security: ConfigurationSecurityModel) -> Diagnostics:
@@ -322,3 +368,36 @@ def merge_environment_models(
         secrets.update({s.key: s for s in spec.secrets or []})
         features.update({f.key: f for f in spec.features or []})
     return variables, secrets, features
+
+
+def merge_workspace_environment_deployment_properties(
+    workspace: WorkspaceModel,
+    environments: list[EnvironmentModel],
+    deployment: DeploymentModel,
+    source: str,
+) -> dict[str, Any]:
+    """Deep-merge `{source}` (`"properties"` or `"custom"`):
+    `workspace.spec.{source}` -> each reachable `environment.spec.{source}`
+    in order -> `deployment.spec.{source}` (docs/design/
+    build-time-value-categories.md, Q3 - a deliberate improvement over v1's
+    real, docstring-contradicting behaviour, which never merges the
+    deployment's own value at all).
+
+    No `overrides.{source}` step, unlike v1: `EnvironmentSpecModel` has no
+    `overrides` field in v2 at all - confirmed via its own module docstring,
+    deliberately not ported (0 of 26 real environment documents used it,
+    ADR-0003's minimal-slice policy).
+
+    Moved here from `value_controller.py` (docs/work/
+    environment-value-metadata.md Phase 3) — pure, no `SolutionContext`
+    dependency, so it belongs in `services`, not `controllers`: callers
+    needing the merged view at validate time (`semantic_checks.py`) would
+    otherwise recreate the cycle `value_references.py` documents
+    (`solution_context` -> `semantic_checks` -> `value_controller` ->
+    `solution_context`).
+    """
+    result: dict[str, Any] = dict(getattr(workspace.spec, source, None) or {})
+    for environment in environments:
+        result = deep_merge(result, getattr(environment.spec, source, None) or {})
+    result = deep_merge(result, getattr(deployment.spec, source, None) or {})
+    return result

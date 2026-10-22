@@ -55,7 +55,6 @@ from strata.controllers.source_sync import (
 )
 from strata.controllers.value_controller import (
     build_value_references,
-    merge_workspace_environment_deployment_properties,
     reachable_environments,
     resolve_deployment,
     resolve_tenant,
@@ -87,7 +86,10 @@ from strata.models.solution_model import SolutionRemoteModel
 from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
-from strata.services.environment_service import merge_environment_models
+from strata.services.environment_service import (
+    merge_environment_models,
+    merge_workspace_environment_deployment_properties,
+)
 from strata.services.version_service import VersionService
 from strata.services.workspace_service import effective_assets, effective_providers
 from strata.utils.dependency_order import topological_order

@@ -111,6 +111,27 @@ def test_all_keys_resolved_exits_zero(runner, solution):
     assert result.exit_code == EXIT_SUCCESS
 
 
+def test_resolved_count_ignores_value_references_nobody_asked_for(runner, solution):
+    """`${value:}` references anywhere in the solution are resolved too and land
+    in the same map; they must not inflate the 'resolved N of M keys' count."""
+    environment = solution / "environment.yaml"
+    environment.write_text(
+        environment.read_text(encoding="utf-8").replace(
+            "  secrets:",
+            '    - key: ENV_NAME\n      store: constant\n      value: "${value:environment.prd.meta.name}"\n  secrets:',
+        ),
+        encoding="utf-8",
+    )
+    result = _run(runner, "app", "REGION", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "resolved 1 of 1 keys" in result.output
+
+
+def test_resolved_count_excludes_failed_keys(runner, solution):
+    result = _run(runner, "app", "REGION", "GHOST", "--path", solution)
+    assert "resolved 1 of 2 keys" in result.output
+
+
 def test_unresolved_key_exits_three(runner, solution):
     result = _run(runner, "app", "REGION", "GHOST", "--path", solution)
     assert result.exit_code == EXIT_VALIDATION

@@ -1702,6 +1702,37 @@ def test_environment_store_not_allowed_by_security_is_caught(tmp_path):
     assert any(d.code == "disallowed_store" for d in context.diagnostics.errors)
 
 
+def test_a_variable_token_in_a_store_value_is_caught_by_validate(tmp_path):
+    """`validate` used to accept this; it then failed at deploy time with
+    `value_resolution_failed`, because a store's own value is only resolved
+    against `${value:}` references."""
+    root = _base_solution(tmp_path)
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + '    - key: ALIAS_IP\n      store: constant\n      value: "${var:PUBLIC_IP}"\n',
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "store_value_token_unsupported" for d in context.diagnostics.errors)
+    assert any("ALIAS_IP" in m for m in context.diagnostics.messages())
+
+
+def test_a_value_reference_in_a_store_value_passes_validate(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + '    - key: ENV_NAME\n      store: constant\n      value: "${value:environment.prd.meta.name}"\n',
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
 def test_security_check_is_skipped_without_a_configuration_document(tmp_path):
     """No Configuration doc means no declared policy — skip, don't guess.
     Mirrors `test_topology_component_check_is_skipped_without_a_configuration_document`'s
@@ -2942,6 +2973,204 @@ spec:
 
 
 # ---------------------------------------------------------------------------
+# attributeconfig -> deployment: target.view: effective (merged
+# workspace -> environments -> deployment blob; docs/work/
+# environment-value-metadata.md Phase 4)
+# ---------------------------------------------------------------------------
+
+
+def _write_deployment_properties_attributeconfig(root: Path, *, view: str, selector: str = "") -> None:
+    _write(
+        root,
+        "attributeconfig.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: deployment-properties-owner
+spec:
+  target:
+    kind: deployment
+    block: properties
+    view: {view}
+{selector}  schema:
+    type: object
+    required: [owner]
+""",
+    )
+
+
+def _write_tenant_with_properties_owner(root: Path) -> None:
+    """Overwrites `_base_solution()`'s tenant.yaml, adding the base-layer
+    `properties.owner` ADR-0024 folds into every deployment it resolves."""
+    _write(
+        root,
+        "tenant.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: tenant
+meta:
+  name: c0062
+spec:
+  display_name: Acme
+  geographies: [europe]
+  properties:
+    owner: platform-team
+""",
+    )
+
+
+def test_attributeconfig_document_view_misses_a_value_only_the_tenant_sets(tmp_path):
+    """`view: document` (the default) checks the deployment's own raw
+    `properties` fragment only — a tenant default (ADR-0024) is folded in by
+    `resolve_deployment_chains()`, which this view never consults, so
+    `required: [owner]` misfires on a deployment that resolves to a
+    perfectly valid, fully-merged `owner`."""
+    root = _base_solution(tmp_path)
+    _write_tenant_with_properties_owner(root)
+    _write_deployment_properties_attributeconfig(root, view="document")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "attributeconfig_field_missing" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_effective_view_sees_the_tenant_default(tmp_path):
+    """The identical schema, `view: effective`, checks the merged
+    workspace -> environments -> (tenant-resolved) deployment blob instead —
+    the tenant's `properties.owner` reaches it, so the same deployment passes."""
+    root = _base_solution(tmp_path)
+    _write_tenant_with_properties_owner(root)
+    _write_deployment_properties_attributeconfig(root, view="effective")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_attributeconfig_effective_view_merges_workspace_and_environment_too(tmp_path):
+    """Not just the tenant layer — `properties` set on the workspace AND on
+    an environment both reach the merged blob, same as `build run`/
+    `deploy run` already see. Uses a schema requiring one key from each layer
+    so neither assertion could pass from only one of them merging."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "workspace.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  providers: [azure-main]
+  provisioners:
+    - name: tf
+      tool: terraform
+      source: {source_path: terraform/main}
+  execution:
+    - name: provision-infra
+      provisioner: tf
+      resources: [storage-account]
+  resources:
+    - name: storage-account
+      resource: storage-account
+      role: control-plane
+  topology:
+    - name: main-topology
+      type: kubernetes
+      components:
+        - resource: storage-account
+  namespaces: [apps]
+  dns_zones: [example]
+  properties:
+    owner: platform-team
+""",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec:
+  variables:
+    - key: PUBLIC_IP
+      store: constant
+      value: "1.2.3.4"
+  properties:
+    region: westeurope
+""",
+    )
+    _write(
+        root,
+        "attributeconfig.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: deployment-properties-owner-and-region
+spec:
+  target:
+    kind: deployment
+    block: properties
+    view: effective
+  schema:
+    type: object
+    required: [owner, region]
+""",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_attributeconfig_effective_view_skips_a_partial_deployment(tmp_path):
+    """A `partial: true` base is not deployable and may lack required fields
+    by design — skipped, not checked against `{}`."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "deployment.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: prd-deployment
+spec:
+  partial: true
+  tenant: c0062
+  environments: [prd]
+""",
+    )
+    _write_deployment_properties_attributeconfig(root, view="effective")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert any(d.code == "attributeconfig_unused" for d in context.diagnostics.warnings)
+
+
+def test_attributeconfig_effective_view_unused_warns_when_selector_matches_no_deployment(tmp_path):
+    selector = "    selector:\n      spec.workspace: ghost\n"
+    root = _base_solution(tmp_path)
+    _write_deployment_properties_attributeconfig(root, view="effective", selector=selector)
+
+    context = _resolve(root)
+    assert context.ok  # warning, not an error — does not fail validate
+    assert any(d.code == "attributeconfig_unused" for d in context.diagnostics.warnings)
+
+
+def test_attributeconfig_effective_view_finding_names_the_deployment(tmp_path):
+    """An `effective`-view finding is attributed to the deployment and its
+    message names it — distinct from a `document`-view finding on the same
+    document (both attribute to `entry.source`, so the message is what
+    disambiguates which blob failed)."""
+    root = _base_solution(tmp_path)
+    _write_deployment_properties_attributeconfig(root, view="effective")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(
+        d.code == "attributeconfig_field_missing" and "prd-deployment" in d.message for d in context.diagnostics.errors
+    )
+
+
+# ---------------------------------------------------------------------------
 # attributeconfig -> attributeconfig: duplicate-attribute load-time check
 # (docs/design/dynamic-configuration-validation.md Phase 4, Q12/Q16)
 # ---------------------------------------------------------------------------
@@ -3032,6 +3261,55 @@ def test_attributeconfig_conflict_silent_for_disjoint_top_level_attributes(tmp_p
     _write(root, "strata.yaml", MANIFEST)
     _write_attributeconfig(root, "ac1.yaml", "ac-owner", properties_yaml="      owner:\n        type: string\n")
     _write_attributeconfig(root, "ac2.yaml", "ac-region", properties_yaml="      region:\n        type: string\n")
+
+    context = _resolve(root)
+    assert not any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_conflict_silent_between_document_and_effective_view(tmp_path):
+    """Same `(kind, block)`, same top-level attribute, but different `view`
+    — `document` and `effective` check different data (one document's own
+    fragment vs. a deployment's merged blob) and can never conflict
+    (Phase 4: `view` joined the grouping key)."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "ac1.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: deployment-properties-owner-document
+spec:
+  target:
+    kind: deployment
+    block: properties
+    view: document
+  schema:
+    type: object
+    properties:
+      owner:
+        type: string
+""",
+    )
+    _write(
+        root,
+        "ac2.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: deployment-properties-owner-effective
+spec:
+  target:
+    kind: deployment
+    block: properties
+    view: effective
+  schema:
+    type: object
+    properties:
+      owner:
+        type: string
+""",
+    )
 
     context = _resolve(root)
     assert not any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)

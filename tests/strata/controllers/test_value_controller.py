@@ -12,7 +12,6 @@ from strata.controllers.value_controller import (
     build_value_references,
     is_direct_store,
     list_values,
-    merge_workspace_environment_deployment_properties,
     reachable_environments,
     resolve_artifact,
     resolve_artifact_field,
@@ -29,10 +28,7 @@ from strata.controllers.value_controller import (
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.integrations.resolved_context import ValueReference
-from strata.models.common_models import SourceModel
-from strata.models.deployment_model import DeploymentMetaModel, DeploymentModel, DeploymentSpecModel
 from strata.models.environment_model import EnvironmentMetaModel, EnvironmentModel, EnvironmentSpecModel
-from strata.models.provisioning_model import ProvisionerModel
 from strata.models.store_model import (
     FeatureStoreModel,
     FeatureStoreType,
@@ -41,7 +37,6 @@ from strata.models.store_model import (
     VariableStoreModel,
     VariableStoreType,
 )
-from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
 from strata.utils.errors import UsageError
 
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
@@ -702,60 +697,6 @@ def test_build_value_references_merges_multiple_environments_later_wins():
 
     assert len(variable_refs) == 1
     assert variable_refs[0].value == "from-override"
-
-
-# ---------------------------------------------------------------------------
-# merge_workspace_environment_deployment_properties() (Q3)
-# ---------------------------------------------------------------------------
-
-
-def _workspace_for_properties(properties=None, custom=None) -> WorkspaceModel:
-    return WorkspaceModel(
-        meta=WorkspaceMetaModel(name="ws"),
-        spec=WorkspaceSpecModel(
-            providers=["p1"],
-            provisioners=[ProvisionerModel(name="tf_main", tool="terraform", source=SourceModel(source_path="infra"))],
-            properties=properties,
-            custom=custom,
-        ),
-    )
-
-
-def _deployment_for_properties(properties=None, custom=None) -> DeploymentModel:
-    return DeploymentModel(
-        meta=DeploymentMetaModel(name="app"),
-        spec=DeploymentSpecModel(workspace="ws", environments=["prd"], properties=properties, custom=custom),
-    )
-
-
-def test_merge_properties_later_layer_wins_per_key_deep_merge():
-    workspace = _workspace_for_properties(properties={"region": "westeurope", "tier": "standard"})
-    environment = _env_model("prd", properties={"tier": "premium"})
-    deployment = _deployment_for_properties(properties={"region": "northeurope"})
-
-    merged = merge_workspace_environment_deployment_properties(workspace, [environment], deployment, "properties")
-
-    # deployment's own "region" wins over workspace's; environment's "tier" wins over workspace's.
-    assert merged == {"region": "northeurope", "tier": "premium"}
-
-
-def test_merge_properties_empty_everywhere_is_an_empty_dict():
-    workspace = _workspace_for_properties()
-    deployment = _deployment_for_properties()
-    assert merge_workspace_environment_deployment_properties(workspace, [], deployment, "custom") == {}
-
-
-def test_merge_properties_multiple_environments_merge_in_order():
-    """Two reachable environments — later one wins per key, matching
-    `build_value_references()`'s own multi-environment convention above."""
-    workspace = _workspace_for_properties(properties={"region": "westeurope", "tier": "standard", "workspace_only": 1})
-    base = _env_model("base", properties={"tier": "premium", "base_only": 2})
-    override = _env_model("override", properties={"tier": "gold"})
-    deployment = _deployment_for_properties()
-
-    merged = merge_workspace_environment_deployment_properties(workspace, [base, override], deployment, "properties")
-
-    assert merged == {"region": "westeurope", "tier": "gold", "workspace_only": 1, "base_only": 2}
 
 
 # ---------------------------------------------------------------------------

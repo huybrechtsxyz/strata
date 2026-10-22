@@ -42,7 +42,6 @@ from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import SourceSyncError, resolved_asset_info
 from strata.controllers.value_controller import (
     build_value_references,
-    merge_workspace_environment_deployment_properties,
     reachable_environments,
     resolve_deployment,
     resolve_tenant,
@@ -65,7 +64,10 @@ from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
-from strata.services.environment_service import merge_environment_models
+from strata.services.environment_service import (
+    merge_environment_models,
+    merge_workspace_environment_deployment_properties,
+)
 from strata.services.workspace_service import effective_assets
 from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics

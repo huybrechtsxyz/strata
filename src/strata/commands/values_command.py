@@ -237,7 +237,7 @@ def values_get(
         )
 
         result = resolve_values(context, deployment, list(keys))
-        run.step(f"resolved {len(result.values)} of {len(keys)} keys")
+        run.step(f"resolved {sum(key in result.values for key in keys)} of {len(keys)} keys")
 
         if output == "console":
             _print_console(result.values, keys, value_format)

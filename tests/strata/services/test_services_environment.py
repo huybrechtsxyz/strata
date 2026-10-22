@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Tests for EnvironmentService — declared keys and Phase 2 token resolution."""
 
+import pytest
+
 from strata.models.configuration_model import ConfigurationSecurityModel
 from strata.models.dns_model import DnsModel
 from strata.models.network_model import NetworkModel
@@ -317,6 +319,73 @@ def test_keys_unique_to_either_environment_both_survive_the_merge():
 
 
 # ---------------------------------------------------------------------------
+# merge_workspace_environment_deployment_properties() (Q3) — moved here from
+# test_value_controller.py (docs/work/environment-value-metadata.md Phase 3).
+# ---------------------------------------------------------------------------
+
+
+def _workspace_for_properties(properties=None, custom=None):
+    from strata.models.common_models import SourceModel
+    from strata.models.provisioning_model import ProvisionerModel
+    from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
+
+    return WorkspaceModel(
+        meta=WorkspaceMetaModel(name="ws"),
+        spec=WorkspaceSpecModel(
+            providers=["p1"],
+            provisioners=[ProvisionerModel(name="tf_main", tool="terraform", source=SourceModel(source_path="infra"))],
+            properties=properties,
+            custom=custom,
+        ),
+    )
+
+
+def _deployment_for_properties(properties=None, custom=None):
+    from strata.models.deployment_model import DeploymentMetaModel, DeploymentModel, DeploymentSpecModel
+
+    return DeploymentModel(
+        meta=DeploymentMetaModel(name="app"),
+        spec=DeploymentSpecModel(workspace="ws", environments=["prd"], properties=properties, custom=custom),
+    )
+
+
+def test_merge_properties_later_layer_wins_per_key_deep_merge():
+    from strata.services.environment_service import merge_workspace_environment_deployment_properties
+
+    workspace = _workspace_for_properties(properties={"region": "westeurope", "tier": "standard"})
+    environment = _model(properties={"tier": "premium"})
+    deployment = _deployment_for_properties(properties={"region": "northeurope"})
+
+    merged = merge_workspace_environment_deployment_properties(workspace, [environment], deployment, "properties")
+
+    # deployment's own "region" wins over workspace's; environment's "tier" wins over workspace's.
+    assert merged == {"region": "northeurope", "tier": "premium"}
+
+
+def test_merge_properties_empty_everywhere_is_an_empty_dict():
+    from strata.services.environment_service import merge_workspace_environment_deployment_properties
+
+    workspace = _workspace_for_properties()
+    deployment = _deployment_for_properties()
+    assert merge_workspace_environment_deployment_properties(workspace, [], deployment, "custom") == {}
+
+
+def test_merge_properties_multiple_environments_merge_in_order():
+    """Two reachable environments — later one wins per key, matching
+    `build_value_references()`'s own multi-environment convention."""
+    from strata.services.environment_service import merge_workspace_environment_deployment_properties
+
+    workspace = _workspace_for_properties(properties={"region": "westeurope", "tier": "standard", "workspace_only": 1})
+    base = _model(properties={"tier": "premium", "base_only": 2})
+    override = _model(properties={"tier": "gold"})
+    deployment = _deployment_for_properties()
+
+    merged = merge_workspace_environment_deployment_properties(workspace, [base, override], deployment, "properties")
+
+    assert merged == {"region": "westeurope", "tier": "gold", "workspace_only": 1, "base_only": 2}
+
+
+# ---------------------------------------------------------------------------
 # validate_artifact_references() (docs/design/artifact-references.md's
 # full-review finding — store: artifact's value had no cross-reference check)
 # ---------------------------------------------------------------------------
@@ -360,6 +429,65 @@ def test_non_artifact_variables_are_never_checked():
 def test_no_artifacts_declared_anywhere_still_reports_the_reference():
     result = _environment_with_artifact_variable().validate_artifact_references(set())
     assert not result.ok
+
+
+# ---------------------------------------------------------------------------
+# validate_store_value_tokens() — a store's own `value` is resolved only against
+# `${value:}` references, so any other token kind there fails at deploy time
+# ---------------------------------------------------------------------------
+
+
+def _environment_with_variable_value(value: object, *, section: str = "variables") -> EnvironmentService:
+    service = EnvironmentService(
+        data={
+            "meta": {"name": "prd"},
+            "spec": {
+                "variables": [{"key": "REGION", "store": "constant", "value": "westeurope"}],
+                "secrets": [{"key": "DB_PASSWORD", "store": "constant", "value": "x"}],
+                "features": [{"key": "ENABLE_X", "store": "constant", "value": "true"}],
+                section: [{"key": "ALIAS", "store": "constant", "value": value}],
+            },
+        }
+    )
+    service.validate()
+    return service
+
+
+@pytest.mark.parametrize(
+    ("section", "value", "token"),
+    [
+        ("variables", "${var:REGION}", "${var:REGION}"),
+        ("secrets", "${secret:DB_PASSWORD}", "${secret:DB_PASSWORD}"),
+        ("features", "${feature:ENABLE_X}", "${feature:ENABLE_X}"),
+        ("variables", "${output:step.key}", "${output:step.key}"),
+        ("variables", "prefix-${var:REGION}-suffix", "${var:REGION}"),
+    ],
+)
+def test_a_non_value_token_in_a_store_value_is_rejected(section, value, token):
+    result = _environment_with_variable_value(value, section=section).validate_store_value_tokens()
+    assert not result.ok
+    assert [d.code for d in result.errors] == ["store_value_token_unsupported"]
+    assert token in result.messages()[0]
+    assert f"spec.{section}[" in (result.errors[0].location or "")
+
+
+def test_a_token_nested_in_an_object_value_is_rejected():
+    service = _environment_with_variable_value({"region": "${var:REGION}"})
+    assert not service.validate_store_value_tokens().ok
+
+
+def test_a_value_reference_in_a_store_value_is_allowed():
+    """`${value:}` is the one token kind a constant's value is resolved against."""
+    assert _environment_with_variable_value("${value:environment.prd.meta.name}").validate_store_value_tokens().ok
+
+
+def test_an_escaped_token_in_a_store_value_is_allowed():
+    assert _environment_with_variable_value("$${var:REGION}").validate_store_value_tokens().ok
+
+
+@pytest.mark.parametrize("value", ["plain", "", 3, True])
+def test_a_literal_store_value_is_allowed(value):
+    assert _environment_with_variable_value(value).validate_store_value_tokens().ok
 
 
 # ---------------------------------------------------------------------------
