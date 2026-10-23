@@ -3,9 +3,11 @@
 - Status: draft — problem and evidence recorded; both attributeconfig sub-designs under topic 1 (`properties`/
   `custom`, and `variables`/`features`) are fully built and documented in
   [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)
-  (`target.view: document | effective` across five blocks, `secrets` permanently excluded); the cross-block half, and
-  topic 1's own remaining open questions (default view, provenance attribution), stay undecided, as do topics 2-4
-- Last updated: 2026-10-22
+  (`target.view: document | effective` across five blocks, `secrets` permanently excluded); cross-block conditional
+  rules (`block: composite`) are designed and reviewed with a 3-phase plan, all three built and documented; topic 1's
+  remaining open questions
+  (default view, provenance attribution) stay undecided, as do topics 2-4
+- Last updated: 2026-10-23
 - Related: [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)
   (`attributeconfig`: the closest existing mechanism, scoped to `properties`/`custom`/`configuration` only),
   [ADR-0040](../decisions/0040-attributeconfig-standalone-kind.md),
@@ -126,9 +128,8 @@ actual merged, deployable result instead.
 - Should `effective` become the default for `properties`/`custom` on the layered kinds? Per-document `required` on them
   is almost never what an author means, but flipping the default is breaking. Nothing in the repo relies on it today.
 - Attributing a finding to the layer that set the value.
-- ~~The cross-block extension (`variables`/`features` composed with `properties`)~~ — same-block `variables`/`features`
-  support is now designed below (decided 2026-10-22); the *cross-block* half (a feature gating a variable) is still
-  open, see that design's own "Out of scope" note.
+- ~~The cross-block extension (`variables`/`features` composed with `properties`)~~ — built: same-block
+  `variables`/`features` (2026-10-22) and cross-block conditional rules as `block: composite` (2026-10-23), both below.
 
 #### `attributeconfig` over `variables`/`features` — DONE, now in docs/design/
 
@@ -139,8 +140,18 @@ documented in [dynamic-configuration-validation.md](../design/dynamic-configurat
 "Evaluation semantics" and "Known limits" sections, and its History — not repeated here. Covers the same-block half
 of topic 1's "Requirements" problem for `variables`/`features`, including the real recorded defect
 (`vnet_private_endpoints_subnet_name` blank while `vnet_name` was set — reproduced and caught end-to-end). The
-cross-block case (a `features` key gating a `variables` key) remains explicitly out of scope — see the design doc's
-"Known limits" #3.
+cross-block case (a `features` key gating a `variables` key) was built afterwards as `block: composite`, below.
+
+#### Cross-block conditional rules (`block: composite`) — DONE, now in docs/design/
+
+Built as a 3-phase plan (model + evaluator, conflict check, docs) — all three shipped 2026-10-23, full check suite
+clean at every phase (mypy/ruff/lint-imports/pytest, 3060 tests at completion). The shape, evaluation rules,
+conflict-check change and the declared-vs-resolved limitation are documented in
+[dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)'s "Evaluation semantics" and
+"Known limits" sections and its History — not repeated here. Covers the two recorded cross-block cases
+(`enable_aks` gating `aks_cluster_id`, `enable_sci` gating four `sci_*`/`aci_subnet_name` variables), both verified
+against `E:\Sources\cfg-int-deployment` and reproduced end-to-end against a base + leaf environment chain. Value
+equality between fields remains out of scope (topic 2; design doc "Known limits" #4).
 
 ### 2. Alias or copy-of
 
@@ -263,15 +274,16 @@ Evidence first, per repo convention; nothing below is a commitment.
    shape + same-block cross-key, including the recorded real defect) is now designed (2026-10-22, see topic 1's
    second design) via the same `attributeconfig`/`view: effective` mechanism, widened rather than a new rule type.
    Only the cross-block half (a feature gating a variable) remains undecided — still a dedicated rule, or a later
-   composed-object widening of the same mechanism.
+   composed-object widening of the same mechanism. **Decided 2026-10-23:** the composed-object widening
+   (`block: composite`, see topic 1).
 5. Decide whether naming budgets belong in strata at all (topic 4).
 6. Decide whether, and how, an upstream step's output reaches a downstream step's inputs (the adjacent section above).
    cfg-int works around it with the Key Vault for now, so this is not blocking; the trigger to revisit is when that
    workaround is dropped.
 7. ~~Only then pick a first slice~~ — picked: cross-key requirements (topic 1), on the strength of the recorded defect
-   (blank value that silently disabled private endpoints) — now built for `properties`/`custom` and designed for
-   `variables`/`features`. Provenance (topic 3) remains the largest-volume, no-defect-behind-it runner-up; topics 2/4
-   and the adjacent upstream-output section are all still untouched.
+   (blank value that silently disabled private endpoints) — now built for `properties`/`custom`, `variables`/
+   `features`, and cross-block conditional rules (`composite`). Provenance (topic 3) remains the largest-volume,
+   no-defect-behind-it runner-up; topics 2/4 and the adjacent upstream-output section are all still untouched.
 
 ## Changelog
 
@@ -360,3 +372,30 @@ Evidence first, per repo convention; nothing below is a commitment.
   short pointer, same treatment the `properties`/`custom` design got in Phase 5 of its own plan. Both attributeconfig
   sub-designs under topic 1 are now fully built and documented — nothing left to implement under topic 1 except the
   cross-block case and the two genuinely open questions (default view, provenance attribution).
+- 2026-10-23: designed cross-block conditional rules as `block: composite` (all four merged blocks in one object,
+  `view: effective` only, `secrets` excluded). Re-verified the evidence directly in `E:\Sources\cfg-int-deployment`
+  rather than relying on the earlier summary: `enable_aks`/`enable_sci` are features, their dependents are variables,
+  the base stack defaults `enable_aks` to a boolean `true` that a leaf overrides, and Terraform already enforces the
+  same rule at plan. Value equality stays out (topic 2). Found that the conflict check would misfire on `composite`
+  (every schema shares the four top-level keys) and planned the one-level-down fix. 4-phase plan written; nothing
+  built.
+- 2026-10-23: reviewed the `composite` design against the code. Confirmed all four blocks are included. Corrected
+  three points: the dedicated `composite requires view: effective` check must be defined before
+  `validate_block_exists_on_kind()` (Pydantic stops at the first failing after-validator, verified); the location
+  prefix is built from `target.block` today, so `composite` needs an explicit `spec` prefix, not "the same form" for
+  free; the conflict-check misfire only happens when two schemas declare the same sub-block at the top level, not
+  always. Added a limitation that applies to the shipped blocks too: rules see declared `value`s, which are real
+  values only for `store: constant` (missed findings, never false ones). Merged the model and evaluator phases so no
+  temporary guard is needed; 3 phases now.
+- 2026-10-23: composite Phase 1 implemented (model + evaluator together, no temporary guard). Both real cfg-int cases
+  reproduce end-to-end against a base + leaf chain, including the leaf override and the boolean feature value. 12 new
+  tests, full check suite clean (3057 passed). Remaining: Phase 2 (conflict check), Phase 3 (docs).
+- 2026-10-23: composite Phase 2 implemented. The conflict check compares `(sub_block, key)` pairs for `composite`
+  instead of the four shared top-level keys. 3 new tests, full check suite clean (3060 passed). Remaining: Phase 3
+  (docs).
+- 2026-10-23: composite Phase 3 (docs) implemented. Graduated into
+  [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md): document shape, "Scope",
+  "Evaluation semantics" (composite shape and rules, conflict check one level down), "Known limits" (#3 rewritten to
+  cross-block equality only; new #5 for declared-vs-resolved values, which also covers the shipped `variables`/
+  `features` blocks), and a History entry. Collapsed this doc's composite design and plan into a pointer. Topic 1's
+  remaining items are the two open questions (default view, finding attribution); topics 2-4 are untouched.

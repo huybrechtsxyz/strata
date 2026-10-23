@@ -739,12 +739,11 @@ def _check_attributeconfig_effective_view(
     validator: Any,
 ) -> Diagnostics:
     """`target.view: effective` (the model restricts this to `target.kind: deployment`, and `target.block`
-    one of `properties`/`custom`/`variables`/`features`): checked against the merged blob of every
+    one of `properties`/`custom`/`variables`/`features`/`composite`): checked against the merged blob of every
     *deployable* deployment (a `partial: true` base is skipped — it is not deployable and may lack required
     fields by design), instead of the deployment document's own fragment. `properties`/`custom` merge
-    `workspace -> environments -> deployment`; `variables`/`features` merge only the reachable environments
-    (`_merged_effective_value()` — neither has a workspace- or deployment-level field to merge in, docs/
-    work/environment-value-metadata.md's `variables`/`features` design, Phase 3).
+    `workspace -> environments -> deployment`; `variables`/`features` merge only the reachable environments;
+    `composite` nests all four (`_merged_effective_value()`).
 
     Findings attribute to the deployment's own source, and the message names
     the deployment so an `effective`-view finding is never mistaken for a
@@ -767,6 +766,8 @@ def _check_attributeconfig_effective_view(
         if merged is None:
             continue  # unresolved workspace reference already reported by validate_references
 
+        # composite's absolute_path already starts with the sub-block name.
+        base = "spec" if target.block == "composite" else f"spec.{target.block}"
         log.info("attributeconfig applied", document=str(deployment_entry.ref), schema=str(entry.ref))
         try:
             errors = list(validator.iter_errors(merged))
@@ -775,14 +776,14 @@ def _check_attributeconfig_effective_view(
                 f"attributeconfig '{entry.ref.name}': schema references an external resource, which is "
                 f"not allowed: {exc}",
                 source=str(deployment_entry.source),
-                location=f"spec.{target.block}",
+                location=base,
                 code=ATTRIBUTECONFIG_INVALID_CODE,
             )
             continue
 
         for error in errors:
             code, message, relative_location = translate_validation_error(error)
-            location = f"spec.{target.block}.{relative_location}" if relative_location else f"spec.{target.block}"
+            location = f"{base}.{relative_location}" if relative_location else base
             diagnostics.error(
                 f"merged blob of deployment '{deployment_entry.ref.name}': {message}",
                 source=str(deployment_entry.source),
@@ -808,11 +809,21 @@ def _merged_effective_value(index: DocumentIndex, deployment: DeploymentModel, b
     declares them, confirmed via `environment_model.py` — docs/work/environment-value-metadata.md's
     `variables`/`features` design) — just the reachable environments, via the same `merge_environment_
     models()` `_merged_declared_keys()` already uses, reshaped the same way `document` view's keys are
-    (`reshape_block_value()`, Phase 2). `properties`/`custom` keep the existing three-layer merge.
+    (`reshape_block_value()`, Phase 2). `properties`/`custom` keep the existing three-layer merge. `composite`
+    is the four results above nested under their block names, for cross-block rules.
 
     Returns `None` when an unresolved `deployment.spec.workspace` reference blocks the `properties`/
-    `custom` merge — already reported by `validate_references`, not re-reported here.
+    `custom` merge (and therefore `composite`) — already reported by `validate_references`, not re-reported here.
     """
+    if block == "composite":
+        parts: dict[str, Any] = {}
+        for sub_block in ("properties", "custom", "variables", "features"):
+            sub_value = _merged_effective_value(index, deployment, sub_block)
+            if sub_value is None:
+                return None
+            parts[sub_block] = sub_value
+        return parts
+
     environments: list[EnvironmentModel] = []
     for name in _reachable_environment_names(index, deployment):
         env_entry = index.get(PlatformKind.ENVIRONMENT, name)
@@ -846,7 +857,8 @@ def _check_attributeconfig_conflicts(index: DocumentIndex) -> Diagnostics:
     own it. `view` is part of the group key (Phase 4): a `document`-view and
     an `effective`-view schema on the same block check different data (one
     document's own fragment vs. a deployment's merged blob) and can never
-    conflict.
+    conflict. For `block: composite` the compared attributes are `(sub_block,
+    key)` pairs one level down (`_schema_attribute_keys()`).
 
     Runs once per `validate`, pairwise over every `(kind, block, view)` group
     — not per target document — since this is purely a property of the
@@ -871,9 +883,10 @@ def _check_attributeconfig_pair_conflict(first: IndexEntry, second: IndexEntry) 
     diagnostics = Diagnostics()
     first_model = cast(AttributeConfigModel, first.model)
     second_model = cast(AttributeConfigModel, second.model)
+    target = first_model.spec.target
 
-    first_keys = _schema_top_level_properties(first_model.spec.schema_)
-    second_keys = _schema_top_level_properties(second_model.spec.schema_)
+    first_keys = _schema_attribute_keys(first_model.spec.schema_, target.block)
+    second_keys = _schema_attribute_keys(second_model.spec.schema_, target.block)
     shared_keys = first_keys & second_keys
     if not shared_keys:
         return diagnostics
@@ -881,29 +894,42 @@ def _check_attributeconfig_pair_conflict(first: IndexEntry, second: IndexEntry) 
     if not selectors_compatible(first_model.spec.target.selector or {}, second_model.spec.target.selector or {}):
         return diagnostics
 
-    target = first_model.spec.target
+    # composite keys already start with the sub-block, so the block name is not part of the attribute path.
+    block_prefix = [] if target.block == "composite" else [target.block]
     for key in sorted(shared_keys):
+        attribute = ".".join([*block_prefix, *key])
         diagnostics.error(
             f"attributeconfig '{first.ref.name}' and '{second.ref.name}' both declare a schema for "
-            f"'{target.kind.value}.spec.{target.block}.{key}', and their selectors can match the same "
+            f"'{target.kind.value}.spec.{attribute}', and their selectors can match the same "
             "document — pick one schema, or narrow the selectors so they can never both apply.",
             source=str(first.source),
-            location=f"spec.schema.properties.{key}",
+            location="spec.schema." + ".".join(f"properties.{part}" for part in key),
             code="attributeconfig_conflict",
         )
     return diagnostics
 
 
-def _schema_top_level_properties(schema: dict[str, Any]) -> set[str]:
-    """Top-level `properties` keys of a schema, or an empty set if absent or
-    not shaped like an object — `attributeconfig.spec.schema` is an
-    unvalidated `dict[str, Any]` at this point (`_check_attributeconfigs()`'s
-    own `build_validator()` call is what would reject a malformed schema as
-    `attributeconfig_invalid`, but that's a separate, independent pass — this
-    check must not assume it already ran, or crash if it hasn't).
+def _schema_attribute_keys(schema: dict[str, Any], block: str) -> set[tuple[str, ...]]:
+    """The attributes a schema declares, as key paths: top-level `properties` keys for every block, and
+    `(sub_block, key)` pairs one level down for `composite` — whose top-level keys are the four sub-block
+    names every composite schema shares, so comparing them would flag unrelated schemas.
+
+    Returns an empty set for anything not shaped like an object: `attributeconfig.spec.schema` is an
+    unvalidated `dict[str, Any]` here (`_check_attributeconfigs()`'s own `build_validator()` call is what
+    would reject a malformed schema as `attributeconfig_invalid`, but that's a separate, independent pass —
+    this check must not assume it already ran, or crash if it hasn't).
     """
-    properties = schema.get("properties")
-    return set(properties.keys()) if isinstance(properties, dict) else set()
+    top = schema.get("properties")
+    if not isinstance(top, dict):
+        return set()
+    if block != "composite":
+        return {(key,) for key in top}
+    keys: set[tuple[str, ...]] = set()
+    for sub_block, sub_schema in top.items():
+        nested = sub_schema.get("properties") if isinstance(sub_schema, dict) else None
+        if isinstance(nested, dict):
+            keys.update((sub_block, key) for key in nested)
+    return keys
 
 
 def _check_resources(index: DocumentIndex) -> Diagnostics:

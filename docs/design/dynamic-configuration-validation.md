@@ -1,7 +1,7 @@
 # Dynamic Configuration Validation (`attributeconfig`) — Design
 
 - Status: current
-- Last updated: 2026-10-22 (variables/features)
+- Last updated: 2026-10-23 (composite)
 
 ## Overview
 
@@ -39,7 +39,7 @@ meta:
 spec:
   target:
     kind: <PlatformKind>              # e.g. environment, resource
-    block: properties | custom | configuration | variables | features  # whichever block this kind actually has
+    block: properties | custom | configuration | variables | features | composite  # composite: view: effective only
     view: document | effective        # optional, default document — see "Evaluation semantics"
     selector:                         # optional; omitted = every document of this kind
       <field.path>: <required-value>  # equality only, no wildcards/regex
@@ -54,7 +54,9 @@ Covers `properties`/`custom` on every kind, `configuration` specifically where t
 name (`resource.spec.configuration`), and `variables`/`features` on `environment` — both are
 `list[VariableStoreModel | FeatureStoreModel] | None`, not a `dict[str, Any]` blob like the other three,
 so they are reshaped into the same `{key: value}` shape before evaluation (`reshape_block_value()`,
-"Evaluation semantics" below). `secrets` is excluded **permanently, as a security boundary, not merely
+"Evaluation semantics" below). `composite` is not a field at all: it is the four merged blocks of a deployment
+side by side, for rules that span blocks (`view: effective` only, "Evaluation semantics" below). `secrets` is
+excluded **permanently, as a security boundary, not merely
 unaddressed scope**: a failing schema's `ValidationError.message` can echo the offending value back in
 `strata validate`'s plain-text output, and a `store: constant` secret's `value` *is* the literal secret —
 validating it the same way would mean a secret's real value can end up in a CI log the moment an author's
@@ -146,6 +148,26 @@ completely unchecked until someone remembered to opt in.
   confused with a `document`-view finding on the same deployment document.
   Which layer actually set the offending value is not tracked (`deep_merge`
   keeps no provenance) — a known gap, not a bug.
+- **`block: composite` (cross-block conditional rules).** Only valid with `view: effective` (and therefore
+  `kind: deployment`); `view: document` is rejected with `block 'composite' requires view: effective` — that
+  check is defined before the `(kind, block)` check, because Pydantic stops at the first failing after-validator
+  and the `(kind, block)` check's message would otherwise be the misleading `does not exist on kind`. The schema is
+  evaluated against one object holding all four merged blocks, each built by the same per-block merge above, each
+  always present (`{}` when empty), `secrets` never included:
+
+  ```json
+  { "properties": {...}, "custom": {...},
+    "variables": { "aks_cluster_id": { "store": "constant", "value": "", ... } },
+    "features":  { "enable_aks":     { "store": "constant", "value": true, ... } } }
+  ```
+
+  A rule such as "if feature `enable_aks` is on, variable `aks_cluster_id` must be non-empty" is an ordinary
+  `if`/`then` across `features` and `variables`; a feature value may be a YAML boolean or a string, so a condition
+  should accept both (`enum: [true, "true"]`). Findings use the same location form as the single-block views
+  (`spec.variables.aks_cluster_id.value`, no `composite` segment). If the workspace reference is unresolved, the
+  deployment is skipped, as for `properties`/`custom`. Built for two real cases in a consumer repo, both a feature
+  gating variables and both layered (a base stack turns the feature on, a leaf environment turns it off) —
+  Terraform already enforced one of them at plan time; this moves it to `strata validate`.
 - **No merge across schemas.** Every schema whose target and selector match a document is
   evaluated independently; all must pass. Monotonic — adding a schema can
   only ever tighten validation, never loosen it. An unset block is checked
@@ -162,7 +184,11 @@ completely unchecked until someone remembered to opt in.
   selector is vacantly compatible with anything). `view` is part of the
   group key: a `document`-view and an `effective`-view schema on the same
   block check different data (one document's own fragment vs. a
-  deployment's merged blob) and can never conflict. Diagnostic code
+  deployment's merged blob) and can never conflict. For `block: composite`
+  the compared attributes are `(sub_block, key)` pairs one level down
+  (`schema.properties.<sub_block>.properties.<key>`), since every composite
+  schema shares the same four top-level keys. Conditional rules inside
+  `if`/`then` are not visible to this check, for any block. Diagnostic code
   `attributeconfig_conflict`, `.error()` severity.
 - **Applied-schema visibility**: every `(document, schema)` application is
   logged via `log.info()` under `--verbose` (same channel as
@@ -234,13 +260,17 @@ Never expressible by this mechanism, standard or native schema language:
 2. **Cross-document invariants** (one document's field must equal
    another document's field) — no schema targeting one document can
    constrain another.
-3. **Cross-block invariants** (a `features` key gating a `variables` key, e.g. a feature flag that must be
-   on for a variable to be required) — `target.block` is one block per schema; `variables`/`features`/
-   `properties` are never composed into one object a schema is evaluated against. Same-block cross-key
-   rules (two `variables` keys, or two `properties` keys) *are* expressible, via `if`/`then`, same as any
-   other block.
+3. **Cross-block value equality.** Cross-block *conditional* rules (a feature gating a variable or property) are
+   expressible with `block: composite`. Comparing values across fields is not — see #4.
 4. **"These two keys are equal"** (an alias/copy-of invariant) — JSON Schema has no cross-property
-   equality keyword; same limitation as #2, one level down.
+   equality keyword; same limitation as #2, one level down. A composed object does not change this.
+5. **Declared values, not resolved ones** (`variables`, `features`, and `composite`). A rule sees each store
+   entry as declared. For `store: constant`, `value` is the real value; for every other store it is a lookup
+   identifier (an environment-variable name, a Key Vault or App Configuration key, an artifact name), and
+   `validate` does not resolve stores. A rule on `value` therefore only means what it says for constant stores.
+   The failure mode is a missed finding, never a false one: a condition like `enum: [true, "true"]` never matches
+   an identifier, and `minLength: 1` passes on any identifier. To fail closed, also constrain
+   `store: { const: constant }`.
 
 Cross-field invariants *within* a single document's targeted block are
 expressible via JSON Schema's `if`/`then`/`dependentRequired` — confirmed
@@ -397,3 +427,15 @@ guarded by schema X").
   one release between the model change and the merge landing, removed
   once the real merge (`merge_environment_models()`, reused unchanged from
   `_check_deployment_value_tokens()`) was wired in.
+- Added `block: composite` (2026-10-23, docs/work/environment-value-metadata.md's 3-phase plan, now folded in
+  here) for cross-block conditional rules. Evidence checked directly in the consumer repo: `enable_aks` and
+  `enable_sci` are features, their dependents are variables, and the base stack sets `enable_aks` to a boolean
+  `true` that a leaf environment overrides — so the rule needs the merged view and must accept both `true` and
+  `"true"`. Chose a fifth `block` value over a third `view` value: `view: composite` would leave `block`
+  required but meaningless. Chose all four merged blocks over only `variables`+`features`: both recorded cases
+  are feature→variable, but `properties` is where composed values belong, so feature→property rules are the
+  likely next case, and one fixed shape needs no configuration. The model and evaluator landed in one change
+  this time, so no temporary "not yet implemented" guard was needed. The conflict check had to move one level
+  down for `composite`, since every composite schema shares the four top-level keys. The review also surfaced
+  a limit that applies to `variables`/`features` as shipped: rules see declared values, which are real only for
+  `store: constant` (Known limits #5). Value equality between fields stays out of scope.

@@ -3367,6 +3367,213 @@ spec:
 
 
 # ---------------------------------------------------------------------------
+# attributeconfig -> deployment: block: composite (cross-block conditional
+# rules; docs/work/environment-value-metadata.md's composite design, Phase 1)
+# ---------------------------------------------------------------------------
+
+_ENABLE_AKS_REQUIRES_CLUSTER_ID = """  schema:
+    type: object
+    if:
+      properties:
+        features:
+          required: [enable_aks]
+          properties:
+            enable_aks:
+              properties:
+                value: { enum: [true, "true"] }
+    then:
+      properties:
+        variables:
+          required: [aks_cluster_id]
+          properties:
+            aks_cluster_id:
+              properties:
+                value: { type: string, minLength: 1 }
+"""
+
+_ENABLE_SCI_REQUIRES_SCI_VARIABLES = """  schema:
+    type: object
+    if:
+      properties:
+        features:
+          required: [enable_sci]
+          properties:
+            enable_sci:
+              properties:
+                value: { enum: [true, "true"] }
+    then:
+      properties:
+        variables:
+          required: [aci_subnet_name, sci_function_app_url, sci_storage_account_name, sci_storage_container_name]
+          properties:
+            aci_subnet_name: { properties: { value: { type: string, minLength: 1 } } }
+            sci_function_app_url: { properties: { value: { type: string, minLength: 1 } } }
+            sci_storage_account_name: { properties: { value: { type: string, minLength: 1 } } }
+            sci_storage_container_name: { properties: { value: { type: string, minLength: 1 } } }
+"""
+
+
+def _write_composite_attributeconfig(root: Path, name: str, schema_yaml: str) -> None:
+    _write(
+        root,
+        f"attributeconfig-{name}.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: attributeconfig
+meta:
+  name: {name}
+spec:
+  target:
+    kind: deployment
+    block: composite
+    view: effective
+{schema_yaml}""",
+    )
+
+
+def _write_ring_chain(
+    root: Path, *, base_features: str, base_variables: str, leaf_features: str = "", leaf_variables: str = ""
+) -> None:
+    """A base `ring` environment plus the `prd` leaf, merged in that order (leaf wins) — the
+    `stacks/ring` base + `c0224/dev` leaf shape the recorded cfg-int cases come from."""
+    leaf_features_block = f"  features:\n{leaf_features}" if leaf_features else ""
+    _write(
+        root,
+        "environment-ring.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: ring
+spec:
+  variables:
+{base_variables}  features:
+{base_features}""",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec:
+  variables:
+    - key: PUBLIC_IP
+      store: constant
+      value: "1.2.3.4"
+{leaf_variables}{leaf_features_block}""",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: prd-deployment
+spec:
+  workspace: main
+  tenant: c0062
+  environments: [ring, prd]
+  stages:
+    - step: provision-infra
+""",
+    )
+
+
+_AKS_ON_BOOLEAN = "    - key: enable_aks\n      store: constant\n      value: true\n"
+_AKS_OFF = "    - key: enable_aks\n      store: constant\n      value: false\n"
+_CLUSTER_ID_BLANK = '    - key: aks_cluster_id\n      store: constant\n      value: ""\n'
+
+
+def test_attributeconfig_composite_fails_when_inherited_feature_on_and_variable_blank(tmp_path):
+    """The real `enable_aks` case: the base turns the feature on (as a YAML boolean), the cluster id is blank."""
+    root = _base_solution(tmp_path)
+    _write_ring_chain(root, base_features=_AKS_ON_BOOLEAN, base_variables=_CLUSTER_ID_BLANK)
+    _write_composite_attributeconfig(root, "aks-cluster-id-required", _ENABLE_AKS_REQUIRES_CLUSTER_ID)
+
+    context = _resolve(root)
+    assert not context.ok
+    findings = [d for d in context.diagnostics.errors if "prd-deployment" in d.message]
+    assert findings, context.diagnostics.messages()
+    assert findings[0].location == "spec.variables.aks_cluster_id.value"
+
+
+def test_attributeconfig_composite_passes_when_leaf_overrides_feature_off(tmp_path):
+    """Same base, but the leaf turns `enable_aks` off — only the merged view knows the condition no longer applies."""
+    root = _base_solution(tmp_path)
+    _write_ring_chain(root, base_features=_AKS_ON_BOOLEAN, base_variables=_CLUSTER_ID_BLANK, leaf_features=_AKS_OFF)
+    _write_composite_attributeconfig(root, "aks-cluster-id-required", _ENABLE_AKS_REQUIRES_CLUSTER_ID)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_attributeconfig_composite_passes_when_feature_on_and_variable_set(tmp_path):
+    root = _base_solution(tmp_path)
+    _write_ring_chain(
+        root,
+        base_features=_AKS_ON_BOOLEAN,
+        base_variables='    - key: aks_cluster_id\n      store: constant\n      value: "/subscriptions/x/aks"\n',
+    )
+    _write_composite_attributeconfig(root, "aks-cluster-id-required", _ENABLE_AKS_REQUIRES_CLUSTER_ID)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+@pytest.mark.parametrize(
+    "blank", ["aci_subnet_name", "sci_function_app_url", "sci_storage_account_name", "sci_storage_container_name"]
+)
+def test_attributeconfig_composite_one_feature_gates_several_variables(tmp_path, blank):
+    """The real `enable_sci` case: one feature, four dependent variables; any one blank fails."""
+    names = ["aci_subnet_name", "sci_function_app_url", "sci_storage_account_name", "sci_storage_container_name"]
+    variables = "".join(
+        f'    - key: {name}\n      store: constant\n      value: "{"" if name == blank else "set"}"\n' for name in names
+    )
+    root = _base_solution(tmp_path)
+    _write_ring_chain(
+        root,
+        base_features='    - key: enable_sci\n      store: constant\n      value: "true"\n',
+        base_variables=variables,
+    )
+    _write_composite_attributeconfig(root, "sci-variables-required", _ENABLE_SCI_REQUIRES_SCI_VARIABLES)
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.location == f"spec.variables.{blank}.value" for d in context.diagnostics.errors), (
+        context.diagnostics.messages()
+    )
+
+
+def test_attributeconfig_composite_exposes_properties_and_custom_too(tmp_path):
+    """All four blocks are present — a feature can gate a property, not only a variable."""
+    root = _base_solution(tmp_path)
+    _write_ring_chain(root, base_features=_AKS_ON_BOOLEAN, base_variables=_CLUSTER_ID_BLANK)
+    _write_composite_attributeconfig(
+        root,
+        "aks-needs-owner-property",
+        """  schema:
+    type: object
+    required: [properties, custom, variables, features]
+    if:
+      properties:
+        features:
+          required: [enable_aks]
+    then:
+      properties:
+        properties:
+          required: [owner]
+""",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(
+        d.location == "spec.properties" and d.code == "attributeconfig_field_missing"
+        for d in context.diagnostics.errors
+    ), context.diagnostics.messages()
+
+
+# ---------------------------------------------------------------------------
 # attributeconfig -> environment: document view on variables/features
 # (docs/work/environment-value-metadata.md's `variables`/`features` design, Phase 2)
 # ---------------------------------------------------------------------------
@@ -3621,4 +3828,50 @@ spec:
     context = _resolve(root)  # must not raise
     assert not context.ok
     assert any(d.code == "attributeconfig_invalid" for d in context.diagnostics.errors)
+    assert not any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)
+
+
+def _composite_variables_schema(*keys: str) -> str:
+    properties = "".join(f"          {key}:\n            type: object\n" for key in keys)
+    return f"""  schema:
+    type: object
+    properties:
+      variables:
+        type: object
+        properties:
+{properties}"""
+
+
+def test_attributeconfig_conflict_composite_silent_for_different_keys_in_the_same_sub_block(tmp_path):
+    """Both schemas declare `properties.variables` at the top level; comparing top-level keys would flag them.
+    They constrain different variables, so they don't conflict."""
+    root = _base_solution(tmp_path)
+    _write_composite_attributeconfig(root, "composite-a", _composite_variables_schema("aks_cluster_id"))
+    _write_composite_attributeconfig(root, "composite-b", _composite_variables_schema("worker_pools"))
+
+    context = _resolve(root)
+    assert not any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)
+
+
+def test_attributeconfig_conflict_composite_fires_for_the_same_sub_block_key(tmp_path):
+    root = _base_solution(tmp_path)
+    _write_composite_attributeconfig(root, "composite-a", _composite_variables_schema("aks_cluster_id"))
+    _write_composite_attributeconfig(root, "composite-b", _composite_variables_schema("aks_cluster_id", "worker_pools"))
+
+    context = _resolve(root)
+    conflicts = [d for d in context.diagnostics.errors if d.code == "attributeconfig_conflict"]
+    assert len(conflicts) == 1, context.diagnostics.messages()
+    assert "'deployment.spec.variables.aks_cluster_id'" in conflicts[0].message
+    assert conflicts[0].location == "spec.schema.properties.variables.properties.aks_cluster_id"
+
+
+def test_attributeconfig_conflict_composite_ignores_a_malformed_sub_block(tmp_path):
+    """A sub-block declared as something other than a mapping must not crash the check."""
+    root = _base_solution(tmp_path)
+    _write_composite_attributeconfig(
+        root, "composite-malformed", "  schema:\n    type: object\n    properties:\n      variables: not-a-mapping\n"
+    )
+    _write_composite_attributeconfig(root, "composite-b", _composite_variables_schema("aks_cluster_id"))
+
+    context = _resolve(root)  # must not raise
     assert not any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)

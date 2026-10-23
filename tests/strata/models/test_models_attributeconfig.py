@@ -186,6 +186,30 @@ def test_attributeconfig_rejects_effective_view_for_configuration_block():
         AttributeConfigModel.model_validate(data)
 
 
+def test_attributeconfig_accepts_composite_on_deployment_effective_view():
+    data = _minimal_attributeconfig()
+    data["spec"]["target"] = {"kind": "deployment", "block": "composite", "view": "effective"}
+    model = AttributeConfigModel.model_validate(data)
+    assert model.spec.target.block == "composite"
+
+
+@pytest.mark.parametrize("kind", ["deployment", "environment"])
+def test_attributeconfig_composite_document_view_gets_the_dedicated_message(kind):
+    """Not the misleading `block 'composite' does not exist on kind ...` from the (kind, block) check."""
+    data = _minimal_attributeconfig()
+    data["spec"]["target"] = {"kind": kind, "block": "composite"}
+    with pytest.raises(ValidationError, match="block 'composite' requires view: effective") as excinfo:
+        AttributeConfigModel.model_validate(data)
+    assert "does not exist on kind" not in str(excinfo.value)
+
+
+def test_attributeconfig_rejects_composite_for_non_deployment_kind():
+    data = _minimal_attributeconfig()
+    data["spec"]["target"] = {"kind": "environment", "block": "composite", "view": "effective"}
+    with pytest.raises(ValidationError, match="view: effective is only supported for target.kind: deployment"):
+        AttributeConfigModel.model_validate(data)
+
+
 def test_attributeconfig_blocks_by_kind_matches_every_real_spec_model():
     """Pins `BLOCKS_BY_KIND` against the real `*SpecModel` classes directly, so the table can't silently
     drift from the models it describes (docs/work/environment-value-metadata.md Phase 1)."""

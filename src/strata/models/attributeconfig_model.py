@@ -64,8 +64,9 @@ BLOCKS_BY_KIND: dict[PlatformKind, frozenset[str]] = {
 #: `view: effective` block/kind validity (docs/work/environment-value-metadata.md) — independent of
 #: `BLOCKS_BY_KIND`: `target.kind` is always `deployment` regardless of which of these blocks is checked, since
 #: `deployment` is the one thing every merge (`properties`/`custom`'s workspace+environments+deployment,
-#: `variables`/`features`'s environments-only) is scoped against, not necessarily the kind that owns the field.
-_EFFECTIVE_VIEW_BLOCKS: frozenset[str] = frozenset({"properties", "custom", "variables", "features"})
+#: `variables`/`features`'s environments-only, `composite`'s all four) is scoped against, not necessarily the kind
+#: that owns the field.
+_EFFECTIVE_VIEW_BLOCKS: frozenset[str] = frozenset({"properties", "custom", "variables", "features", "composite"})
 
 
 class AttributeConfigTargetModel(PlatformBaseModel):
@@ -73,8 +74,10 @@ class AttributeConfigTargetModel(PlatformBaseModel):
     which documents of that kind, via a selector."""
 
     kind: PlatformKind = Field(description="The kind of document this schema targets (e.g. 'environment').")
-    block: Literal["properties", "custom", "configuration", "variables", "features"] = Field(
-        description="Which passthrough blob field on the targeted kind this schema validates. 'secrets' is "
+    block: Literal["properties", "custom", "configuration", "variables", "features", "composite"] = Field(
+        description="Which passthrough blob field on the targeted kind this schema validates. 'composite' (view: "
+        "effective only) evaluates one object holding the merged properties/custom/variables/features together, "
+        "for rules that span blocks. 'secrets' is "
         "deliberately never a valid value — a failing schema's message can echo the offending value verbatim, "
         "and a `store: constant` secret's value IS the literal secret (docs/work/environment-value-metadata.md)."
     )
@@ -89,6 +92,14 @@ class AttributeConfigTargetModel(PlatformBaseModel):
         "unchanged behaviour. 'effective': evaluate the merged `properties`/`custom`/`variables`/`features` of "
         "each deployable deployment instead — only valid for `kind: deployment`.",
     )
+
+    # Must stay defined before validate_block_exists_on_kind(): Pydantic stops at the first failing after-validator.
+    @model_validator(mode="after")
+    def validate_composite_requires_effective_view(self) -> "AttributeConfigTargetModel":
+        """`composite` is a merged-only view of four blocks; no single document has it as a field."""
+        if self.block == "composite" and self.view != "effective":
+            raise ValueError("block 'composite' requires view: effective")
+        return self
 
     @model_validator(mode="after")
     def validate_block_exists_on_kind(self) -> "AttributeConfigTargetModel":
