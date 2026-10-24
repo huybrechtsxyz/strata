@@ -388,7 +388,7 @@ def merge_workspace_environment_deployment_properties(
     deliberately not ported (0 of 26 real environment documents used it,
     ADR-0003's minimal-slice policy).
 
-    Moved here from `value_controller.py` (docs/work/
+    Moved here from `value_controller.py` (docs/archive/
     environment-value-metadata.md Phase 3) — pure, no `SolutionContext`
     dependency, so it belongs in `services`, not `controllers`: callers
     needing the merged view at validate time (`semantic_checks.py`) would

@@ -286,8 +286,13 @@ Out of scope, no consumer asking yet: surfacing the applied-schema set in
 `validate --output json`'s `data` payload for tooling (e.g. "this block is
 guarded by schema X").
 
+Out of scope, no evidence of need yet: naming the layer (environment, workspace, deployment) that set a value an
+`effective`-view finding is about. Findings name the deployment and the merged path.
+
 ## Related Decisions
 
+- [ADR-0044](../decisions/0044-environment-values-carry-no-metadata-fields.md) — requirements are the only value
+  metadata strata checks; alias, provenance and naming budgets stay with their real owners.
 - [ADR-0040](../decisions/0040-attributeconfig-standalone-kind.md) — the
   standalone kind, push binding, JSON Schema choice, and the non-retrieving
   registry requirement.
@@ -376,7 +381,7 @@ guarded by schema X").
   compiled module directly against a realistic diagnostic location, not
   just by reading its source.
 - Added `target.view: document | effective` (2026-10-22,
-  docs/work/environment-value-metadata.md's 5-phase plan, now folded in
+  docs/archive/environment-value-metadata.md's 5-phase plan, now folded in
   here) — a `document`-view `required` schema misfires on a layered
   environment, since `properties`/`custom` deep-merge `workspace ->
   environments -> deployment` (and a tenant's own base layer, ADR-0024)
@@ -400,7 +405,7 @@ guarded by schema X").
   passed validation silently and evaluated every document of that kind
   against `{}` forever, with the finding blaming the documents rather
   than the actual mistake in the `attributeconfig` document itself.
-- Extended to `variables`/`features` (2026-10-22, docs/work/
+- Extended to `variables`/`features` (2026-10-22, docs/archive/
   environment-value-metadata.md's own 4-phase plan, now folded in here) —
   the deferred half of the previous entry, same-block cross-key rules only
   (the real recorded defect, `vnet_name`/`vnet_private_endpoints_subnet_name`,
@@ -427,7 +432,7 @@ guarded by schema X").
   one release between the model change and the merge landing, removed
   once the real merge (`merge_environment_models()`, reused unchanged from
   `_check_deployment_value_tokens()`) was wired in.
-- Added `block: composite` (2026-10-23, docs/work/environment-value-metadata.md's 3-phase plan, now folded in
+- Added `block: composite` (2026-10-23, docs/archive/environment-value-metadata.md's 3-phase plan, now folded in
   here) for cross-block conditional rules. Evidence checked directly in the consumer repo: `enable_aks` and
   `enable_sci` are features, their dependents are variables, and the base stack sets `enable_aks` to a boolean
   `true` that a leaf environment overrides — so the rule needs the merged view and must accept both `true` and
@@ -440,7 +445,7 @@ guarded by schema X").
   a limit that applies to `variables`/`features` as shipped: rules see declared values, which are real only for
   `store: constant` (Known limits #5). Value equality between fields stays out of scope.
 - Made `target.view` required, removing the `document` default (2026-10-24,
-  docs/work/environment-value-metadata.md). The two views check different data, and picking the wrong one either
+  docs/archive/environment-value-metadata.md). The two views check different data, and picking the wrong one either
   misfires (`document` on a layered value) or silently misses, so the author always states which. Breaking:
   a schema without `view` now fails at load (`Field required` at `spec.target.view`). Pre-1.0, no compatibility
   mode, same as ADR-0035; the only real schemas affected were the three in `config/registries/azure-attributes.yaml`.

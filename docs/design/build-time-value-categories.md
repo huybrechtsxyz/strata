@@ -326,7 +326,7 @@ A real, open gap in this mechanism — the secret taint check is tracked
 per top-level key, not per leaf, so one secret anywhere inside a large
 nested value forces the entire value through its env var — is still being
 worked out, not settled, so it's tracked separately:
-[flat-category-secret-taint-size-limit.md](../work/flat-category-secret-taint-size-limit.md).
+[flat-category-secret-taint-size-limit.md](../archive/flat-category-secret-taint-size-limit.md).
 
 ## Design Principle: shared inputs, per-integration translation
 - change `build_run()`/`build_controller.py`'s orchestration to special-case
@@ -465,4 +465,4 @@ reads `graph.version.spec.promotion` directly from it, no separate lookup.
   tracked per top-level key, not per leaf, with no size-limit check
   against real OS environment-variable limits — is a real, unresolved
   problem rather than a settled fact, so it was split out instead of
-  kept here: [flat-category-secret-taint-size-limit.md](../work/flat-category-secret-taint-size-limit.md).
+  kept here: [flat-category-secret-taint-size-limit.md](../archive/flat-category-secret-taint-size-limit.md).

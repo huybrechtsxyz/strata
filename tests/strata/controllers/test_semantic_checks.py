@@ -2978,7 +2978,7 @@ spec:
 
 # ---------------------------------------------------------------------------
 # attributeconfig -> deployment: target.view: effective (merged
-# workspace -> environments -> deployment blob; docs/work/
+# workspace -> environments -> deployment blob; docs/archive/
 # environment-value-metadata.md Phase 4)
 # ---------------------------------------------------------------------------
 
@@ -3192,7 +3192,7 @@ _VNET_SAME_BLOCK_IF_THEN_SCHEMA = """  schema:
 
 
 def _write_deployment_variables_effective_attributeconfig(root: Path) -> None:
-    """The real recorded defect's shape (docs/work/environment-value-metadata.md's Evidence section):
+    """The real recorded defect's shape (docs/archive/environment-value-metadata.md's Evidence section):
     `vnet_private_endpoints_subnet_name` must be set whenever `vnet_name` is — both are **variables**, a
     same-block cross-key rule."""
     _write(
@@ -3372,7 +3372,7 @@ spec:
 
 # ---------------------------------------------------------------------------
 # attributeconfig -> deployment: block: composite (cross-block conditional
-# rules; docs/work/environment-value-metadata.md's composite design, Phase 1)
+# rules; docs/archive/environment-value-metadata.md's composite design, Phase 1)
 # ---------------------------------------------------------------------------
 
 _ENABLE_AKS_REQUIRES_CLUSTER_ID = """  schema:
@@ -3579,7 +3579,7 @@ def test_attributeconfig_composite_exposes_properties_and_custom_too(tmp_path):
 
 # ---------------------------------------------------------------------------
 # attributeconfig -> environment: document view on variables/features
-# (docs/work/environment-value-metadata.md's `variables`/`features` design, Phase 2)
+# (docs/archive/environment-value-metadata.md's `variables`/`features` design, Phase 2)
 # ---------------------------------------------------------------------------
 
 

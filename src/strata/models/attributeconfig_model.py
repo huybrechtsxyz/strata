@@ -30,7 +30,7 @@ from strata.models.common_models import (
 
 #: Which `properties`/`custom`/`configuration`/`variables`/`features` fields each kind's own top-level
 #: `*SpecModel` actually declares — verified directly against those classes
-#: (2026-10-22, docs/work/environment-value-metadata.md), not merely assumed
+#: (2026-10-22, docs/archive/environment-value-metadata.md), not merely assumed
 #: from `block`'s own `Literal`. A same-named field on a NESTED sub-model
 #: (`DnsZoneModel.custom`, `FirewallRuleModel.custom`,
 #: `WorkspaceResourceModel.configuration`, ...) does not count — `getattr
@@ -61,7 +61,7 @@ BLOCKS_BY_KIND: dict[PlatformKind, frozenset[str]] = {
     PlatformKind.RESOURCE: frozenset({"custom", "configuration"}),
 }
 
-#: `view: effective` block/kind validity (docs/work/environment-value-metadata.md) — independent of
+#: `view: effective` block/kind validity (docs/archive/environment-value-metadata.md) — independent of
 #: `BLOCKS_BY_KIND`: `target.kind` is always `deployment` regardless of which of these blocks is checked, since
 #: `deployment` is the one thing every merge (`properties`/`custom`'s workspace+environments+deployment,
 #: `variables`/`features`'s environments-only, `composite`'s all four) is scoped against, not necessarily the kind
@@ -79,7 +79,7 @@ class AttributeConfigTargetModel(PlatformBaseModel):
         "effective only) evaluates one object holding the merged properties/custom/variables/features together, "
         "for rules that span blocks. 'secrets' is "
         "deliberately never a valid value — a failing schema's message can echo the offending value verbatim, "
-        "and a `store: constant` secret's value IS the literal secret (docs/work/environment-value-metadata.md)."
+        "and a `store: constant` secret's value IS the literal secret (docs/archive/environment-value-metadata.md)."
     )
     selector: dict[str, str] | None = Field(
         None,
@@ -106,7 +106,7 @@ class AttributeConfigTargetModel(PlatformBaseModel):
         """`view: document` only: reject a `(kind, block)` pair naming a field `kind`'s own spec model
         doesn't have — such a pair used to pass load-time validation and then
         silently evaluate every document of `kind` against `{}` forever
-        (docs/work/environment-value-metadata.md's "Two real gaps" #2).
+        (docs/archive/environment-value-metadata.md's "Two real gaps" #2).
 
         Does not apply to `view: effective`: its merge source is never
         literally `target.kind`'s own spec for `variables`/`features` (only
@@ -125,7 +125,7 @@ class AttributeConfigTargetModel(PlatformBaseModel):
     def validate_effective_view_supported(self) -> "AttributeConfigTargetModel":
         """`view: effective` only has a merge to evaluate against for `kind: deployment` + a block in
         `_EFFECTIVE_VIEW_BLOCKS` — `properties`/`custom` via `merge_workspace_environment_deployment_
-        properties()`, `variables`/`features` via `merge_environment_models()` (docs/work/
+        properties()`, `variables`/`features` via `merge_environment_models()` (docs/archive/
         environment-value-metadata.md's `variables`/`features` design). No merge exists for `configuration`,
         or for any block on any other kind."""
         if self.view == "effective" and (

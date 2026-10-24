@@ -5,7 +5,7 @@
 - Related: [docs/design/unified-terraform-projection.md](../design/unified-terraform-projection.md)
   (the finished design — current payload shape, how it works end to end),
   [terraform-tfvars-parity.md](../design/terraform-tfvars-parity.md)
-  (the v1-parity shape this decision replaces), [flat-category-secret-taint-size-limit.md](../work/flat-category-secret-taint-size-limit.md)
+  (the v1-parity shape this decision replaces), [flat-category-secret-taint-size-limit.md](../archive/flat-category-secret-taint-size-limit.md)
   (the per-category patch this decision supersedes structurally rather
   than extending), sequenced after [flatten-provider-resource-module-properties.md](../design/flatten-provider-resource-module-properties.md),
   ADR-0022 (build renders, deploy executes), ADR-0023 (build output
@@ -55,7 +55,7 @@ complexity.
 
 - **Keep the per-category shape and patch the secret-taint gap in
   place** — the path originally pursued in
-  [flat-category-secret-taint-size-limit.md](../work/flat-category-secret-taint-size-limit.md).
+  [flat-category-secret-taint-size-limit.md](../archive/flat-category-secret-taint-size-limit.md).
   Rejected: a per-category patch cannot fix the `resx_<type>` data-loss
   bug or the three-incompatible-shapes problem, both caused by the same
   category taxonomy the patch would leave in place.

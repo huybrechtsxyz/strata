@@ -169,7 +169,7 @@ def test_attributeconfig_document_view_rejects_variables_on_a_kind_without_them(
 def test_attributeconfig_accepts_effective_view_on_deployment(block):
     """`view: effective` is accepted for every block it has a merge for — including `variables`/`features`,
     even though `deployment` itself has no such field (the design-gap fix: `validate_block_exists_on_kind()`
-    no longer applies to `view: effective` at all, docs/work/environment-value-metadata.md)."""
+    no longer applies to `view: effective` at all, docs/archive/environment-value-metadata.md)."""
     data = _minimal_attributeconfig()
     data["spec"]["target"] = {"kind": "deployment", "block": block, "view": "effective"}
     model = AttributeConfigModel.model_validate(data)
@@ -219,7 +219,7 @@ def test_attributeconfig_rejects_composite_for_non_deployment_kind():
 
 def test_attributeconfig_blocks_by_kind_matches_every_real_spec_model():
     """Pins `BLOCKS_BY_KIND` against the real `*SpecModel` classes directly, so the table can't silently
-    drift from the models it describes (docs/work/environment-value-metadata.md Phase 1)."""
+    drift from the models it describes (docs/archive/environment-value-metadata.md Phase 1)."""
     for kind, spec_model in _SPEC_MODEL_BY_KIND.items():
         expected = frozenset(block for block in _BLOCK_NAMES if block in spec_model.model_fields)
         assert BLOCKS_BY_KIND.get(kind, frozenset()) == expected, (

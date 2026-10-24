@@ -142,7 +142,7 @@ def reshape_block_value(raw: Any, block: str) -> dict[str, Any]:
     rules. Reshaped into the same `{key: value}` shape every other block already has, keyed by each
     entry's own `key` (uniqueness within one list is enforced by `EnvironmentSpecModel.
     validate_unique_keys()`), with the *whole* store entry dumped — `value`/`type` are both typed `Any`
-    on the real models, so a rule may need `store`/`type` alongside `value` (docs/work/
+    on the real models, so a rule may need `store`/`type` alongside `value` (docs/archive/
     environment-value-metadata.md's `variables`/`features` design).
     """
     if block in ("variables", "features"):

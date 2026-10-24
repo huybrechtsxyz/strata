@@ -652,7 +652,7 @@ def _check_attributeconfigs(index: DocumentIndex, resolved: dict[str, Deployment
     isolation (`_check_attributeconfig_document_view()`, unchanged since
     Phase 1); `effective` evaluates the merged blob of each deployable
     deployment instead (`_check_attributeconfig_effective_view()`,
-    docs/work/environment-value-metadata.md) — the fix for a
+    docs/archive/environment-value-metadata.md) — the fix for a
     `required` schema misfiring on a layered environment whose blanks are
     filled in by a tenant/workspace default (`properties`/`custom`) or
     another environment in the same merge (`variables`/`features`) further
@@ -806,7 +806,7 @@ def _merged_effective_value(index: DocumentIndex, deployment: DeploymentModel, b
     """The reshaped, schema-ready merged blob for `view: effective` + `block`, scoped to `deployment`.
 
     `variables`/`features` have no workspace- or deployment-level field to merge in (only `Environment`
-    declares them, confirmed via `environment_model.py` — docs/work/environment-value-metadata.md's
+    declares them, confirmed via `environment_model.py` — docs/archive/environment-value-metadata.md's
     `variables`/`features` design) — just the reachable environments, via the same `merge_environment_
     models()` `_merged_declared_keys()` already uses, reshaped the same way `document` view's keys are
     (`reshape_block_value()`, Phase 2). `properties`/`custom` keep the existing three-layer merge. `composite`

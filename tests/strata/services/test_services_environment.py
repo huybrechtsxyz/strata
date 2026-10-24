@@ -320,7 +320,7 @@ def test_keys_unique_to_either_environment_both_survive_the_merge():
 
 # ---------------------------------------------------------------------------
 # merge_workspace_environment_deployment_properties() (Q3) — moved here from
-# test_value_controller.py (docs/work/environment-value-metadata.md Phase 3).
+# test_value_controller.py (docs/archive/environment-value-metadata.md Phase 3).
 # ---------------------------------------------------------------------------
 
 
