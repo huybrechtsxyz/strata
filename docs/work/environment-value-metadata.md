@@ -4,12 +4,12 @@
   `custom`, and `variables`/`features`) are fully built and documented in
   [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)
   (`target.view: document | effective` across five blocks, `secrets` permanently excluded); cross-block conditional
-  rules (`block: composite`) are designed and reviewed with a 3-phase plan, all three built and documented; topic 1's
-  remaining open questions
-  (default view, provenance attribution) stay undecided, as do topics 2-4
-- Last updated: 2026-10-23
+  rules (`block: composite`) are designed and reviewed with a 3-phase plan, all three built and documented. Decided
+  2026-10-24: `target.view` is required (built). Topic 2 analysed 2026-10-24: no strata feature needed.
+  Open: finding attribution (topic 1), topics 3-4
+- Last updated: 2026-10-24
 - Related: [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)
-  (`attributeconfig`: the closest existing mechanism, scoped to `properties`/`custom`/`configuration` only),
+  (`attributeconfig`: the mechanism topic 1 extended),
   [ADR-0040](../decisions/0040-attributeconfig-standalone-kind.md),
   [cross-document-value-references.md](../design/cross-document-value-references.md) (`${value:}`),
   [composite-variable-merge.md](../design/composite-variable-merge.md),
@@ -59,7 +59,7 @@ Specific cases worth keeping in view:
   `web_apps_subnet_name`/`private_endpoints_subnet_name` under the names the forked Terraform roots declare;
   `log_workspace_daily_quota_gb` repeats `daily_quota_gb`. Each comment says "keep the two values identical".
   Nothing enforces it. The cause is structural: every key is delivered to every provisioner under its own name, and a
-  forked root cannot be renamed to match.
+  forked root cannot be renamed to match. (That is v1's flat delivery; v2 does not have it. See topic 2.)
 - **Provenance.** Values such as `api_management_id`, `vnet_id` and `agw_subnet_id` are copied from applied upstream
   layers on purpose (the audit trail requires the value to be visible in the reviewed diff; App Configuration is
   private-endpoint-only). Each carries "confirmed via `az apim show`, 2026-09-23" or similar, plus "re-read if the VNet
@@ -70,14 +70,14 @@ Specific cases worth keeping in view:
 
 ## What exists in v2 today
 
-| Need         | Closest existing mechanism                                                                                                                   | Gap                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Requirements | `attributeconfig`: JSON Schema 2020-12 (`pattern`, `required`, `if`/`then`, `dependentRequired`, `enum`) pushed onto every matching document | Targets only the `properties`/`custom`/`configuration` blob. `variables` and `features` are explicitly out of scope (typed lists), and most of cfg-int's values are in `variables`. A schema sees one block, so "feature X on, therefore variable Y non-empty" cannot be expressed. **Tested 2026-10-21:** `block: variables` and `block: features` are rejected at load (`Input should be 'properties', 'custom' or 'configuration'`). |
-| Requirements | `VariableStoreModel` validators                                                                                                              | Only `type`/`value` consistency and `default`/`field` placement. No pattern, no cross-key rule.                                                                                                                                                                                                                                                                                                                                         |
-| Alias        | `${value:kind.name.path}` (resolved at validate and deploy)                                                                                  | Addresses another *document's* field. A list segment is matched by a `"name"` key, but variables are keyed by `key`. **Tested 2026-10-21:** by `key` fails (`value_reference_invalid_path`); by list position (`variables.1.value`) validates and resolves, but position is fragile and the token addresses one document, not the merged environment.                                                                                   |
-| Alias        | `${var:KEY}` inside another variable's `value`                                                                                               | **Tested 2026-10-21: does not work.** Before the fix `strata validate` accepted it (0 errors), `build run` emitted the literal token into tfvars, and `deploy run` failed with `value_resolution_failed`; a `store: constant` value is only resolved against `${value:}` references. `validate` now rejects it (`store_value_token_unsupported`).                                                                                       |
-| Provenance   | `meta.annotations` (free-form, per document); `kind: version` pins carry a rationale ([ADR-0019](../decisions/0019-version-pinning.md))      | Per document, not per key. Nothing structured, nothing queryable, nothing that can go stale.                                                                                                                                                                                                                                                                                                                                            |
-| Naming       | `attributeconfig` `maxLength` / `pattern` on a single `properties` value                                                                     | A budget applies to a name *composed* from several keys plus a literal suffix, so it is a computed length across keys, which a per-value schema cannot state.                                                                                                                                                                                                                                                                           |
+| Need         | Closest existing mechanism                                                                                                                   | Gap                                                                                                                                                                                                                                                                                                                                                   |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirements | `attributeconfig`: JSON Schema 2020-12 (`pattern`, `required`, `if`/`then`, `dependentRequired`, `enum`) pushed onto every matching document | *Was (2026-10-21):* only `properties`/`custom`/`configuration`, one document at a time. **Since 2026-10-22/23:** also `variables`/`features`, an `effective` view over the merged deployment, and cross-block rules (`block: composite`) — see topic 1. Still out of reach: value equality between fields, and resolved (non-constant) store values.  |
+| Requirements | `VariableStoreModel` validators                                                                                                              | Only `type`/`value` consistency and `default`/`field` placement. No pattern, no cross-key rule.                                                                                                                                                                                                                                                       |
+| Alias        | `${value:kind.name.path}` (resolved at validate and deploy)                                                                                  | Addresses another *document's* field. A list segment is matched by a `"name"` key, but variables are keyed by `key`. **Tested 2026-10-21:** by `key` fails (`value_reference_invalid_path`); by list position (`variables.1.value`) validates and resolves, but position is fragile and the token addresses one document, not the merged environment. |
+| Alias        | `${var:KEY}` inside another variable's `value`                                                                                               | **Tested 2026-10-21: does not work.** Before the fix `strata validate` accepted it (0 errors), `build run` emitted the literal token into tfvars, and `deploy run` failed with `value_resolution_failed`; a `store: constant` value is only resolved against `${value:}` references. `validate` now rejects it (`store_value_token_unsupported`).     |
+| Provenance   | `meta.annotations` (free-form, per document); `kind: version` pins carry a rationale ([ADR-0019](../decisions/0019-version-pinning.md))      | Per document, not per key. Nothing structured, nothing queryable, nothing that can go stale.                                                                                                                                                                                                                                                          |
+| Naming       | `attributeconfig` `maxLength` / `pattern` on a single `properties` value                                                                     | A budget applies to a name *composed* from several keys plus a literal suffix, so it is a computed length across keys, which a per-value schema cannot state.                                                                                                                                                                                         |
 
 Constraints from earlier decisions that any design here has to respect:
 
@@ -125,8 +125,21 @@ actual merged, deployable result instead.
 
 **Open questions**
 
-- Should `effective` become the default for `properties`/`custom` on the layered kinds? Per-document `required` on them
-  is almost never what an author means, but flipping the default is breaking. Nothing in the repo relies on it today.
+- ~~Should `effective` become the default for `properties`/`custom` on the layered kinds?~~ **Decided 2026-10-24:
+  neither view is the default; `target.view` becomes a required field.** `document` and `effective` check different
+  data, and the wrong one fails silently or misfires, so the author should always say which. Breaking, but strata-v2
+  is pre-1.0 and ADR-0035 set the precedent of a clean break over a compatibility mode. Impact, counted 2026-10-24:
+  3 schemas in `config/registries/azure-attributes.yaml`, 2 examples in `docs/config/attributeconfig.md`, 1 in the
+  design doc, and test fixtures (14 YAML schemas in `test_semantic_checks.py` plus `_minimal_attributeconfig()` in
+  the model tests); `.v2-cfg` and `.v2-haven` have none.
+  **Design:** drop the default from `AttributeConfigTargetModel.view`; Pydantic then rejects a missing `view` at
+  load with its standard "Field required" error at `spec.target.view`. No evaluator change: `_check_attributeconfigs()`
+  already branches on the value. The `composite`/`effective` validators are unchanged (they run after field
+  validation, so they always see a declared view).
+  **Plan (one phase):** model field + description; `view: document` on the 3 `config/` schemas; every test fixture
+  declares `view`; a model test that a missing `view` is rejected; `docs/config/attributeconfig.md`,
+  `docs/config/resource.md` and the design doc's document shape, evaluation semantics and History; full check suite
+  and `config/` validate. **Built 2026-10-24** as planned; 3061 tests passing, `config/` validates (32 documents).
 - Attributing a finding to the layer that set the value.
 - ~~The cross-block extension (`variables`/`features` composed with `properties`)~~ — built: same-block
   `variables`/`features` (2026-10-22) and cross-block conditional rules as `block: composite` (2026-10-23), both below.
@@ -153,18 +166,42 @@ conflict-check change and the declared-vs-resolved limitation are documented in
 against `E:\Sources\cfg-int-deployment` and reproduced end-to-end against a base + leaf environment chain. Value
 equality between fields remains out of scope (topic 2; design doc "Known limits" #4).
 
-### 2. Alias or copy-of
+### 2. Alias or copy-of — analysed 2026-10-24: no strata feature needed
 
-Two different intents that should not be conflated:
+**What the duplicates actually are** (re-checked in `E:\Sources\cfg-int-deployment` and the product repo). The
+Evidence table's "12" counted matching *lines*, including generated `build/` output and wrapped descriptions. In the
+source there are **4 duplicate keys, all in the c0224/dev leaf**:
 
-- **Alias**: one source of truth; the second key is generated from the first. Removes the duplication.
-- **Copy-of**: both literals stay; strata asserts they are equal. Cheaper, but the duplicate remains.
+| Duplicate key                        | Copy of                         | Variable declared by                                                                                             |
+| ------------------------------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `vnet_default_subnet_name`           | `web_apps_subnet_name`          | Dispatcher root (`deploy_dsp/terraform`) and DataHub root (`deploy/terraform`), both in `IntegrationApi.DataHub` |
+| `vnet_private_endpoints_subnet_name` | `private_endpoints_subnet_name` | Dispatcher root                                                                                                  |
+| `vnet_event_grid_subnet_name`        | `private_endpoints_subnet_name` | DataHub root                                                                                                     |
+| `log_workspace_daily_quota_gb`       | `daily_quota_gb`                | DataHub and Dispatcher roots                                                                                     |
 
-Neither is expressible today (tested, see the two Alias rows above): `${var:KEY}` inside a variable does not resolve,
-and `${value:}` cannot address a variable by key. The smallest candidate is a field on the variable naming its source
-key, resolved after the layers merge and failing `validate` if the source is missing. The structural root cause (one flat, broadcast key namespace per provisioner)
-is a separate, larger question; cfg-int's own config calls per-provisioner input scoping "a separate upstream ask".
-An alias is a workaround for it, not a fix.
+The originals (`web_apps_subnet_name`, `private_endpoints_subnet_name`, `daily_quota_gb`) are the names cfg-int's own
+ring root declares.
+
+**Why they exist.** One environment feeds three Terraform roots (ring, DataHub, Dispatcher) that name the same thing
+differently, and two of them live in another repository. v1 delivered every environment key as a flat Terraform
+variable of the same name, so the only way to give a root an input under its own name was a second key with the same
+value. The duplication is a naming difference at the consumer boundary, not a configuration need.
+
+**Merge strategies do not help.** All four pairs sit in one document, in one layer. A merge strategy decides which
+layer's value wins *for the same key*; here one value is needed *under two names* by two consumers. No merge renames.
+
+**v2 already removes the cause.** ADR-0035 replaced flat per-key variables with one `strata` object: a root reads
+`local.strata.variables.<key>`, and there are no flat variables left to match by name. ADR-0035 also already requires
+every consumer root to be rewritten to read `local.strata.*`. During that rewrite a product root maps the value to
+its own name in its own `locals` (e.g. `vnet_default_subnet_name = local.strata.variables.web_apps_subnet_name`), so
+the rename lives in HCL, next to the code that has the different name, and the four duplicate keys are deleted. If a
+product root cannot be changed, a thin wrapper root in cfg-int calls it as a module with renamed arguments; still HCL,
+still no strata feature.
+
+**Decision: no alias field, no copy-of assertion, no merge strategy.** Reopen only if a duplicate turns up that is not
+a consumer-naming difference (two keys that must be equal by policy). None is recorded. Not yet verified end to end:
+`.v2-cfg` does not include the product estates, so the HCL mapping has not been tried; open item 3 (converting the
+c0224/dev leaf) is the natural place to confirm it.
 
 ### 3. Structured provenance
 
@@ -399,3 +436,12 @@ Evidence first, per repo convention; nothing below is a commitment.
   cross-block equality only; new #5 for declared-vs-resolved values, which also covers the shipped `variables`/
   `features` blocks), and a History entry. Collapsed this doc's composite design and plan into a pointer. Topic 1's
   remaining items are the two open questions (default view, finding attribution); topics 2-4 are untouched.
+- 2026-10-24: decided `target.view` becomes required (no default); impact counted, not built. Analysed topic 2 against
+  the real repos: 4 duplicate keys (not 12), all one environment value under the names different Terraform roots
+  declare. A naming difference at the consumer, not a merge problem; ADR-0035's single `strata` object already removes
+  the cause, so the rename moves into each root's HCL during the migration ADR-0035 already requires. No alias or
+  copy-of feature. Also corrected two stale spots (the Requirements row in "What exists in v2 today" and the
+  `Related:` line).
+- 2026-10-24: built the required `target.view` in one phase: field default removed, `view: document` added to the
+  3 `config/` schemas and every test fixture, a missing-`view` model test, docs (`attributeconfig.md`, `resource.md`,
+  design doc shape, evaluation semantics and History). Full check suite clean (3061 passed); `config/` validates.

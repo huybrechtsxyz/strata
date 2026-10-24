@@ -647,7 +647,7 @@ def _check_attributeconfigs(index: DocumentIndex, resolved: dict[str, Deployment
     documents (D7: conjunctive, no merge — every match is checked
     independently and all must pass).
 
-    `target.view` (default `document`) picks which data a schema is checked
+    `target.view` (required) picks which data a schema is checked
     against: `document` evaluates each matching document's own block in
     isolation (`_check_attributeconfig_document_view()`, unchanged since
     Phase 1); `effective` evaluates the merged blob of each deployable
@@ -690,7 +690,7 @@ def _check_attributeconfigs(index: DocumentIndex, resolved: dict[str, Deployment
 def _check_attributeconfig_document_view(
     index: DocumentIndex, entry: IndexEntry, attributeconfig: AttributeConfigModel, validator: Any
 ) -> Diagnostics:
-    """`target.view: document` (default): every matching document of
+    """`target.view: document`: every matching document of
     `target.kind` is checked against its own `target.block`, in isolation —
     the original (and only, pre-Phase-4) evaluation path.
     """

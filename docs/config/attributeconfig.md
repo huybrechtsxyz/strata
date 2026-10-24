@@ -12,8 +12,12 @@ for the full design rationale.
 ## Schema
 
 - `spec.target.kind` — which [`PlatformKind`](../GLOSSARY.md) this schema targets (e.g. `resource`)
-- `spec.target.block` — which blob field on that kind to validate: `properties`, `custom`, or
-  `configuration` (whichever the target kind actually has)
+- `spec.target.block` — which blob field on that kind to validate: `properties`, `custom`,
+  `configuration`, `variables`, `features` (whichever the target kind actually has), or `composite`
+  (all four merged blocks together; `view: effective` only). Never `secrets`.
+- `spec.target.view` — required: `document` validates each matching document's own block in
+  isolation; `effective` validates each deployable deployment's merged result (`target.kind:
+  deployment` only)
 - `spec.target.selector` — optional `field.path: required-value` equality map narrowing which
   documents of `target.kind` this schema applies to. Omitted means every document of that kind.
   Equality only — no wildcards or regex.
@@ -32,6 +36,7 @@ spec:
   target:
     kind: resource
     block: configuration
+    view: document
     selector:
       spec.provider_type: azure
       spec.resource_type: storage_account

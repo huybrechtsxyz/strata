@@ -40,7 +40,7 @@ spec:
   target:
     kind: <PlatformKind>              # e.g. environment, resource
     block: properties | custom | configuration | variables | features | composite  # composite: view: effective only
-    view: document | effective        # optional, default document — see "Evaluation semantics"
+    view: document | effective        # required, no default — see "Evaluation semantics"
     selector:                         # optional; omitted = every document of this kind
       <field.path>: <required-value>  # equality only, no wildcards/regex
   schema:                             # verbatim JSON Schema (2020-12), passed through near-raw
@@ -124,7 +124,7 @@ completely unchecked until someone remembered to opt in.
 
 ### Evaluation semantics
 
-- **`target.view` (default `document`).** `document` evaluates every
+- **`target.view` (required, no default).** `document` evaluates every
   matching document's own `target.block` fragment in isolation, as above.
   `effective` — only valid for `target.kind: deployment` (rejected at load for anything else, since no merge
   exists for `configuration` or for any other kind) — instead evaluates the fully merged blob of every
@@ -439,3 +439,8 @@ guarded by schema X").
   down for `composite`, since every composite schema shares the four top-level keys. The review also surfaced
   a limit that applies to `variables`/`features` as shipped: rules see declared values, which are real only for
   `store: constant` (Known limits #5). Value equality between fields stays out of scope.
+- Made `target.view` required, removing the `document` default (2026-10-24,
+  docs/work/environment-value-metadata.md). The two views check different data, and picking the wrong one either
+  misfires (`document` on a layered value) or silently misses, so the author always states which. Breaking:
+  a schema without `view` now fails at load (`Field required` at `spec.target.view`). Pre-1.0, no compatibility
+  mode, same as ADR-0035; the only real schemas affected were the three in `config/registries/azure-attributes.yaml`.

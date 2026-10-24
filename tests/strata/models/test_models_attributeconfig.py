@@ -63,7 +63,7 @@ def _minimal_attributeconfig() -> dict:
     return {
         "meta": {"name": "environment-custom"},
         "spec": {
-            "target": {"kind": "environment", "block": "custom"},
+            "target": {"kind": "environment", "block": "custom", "view": "document"},
             "schema": {"type": "object", "properties": {"region": {"type": "string"}}},
         },
     }
@@ -80,6 +80,13 @@ def test_attributeconfig_minimal_is_valid():
     assert model.spec.schema_ == {"type": "object", "properties": {"region": {"type": "string"}}}
     assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
     assert model.kind.value == "attributeconfig"
+
+
+def test_attributeconfig_rejects_a_missing_view():
+    data = _minimal_attributeconfig()
+    del data["spec"]["target"]["view"]
+    with pytest.raises(ValidationError, match=r"spec\.target\.view\n  Field required"):
+        AttributeConfigModel.model_validate(data)
 
 
 def test_attributeconfig_rejects_mismatched_kind():
@@ -115,7 +122,7 @@ def test_attributeconfig_rejects_invalid_block():
 def test_attributeconfig_accepts_pair_the_kind_actually_has(kind, block):
     """A `(kind, block)` pair naming a field that kind's own spec model has is accepted."""
     data = _minimal_attributeconfig()
-    data["spec"]["target"] = {"kind": kind, "block": block}
+    data["spec"]["target"] = {"kind": kind, "block": block, "view": "document"}
     model = AttributeConfigModel.model_validate(data)
     assert model.spec.target.kind.value == kind
     assert model.spec.target.block == block
@@ -125,7 +132,7 @@ def test_attributeconfig_rejects_pair_the_kind_does_not_have():
     """`resource` has no top-level `properties` field (only `custom`/`configuration`) — rejected at load,
     not silently evaluated against `{}` forever."""
     data = _minimal_attributeconfig()
-    data["spec"]["target"] = {"kind": "resource", "block": "properties"}
+    data["spec"]["target"] = {"kind": "resource", "block": "properties", "view": "document"}
     with pytest.raises(
         ValidationError, match="block 'properties' does not exist on kind 'resource' \\(has: configuration, custom\\)"
     ):
@@ -135,7 +142,7 @@ def test_attributeconfig_rejects_pair_the_kind_does_not_have():
 def test_attributeconfig_rejects_any_block_for_a_kind_with_none():
     """`dns`'s own top-level spec model has none of properties/custom/configuration."""
     data = _minimal_attributeconfig()
-    data["spec"]["target"] = {"kind": "dns", "block": "properties"}
+    data["spec"]["target"] = {"kind": "dns", "block": "properties", "view": "document"}
     with pytest.raises(ValidationError, match="\\(has: none\\)"):
         AttributeConfigModel.model_validate(data)
 
@@ -153,7 +160,7 @@ def test_attributeconfig_document_view_rejects_variables_on_a_kind_without_them(
     """`deployment` has no `variables` field of its own (only `environment` does) — `view: document` still
     rejects it, same as any other kind/block mismatch."""
     data = _minimal_attributeconfig()
-    data["spec"]["target"] = {"kind": "deployment", "block": "variables"}
+    data["spec"]["target"] = {"kind": "deployment", "block": "variables", "view": "document"}
     with pytest.raises(ValidationError, match="block 'variables' does not exist on kind 'deployment'"):
         AttributeConfigModel.model_validate(data)
 
@@ -197,7 +204,7 @@ def test_attributeconfig_accepts_composite_on_deployment_effective_view():
 def test_attributeconfig_composite_document_view_gets_the_dedicated_message(kind):
     """Not the misleading `block 'composite' does not exist on kind ...` from the (kind, block) check."""
     data = _minimal_attributeconfig()
-    data["spec"]["target"] = {"kind": kind, "block": "composite"}
+    data["spec"]["target"] = {"kind": kind, "block": "composite", "view": "document"}
     with pytest.raises(ValidationError, match="block 'composite' requires view: effective") as excinfo:
         AttributeConfigModel.model_validate(data)
     assert "does not exist on kind" not in str(excinfo.value)

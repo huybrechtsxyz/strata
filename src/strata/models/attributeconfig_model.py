@@ -87,10 +87,10 @@ class AttributeConfigTargetModel(PlatformBaseModel):
         "document of `kind` matches. Equality only — no wildcards or regex.",
     )
     view: Literal["document", "effective"] = Field(
-        "document",
-        description="'document' (default): evaluate each matching document's own block in isolation, "
-        "unchanged behaviour. 'effective': evaluate the merged `properties`/`custom`/`variables`/`features` of "
-        "each deployable deployment instead — only valid for `kind: deployment`.",
+        description="Required, no default: the two views check different data. 'document': evaluate each "
+        "matching document's own block in isolation. 'effective': evaluate the merged "
+        "`properties`/`custom`/`variables`/`features` of each deployable deployment instead — only valid for "
+        "`kind: deployment`.",
     )
 
     # Must stay defined before validate_block_exists_on_kind(): Pydantic stops at the first failing after-validator.

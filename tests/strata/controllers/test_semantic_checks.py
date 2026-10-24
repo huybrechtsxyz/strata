@@ -2739,6 +2739,7 @@ spec:
   target:
     kind: resource
     block: custom
+    view: document
 {selector}{schema_yaml}""",
     )
     return root
@@ -2862,6 +2863,7 @@ spec:
   target:
     kind: resource
     block: custom
+    view: document
     selector:
       spec.provider_type: azure
 {_OWNER_SCHEMA}""",
@@ -2946,6 +2948,7 @@ spec:
   target:
     kind: resource
     block: custom
+    view: document
 {_OWNER_SCHEMA}""",
     )
     _write(
@@ -2959,6 +2962,7 @@ spec:
   target:
     kind: resource
     block: custom
+    view: document
   schema:
     type: object
     maxProperties: 0
@@ -3019,7 +3023,7 @@ spec:
 
 
 def test_attributeconfig_document_view_misses_a_value_only_the_tenant_sets(tmp_path):
-    """`view: document` (the default) checks the deployment's own raw
+    """`view: document` checks the deployment's own raw
     `properties` fragment only — a tenant default (ADR-0024) is folded in by
     `resolve_deployment_chains()`, which this view never consults, so
     `required: [owner]` misfires on a deployment that resolves to a
@@ -3591,6 +3595,7 @@ spec:
   target:
     kind: environment
     block: {block}
+    view: document
   schema:
 {schema_yaml}""",
     )
@@ -3675,6 +3680,7 @@ spec:
   target:
     kind: resource
     block: custom
+    view: document
 {selector_yaml}  schema:
     type: object
     properties:
@@ -3818,6 +3824,7 @@ spec:
   target:
     kind: resource
     block: custom
+    view: document
   schema:
     type: object
     properties: not-a-mapping

@@ -8,6 +8,7 @@ spec:
   target:
     kind: resource
     block: configuration
+    view: document
     selector:
       spec.provider_type: azure
       spec.resource_type: storage_account
@@ -30,6 +31,7 @@ spec:
   target:
     kind: resource
     block: configuration
+    view: document
     selector:
       spec.provider_type: azure
       spec.resource_type: key_vault
@@ -51,6 +53,7 @@ spec:
   target:
     kind: resource
     block: configuration
+    view: document
     selector:
       spec.provider_type: azure
       spec.resource_type: application_gateway
