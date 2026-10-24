@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Resource (kind: resource) &mdash; strata 2.0.0-Alpha26 documentation</title>
+  <title>Resource (kind: resource) &mdash; strata 2.0.0-Alpha27 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=240d00d6"></script>
+      <script src="../_static/documentation_options.js?v=807584cf"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -142,7 +142,7 @@ hardcoded instance reference</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.storage</span></code> — optional VM-style storage config: <code class="docutils literal notranslate"><span class="pre">install_path</span></code>, <code class="docutils literal notranslate"><span class="pre">disks[]</span></code> (<code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">size,</span> <span class="pre">label,</span> <span class="pre">mount}</span></code>), <code class="docutils literal notranslate"><span class="pre">volumes[]</span></code> (<code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">path}</span></code> — must sit under one of <code class="docutils literal notranslate"><span class="pre">disks[]</span></code>’s mount points),
 <code class="docutils literal notranslate"><span class="pre">parameters</span></code> (free-form)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> — passthrough; shape-validated against any matching
-<a class="reference internal" href="attributeconfig.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">attributeconfig</span></code></span></a> document (<code class="docutils literal notranslate"><span class="pre">target.kind:</span> <span class="pre">resource</span></code>, <code class="docutils literal notranslate"><span class="pre">target.block:</span> <span class="pre">configuration</span></code>), not against <code class="docutils literal notranslate"><span class="pre">providerconfig</span></code> directly</p></li>
+<a class="reference internal" href="attributeconfig.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">attributeconfig</span></code></span></a> document (<code class="docutils literal notranslate"><span class="pre">target.kind:</span> <span class="pre">resource</span></code>, <code class="docutils literal notranslate"><span class="pre">target.block:</span> <span class="pre">configuration</span></code>, <code class="docutils literal notranslate"><span class="pre">target.view:</span> <span class="pre">document</span></code>), not against <code class="docutils literal notranslate"><span class="pre">providerconfig</span></code> directly</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.default_tags</span></code> / <code class="docutils literal notranslate"><span class="pre">spec.custom_tags</span></code> — cloud tags (both optional)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.custom</span></code> — free-form data, not consumed by any provisioner</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.lifecycle</span></code> — optional IaC workflow hook phases</p></li>

@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Environment (kind: environment) &mdash; strata 2.0.0-Alpha26 documentation</title>
+  <title>Environment (kind: environment) &mdash; strata 2.0.0-Alpha27 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=240d00d6"></script>
+      <script src="../_static/documentation_options.js?v=807584cf"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -145,7 +145,11 @@ of that machinery is ported.</p>
 rest validate as recognized names, naming a capability-backed <a class="reference internal" href="integration.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">integration</span></code></span></a>,
 but have no runtime resolver wired up yet</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">value</span></code> — the store’s own addressing scheme: a literal (<code class="docutils literal notranslate"><span class="pre">constant</span></code>), an environment variable
-name (<code class="docutils literal notranslate"><span class="pre">environment</span></code>/<code class="docutils literal notranslate"><span class="pre">github</span></code>), or a secret path/ID/flag key for an integration-backed store</p></li>
+name (<code class="docutils literal notranslate"><span class="pre">environment</span></code>/<code class="docutils literal notranslate"><span class="pre">github</span></code>), or a secret path/ID/flag key for an integration-backed store.
+A <code class="docutils literal notranslate"><span class="pre">value</span></code> cannot contain a <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${output:}</span></code> token — a key
+cannot be defined through another key, and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> rejects it
+(<code class="docutils literal notranslate"><span class="pre">store_value_token_unsupported</span></code>). <code class="docutils literal notranslate"><span class="pre">${value:kind.name.path}</span></code> (a field of another document)
+is allowed in a <code class="docutils literal notranslate"><span class="pre">constant</span></code>’s value.</p></li>
 <li><p>Secrets additionally support <code class="docutils literal notranslate"><span class="pre">generate:</span> <span class="pre">{type,</span> <span class="pre">length}</span></code> (auto-generate when the key is missing)
 and <code class="docutils literal notranslate"><span class="pre">rotate</span></code> (age-based or automatic rotation policy) — integration-backed stores only</p></li>
 </ul>

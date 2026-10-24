@@ -20,7 +20,11 @@ of that machinery is ported.
     rest validate as recognized names, naming a capability-backed [`integration`](integration.md),
     but have no runtime resolver wired up yet
   - `value` — the store's own addressing scheme: a literal (`constant`), an environment variable
-    name (`environment`/`github`), or a secret path/ID/flag key for an integration-backed store
+    name (`environment`/`github`), or a secret path/ID/flag key for an integration-backed store.
+    A `value` cannot contain a `${var:}`/`${secret:}`/`${feature:}`/`${output:}` token — a key
+    cannot be defined through another key, and `strata validate` rejects it
+    (`store_value_token_unsupported`). `${value:kind.name.path}` (a field of another document)
+    is allowed in a `constant`'s value.
   - Secrets additionally support `generate: {type, length}` (auto-generate when the key is missing)
     and `rotate` (age-based or automatic rotation policy) — integration-backed stores only
 - `spec.properties` — merged as a layer into every deployment using this environment (tenant

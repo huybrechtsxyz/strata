@@ -18,7 +18,7 @@ several times, under different local names) via `WorkspaceResourceModel`.
   `parameters` (free-form)
 - `spec.configuration` — passthrough; shape-validated against any matching
   [`attributeconfig`](attributeconfig.md) document (`target.kind: resource`, `target.block:
-  configuration`), not against `providerconfig` directly
+  configuration`, `target.view: document`), not against `providerconfig` directly
 - `spec.default_tags` / `spec.custom_tags` — cloud tags (both optional)
 - `spec.custom` — free-form data, not consumed by any provisioner
 - `spec.lifecycle` — optional IaC workflow hook phases

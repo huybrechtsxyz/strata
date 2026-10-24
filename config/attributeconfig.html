@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AttributeConfig (kind: attributeconfig) &mdash; strata 2.0.0-Alpha26 documentation</title>
+  <title>AttributeConfig (kind: attributeconfig) &mdash; strata 2.0.0-Alpha27 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=240d00d6"></script>
+      <script src="../_static/documentation_options.js?v=807584cf"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -137,8 +137,11 @@ for the full design rationale.</p>
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.target.kind</span></code> — which <a class="reference internal" href="../GLOSSARY.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">PlatformKind</span></code></span></a> this schema targets (e.g. <code class="docutils literal notranslate"><span class="pre">resource</span></code>)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.target.block</span></code> — which blob field on that kind to validate: <code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>, or
-<code class="docutils literal notranslate"><span class="pre">configuration</span></code> (whichever the target kind actually has)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.target.block</span></code> — which blob field on that kind to validate: <code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>,
+<code class="docutils literal notranslate"><span class="pre">configuration</span></code>, <code class="docutils literal notranslate"><span class="pre">variables</span></code>, <code class="docutils literal notranslate"><span class="pre">features</span></code> (whichever the target kind actually has), or <code class="docutils literal notranslate"><span class="pre">composite</span></code>
+(all four merged blocks together; <code class="docutils literal notranslate"><span class="pre">view:</span> <span class="pre">effective</span></code> only). Never <code class="docutils literal notranslate"><span class="pre">secrets</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.target.view</span></code> — required: <code class="docutils literal notranslate"><span class="pre">document</span></code> validates each matching document’s own block in
+isolation; <code class="docutils literal notranslate"><span class="pre">effective</span></code> validates each deployable deployment’s merged result (<code class="docutils literal notranslate"><span class="pre">target.kind:</span> <span class="pre">deployment</span></code> only)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.target.selector</span></code> — optional <code class="docutils literal notranslate"><span class="pre">field.path:</span> <span class="pre">required-value</span></code> equality map narrowing which
 documents of <code class="docutils literal notranslate"><span class="pre">target.kind</span></code> this schema applies to. Omitted means every document of that kind.
 Equality only — no wildcards or regex.</p></li>
@@ -157,6 +160,7 @@ strata-invented vocabulary.</p></li>
 <span class="w">  </span><span class="nt">target</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">resource</span>
 <span class="w">    </span><span class="nt">block</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">configuration</span>
+<span class="w">    </span><span class="nt">view</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">document</span>
 <span class="w">    </span><span class="nt">selector</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">spec.provider_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
 <span class="w">      </span><span class="nt">spec.resource_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage_account</span>
