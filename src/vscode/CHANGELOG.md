@@ -8,6 +8,10 @@ the `strata` CLI it wraps.
 
 ### Added
 
+- **Update Solution Files command** (`strata.updateSolution`) — runs `strata sln update` after a
+  modal confirmation, refreshing `.strata/` (including the JSON Schemas behind YAML autocomplete) and
+  creating any missing `.vscode/`/`.github/` scaffold files. Existing files outside `.strata/` are
+  never overwritten. The changed files are listed in a new **Strata** output channel.
 - **Workspace `.venv` auto-detection** — when `strata.cliPath` is left at its default (`"strata"`),
   the CLI wrapper now checks for `.venv`/`venv` (`Scripts/strata.exe` on Windows, `bin/strata`
   elsewhere) in the workspace folder before falling back to `PATH`. An explicit `strata.cliPath`

@@ -164,6 +164,11 @@ export class StrataClient {
         return this.run<GraphData>(['graph', ...(path ? [path] : [])]);
     }
 
+    /** `strata sln update` — rewrites `.strata/` and creates missing scaffold files; never overwrites a user-owned one. */
+    async slnUpdate(): Promise<Envelope<Record<string, never>>> {
+        return this.run<Record<string, never>>(['sln', 'update']);
+    }
+
     /** `strata version` — a bare string, not an envelope. */
     async version(): Promise<string> {
         const cliPath = resolveCliPath(this.cwd);

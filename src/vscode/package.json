@@ -41,6 +41,11 @@
       {
         "command": "strata.openGraphLocation",
         "title": "Strata: Open Reference Location"
+      },
+      {
+        "command": "strata.updateSolution",
+        "title": "Strata: Update Solution Files (schemas, scaffold)",
+        "icon": "$(sync)"
       }
     ],
     "menus": {

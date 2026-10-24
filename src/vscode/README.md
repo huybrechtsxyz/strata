@@ -57,11 +57,12 @@ workflow, including packaging a `.vsix` for manual installation.
 
 ## Commands
 
-| Command                    | Title                           | Purpose                                                     |
-| -------------------------- | ------------------------------- | ----------------------------------------------------------- |
-| `strata.validate`          | Strata: Validate Solution       | Validate now and show a summary notification.               |
-| `strata.refreshGraph`      | Strata: Refresh Graph           | Re-run `strata graph` and reload the Graph view.            |
-| `strata.openGraphLocation` | Strata: Open Reference Location | Internal — bound to clicking a reference in the Graph view. |
+| Command                    | Title                                             | Purpose                                                                                                                                                                                                                                                                    |
+| -------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata.validate`          | Strata: Validate Solution                         | Validate now and show a summary notification.                                                                                                                                                                                                                              |
+| `strata.refreshGraph`      | Strata: Refresh Graph                             | Re-run `strata graph` and reload the Graph view.                                                                                                                                                                                                                           |
+| `strata.openGraphLocation` | Strata: Open Reference Location                   | Internal — bound to clicking a reference in the Graph view.                                                                                                                                                                                                                |
+| `strata.updateSolution`    | Strata: Update Solution Files (schemas, scaffold) | Run `strata sln update` after a confirmation: rewrites `.strata/` (including the YAML editor schemas) and creates missing `.vscode/`/`.github/` scaffold files; never overwrites an existing file outside `.strata/`. Changes are listed in the **Strata** output channel. |
 
 ## Views
 

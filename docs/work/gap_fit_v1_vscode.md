@@ -1,7 +1,7 @@
 # v1 -> v2 VS Code Extension Coverage Gaps
 
 - Status: living - update in place as items are ported, deliberately deferred, or decided against
-- Last updated: 2026-10-18
+- Last updated: 2026-10-24
 
 ## Overview
 
@@ -42,7 +42,7 @@ schema.
   a document (triggering the existing whole-solution validate) could still be added cheaply; that
   part is `Undecided`.
 
-### 2. ~~Schema export & wiring (`strata.exportSchemas`)~~ — MOSTLY RESOLVED (backend side)
+### 2. ~~Schema export & wiring (`strata.exportSchemas`)~~ — RESOLVED (2026-10-24)
 
 - **v1:** one-click JSON Schema export + wiring into VS Code's YAML schema association, enabling
   autocomplete/inline validation in the editor itself (separate from `strata validate`).
@@ -67,6 +67,22 @@ schema.
   wiring one would just shell out to `sln update` (reusing the existing CLI, not a new backend
   capability) and could double as the extension's first `sln`-group command generally (see gap #4's
   "readiness/guide view" note, which has the same underlying "no `sln` wiring yet" root cause).
+- **Design (2026-10-24):** one command, `strata.updateSolution` ("Strata: Update Solution Files"),
+  calling `sln update --output json` through `StrataClient`. Verified against the real CLI first:
+  `sln update` is not schema-only. It always rewrites package-owned `.strata/` (README, schemas) and
+  also *creates* any missing user-owned scaffold file (`.vscode/settings.json`, `.vscode/
+  extensions.json`, `.github/` templates); an existing user-owned file is never overwritten
+  (`ScaffoldController._scaffold()`). So the command asks for a modal confirmation saying exactly
+  that, then reports the envelope's `Created:`/`Updated:` info messages (count in a notification,
+  full list in a "Strata" output channel). Failures (`ok: false`, CLI not found, crash) surface as an
+  error notification with the first diagnostic. No new CLI surface.
+- **Plan (one phase):** `StrataClient.slnUpdate()`; the command + confirmation + output channel in
+  `extension.ts`; `package.json` contribution; README/CHANGELOG; compile + lint; exercise the client
+  method against a scratch solution with a `vscode` stub.
+- **Built 2026-10-24** as planned (`strata.updateSolution`). Verified by loading the compiled
+  extension under a `vscode` stub against a scratch solution: declining the confirmation writes
+  nothing; accepting writes `.strata/schemas/` and reports all 7 changes; a folder with no
+  `strata.yaml` and a missing CLI both surface an error notification. Status: `Ported`.
 
 ### 3. Build / Deploy commands (dry-run + run, stage-based)
 
@@ -160,7 +176,11 @@ schema.
 
 - **v1:** `promotionsViewProvider.ts` - chat `/promote`.
 - **v2 today:** nothing wired; CLI has `promote status` / `promote apply` / `promote view`.
-- **Status:** `CLI ready, not wired`.
+- **Status:** `Undecided` — deferred 2026-10-24. The CLI is ready, but no real data exercises it:
+  zero `kind: version` documents with `spec.promotion` in `config/`, `.v2-cfg`, `.v2-haven` or
+  cfg-int's `origin/v2`, and `promote view`/`status` return an empty rollout for `config/`. A view
+  would render an empty tree everywhere and could only be shaped against synthetic data. Revisit when
+  a consumer (cfg-int v3's rings are the expected first) tags its version documents.
 
 ### 13. Chat participant (`@strata`) and AI-assisted commands
 
