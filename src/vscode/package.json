@@ -1,26 +1,41 @@
 {
-  "name": "strata",
+  "name": "xyz-strata",
   "displayName": "Strata",
-  "description": "Strata infrastructure workspace integration — validate the solution and explore its cross-document reference graph.",
-  "version": "0.0.1",
+  "description": "Validate strata solutions on every save, explore how their documents reference each other, and get schema autocomplete for every document kind.",
+  "version": "2.0.0",
   "publisher": "huybrechts-xyz",
   "license": "AGPL-3.0-or-later",
+  "icon": "resources/icon.png",
+  "galleryBanner": {
+    "color": "#14202E",
+    "theme": "dark"
+  },
+  "homepage": "https://github.com/huybrechtsxyz/strata#readme",
+  "bugs": {
+    "url": "https://github.com/huybrechtsxyz/strata/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/huybrechtsxyz/strata-v2"
+    "url": "https://github.com/huybrechtsxyz/strata.git",
+    "directory": "src/vscode"
   },
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Other",
-    "Linters"
+    "Linters",
+    "Visualization",
+    "Other"
   ],
   "keywords": [
     "strata",
-    "infrastructure",
+    "terraform",
+    "helm",
+    "docker-compose",
+    "infrastructure-as-code",
+    "iac",
     "yaml",
-    "platform"
+    "devops"
   ],
   "activationEvents": [
     "workspaceContains:strata.yaml"
@@ -80,6 +95,58 @@
         }
       ]
     },
+    "walkthroughs": [
+      {
+        "id": "strata.gettingStarted",
+        "title": "Get started with Strata",
+        "description": "From an installed CLI to a validated solution, with autocomplete and an AI agent that knows strata.",
+        "steps": [
+          {
+            "id": "strata.gettingStarted.cli",
+            "title": "Install the strata CLI",
+            "description": "Every check in this extension is the real `strata` CLI. Install it once, or let the extension find it in your project's `.venv`.\n[Configure the CLI path](command:workbench.action.openSettings?%5B%22strata.cliPath%22%5D)",
+            "media": {
+              "markdown": "resources/walkthrough/cli.md"
+            }
+          },
+          {
+            "id": "strata.gettingStarted.solution",
+            "title": "Open a solution",
+            "description": "Strata starts when the folder you open contains a `strata.yaml`. No solution yet? Create one with `strata sln init`.\n[Open Folder](command:workbench.action.files.openFolder)",
+            "media": {
+              "markdown": "resources/walkthrough/solution.md"
+            }
+          },
+          {
+            "id": "strata.gettingStarted.validate",
+            "title": "Validate your solution",
+            "description": "Check every document and every reference between them. From now on this happens each time you save.\n[Validate Solution](command:strata.validate)",
+            "media": {
+              "markdown": "resources/walkthrough/validate.md"
+            }
+          },
+          {
+            "id": "strata.gettingStarted.graph",
+            "title": "Explore the reference graph",
+            "description": "See which document points at which, and spot the references that don't resolve.\n[Open the Graph](command:strataGraph.focus)",
+            "media": {
+              "markdown": "resources/walkthrough/graph.md"
+            },
+            "completionEvents": [
+              "onView:strataGraph"
+            ]
+          },
+          {
+            "id": "strata.gettingStarted.update",
+            "title": "Turn on autocomplete and agent skills",
+            "description": "Export a JSON Schema for every document kind, and give Claude and GitHub Copilot a strata skill.\n[Update Solution Files](command:strata.updateSolution)",
+            "media": {
+              "markdown": "resources/walkthrough/update.md"
+            }
+          }
+        ]
+      }
+    ],
     "viewsWelcome": [
       {
         "view": "strataGraph",

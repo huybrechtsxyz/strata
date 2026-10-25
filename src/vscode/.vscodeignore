@@ -5,5 +5,7 @@
 **/.eslintrc.json
 node_modules/**
 src/**
+*.vsix
+DEVELOPMENT.md
 out/test/**
 .vscode-test.mjs

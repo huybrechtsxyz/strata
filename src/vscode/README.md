@@ -1,135 +1,193 @@
-# Strata VS Code Extension
+<!-- markdownlint-disable MD033 MD041 -->
+<div align="center">
 
-Editor integration for the Strata v2 CLI: validates a solution as you work and lets you explore
-its cross-document reference graph without leaving VS Code.
+<img src="https://raw.githubusercontent.com/huybrechtsxyz/strata/main/src/vscode/resources/icon.png" width="112" alt="Strata">
 
-This is a from-scratch v2 extension, not a port of [v1's `src/vscode`](https://github.com/huybrechtsxyz/strata/tree/main/src/vscode) extension — it wraps
-only the CLI surface v2 actually has today. See [Scope](#scope) for what that does (and does not
-yet) include.
+# Strata for VS Code
+
+**Your environments are data, not copy-pasted folders.<br>Catch a broken one while you type, not
+after you deploy.**
+
+[Get started](#get-started) · [Features](#features) · [Commands](#commands) ·
+[Settings](#settings) · [Upgrading from v1](#upgrading-from-v1) ·
+[Troubleshooting](#troubleshooting)
+
+</div>
+
+---
+
+## Why Strata
+
+You already have Terraform. The problem is the eight environment folders, `dev`, `staging`, `prd`,
+`prd-eu`, `dr` and the rest, that are 90% identical. A change lands in one, gets forgotten in three
+others, and you find out when production drifts.
+
+[Strata](https://github.com/huybrechtsxyz/strata) is a YAML layer over **Terraform**, **Helm** and
+**Docker Compose** that treats environments as data. You describe providers, workspaces, modules
+and environments once; a deployment combines them, and one command validates the whole solution
+before anything is rendered or applied.
+
+This extension brings those checks into the editor, so you see a mistake while you are editing.
 
 ## Features
 
-- **Validate** — runs `strata validate` against the whole solution and reports findings in the
-  editor's Problems panel, grouped by the file each one came from. Re-runs automatically on save.
-- **Graph** — a "Graph" view (Strata icon in the Activity Bar) backed by `strata graph`, showing
-  every cross-document reference: one entry per document, expanding to the references it
-  declares. A reference that does not resolve is marked **unresolved**. Clicking a reference opens
-  the declaring file at that field.
-- **Status bar** — shows the `strata` CLI version, or why it isn't available.
+### Validate the whole solution on every save
 
-## Requirements
+Save any YAML file and the extension runs `strata validate` across the **entire** solution, since
+a rename in one document can break references in five others. Schema errors, references to
+documents that don't exist, variables nothing provides and dangling version pins appear in the
+**Problems** panel, on the field that caused them.
 
-- VS Code 1.90 or later.
-- The `strata` CLI available to run — either on `PATH`, in a workspace `.venv`/`venv` (auto-detected
-  when `strata.cliPath` is left at its default, e.g. the `.venv/Scripts/strata.exe` that `uv sync`
-  produces — see [Get Started](../../.github/CONTRIBUTING.md#get-started) in this repository's own
-  contributing guide), or reachable via an explicit [`strata.cliPath`](#configuration) override
-  (e.g. `"uv run strata"`).
-- A solution: a `strata.yaml` at or above the open workspace folder (see
-  [the Solution document](../../docs/config/solution.md) and
-  [ADR-0015](../../docs/decisions/0015-solution-manifest-and-document-discovery.md)). The
-  extension activates when one is present.
+### See how your documents connect
 
-## Installation
+The **Graph** view lists every cross-document reference: which deployment uses which workspace,
+which workspace uses which providers and modules. References that don't resolve are flagged, and a
+click takes you straight to the field. Use it to answer *"what breaks if I rename this?"* before
+you rename it.
 
-Not yet published to the Marketplace. Run it from source:
+### Autocomplete for every document kind
 
-```powershell
-cd src/vscode
-npm install
-npm run compile
-```
+**Strata: Update Solution Files** exports a JSON Schema for each document kind. Together with the
+[YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml), you get
+completion, hover documentation and inline errors for every `spec` field as you type.
 
-Then open this repository in VS Code and press **F5** (uses the root
-[`.vscode/launch.json`](../../.vscode/launch.json) "Run VS Code Extension" configuration) to start
-an Extension Development Host with it loaded. See [DEVELOPMENT.md](DEVELOPMENT.md) for the full
-workflow, including packaging a `.vsix` for manual installation.
+### An AI agent that already knows strata
 
-## Quick Start
+The same command gives your repository an agent skill that **Claude Code** and **GitHub Copilot**
+load automatically: the commands, the merge rules, the known pitfalls, and the rule to never deploy
+or change secrets unless asked. A second skill holds your team's own lessons, and strata never
+overwrites it.
 
-1. Open a folder containing a `strata.yaml` (or a subdirectory of one) — the extension activates
-   automatically.
-2. Check the status bar: `$(cloud) strata <version>` means the CLI was found and ran. `$(error)
-   strata` means it was not — see [Troubleshooting](#troubleshooting).
-3. Save any `.yaml` file to validate the solution; problems appear in the **Problems** panel
-   (`Ctrl+Shift+M`).
-4. Open the **Strata** view in the Activity Bar to browse the reference graph.
+### The real CLI, never a re-implementation
+
+Every check is the `strata` CLI you deploy with, so the editor and your pipeline never disagree.
+The status bar shows which CLI version is answering, and the extension finds it in your project's
+`.venv` without any configuration.
+
+## Get started
+
+1. **Install the CLI** (version 2 or later):
+
+   ```sh
+   pipx install xyz-strata        # or: uv tool install xyz-strata
+   ```
+
+   A project-local install in `.venv`/`venv` (for example from `uv sync`) is found automatically.
+
+2. **Open a folder that contains `strata.yaml`.** No solution yet? Create one:
+
+   ```sh
+   strata sln init my-platform
+   ```
+
+3. **Save a YAML file.** Findings appear in the **Problems** panel (`Ctrl+Shift+M`), and the
+   status bar shows `strata 2.x.x`.
+
+4. **Run *Strata: Update Solution Files*** once, to turn on autocomplete and the agent skills.
+
+Prefer a guided tour? Open **Help → Welcome** and choose **Get started with Strata**.
+
+**Requirements:** VS Code 1.90 or later, the `strata` CLI 2.x, and (for autocomplete) the
+[YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml).
 
 ## Commands
 
-| Command                    | Title                                             | Purpose                                                                                                                                                                                                                                                                                                                                                                   |
-| -------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `strata.validate`          | Strata: Validate Solution                         | Validate now and show a summary notification.                                                                                                                                                                                                                                                                                                                             |
-| `strata.refreshGraph`      | Strata: Refresh Graph                             | Re-run `strata graph` and reload the Graph view.                                                                                                                                                                                                                                                                                                                          |
-| `strata.openGraphLocation` | Strata: Open Reference Location                   | Internal — bound to clicking a reference in the Graph view.                                                                                                                                                                                                                                                                                                               |
-| `strata.updateSolution`    | Strata: Update Solution Files (schemas, scaffold) | Run `strata sln update` after a confirmation: rewrites `.strata/` (including the YAML editor schemas) and the strata agent skill (`.claude/skills/strata/`, unless its generated marker was removed), and creates missing `.vscode/`/`.github/`/`.claude/` scaffold files; never overwrites any other existing file. Changes are listed in the **Strata** output channel. |
+Open the Command Palette (`Ctrl+Shift+P`) and type **Strata**.
 
-## Views
+| Command                           | What it does                                                                                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Strata: Validate Solution**     | Validate the whole solution now and show a summary.                                                                                              |
+| **Strata: Refresh Graph**         | Reload the Graph view after larger edits.                                                                                                        |
+| **Strata: Update Solution Files** | Run `strata sln update`: refresh the JSON Schemas and the strata agent skill, and add any missing starter files. Asks before it writes anything. |
 
-### Graph
+**Update Solution Files** always rewrites `.strata/`. It rewrites the strata agent skill
+(`.claude/skills/strata/`) only while that file still has its "Generated by strata" line. It
+creates missing `.vscode/`, `.github/` and `.claude/` starter files but never overwrites one that
+exists. Every file it touches is listed in the **Strata** output channel.
 
-One top-level entry per document that declares at least one reference (`kind/name`, e.g.
-`workspace/main`), expanding to its references (`location → target_kind/target_name`). An
-unresolved reference shows a warning icon and an "unresolved" description — this view never fails
-validation itself, it only shows the shape of the solution; `strata validate` is what decides
-pass/fail.
+## Settings
 
-Use the refresh icon in the view's title bar, or run **Strata: Refresh Graph**, after changes the
-file watcher doesn't already know to re-check (the view does not watch the filesystem yet — see
-[Scope](#scope)).
+| Setting                 | Default    | Description                                                                                                       |
+| ----------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| `strata.cliPath`        | `"strata"` | The CLI to run. The default looks in the workspace `.venv`/`venv` first, then `PATH`. Example: `"uv run strata"`. |
+| `strata.validateOnSave` | `true`     | Re-validate the whole solution whenever a YAML file is saved.                                                     |
 
-## Configuration
+## Upgrading from v1
 
-| Setting                 | Type    | Default    | Description                                                                                                                                                  |
-| ----------------------- | ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `strata.cliPath`        | string  | `"strata"` | Path to the `strata` CLI. Default auto-detects a workspace `.venv`/`venv` before falling back to `PATH`; set explicitly to override, e.g. `"uv run strata"`. |
-| `strata.validateOnSave` | boolean | `true`     | Re-validate the whole solution whenever a YAML file is saved.                                                                                                |
+Version 2 of this extension is built for **strata v2** solutions. It is a rebuild, not an update,
+so check this before you upgrade:
+
+- **It needs a v2 solution and CLI.** The extension starts on a `strata.yaml` manifest (v1 used
+  `.strata/solution.json`) and talks to the `strata` CLI 2.x. The status bar shows which CLI
+  version it found; a 1.x version there means the CLI needs upgrading too.
+- **Fewer, sharper features.** v2 starts with validation, the reference graph, schemas and agent
+  skills. v1's Workspace, Files, Repositories, Environments, Tools and Audit views, the Build and
+  Deploy commands, CodeLens, tasks, diagrams and the `@strata` chat participant are not part of
+  2.0. Build, deploy and audit run from the CLI (`strata build run`, `strata deploy run`,
+  `strata audit status`). For AI help, the agent skills replace the chat participant.
+
+**Still on a v1 solution?** Stay on v1: in the Extensions view, open the gear menu on **Strata**,
+choose **Install Specific Version…**, pick **1.11.2**, then turn off **Auto Update** for it.
 
 ## Troubleshooting
 
-### Status bar shows `$(error) strata`
+<details>
+<summary><b>The status bar shows an error next to <code>strata</code></b></summary>
 
-The CLI could not be run. Hover the status bar item for the exact error. Most commonly:
+The CLI could not be run. Hover the status bar item for the exact error. Usually:
 
-- `strata` is not on `PATH` and no workspace `.venv`/`venv` was found — set `strata.cliPath`, e.g.
-  `"uv run strata"` or an absolute path to the executable.
-- The configured command exists but isn't the `strata` CLI — check `strata.cliPath` is spelled
-  correctly.
+- `strata` is not on `PATH` and there is no workspace `.venv`/`venv`: install it (see
+  [Get started](#get-started)) or set `strata.cliPath`, for example `"uv run strata"`.
+- `strata.cliPath` points at something that isn't the strata CLI: check the spelling.
 
-### The extension never activates
+</details>
 
-It activates on `workspaceContains:strata.yaml` — confirm the open workspace folder contains one
-at its root or a subdirectory (`strata` document discovery itself walks *upward* from a path to
-find one, per ADR-0015, but VS Code's own activation check only looks *downward* from the
-workspace root, so a `strata.yaml` in a parent directory of the opened folder will not trigger
-activation).
+<details>
+<summary><b>The extension never starts</b></summary>
 
-### Graph view is empty
+It starts when the opened folder contains a `strata.yaml`, at its root or in a subfolder. The CLI
+itself also finds a `strata.yaml` in a *parent* folder, but VS Code only looks downward, so open
+the folder that contains the manifest (or a parent of it).
 
-- Run **Strata: Refresh Graph** — it does not refresh automatically yet.
-- Check the solution actually has cross-document references (a lone `provider.yaml` with nothing
-  referencing it produces an empty graph; this is correct, not a bug).
-- If `strata graph` itself fails, a warning notification explains why — the same CLI error the
-  status bar hover shows.
+</details>
 
-### Validation looks stale
+<details>
+<summary><b>The Graph view is empty</b></summary>
 
-Saves are debounced by 300ms and run one solution-wide `strata validate` — if several files are
-saved close together, only the last run's results apply (correct: it always reflects the whole
-solution, not just the file you last touched). Run **Strata: Validate Solution** to force an
-immediate re-check.
+- Run **Strata: Refresh Graph**. The view doesn't refresh by itself yet.
+- The solution may have no cross-document references yet. A lone provider that nothing uses
+  produces an empty graph, which is correct.
+- If `strata graph` fails, a notification explains why.
 
-## Scope
+</details>
 
-This extension intentionally covers only what v2's CLI has today (`validate`, `graph`, `version`).
-For context, [v1's extension](https://github.com/huybrechtsxyz/strata/tree/main/src/vscode) also
-had a workspace explorer, build/deploy commands, drift detection, an audit trail view, a chat
-participant, SBOM generation, and more — none of that exists here because the corresponding v2 CLI
-commands (`build`, `deploy` wiring, `audit`, etc.) either don't exist yet or aren't wired into the
-extension yet. Nothing here references those features; if you're looking for them, they aren't
-silently broken — they simply haven't been built.
+<details>
+<summary><b>Validation results look stale</b></summary>
 
-## Development
+Saves are debounced by 300 ms and each one validates the whole solution, so when several files are
+saved together only the last result is shown, and it covers all of them. Run
+**Strata: Validate Solution** to check immediately.
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for setup, building, debugging, and project structure.
-Changes are tracked in [CHANGELOG.md](CHANGELOG.md).
+</details>
+
+<details>
+<summary><b>No autocomplete in YAML files</b></summary>
+
+- Install the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml).
+- Run **Strata: Update Solution Files** to export the schemas to `.strata/schemas/`.
+- Check that `.vscode/settings.json` maps `.strata/schemas/strata.json` under `yaml.schemas`.
+  `strata sln init` adds that mapping; older solutions may need it added by hand.
+
+</details>
+
+## Feedback and contributing
+
+- **Bugs and ideas:** [GitHub Issues](https://github.com/huybrechtsxyz/strata/issues)
+- **What's new:** [Changelog](https://github.com/huybrechtsxyz/strata/blob/main/src/vscode/CHANGELOG.md)
+- **Build it yourself:** [Development guide](https://github.com/huybrechtsxyz/strata/blob/main/src/vscode/DEVELOPMENT.md)
+- **How strata works:** [Documentation](https://github.com/huybrechtsxyz/strata/tree/main/docs)
+
+## License
+
+[AGPL-3.0-or-later](https://github.com/huybrechtsxyz/strata/blob/main/LICENSE). Strata for VS Code
+is part of the [strata](https://github.com/huybrechtsxyz/strata) project.

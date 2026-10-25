@@ -34,7 +34,7 @@ def test_init_creates_the_scaffolded_files(tmp_path):
     assert (tmp_path / ".github" / "pull_request_template.md").is_file()
     assert (tmp_path / ".github" / "ISSUE_TEMPLATE" / "deployment-change-request.yml").is_file()
     assert (tmp_path / ".vscode" / "extensions.json").is_file()
-    assert "huybrechts-xyz.strata" in (tmp_path / ".vscode" / "extensions.json").read_text(encoding="utf-8")
+    assert "huybrechts-xyz.xyz-strata" in (tmp_path / ".vscode" / "extensions.json").read_text(encoding="utf-8")
 
 
 def test_init_is_idempotent_and_never_overwrites_the_manifest(tmp_path):
@@ -59,7 +59,9 @@ def test_vscode_is_user_owned_like_github(tmp_path):
     """.vscode/ follows the same rule as .github/ — written once, never refreshed."""
     ScaffoldController(tmp_path).init("acme-platform")
     extensions = tmp_path / ".vscode" / "extensions.json"
-    customized = '{\n  "recommendations": [\n    "huybrechts-xyz.strata",\n    "ms-azuretools.vscode-bicep"\n  ]\n}\n'
+    customized = (
+        '{\n  "recommendations": [\n    "huybrechts-xyz.xyz-strata",\n    "ms-azuretools.vscode-bicep"\n  ]\n}\n'
+    )
     extensions.write_text(customized, encoding="utf-8")
 
     ScaffoldController(tmp_path).update()

@@ -2,12 +2,27 @@
 
 All notable changes to this extension are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project follows the same versioning as
-the `strata` CLI it wraps.
+the `strata` CLI it wraps. For 1.x, see the
+[v1 changelog](https://github.com/huybrechtsxyz/strata/blob/v1.11.2/src/vscode/CHANGELOG.md).
 
-## [Unreleased]
+## [2.0.0] - Unreleased
+
+The extension rebuilt for strata v2. It replaces 1.x on the same Marketplace listing.
+
+### Changed (breaking)
+
+- **Needs a strata v2 solution and CLI.** Activates on `strata.yaml` instead of
+  `.strata/solution.json`, and runs the `strata` CLI 2.x.
+- **1.x features not carried over:** the Workspace, Files, Repositories, Environments, Tools and
+  Audit views; Build and Deploy commands; CodeLens; the `strata` task type; diagrams; the help
+  pane; and the `@strata` chat participant. Build, deploy and audit run from the CLI; scaffolded
+  agent skills replace the chat participant. To keep 1.x, install version 1.11.2 and turn off
+  auto-update for it (see the README's "Upgrading from v1").
 
 ### Added
 
+- **Get started walkthrough** (Help > Welcome): install the CLI, open a solution, validate,
+  explore the graph, and turn on autocomplete and agent skills.
 - **Update Solution Files command** (`strata.updateSolution`) — runs `strata sln update` after a
   modal confirmation, refreshing `.strata/` (including the JSON Schemas behind YAML autocomplete) and
   the strata agent skill (`.claude/skills/strata/`, unless its generated marker was removed), and
@@ -17,16 +32,6 @@ the `strata` CLI it wraps.
   the CLI wrapper now checks for `.venv`/`venv` (`Scripts/strata.exe` on Windows, `bin/strata`
   elsewhere) in the workspace folder before falling back to `PATH`. An explicit `strata.cliPath`
   override still always wins.
-
-## [0.0.1] — 2026-10-01
-
-
-Initial scaffold. Wraps v2's CLI surface as it exists today — `validate`, `graph`, `version` — not
-a port of [v1's extension](https://github.com/huybrechtsxyz/strata/tree/main/src/vscode); see
-[README.md § Scope](README.md#scope) for what that leaves out.
-
-### Added
-
 - **Validation diagnostics** — `strata validate` runs on save (debounced) and on
   **Strata: Validate Solution**; findings are grouped by source file and shown in the Problems
   panel, with the reported field path resolved to a line via a dotted-path heuristic

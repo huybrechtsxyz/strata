@@ -134,6 +134,11 @@ jobs:
       - name: Copy LICENSE into extension directory
         run: cp LICENSE src/vscode/LICENSE
 
+      # The Marketplace has no semver pre-releases, so 2.0.0-Alpha27 packages as 2.0.0.
+      - name: Stamp extension version from VERSION.txt
+        working-directory: src/vscode
+        run: npm version "$(sed -E 's/-.*//' ../../VERSION.txt | tr -d '[:space:]')" --no-git-tag-version --allow-same-version
+
       - name: Package extension (.vsix)
         working-directory: src/vscode
         run: |

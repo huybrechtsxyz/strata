@@ -65,7 +65,9 @@ src/vscode/
 │       ├── graphViewProvider.ts      # `strata graph` -> "Graph" tree view
 │       └── statusBarProvider.ts      # `strata version` -> status bar item
 ├── resources/
-│   └── icon.svg                      # Activity Bar container icon
+│   ├── icon.svg                      # Activity Bar container icon
+│   ├── icon.png                      # Marketplace / Extensions view icon
+│   └── walkthrough/                  # "Get started with Strata" walkthrough step pages
 ├── package.json                      # Extension manifest + npm scripts/dependencies
 ├── package-lock.json
 ├── tsconfig.json
@@ -120,12 +122,27 @@ wrapper so the JSON envelope is parsed and CLI-not-found errors are reported con
 
 ## Publishing
 
-Not published anywhere yet (no Marketplace listing, no `.vsix` release). To build a local package
-for manual installation once there's a reason to:
+The extension publishes to the existing Marketplace listing
+[`huybrechts-xyz.xyz-strata`](https://marketplace.visualstudio.com/items?itemName=huybrechts-xyz.xyz-strata)
+(1.x was v1; 2.0.0 onwards is this extension). CI does it:
+
+- `ci-build.yml` stamps `package.json`'s version from `VERSION.txt` with the pre-release suffix
+  dropped (`2.0.0-Alpha27` packages as `2.0.0`; the Marketplace has no semver pre-releases), then
+  packages the `.vsix`.
+- `ci-release.yml` publishes it only for a plain `vX.Y.Z` tag. Alpha/beta/rc tags never reach the
+  Marketplace.
+
+The README is the Marketplace page, so write it for users, not contributors. Use absolute
+`https://github.com/huybrechtsxyz/strata/...` links: relative links outside `src/vscode` break on
+the Marketplace (v1's published page links to a 404 `CONTRIBUTING.md` for exactly this reason).
+Images must be PNG over `https`; `vsce` rejects SVG.
+
+To build a local package and check what ships:
 
 ```powershell
 cd src/vscode
-npx @vscode/vsce package
+npx @vscode/vsce ls          # files that would be packaged
+npx @vscode/vsce package     # writes xyz-strata-<version>.vsix
 ```
 
-Then, in VS Code: **Extensions** view → **...** menu → **Install from VSIX...**.
+Then, in VS Code: **Extensions** view > **...** menu > **Install from VSIX...**.

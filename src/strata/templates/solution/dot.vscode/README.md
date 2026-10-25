@@ -6,7 +6,7 @@ Scaffolded once by `strata sln init` — yours to edit freely afterwards.
 package-owned vs. user-owned).
 
 `extensions.json` recommends the
-[Strata VS Code extension](https://github.com/huybrechtsxyz/strata-v2/tree/main/src/vscode),
+[Strata VS Code extension](https://marketplace.visualstudio.com/items?itemName=huybrechts-xyz.xyz-strata),
 which validates this solution and visualizes its cross-document
 reference graph from inside the editor. Add your own recommendations,
 settings, and tasks here as needed — nothing else is scaffolded yet.
