@@ -246,6 +246,22 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-10-25: **Built RC1** - bumped `VERSION.txt` from `2.0.0-Alpha27` to `2.0.0-RC1` (normalizes to `2.0.0rc1`, a
+  PEP 440 pre-release; confirmed via `packaging.version.Version` first; no trailing newline, as before). **A maintainer
+  decision that skips this doc's own gates:** no beta was cut, Stage 2's entry bar is not met (`.v2-haven` and cfg-int
+  `origin/v2` build, but `deploy run` against both is unproven), and `v2` is not merged into `main`, so this RC is cut
+  from `v2-beta`, not `main`. Stage 4's entry bar (clean RC trial, gap_fit_v1 resolved, v1-maintenance decision) still
+  stands before a plain `v2.0.0`. Asked first, and the pre-release suffix was chosen deliberately: a `v2.0.0-rc1` tag
+  is a GitHub pre-release, PyPI marks it pre-release (an unpinned `pip install xyz-strata` keeps resolving to v1),
+  Docker `latest` stays put, and the Marketplace job is skipped. The VS Code extension, now `xyz-strata` on v1's
+  listing, packages as `2.0.0` (ci-build strips the suffix) but is only published by a stable tag. Full check suite
+  green: mypy (160 files), ruff check, ruff format, import-linter, pytest (3095 passed), Sphinx with `-W`, `config/`
+  validates (32 documents, 3 warnings). `uv sync --reinstall-package xyz-strata` then `uv sync --all-extras` refreshed
+  the dev install; `strata version` reported `2.0.0rc1`. `uv build` produced `xyz_strata-2.0.0rc1-py3-none-any.whl`/
+  `.tar.gz`; a fresh isolated venv confirmed `strata version` -> `2.0.0rc1`, the command list (`audit`, `build`,
+  `deploy`, `graph`, `path`, `promote`, `sln`, `validate`, `values`, `version`), `strata validate` on `config/`, and
+  that the agent-skill template ships in the wheel. Verification venv removed after. The commit and the
+  `v2.0.0-rc1` tag are left to the maintainer.
 - 2026-10-21: **Built alpha26** — bumped `VERSION.txt` to `2.0.0-Alpha26` (normalizes to `2.0.0a26`;
   confirmed via `packaging.version.Version` first; the file has no trailing newline, as before), cut after
   the Helm/OCI chart work ([helm-chart-deployment.md](../design/helm-chart-deployment.md)) so haven can be converted onto it.
