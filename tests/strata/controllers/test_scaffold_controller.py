@@ -13,9 +13,10 @@ import yaml
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-from strata.controllers.scaffold_controller import ScaffoldController
+from strata.controllers.scaffold_controller import AGENT_SKILL_PATH, GENERATED_MARKER, ScaffoldController
 from strata.controllers.solution_controller import SERVICE_BY_KIND
 from strata.utils.errors import UsageError
+from strata.utils.version import get_version
 
 
 def test_init_creates_the_manifest(tmp_path):
@@ -108,6 +109,75 @@ def test_worked_example_update_refreshes_strata_but_preserves_github_customizati
     assert issue_template.read_text(encoding="utf-8") == issue_template_before
     assert pr_template.read_text(encoding="utf-8") == customized
     assert "SOC2 control reference" in pr_template.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Agent skills (.claude/skills/, ADR-0046)
+# ---------------------------------------------------------------------------
+
+
+def _frontmatter(path: Path) -> dict:
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith("---\n"), "frontmatter must be the file's first line or agents ignore it"
+    return yaml.safe_load(text.split("---\n", 2)[1])
+
+
+@pytest.mark.parametrize("skill", ["strata", "project-gotchas"])
+def test_init_writes_skills_both_agents_can_load(tmp_path, skill):
+    """Claude Code and VS Code Copilot both read .claude/skills/<name>/SKILL.md; the name must match the folder."""
+    ScaffoldController(tmp_path).init("acme-platform")
+
+    meta = _frontmatter(tmp_path / ".claude" / "skills" / skill / "SKILL.md")
+    assert meta["name"] == skill
+    assert 0 < len(meta["description"]) <= 1024
+    assert set(meta) == {"name", "description"}  # portable Agent Skills fields only
+
+
+def test_strata_skill_is_stamped_with_version_and_every_kind(tmp_path):
+    ScaffoldController(tmp_path).init("acme-platform")
+
+    text = (tmp_path / AGENT_SKILL_PATH).read_text(encoding="utf-8")
+    assert f"{GENERATED_MARKER}{get_version()}." in text
+    assert "{{" not in text
+    for kind in SERVICE_BY_KIND:
+        assert f"`{kind.value}`" in text
+
+
+def test_update_rewrites_the_strata_skill_while_the_marker_is_present(tmp_path):
+    ScaffoldController(tmp_path).init("acme-platform")
+    skill = tmp_path / AGENT_SKILL_PATH
+    original = skill.read_text(encoding="utf-8")
+    skill.write_text(original + "\nlocal edit that keeps the marker\n", encoding="utf-8")
+
+    controller = ScaffoldController(tmp_path)
+    controller.update()
+
+    assert skill.read_text(encoding="utf-8") == original
+    assert f"Updated: {AGENT_SKILL_PATH}" in controller.messages
+
+
+def test_update_keeps_a_strata_skill_whose_marker_was_removed(tmp_path):
+    ScaffoldController(tmp_path).init("acme-platform")
+    skill = tmp_path / AGENT_SKILL_PATH
+    owned = "\n".join(line for line in skill.read_text(encoding="utf-8").splitlines() if GENERATED_MARKER not in line)
+    skill.write_text(owned + "\nteam edit\n", encoding="utf-8")
+
+    controller = ScaffoldController(tmp_path)
+    controller.update()
+
+    assert skill.read_text(encoding="utf-8") == owned + "\nteam edit\n"
+    assert any(m.startswith(f"Kept: {AGENT_SKILL_PATH}") for m in controller.messages)
+
+
+def test_project_gotchas_skill_is_team_owned(tmp_path):
+    ScaffoldController(tmp_path).init("acme-platform")
+    gotchas = tmp_path / ".claude" / "skills" / "project-gotchas" / "SKILL.md"
+    edited = gotchas.read_text(encoding="utf-8") + "\n- **Symptom:** a real lesson\n"
+    gotchas.write_text(edited, encoding="utf-8")
+
+    ScaffoldController(tmp_path).update()
+
+    assert gotchas.read_text(encoding="utf-8") == edited
 
 
 # ---------------------------------------------------------------------------

@@ -25,8 +25,9 @@ let _statusBar: StatusBarProvider | undefined;
 let _output: vscode.OutputChannel | undefined;
 
 const UPDATE_CONFIRM =
-    'Refresh the solution files? This rewrites .strata/ (including the editor schemas) and creates any missing ' +
-    '.vscode/ and .github/ scaffold files. Existing files outside .strata/ are never overwritten.';
+    'Refresh the solution files? This rewrites .strata/ (including the editor schemas) and the strata agent ' +
+    'skill (.claude/skills/strata/, unless your team removed its generated marker), and creates any missing ' +
+    '.vscode/, .github/ and .claude/ scaffold files. Other existing files are never overwritten.';
 
 async function updateSolution(client: StrataClient, output: vscode.OutputChannel): Promise<void> {
     const choice = await vscode.window.showInformationMessage(UPDATE_CONFIRM, { modal: true }, 'Update');

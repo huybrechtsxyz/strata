@@ -189,12 +189,17 @@ schema.
   `/review` (AI terraform-plan risk analysis), `/diagnose` (AI failure diagnosis), `/sbom` (AI
   supply-chain analysis), and `/diagram create <description>` are LLM-backed, not plain CLI
   wrappers (`aiPromptBuilder.ts`).
-- **v2 today:** no chat participant at all.
-- **Status:** `Undecided`, and deliberately split from the rest of this list - a chat participant
-  is a different kind of surface (contributes `chatParticipants`, needs its own design pass on
-  which of the ~16 subcommands make sense as chat vs. as plain commands/views) rather than a
-  provider-by-provider port. Recommend deciding this as its own design doc if pursued, not folded
-  into incremental gap-closing here.
+- **v2 today:** no chat participant, by decision (below).
+- **Status:** `Decided 2026-10-24 - no chat participant, MCP server or language-model tools`.
+  v1's MCP server exposed 13 tools and no consumer (haven, cfg-int) used any of them; the agents
+  people actually use (Claude Code, VS Code Copilot agent mode) already run the CLI in a terminal
+  and read `--output json`. What they lack is strata knowledge, so v2 scaffolds
+  [Agent Skills](https://agentskills.io) instead: `sln init`/`sln update` write a strata-generated
+  `.claude/skills/strata/SKILL.md` (commands, ground rules, known pitfalls) and a team-owned
+  `.claude/skills/project-gotchas/SKILL.md`. `.claude/skills/` is read by both Claude and Copilot.
+  See [ADR-0046](../decisions/0046-strata-agent-skills-with-generated-marker.md) and
+  [solution-scaffolding.md](../design/solution-scaffolding.md). Other agents (`AGENTS.md`,
+  `.agents/skills/`) only when a consumer needs them.
 
 ### 14. Secret management, deployment locking, multi-environment composition, SBOM generation
 
