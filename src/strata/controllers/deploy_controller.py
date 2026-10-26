@@ -36,14 +36,17 @@ from strata.controllers.deployment_output_store import (
     OutputRecordNotFoundError,
     OutputRecordStaleError,
 )
+from strata.controllers.integration_readiness import IntegrationReadiness, assess_integration
 from strata.controllers.integration_resolution import resolve_integration, resolve_output_store_integration
+from strata.controllers.policy_results import append_policy_result
+from strata.controllers.security_gate_controller import evaluate_security_gates
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import SourceSyncError, resolved_asset_info
 from strata.controllers.value_controller import (
     build_value_references,
     reachable_environments,
-    resolve_deployment,
+    resolve_deployment_workspace,
     resolve_tenant,
     resolve_values,
 )
@@ -63,7 +66,7 @@ from strata.models.deployment_model import DeploymentStageModel
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
-from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
+from strata.models.workspace_model import claimed_names, effective_resources_and_namespaces
 from strata.services.environment_service import (
     merge_environment_models,
     merge_workspace_environment_deployment_properties,
@@ -71,7 +74,7 @@ from strata.services.environment_service import (
 from strata.services.workspace_service import effective_assets
 from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.errors import SystemError, UsageError
+from strata.utils.errors import SystemError
 from strata.utils.value_tokens import extract_value_tokens, referenced_output_keys, resolve_value_tokens_in_mapping
 
 #: Minimum length a resolved secret value must have before `_redact()`
@@ -499,15 +502,7 @@ def deploy_run(
     build_path = build_path.absolute()
     index = context.controller.index
 
-    deployment = resolve_deployment(context, deployment_name, version_pin=pin)
-    if deployment.spec.workspace is None:
-        raise UsageError(f"Deployment '{deployment_name}' has no workspace to deploy.")
-    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-    if workspace_entry is None:
-        raise UsageError(
-            f"Deployment '{deployment_name}' names workspace '{deployment.spec.workspace}', which is not in the index."
-        )
-    workspace = cast(WorkspaceModel, workspace_entry.model)
+    deployment, workspace = resolve_deployment_workspace(context, deployment_name, version_pin=pin)
 
     # Cross-run step-output persistence (docs/work/cross-run-step-output-
     # delivery.md) — `None` when the workspace configures no
@@ -555,6 +550,34 @@ def deploy_run(
         for value in secret_values:
             text = text.replace(value, "***")
         return text
+
+    # Security gates (docs/work/security-gates-design.md D5): after values resolve, before any step.
+    if workspace.spec.release_gate_policy is not None or workspace.spec.image_gate_policy is not None:
+        if smoke_test:
+            _step("would run security gates (release_gate_policy / image_gate_policy)")
+        else:
+
+            def _add_secret(value: str) -> None:
+                if len(value) >= _MIN_REDACT_LENGTH:
+                    secret_values.add(value)
+
+            gates = evaluate_security_gates(
+                context,
+                deployment_name,
+                workspace,
+                build_path,
+                resolved=resolved,
+                version_pin=pin,
+                on_step=_step,
+                on_secret=_add_secret,
+            )
+            gate_diagnostics = gates.diagnostics
+            diagnostics.extend(gate_diagnostics)
+            if build_path.is_dir():
+                for result in gates.policy_results(workspace):
+                    append_policy_result(build_path, result)
+            if not gate_diagnostics.ok:
+                return diagnostics
 
     # For `provisioner.output.template` rendering only (phase 8) — same
     # assembly `build_run()` uses, so a template validated at build time
@@ -670,17 +693,26 @@ def deploy_run(
     # gotchas from v1": fail fast, before a later step's missing tool is
     # discovered only after an earlier one already made real changes).
     resolved_steps: list[tuple[ProvisioningStepModel, ProvisionerModel, InfraIntegration]] = []
+    # Keyed by command too: a script integration's command depends on the provisioner it is bound to.
+    readiness_by_tool: dict[tuple[str, str | None], IntegrationReadiness] = {}
     for step in steps:
         provisioner = find_provisioner(workspace, step.provisioner)
         integration = resolve_integration(index, provisioner)
-        if not integration.is_available():
-            diagnostics.error(
-                f"Provisioner '{provisioner.name}' (step '{step.name}'): "
-                f"'{integration.command}' is not available on PATH.",
-                location=step.name,
-            )
-            continue
-        resolved_steps.append((step, provisioner, integration))
+        tool_key = (integration.name, integration.command)
+        readiness = readiness_by_tool.get(tool_key)
+        if readiness is None:
+            readiness = assess_integration(integration, read_version=not smoke_test)
+            readiness_by_tool[tool_key] = readiness
+            for problem in readiness.problems:
+                diagnostics.error(
+                    f"Provisioner '{provisioner.name}' (step '{step.name}'): {problem.message}",
+                    location=step.name,
+                    code=problem.code,
+                )
+            if smoke_test and readiness.required_version is not None and readiness.available:
+                _step(f"would check {integration.TYPE} '{integration.name}' version '{readiness.required_version}'")
+        if readiness.ok:
+            resolved_steps.append((step, provisioner, integration))
     if not diagnostics.ok:
         return diagnostics
 

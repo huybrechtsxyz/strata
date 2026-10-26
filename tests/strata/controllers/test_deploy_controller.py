@@ -1464,6 +1464,111 @@ def test_deploy_run_preflight_fails_when_tool_unavailable(tmp_path: Path, monkey
     assert "not available on PATH" in diagnostics.messages()[0]
 
 
+def test_deploy_run_reports_an_unavailable_tool_once_for_all_its_steps(tmp_path: Path, monkeypatch):
+    root = _terraform_solution(tmp_path, second_step=True)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: None)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "integration_unavailable" and "step 'apply_infra'" in error.message
+
+
+def test_deploy_run_preflight_fails_for_a_provisioner_naming_a_disabled_integration(tmp_path: Path, _capture):
+    root = _terraform_solution(tmp_path)
+    _write(
+        root,
+        "integration.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: tf-off\nspec:\n"
+        "  type: terraform\n  capabilities: [infrastructure]\n  enabled: false\n",
+    )
+    workspace = root / "workspace.yaml"
+    workspace.write_text(
+        workspace.read_text(encoding="utf-8").replace(
+            "      tool: terraform\n", "      tool: terraform\n      integration: tf-off\n"
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "integration_disabled" and "tf-off is disabled" in error.message
+    assert _capture == []
+
+
+def _versioned_terraform(tmp_path: Path, installed: str, **solution) -> tuple[Path, Path, list[list[str]], object]:
+    """A Terraform solution whose Integration document pins `>= 1.7`; `terraform version` reports `installed`."""
+    root = _terraform_solution(tmp_path, **solution)
+    _write(
+        root,
+        "integration.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: terraform\nspec:\n"
+        "  type: terraform\n  capabilities: [infrastructure]\n  version: '>= 1.7'\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    calls: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        stdout = f"Terraform v{installed}\non windows_amd64" if args[1:] == ["version"] else "ok"
+        return CommandResult(returncode=0, stdout=stdout, stderr="")
+
+    import strata.integrations.base as base_module
+
+    return root, build_path, calls, (base_module, _fake_run_command)
+
+
+def _install(monkeypatch, stubs) -> None:
+    base_module, fake = stubs
+    monkeypatch.setattr(base_module, "run_command", fake)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+
+def test_deploy_run_preflight_fails_on_a_version_mismatch(tmp_path: Path, monkeypatch):
+    root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.5.7")
+    _install(monkeypatch, stubs)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "integration_version_mismatch"
+    assert "installed version 1.5.7 does not satisfy '>= 1.7'" in error.message
+    assert "tf_main" in error.message and "apply_infra" in error.message
+    assert calls == [["terraform", "version"]]
+
+
+def test_deploy_run_checks_the_version_once_per_integration(tmp_path: Path, monkeypatch):
+    root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.9.2", second_step=True)
+    _install(monkeypatch, stubs)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert calls.count(["terraform", "version"]) == 1
+    assert calls[0] == ["terraform", "version"] and len(calls) > 1
+
+
+def test_deploy_run_smoke_test_reports_the_version_check_without_running_the_tool(tmp_path: Path, monkeypatch):
+    root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.5.7")
+    _install(monkeypatch, stubs)
+    steps: list[str] = []
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, smoke_test=True, on_step=steps.append)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert calls == []
+    assert "would check terraform 'terraform' version '>= 1.7'" in steps
+
+
 def test_deploy_run_resolves_backend_configuration_tokens(tmp_path: Path):
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")

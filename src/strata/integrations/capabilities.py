@@ -13,6 +13,7 @@ there is nothing to dispatch it to.
 """
 
 from abc import abstractmethod
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -25,6 +26,7 @@ from strata.integrations.resolved_context import (
     SecretMetadata,
     ValueResolution,
 )
+from strata.integrations.security_findings import ImageLookup, ImageRef, ReleaseGateOutcome, ReleaseGateRequest
 from strata.models.integration_model import Capability
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
@@ -560,6 +562,86 @@ class ScannerIntegration(Integration):
         """
 
 
+class ReleaseGateIntegration(Integration):
+    """Capability: `release_gate`. A remote platform's pass/fail verdict on a repository at a commit.
+
+    docs/work/security-gates-design.md D1. Vendor thresholds come from the class's own Integration
+    document (D4), never from the request, so the gate policy stays vendor-neutral.
+    """
+
+    @abstractmethod
+    def run_release_gate(
+        self, request: ReleaseGateRequest, *, on_poll: Callable[[int], None] | None = None
+    ) -> ReleaseGateOutcome:
+        """Start (or look up) the platform's release check and wait for its verdict.
+
+        Args:
+            request: Repository, commit, and the time budget for waiting.
+            on_poll: Called with the attempt number while the platform is still working.
+
+        Raises:
+            strata.integrations.errors.GateNotFoundError: The platform does not know the repository
+                or commit. A configuration error, never retried.
+            strata.integrations.errors.GateTimeoutError: No verdict within `request.timeout`.
+            strata.integrations.errors.IntegrationError: Any other failure (unreachable, rejected
+                credentials, unparseable response).
+        """
+
+
+class ImageFindingsIntegration(Integration):
+    """Capability: `image_findings`. A remote platform's open issues for one container image.
+
+    docs/work/security-gates-design.md D1. How the platform names an image is the class's own
+    concern, configured on its Integration document.
+    """
+
+    @abstractmethod
+    def find_image_issues(self, image: ImageRef, severities: frozenset[str]) -> ImageLookup:
+        """Open issues for `image` at the given severities (`SECURITY_SEVERITY_ORDER` values).
+
+        An image the platform doesn't know, or matches more than once, is a result
+        (`ImageLookup.status`), not an exception.
+
+        Raises:
+            strata.integrations.errors.IntegrationError: The platform could not answer at all.
+        """
+
+
+class CredentialedIntegration(Integration):
+    """Not a capability: an integration whose `spec.authentication` keys strata resolves before use.
+
+    docs/work/security-gates-design.md D2. The controller resolves
+    `spec.authentication.key_references()` through the value pipeline and hands the values over
+    here, so this layer never imports `controllers` (ADR-0003).
+    """
+
+    def bind_credentials(self, values: Mapping[str, str]) -> None:
+        """Receive the resolved value for every key reference in `spec.authentication`.
+
+        Called before any capability method; with no `authentication` block, with an empty mapping,
+        and the class may then fall back to its own environment variables. Default: ignore.
+        """
+
+
+class ConnectionCheckIntegration(Integration):
+    """Not a capability: an integration that can verify its credentials and reachability.
+
+    docs/work/security-gates-design.md D7; backs `strata integration check`.
+    """
+
+    @abstractmethod
+    def check_connection(self) -> list[str]:
+        """Verify every part this document is configured for, without changing anything.
+
+        Returns:
+            One line per verified part, for the command to report.
+
+        Raises:
+            strata.integrations.errors.IntegrationError: Unreachable, or credentials missing or
+                rejected.
+        """
+
+
 #: Capability -> the ABC a class declaring it must implement. Keyed by
 #: `str`, not `Capability`, even though every key is a `Capability` member
 #: (`Capability <: str`, so this stays assignable) — `find_capability_
@@ -580,6 +662,8 @@ CAPABILITY_ABCS: dict[str, type[Integration]] = {
     Capability.AUDIT: AuditSinkIntegration,
     Capability.SCANNER: ScannerIntegration,
     Capability.KEY_VALUE: KeyValueStoreIntegration,
+    Capability.RELEASE_GATE: ReleaseGateIntegration,
+    Capability.IMAGE_FINDINGS: ImageFindingsIntegration,
 }
 
 

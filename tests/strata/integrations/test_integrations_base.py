@@ -345,3 +345,29 @@ def test_ensure_version_raises_for_an_unsatisfied_constraint():
 
     with pytest.raises(IntegrationError, match="does not satisfy"):
         _FakeCli().ensure_version(">=1.0")
+
+
+@pytest.mark.parametrize(
+    ("installed", "expected", "ok"),
+    [("1.12.0", "~> 1.9", True), ("2.0.0", "~> 1.9", False), ("1.10.0-beta1", ">= 1.7", True)],
+)
+def test_ensure_version_reads_terraform_constraints_and_accepts_prereleases(installed, expected, ok):
+    import sys
+
+    class _FakeCli(Integration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset()
+        TRANSPORTS = frozenset({"cli"})
+        COMMAND = sys.executable
+        VERSION_ARGS = ("-c", f"print('{installed}')")
+
+    if ok:
+        _FakeCli().ensure_version(expected)
+    else:
+        with pytest.raises(IntegrationError, match=f"installed version {installed} does not satisfy"):
+            _FakeCli().ensure_version(expected)
+
+
+def test_ensure_version_with_an_invalid_constraint_is_an_integration_error():
+    with pytest.raises(IntegrationError, match="is not a version constraint"):
+        _CliOnly().ensure_version("latest")

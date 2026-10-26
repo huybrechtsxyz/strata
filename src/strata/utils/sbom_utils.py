@@ -71,6 +71,24 @@ def parse_image_ref(image: str) -> tuple[str, str | None, str | None]:
     return name, tag, digest
 
 
+def split_registry(name: str) -> tuple[str | None, str]:
+    """Split an image name (no tag or digest) into `(registry, repository)`.
+
+    The first path segment is a registry when it contains `.` or `:` or is `localhost`, which is
+    Docker's own rule; otherwise the image is on Docker Hub and the registry is `None`.
+
+    Examples:
+        "ghcr.io/org/app" -> ("ghcr.io", "org/app")
+        "registry:5000/img" -> ("registry:5000", "img")
+        "org/app" -> (None, "org/app")
+        "traefik" -> (None, "traefik")
+    """
+    first, separator, rest = name.partition("/")
+    if separator and ("." in first or ":" in first or first == "localhost"):
+        return first, rest
+    return None, name
+
+
 def image_to_purl(image: str) -> str:
     """Convert a container image reference to a Package URL string.
 

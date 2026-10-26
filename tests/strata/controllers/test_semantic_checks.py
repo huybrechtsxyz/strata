@@ -1928,6 +1928,153 @@ def test_workspace_without_output_store_is_unaffected_by_the_cas_check(tmp_path)
 
 
 # ---------------------------------------------------------------------------
+# Workspace security gate policies -> their Integration must declare the capability
+# and be of a type implementing it (docs/work/security-gates-design.md D3).
+# ---------------------------------------------------------------------------
+
+_GATE_POLICIES = (
+    "  release_gate_policy:\n    integration: gate-ci\n    repository: org/infra\n"
+    "  image_gate_policy:\n    integration: gate-api\n"
+)
+
+
+def _versioned_integration(root: Path, name: str, integration_type: str, extra: str = "") -> None:
+    _write(
+        root,
+        f"integrations/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: {name}\nspec:\n"
+        f"  type: {integration_type}\n  capabilities: [x-test]\n  version: '>= 1.0'\n{extra}",
+    )
+
+
+def _version_findings(context) -> list[str]:
+    return [d.message for d in context.diagnostics.errors if d.code == "integration_version_unenforceable"]
+
+
+def test_spec_version_on_a_cli_integration_is_fine(tmp_path):
+    root = _base_solution(tmp_path)
+    _versioned_integration(root, "tf", "terraform")
+    _versioned_integration(root, "homegrown", "not-a-registered-type")
+    assert _version_findings(_resolve(root)) == []
+
+
+def test_spec_version_on_a_networked_only_integration_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _versioned_integration(root, "aikido-ci", "aikido")
+    [message] = _version_findings(_resolve(root))
+    assert "'aikido-ci'" in message and "over http" in message
+
+
+def test_spec_version_with_a_networked_transport_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _versioned_integration(root, "tf", "terraform", "  transport: http\n")
+    assert len(_version_findings(_resolve(root))) == 1
+
+
+def _gate_integration(root: Path, name: str, integration_type: str, capabilities: str, enabled: bool = True) -> None:
+    _write(
+        root,
+        f"integrations/{name}.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: integration
+meta:
+  name: {name}
+spec:
+  type: {integration_type}
+  capabilities: [{capabilities}]
+  enabled: {str(enabled).lower()}
+""",
+    )
+
+
+@pytest.fixture
+def fake_gate_type(monkeypatch):
+    """Register a type implementing both gate ABCs until a real one (Aikido, Phase 3/4) exists."""
+    from strata.controllers import semantic_checks
+    from strata.integrations.capabilities import ImageFindingsIntegration, ReleaseGateIntegration
+
+    class _FakeGate(ReleaseGateIntegration, ImageFindingsIntegration):
+        TYPE = "fake-gate"
+        CAPABILITIES = frozenset({"release_gate", "image_findings"})
+        TRANSPORTS = frozenset({"http"})
+
+        def run_release_gate(self, request, *, on_poll=None):
+            raise NotImplementedError
+
+        def find_image_issues(self, image, severities):
+            raise NotImplementedError
+
+    real_get_class = semantic_checks.get_integration_class
+    monkeypatch.setattr(
+        semantic_checks,
+        "get_integration_class",
+        lambda integration_type: _FakeGate if integration_type == "fake-gate" else real_get_class(integration_type),
+    )
+
+
+def _gate_findings(context) -> dict[str, str]:
+    return {d.code: d.message for d in context.diagnostics.errors if d.code and d.code.startswith("gate_")}
+
+
+def test_security_gates_with_capable_integrations_pass(tmp_path, fake_gate_type):
+    root = _base_solution(tmp_path)
+    _gate_integration(root, "gate-ci", "fake-gate", "release_gate")
+    _gate_integration(root, "gate-api", "fake-gate", "image_findings")
+    _append_to_workspace(root, _GATE_POLICIES)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_security_gate_naming_an_unknown_integration_is_a_reference_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _append_to_workspace(root, "  image_gate_policy:\n    integration: nowhere\n")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("nowhere" in m for m in context.diagnostics.messages())
+    assert _gate_findings(context) == {}
+
+
+def test_security_gate_integration_that_is_disabled_is_caught(tmp_path, fake_gate_type):
+    root = _base_solution(tmp_path)
+    _gate_integration(root, "gate-api", "fake-gate", "image_findings", enabled=False)
+    _append_to_workspace(root, "  image_gate_policy:\n    integration: gate-api\n")
+
+    findings = _gate_findings(_resolve(root))
+    assert "disabled" in findings["gate_integration_capability_missing"]
+
+
+def test_security_gate_integration_not_declaring_the_capability_is_caught(tmp_path, fake_gate_type):
+    """A document set up for one gate cannot silently answer the other (design D2: one per credential)."""
+    root = _base_solution(tmp_path)
+    _gate_integration(root, "gate-ci", "fake-gate", "image_findings")
+    _append_to_workspace(root, "  release_gate_policy:\n    integration: gate-ci\n    repository: org/infra\n")
+
+    findings = _gate_findings(_resolve(root))
+    message = findings["gate_integration_capability_missing"]
+    assert "'release_gate'" in message and "declares: image_findings" in message
+
+
+def test_security_gate_integration_of_a_type_without_the_capability_is_caught(tmp_path):
+    """webhook declaring release_gate validates as a document, but its class cannot provide it."""
+    root = _base_solution(tmp_path)
+    _gate_integration(root, "gate-ci", "webhook", "release_gate")
+    _append_to_workspace(root, "  release_gate_policy:\n    integration: gate-ci\n    repository: org/infra\n")
+
+    findings = _gate_findings(_resolve(root))
+    assert "ReleaseGateIntegration" in findings["gate_integration_type_unsupported"]
+
+
+def test_security_gate_integration_of_an_unregistered_type_is_not_this_checks_finding(tmp_path):
+    root = _base_solution(tmp_path)
+    _gate_integration(root, "gate-api", "not-registered", "image_findings")
+    _append_to_workspace(root, "  image_gate_policy:\n    integration: gate-api\n")
+
+    assert _gate_findings(_resolve(root)) == {}
+
+
+# ---------------------------------------------------------------------------
 # Configuration.spec.paths (docs/design/path-conventions.md, docs/design/gap_fit_v1.md
 # gap #7 — real usage: config-deploy's config/paths.yaml)
 # ---------------------------------------------------------------------------

@@ -51,6 +51,7 @@ from strata.models.store_model import (
 )
 from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
+from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
 from strata.utils.diagnostics import Diagnostics
@@ -172,6 +173,25 @@ def resolve_deployment(
         deployment = deployment.model_copy(update={"spec": deployment.spec.model_copy(update={"version": version_pin})})
 
     return deployment
+
+
+def resolve_deployment_workspace(
+    context: SolutionContext, deployment_name: str, *, version_pin: str | None = None
+) -> tuple[DeploymentModel, WorkspaceModel]:
+    """`resolve_deployment()` plus the workspace it names; shared by `build run`, `deploy run` and `policy`.
+
+    Raises:
+        UsageError: As `resolve_deployment()`, or the deployment names no workspace or one not in the index.
+    """
+    deployment = resolve_deployment(context, deployment_name, version_pin=version_pin)
+    if deployment.spec.workspace is None:
+        raise UsageError(f"Deployment '{deployment_name}' has no workspace.")
+    entry = context.controller.index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+    if entry is None:
+        raise UsageError(
+            f"Deployment '{deployment_name}' names workspace '{deployment.spec.workspace}', which is not in the index."
+        )
+    return deployment, cast(WorkspaceModel, entry.model)
 
 
 def resolve_tenant(context: SolutionContext, deployment: DeploymentModel) -> TenantModel | None:

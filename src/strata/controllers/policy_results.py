@@ -6,8 +6,9 @@ population" design. The one shared file-format contract between
 matches the existing `resolved.yaml`/`sbom.json` hand-off precedent
 between the two commands.
 
-Scoped to build-phase policies only (`cve_policy` today) — validate-phase
-policies (`tenant_zone`/`path_convention`) are explicitly out of scope for
+Written by build-phase policies (`cve_policy`, `checkov_policy`) and appended to by deploy-phase
+ones (`release_gate_policy`, `image_gate_policy`, docs/work/security-gates-design.md D9) —
+validate-phase policies (`tenant_zone`/`path_convention`) are explicitly out of scope for
 this pass, since `strata validate` has no `build_path` concept and no
 enforced 1:1 relationship to any one later `deploy run` invocation.
 """
@@ -16,6 +17,7 @@ import json
 from pathlib import Path
 
 from strata.models.audit_manifest_model import ManifestPolicyResultModel
+from strata.utils.errors import SystemError
 
 #: Public — both `build_controller.py` (writes) and `audit_run.py` (reads)
 #: must agree on this exact filename.
@@ -43,5 +45,19 @@ def read_policy_results(build_path: Path) -> list[ManifestPolicyResultModel] | N
     path = build_path / POLICY_RESULTS_FILENAME
     if not path.exists():
         return None
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    return [ManifestPolicyResultModel.model_validate(item) for item in payload["policy_results"]]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return [ManifestPolicyResultModel.model_validate(item) for item in payload["policy_results"]]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise SystemError(f"'{path}' is not a readable policy results file ({exc}).") from None
+
+
+def append_policy_result(build_path: Path, result: ManifestPolicyResultModel) -> None:
+    """Merge one result into `build_path/policy_results.json`, creating it when absent.
+
+    Replaces an entry with the same `policy_name` and keeps every other one, so a deploy-phase
+    gate never drops what `build run` recorded, and re-running a deploy never duplicates itself.
+    """
+    existing = read_policy_results(build_path) or []
+    merged = [entry for entry in existing if entry.policy_name != result.policy_name] + [result]
+    write_policy_results(build_path, merged)

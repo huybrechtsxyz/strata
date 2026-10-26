@@ -1,0 +1,34 @@
+[
+  {
+    "id": 9001,
+    "group_id": 501,
+    "type": "docker_container",
+    "status": "open",
+    "severity": "critical",
+    "severity_score": 95,
+    "rule": "CVE-2024-3094",
+    "cve_id": "CVE-2024-3094",
+    "affected_package": "xz-utils",
+    "affected_file": null,
+    "attack_surface": "docker_container",
+    "container_repo_id": 101,
+    "container_repo_name": "huybrechtsxyz/api",
+    "first_detected_at": 1729900000
+  },
+  {
+    "id": 9002,
+    "group_id": 502,
+    "type": "docker_container",
+    "status": "open",
+    "severity": "high",
+    "severity_score": 75,
+    "rule": "CVE-2023-4863",
+    "cve_id": "CVE-2023-4863",
+    "affected_package": "libwebp",
+    "affected_file": null,
+    "attack_surface": "docker_container",
+    "container_repo_id": 101,
+    "container_repo_name": "huybrechtsxyz/api",
+    "first_detected_at": 1729900100
+  }
+]

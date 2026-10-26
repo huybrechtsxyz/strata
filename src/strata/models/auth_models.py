@@ -269,3 +269,24 @@ class AuthenticationModel(PlatformBaseModel):
             raise ValueError(f"method is '{self.method}' but unrelated configuration is also set: {', '.join(extra)}")
 
         return self
+
+    def key_references(self) -> tuple[str, ...]:
+        """Every key reference the active method's block sets, for a caller to resolve before use.
+
+        docs/work/security-gates-design.md D2. Methods with no consumer yet return `()`; literal
+        fields (`token.username`) and flags are never key references.
+        """
+        names = _KEY_REFERENCE_FIELDS.get(self.method)
+        if names is None:
+            return ()
+        block = getattr(self, self.method)
+        return tuple(ref for ref in (getattr(block, name) for name in names) if ref)
+
+
+#: Key-reference fields per method, in declaration order. Extend when a consumer needs another method.
+_KEY_REFERENCE_FIELDS: dict[str, tuple[str, ...]] = {
+    "token": ("token",),
+    "ssh_key": ("private_key", "passphrase", "known_hosts"),
+    "api_key": ("api_key", "api_secret", "endpoint", "header_name"),
+    "oauth2": ("client_id", "client_secret", "tenant_id", "token_url", "authorization_url", "scope"),
+}

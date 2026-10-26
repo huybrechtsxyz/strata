@@ -844,6 +844,34 @@ def test_workspace_cve_policy_rejects_unknown_fields():
         WorkspaceModel.model_validate(data)
 
 
+# ---------------------------------------------------------------------------
+# spec.release_gate_policy / spec.image_gate_policy (docs/work/security-gates-design.md D3)
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_security_gate_policies_are_optional():
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.release_gate_policy is None
+    assert model.spec.image_gate_policy is None
+
+
+def test_workspace_accepts_both_security_gate_policies():
+    data = _minimal_workspace()
+    data["spec"]["release_gate_policy"] = {"integration": "aikido-ci", "repository": "org/infra"}
+    data["spec"]["image_gate_policy"] = {"integration": "aikido-api", "max_severity": "CRITICAL"}
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.release_gate_policy.integration == "aikido-ci"
+    assert model.spec.image_gate_policy.max_severity == "CRITICAL"
+
+
+def test_workspace_security_gate_policy_rejects_vendor_options():
+    """Vendor knobs belong on the Integration document (design D4), never on the policy."""
+    data = _minimal_workspace()
+    data["spec"]["release_gate_policy"] = {"integration": "aikido-ci", "repository": "org/infra", "sla_mode": True}
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
 def test_workspace_cve_policy_rejects_a_threshold_more_restrictive_than_max_severity():
     data = _minimal_workspace()
     data["spec"]["cve_policy"] = {"max_severity": "LOW", "severity_threshold": "HIGH"}

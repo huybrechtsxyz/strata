@@ -1,0 +1,12 @@
+[
+  {
+    "id": 101,
+    "name": "huybrechtsxyz/api",
+    "tag": "1.4.2"
+  },
+  {
+    "id": 102,
+    "name": "huybrechtsxyz/api-gateway",
+    "tag": "2.0.0"
+  }
+]

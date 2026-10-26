@@ -46,6 +46,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "webhook": ("strata.integrations.webhook", "WebhookIntegration"),
     "otel": ("strata.integrations.otel", "OtelIntegration"),
     "sentinel": ("strata.integrations.sentinel", "SentinelIntegration"),
+    "aikido": ("strata.integrations.aikido", "AikidoIntegration"),
     # ansible/git/bicep/opentofu/vault/consul/etcd/bitwarden/flagsmith/cost/
     # cve/splunk/syslog/identity as each gets a real v2 consumer (ADR-0021
     # Phase 7+).
@@ -107,6 +108,11 @@ def get(integration_type: str, config: IntegrationModel | None = None) -> Integr
     """
     integration_class = get_class(integration_type)
     return integration_class(config)
+
+
+def known_types() -> list[str]:
+    """Every registered type, built-in and installed plugin, sorted - for "did you mean" messages."""
+    return sorted(set(_KNOWN) | {ep.name for ep in entry_points(group=ENTRY_POINT_GROUP)})
 
 
 def get_class(integration_type: str) -> type[Integration]:

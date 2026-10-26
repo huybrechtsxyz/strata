@@ -57,6 +57,7 @@ from strata.models.common_models import (
     validate_kind_matches,
     validate_script_file,
 )
+from strata.utils.version_constraints import parse_version_constraint
 
 #: Extension prefix marking a capability strata does not dispatch on — an
 #: integration's own concern, carried and never rejected as unknown. See
@@ -128,6 +129,11 @@ class Capability(StrEnum):
     # has more than one real consumer planned, see that doc's own
     # Terminology section).
     KEY_VALUE = "key_value"  #: Small, keyed records needing optional compare-and-swap writes
+    # docs/work/security-gates-design.md D1. Not `scanner`: that ABC is about a locally installed
+    # tool (`ensure_available()`); this is a remote service's verdict, nothing runs locally.
+    RELEASE_GATE = "release_gate"  #: Pass/fail verdict for a repository at a commit
+    # Same design, same "not scanner" reasoning: a lookup of a remote service's open issues.
+    IMAGE_FINDINGS = "image_findings"  #: Open security issues for a container image
 
 
 #: Capability vocabulary v2 currently has real consumers for. Closed/curated
@@ -218,6 +224,14 @@ class IntegrationSpecModel(PlatformBaseModel):
                 f"Valid capabilities: {sorted(c.value for c in VALID_INTEGRATION_CAPABILITIES)}, "
                 "or an 'x-'-prefixed extension."
             )
+        return v
+
+    @field_validator("version")
+    @classmethod
+    def validate_version(cls, v: str | None) -> str | None:
+        """Reject a constraint `ensure_version()` could not parse (docs/work/integration-readiness.md D3)."""
+        if v is not None:
+            parse_version_constraint(v)
         return v
 
 

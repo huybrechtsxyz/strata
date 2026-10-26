@@ -23,8 +23,6 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import ClassVar
 
-from packaging.specifiers import SpecifierSet
-
 from strata.integrations.errors import IntegrationError
 from strata.models.integration_model import IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel
@@ -36,6 +34,7 @@ from strata.utils.transport import (
     http_request,
     run_command,
 )
+from strata.utils.version_constraints import parse_version_constraint, version_satisfies
 
 
 class Integration(ABC):
@@ -264,26 +263,31 @@ class Integration(ABC):
     def ensure_version(self, expected: str | None) -> None:
         """Raise if the installed version doesn't satisfy `expected`.
 
-        `expected` is a PEP 440 specifier (e.g. `">=1.17"`, `"~=1.9"`) —
-        typically `IntegrationModel.spec.version`, the single owner of this
-        fact (ADR-0021 D4). `None` means no assertion — a no-op.
+        `expected` is a PEP 440 specifier (e.g. `">=1.17"`, `"~=1.9"`), or Terraform's `~>` read as
+        `~=` (`utils/version_constraints.py`) — typically `IntegrationModel.spec.version`, the single
+        owner of this fact (ADR-0021 D4). `None` means no assertion — a no-op. A prerelease install
+        satisfies a constraint its release would.
 
         Args:
-            expected: A PEP 440 version specifier, or `None`.
+            expected: A version constraint, or `None`.
 
         Raises:
-            IntegrationError: The version cannot be determined, or does not
-                satisfy `expected`.
+            IntegrationError: The constraint is invalid, the version cannot be determined, or it does
+                not satisfy `expected`.
         """
         if expected is None:
             return
+        try:
+            parse_version_constraint(expected)
+        except ValueError as exc:
+            raise IntegrationError(f"{self.name}: {exc}") from None
         version = self.get_version()
         if version is None:
             raise IntegrationError(
                 f"{self.name}: could not determine the installed version to check against '{expected}'."
             )
-        if not SpecifierSet(expected).contains(version):
-            raise IntegrationError(f"{self.name}: version {version} does not satisfy '{expected}'.")
+        if not version_satisfies(version, expected):
+            raise IntegrationError(f"{self.name}: installed version {version} does not satisfy '{expected}'.")
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(name={self.name!r})"

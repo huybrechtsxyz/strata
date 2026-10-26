@@ -12,6 +12,8 @@ Commands:
     path       : Resolve a document's (kind, name) to its real file path.
     version    : Show the strata version, or manage kind: version documents (new/update/set).
     promote    : Inspect or mutate a workspace's ring/order/wave rollout (status/apply/view).
+    policy     : List, check and inspect a deployment's workspace policies (list/check/findings).
+    integration: Check an Integration document's credentials and reachability (check).
 
 Exit codes are declared once in `strata.commands.exit_codes` — see there for
 what each means.
@@ -24,7 +26,9 @@ from strata.commands.build_command import build_command
 from strata.commands.deploy_command import deploy_command
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE  # noqa: F401  (re-exported for callers)
 from strata.commands.graph_command import graph_command
+from strata.commands.integration_command import integration_command
 from strata.commands.path_command import path_command
+from strata.commands.policy_command import policy_command
 from strata.commands.promote_command import promote_command
 from strata.commands.sln_command import sln_command
 from strata.commands.validate_command import validate_command
@@ -49,6 +53,8 @@ cli.add_command(sln_command)
 cli.add_command(path_command)
 cli.add_command(version_command)
 cli.add_command(promote_command)
+cli.add_command(policy_command)
+cli.add_command(integration_command)
 
 
 def main() -> None:

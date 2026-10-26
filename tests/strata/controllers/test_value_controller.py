@@ -16,6 +16,7 @@ from strata.controllers.value_controller import (
     resolve_artifact,
     resolve_artifact_field,
     resolve_deployment,
+    resolve_deployment_workspace,
     resolve_diagnostic,
     resolve_document_value_references,
     resolve_tenant,
@@ -311,6 +312,15 @@ def test_resolve_deployment_version_pin_raises_for_an_unknown_version(tmp_path):
 
     with pytest.raises(UsageError, match="--pin names an unknown version document: 'ghost'"):
         resolve_deployment(_context(root), "app", version_pin="ghost")
+
+
+def test_resolve_deployment_workspace_without_a_workspace_is_a_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="Deployment 'app' has no workspace"):
+        resolve_deployment_workspace(_context(root), "app")
 
 
 def test_resolve_deployment_version_pin_never_mutates_the_file_on_disk(tmp_path):

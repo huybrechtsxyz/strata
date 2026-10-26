@@ -24,6 +24,14 @@ def test_integration_minimal_is_valid():
     assert model.kind.value == "integration"
 
 
+def test_integration_accepts_the_security_gate_capabilities():
+    """docs/work/security-gates-design.md D1: core capabilities, declarable without an x- prefix."""
+    data = _minimal_integration()
+    data["spec"] = {"type": "aikido", "capabilities": ["release_gate", "image_findings"]}
+    model = IntegrationModel.model_validate(data)
+    assert model.spec.capabilities == {"release_gate", "image_findings"}
+
+
 def test_integration_defaults():
     """required/enabled default sensibly; capabilities may be empty."""
     data = {"meta": {"name": "git-main"}, "spec": {"type": "git"}}
@@ -145,6 +153,19 @@ def test_integration_accepts_version_constraint():
     data["spec"]["version"] = ">= 1.17"
     model = IntegrationModel.model_validate(data)
     assert model.spec.version == ">= 1.17"
+
+
+def test_integration_accepts_a_terraform_style_version_constraint():
+    data = _minimal_integration()
+    data["spec"]["version"] = "~> 1.9"
+    assert IntegrationModel.model_validate(data).spec.version == "~> 1.9"
+
+
+def test_integration_rejects_an_unparseable_version_constraint():
+    data = _minimal_integration()
+    data["spec"]["version"] = "latest"
+    with pytest.raises(ValidationError, match="is not a version constraint"):
+        IntegrationModel.model_validate(data)
 
 
 def test_integration_accepts_command_override():

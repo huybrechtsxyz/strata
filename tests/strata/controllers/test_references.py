@@ -241,6 +241,8 @@ def test_workspace_references_are_discovered_from_its_own_fields():
         "spec.provisioners[].integration",
         "spec.provisioners[].gitops.remote",
         "spec.output_store_integration",
+        "spec.release_gate_policy.integration",
+        "spec.image_gate_policy.integration",
     }
 
 

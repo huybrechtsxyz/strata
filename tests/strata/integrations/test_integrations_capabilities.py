@@ -4,18 +4,25 @@
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
+import pytest
+
 from strata.integrations.base import Integration
 from strata.integrations.capabilities import (
     CAPABILITY_ABCS,
     NEW_KEY_VERSION,
     AuditSinkIntegration,
+    ConnectionCheckIntegration,
+    CredentialedIntegration,
+    ImageFindingsIntegration,
     InfraIntegration,
     KeyValueStoreIntegration,
+    ReleaseGateIntegration,
     ScannerIntegration,
     StoreIntegration,
     find_capability_mismatches,
 )
 from strata.integrations.resolved_context import KeyValueEntry, ResolvedWorkspaceGraph, ValueResolution
+from strata.integrations.security_findings import ImageLookup, ImageRef, ReleaseGateOutcome, ReleaseGateRequest
 from strata.models.common_models import SourceModel
 from strata.models.integration_model import Capability
 from strata.models.provisioning_model import ProvisionerModel
@@ -192,7 +199,8 @@ def test_no_mismatch_for_a_capability_with_no_abc_yet():
 def test_capability_abcs_covers_every_core_capability_with_a_real_consumer():
     """variables/secrets/features -> StoreIntegration; infrastructure/container ->
     InfraIntegration; audit -> AuditSinkIntegration; scanner -> ScannerIntegration;
-    key_value -> KeyValueStoreIntegration."""
+    key_value -> KeyValueStoreIntegration; release_gate -> ReleaseGateIntegration;
+    image_findings -> ImageFindingsIntegration."""
     assert CAPABILITY_ABCS == {
         "variables": StoreIntegration,
         "secrets": StoreIntegration,
@@ -202,6 +210,8 @@ def test_capability_abcs_covers_every_core_capability_with_a_real_consumer():
         "audit": AuditSinkIntegration,
         "scanner": ScannerIntegration,
         "key_value": KeyValueStoreIntegration,
+        "release_gate": ReleaseGateIntegration,
+        "image_findings": ImageFindingsIntegration,
     }
 
 
@@ -360,6 +370,105 @@ def test_no_mismatch_for_a_compliant_scanner_integration():
             pass
 
     assert find_capability_mismatches(_Compliant) == []
+
+
+# ---------------------------------------------------------------------------
+# Security gate capabilities (docs/work/security-gates-design.md D1, D2, D7)
+# ---------------------------------------------------------------------------
+
+
+class _BothGates(ReleaseGateIntegration, ImageFindingsIntegration, CredentialedIntegration, ConnectionCheckIntegration):
+    """One class serving both capabilities plus both mixins, as Aikido will."""
+
+    TYPE = "widget"
+    CAPABILITIES = frozenset({"release_gate", "image_findings"})
+    TRANSPORTS = frozenset({"http"})
+
+    def run_release_gate(self, request, *, on_poll=None):
+        return ReleaseGateOutcome(passed=True, reference=request.commit[:7])
+
+    def find_image_issues(self, image, severities):
+        return ImageLookup(status="found", platform_name=image.path)
+
+    def check_connection(self):
+        return ["ok"]
+
+
+def test_release_gate_integration_requires_run_release_gate():
+    class _Incomplete(ReleaseGateIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"release_gate"})
+        TRANSPORTS = frozenset({"http"})
+
+    import pytest
+
+    with pytest.raises(TypeError):
+        _Incomplete()  # type: ignore[abstract]
+
+
+def test_image_findings_integration_requires_find_image_issues():
+    class _Incomplete(ImageFindingsIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"image_findings"})
+        TRANSPORTS = frozenset({"http"})
+
+    import pytest
+
+    with pytest.raises(TypeError):
+        _Incomplete()  # type: ignore[abstract]
+
+
+def test_connection_check_integration_requires_check_connection():
+    class _Incomplete(ConnectionCheckIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset()
+        TRANSPORTS = frozenset({"http"})
+
+    import pytest
+
+    with pytest.raises(TypeError):
+        _Incomplete()  # type: ignore[abstract]
+
+
+def test_one_class_can_serve_both_gates_and_constructs_with_only_config():
+    """No ABC or mixin defines __init__, so the registry's `cls(config)` keeps working."""
+    integration = _BothGates(None)
+
+    request = ReleaseGateRequest(repository="org/repo", commit="a" * 40, timeout=900, poll_interval=10)
+    assert integration.run_release_gate(request).passed is True
+    image = ImageRef(service="api", registry="ghcr.io", repository="org/api", tag="1.0")
+    assert integration.find_image_issues(image, frozenset({"HIGH"})).platform_name == "ghcr.io/org/api"
+    assert integration.check_connection() == ["ok"]
+    assert find_capability_mismatches(_BothGates) == []
+
+
+def test_bind_credentials_default_is_a_no_op():
+    _BothGates(None).bind_credentials({"AIKIDO_CI_TOKEN": "value"})  # does not raise
+
+
+@pytest.mark.parametrize("capability", ["release_gate", "image_findings"])
+def test_mismatch_when_a_plain_integration_declares_a_gate_capability(capability):
+    class _Wrong(Integration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({capability})
+        TRANSPORTS = frozenset({"http"})
+
+    mismatches = find_capability_mismatches(_Wrong)
+    assert len(mismatches) == 1
+    assert capability in mismatches[0]
+
+
+def test_release_gate_alone_does_not_satisfy_image_findings():
+    class _ReleaseOnly(ReleaseGateIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"release_gate", "image_findings"})
+        TRANSPORTS = frozenset({"http"})
+
+        def run_release_gate(self, request, *, on_poll=None):
+            return ReleaseGateOutcome(passed=True)
+
+    mismatches = find_capability_mismatches(_ReleaseOnly)
+    assert mismatches == ["_ReleaseOnly declares 'image_findings' but does not implement ImageFindingsIntegration"]
 
 
 # ---------------------------------------------------------------------------

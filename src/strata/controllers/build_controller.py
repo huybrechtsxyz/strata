@@ -56,7 +56,7 @@ from strata.controllers.source_sync import (
 from strata.controllers.value_controller import (
     build_value_references,
     reachable_environments,
-    resolve_deployment,
+    resolve_deployment_workspace,
     resolve_tenant,
     resolve_values,
     resolve_version,
@@ -543,15 +543,7 @@ def build_run(
 
     index = context.controller.index
 
-    deployment = resolve_deployment(context, deployment_name, version_pin=pin)
-    if deployment.spec.workspace is None:
-        raise UsageError(f"Deployment '{deployment_name}' has no workspace to build.")
-    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-    if workspace_entry is None:
-        raise UsageError(
-            f"Deployment '{deployment_name}' names workspace '{deployment.spec.workspace}', which is not in the index."
-        )
-    workspace = cast(WorkspaceModel, workspace_entry.model)
+    deployment, workspace = resolve_deployment_workspace(context, deployment_name, version_pin=pin)
 
     environments = reachable_environments(context, deployment)
     variable_refs, feature_refs, secret_refs = build_value_references(

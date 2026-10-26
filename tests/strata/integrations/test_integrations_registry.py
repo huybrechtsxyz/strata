@@ -27,6 +27,14 @@ class _FakeEntryPoint:
         return self._target
 
 
+def test_known_types_lists_built_ins_and_installed_plugins_sorted(monkeypatch):
+    plugin = _FakeEntryPoint(name="zz-plugin", value="pkg:Cls", _target=object)
+    monkeypatch.setattr(registry, "entry_points", lambda group: [plugin])
+    types = registry.known_types()
+    assert types == sorted(types)
+    assert {"terraform", "aikido", "zz-plugin"} <= set(types) and "ansible" not in types
+
+
 def test_get_returns_an_instance_of_the_registered_class():
     instance = get("infisical")
     assert isinstance(instance, InfisicalResolver)

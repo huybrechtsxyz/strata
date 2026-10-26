@@ -21,6 +21,7 @@ strata-v2
    how-to/generate-per-instance-terraform-blocks
    how-to/migrate-v1-workspace-topology-provisioning
    how-to/sbom-generation
+   how-to/security-gates
 
 .. toctree::
    :maxdepth: 1

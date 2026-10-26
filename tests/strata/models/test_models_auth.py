@@ -110,3 +110,56 @@ def test_auth_token_mismatched_config_is_invalid():
     """method='token' with ssh_key config set (instead of token) raises a ValidationError."""
     with pytest.raises(ValidationError, match="configuration is not set"):
         AuthenticationModel.model_validate({"method": "token", "ssh_key": {"private_key": "github-deploy-key-private"}})
+
+
+# ---------------------------------------------------------------------------
+# key_references() (docs/work/security-gates-design.md D2)
+# ---------------------------------------------------------------------------
+
+
+def test_key_references_for_token_never_include_the_literal_username():
+    model = AuthenticationModel.model_validate(
+        {"method": "token", "token": {"token": "GITHUB_PAT", "username": "x-access-token"}}
+    )
+    assert model.key_references() == ("GITHUB_PAT",)
+
+
+def test_key_references_for_ssh_key_skip_unset_fields():
+    model = AuthenticationModel.model_validate(
+        {"method": "ssh_key", "ssh_key": {"private_key": "DEPLOY_KEY", "known_hosts": "GITHUB_HOSTS"}}
+    )
+    assert model.key_references() == ("DEPLOY_KEY", "GITHUB_HOSTS")
+
+
+def test_key_references_for_api_key():
+    minimal = AuthenticationModel.model_validate({"method": "api_key", "api_key": {"api_key": "AIKIDO_CI_TOKEN"}})
+    assert minimal.key_references() == ("AIKIDO_CI_TOKEN",)
+
+    full = AuthenticationModel.model_validate(
+        {
+            "method": "api_key",
+            "api_key": {"api_key": "K", "api_secret": "S", "endpoint": "E", "header_name": "H"},
+        }
+    )
+    assert full.key_references() == ("K", "S", "E", "H")
+
+
+def test_key_references_for_oauth2():
+    model = AuthenticationModel.model_validate(
+        {
+            "method": "oauth2",
+            "oauth2": {"client_id": "AIKIDO_CLIENT_ID", "client_secret": "AIKIDO_CLIENT_SECRET", "scope": "SCOPE"},
+        }
+    )
+    assert model.key_references() == ("AIKIDO_CLIENT_ID", "AIKIDO_CLIENT_SECRET", "SCOPE")
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"method": "cli", "cli": {"use_cli": True}},
+        {"method": "managed_identity", "managed_identity": {"client_id": "MI_CLIENT_ID"}},
+    ],
+)
+def test_key_references_are_empty_for_methods_without_a_consumer(data):
+    assert AuthenticationModel.model_validate(data).key_references() == ()

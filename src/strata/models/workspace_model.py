@@ -42,6 +42,7 @@ from strata.models.common_models import (
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
 from strata.models.reference_fields import References
 from strata.models.sbom_model import CveMaxSeverityPolicyModel
+from strata.models.security_gate_model import ImageGatePolicyModel, ReleaseGatePolicyModel
 from strata.utils.dependency_order import topological_order
 from strata.utils.names import check_unique_names
 
@@ -522,6 +523,17 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "terraform/bicep/ansible provisioners, or its Helm namespace modules (docs/archive/"
         "checkov-integration.md). Same placement reasoning as cve_policy — a build-phase concern, "
         "not a per-deployment one.",
+    )
+    release_gate_policy: ReleaseGatePolicyModel | None = Field(
+        None,
+        description="Gates 'deploy run' on a security platform's verdict for the solution repository at the "
+        "deployed commit (docs/work/security-gates-design.md). Runs at deploy preflight, not build: it "
+        "needs the network and resolved credentials.",
+    )
+    image_gate_policy: ImageGatePolicyModel | None = Field(
+        None,
+        description="Gates 'deploy run' on a security platform's open issues for the container images in "
+        "sbom.json (docs/work/security-gates-design.md). Runs at deploy preflight, like release_gate_policy.",
     )
 
     @model_validator(mode="after")

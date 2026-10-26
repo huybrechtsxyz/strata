@@ -7,9 +7,27 @@ from strata.utils.sbom_utils import (
     is_floating_tag,
     is_local_module_source,
     parse_image_ref,
+    split_registry,
     terraform_module_to_purl,
     terraform_provider_to_purl,
 )
+
+# ---------------------------------------------------------------------------
+# split_registry() (docs/work/security-gates-design.md D1)
+# ---------------------------------------------------------------------------
+
+
+def test_split_registry_recognises_registry_hosts():
+    assert split_registry("ghcr.io/org/app") == ("ghcr.io", "org/app")
+    assert split_registry("myregistry.azurecr.io/team/api") == ("myregistry.azurecr.io", "team/api")
+    assert split_registry("registry:5000/img") == ("registry:5000", "img")
+    assert split_registry("localhost/img") == ("localhost", "img")
+
+
+def test_split_registry_leaves_docker_hub_names_alone():
+    assert split_registry("org/app") == (None, "org/app")
+    assert split_registry("traefik") == (None, "traefik")
+
 
 # ---------------------------------------------------------------------------
 # is_floating_tag()

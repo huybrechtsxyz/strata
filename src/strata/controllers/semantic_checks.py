@@ -37,7 +37,8 @@ from referencing.exceptions import Unresolvable
 
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
-from strata.integrations.capabilities import KeyValueStoreIntegration
+from strata.integrations.base import Integration
+from strata.integrations.capabilities import ImageFindingsIntegration, KeyValueStoreIntegration, ReleaseGateIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.git_push import FETCH_METHODS, credential_keys
 from strata.integrations.helm import REGISTRY_AUTH_METHODS
@@ -139,6 +140,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_paths(index, root))
     diagnostics.extend(_check_version_workspace(index, resolved))
     diagnostics.extend(_check_dns_records(index))
+    diagnostics.extend(_check_integration_versions(index))
     return diagnostics
 
 
@@ -967,6 +969,7 @@ def _check_workspaces(index: DocumentIndex) -> Diagnostics:
         diagnostics.extend(_check_workspace_subnets(index, workspace), source=str(entry.source))
 
         diagnostics.extend(_check_workspace_key_value_store_supports_cas(index, workspace), source=str(entry.source))
+        diagnostics.extend(_check_workspace_security_gates(index, workspace), source=str(entry.source))
         if security is not None:
             diagnostics.extend(
                 _check_workspace_key_value_store_allowed(index, workspace, security), source=str(entry.source)
@@ -1050,6 +1053,92 @@ def _check_workspace_key_value_store_supports_cas(index: DocumentIndex, workspac
         location="spec.output_store",
         code="output_store_lacks_cas",
     )
+    return diagnostics
+
+
+#: Workspace gate policy field -> the capability its Integration must declare and the ABC its class must
+#: implement (docs/work/security-gates-design.md D3).
+_SECURITY_GATE_POLICIES: tuple[tuple[str, Capability, type[Integration]], ...] = (
+    ("release_gate_policy", Capability.RELEASE_GATE, ReleaseGateIntegration),
+    ("image_gate_policy", Capability.IMAGE_FINDINGS, ImageFindingsIntegration),
+)
+
+
+def _check_workspace_security_gates(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
+    """A gate policy's Integration must be enabled, declare the capability, and be of a type that implements it.
+
+    Follows both existing precedents (design D3): the declared-capability check of the remote/asset
+    `sources` checks, and the class-only `issubclass` lookup of
+    `_check_workspace_key_value_store_supports_cas` (no construction, no credentials). An unknown
+    document name is the generic reference walk's finding, and an unregistered type is reported
+    louder at deploy time, so neither is repeated here.
+    """
+    diagnostics = Diagnostics()
+    for field_name, capability, capability_abc in _SECURITY_GATE_POLICIES:
+        policy = getattr(workspace.spec, field_name)
+        if policy is None:
+            continue
+        entry = index.get(PlatformKind.INTEGRATION, policy.integration)
+        if entry is None:
+            continue
+        spec = cast(IntegrationModel, entry.model).spec
+        owner = f"Workspace '{workspace.meta.name}': {field_name} integration '{policy.integration}'"
+        location = f"spec.{field_name}.integration"
+        if not spec.enabled:
+            diagnostics.error(
+                f"{owner} is disabled (spec.enabled: false), so it cannot answer the gate.",
+                location=location,
+                code="gate_integration_capability_missing",
+            )
+            continue
+        if capability not in spec.capabilities:
+            declared = ", ".join(sorted(spec.capabilities)) or "none"
+            diagnostics.error(
+                f"{owner} does not declare the '{capability}' capability (declares: {declared}).",
+                location=location,
+                code="gate_integration_capability_missing",
+            )
+            continue
+        try:
+            integration_class = get_integration_class(spec.type)
+        except IntegrationError:
+            continue
+        if not issubclass(integration_class, capability_abc):
+            diagnostics.error(
+                f"{owner} is of type '{spec.type}', which cannot provide '{capability}' "
+                f"(it does not implement {capability_abc.__name__}).",
+                location=location,
+                code="gate_integration_type_unsupported",
+            )
+    return diagnostics
+
+
+def _check_integration_versions(index: DocumentIndex) -> Diagnostics:
+    """`spec.version` must be checkable: only a `cli` transport has an installed version to read.
+
+    docs/work/integration-readiness.md D4. Class-only lookup (no construction, no PATH); an unregistered
+    type is skipped, as `_check_workspace_security_gates` does.
+    """
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.INTEGRATION):
+        spec = cast(IntegrationModel, entry.model).spec
+        if spec.version is None:
+            continue
+        try:
+            integration_class = get_integration_class(spec.type)
+        except IntegrationError:
+            continue
+        if "cli" in integration_class.TRANSPORTS and spec.transport in (None, "cli"):
+            continue
+        transport = spec.transport or ", ".join(sorted(integration_class.TRANSPORTS))
+        diagnostics.error(
+            f"Integration '{entry.ref.name}': spec.version '{spec.version}' cannot be checked - type "
+            f"'{spec.type}' is reached over {transport}, not a local CLI whose version strata can read. "
+            "Remove spec.version.",
+            source=str(entry.source),
+            location="spec.version",
+            code="integration_version_unenforceable",
+        )
     return diagnostics
 
 

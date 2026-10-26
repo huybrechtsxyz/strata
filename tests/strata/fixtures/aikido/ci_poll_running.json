@@ -1,0 +1,8 @@
+{
+  "all_scans_completed": false,
+  "dependency_scan_completed": true,
+  "sast_scan_completed": false,
+  "iac_scan_completed": false,
+  "secrets_scan_completed": false,
+  "malware_scan_completed": false
+}
