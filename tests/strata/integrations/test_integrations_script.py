@@ -4,6 +4,7 @@
 import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -39,6 +40,13 @@ def _capture(monkeypatch):
     # across environments for a test that isn't exercising that fallback.
     monkeypatch.setattr(shutil, "which", lambda name: name)
     return captured
+
+
+def _platform(monkeypatch, os_name: str) -> None:
+    # Never patch the real os.name: pathlib (and pytest plugins) would then build PosixPath on Windows.
+    import strata.integrations.script as script_module
+
+    monkeypatch.setattr(script_module, "os", SimpleNamespace(name=os_name))
 
 
 def _bound(file: str, args: list[str] | None = None) -> ScriptIntegration:
@@ -90,28 +98,22 @@ def test_interpreter_argv_sh_falls_back_to_git_bash_on_windows(monkeypatch):
     2026-10-14) — Git for Windows' installer frequently does not add
     Git\\bin to PATH, confirmed on this repo's own dev machine
     (bash.exe exists on disk, shutil.which('bash') found neither)."""
-    import strata.integrations.script as script_module
-
     monkeypatch.setattr(shutil, "which", lambda name: None)
-    monkeypatch.setattr(script_module.os, "name", "nt")
+    _platform(monkeypatch, "nt")
     monkeypatch.setattr(Path, "exists", lambda self: str(self) == r"C:\Program Files\Git\bin\bash.exe")
 
     assert _interpreter_argv(".sh", Path("deploy.sh")) == [r"C:\Program Files\Git\bin\bash.exe", "deploy.sh"]
 
 
 def test_interpreter_argv_sh_falls_back_to_bash_literal_when_nothing_resolves(monkeypatch):
-    import strata.integrations.script as script_module
-
     monkeypatch.setattr(shutil, "which", lambda name: None)
-    monkeypatch.setattr(script_module.os, "name", "posix")  # no Windows fallback paths checked
+    _platform(monkeypatch, "posix")  # no Windows fallback paths checked
     assert _interpreter_argv(".sh", Path("deploy.sh")) == ["bash", "deploy.sh"]
 
 
 def test_interpreter_argv_sh_falls_back_to_bash_literal_on_windows_with_no_git_install(monkeypatch):
-    import strata.integrations.script as script_module
-
     monkeypatch.setattr(shutil, "which", lambda name: None)
-    monkeypatch.setattr(script_module.os, "name", "nt")
+    _platform(monkeypatch, "nt")
     monkeypatch.setattr(Path, "exists", lambda self: False)
     assert _interpreter_argv(".sh", Path("deploy.sh")) == ["bash", "deploy.sh"]
 
@@ -197,9 +199,7 @@ def test_is_available_false_when_the_interpreter_does_not_resolve(monkeypatch):
 @pytest.mark.parametrize("os_name,expected", [("nt", True), ("posix", False)])
 def test_is_available_bat_checks_the_platform_not_path(monkeypatch, os_name, expected):
     """.bat has no PATH lookup - cmd.exe associates it natively, Windows-only."""
-    import strata.integrations.script as script_module
-
-    monkeypatch.setattr(script_module.os, "name", os_name)
+    _platform(monkeypatch, os_name)
     assert _bound("deploy.bat").is_available() is expected
 
 
