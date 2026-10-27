@@ -43,7 +43,8 @@ parameters.
 - `spec.default_tags` — default cloud tags for resources created by this workspace
 - `spec.cve_policy` — fail `build run` when the SBOM's CVE findings at or above `max_severity`
   exceed `max_count` (scanned with Trivy or Grype)
-- `spec.checkov_policy` — fail `build run` on Checkov findings at or above `severity_gate`
+- `spec.checkov_policy` — fail `build run` on Checkov findings at or above `severity_gate`; a
+  finding with no severity (open-source Checkov reports none) always counts
 - `spec.release_gate_policy` — at deploy, ask a `release_gate` [integration](integration.md) for its
   verdict on `repository` at the deployed commit
 - `spec.image_gate_policy` — at deploy, count an `image_findings` integration's open issues for every

@@ -383,7 +383,7 @@ def _checkov_solution(tmp_path: Path, enforcement: str = "deny") -> Path:
         ("deny", [], EXIT_SUCCESS),
         ("deny", ["HIGH"], EXIT_VALIDATION),
         ("warn", ["HIGH"], EXIT_SUCCESS),
-        ("deny", ["UNKNOWN"], EXIT_SUCCESS),
+        ("deny", ["UNKNOWN"], EXIT_VALIDATION),
     ],
 )
 def test_check_checkov_exit_codes(tmp_path, gate, checkov, enforcement, severities, exit_code):
@@ -402,7 +402,7 @@ def test_findings_checkov_console_marks_unrated(tmp_path, gate, checkov):
     assert "terraform, scanned with checkov 3.3.16, severities CRITICAL, HIGH" in result.output
     assert "provisioner 'tf_main': 1 finding(s), 1 unrated" in result.output
     assert "HIGH     CKV_0 aws_s3_bucket.b0 at /main.tf:1\n" in result.output
-    assert "CKV_1 aws_s3_bucket.b1 at /main.tf:2 [unrated, never counted]" in result.output
+    assert "CKV_1 aws_s3_bucket.b1 at /main.tf:2 [unrated]" in result.output
 
 
 def test_findings_checkov_json_shape(tmp_path, gate, checkov):

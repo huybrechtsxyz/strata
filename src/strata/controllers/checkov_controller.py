@@ -145,20 +145,30 @@ def evaluate_checkov_policy(
             _report_missing_data(diagnostics, policy.on_missing_data, str(exc), scope=target.label)
             continue
 
-        breaching = result.findings_at_or_above(policy.severity_gate.upper())
-        if breaching:
+        rated = result.findings_at_or_above(policy.severity_gate.upper())
+        unrated = [finding for finding in result.findings if _is_unrated(finding)]
+        if rated or unrated:
+            note = f", {len(unrated)} of them unrated" if unrated else ""
             severity(
-                f"checkov_policy: {target.label} has {len(breaching)} finding(s) at or above "
-                f"severity '{policy.severity_gate}' \u2014 scanned with checkov {result.scanner_version}.",
+                f"checkov_policy: {target.label} has {len(rated) + len(unrated)} finding(s) at or above "
+                f"severity '{policy.severity_gate}'{note} \u2014 scanned with checkov {result.scanner_version}.",
                 code="checkov_policy_violation",
             )
     return diagnostics
 
 
+def _is_unrated(finding: CheckovFindingModel) -> bool:
+    """No usable severity (open-source Checkov reports `null`): counted at any `severity_gate` (plan P9b)."""
+    return finding.severity not in _RATED
+
+
+_RATED = CHECKOV_SEVERITY_ORDER[:-1]
+
+
 @dataclass(frozen=True)
 class CheckovFinding:
     finding: CheckovFindingModel
-    #: No severity (open-source Checkov without an API key): never counted by `severity_gate` (plan P9-7).
+    #: No severity (open-source Checkov without an API key); always listed and counted (plan P9b).
     unrated: bool
 
 
@@ -220,9 +230,9 @@ def checkov_findings(
             raise SystemError(f"checkov_policy: {target.label}: {exc}") from None
         version = result.scanner_version
         findings = tuple(
-            CheckovFinding(finding, unrated=finding.severity not in rated)
+            CheckovFinding(finding, unrated=_is_unrated(finding))
             for finding in result.findings
-            if finding.severity not in rated or finding.severity in severities
+            if _is_unrated(finding) or finding.severity in severities
         )
         rows.append(CheckovTargetFindings(target.label, target.path, None, findings))
     return CheckovFindingsReport(version, policy.framework, severities, tuple(rows), nothing)

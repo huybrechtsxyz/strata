@@ -4,6 +4,8 @@ checkov-integration.md Phase 2/3)."""
 
 from pathlib import Path
 
+import pytest
+
 from strata.controllers.checkov_controller import evaluate_checkov_policy
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.integrations.errors import IntegrationError
@@ -162,6 +164,52 @@ def test_evaluate_checkov_policy_warns_instead_of_erroring_when_enforcement_is_w
 
     assert diagnostics.ok  # warnings don't fail Diagnostics.ok
     assert len(diagnostics.warnings) == 1
+
+
+# ---------------------------------------------------------------------------
+# Unrated findings count (security-gates plan Phase 9b)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("enforcement", "errors", "warnings"), [("deny", 1, 0), ("warn", 0, 1)])
+def test_an_unrated_finding_breaches_even_the_critical_gate(tmp_path: Path, monkeypatch, enforcement, errors, warnings):
+    _patch_scanner(monkeypatch, _FakeScanner(result=_scan_result("UNKNOWN")))
+    workspace = _workspace(
+        {"severity_gate": "critical", "enforcement": enforcement}, execution=[_step("apply_infra", "tf_main")]
+    )
+
+    diagnostics = evaluate_checkov_policy(tmp_path, workspace, {"tf_main": tmp_path / "infra"})
+
+    assert (len(diagnostics.errors), len(diagnostics.warnings)) == (errors, warnings)
+    assert "has 1 finding(s) at or above severity 'critical', 1 of them unrated" in diagnostics.items[0].message
+
+
+def test_an_unrecognised_severity_counts_as_unrated(tmp_path: Path, monkeypatch):
+    _patch_scanner(monkeypatch, _FakeScanner(result=_scan_result("INFO")))
+    workspace = _workspace({"severity_gate": "high"}, execution=[_step("apply_infra", "tf_main")])
+
+    diagnostics = evaluate_checkov_policy(tmp_path, workspace, {"tf_main": tmp_path / "infra"})
+
+    assert [d.code for d in diagnostics.errors] == ["checkov_policy_violation"]
+
+
+def test_rated_and_unrated_breaches_are_counted_together(tmp_path: Path, monkeypatch):
+    _patch_scanner(monkeypatch, _FakeScanner(result=_scan_result("CRITICAL", "LOW", "UNKNOWN", "UNKNOWN")))
+    workspace = _workspace({"severity_gate": "high"}, execution=[_step("apply_infra", "tf_main")])
+
+    diagnostics = evaluate_checkov_policy(tmp_path, workspace, {"tf_main": tmp_path / "infra"})
+
+    [error] = diagnostics.errors
+    assert "has 3 finding(s) at or above severity 'high', 2 of them unrated" in error.message
+
+
+def test_a_rated_only_breach_keeps_the_original_message(tmp_path: Path, monkeypatch):
+    _patch_scanner(monkeypatch, _FakeScanner(result=_scan_result("CRITICAL")))
+    workspace = _workspace({"severity_gate": "high"}, execution=[_step("apply_infra", "tf_main")])
+
+    diagnostics = evaluate_checkov_policy(tmp_path, workspace, {"tf_main": tmp_path / "infra"})
+
+    assert "has 1 finding(s) at or above severity 'high' \u2014 scanned" in diagnostics.errors[0].message
 
 
 # ---------------------------------------------------------------------------

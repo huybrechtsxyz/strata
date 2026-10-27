@@ -200,8 +200,8 @@ Implementation phases (detail in
 - [ ] **Phase 7** - first contact with a real Aikido workspace; resolves every [U] in the Aikido
       reference.
 - [x] **Phase 8** - follow-on: `cve_policy` joins `strata policy check` / `findings`. Done 2026-10-27.
-- [x] **Phase 9** - follow-on: `checkov_policy` joins them. Done 2026-10-27; open: P9-7, the
-      `UNKNOWN` severity gap (open-source Checkov never breaches the gate).
+- [x] **Phase 9** - follow-on: `checkov_policy` joins them. Done 2026-10-27; Phase 9b (unrated
+      Checkov findings count, P9-7 option b) done the same day.
 - [ ] **Phase 10** - follow-on: a future `opa_policy` (design first, only on real consumer demand).
 - [x] Record the decision as an ADR: ADR-0047 (capabilities), ADR-0048 (credentials), ADR-0049
       (`strata policy`). Done 2026-10-27.
@@ -225,6 +225,10 @@ Still open, outside the design:
 - **Release timing:** the design targets strata 2.x after 2.0.0; schedule against the RC trial.
 
 ## Changelog
+
+- 2026-10-27: Phase 9b built (P9-7, option b): a Checkov finding with no severity counts against
+  `checkov_policy` at any `severity_gate`. Breaking for open-source Checkov users with failed
+  checks under `deny`; CVE and image gates unchanged.
 
 - 2026-10-27: Phase 9 built: `checkov_policy` in `strata policy check` (default included,
   `phase: "build"`) and `policy findings --policy checkov_policy` (per target, unrated findings

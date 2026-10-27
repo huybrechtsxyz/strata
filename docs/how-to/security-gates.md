@@ -147,6 +147,7 @@ scanner is available or the scan fails.
   same scanner, allowlist and `on_missing_data` as `strata build run`, and its result replaces the
   build's entry in `policy_results.json`. `checkov_policy` is checked the same way against the
   rendered sources in the build path; `.terraform/` left by a deploy is not scanned.
-- Open-source Checkov (no API key) reports no severity, and `checkov_policy` never counts a finding
-  without one, so its gate does not fail on those. `strata policy findings --policy checkov_policy`
-  lists them marked `[unrated, never counted]`.
+- Open-source Checkov (no API key) reports no severity. `checkov_policy` counts such an unrated
+  failed check at any `severity_gate`, so a `deny` policy fails on it; use `enforcement: warn`,
+  `skip_checks` or `include_checks` to relax it. `strata policy findings --policy checkov_policy`
+  marks them `[unrated]`.

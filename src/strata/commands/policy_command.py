@@ -301,7 +301,7 @@ def _print_checkov_findings(report: CheckovFindingsReport) -> None:
             finding = item.finding
             lines = finding.file_line_range or []
             where = f"{finding.file_path}:{lines[0]}" if lines else finding.file_path
-            marker = " [unrated, never counted]" if item.unrated else ""
+            marker = " [unrated]" if item.unrated else ""
             click.echo(f"      {finding.severity:<8} {finding.check_id} {finding.resource} at {where}{marker}")
         if len(target.findings) > _CONSOLE_ISSUES:
             click.echo(f"      ... {len(target.findings) - _CONSOLE_ISSUES} more (--output json lists all)")

@@ -621,7 +621,8 @@ Phase 8.
 **Done when** `strata policy check --policy checkov_policy` reproduces the `build run` verdict from a
 build path alone.
 
-**Done (2026-10-27).** As designed (P9-1 to P9-6); P9-7 (the `UNKNOWN` fix) is still open.
+**Done (2026-10-27).** As designed (P9-1 to P9-6); P9-7 decided as option (b), built as Phase 9b
+below.
 Refinements:
 - The evaluator's target resolution is extracted into `_targets()`, which the gate and
   `checkov_findings()` share, so they cannot disagree on what is in scope. The 119 existing
@@ -636,6 +637,43 @@ Refinements:
 - A CLI test pins the gap: a `deny` policy with only `UNKNOWN` findings exits 0.
 - Eight mutants: seven killed at first. The survivor (a source-less step's
   `build_path / step.name`) now has its own test.
+
+### Phase 9b - Unrated Checkov findings count (P9-7, option b)
+
+**Decision (2026-10-27): option (b).** A failed check with no severity counts against the
+`checkov_policy` gate, at any `severity_gate`. No new field.
+
+- **P9b-1 - Why (b), not (a).** Under (a), the gate stays silent until someone sets a field they
+  don't know exists, so "never scanned" and "scanned clean" keep looking the same. That is the
+  risk `on_missing_data` exists to prevent. A failed check is a failed check: if Checkov cannot
+  rate it, it cannot be rated below the gate either.
+- **P9b-2 - Scope: Checkov only.** CVE `UNKNOWN` (Trivy/Grype) is a severity the vendor actually
+  assigned ("not yet rated" in the CVE database), and the image gate's `UNKNOWN` maps Aikido
+  values strata does not recognise. Both stay uncounted (`cve_policy` already exposes
+  `severity_threshold: UNKNOWN` for that case). Checkov's `UNKNOWN` instead means "no severity
+  data at all" (`severity: null`, open-source Checkov).
+- **P9b-3 - Where.** `checkov_controller`: unrated = severity outside
+  `CRITICAL..LOW` (`null`, `UNKNOWN`, or a value strata does not recognise, matching
+  `findings_at_or_above()`'s own mapping). Breaching = `findings_at_or_above(gate)` + unrated.
+  `CheckovScanResultModel.findings_at_or_above()` is unchanged: it stays a pure severity filter,
+  with its own tests.
+- **P9b-4 - Message.** Unchanged when every breach is rated; otherwise it adds
+  `, N of them unrated`, so a user can see why a `severity_gate: critical` policy failed.
+- **P9b-5 - Breaking, by intent.** A build or `policy check` that passed with open-source
+  Checkov and failed checks now fails under `enforcement: deny`. Ways out, all existing:
+  `enforcement: warn`, `skip_checks` / `include_checks`, or fixing the findings. CHANGELOG
+  "Changed" entry; the how-to says so.
+- **P9b-6 - `policy findings`.** Unrated findings are still always listed; the marker becomes
+  `[unrated]` (they are counted now). The JSON `unrated` flag is unchanged.
+
+**Tests**: `evaluate_checkov_policy()` with only `UNKNOWN` (deny -> error, warn -> warning), an
+unrecognised severity string counted, the mixed message, `severity_gate: critical` still failing
+on unrated; `build run` fails on an unrated finding; the CLI case pinned in Phase 9
+(`deny` + `UNKNOWN` -> exit 0) flips to exit 3; CVE and image gates unchanged (existing tests).
+
+**Done (2026-10-27).** As designed. Six new tests (checkov controller, `build run`), the Phase 9
+CLI pin flipped to exit 3; three mutants (no unrated counting, no message note, only the literal
+`UNKNOWN` treated as unrated), all killed. P9-7 is closed.
 
 ---
 

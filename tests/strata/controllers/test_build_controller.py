@@ -1767,6 +1767,18 @@ def _checkov_result(*severities: str) -> CheckovScanResultModel:
     )
 
 
+def test_build_run_fails_on_an_unrated_checkov_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Security-gates plan Phase 9b: open-source Checkov reports no severity, and that still counts."""
+    _patch_checkov_scanner(monkeypatch, _checkov_result("UNKNOWN"))
+    root = _minimal_solution(
+        tmp_path, checkov_policy_yaml="  checkov_policy:\n    severity_gate: critical\n    enforcement: deny\n"
+    )
+
+    diagnostics = build_run(_context(root), "app", tmp_path / "build")
+
+    assert [d.code for d in diagnostics.errors] == ["checkov_policy_violation"]
+
+
 def test_build_run_writes_policy_results_when_checkov_policy_breaches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _patch_checkov_scanner(monkeypatch, _checkov_result("CRITICAL"))
     root = _minimal_solution(
