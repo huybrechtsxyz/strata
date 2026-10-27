@@ -330,6 +330,12 @@ its evaluator and one table row; `list`, `check` and the audit record then work 
 **Scope this iteration (kept small):** `policy check` evaluates the two gate policies only, and
 `policy findings` supports the image gate only. Each other policy joins in its own later phase of
 the implementation plan (`cve_policy`, `checkov_policy`, then a future `opa_policy`).
+`cve_policy` joined both in Phase 8 (2026-10-27): `check` includes it by default and records it
+with `phase: "build"`; `findings` lists each CVE with allowlisted ones marked, `--severity`
+defaulting to `severity_threshold`, else `max_severity`.
+`checkov_policy` joined both in Phase 9 (2026-10-27): the rendered source paths are re-derived
+from the model (no build-output change); `findings` lists failed checks per provisioner or Helm
+module, marking findings without a severity, which the gate never counts (plan P9-7).
 
 | Command                                                                                     | Purpose                                                                                                                                                                                                                                                                                                                                                                                                  | Exit                                                                                                                                                                                           |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -128,6 +128,12 @@ def describe_source(source: SourceModel) -> str:
     return f"{remote}source_path '{source.source_path}'"
 
 
+def source_destination(build_path: Path, source: SourceModel) -> Path:
+    """Where `sync_source()` copies `source`: a pure function of the model (security-gates plan P9-1)."""
+    assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
+    return build_path / (source.target_path or source.source_path)
+
+
 def sync_source(
     root: Path,
     build_path: Path,
@@ -180,7 +186,7 @@ def sync_source(
     )
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
     origin = repo_root / source.source_path
-    destination = build_path / (source.target_path or source.source_path)
+    destination = source_destination(build_path, source)
 
     # `source_path`/`target_path` are already validated as relative at the model layer, so
     # this only catches what a string check cannot: a symlink inside the repo pointing out

@@ -85,7 +85,7 @@ class SecurityGateEvaluation:
         return combined
 
     def policy_results(self, workspace: WorkspaceModel) -> list[ManifestPolicyResultModel]:
-        """One entry per evaluated gate, shaped like `build_controller._cve_policy_result()`."""
+        """One entry per evaluated gate, shaped like `policy_results.cve_policy_result()`."""
         results = []
         gates: tuple[tuple[str, Diagnostics | None, ReleaseGatePolicyModel | ImageGatePolicyModel | None], ...] = (
             ("release_gate_policy", self.release, workspace.spec.release_gate_policy),

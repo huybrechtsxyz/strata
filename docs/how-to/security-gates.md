@@ -122,8 +122,10 @@ strata integration check aikido-ci --deployment prd-app      # 0 ok, 1 unreachab
 strata integration check aikido-api --deployment prd-app
 strata build run prd-app                                     # writes sbom.json
 strata policy list prd-app                                   # what is configured, last results
-strata policy check prd-app                                  # both gates, exactly as deploy runs them
+strata policy check prd-app                                  # every build and deploy policy, as build/deploy run them
 strata policy findings prd-app --policy image_gate_policy    # per image, allowlisted issues marked
+strata policy findings prd-app --policy cve_policy           # per CVE in sbom.json, allowlisted ones marked
+strata policy findings prd-app --policy checkov_policy       # per provisioner/Helm module, failed checks
 ```
 
 `strata policy check` exits 0 on pass (a `warn` breach included), 3 on a `deny` breach or missing
@@ -132,12 +134,19 @@ data under `block`, and 2 when there is nothing to check. Its results are append
 
 `strata policy findings --integration aikido-api` works before `image_gate_policy` is configured,
 so you can see what the gate would count before adopting it. `--severity` lowers or raises the
-threshold for the listing only.
+threshold for the listing only; for `cve_policy` it defaults to `severity_threshold`, else
+`max_severity`. `policy findings --policy cve_policy` exits 2 without `sbom.json` and 1 when no
+scanner is available or the scan fails.
 
 ## Notes
 
 - `strata deploy run --smoke-test` only reports that the gates would run; `--dry-run` runs them.
 - Credential values are added to the deploy's redaction set and never appear in diagnostics,
   `policy_results.json` or streamed output.
-- `cve_policy` and `checkov_policy` still run only in `strata build run`; `strata policy list` shows
-  them, but `strata policy check` does not evaluate them yet.
+- `cve_policy` is checked by `strata policy check` against the build path's `sbom.json`, with the
+  same scanner, allowlist and `on_missing_data` as `strata build run`, and its result replaces the
+  build's entry in `policy_results.json`. `checkov_policy` is checked the same way against the
+  rendered sources in the build path; `.terraform/` left by a deploy is not scanned.
+- Open-source Checkov (no API key) reports no severity, and `checkov_policy` never counts a finding
+  without one, so its gate does not fail on those. `strata policy findings --policy checkov_policy`
+  lists them marked `[unrated, never counted]`.

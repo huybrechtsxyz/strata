@@ -41,6 +41,8 @@ import yaml
 from strata.controllers.checkov_controller import evaluate_checkov_policy
 from strata.controllers.integration_readiness import integration_preflight
 from strata.controllers.integration_resolution import find_provisioner, resolve_integration
+from strata.controllers.policy_results import checkov_policy_result as build_checkov_policy_result
+from strata.controllers.policy_results import cve_policy_result as build_cve_policy_result
 from strata.controllers.policy_results import write_policy_results
 from strata.controllers.remote_credentials import RemoteCredentialResolver
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
@@ -51,6 +53,7 @@ from strata.controllers.source_sync import (
     SourceSyncError,
     describe_source,
     resolved_asset_info,
+    source_destination,
     sync_asset,
     sync_source,
 )
@@ -72,7 +75,6 @@ from strata.integrations.resolved_context import (
     ValueResolution,
 )
 from strata.models.asset_model import AssetModel
-from strata.models.audit_manifest_model import ManifestPolicyResultModel
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
@@ -94,7 +96,7 @@ from strata.services.environment_service import (
 from strata.services.version_service import VersionService
 from strata.services.workspace_service import effective_assets, effective_providers
 from strata.utils.dependency_order import topological_order
-from strata.utils.diagnostics import Diagnostics, Severity
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import SystemError, UsageError
 
@@ -185,6 +187,11 @@ def _lookup_provider_slots(
     return result
 
 
+def workspace_namespaces(index: DocumentIndex, workspace: WorkspaceModel) -> dict[str, NamespaceModel]:
+    """`{name: namespace}` for `workspace.spec.namespaces`, as `ResolvedWorkspaceGraph.namespaces` holds them."""
+    return cast(dict[str, NamespaceModel], _lookup_all(index, PlatformKind.NAMESPACE, workspace.spec.namespaces))
+
+
 def build_resolved_workspace_graph(
     index: DocumentIndex,
     workspace: WorkspaceModel,
@@ -209,7 +216,7 @@ def build_resolved_workspace_graph(
     itself already provides.
     """
     resource_names = [wr.resource for wr in (workspace.spec.resources or []) if wr.resource is not None]
-    namespaces = cast(dict[str, NamespaceModel], _lookup_all(index, PlatformKind.NAMESPACE, workspace.spec.namespaces))
+    namespaces = workspace_namespaces(index, workspace)
     # Module names come from every resolved namespace's own spec.modules
     # (docs/design/unified-terraform-projection.md Phase 1) — `namespaces`
     # must be resolved first, not from workspace.spec.namespaces directly,
@@ -429,6 +436,35 @@ def materialise_provisioner_sources(
                 on_step(f"materialised provisioner '{provisioner.name}' source at {source_path} (dependency)")
     materialised[provisioner.name] = source_path
     return source_path
+
+
+def expected_source_paths(build_path: Path, workspace: WorkspaceModel) -> dict[str, Path | None]:
+    """The `materialised` mapping `build_run()` builds, re-derived from the model (security-gates plan P9-1).
+
+    Same reach (every execution step's provisioner plus its `depends_on` closure) and the same
+    destinations; a path not on disk maps to `None`, i.e. "not materialised during this build".
+    """
+    paths: dict[str, Path | None] = {}
+
+    def reach(provisioner: ProvisionerModel) -> None:
+        if provisioner.name in paths:
+            return
+        for dep_name in provisioner.depends_on or []:
+            reach(find_provisioner(workspace, dep_name))
+        paths[provisioner.name] = (
+            source_destination(build_path, provisioner.source) if provisioner.source is not None else None
+        )
+
+    for step in ordered_by_depends_on(workspace.spec.execution or []):
+        provisioner = find_provisioner(workspace, step.provisioner)
+        for dep_name in provisioner.depends_on or []:
+            reach(find_provisioner(workspace, dep_name))
+        paths[provisioner.name] = (
+            source_destination(build_path, provisioner.source)
+            if provisioner.source is not None
+            else build_path / step.name
+        )
+    return {name: path if path is not None and path.exists() else None for name, path in paths.items()}
 
 
 def build_run(
@@ -767,14 +803,14 @@ def build_run(
         #
         # `evaluate_cve_policy()`'s own, unmerged Diagnostics is captured
         # here (not immediately folded into the shared `diagnostics`
-        # accumulator) so `_cve_policy_result()` can build a
+        # accumulator) so `policy_results.cve_policy_result()` can build a
         # ManifestPolicyResultModel from exactly this policy's own
         # findings, not build_run()'s full, mixed accumulation
         # (docs/work/audit-trail.md's "DeploymentManifestModel.
         # policy_results population" design).
         cve_diagnostics = evaluate_cve_policy(build_path, graph.workspace, index)
         diagnostics.extend(cve_diagnostics)
-        cve_policy_result = _cve_policy_result(graph.workspace, cve_diagnostics)
+        cve_policy_result = build_cve_policy_result(graph.workspace, cve_diagnostics)
 
         # Checkov policy gate (docs/archive/checkov-integration.md Phase 2/3) —
         # same placement/capture-then-extend pattern as the CVE gate just
@@ -787,7 +823,7 @@ def build_run(
             build_path, graph.workspace, materialised, namespaces=graph.namespaces, index=index
         )
         diagnostics.extend(checkov_diagnostics)
-        checkov_policy_result = _checkov_policy_result(graph.workspace, checkov_diagnostics)
+        checkov_policy_result = build_checkov_policy_result(graph.workspace, checkov_diagnostics)
 
         # Both results are written together, not via two separate calls —
         # write_policy_results() overwrites the whole file each call, so a
@@ -801,49 +837,3 @@ def build_run(
         _step(f"would write {build_path / 'sbom.json'}")
 
     return diagnostics
-
-
-def _cve_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> ManifestPolicyResultModel | None:
-    """Build the `cve_policy` entry for `policy_results.json`, or `None`
-    when the policy is unset (docs/work/audit-trail.md's own design).
-
-    `passed` is strictly `diagnostics.ok` (no errors) — an
-    `enforcement: warn` breach still reports `passed=True` here, since the
-    build itself wasn't blocked. `violations` folds in both error and
-    warning messages, not errors only, so a warn-mode breach's finding
-    isn't silently discarded from the audit record. `policy_name` falls
-    back to the field name itself (`"cve_policy"`) — v2's bespoke,
-    single-field policies (unlike v1's named `policies:` list) have no
-    operator-assigned name to record.
-    """
-    policy = workspace.spec.cve_policy
-    if policy is None:
-        return None
-    violations = diagnostics.messages(Severity.ERROR) + diagnostics.messages(Severity.WARNING)
-    return ManifestPolicyResultModel(
-        policy_name="cve_policy",
-        policy_type="cve_max_severity",
-        phase="build",
-        enforcement=policy.enforcement,
-        passed=diagnostics.ok,
-        violations=violations,
-    )
-
-
-def _checkov_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> ManifestPolicyResultModel | None:
-    """Build the `checkov_policy` entry for `policy_results.json`, or
-    `None` when the policy is unset — mirrors `_cve_policy_result()`
-    exactly (docs/archive/checkov-integration.md Phase 2).
-    """
-    policy = workspace.spec.checkov_policy
-    if policy is None:
-        return None
-    violations = diagnostics.messages(Severity.ERROR) + diagnostics.messages(Severity.WARNING)
-    return ManifestPolicyResultModel(
-        policy_name="checkov_policy",
-        policy_type="checkov",
-        phase="build",
-        enforcement=policy.enforcement,
-        passed=diagnostics.ok,
-        violations=violations,
-    )

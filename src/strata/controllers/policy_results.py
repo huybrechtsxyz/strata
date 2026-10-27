@@ -17,11 +17,48 @@ import json
 from pathlib import Path
 
 from strata.models.audit_manifest_model import ManifestPolicyResultModel
+from strata.models.workspace_model import WorkspaceModel
+from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.errors import SystemError
 
 #: Public — both `build_controller.py` (writes) and `audit_run.py` (reads)
 #: must agree on this exact filename.
 POLICY_RESULTS_FILENAME = "policy_results.json"
+
+
+def cve_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> ManifestPolicyResultModel | None:
+    """The `cve_policy` entry for `policy_results.json`, or `None` when the policy is unset.
+
+    Shared by `build run` and `strata policy check` (security-gates plan Phase 8, P8-1). `passed` is
+    `diagnostics.ok`, so a `warn` breach passes; `violations` keeps errors and warnings alike, so a
+    warn-mode breach is still recorded. v2's single-field policies have no operator-given name, so
+    the field name is the `policy_name`.
+    """
+    policy = workspace.spec.cve_policy
+    if policy is None:
+        return None
+    return _build_phase_result("cve_policy", "cve_max_severity", policy.enforcement, diagnostics)
+
+
+def checkov_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> ManifestPolicyResultModel | None:
+    """The `checkov_policy` entry for `policy_results.json`, or `None` when unset (as `cve_policy_result()`)."""
+    policy = workspace.spec.checkov_policy
+    if policy is None:
+        return None
+    return _build_phase_result("checkov_policy", "checkov", policy.enforcement, diagnostics)
+
+
+def _build_phase_result(
+    name: str, policy_type: str, enforcement: str, diagnostics: Diagnostics
+) -> ManifestPolicyResultModel:
+    return ManifestPolicyResultModel(
+        policy_name=name,
+        policy_type=policy_type,
+        phase="build",
+        enforcement=enforcement,
+        passed=diagnostics.ok,
+        violations=diagnostics.messages(Severity.ERROR) + diagnostics.messages(Severity.WARNING),
+    )
 
 
 def write_policy_results(build_path: Path, results: list[ManifestPolicyResultModel]) -> None:

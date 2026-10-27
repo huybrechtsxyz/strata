@@ -199,9 +199,9 @@ Implementation phases (detail in
       user docs, agent skill command table. Done 2026-10-26.
 - [ ] **Phase 7** - first contact with a real Aikido workspace; resolves every [U] in the Aikido
       reference.
-- [ ] **Phase 8** - follow-on: `cve_policy` joins `strata policy check` / `findings`.
-- [ ] **Phase 9** - follow-on: `checkov_policy` joins them (design first: a standalone check needs the
-      rendered source paths `build run` only holds in memory).
+- [x] **Phase 8** - follow-on: `cve_policy` joins `strata policy check` / `findings`. Done 2026-10-27.
+- [x] **Phase 9** - follow-on: `checkov_policy` joins them. Done 2026-10-27; open: P9-7, the
+      `UNKNOWN` severity gap (open-source Checkov never breaches the gate).
 - [ ] **Phase 10** - follow-on: a future `opa_policy` (design first, only on real consumer demand).
 - [x] Record the decision as an ADR: ADR-0047 (capabilities), ADR-0048 (credentials), ADR-0049
       (`strata policy`). Done 2026-10-27.
@@ -225,6 +225,22 @@ Still open, outside the design:
 - **Release timing:** the design targets strata 2.x after 2.0.0; schedule against the RC trial.
 
 ## Changelog
+
+- 2026-10-27: Phase 9 built: `checkov_policy` in `strata policy check` (default included,
+  `phase: "build"`) and `policy findings --policy checkov_policy` (per target, unrated findings
+  marked). Source paths are re-derived by `expected_source_paths()`; a test checks they match
+  `build run`'s across five source shapes. P9-7 still open.
+
+- 2026-10-27: Phase 9 designed (implementation plan P9-1 to P9-7). A standalone check
+  re-derives the rendered source paths from the model, with no change to the build output.
+  Verified with checkov 3.3.16: `.terraform/` is skipped, and without an API key every severity
+  is null, so the current gate never breaches with open-source Checkov. That fix is a separate
+  decision (P9-7).
+
+- 2026-10-27: Phase 8 built: `cve_policy` in `strata policy check` (default included, recorded as
+  `phase: "build"`, same verdict as `build run`) and `policy findings --policy cve_policy`
+  (allowlisted findings marked); result builders shared in `policy_results.py`; `policy list` names
+  the declared scanner. See the implementation plan's Phase 8 design P8-1 to P8-6.
 
 - 2026-10-26: Code review fixes: `integration check` no longer accepts a CI token on 429/5xx;
   unresolved credential errors carry the value pipeline's reason; the image gate no longer reports

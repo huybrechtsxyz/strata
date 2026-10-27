@@ -455,6 +455,30 @@ and simplify code where a fallback proves unnecessary (keep defensive parsing).
 The CVE gate already runs in `build run` (`sbom_controller.evaluate_cve_policy(build_path,
 workspace, index)`) and needs only what the build path holds (`sbom.json`) plus Trivy or Grype.
 
+**Design (2026-10-27).** Verified first: `evaluate_cve_policy()` reads only `build_path` and the
+index (scanner choice included, integration-readiness Phases 6-7), so it runs unchanged outside
+`build run`; the result builder `build_controller._cve_policy_result()` is private; `_apply_allowlist()`
+drops suppressed findings, so nothing can show them; `policy findings` is hard-wired to
+`ImageFindingsReport`.
+
+- **P8-1 - Same evaluation, same record.** `policy check` calls `evaluate_cve_policy()` unchanged
+  and records the entry `build run` records: `phase: "build"` (it judges build output), replacing
+  the build entry. `_cve_policy_result()`/`_checkov_policy_result()` move to `policy_results.py` as
+  public `cve_policy_result()`/`checkov_policy_result()`, used by both.
+- **P8-2 - Included by default.** A plain `policy check <deployment>` evaluates `cve_policy` too
+  when configured; a missing scanner follows the policy's `on_missing_data`, as in `build run`.
+- **P8-3 - One allowlist rule.** `sbom_controller` splits it into `active_allowlist()` and
+  `is_allowlisted()`; the gate drops, the new read-only `cve_findings()` marks. The verdict cannot
+  change.
+- **P8-4 - Findings per row.** Each table row carries an optional findings function returning its
+  own report (`ImageFindingsReport`, new `CveFindingsReport`); the command renders by type.
+  `--severity` for `cve_policy` defaults to `severity_threshold`, else `max_severity`;
+  `--integration` is only valid for `image_gate_policy` (usage error otherwise).
+- **P8-5 - `policy findings --policy cve_policy` errors.** No `sbom.json`: exit 2 (as the image
+  gate); scanner missing or the scan failing: exit 1 (an environment problem, not a verdict).
+- **P8-6 - `policy list`** names the declared scanner (`trivy 'name'` / `grype 'name'`), else
+  `trivy/grype (PATH)`.
+
 **Files**: `controllers/policy_controller.py` (row gains check and findings functions),
 `controllers/sbom_controller.py` (a read-only `cve_findings()` returning the scan result with
 allowlisted findings marked), `controllers/build_controller.py` (move `_cve_policy_result()` where
@@ -475,6 +499,11 @@ of a cross-module private import), tests in `test_policy_controller.py` and `tes
 **Done when** `strata policy check --policy cve_policy` matches what `build run` would decide for
 the same SBOM.
 
+**Done (2026-10-27).** As designed (P8-1 to P8-6). The allowlist helpers are private
+(`_active_allowlist()`, `_is_allowlisted()`). `_PolicyRow.findings` is now a function taking a
+request; `policy_findings()` returns `ImageFindingsReport | CveFindingsReport`. "Done when" is a
+test (`test_check_cve_reaches_the_same_result_as_build_run`); five mutants, all killed.
+
 ---
 
 ## Phase 9 - Follow-on: `checkov_policy` in `strata policy` (design first)
@@ -492,8 +521,121 @@ needs each provisioner's materialised source path, which `build_run()` only hold
 2. Then as Phase 8: row with check and findings functions (failed checks per resource and file,
    severity), shared result builder, tests.
 
+**Design (2026-10-27).** Verified first:
+
+- **Where the sources land.** `build run` puts a source at
+  `build_path / (source.target_path or source.source_path)`, which `source_sync.sync_source()`
+  computes from the model alone. A source-less step provisioner uses `build_path / step.name`.
+  `build run` reaches the provisioner of every execution step, plus the transitive `depends_on`
+  closure of each (`materialise_provisioner_sources()`). A dependency without a source maps to
+  `None`.
+- **Pins don't move paths.** Version pins change a remote's ref (`apply_remote_version_pins()`),
+  never a path. `--pin` therefore cannot move a source.
+- **Helm.** The helm branch already reads `build_path/<namespace>/<module>`. It also needs the
+  workspace's namespaces, which `build_resolved_workspace_graph()` gets from the private
+  `_lookup_all(index, NAMESPACE, workspace.spec.namespaces)`.
+- **Deploy works in the build directory.** Terraform runs in place (`cwd=path`,
+  `integrations/terraform.py`), so after a deploy the build path also holds `.terraform/`.
+- **Probe with checkov 3.3.16** (the version installed here). It scanned a directory with a stray
+  `.terraform/modules/m/x.tf` and reported only the top-level file, so `.terraform/` is skipped.
+  A check before or after the deploy sees the same files.
+- **Probe with checkov 3.3.16, no API key.** Every failed check came back with `severity: null`.
+  Strata maps that to `UNKNOWN`, and `findings_at_or_above()` never counts `UNKNOWN` against any
+  `severity_gate`. **So with open-source Checkov, `checkov_policy` as built never breaches.** See
+  P9-7.
+
+Decisions:
+
+- **P9-1 - Re-derive the source paths; don't record them.**
+  - A new public `expected_source_paths(build_path, workspace) -> dict[str, Path | None]` sits next
+    to `materialise_provisioner_sources()` in `build_controller.py`. It returns the reached set,
+    each provisioner mapped to its destination, or to `None` when the provisioner has no source or
+    its directory isn't on disk ("not materialised during this build", as today).
+  - The path rule moves into one function, `source_sync.source_destination(build_path, source)`,
+    which `sync_source()` itself uses, so the two cannot drift.
+  - Why not record the paths (e.g. a section in `resolved.yaml`): that changes the build-output
+    contract (an ADR), and adds a file that must stay in sync with something that is already a
+    pure function of the model. Why not re-sync: it is slow, needs the network, and mutates the
+    build path. No ADR is needed: the build output is unchanged.
+- **P9-2 - Parity is a test, not a hope.** A real `build_run()` covers a step provisioner, a
+  `depends_on`-only one, a `target_path`, and a source-less dependency. The test captures the
+  `materialised` dict passed to `evaluate_checkov_policy()` and asserts `expected_source_paths()`
+  returns the same dict.
+- **P9-3 - Same evaluation, same record.** `check` calls `evaluate_checkov_policy(build_path,
+  workspace, expected_source_paths(...), namespaces=workspace_namespaces(index, workspace),
+  index=index)` unchanged. It records the result through the shared `checkov_policy_result()`
+  (Phase 8) with `phase: "build"`, replacing the build entry.
+  - `workspace_namespaces()` is a new public helper in `build_controller.py`;
+    `build_resolved_workspace_graph()` uses it too.
+  - A plain `policy check` includes `checkov_policy` (as P8-2). Missing directories follow
+    `on_missing_data`, as in `build run`.
+- **P9-4 - Same staleness as `cve_policy`.** The check judges what is in `--build-path`, against
+  the current workspace document. If the solution changed after the build, a provisioner's
+  directory may be missing, and that goes through `on_missing_data`. `build run` cleans the build
+  path by default, so the path holds one build.
+- **P9-5 - `policy findings --policy checkov_policy`.**
+  - New `checkov_controller.checkov_findings(build_path, workspace, index, threshold)` returns a
+    `CheckovFindingsReport(scanner_version, framework, severities, targets)`. Each target is one
+    provisioner or Helm module: `CheckovTarget(label, path, missing, findings)`.
+  - Each finding carries `unrated: bool` (as built; designed as `counted`): check id, name,
+    resource, `file:line`, severity. Findings below the threshold are dropped. `UNKNOWN` findings
+    are always listed and marked `[unrated, never counted]` (P9-7).
+  - `--severity` defaults to `severity_gate` (upper-cased). `--integration` is a usage error, as
+    for `cve_policy`.
+  - Exit codes, as P8-5: a build path that does not exist exits 2 ("run `strata build run`
+    first"); Checkov missing, or any target's scan failing, exits 1. A target that isn't
+    materialised is data, not an error: it is shown in its row.
+  - Checkov has no allowlist beyond `skip_checks`/`include_checks`, which apply inside the scan, so
+    there is no allowlisted marker.
+- **P9-6 - `policy list`** names the declared integration (`checkov 'name'`), else
+  `checkov (PATH)`. The `checkov_policy` row becomes checkable, with findings.
+- **P9-7 - The `UNKNOWN` severity gap is reported here and fixed separately.** Phase 9's "done
+  when" is parity with `build run`, so the verdict does not change in this phase. `findings`
+  makes the gap visible: failures appear, marked as not counted. Fixing it changes `build run`
+  too, so it needs its own decision. Options:
+  - (a) a policy field `unknown_severity: ignore | count`, default `ignore`, i.e. today's
+    behaviour, with opt-in counting;
+  - (b) count `UNKNOWN` by default, which is breaking: a green build can turn red;
+  - (c) gate on check ids (`fail_checks: [...]`) instead of severity.
+
+  Recommended: (a), as a small follow-on phase 9b, with the how-to telling open-source users to
+  set it.
+
+**Files**: `controllers/source_sync.py` (`source_destination()`), `controllers/build_controller.py`
+(`expected_source_paths()`, `workspace_namespaces()`), `controllers/checkov_controller.py`
+(`checkov_findings()`, report types), `controllers/policy_controller.py` (row, backing),
+`commands/policy_command.py` (rendering, help), tests in `test_build_controller.py` (parity),
+`test_checkov_controller.py`, `test_policy_controller.py`, `test_commands_policy.py`; docs as
+Phase 8.
+
+**Tests**:
+- Parity (P9-2).
+- Check: pass, breach under `deny`/`warn`, and a missing directory or missing Checkov under each
+  `on_missing_data` (scanner stubbed as in `test_checkov_controller.py`), for both a terraform
+  scope and a helm scope.
+- The recorded result has `phase: "build"` and replaces the build entry.
+- Findings: per-target rows, the `UNKNOWN` marker, the threshold default, and the exit codes.
+- "Done when": the same build path gives the same `passed`/`violations` through `build run`'s
+  evaluator and `policy check`.
+
 **Done when** `strata policy check --policy checkov_policy` reproduces the `build run` verdict from a
 build path alone.
+
+**Done (2026-10-27).** As designed (P9-1 to P9-6); P9-7 (the `UNKNOWN` fix) is still open.
+Refinements:
+- The evaluator's target resolution is extracted into `_targets()`, which the gate and
+  `checkov_findings()` share, so they cannot disagree on what is in scope. The 119 existing
+  Checkov and build tests passed unchanged after the extraction.
+- The finding flag is `unrated` (no severity, never counted), not `counted`. The flag means
+  "the gate can never count this", not "the gate counts this at the current threshold".
+- `declared_checkov()` is public, for `policy list`. Without a policy, `findings` uses the
+  policy defaults.
+- Parity (P9-2) is tested across five source shapes: a dependency, a transitive chain, a shared
+  dependency, a provisioner reached both ways, and `target_path` with a source-less dependency
+  and an unreached provisioner.
+- A CLI test pins the gap: a `deny` policy with only `UNKNOWN` findings exits 0.
+- Eight mutants: seven killed at first. The survivor (a source-less step's
+  `build_path / step.name`) now has its own test.
 
 ---
 

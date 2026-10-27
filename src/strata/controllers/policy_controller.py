@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """`strata policy list | check | findings` (docs/work/security-gates-design.md D7).
 
-A dispatch table, not a policy engine (policy-engine-architecture.md's "bespoke" decision): one row
-per workspace policy field, naming its phase and the function that evaluates it now. A row without
-a check function is listed but not yet checkable here; `cve_policy` and `checkov_policy` still run
-only inside `build run` (implementation plan Phases 8-9 add them).
+A dispatch table, not a policy engine (policy-engine-architecture.md's "bespoke" decision, ADR-0049):
+one row per workspace policy field, naming its phase, the function that evaluates it now and the
+one that lists its findings. Every build-phase policy is judged against `--build-path`, recorded as
+`build run` records it.
 """
 
 from collections.abc import Callable, Sequence
@@ -12,7 +12,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from strata.controllers.policy_results import append_policy_result, read_policy_results
+from strata.controllers.build_controller import expected_source_paths, workspace_namespaces
+from strata.controllers.checkov_controller import (
+    CheckovFindingsReport,
+    checkov_findings,
+    declared_checkov,
+    evaluate_checkov_policy,
+)
+from strata.controllers.policy_results import (
+    append_policy_result,
+    checkov_policy_result,
+    cve_policy_result,
+    read_policy_results,
+)
+from strata.controllers.sbom_controller import (
+    CveFindingsReport,
+    cve_findings,
+    declared_cve_scanner,
+    evaluate_cve_policy,
+)
 from strata.controllers.security_gate_controller import (
     Gate,
     ImageFindingsReport,
@@ -50,6 +68,92 @@ class _CheckRequest:
 
 _CheckFunction = Callable[[_CheckRequest], tuple[Diagnostics, list[ManifestPolicyResultModel]]]
 
+PolicyFindingsReport = ImageFindingsReport | CveFindingsReport | CheckovFindingsReport
+
+
+@dataclass(frozen=True)
+class _FindingsRequest:
+    context: SolutionContext
+    deployment_name: str
+    workspace: WorkspaceModel
+    build_path: Path
+    severity: str | None
+    integration: str | None
+    version_pin: str | None
+    on_step: Callable[[str], None] | None
+
+
+_FindingsFunction = Callable[[_FindingsRequest], PolicyFindingsReport]
+
+
+def _cve_check(request: _CheckRequest) -> tuple[Diagnostics, list[ManifestPolicyResultModel]]:
+    """`build run`'s own CVE gate against `--build-path`, recorded as `build run` records it (P8-1)."""
+    diagnostics = evaluate_cve_policy(request.build_path, request.workspace, request.context.controller.index)
+    result = cve_policy_result(request.workspace, diagnostics)
+    return diagnostics, [result] if result is not None else []
+
+
+def _cve_findings(request: _FindingsRequest) -> PolicyFindingsReport:
+    _no_integration(request, "cve_policy uses the declared or PATH scanner")
+    policy = request.workspace.spec.cve_policy
+    threshold = request.severity or (
+        (policy.severity_threshold or policy.max_severity) if policy is not None else DEFAULT_FINDINGS_SEVERITY
+    )
+    return cve_findings(request.build_path, request.context.controller.index, threshold)
+
+
+def _checkov_check(request: _CheckRequest) -> tuple[Diagnostics, list[ManifestPolicyResultModel]]:
+    """`build run`'s own Checkov gate over the re-derived source paths (P9-1, P9-3)."""
+    index = request.context.controller.index
+    diagnostics = evaluate_checkov_policy(
+        request.build_path,
+        request.workspace,
+        expected_source_paths(request.build_path, request.workspace),
+        namespaces=workspace_namespaces(index, request.workspace),
+        index=index,
+    )
+    result = checkov_policy_result(request.workspace, diagnostics)
+    return diagnostics, [result] if result is not None else []
+
+
+def _checkov_findings(request: _FindingsRequest) -> PolicyFindingsReport:
+    _no_integration(request, "checkov_policy uses the declared or PATH checkov")
+    policy = request.workspace.spec.checkov_policy
+    index = request.context.controller.index
+    return checkov_findings(
+        request.build_path,
+        request.workspace,
+        expected_source_paths(request.build_path, request.workspace),
+        namespaces=workspace_namespaces(index, request.workspace),
+        index=index,
+        threshold=request.severity or (policy.severity_gate.upper() if policy is not None else "HIGH"),
+    )
+
+
+def _no_integration(request: _FindingsRequest, reason: str) -> None:
+    if request.integration is not None:
+        raise UsageError(f"--integration only applies to image_gate_policy; {reason}.")
+
+
+def _image_findings(request: _FindingsRequest) -> PolicyFindingsReport:
+    policy = request.workspace.spec.image_gate_policy
+    integration_name = request.integration or (policy.integration if policy is not None else None)
+    if integration_name is None:
+        raise UsageError(
+            f"Workspace '{request.workspace.meta.name}' configures no image_gate_policy; "
+            "pass --integration NAME to name an image_findings integration."
+        )
+    threshold = request.severity or (policy.max_severity if policy is not None else DEFAULT_FINDINGS_SEVERITY)
+    return list_image_findings(
+        request.context,
+        request.deployment_name,
+        request.build_path,
+        integration_name,
+        threshold,
+        version_pin=request.version_pin,
+        on_step=request.on_step,
+    )
+
 
 def _gate_check(gate: Gate) -> _CheckFunction:
     def _check(request: _CheckRequest) -> tuple[Diagnostics, list[ManifestPolicyResultModel]]:
@@ -74,15 +178,15 @@ class _PolicyRow:
     name: str
     phase: Literal["build", "deploy"]
     check: _CheckFunction | None
-    findings: bool
+    findings: _FindingsFunction | None
 
 
 #: Every workspace policy field. A new policy adds one row (design D7).
 _POLICIES: tuple[_PolicyRow, ...] = (
-    _PolicyRow("cve_policy", "build", check=None, findings=False),
-    _PolicyRow("checkov_policy", "build", check=None, findings=False),
-    _PolicyRow("release_gate_policy", "deploy", check=_gate_check("release"), findings=False),
-    _PolicyRow("image_gate_policy", "deploy", check=_gate_check("images"), findings=True),
+    _PolicyRow("cve_policy", "build", check=_cve_check, findings=_cve_findings),
+    _PolicyRow("checkov_policy", "build", check=_checkov_check, findings=_checkov_findings),
+    _PolicyRow("release_gate_policy", "deploy", check=_gate_check("release"), findings=None),
+    _PolicyRow("image_gate_policy", "deploy", check=_gate_check("images"), findings=_image_findings),
 )
 _ROWS = {row.name: row for row in _POLICIES}
 
@@ -115,7 +219,7 @@ def list_policies(
                 enforcement=policy.enforcement,
                 backing=_backing(context, row.name, policy),
                 checkable=row.check is not None,
-                findings=row.findings,
+                findings=row.findings is not None,
                 last_result=recorded.get(row.name),
             )
         )
@@ -177,35 +281,28 @@ def policy_findings(
     integration: str | None = None,
     version_pin: str | None = None,
     on_step: Callable[[str], None] | None = None,
-) -> ImageFindingsReport:
-    """Itemised findings for `policy_name`, read-only; only `image_gate_policy` has any yet.
+) -> PolicyFindingsReport:
+    """Itemised findings for `policy_name`, read-only (image gate per SBOM image; CVE per finding).
 
-    `integration` names an `image_findings` document directly, so the lookup works before the
-    policy is configured. `severity` defaults to the policy's `max_severity`, else HIGH.
+    `integration` names an `image_findings` document directly, so the image lookup works before the
+    policy is configured. `severity` defaults to the policy's own threshold, else HIGH.
 
     Raises:
-        UsageError: An unknown or unsupported policy, or no integration to ask.
+        UsageError: An unknown or unsupported policy, no integration to ask, or no `sbom.json`.
     """
     row = _ROWS.get(policy_name)
     if row is None:
         raise UsageError(f"Unknown policy '{policy_name}'. Known: {', '.join(_ROWS)}.")
-    if not row.findings:
+    if row.findings is None:
         raise UsageError(
             f"'strata policy findings' does not support {policy_name} yet; "
-            f"supported: {', '.join(r.name for r in _POLICIES if r.findings)}."
+            f"supported: {', '.join(r.name for r in _POLICIES if r.findings is not None)}."
         )
     _, workspace = resolve_deployment_workspace(context, deployment_name, version_pin=version_pin)
-    policy = cast(ImageGatePolicyModel | None, getattr(workspace.spec, policy_name))
-    integration_name = integration or (policy.integration if policy is not None else None)
-    if integration_name is None:
-        raise UsageError(
-            f"Workspace '{workspace.meta.name}' configures no {policy_name}; "
-            "pass --integration NAME to name an image_findings integration."
-        )
-    threshold = severity or (policy.max_severity if policy is not None else DEFAULT_FINDINGS_SEVERITY)
-    return list_image_findings(
-        context, deployment_name, build_path, integration_name, threshold, version_pin=version_pin, on_step=on_step
+    request = _FindingsRequest(
+        context, deployment_name, workspace, build_path, severity, integration, version_pin, on_step
     )
+    return row.findings(request)
 
 
 def _configured(workspace: WorkspaceModel) -> list[tuple[_PolicyRow, _Policy]]:
@@ -234,9 +331,11 @@ def _selectable(name: str, configured: dict[str, _PolicyRow], workspace: Workspa
 def _backing(context: SolutionContext, name: str, policy: _Policy) -> str:
     """What evaluates the policy: a local tool, or `<type> '<integration>'` for the gates."""
     if name == "cve_policy":
-        return "trivy/grype"
+        declared = declared_cve_scanner(context.controller.index)
+        return f"{declared.TYPE} '{declared.name}'" if declared is not None else "trivy/grype (PATH)"
     if name == "checkov_policy":
-        return "checkov"
+        checkov = declared_checkov(context.controller.index)
+        return f"checkov '{checkov.name}'" if checkov is not None else "checkov (PATH)"
     integration_name = cast(ReleaseGatePolicyModel | ImageGatePolicyModel, policy).integration
     entry = context.controller.index.get(PlatformKind.INTEGRATION, integration_name)
     integration_type = cast(IntegrationModel, entry.model).spec.type if entry is not None else "unknown"

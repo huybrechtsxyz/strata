@@ -17,6 +17,7 @@ see the design doc's "write now, reference later" conclusion.
 """
 
 import hashlib
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import cast
@@ -44,11 +45,13 @@ from strata.models.sbom_model import (
     CVE_SEVERITY_ORDER,
     CveAllowedEntryModel,
     CveAuditResultModel,
+    CveFindingModel,
     SbomComponentModel,
     SbomReferenceModel,
 )
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.errors import SystemError, UsageError
 
 log = get_logger(__name__)
 
@@ -179,13 +182,54 @@ def _build_cyclonedx_json(components: list[SbomComponentModel]) -> str:
     return output.output_as_string()
 
 
-def _declared_cve_scanner(index: DocumentIndex) -> CveScannerIntegration | None:
+def declared_cve_scanner(index: DocumentIndex) -> CveScannerIntegration | None:
     """The enabled `trivy` document's scanner, else the enabled `grype` one (docs/work/integration-readiness.md D26)."""
     for integration_type, scanner_class in (("trivy", TrivyIntegration), ("grype", GrypeIntegration)):
         config = bind_integration_config(index, integration_type, requester="cve_policy")
         if config is not None:
             return scanner_class(config)
     return None
+
+
+@dataclass(frozen=True)
+class CveFinding:
+    finding: CveFindingModel
+    allowlisted: bool
+
+
+@dataclass(frozen=True)
+class CveFindingsReport:
+    """`strata policy findings --policy cve_policy` (security-gates plan Phase 8, P8-3/P8-5)."""
+
+    scanner: str
+    scanner_version: str
+    severities: tuple[str, ...]
+    findings: tuple[CveFinding, ...]
+
+
+def cve_findings(build_path: Path, index: DocumentIndex, threshold: str) -> CveFindingsReport:
+    """Every finding in `sbom.json` at or above `threshold`, read-only; allowlisted ones marked, not dropped.
+
+    Raises:
+        UsageError: No `sbom.json` under `build_path`.
+        SystemError: No scanner available, or the scan failed.
+    """
+    sbom_path = build_path / _SBOM_FILENAME
+    if not sbom_path.is_file():
+        raise UsageError(f"No {_SBOM_FILENAME} in '{build_path}'; run 'strata build run' first.")
+    scanner = declared_cve_scanner(index) or CveScannerIntegration()
+    try:
+        scanner.ensure_available()
+        result = scanner.scan_sbom(sbom_path, severity_threshold=threshold)
+    except IntegrationError as exc:
+        raise SystemError(str(exc)) from None
+    active = _active_allowlist(_configured_allowlist(index))
+    return CveFindingsReport(
+        scanner=result.scanner,
+        scanner_version=result.scanner_version,
+        severities=tuple(CVE_SEVERITY_ORDER[: CVE_SEVERITY_ORDER.index(threshold) + 1]),
+        findings=tuple(CveFinding(finding, _is_allowlisted(finding, active)) for finding in result.findings),
+    )
 
 
 def evaluate_cve_policy(build_path: Path, workspace: WorkspaceModel, index: DocumentIndex) -> Diagnostics:
@@ -222,7 +266,7 @@ def evaluate_cve_policy(build_path: Path, workspace: WorkspaceModel, index: Docu
 
     severity = diagnostics.error if policy.enforcement == "deny" else diagnostics.warning
     sbom_path = build_path / _SBOM_FILENAME
-    declared = _declared_cve_scanner(index)
+    declared = declared_cve_scanner(index)
     scanner = declared or CveScannerIntegration()
 
     missing_reason: str | None = None
@@ -293,16 +337,8 @@ def _apply_allowlist(result: CveAuditResultModel, allowed: list[CveAllowedEntryM
     one with `package` set only suppresses findings naming that exact
     package.
     """
-    today = date.today()
-    active = [entry for entry in allowed if entry.expires is None or date.fromisoformat(entry.expires) >= today]
-    remaining = [
-        finding
-        for finding in result.findings
-        if not any(
-            entry.id == finding.vulnerability_id and (entry.package is None or entry.package == finding.package_name)
-            for entry in active
-        )
-    ]
+    active = _active_allowlist(allowed)
+    remaining = [finding for finding in result.findings if not _is_allowlisted(finding, active)]
     counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
     for finding in remaining:
         counts[finding.severity if finding.severity in counts else "UNKNOWN"] += 1
@@ -316,6 +352,20 @@ def _apply_allowlist(result: CveAuditResultModel, allowed: list[CveAllowedEntryM
             "low": counts["LOW"],
             "unknown": counts["UNKNOWN"],
         }
+    )
+
+
+def _active_allowlist(allowed: list[CveAllowedEntryModel]) -> list[CveAllowedEntryModel]:
+    """Entries still in force: no `expires`, or `expires` today or later."""
+    today = date.today()
+    return [entry for entry in allowed if entry.expires is None or date.fromisoformat(entry.expires) >= today]
+
+
+def _is_allowlisted(finding: CveFindingModel, active: list[CveAllowedEntryModel]) -> bool:
+    """An entry matches the CVE id, and its `package` when it names one."""
+    return any(
+        entry.id == finding.vulnerability_id and (entry.package is None or entry.package == finding.package_name)
+        for entry in active
     )
 
 

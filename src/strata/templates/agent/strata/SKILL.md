@@ -38,7 +38,7 @@ Exit codes: 0 success, 1 system failure, 2 usage error, 3 validation failure (th
 | `strata version new / set / update NAME` | Manage `kind: version` pin documents. |
 | `strata promote status / view / apply WORKSPACE` | Ring/order/wave rollout of version documents. |
 | `strata audit status / changes [DEPLOYMENT]` | Read back the deployment audit trail. |
-| `strata policy list / check / findings DEPLOYMENT` | List the workspace's policies, evaluate the deploy gates now, or list an image gate's open issues. |
+| `strata policy list / check / findings DEPLOYMENT` | List the workspace's policies, evaluate them now (`cve_policy`, `checkov_policy`, the deploy gates), or list a policy's findings (all but `release_gate_policy`). |
 | `strata integration check NAME` | Is an integration ready: enabled, tool on PATH, right version, and (where supported) credentials accepted. NAME is a document or a type; `--deployment` resolves credentials. |
 | `strata integration list [--deployment D]` | Every integration's local readiness; with `--deployment`, what it is used for, failing when a used one is not ready. Offline. |
 | `strata sln init NAME` / `strata sln update` | Create or refresh the scaffold files, including this skill. |

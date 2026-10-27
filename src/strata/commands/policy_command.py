@@ -15,7 +15,9 @@ import click
 from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import CommandRun, command_run
+from strata.controllers.checkov_controller import CheckovFindingsReport
 from strata.controllers.policy_controller import PolicyInfo, check_policies, list_policies, policy_findings
+from strata.controllers.sbom_controller import CveFindingsReport
 from strata.controllers.security_gate_controller import ImageFindingsReport
 from strata.controllers.solution_context import SolutionContext, open_solution
 from strata.integrations.security_findings import SecurityIssue
@@ -154,7 +156,7 @@ def _last_result(result: ManifestPolicyResultModel | None) -> str:
     multiple=True,
     metavar="NAME",
     help="Evaluate only this policy (repeatable). Default: every configured policy 'policy check' supports "
-    "(release_gate_policy, image_gate_policy).",
+    "(cve_policy, checkov_policy, release_gate_policy, image_gate_policy).",
 )
 @click.option(
     "--commit",
@@ -174,9 +176,10 @@ def check_command(
     quiet: bool,
     verbose: bool,
 ) -> None:
-    """Evaluate DEPLOYMENT's policies now, exactly as 'deploy run' would.
+    """Evaluate DEPLOYMENT's policies now, exactly as 'build run' / 'deploy run' would.
 
-    Results are appended to policy_results.json when --build-path exists.
+    cve_policy scans --build-path's sbom.json, checkov_policy its rendered
+    sources. Results are appended to policy_results.json when --build-path exists.
 
     \b
     Exit codes:
@@ -205,12 +208,18 @@ def check_command(
 
 @policy_command.command("findings")
 @click.argument("deployment")
-@click.option("--policy", "policy_name", required=True, metavar="NAME", help="The policy, e.g. image_gate_policy.")
+@click.option(
+    "--policy",
+    "policy_name",
+    required=True,
+    metavar="NAME",
+    help="The policy: image_gate_policy, cve_policy or checkov_policy.",
+)
 @click.option(
     "--severity",
     type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW"], case_sensitive=False),
     default=None,
-    help="Lowest severity to list. Defaults to the policy's max_severity, else HIGH.",
+    help="Lowest severity to list. Defaults to the policy's own threshold, else HIGH.",
 )
 @click.option(
     "--integration",
@@ -231,16 +240,20 @@ def findings_command(
     quiet: bool,
     verbose: bool,
 ) -> None:
-    """List the open issues behind a policy (image_gate_policy: per SBOM image).
+    """List the issues behind a policy: image_gate_policy per SBOM image, cve_policy per
+    vulnerability, checkov_policy per failed check and target.
 
     Read-only. Issues the cve_allowed allowlist would suppress are shown and
-    marked, not hidden.
+    marked, not hidden; so are Checkov findings without a severity, which the
+    gate never counts.
 
     \b
     Exit codes:
       0  listed
-      1  the platform could not be reached or rejected the request
-      2  unsupported policy, no integration to ask, no sbom.json; bad arguments
+      1  the platform could not be reached or rejected the request; no
+         CVE scanner or checkov, or a scan failed
+      2  unsupported policy, no integration to ask, no sbom.json or build
+         output; bad arguments
       3  the integration is misconfigured or its credentials do not resolve
     """
     with command_run("policy findings", output=output, quiet=quiet, verbose=verbose) as run:
@@ -256,13 +269,104 @@ def findings_command(
             on_step=run.step,
         )
         if output == "console":
-            _print_findings(report)
+            if isinstance(report, CveFindingsReport):
+                _print_cve_findings(report)
+            elif isinstance(report, CheckovFindingsReport):
+                _print_checkov_findings(report)
+            else:
+                _print_image_findings(report)
         run.report(Diagnostics(), root=context.root)
         if isinstance(run.reporter, JsonReporter):
-            run.reporter.data = _findings_json(policy_name, report)
+            if isinstance(report, CveFindingsReport):
+                run.reporter.data = _cve_findings_json(policy_name, report)
+            elif isinstance(report, CheckovFindingsReport):
+                run.reporter.data = _checkov_findings_json(policy_name, report)
+            else:
+                run.reporter.data = _image_findings_json(policy_name, report)
 
 
-def _print_findings(report: ImageFindingsReport) -> None:
+def _print_checkov_findings(report: CheckovFindingsReport) -> None:
+    version = f"checkov {report.scanner_version}" if report.scanner_version else "checkov (nothing scanned)"
+    click.echo(f"  {report.framework}, scanned with {version}, severities {', '.join(report.severities)}")
+    if report.nothing is not None:
+        click.echo(f"  nothing in scope: {report.nothing}")
+    for target in report.targets:
+        if target.missing is not None:
+            click.echo(f"  {target.label}: not scanned ({target.missing})")
+            continue
+        unrated = sum(item.unrated for item in target.findings)
+        rated = len(target.findings) - unrated
+        click.echo(f"  {target.label}: {rated} finding(s), {unrated} unrated")
+        for item in target.findings[:_CONSOLE_ISSUES]:
+            finding = item.finding
+            lines = finding.file_line_range or []
+            where = f"{finding.file_path}:{lines[0]}" if lines else finding.file_path
+            marker = " [unrated, never counted]" if item.unrated else ""
+            click.echo(f"      {finding.severity:<8} {finding.check_id} {finding.resource} at {where}{marker}")
+        if len(target.findings) > _CONSOLE_ISSUES:
+            click.echo(f"      ... {len(target.findings) - _CONSOLE_ISSUES} more (--output json lists all)")
+
+
+def _checkov_findings_json(policy_name: str, report: CheckovFindingsReport) -> dict[str, Any]:
+    return {
+        "policy": policy_name,
+        "scanner_version": report.scanner_version,
+        "framework": report.framework,
+        "severities": list(report.severities),
+        "nothing": report.nothing,
+        "targets": [
+            {
+                "target": target.label,
+                "path": str(target.path) if target.path is not None else None,
+                "missing": target.missing,
+                "findings": [
+                    {**item.finding.model_dump(mode="json"), "unrated": item.unrated} for item in target.findings
+                ],
+            }
+            for target in report.targets
+        ],
+    }
+
+
+def _print_cve_findings(report: CveFindingsReport) -> None:
+    counts = _cve_counts(report)
+    summary = ", ".join(f"{count} {severity}" for severity, count in counts.items() if count) or "no findings"
+    click.echo(f"  scanned with {report.scanner} {report.scanner_version}, severities {', '.join(report.severities)}")
+    click.echo(f"  {summary}")
+    for item in report.findings[:_CONSOLE_ISSUES]:
+        finding = item.finding
+        marker = " [allowlisted]" if item.allowlisted else ""
+        fixed = f" (fixed in {finding.fixed_version})" if finding.fixed_version else ""
+        click.echo(
+            f"      {finding.severity:<8} {finding.vulnerability_id} in {finding.package_name} "
+            f"{finding.installed_version}{fixed}{marker}"
+        )
+    if len(report.findings) > _CONSOLE_ISSUES:
+        click.echo(f"      ... {len(report.findings) - _CONSOLE_ISSUES} more (--output json lists all)")
+
+
+def _cve_counts(report: CveFindingsReport) -> dict[str, int]:
+    counts = dict.fromkeys(report.severities, 0)
+    for item in report.findings:
+        if item.finding.severity in counts:
+            counts[item.finding.severity] += 1
+    return counts
+
+
+def _cve_findings_json(policy_name: str, report: CveFindingsReport) -> dict[str, Any]:
+    return {
+        "policy": policy_name,
+        "scanner": report.scanner,
+        "scanner_version": report.scanner_version,
+        "severities": list(report.severities),
+        "counts": _cve_counts(report),
+        "findings": [
+            {**item.finding.model_dump(mode="json"), "allowlisted": item.allowlisted} for item in report.findings
+        ],
+    }
+
+
+def _print_image_findings(report: ImageFindingsReport) -> None:
     click.echo(f"  via {report.integration}, severities {', '.join(report.severities)}")
     if not report.images:
         click.echo("  (no container images in sbom.json)")
@@ -289,7 +393,7 @@ def _counts(issues: tuple[SecurityIssue, ...], severities: tuple[str, ...]) -> d
     return counts
 
 
-def _findings_json(policy_name: str, report: ImageFindingsReport) -> dict[str, Any]:
+def _image_findings_json(policy_name: str, report: ImageFindingsReport) -> dict[str, Any]:
     return {
         "policy": policy_name,
         "integration": report.integration,

@@ -5,6 +5,7 @@ Exit codes and output shape through the real CLI; the gate integration is a vend
 """
 
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,11 +14,15 @@ from click.testing import CliRunner
 
 from strata.commands.cli import cli
 from strata.commands.exit_codes import EXIT_FAILURE, EXIT_SUCCESS, EXIT_USAGE, EXIT_VALIDATION
+from strata.controllers import checkov_controller as checkov_module
+from strata.controllers import sbom_controller as sbom_module
 from strata.controllers import security_gate_controller as gates_module
 from strata.controllers.policy_results import read_policy_results
 from strata.integrations.capabilities import ImageFindingsIntegration, ReleaseGateIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.security_findings import ImageLookup, ReleaseGateOutcome, SecurityIssue
+from strata.models.checkov_model import CheckovFindingModel, CheckovScanResultModel
+from strata.models.sbom_model import CveAuditResultModel, CveFindingModel
 
 COMMIT = "d" * 40
 _HEADER = "apiVersion: strata.huybrechts.xyz/v2\nkind: {kind}\nmeta:\n  name: {name}\nspec:\n"
@@ -157,9 +162,10 @@ def test_check_nothing_to_check_is_two(tmp_path, gate):
     assert result.exit_code == EXIT_USAGE, result.output
 
 
-def test_check_unsupported_policy_is_two(tmp_path, gate):
-    result = _invoke("check", "app", "--path", str(_solution(tmp_path)), "--policy", "cve_policy")
+def test_check_unconfigured_policy_is_two(tmp_path, gate):
+    result = _invoke("check", "app", "--path", str(_solution(tmp_path)), "--policy", "checkov_policy")
     assert result.exit_code == EXIT_USAGE, result.output
+    assert "does not configure checkov_policy" in result.output
 
 
 def test_check_image_policy_only_makes_no_release_call(tmp_path, gate):
@@ -221,3 +227,211 @@ def test_findings_unreachable_is_one(tmp_path, gate):
 def test_findings_unsupported_policy_is_two(tmp_path, gate):
     result = _invoke("findings", "app", "--path", str(_solution(tmp_path)), "--policy", "release_gate_policy")
     assert result.exit_code == EXIT_USAGE, result.output
+
+
+# ---------------------------------------------------------------------------
+# cve_policy (plan Phase 8)
+# ---------------------------------------------------------------------------
+
+_CVE_POLICY = "  cve_policy:\n    max_severity: HIGH\n    enforcement: {enforcement}\n    on_missing_data: block\n"
+
+
+class _FakeScanner:
+    def __init__(self) -> None:
+        self.available = True
+        self.findings: list[CveFindingModel] = []
+
+    def is_available(self) -> bool:
+        return self.available
+
+    def ensure_available(self) -> None:
+        if not self.available:
+            raise IntegrationError("trivy: 'trivy' is not available on PATH.")
+
+    def scan_sbom(self, sbom_path: Path, *, severity_threshold: str) -> CveAuditResultModel:
+        return CveAuditResultModel(
+            scanner="trivy",
+            scanner_version="0.50.0",
+            sbom_path=str(sbom_path),
+            total_findings=len(self.findings),
+            critical=sum(f.severity == "CRITICAL" for f in self.findings),
+            findings=list(self.findings),
+        )
+
+
+@pytest.fixture
+def scanner(monkeypatch):
+    fake = _FakeScanner()
+    monkeypatch.setattr(sbom_module, "CveScannerIntegration", lambda: fake)
+    return fake
+
+
+def _critical(vulnerability_id: str) -> CveFindingModel:
+    return CveFindingModel(
+        vulnerability_id=vulnerability_id,
+        severity="CRITICAL",
+        package_name="openssl",
+        installed_version="1.0",
+        fixed_version="1.1",
+    )
+
+
+@pytest.mark.parametrize(
+    ("enforcement", "findings", "exit_code"),
+    [("deny", 0, EXIT_SUCCESS), ("deny", 1, EXIT_VALIDATION), ("warn", 1, EXIT_SUCCESS)],
+)
+def test_check_cve_exit_codes(tmp_path, gate, scanner, enforcement, findings, exit_code):
+    scanner.findings = [_critical(f"CVE-2026-{n}") for n in range(findings)]
+    root = _solution(tmp_path, policies=_CVE_POLICY.format(enforcement=enforcement))
+    result = _invoke("check", "app", "--path", str(root))
+    assert result.exit_code == exit_code, result.output
+    [recorded] = read_policy_results(root / "build" / "app") or []
+    assert (recorded.policy_name, recorded.phase) == ("cve_policy", "build")
+
+
+def test_findings_cve_console_marks_allowlisted(tmp_path, gate, scanner):
+    scanner.findings = [_critical("CVE-2026-1"), _critical("CVE-2026-2")]
+    root = _solution(tmp_path, policies=_CVE_POLICY.format(enforcement="deny"))
+    _write(root, "configuration.yaml", "configuration", "c", "  cve_allowed:\n    - id: CVE-2026-1\n      reason: ok\n")
+    result = _invoke("findings", "app", "--path", str(root), "--policy", "cve_policy")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "scanned with trivy 0.50.0, severities CRITICAL, HIGH" in result.output
+    assert "2 CRITICAL" in result.output
+    assert "CVE-2026-1 in openssl 1.0 (fixed in 1.1) [allowlisted]" in result.output
+    assert "CVE-2026-2 in openssl 1.0 (fixed in 1.1)\n" in result.output
+
+
+def test_findings_cve_json_shape(tmp_path, gate, scanner):
+    scanner.findings = [_critical("CVE-2026-1")]
+    root = _solution(tmp_path, policies=_CVE_POLICY.format(enforcement="deny"))
+    result = _invoke("findings", "app", "--path", str(root), "--policy", "cve_policy", "-o", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    data = json.loads(result.output)["data"]
+    assert data["policy"] == "cve_policy" and data["scanner"] == "trivy" and data["scanner_version"] == "0.50.0"
+    assert data["severities"] == ["CRITICAL", "HIGH"]
+    assert data["counts"] == {"CRITICAL": 1, "HIGH": 0}
+    [finding] = data["findings"]
+    assert finding["vulnerability_id"] == "CVE-2026-1" and finding["allowlisted"] is False
+
+
+def test_findings_cve_without_an_sbom_is_two(tmp_path, gate, scanner):
+    root = _solution(tmp_path, policies=_CVE_POLICY.format(enforcement="deny"))
+    (root / "build" / "app" / "sbom.json").unlink()
+    result = _invoke("findings", "app", "--path", str(root), "--policy", "cve_policy")
+    assert result.exit_code == EXIT_USAGE, result.output
+
+
+def test_findings_cve_without_a_scanner_is_one(tmp_path, gate, scanner):
+    scanner.available = False
+    root = _solution(tmp_path, policies=_CVE_POLICY.format(enforcement="deny"))
+    result = _invoke("findings", "app", "--path", str(root), "--policy", "cve_policy")
+    assert result.exit_code == EXIT_FAILURE, result.output
+    assert "not available on PATH" in result.output
+
+
+# ---------------------------------------------------------------------------
+# checkov_policy (plan Phase 9)
+# ---------------------------------------------------------------------------
+
+_CHECKOV_POLICY = "  checkov_policy:\n    enforcement: {enforcement}\n    on_missing_data: block\n"
+
+
+class _FakeCheckov:
+    def __init__(self) -> None:
+        self.severities: list[str] = []
+        self.error: IntegrationError | None = None
+
+    def scan(self, directory: Path, **kwargs) -> CheckovScanResultModel:
+        if self.error is not None:
+            raise self.error
+        findings = [
+            CheckovFindingModel(
+                check_id=f"CKV_{n}",
+                check_name="check",
+                resource=f"aws_s3_bucket.b{n}",
+                file_path="/main.tf",
+                file_line_range=[n + 1, n + 2],
+                severity=severity,
+            )
+            for n, severity in enumerate(self.severities)
+        ]
+        return CheckovScanResultModel(
+            failed=len(findings),
+            findings=findings,
+            scanner_version="3.3.16",
+            framework="terraform",
+            scanned_path=str(directory),
+        )
+
+
+@pytest.fixture
+def checkov(monkeypatch):
+    fake = _FakeCheckov()
+    monkeypatch.setattr(checkov_module, "CheckovIntegration", lambda *args: fake)
+    return fake
+
+
+def _checkov_solution(tmp_path: Path, enforcement: str = "deny") -> Path:
+    root = _solution(tmp_path, policies=_CHECKOV_POLICY.format(enforcement=enforcement))
+    (root / "build" / "app" / "infra").mkdir()
+    return root
+
+
+@pytest.mark.parametrize(
+    ("enforcement", "severities", "exit_code"),
+    [
+        ("deny", [], EXIT_SUCCESS),
+        ("deny", ["HIGH"], EXIT_VALIDATION),
+        ("warn", ["HIGH"], EXIT_SUCCESS),
+        ("deny", ["UNKNOWN"], EXIT_SUCCESS),
+    ],
+)
+def test_check_checkov_exit_codes(tmp_path, gate, checkov, enforcement, severities, exit_code):
+    checkov.severities = severities
+    root = _checkov_solution(tmp_path, enforcement)
+    result = _invoke("check", "app", "--path", str(root))
+    assert result.exit_code == exit_code, result.output
+    [recorded] = read_policy_results(root / "build" / "app") or []
+    assert (recorded.policy_name, recorded.phase) == ("checkov_policy", "build")
+
+
+def test_findings_checkov_console_marks_unrated(tmp_path, gate, checkov):
+    checkov.severities = ["HIGH", "UNKNOWN"]
+    result = _invoke("findings", "app", "--path", str(_checkov_solution(tmp_path)), "--policy", "checkov_policy")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform, scanned with checkov 3.3.16, severities CRITICAL, HIGH" in result.output
+    assert "provisioner 'tf_main': 1 finding(s), 1 unrated" in result.output
+    assert "HIGH     CKV_0 aws_s3_bucket.b0 at /main.tf:1\n" in result.output
+    assert "CKV_1 aws_s3_bucket.b1 at /main.tf:2 [unrated, never counted]" in result.output
+
+
+def test_findings_checkov_json_shape(tmp_path, gate, checkov):
+    checkov.severities = ["UNKNOWN"]
+    root = _checkov_solution(tmp_path)
+    result = _invoke("findings", "app", "--path", str(root), "--policy", "checkov_policy", "-o", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    data = json.loads(result.output)["data"]
+    assert set(data) == {"policy", "scanner_version", "framework", "severities", "nothing", "targets"}
+    [target] = data["targets"]
+    assert target["target"] == "provisioner 'tf_main'" and target["missing"] is None
+    assert target["findings"][0]["check_id"] == "CKV_0" and target["findings"][0]["unrated"] is True
+
+
+def test_findings_checkov_unrendered_target_is_listed(tmp_path, gate, checkov):
+    root = _solution(tmp_path, policies=_CHECKOV_POLICY.format(enforcement="deny"))
+    result = _invoke("findings", "app", "--path", str(root), "--policy", "checkov_policy")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "provisioner 'tf_main': not scanned (not materialised during this build)" in result.output
+
+
+def test_findings_checkov_without_build_output_is_two(tmp_path, gate, checkov):
+    root = _solution(tmp_path, policies=_CHECKOV_POLICY.format(enforcement="deny"))
+    shutil.rmtree(root / "build")
+    result = _invoke("findings", "app", "--path", str(root), "--policy", "checkov_policy")
+    assert result.exit_code == EXIT_USAGE, result.output
+
+
+def test_findings_checkov_scan_failure_is_one(tmp_path, gate, checkov):
+    checkov.error = IntegrationError("checkov not found on PATH")
+    result = _invoke("findings", "app", "--path", str(_checkov_solution(tmp_path)), "--policy", "checkov_policy")
+    assert result.exit_code == EXIT_FAILURE, result.output

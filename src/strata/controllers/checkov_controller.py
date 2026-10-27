@@ -36,7 +36,7 @@ equivalent at build time in v2. Re-scoped instead to a distinction that
   namespace's modules.
 """
 
-from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from strata.controllers.integration_resolution import bind_integration_config
@@ -44,12 +44,18 @@ from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.workload_controller import resolve_module
 from strata.integrations.checkov import CheckovIntegration
 from strata.integrations.errors import IntegrationError
-from strata.models.checkov_model import CheckovPolicyModel
+from strata.models.checkov_model import (
+    CHECKOV_SEVERITY_ORDER,
+    CheckovFindingModel,
+    CheckovPolicyModel,
+    CheckovScanResultModel,
+)
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.builtin_types import TERRAFORM_COMPATIBLE_TYPES, ProvisionerType
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.errors import SystemError, UsageError
 
 #: `checkov_policy.framework` -> the real `ProvisionerModel.tool` values it
 #: scans. `helm` is deliberately absent — resolved via namespace modules
@@ -61,10 +67,14 @@ _FRAMEWORK_TOOLS: dict[str, frozenset[str]] = {
 }
 
 
-def _checkov(index: DocumentIndex | None) -> CheckovIntegration:
-    """The enabled `checkov` document's scanner, else the PATH default (docs/work/integration-readiness.md D26)."""
+def declared_checkov(index: DocumentIndex | None) -> CheckovIntegration | None:
+    """The enabled `checkov` document's scanner, else `None` (docs/work/integration-readiness.md D26)."""
     config = bind_integration_config(index, "checkov", requester="checkov_policy") if index is not None else None
-    return CheckovIntegration(config) if config is not None else CheckovIntegration()
+    return CheckovIntegration(config) if config is not None else None
+
+
+def _checkov(index: DocumentIndex | None) -> CheckovIntegration:
+    return declared_checkov(index) or CheckovIntegration()
 
 
 def evaluate_checkov_policy(
@@ -119,56 +129,147 @@ def evaluate_checkov_policy(
         return diagnostics
 
     severity = diagnostics.error if policy.enforcement == "deny" else diagnostics.warning
-
-    if policy.framework == "helm":
-        _evaluate_helm(diagnostics, policy, build_path, namespaces, index, severity)
-        return diagnostics
-
-    tools = _FRAMEWORK_TOOLS[policy.framework]
-    provisioners = _provisioners_for_scope(workspace, tools, policy.scope)
-    if not provisioners:
-        _report_missing_data(
-            diagnostics,
-            policy.on_missing_data,
-            f"no '{policy.framework}' provisioners found for scope '{policy.scope}'",
-        )
+    targets, nothing = _targets(policy, workspace, provisioner_source_paths, build_path, namespaces, index)
+    if nothing is not None:
+        _report_missing_data(diagnostics, policy.on_missing_data, nothing)
         return diagnostics
 
     scanner = _checkov(index)
-    for provisioner in provisioners:
-        source_path = provisioner_source_paths.get(provisioner.name)
-        if source_path is None:
-            _report_missing_data(
-                diagnostics,
-                policy.on_missing_data,
-                "not materialised during this build",
-                scope=f"provisioner '{provisioner.name}'",
-            )
+    for target in targets:
+        if target.path is None:
+            _report_missing_data(diagnostics, policy.on_missing_data, target.missing or "", scope=target.label)
             continue
-
         try:
-            result = scanner.scan(
-                source_path,
-                framework=policy.framework,
-                skip_checks=policy.skip_checks,
-                include_checks=policy.include_checks,
-                custom_checks_dir=policy.custom_checks_dir,
-                timeout=policy.timeout,
-            )
+            result = _scan(scanner, policy, target.path)
         except IntegrationError as exc:
-            _report_missing_data(
-                diagnostics, policy.on_missing_data, str(exc), scope=f"provisioner '{provisioner.name}'"
-            )
+            _report_missing_data(diagnostics, policy.on_missing_data, str(exc), scope=target.label)
             continue
 
         breaching = result.findings_at_or_above(policy.severity_gate.upper())
         if breaching:
             severity(
-                f"checkov_policy: provisioner '{provisioner.name}' has {len(breaching)} finding(s) at or above "
-                f"severity '{policy.severity_gate}' — scanned with checkov {result.scanner_version}.",
+                f"checkov_policy: {target.label} has {len(breaching)} finding(s) at or above "
+                f"severity '{policy.severity_gate}' \u2014 scanned with checkov {result.scanner_version}.",
                 code="checkov_policy_violation",
             )
     return diagnostics
+
+
+@dataclass(frozen=True)
+class CheckovFinding:
+    finding: CheckovFindingModel
+    #: No severity (open-source Checkov without an API key): never counted by `severity_gate` (plan P9-7).
+    unrated: bool
+
+
+@dataclass(frozen=True)
+class CheckovTargetFindings:
+    """One provisioner or Helm module; `missing` says why it was not scanned."""
+
+    label: str
+    path: Path | None
+    missing: str | None
+    findings: tuple[CheckovFinding, ...]
+
+
+@dataclass(frozen=True)
+class CheckovFindingsReport:
+    """`strata policy findings --policy checkov_policy` (security-gates plan Phase 9, P9-5)."""
+
+    scanner_version: str | None
+    framework: str
+    severities: tuple[str, ...]
+    targets: tuple[CheckovTargetFindings, ...]
+    #: Why nothing is in scope at all, else `None`.
+    nothing: str | None
+
+
+def checkov_findings(
+    build_path: Path,
+    workspace: WorkspaceModel,
+    provisioner_source_paths: dict[str, Path | None],
+    *,
+    namespaces: dict[str, NamespaceModel] | None,
+    index: DocumentIndex,
+    threshold: str,
+) -> CheckovFindingsReport:
+    """Failed checks per target at or above `threshold`, read-only; unrated ones always listed and marked.
+
+    Targets are the ones `evaluate_checkov_policy()` scans; without a policy, the policy defaults apply.
+
+    Raises:
+        UsageError: `build_path` does not exist.
+        SystemError: Checkov is not available, or a scan failed.
+    """
+    if not build_path.is_dir():
+        raise UsageError(f"No build output at '{build_path}'; run 'strata build run' first.")
+    policy = workspace.spec.checkov_policy or CheckovPolicyModel.model_validate({})
+    targets, nothing = _targets(policy, workspace, provisioner_source_paths, build_path, namespaces, index)
+    rated = CHECKOV_SEVERITY_ORDER[:-1]
+    severities = tuple(CHECKOV_SEVERITY_ORDER[: CHECKOV_SEVERITY_ORDER.index(threshold) + 1])
+    scanner = _checkov(index)
+    version: str | None = None
+    rows: list[CheckovTargetFindings] = []
+    for target in targets:
+        if target.path is None:
+            rows.append(CheckovTargetFindings(target.label, None, target.missing, ()))
+            continue
+        try:
+            result = _scan(scanner, policy, target.path)
+        except IntegrationError as exc:
+            raise SystemError(f"checkov_policy: {target.label}: {exc}") from None
+        version = result.scanner_version
+        findings = tuple(
+            CheckovFinding(finding, unrated=finding.severity not in rated)
+            for finding in result.findings
+            if finding.severity not in rated or finding.severity in severities
+        )
+        rows.append(CheckovTargetFindings(target.label, target.path, None, findings))
+    return CheckovFindingsReport(version, policy.framework, severities, tuple(rows), nothing)
+
+
+_NOT_MATERIALISED = "not materialised during this build"
+
+
+@dataclass(frozen=True)
+class _Target:
+    label: str
+    path: Path | None
+    missing: str | None = None
+
+
+def _scan(scanner: CheckovIntegration, policy: CheckovPolicyModel, path: Path) -> CheckovScanResultModel:
+    return scanner.scan(
+        path,
+        framework=policy.framework,
+        skip_checks=policy.skip_checks,
+        include_checks=policy.include_checks,
+        custom_checks_dir=policy.custom_checks_dir,
+        timeout=policy.timeout,
+    )
+
+
+def _targets(
+    policy: CheckovPolicyModel,
+    workspace: WorkspaceModel,
+    provisioner_source_paths: dict[str, Path | None],
+    build_path: Path,
+    namespaces: dict[str, NamespaceModel] | None,
+    index: DocumentIndex | None,
+) -> tuple[list[_Target], str | None]:
+    """What `policy` scans, in order, or why nothing is in scope; shared by the gate and the listing."""
+    if policy.framework == "helm":
+        return _helm_targets(policy, build_path, namespaces, index)
+    provisioners = _provisioners_for_scope(workspace, _FRAMEWORK_TOOLS[policy.framework], policy.scope)
+    if not provisioners:
+        return [], f"no '{policy.framework}' provisioners found for scope '{policy.scope}'"
+    targets = []
+    for provisioner in provisioners:
+        # `None` covers both "never reached" and a source-less dependency.
+        source_path = provisioner_source_paths.get(provisioner.name)
+        missing = None if source_path is not None else _NOT_MATERIALISED
+        targets.append(_Target(f"provisioner '{provisioner.name}'", source_path, missing))
+    return targets, None
 
 
 def _provisioners_for_scope(workspace: WorkspaceModel, tools: frozenset[str], scope: str) -> list[ProvisionerModel]:
@@ -189,99 +290,40 @@ def _provisioners_for_scope(workspace: WorkspaceModel, tools: frozenset[str], sc
     return [p for p in matching if p.name == step.provisioner]
 
 
-def _evaluate_helm(
-    diagnostics: Diagnostics,
+def _helm_targets(
     policy: CheckovPolicyModel,
     build_path: Path,
     namespaces: dict[str, NamespaceModel] | None,
     index: DocumentIndex | None,
-    severity: Callable[..., None],
-) -> None:
-    """Helm's own resolution path (Phase 3) — namespace/module enumeration
-    instead of a provisioner-tool lookup, since a Helm workload is reached
-    via `Namespace.spec.modules`, never `ProvisionerModel` (see this
-    module's own docstring).
-    """
+) -> tuple[list[_Target], str | None]:
+    """Helm's own resolution path (Phase 3): namespace modules, never a provisioner (module docstring)."""
     if namespaces is None or index is None:
-        _report_missing_data(diagnostics, policy.on_missing_data, "no namespace data available to resolve Helm modules")
-        return
+        return [], "no namespace data available to resolve Helm modules"
+    selected = _namespaces_for_scope(namespaces, policy.scope)
+    if not selected:
+        return [], f"no namespaces found for scope '{policy.scope}'"
 
-    targets = _namespaces_for_scope(namespaces, policy.scope)
-    if not targets:
-        _report_missing_data(diagnostics, policy.on_missing_data, f"no namespaces found for scope '{policy.scope}'")
-        return
-
-    scanner = _checkov(index)
-    modules_reached = 0
-    for namespace in targets:
+    targets: list[_Target] = []
+    for namespace in selected:
         for reference in namespace.spec.modules or []:
             if not reference.enabled:
                 continue
             module = resolve_module(index, reference)
             if module.spec.type != "helm":
                 continue
-            modules_reached += 1
-
             label = f"namespace '{namespace.meta.name}' module '{reference.name}'"
-
             if module.spec.source.chart_name is not None:
-                # Registry-pulled chart — only `values.yaml`/`meta.yaml` are
-                # ever written for it (source_sync.sync_module_source()'s
-                # own documented behavior), never the chart's own templates
-                # — matches v1's real "no local source, skip with an
-                # explicit warning" behavior.
-                _report_missing_data(
-                    diagnostics,
-                    policy.on_missing_data,
-                    "registry-pulled chart has no local source to scan",
-                    scope=label,
-                )
+                # Only values.yaml/meta.yaml are written for a registry chart, never its templates (as v1).
+                targets.append(_Target(label, None, "registry-pulled chart has no local source to scan"))
                 continue
-
             module_dir = build_path / namespace.meta.name / reference.name
-            if not module_dir.is_dir():
-                _report_missing_data(
-                    diagnostics, policy.on_missing_data, "not materialised during this build", scope=label
-                )
-                continue
-
-            try:
-                result = scanner.scan(
-                    module_dir,
-                    framework="helm",
-                    skip_checks=policy.skip_checks,
-                    include_checks=policy.include_checks,
-                    custom_checks_dir=policy.custom_checks_dir,
-                    timeout=policy.timeout,
-                )
-            except IntegrationError as exc:
-                _report_missing_data(diagnostics, policy.on_missing_data, str(exc), scope=label)
-                continue
-
-            breaching = result.findings_at_or_above(policy.severity_gate.upper())
-            if breaching:
-                severity(
-                    f"checkov_policy: {label} has {len(breaching)} finding(s) at or above severity "
-                    f"'{policy.severity_gate}' — scanned with checkov {result.scanner_version}.",
-                    code="checkov_policy_violation",
-                )
-
-    if modules_reached == 0:
-        # Every reachable module in scope was either disabled or not
-        # helm-typed — the "nothing to evaluate" case the provisioner-based
-        # path already guards (`if not provisioners:` above) was otherwise
-        # silently unreachable here: the only not-empty check before this
-        # loop is on *namespaces*, not on whether any of them actually had
-        # a helm module to scan. Left unguarded, a typo'd `type:` or an
-        # all-disabled namespace would produce zero diagnostics at all —
-        # exactly the "never scanned looks the same as scanned clean" risk
-        # `on_missing_data` exists to prevent (this doc's own "v2 design
-        # decision" section).
-        _report_missing_data(
-            diagnostics,
-            policy.on_missing_data,
-            f"no helm modules found across {len(targets)} namespace(s) for scope '{policy.scope}'",
-        )
+            targets.append(
+                _Target(label, module_dir) if module_dir.is_dir() else _Target(label, None, _NOT_MATERIALISED)
+            )
+    if not targets:
+        # Every module disabled or not helm-typed: never let "never scanned" look like "scanned clean".
+        return [], f"no helm modules found across {len(selected)} namespace(s) for scope '{policy.scope}'"
+    return targets, None
 
 
 def _namespaces_for_scope(namespaces: dict[str, NamespaceModel], scope: str) -> list[NamespaceModel]:

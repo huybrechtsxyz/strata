@@ -17,12 +17,14 @@ from strata.controllers.build_controller import (
     apply_remote_version_pins,
     build_resolved_workspace_graph,
     build_run,
+    expected_source_paths,
     find_provisioner,
     ordered_by_depends_on,
 )
 from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.controllers.source_sync import SourceSyncError
+from strata.controllers.value_controller import resolve_deployment_workspace
 from strata.integrations.terraform_projection import build_strata_payload
 from strata.models.asset_model import AssetModel
 from strata.models.checkov_model import CheckovFindingModel, CheckovScanResultModel
@@ -127,6 +129,23 @@ def test_find_provisioner_raises_for_an_unknown_name():
     )
     with pytest.raises(UsageError, match="ghost"):
         find_provisioner(workspace, "ghost")
+
+
+def test_expected_source_paths_keys_a_source_less_step_by_its_step_name(tmp_path: Path):
+    """As `build_run()`'s step loop does for a sync/GitOps provisioner (`build_path / step.name`)."""
+    workspace = WorkspaceModel.model_validate(
+        {
+            "meta": {"name": "ws"},
+            "spec": {
+                "providers": ["p1"],
+                "provisioners": [{"name": "gitops", "tool": "argocd"}],
+                "execution": [{"name": "sync_apps", "provisioner": "gitops", "resources": ["r1"]}],
+                "resources": [{"name": "r1", "resource": "r1"}],
+            },
+        }
+    )
+    (tmp_path / "sync_apps").mkdir()
+    assert expected_source_paths(tmp_path, workspace) == {"gitops": tmp_path / "sync_apps"}
 
 
 # ---------------------------------------------------------------------------
@@ -1102,6 +1121,72 @@ def test_build_run_unified_mapping_survives_a_provisioner_reached_both_ways(tmp_
     assert materialised["iac_primitives"] == build_path / "primitives"
     assert materialised["tf_main"] == build_path / "infra"
     assert (build_path / "components" / "main.tf").exists()
+
+
+def _terraform_solution_with_target_path_and_unreached(tmp_path: Path) -> Path:
+    """`target_path`, a source-less dependency, and a provisioner no step reaches."""
+    root = _terraform_solution_with_dependency(tmp_path)
+    _write(root, "spare/main.tf", "# never reached\n")
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n"
+        "    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "        target_path: rendered/infra\n"
+        "      depends_on:\n        - iac_components\n        - gitops_sync\n"
+        "    - name: iac_components\n      tool: terraform\n      source:\n        source_path: components\n"
+        "    - name: gitops_sync\n      tool: argocd\n"
+        "    - name: tf_spare\n      tool: terraform\n      source:\n        source_path: spare\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    return root
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        _terraform_solution_with_dependency,
+        _terraform_solution_with_transitive_dependency,
+        _terraform_solution_with_shared_dependency,
+        _terraform_solution_with_dependency_also_executed,
+        _terraform_solution_with_target_path_and_unreached,
+    ],
+)
+def test_expected_source_paths_matches_what_build_run_hands_the_checkov_gate(tmp_path: Path, monkeypatch, fixture):
+    """Security-gates plan P9-2: `policy check` re-derives the paths `build run` used, so they must agree."""
+    from strata.controllers import build_controller as build_controller_module
+
+    root = fixture(tmp_path)
+    build_path = tmp_path / "build"
+    handed: dict[str, dict] = {}
+    real_evaluate = build_controller_module.evaluate_checkov_policy
+
+    def _spy(build_path_, workspace, provisioner_source_paths, **kwargs):
+        handed["paths"] = dict(provisioner_source_paths)
+        handed["workspace"] = workspace
+        return real_evaluate(build_path_, workspace, provisioner_source_paths, **kwargs)
+
+    monkeypatch.setattr(build_controller_module, "evaluate_checkov_policy", _spy)
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert expected_source_paths(build_path, handed["workspace"]) == handed["paths"]
+
+
+def test_expected_source_paths_reports_a_missing_directory_as_not_materialised(tmp_path: Path):
+    root = _terraform_solution_with_target_path_and_unreached(tmp_path)
+    build_path = tmp_path / "build"
+    assert build_run(_context(root), "app", build_path).ok
+    _, workspace = resolve_deployment_workspace(_context(root), "app")
+    shutil.rmtree(build_path / "components")
+
+    paths = expected_source_paths(build_path, workspace)
+
+    assert paths == {"iac_components": None, "gitops_sync": None, "tf_main": build_path / "rendered" / "infra"}
 
 
 # ---------------------------------------------------------------------------
