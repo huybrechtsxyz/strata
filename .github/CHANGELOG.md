@@ -13,3 +13,4 @@ v2 is a ground-up rebuild of strata, evidence-driven from real v1 consumer usage
 ### Added
 
 - Security gates: `release_gate_policy` and `image_gate_policy` on the workspace, checked by `strata deploy run` before any step, backed by any `release_gate` / `image_findings` integration (Aikido Security first). New `strata policy list | check | findings` and `strata integration check` commands. See [docs/how-to/security-gates.md](../docs/how-to/security-gates.md).
+- Integration readiness: `strata build run` and every `strata deploy` command first check each enabled Integration (tool on PATH, `spec.version`); a `required: true` one that is not ready stops the run, others warn. `spec.version` is enforced (Terraform's `~>` accepted). New `strata integration list [--deployment D]`; `strata integration check` reports local readiness before the connection check and accepts a type name.

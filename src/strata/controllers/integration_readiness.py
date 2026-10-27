@@ -11,9 +11,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import cast
 
-from strata.controllers.build_controller import find_provisioner
 from strata.controllers.integration_resolution import (
     bind_integration_config,
+    find_provisioner,
     resolve_integration,
     resolve_output_store_integration,
 )
@@ -29,6 +29,7 @@ from strata.models.common_models import PlatformKind
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel
 from strata.services.environment_service import merge_environment_models
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 from strata.utils.version_constraints import version_satisfies
 
@@ -51,6 +52,7 @@ class IntegrationReadiness:
     declared: bool
     registered: bool
     enabled: bool
+    required: bool
     local_tool: bool
     command: str | None
     available: bool | None
@@ -188,6 +190,7 @@ def assess_integration(integration: Integration, *, read_version: bool = True) -
         declared=config is not None,
         registered=True,
         enabled=enabled,
+        required=config.spec.required if config is not None else False,
         local_tool=local_tool,
         command=command,
         available=available,
@@ -196,6 +199,39 @@ def assess_integration(integration: Integration, *, read_version: bool = True) -
         connection_check=isinstance(integration, ConnectionCheckIntegration),
         problems=tuple(problems),
     )
+
+
+def readiness_diagnostics(readiness: IntegrationReadiness, *, used: bool = False) -> Diagnostics:
+    """Problems as findings (D19): an error when the integration is required or used, else a warning.
+
+    A disabled integration nothing uses reports nothing: disabling it was a choice.
+    """
+    diagnostics = Diagnostics()
+    if not readiness.enabled and not used:
+        return diagnostics
+    report = diagnostics.error if used or readiness.required else diagnostics.warning
+    label = f"Integration '{readiness.name}'" + (" (required)" if readiness.required else "")
+    for problem in readiness.problems:
+        report(f"{label}: {problem.message}", location=readiness.name, code=problem.code)
+    return diagnostics
+
+
+def integration_preflight(
+    index: DocumentIndex, *, exclude: frozenset[str] = frozenset(), read_version: bool = True
+) -> Diagnostics:
+    """Every enabled Integration document's readiness, before `build run` or deploy does any work (D19-D22).
+
+    Args:
+        exclude: Document names the caller already checked more strictly (deploy's step preflight).
+        read_version: Run each tool to read its version; `False` under `--smoke-test`.
+    """
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.INTEGRATION):
+        config = cast(IntegrationModel, entry.model)
+        if entry.ref.name in exclude or not config.spec.enabled:
+            continue
+        diagnostics.extend(readiness_diagnostics(assess_document(config, read_version=read_version).readiness))
+    return diagnostics
 
 
 def list_integrations(
@@ -299,6 +335,7 @@ def _unconstructed(
         declared=config is not None,
         registered=registered,
         enabled=enabled,
+        required=config.spec.required if config is not None else False,
         local_tool=False,
         command=None,
         available=None,

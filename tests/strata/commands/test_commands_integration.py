@@ -336,6 +336,17 @@ def test_list_keeps_a_disabled_document_named_like_a_type_default_row(tmp_path, 
     assert "azure-keyvault (type default)" in _list(root, "--deployment", "app").output
 
 
+def test_list_without_a_deployment_fails_when_a_required_integration_is_not_ready(tmp_path, http, tools):
+    tools["on_path"] = False
+    root = _solution(tmp_path)
+    document = root / "terraform.yaml"
+    document.write_text(document.read_text(encoding="utf-8") + "  required: true\n", encoding="utf-8")
+    result = _list(root, "--output", "json")
+    assert result.exit_code == EXIT_VALIDATION, result.output
+    errors = [d for d in json.loads(result.output)["diagnostics"] if d["severity"] == "error"]
+    assert [d["location"] for d in errors] == ["terraform"]
+
+
 def test_list_with_a_pin_resolves_the_deployment_with_it(tmp_path, http, tools):
     root = _deployable(_solution(tmp_path))
     assert _list(root, "--deployment", "app", "--pin", "ghost").exit_code == EXIT_USAGE

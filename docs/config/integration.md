@@ -25,7 +25,10 @@ real integration (Infisical, Azure Key Vault, Azure App Configuration).
   provides both, one document per credential
 - `spec.configuration` — integration-specific settings, validated by the integration itself (an
   unknown key is an error, not silently ignored)
-- `spec.required` — whether this integration must be available for platform operation (default `false`)
+- `spec.required` — whether this integration must be ready on the machine running strata (default
+  `false`). `strata build run`, every `strata deploy` command and `strata integration list` check
+  every enabled integration first: a required one that is not ready (tool not on PATH, wrong
+  version, misconfigured) is an error and stops the run; any other is a warning
 - `spec.enabled` — whether it's active (default `true`)
 - `spec.authentication` — same shape as [provider.md](provider.md)'s
 - `spec.transport` — how it's reached (`cli`, `http`, `sdk`, ...) — checked against the resolved
@@ -96,4 +99,5 @@ spec:
   a credential holder, not as a problem. A disabled document nothing uses is listed, never warned
   about. With `--deployment` it adds what that deployment binds at deploy time - step
   provisioners, value stores, the output store, gate policies (including types bound without a
-  document) - and exits 3 when one of those is not ready: an offline CI preflight.
+  document) - and exits 3 when one of those is not ready: an offline CI preflight. With or without
+  `--deployment` it also exits 3 when a `required: true` integration is not ready.

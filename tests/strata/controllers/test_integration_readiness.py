@@ -11,7 +11,9 @@ from strata.controllers.integration_readiness import (
     assess_document,
     assess_integration,
     assess_named,
+    integration_preflight,
     list_integrations,
+    readiness_diagnostics,
 )
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.integrations.aikido import AikidoIntegration
@@ -88,6 +90,39 @@ def test_assess_named_refuses_an_ambiguous_type_and_an_unknown_name():
         assess_named(index, "terraform")
     with pytest.raises(UsageError, match="not a known integration type"):
         assess_named(index, "nope")
+
+
+def _readiness(*, required: bool = False, enabled: bool = True):
+    return assess_document(_doc("tool", "forgejo", ["infrastructure"], required=required, enabled=enabled)).readiness
+
+
+@pytest.mark.parametrize(
+    ("required", "used", "severity"),
+    [(True, False, "error"), (False, True, "error"), (False, False, "warning")],
+)
+def test_readiness_diagnostics_severity_follows_required_and_used(required, used, severity):
+    diagnostics = readiness_diagnostics(_readiness(required=required), used=used)
+    [finding] = list(diagnostics)
+    assert finding.severity.value == severity and finding.code == "integration_type_unregistered"
+    assert ("(required)" in finding.message) is required
+
+
+def test_a_disabled_integration_nothing_uses_reports_nothing():
+    readiness = _readiness(enabled=False, required=True)
+    assert list(readiness_diagnostics(readiness)) == []
+    assert readiness_diagnostics(readiness, used=True).errors
+
+
+def test_integration_preflight_skips_disabled_and_excluded_documents():
+    index = _index(
+        _doc("broken-required", "forgejo", ["infrastructure"], required=True),
+        _doc("broken-optional", "forgejo", ["infrastructure"]),
+        _doc("broken-disabled", "forgejo", ["infrastructure"], required=True, enabled=False),
+        _doc("broken-excluded", "forgejo", ["infrastructure"], required=True),
+    )
+    diagnostics = integration_preflight(index, exclude=frozenset({"broken-excluded"}))
+    assert [d.location for d in diagnostics.errors] == ["broken-required"]
+    assert [d.location for d in diagnostics.warnings] == ["broken-optional"]
 
 
 def test_list_integrations_without_a_deployment_lists_every_document_sorted():

@@ -1479,6 +1479,61 @@ def test_deploy_run_reports_an_unavailable_tool_once_for_all_its_steps(tmp_path:
     assert error.code == "integration_unavailable" and "step 'apply_infra'" in error.message
 
 
+def _with_helm_integration(root: Path, *, required: bool) -> None:
+    _write(
+        root,
+        "helm.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: helm\nspec:\n"
+        f"  type: helm\n  capabilities: [container]\n  required: {str(required).lower()}\n",
+    )
+
+
+def _helm_missing(monkeypatch) -> None:
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: None if cmd == "helm" else f"/usr/bin/{cmd}")
+
+
+def test_build_run_stops_when_a_required_integration_is_not_ready(tmp_path: Path, monkeypatch):
+    root = _terraform_solution(tmp_path)
+    _with_helm_integration(root, required=True)
+    _helm_missing(monkeypatch)
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    [error] = diagnostics.errors
+    assert error.code == "integration_unavailable" and "Integration 'helm' (required)" in error.message
+    assert not build_path.exists()
+
+
+def test_build_run_warns_about_an_optional_integration_that_is_not_ready(tmp_path: Path, monkeypatch):
+    root = _terraform_solution(tmp_path)
+    _with_helm_integration(root, required=False)
+    _helm_missing(monkeypatch)
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [d.code for d in diagnostics.warnings] == ["integration_unavailable"]
+    assert (build_path / "resolved.yaml").exists()
+
+
+def test_deploy_run_checks_other_required_integrations_once(tmp_path: Path, _capture, monkeypatch):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    _with_helm_integration(root, required=True)
+    _helm_missing(monkeypatch)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "integration_unavailable" and "'helm'" in error.message
+    assert _capture == []
+
+
 def test_deploy_run_preflight_keys_readiness_by_name_and_command(tmp_path: Path, monkeypatch):
     """A script integration's command depends on its provisioner, so one name can mean two tools (R11)."""
     from strata.controllers import deploy_controller

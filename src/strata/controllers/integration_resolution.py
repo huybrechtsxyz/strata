@@ -48,6 +48,21 @@ from strata.models.workspace_model import WorkspaceModel
 from strata.utils.errors import UsageError
 
 
+def find_provisioner(workspace: WorkspaceModel, name: str) -> ProvisionerModel:
+    """Return the `ProvisionerModel` named `name` in `workspace.spec.provisioners`.
+
+    Raises:
+        UsageError: `name` is not declared — should not happen,
+            `WorkspaceSpecModel.validate_execution()` already guarantees
+            every `ProvisioningStepModel.provisioner` names a real entry;
+            this is a defensive backstop, not primary validation.
+    """
+    for provisioner in workspace.spec.provisioners:
+        if provisioner.name == name:
+            return provisioner
+    raise UsageError(f"Provisioner '{name}' is not declared in workspace '{workspace.meta.name}'.")
+
+
 def resolve_integration(index: DocumentIndex, provisioner: ProvisionerModel) -> InfraIntegration:
     """Return the `InfraIntegration` instance `provisioner` should run against.
 

@@ -180,7 +180,10 @@ def test_a_warn_breach_deploys_and_is_recorded_with_its_violation(tmp_path, gate
     diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok
-    assert [d.code for d in diagnostics.warnings] == ["release_gate_failed"]
+    # The fake type is patched into the gate controller only, so the integration preflight warns it is unregistered.
+    assert [d.code for d in diagnostics.warnings if d.code != "integration_type_unregistered"] == [
+        "release_gate_failed"
+    ]
     assert terraform
     result = read_policy_results(build_path)[0]
     assert result.passed is True and result.violations

@@ -16,7 +16,7 @@ Four small, independent helpers plus the loop itself:
   `depends_on` referencing real steps) — `WorkspaceSpecModel.validate_execution()`
   already guarantees this for `spec.execution`, so this function does not
   re-validate.
-- `find_provisioner()` — `WorkspaceSpecModel.validate_execution()` already
+- `find_provisioner()` (lives in `integration_resolution.py`) — `WorkspaceSpecModel.validate_execution()` already
   guarantees `step.provisioner` names a real entry in `spec.provisioners`;
   this is a lookup, not a check.
 - `materialise_provisioner_sources()` (ADR-0029 — docs/work/
@@ -39,7 +39,8 @@ from typing import Any, cast
 import yaml
 
 from strata.controllers.checkov_controller import evaluate_checkov_policy
-from strata.controllers.integration_resolution import resolve_integration
+from strata.controllers.integration_readiness import integration_preflight
+from strata.controllers.integration_resolution import find_provisioner, resolve_integration
 from strata.controllers.policy_results import write_policy_results
 from strata.controllers.remote_credentials import RemoteCredentialResolver
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
@@ -350,21 +351,6 @@ def ordered_by_depends_on(steps: list[ProvisioningStepModel]) -> list[Provisioni
     return [by_name[name] for name in order]
 
 
-def find_provisioner(workspace: WorkspaceModel, name: str) -> ProvisionerModel:
-    """Return the `ProvisionerModel` named `name` in `workspace.spec.provisioners`.
-
-    Raises:
-        UsageError: `name` is not declared — should not happen,
-            `WorkspaceSpecModel.validate_execution()` already guarantees
-            every `ProvisioningStepModel.provisioner` names a real entry;
-            this is a defensive backstop, not primary validation.
-    """
-    for provisioner in workspace.spec.provisioners:
-        if provisioner.name == name:
-            return provisioner
-    raise UsageError(f"Provisioner '{name}' is not declared in workspace '{workspace.meta.name}'.")
-
-
 def materialise_provisioner_sources(
     context: SolutionContext,
     build_path: Path,
@@ -555,6 +541,11 @@ def build_run(
     version = resolve_version(context, deployment)
 
     diagnostics = Diagnostics()
+    # docs/work/integration-readiness.md D21: a required integration that is not ready stops the build first.
+    preflight = integration_preflight(index)
+    diagnostics.extend(preflight)
+    if not preflight.ok:
+        return diagnostics
     resolved = ValueResolution(deployment=deployment_name)
     if resolve:
         variables, secrets, features = merge_environment_models(environments)

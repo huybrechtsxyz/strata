@@ -30,14 +30,18 @@ from typing import Any, Literal, cast
 
 import jinja2
 
-from strata.controllers.build_controller import build_resolved_workspace_graph, find_provisioner, ordered_by_depends_on
+from strata.controllers.build_controller import build_resolved_workspace_graph, ordered_by_depends_on
 from strata.controllers.deployment_output_store import (
     DeploymentOutputStore,
     OutputRecordNotFoundError,
     OutputRecordStaleError,
 )
-from strata.controllers.integration_readiness import IntegrationReadiness, assess_integration
-from strata.controllers.integration_resolution import resolve_integration, resolve_output_store_integration
+from strata.controllers.integration_readiness import IntegrationReadiness, assess_integration, integration_preflight
+from strata.controllers.integration_resolution import (
+    find_provisioner,
+    resolve_integration,
+    resolve_output_store_integration,
+)
 from strata.controllers.policy_results import append_policy_result
 from strata.controllers.security_gate_controller import evaluate_security_gates
 from strata.controllers.solution_context import SolutionContext
@@ -713,6 +717,12 @@ def deploy_run(
                 _step(f"would check {integration.TYPE} '{integration.name}' version '{readiness.required_version}'")
         if readiness.ok:
             resolved_steps.append((step, provisioner, integration))
+    # Every other enabled integration (docs/work/integration-readiness.md D22): required ones must be ready too.
+    diagnostics.extend(
+        integration_preflight(
+            index, exclude=frozenset(name for name, _ in readiness_by_tool), read_version=not smoke_test
+        )
+    )
     if not diagnostics.ok:
         return diagnostics
 

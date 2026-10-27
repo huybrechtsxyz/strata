@@ -23,6 +23,7 @@ from strata.controllers.integration_readiness import (
     IntegrationUse,
     assess_named,
     list_integrations,
+    readiness_diagnostics,
 )
 from strata.controllers.security_gate_controller import bind_resolved_credentials
 from strata.controllers.solution_context import SolutionContext, open_solution
@@ -166,10 +167,12 @@ def list_command(
 
     \b
     Exit codes:
-      0  listed (without --deployment, problems are warnings)
+      0  listed; problems of integrations that are neither required nor
+         used by --deployment are warnings
       2  unknown deployment, several documents of one auto-bound type,
          or bad arguments
-      3  with --deployment: an integration it uses is not ready
+      3  a required integration (spec.required), or one --deployment
+         uses, is not ready
     """
     with command_run("integration list", output=output, quiet=quiet, verbose=verbose) as run:
         context = open_solution(resolve_work_path(path)).require_valid()
@@ -183,11 +186,7 @@ def list_command(
         run.step(f"{len(rows)} integration(s)")
         diagnostics = Diagnostics()
         for row in rows:
-            if not row.used_for and not row.readiness.enabled:
-                continue
-            report = diagnostics.error if row.used_for else diagnostics.warning
-            for problem in row.readiness.problems:
-                report(problem.message, code=problem.code)
+            diagnostics.extend(readiness_diagnostics(row.readiness, used=bool(row.used_for)))
         if output == "console":
             _print_rows(rows, with_usage=deployment is not None)
         run.report(diagnostics, root=context.root)

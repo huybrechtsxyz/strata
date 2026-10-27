@@ -1,6 +1,6 @@
 # Integration readiness - Work
 
-- Status: in-progress (Phases 1-4 done; remaining open questions only)
+- Status: in-progress (Phases 1-5 done; remaining open questions only)
 - Last updated: 2026-10-26
 
 ## Overview
@@ -236,6 +236,41 @@ Phase 2 (deploy uses `assess_integration()`).
   --pin`, controller-level tests for `assess_document`/`assess_named`/`list_integrations`, and a
   disabled credential holder.
 
+## Phase 5 design - integration preflight for build and deploy
+
+Proposed rule (2026-10-27): check every enabled integration; ready -> ok; not ready -> error when
+`spec.required`, else warning. Verified before deciding:
+
+- **`spec.required` is never read.** The field ("required for platform operation") is set in real
+  documents - `config/` terraform `true`, `.v2-cfg` keyvault and terraform `true`, `.v2-haven` git
+  `true` - and v1's `tools status --missing` used it, but no v2 code consults it: the same class of
+  "documented, silently ignored" gap as `spec.version` was before Phase 1.
+- `build run` checks nothing up front; each tool fails where it is first used (a clone, a scan).
+  Deploy preflight checks only the filtered steps' tools.
+- `integration list` already assesses every document; only its severity rule differs (used ->
+  error, unused -> warning).
+
+Decisions:
+
+- **D19 - Generic, one rule, three callers.** `integration_preflight(index, *, exclude, read_version)`
+  in `integration_readiness.py`: every **enabled** Integration document, assessed as in D5;
+  problems are errors when `spec.required`, warnings otherwise. Disabled documents are skipped.
+  The rule lives in one function, `readiness_diagnostics(readiness, used=...)` (error when required
+  *or* used by the run, warning otherwise, nothing for a disabled unused document), which
+  `integration list` uses too.
+- **D20 - The command is `strata integration list`** (no new command): without `--deployment` it
+  now exits 3 when a *required* integration is not ready; non-required problems stay warnings.
+  It is the stand-alone "is this machine ready?" check v1's `tools status --missing` was.
+- **D21 - `build run` runs it first**, before cleaning or rendering: a required integration that is
+  not ready stops the build (exit 3); other problems are warnings in its report. `--dry-run` runs
+  it too (read-only).
+- **D22 - Deploy runs it after the step preflight**, excluding the integrations the filtered steps
+  already checked (those stay errors, D8), so nothing is reported twice. `--smoke-test` passes
+  `read_version=False`.
+- **D23 - `strata validate` does not run it** - validate must work on any machine; readiness is a
+  property of the machine, not of the documents.
+- **D24 - `readiness.required`** joins the record (and the JSON shape).
+
 ## Implementation Plan
 
 - [x] **Phase 1 - version enforcement (bug fix).** As designed above: `parse_version_constraint()`,
@@ -253,13 +288,17 @@ Phase 2 (deploy uses `assess_integration()`).
       real Terraform 1.12.2.
 - [x] **Phase 4 - `integration list`** with the `--deployment` usage map and exit 3; agent skill row
       (drift test), docs. Done 2026-10-26 (D14-D18).
+- [x] **Phase 5 - integration preflight** for `build run` and deploy, honouring `spec.required`
+      (D19-D24); `find_provisioner()` moved to `integration_resolution.py` to avoid an import cycle.
+      Done 2026-10-27.
 
 ## Remaining Work / Open Questions
 
 1. ~~**Version for networked integrations.**~~ Resolved in Phase 1 design D4: a validate error.
-2. **Build-time tools.** `build run` uses scanners (trivy/grype/checkov) that are not Integration
-   documents today; should `integration list` show them, and should `build run` enforce versions?
-   Same question for build-time module types (D16 left them out).
+2. **Build-time tools without documents.** Phase 5 checks every *declared* integration (git
+   included, R1), so a solution can require any tool by declaring it. Still open: Trivy/Grype/
+   Checkov are not Integration types at all (scanners run by `sbom_controller`/`checkov`), so they
+   cannot be declared or required yet.
 3. ~~**Usage map scope.**~~ Resolved in Phase 4 design D16 (deploy-time bindings only).
 4. ~~**`--missing` filters.**~~ Resolved in D18: none; JSON plus `jq` covers them.
 5. **Validate-time gaps** found on the way: a provisioner naming a disabled Integration document
@@ -270,6 +309,10 @@ Phase 2 (deploy uses `assess_integration()`).
 
 ## Changelog
 
+- 2026-10-27: Phase 5 built: `integration_preflight()` runs first in `build run` and in deploy
+  (after the step preflight, without repeating it); `spec.required` finally means something - a
+  required integration that is not ready is an error, any other a warning; `integration list` uses
+  the same rule (exit 3 for a required one even without `--deployment`).
 - 2026-10-27: Review fixes R1-R11 built: `git` registered as a local tool (`integrations/git_cli.py`),
   `ensure_version()` removed, `registered` made truthful, no warning for disabled unused documents,
   networked types without a connection check say "nothing to verify", connection failures keep the
