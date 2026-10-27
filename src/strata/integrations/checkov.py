@@ -11,13 +11,10 @@ scan_sbom()`'s shape — `ScannerIntegration`'s own docstring already states
 why: an IaC directory in, a completely different findings model out, is a
 genuinely different input/output shape from an SBOM file in.
 
-Never has an `IntegrationModel` document of its own — like
-`CveScannerIntegration`, always built-in (`shutil.which("checkov")` is the
-only resolution strata needs), even though it declares `Capability.SCANNER`.
-The `"checkov"` string in `registry.py`'s `_KNOWN_V1_TYPES` is unrelated —
-that list only improves the error message for someone who tries to declare
-an `Integration` document of `type: checkov`, which this class is never
-constructed from.
+Built with no document by default (`shutil.which("checkov")` is all strata
+needs). Since docs/work/integration-readiness.md Phase 8 a solution can also
+declare `type: checkov`; `checkov_controller` then binds that document, so
+`spec.command`/`spec.version`/`spec.required` apply like any local tool.
 """
 
 import json

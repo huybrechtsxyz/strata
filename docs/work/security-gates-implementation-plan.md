@@ -523,7 +523,7 @@ already allows); `findings` = the violations OPA returns. Joins `strata policy` 
 - [ ] `deploy run` without gate policies behaves exactly as before (existing deploy tests unchanged).
 - [ ] Secret-leak tests pass.
 - [ ] Docs and agent skill updated.
-- [ ] ADR recorded; Phase 7 findings folded in; design graduates to `docs/design/security-gates.md`,
+- [ ] ADR recorded (done 2026-10-27: ADR-0047, ADR-0048, ADR-0049); Phase 7 findings folded in; design graduates to `docs/design/security-gates.md`,
       index + reference + plan to `docs/archive/` (Phases 8-10 move to their own work docs first if
       still open then).
 

@@ -7,10 +7,11 @@ from pathlib import Path
 import pytest
 
 import strata.integrations.cve_scanner as cve_scanner_module
-from strata.integrations.capabilities import ScannerIntegration
-from strata.integrations.cve_scanner import CveScannerIntegration
+from strata.integrations import registry
+from strata.integrations.capabilities import ScannerIntegration, find_capability_mismatches
+from strata.integrations.cve_scanner import CveScannerIntegration, GrypeIntegration, TrivyIntegration
 from strata.integrations.errors import IntegrationError
-from strata.models.integration_model import Capability
+from strata.models.integration_model import Capability, IntegrationModel
 from strata.utils.transport import CommandResult
 
 
@@ -47,6 +48,56 @@ def _patch_run(monkeypatch, result: CommandResult):
 
     monkeypatch.setattr(base_module, "run_command", _fake_run_command)
     return calls
+
+
+# ---------------------------------------------------------------------------
+# Declared backends (docs/work/integration-readiness.md Phases 6-7)
+# ---------------------------------------------------------------------------
+
+
+def _declared(integration_type: str, **spec) -> IntegrationModel:
+    return IntegrationModel.model_validate(
+        {
+            "meta": {"name": f"{integration_type}-doc"},
+            "spec": {"type": integration_type, "capabilities": ["scanner"], **spec},
+        }
+    )
+
+
+def test_trivy_is_a_registered_scanner_type():
+    assert registry.get_class("trivy") is TrivyIntegration
+    assert issubclass(TrivyIntegration, ScannerIntegration)
+    assert find_capability_mismatches(TrivyIntegration) == []
+
+
+def test_a_declared_trivy_is_never_swapped_for_grype(monkeypatch):
+    _patch_which(monkeypatch, {"grype"})
+    scanner = TrivyIntegration(_declared("trivy"))
+    assert scanner.command == "trivy" and not scanner.is_available()
+    with pytest.raises(IntegrationError, match="'trivy' is not available on PATH"):
+        scanner.ensure_available()
+
+
+def test_a_declared_trivy_honours_spec_command_and_reads_its_version(monkeypatch):
+    _patch_which(monkeypatch, {"/opt/trivy/trivy"})
+    calls = _patch_run(monkeypatch, CommandResult(returncode=0, stdout="Version: 0.57.1", stderr=""))
+    scanner = TrivyIntegration(_declared("trivy", command="/opt/trivy/trivy"))
+    assert scanner.is_available()
+    assert scanner.get_version() == "0.57.1"
+    assert calls == [["/opt/trivy/trivy", "--version"]]
+
+
+def test_grype_is_a_registered_scanner_type_reading_its_version_its_own_way(monkeypatch):
+    assert registry.get_class("grype") is GrypeIntegration
+    assert find_capability_mismatches(GrypeIntegration) == []
+    _patch_which(monkeypatch, {"trivy", "grype"})
+    calls = _patch_run(
+        monkeypatch, CommandResult(returncode=0, stdout="Application: grype\nVersion: 0.84.0", stderr="")
+    )
+    scanner = GrypeIntegration(_declared("grype"))
+    assert scanner.command == "grype"
+    assert scanner.get_version() == "0.84.0"
+    assert calls == [["grype", "version"]]
 
 
 # ---------------------------------------------------------------------------

@@ -6,10 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from strata.integrations import registry
 from strata.integrations.capabilities import ScannerIntegration
 from strata.integrations.checkov import CheckovIntegration
 from strata.integrations.errors import IntegrationError
-from strata.models.integration_model import Capability
+from strata.models.integration_model import Capability, IntegrationModel
 from strata.utils.transport import CommandResult
 
 
@@ -70,6 +71,22 @@ def test_ensure_available_raises_when_not_installed(monkeypatch):
 def test_ensure_available_is_a_noop_when_installed(monkeypatch):
     _patch_which(monkeypatch, True)
     CheckovIntegration().ensure_available()  # does not raise
+
+
+def test_checkov_is_a_registered_type_and_a_document_can_override_its_command(monkeypatch, tmp_path):
+    assert registry.get_class("checkov") is CheckovIntegration
+    _patch_which(monkeypatch, True)
+    calls = _patch_run(monkeypatch, CommandResult(returncode=0, stdout="3.2.1", stderr=""))
+    document = IntegrationModel.model_validate(
+        {
+            "meta": {"name": "checkov-pinned"},
+            "spec": {"type": "checkov", "capabilities": ["scanner"], "command": "/venv/bin/checkov"},
+        }
+    )
+    integration = CheckovIntegration(document)
+    assert integration.command == "/venv/bin/checkov"
+    assert integration.get_version() == "3.2.1"
+    assert calls == [["/venv/bin/checkov", "--version"]]
 
 
 # ---------------------------------------------------------------------------

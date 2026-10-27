@@ -29,9 +29,10 @@ from cyclonedx.schema import SchemaVersion
 from cyclonedx.validation.json import JsonStrictValidator
 from packageurl import PackageURL
 
+from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.workload_controller import resolve_module
-from strata.integrations.cve_scanner import CveScannerIntegration
+from strata.integrations.cve_scanner import CveScannerIntegration, GrypeIntegration, TrivyIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.sbom_collectors import registry
@@ -178,6 +179,15 @@ def _build_cyclonedx_json(components: list[SbomComponentModel]) -> str:
     return output.output_as_string()
 
 
+def _declared_cve_scanner(index: DocumentIndex) -> CveScannerIntegration | None:
+    """The enabled `trivy` document's scanner, else the enabled `grype` one (docs/work/integration-readiness.md D26)."""
+    for integration_type, scanner_class in (("trivy", TrivyIntegration), ("grype", GrypeIntegration)):
+        config = bind_integration_config(index, integration_type, requester="cve_policy")
+        if config is not None:
+            return scanner_class(config)
+    return None
+
+
 def evaluate_cve_policy(build_path: Path, workspace: WorkspaceModel, index: DocumentIndex) -> Diagnostics:
     """Gate `build run` on CVE findings in the SBOM `write_sbom()` just
     wrote, when `workspace.spec.cve_policy` is set (docs/work/
@@ -212,11 +222,16 @@ def evaluate_cve_policy(build_path: Path, workspace: WorkspaceModel, index: Docu
 
     severity = diagnostics.error if policy.enforcement == "deny" else diagnostics.warning
     sbom_path = build_path / _SBOM_FILENAME
-    scanner = CveScannerIntegration()
+    declared = _declared_cve_scanner(index)
+    scanner = declared or CveScannerIntegration()
 
     missing_reason: str | None = None
     if not scanner.is_available():
-        missing_reason = "no CVE scanner (Trivy or Grype) found on PATH"
+        missing_reason = (
+            f"{declared.TYPE} '{declared.name}': '{declared.command}' is not available on PATH"
+            if declared is not None
+            else "no CVE scanner (Trivy or Grype) found on PATH"
+        )
     elif not sbom_path.is_file():
         missing_reason = f"no SBOM found at '{sbom_path}'"
 

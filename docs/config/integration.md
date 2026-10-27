@@ -22,7 +22,11 @@ real integration (Infisical, Azure Key Vault, Azure App Configuration).
   `release_gate` (a platform's pass/fail verdict on a repository at a commit) and `image_findings`
   (a platform's open issues for a container image) back the workspace's `release_gate_policy` and
   `image_gate_policy` (see [how-to/security-gates.md](../how-to/security-gates.md)); `type: aikido`
-  provides both, one document per credential
+  provides both, one document per credential.
+  `scanner` is declared by `type: trivy`, `type: grype` (the `cve_policy` scanner) and
+  `type: checkov` (the `checkov_policy` scanner). Declaring one fixes which tool the policy uses
+  (Trivy before Grype when both are declared) and lets you require it and pin its version; without
+  a document, the policies use whichever tool is on PATH
 - `spec.configuration` — integration-specific settings, validated by the integration itself (an
   unknown key is an error, not silently ignored)
 - `spec.required` — whether this integration must be ready on the machine running strata (default

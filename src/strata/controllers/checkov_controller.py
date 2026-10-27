@@ -39,6 +39,7 @@ equivalent at build time in v2. Re-scoped instead to a distinction that
 from collections.abc import Callable
 from pathlib import Path
 
+from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.workload_controller import resolve_module
 from strata.integrations.checkov import CheckovIntegration
@@ -58,6 +59,12 @@ _FRAMEWORK_TOOLS: dict[str, frozenset[str]] = {
     "bicep": frozenset({ProvisionerType.BICEP.value}),
     "ansible": frozenset({ProvisionerType.ANSIBLE.value}),
 }
+
+
+def _checkov(index: DocumentIndex | None) -> CheckovIntegration:
+    """The enabled `checkov` document's scanner, else the PATH default (docs/work/integration-readiness.md D26)."""
+    config = bind_integration_config(index, "checkov", requester="checkov_policy") if index is not None else None
+    return CheckovIntegration(config) if config is not None else CheckovIntegration()
 
 
 def evaluate_checkov_policy(
@@ -127,7 +134,7 @@ def evaluate_checkov_policy(
         )
         return diagnostics
 
-    scanner = CheckovIntegration()
+    scanner = _checkov(index)
     for provisioner in provisioners:
         source_path = provisioner_source_paths.get(provisioner.name)
         if source_path is None:
@@ -204,7 +211,7 @@ def _evaluate_helm(
         _report_missing_data(diagnostics, policy.on_missing_data, f"no namespaces found for scope '{policy.scope}'")
         return
 
-    scanner = CheckovIntegration()
+    scanner = _checkov(index)
     modules_reached = 0
     for namespace in targets:
         for reference in namespace.spec.modules or []:

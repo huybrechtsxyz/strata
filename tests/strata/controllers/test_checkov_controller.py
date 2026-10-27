@@ -96,6 +96,37 @@ def test_evaluate_checkov_policy_is_a_noop_when_unset(tmp_path: Path):
     assert len(diagnostics.items) == 0
 
 
+def test_a_declared_checkov_document_configures_the_scanner(tmp_path: Path, monkeypatch):
+    """docs/work/integration-readiness.md Phase 8 (D26): the enabled `checkov` document is bound."""
+    import strata.controllers.checkov_controller as checkov_controller_module
+    from strata.models.integration_model import IntegrationModel
+
+    received: list[object] = []
+    scanner = _FakeScanner(result=_scan_result("LOW"))
+
+    def _construct(config=None):
+        received.append(config)
+        return scanner
+
+    monkeypatch.setattr(checkov_controller_module, "CheckovIntegration", _construct)
+    document = IntegrationModel.model_validate(
+        {"meta": {"name": "checkov-pinned"}, "spec": {"type": "checkov", "capabilities": ["scanner"]}}
+    )
+    index = DocumentIndex()
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.INTEGRATION, name="checkov-pinned"),
+            model=document,
+            source=Path("checkov.yaml"),
+        )
+    )
+    workspace = _workspace({"severity_gate": "high"}, execution=[_step("apply_infra", "tf_main")])
+
+    evaluate_checkov_policy(tmp_path, workspace, {"tf_main": tmp_path / "infra"}, index=index)
+
+    assert received == [document]
+
+
 # ---------------------------------------------------------------------------
 # Severity gate / enforcement
 # ---------------------------------------------------------------------------

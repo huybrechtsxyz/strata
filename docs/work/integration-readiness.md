@@ -1,6 +1,6 @@
 # Integration readiness - Work
 
-- Status: in-progress (Phases 1-5 done; remaining open questions only)
+- Status: in-progress (Phases 1-8 done; remaining open questions only)
 - Last updated: 2026-10-26
 
 ## Overview
@@ -271,6 +271,46 @@ Decisions:
   property of the machine, not of the documents.
 - **D24 - `readiness.required`** joins the record (and the JSON shape).
 
+## Phases 6-8 design - Trivy, Grype and Checkov as declarable integrations
+
+Verified before deciding (2026-10-27):
+
+- `CveScannerIntegration` (`integrations/cve_scanner.py`, type `cve_scanner`) picks Trivy or Grype
+  from PATH at construction (Trivy preferred) and is built only by `sbom_controller.
+  evaluate_cve_policy()` as `CveScannerIntegration()`; version args differ (`trivy --version`,
+  `grype version`). `CheckovIntegration` (type `checkov`, `COMMAND = "checkov"`) is built only by
+  `checkov_controller` as `CheckovIntegration()`, twice. Neither is in the registry, so no document
+  can declare them; `checkov` is even listed as "a v1 type not yet ported".
+- Both already declare `Capability.SCANNER` and implement `ScannerIntegration`; nothing else
+  depends on their constructors except tests that monkeypatch the class names with no-argument
+  lambdas.
+
+Shared decisions:
+
+- **D25 - Register three types:** `trivy`, `grype`, `checkov`, each a `ScannerIntegration` with the
+  `scanner` capability and the `cli` transport. A document then gets everything Phases 1-5 give any
+  local tool: `spec.version` (validated and enforced), `spec.required` (build/deploy preflight),
+  `spec.command` (a non-default binary), `integration check|list`.
+- **D26 - Declared wins, else today's behaviour.** The CVE gate uses the enabled `trivy` document if
+  there is one, else the enabled `grype` document, else the existing PATH auto-detection
+  (`CveScannerIntegration()`). The Checkov gate uses the enabled `checkov` document, else
+  `CheckovIntegration()`. A declared scanner that is missing is not silently swapped for the other
+  one: the gate's `on_missing_data` applies, and the preflight already reported it.
+- **D27 - Binding by type** through `bind_integration_config()`, as stores and module types bind:
+  several enabled documents of one type is the same usage error.
+- **D28 - No new capability or command.** Scanners stay out of `integration list --deployment`'s
+  usage map (build-time, D16); the preflight covers them.
+
+Per phase:
+
+- **Phase 6 - `trivy`.** `CveScannerIntegration` takes an optional `config` and a fixed `backend`;
+  `command` honours `spec.command`; `ensure_available()` checks the resolved command.
+  `TrivyIntegration` fixes the backend to `trivy`. `sbom_controller` selects per D26.
+- **Phase 7 - `grype`.** `GrypeIntegration`, the same with `grype` (version via `grype version`);
+  added to the D26 selection after Trivy.
+- **Phase 8 - `checkov`.** Register `CheckovIntegration` (out of the v1 list); `checkov_controller`
+  binds an enabled `checkov` document for both its provisioner and Helm paths.
+
 ## Implementation Plan
 
 - [x] **Phase 1 - version enforcement (bug fix).** As designed above: `parse_version_constraint()`,
@@ -291,14 +331,19 @@ Decisions:
 - [x] **Phase 5 - integration preflight** for `build run` and deploy, honouring `spec.required`
       (D19-D24); `find_provisioner()` moved to `integration_resolution.py` to avoid an import cycle.
       Done 2026-10-27.
+- [x] **Phase 6 - `trivy`** declarable (`TrivyIntegration`); `CveScannerIntegration` takes a
+      config and a fixed backend; the CVE gate uses a declared Trivy (D25-D27). Done 2026-10-27.
+- [x] **Phase 7 - `grype`** declarable (`GrypeIntegration`, version via `grype version`); chosen
+      after a declared Trivy. Done 2026-10-27.
+- [x] **Phase 8 - `checkov`** registered (out of the v1 list); the Checkov gate binds a declared
+      document on both its provisioner and Helm paths. Done 2026-10-27.
 
 ## Remaining Work / Open Questions
 
 1. ~~**Version for networked integrations.**~~ Resolved in Phase 1 design D4: a validate error.
-2. **Build-time tools without documents.** Phase 5 checks every *declared* integration (git
-   included, R1), so a solution can require any tool by declaring it. Still open: Trivy/Grype/
-   Checkov are not Integration types at all (scanners run by `sbom_controller`/`checkov`), so they
-   cannot be declared or required yet.
+2. ~~**Build-time tools without documents.**~~ Resolved in Phases 6-8: `git`, `trivy`, `grype` and
+   `checkov` can all be declared, required and version-pinned; undeclared, they keep today's PATH
+   behaviour.
 3. ~~**Usage map scope.**~~ Resolved in Phase 4 design D16 (deploy-time bindings only).
 4. ~~**`--missing` filters.**~~ Resolved in D18: none; JSON plus `jq` covers them.
 5. **Validate-time gaps** found on the way: a provisioner naming a disabled Integration document
@@ -309,6 +354,10 @@ Decisions:
 
 ## Changelog
 
+- 2026-10-27: Phases 6-8 built: `trivy`, `grype` and `checkov` are registered `scanner` types. A
+  declared, enabled document is what the CVE gate (Trivy first, then Grype) and the Checkov gate
+  use - never silently swapped for another tool - and it gets `spec.required`/`spec.version`/
+  `spec.command` like any local tool; undeclared, the gates keep their PATH auto-detection.
 - 2026-10-27: Phase 5 built: `integration_preflight()` runs first in `build run` and in deploy
   (after the step preflight, without repeating it); `spec.required` finally means something - a
   required integration that is not ready is an error, any other a warning; `integration list` uses

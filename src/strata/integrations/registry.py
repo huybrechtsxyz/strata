@@ -48,6 +48,9 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "sentinel": ("strata.integrations.sentinel", "SentinelIntegration"),
     "aikido": ("strata.integrations.aikido", "AikidoIntegration"),
     "git": ("strata.integrations.git_cli", "GitIntegration"),
+    "trivy": ("strata.integrations.cve_scanner", "TrivyIntegration"),
+    "grype": ("strata.integrations.cve_scanner", "GrypeIntegration"),
+    "checkov": ("strata.integrations.checkov", "CheckovIntegration"),
     # ansible/git/bicep/opentofu/vault/consul/etcd/bitwarden/flagsmith/cost/
     # cve/splunk/syslog/identity as each gets a real v2 consumer (ADR-0021
     # Phase 7+).
@@ -69,7 +72,6 @@ _KNOWN_V1_TYPES = frozenset(
         "docker-compose",
         "infracost",
         "kroki",
-        "checkov",
         "opa",
         "azure-cli",
         "aws-cli",

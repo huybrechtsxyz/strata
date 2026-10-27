@@ -16,16 +16,13 @@ filtering happens here in Python instead, including the `NEGLIGIBLE` ->
 cve-scanner-integration.md).
 
 Doesn't fit `Integration.command`'s normal one-executable-per-class
-resolution (ADR-0021 D6): this integration picks between two entirely
-different CLIs at runtime (detected once per instance), not declared on
-the class — so `command` is overridden below rather than relying on
-`COMMAND`/`config.spec.command`. It also never has an `IntegrationModel`
-document of its own — it is always built-in, matching how the three store
-resolvers work from `PATH`/environment alone — even though it now
-declares `Capability.SCANNER` (`ScannerIntegration`,
-`integrations/capabilities.py`): declaring a capability and being
-document-configurable are independent; nothing today ever constructs this
-class from an `IntegrationModel`.
+resolution (ADR-0021 D6): with no Integration document, this integration
+picks between two entirely different CLIs at runtime (detected once per
+instance) - so `command` is overridden below rather than relying on
+`COMMAND`. Since docs/work/integration-readiness.md Phases 6-7 a solution
+can also declare `type: trivy` or `type: grype` (`TrivyIntegration`,
+`GrypeIntegration` below): the backend is then fixed by the document, and
+`spec.command`/`spec.version`/`spec.required` apply like any local tool.
 """
 
 import json
@@ -36,7 +33,7 @@ from pathlib import Path
 
 from strata.integrations.capabilities import ScannerIntegration
 from strata.integrations.errors import IntegrationError
-from strata.models.integration_model import Capability
+from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.sbom_model import CVE_SEVERITY_ORDER, CveAuditResultModel, CveFindingModel
 from strata.utils.transport import CommandResult
 
@@ -58,27 +55,28 @@ class CveScannerIntegration(ScannerIntegration):
     #: Preference order when both are on PATH.
     _BACKENDS = ("trivy", "grype")
 
-    def __init__(self) -> None:
-        super().__init__(config=None)
-        self._backend = next((b for b in self._BACKENDS if shutil.which(b) is not None), None)
+    def __init__(self, config: IntegrationModel | None = None, *, backend: str | None = None) -> None:
+        super().__init__(config=config)
+        if backend is None:
+            backend = next((b for b in self._BACKENDS if shutil.which(b) is not None), None)
+        self._backend = backend
 
     @property
     def command(self) -> str | None:
-        """The detected backend executable — `None` when neither is on `PATH`.
+        """`spec.command` when a document sets it, else the backend executable (`None`: none on PATH).
 
-        Overrides `Integration.command` (normally resolved from `COMMAND`/
-        `config.spec.command`): this integration picks between two
-        entirely different CLIs at runtime instead of one fixed executable
-        per class, and is never configured via an `IntegrationModel`
-        document.
+        Overrides `Integration.command`: without a document this integration picks between two
+        entirely different CLIs at runtime instead of one fixed executable per class.
         """
+        if self.config is not None and self.config.spec.command:
+            return self.config.spec.command
         return self._backend
 
     def get_version(self) -> str | None:
         """Overrides the base implementation: `VERSION_ARGS` differs per
         backend (Trivy: `--version`; Grype: `version`), so it can't be a
         single `ClassVar` shared by both."""
-        if self._backend is None:
+        if self._backend is None or not self.is_available():
             return None
         args = ("--version",) if self._backend == "trivy" else ("version",)
         result = self.run(*args, timeout=10)
@@ -94,13 +92,15 @@ class CveScannerIntegration(ScannerIntegration):
         """Raise when neither Trivy nor Grype is on `PATH`.
 
         Raises:
-            IntegrationError: Neither backend is installed.
+            IntegrationError: Neither backend is installed, or the declared one is not on PATH.
         """
         if self._backend is None:
             raise IntegrationError(
                 "no CVE scanner found on PATH — install Trivy (https://trivy.dev) or "
                 "Grype (https://github.com/anchore/grype) to enable CVE scanning."
             )
+        if not self.is_available():
+            raise IntegrationError(f"{self.name}: '{self.command}' is not available on PATH.")
 
     def scan_sbom(self, sbom_path: Path, *, severity_threshold: str = "MEDIUM") -> CveAuditResultModel:
         """Scan `sbom_path` (a CycloneDX JSON file) with the detected backend.
@@ -220,3 +220,23 @@ class CveScannerIntegration(ScannerIntegration):
             unknown=counts["UNKNOWN"],
             findings=findings,
         )
+
+
+class TrivyIntegration(CveScannerIntegration):
+    """`type: trivy` - the CVE scanner fixed to Trivy (docs/work/integration-readiness.md Phase 6)."""
+
+    TYPE = "trivy"
+    COMMAND = "trivy"
+
+    def __init__(self, config: IntegrationModel | None = None) -> None:
+        super().__init__(config, backend="trivy")
+
+
+class GrypeIntegration(CveScannerIntegration):
+    """`type: grype` - the CVE scanner fixed to Grype (docs/work/integration-readiness.md Phase 7)."""
+
+    TYPE = "grype"
+    COMMAND = "grype"
+
+    def __init__(self, config: IntegrationModel | None = None) -> None:
+        super().__init__(config, backend="grype")

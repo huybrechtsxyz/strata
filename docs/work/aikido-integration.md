@@ -203,7 +203,8 @@ Implementation phases (detail in
 - [ ] **Phase 9** - follow-on: `checkov_policy` joins them (design first: a standalone check needs the
       rendered source paths `build run` only holds in memory).
 - [ ] **Phase 10** - follow-on: a future `opa_policy` (design first, only on real consumer demand).
-- [ ] Record the decision as an ADR once the design is accepted.
+- [x] Record the decision as an ADR: ADR-0047 (capabilities), ADR-0048 (credentials), ADR-0049
+      (`strata policy`). Done 2026-10-27.
 
 Still open, outside the design:
 

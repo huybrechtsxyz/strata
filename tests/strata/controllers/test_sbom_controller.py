@@ -14,6 +14,7 @@ from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationMetaModel, ConfigurationModel, ConfigurationSpecModel
+from strata.models.integration_model import IntegrationModel
 from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleServiceModel, ModuleSpecModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.provisioning_model import ProvisionerModel
@@ -180,6 +181,54 @@ def _index_with_configuration(cve_allowed: list[CveAllowedEntryModel]) -> Docume
         )
     )
     return index
+
+
+def _index_with_scanner(*types: str) -> DocumentIndex:
+    index = DocumentIndex()
+    for integration_type in types:
+        document = IntegrationModel.model_validate(
+            {
+                "meta": {"name": f"{integration_type}-doc"},
+                "spec": {"type": integration_type, "capabilities": ["scanner"]},
+            }
+        )
+        index.add(
+            IndexEntry(
+                ref=DocumentRef(kind=PlatformKind.INTEGRATION, name=document.meta.name),
+                model=document,
+                source=Path(f"{integration_type}.yaml"),
+            )
+        )
+    return index
+
+
+def test_a_declared_trivy_is_the_scanner_the_cve_gate_uses(tmp_path: Path, monkeypatch):
+    import strata.integrations.cve_scanner as cve_scanner_module
+
+    monkeypatch.setattr(
+        cve_scanner_module.shutil, "which", lambda name: f"/usr/bin/{name}" if name == "grype" else None
+    )
+    (tmp_path / "sbom.json").write_text("{}", encoding="utf-8")
+    workspace = _workspace_with_cve_policy({"max_severity": "HIGH"})
+
+    diagnostics = evaluate_cve_policy(tmp_path, workspace, _index_with_scanner("trivy"))
+
+    [error] = diagnostics.errors
+    assert "trivy 'trivy-doc': 'trivy' is not available on PATH" in error.message
+
+
+def test_a_declared_grype_is_used_and_a_declared_trivy_wins_over_it(tmp_path: Path, monkeypatch):
+    import strata.integrations.cve_scanner as cve_scanner_module
+
+    monkeypatch.setattr(cve_scanner_module.shutil, "which", lambda name: None)
+    (tmp_path / "sbom.json").write_text("{}", encoding="utf-8")
+    workspace = _workspace_with_cve_policy({"max_severity": "HIGH"})
+
+    grype_only = evaluate_cve_policy(tmp_path, workspace, _index_with_scanner("grype"))
+    both = evaluate_cve_policy(tmp_path, workspace, _index_with_scanner("grype", "trivy"))
+
+    assert "grype 'grype-doc'" in grype_only.errors[0].message
+    assert "trivy 'trivy-doc'" in both.errors[0].message
 
 
 def test_evaluate_cve_policy_is_a_noop_when_unset(tmp_path: Path):
