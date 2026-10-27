@@ -285,6 +285,26 @@ def _is_commit(value: str) -> bool:
     return len(value) == _COMMIT_LENGTH and all(char in "0123456789abcdef" for char in value)
 
 
+def _pin_matches_run(commit: str, policy: ReleaseGatePolicyModel, diagnostics: Diagnostics) -> bool:
+    """Report a policy `commit` pin that differs from the CI variable (design D6a); False stops the gate."""
+    run = next(
+        ((name, sha) for name in _COMMIT_ENV_VARS if _is_commit(sha := os.environ.get(name, "").strip().lower())),
+        None,
+    )
+    if run is None or run[1] == commit:
+        return True
+    deny = policy.enforcement == "deny"
+    report = diagnostics.error if deny else diagnostics.warning
+    report(
+        f"release_gate_policy: judging the pinned commit {commit[:12]} (spec.release_gate_policy.commit), "
+        f"but {run[0]} says this run builds {run[1][:12]}. Remove the pin, or pass --commit to judge "
+        "another commit on purpose.",
+        location="spec.release_gate_policy.commit",
+        code="release_gate_commit_mismatch",
+    )
+    return not deny
+
+
 def _release_gate(
     context: SolutionContext,
     deployment_name: str,
@@ -321,6 +341,8 @@ def _release_gate(
         return diagnostics
 
     via = f"{integration.TYPE} '{integration.name}'"
+    if source == "policy commit" and not _pin_matches_run(commit, policy, diagnostics):
+        return diagnostics
     _emit(on_step, f"release gate: asking {via} about {policy.repository} @ {commit[:12]} ({source})")
     request = ReleaseGateRequest(
         repository=policy.repository, commit=commit, timeout=policy.timeout, poll_interval=policy.poll_interval

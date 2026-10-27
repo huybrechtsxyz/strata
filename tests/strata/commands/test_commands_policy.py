@@ -224,6 +224,24 @@ def test_findings_unreachable_is_one(tmp_path, gate):
     assert result.exit_code == EXIT_FAILURE, result.output
 
 
+def test_findings_console_shows_an_issue_link_only_when_set(tmp_path, gate):
+    """Review item 7, L3: a platform link is printed after the issue; no link, nothing appended."""
+    gate.lookup = ImageLookup(
+        status="found",
+        platform_name="app",
+        issues=(
+            SecurityIssue(
+                id="7", severity="CRITICAL", status="open", cve_id="CVE-2026-7", package="zlib", link="https://x/7"
+            ),
+            SecurityIssue(id="8", severity="CRITICAL", status="open", cve_id="CVE-2026-8", package="zlib"),
+        ),
+    )
+    result = _invoke("findings", "app", "--path", str(_solution(tmp_path)), "--policy", "image_gate_policy")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "CVE-2026-7 in zlib https://x/7\n" in result.output
+    assert "CVE-2026-8 in zlib\n" in result.output
+
+
 def test_findings_unsupported_policy_is_two(tmp_path, gate):
     result = _invoke("findings", "app", "--path", str(_solution(tmp_path)), "--policy", "release_gate_policy")
     assert result.exit_code == EXIT_USAGE, result.output

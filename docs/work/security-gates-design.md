@@ -309,6 +309,22 @@ solution root; 40-hex validation), SBOM image extraction to `ImageRef` (purl-der
 and policy results. The vendor class owns only the API conversation and how it names images
 (ref D8 second half, now Aikido configuration).
 
+### D6a - A pinned commit that differs from the run's commit (added 2026-10-27)
+
+The policy's `commit` comes before the CI variables, so a pin left in the workspace after testing
+keeps judging an old commit while CI deploys a newer one: an old pass lets every new deploy
+through, and only "via policy commit" in the step line hints at it.
+
+- When the commit judged comes from `release_gate_policy.commit` **and** a CI variable
+  (`STRATA_COMMIT_SHA`, `GITHUB_SHA`, ... the D6 list) holds a different valid commit, the gate
+  reports `release_gate_commit_mismatch`, naming both commits and the variable.
+- Severity follows `enforcement`: `warn` -> warning and the gate continues with the pinned commit;
+  `deny` -> error and the gate stops before asking the platform (the deploy would fail anyway).
+- Not checked: `--commit` (an explicit per-run choice, so it is how a deliberate pin is
+  expressed under `deny`), and `git rev-parse HEAD` (outside CI a pin is usually deliberate).
+- No new policy field: a lasting deliberate pin belongs in the pipeline's `--commit`, not in a
+  shared workspace document.
+
 ### D7 - Commands: a general `strata policy` group, plus `strata integration check`
 
 **Why `policy`, not `security`.** "Policy" is already the shared concept in strata: the
@@ -575,12 +591,14 @@ policy, following D3's two precedents: named document disabled or not declaring 
 ### 6.3 Controller - `controllers/security_gate_controller.py` (new)
 
 ```python
-def resolve_release_gate_integration(index, workspace) -> ReleaseGateIntegration | None
-def resolve_image_findings_integration(index, workspace) -> ImageFindingsIntegration | None
+Gate = Literal["release", "images"]
+
+def _resolve_integration(index, name, capability_abc, field_name, diagnostics) -> Integration | None
     # named document -> registry.get(type, config) -> isinstance check (mirrors
-    # resolve_output_store_integration / _require_key_value_integration); None when the policy is unset
-def bind_resolved_credentials(context, integration, resolved, deployment_name,
-                              on_secret=None) -> Diagnostics
+    # resolve_output_store_integration / _require_key_value_integration), but reports a diagnostic
+    # instead of raising, so each gate's own policy decides how the deploy reacts
+def bind_resolved_credentials(context, integration, resolved, deployment_name, *,
+                              version_pin=None, on_secret=None) -> Diagnostics
     # D2: keys = spec.authentication.key_references() (or () without a block); values from
     # `resolved` on the deploy path, else resolve_values(); no-op for non-CredentialedIntegration
 def resolve_commit_sha(context, policy, diagnostics, override=None) -> tuple[str | None, str]
@@ -588,9 +606,15 @@ def resolve_commit_sha(context, policy, diagnostics, override=None) -> tuple[str
 def images_from_sbom(build_path) -> list[ImageRef] | None      # None: no sbom.json; ValueError: unreadable
 def evaluate_security_gates(
     context, deployment_name, workspace, build_path, *, resolved, version_pin=None,
-    commit_override=None, only: Literal["release", "images"] | None = None,
+    commit_override=None, only: Gate | None = None,
     on_step=None, on_secret: Callable[[str], None] | None = None,
 ) -> SecurityGateEvaluation
+def list_image_findings(
+    context, deployment_name, build_path, integration_name, max_severity, *,
+    version_pin=None, on_step=None,
+) -> ImageFindingsReport
+    # `strata policy findings` (D7): same resolution, credentials and allowlist as the image gate,
+    # but allowlisted issues are marked, not dropped, and nothing is judged or recorded
 
 @dataclass
 class SecurityGateEvaluation:      # each gate's Diagnostics kept apart (D9: one audit entry per gate)
@@ -599,7 +623,17 @@ class SecurityGateEvaluation:      # each gate's Diagnostics kept apart (D9: one
     @property
     def diagnostics(self) -> Diagnostics                                     # both combined
     def policy_results(self, workspace) -> list[ManifestPolicyResultModel]  # replaces security_gate_results()
+
+@dataclass(frozen=True)
+class ImageFindings:               # one SBOM image: platform name, lookup status, issues, allowlisted ids
+@dataclass(frozen=True)
+class ImageFindingsReport:         # integration label, severities listed, one ImageFindings per image
 ```
+
+As built (2026-10-27 review item 10): the two public `resolve_release_gate_integration()` /
+`resolve_image_findings_integration()` first named here became the single private
+`_resolve_integration()`, parameterised by capability ABC; `list_image_findings()` and its report
+types were added in Phase 6.
 
 Rules: integration calls are wrapped; `GateNotFoundError` is a hard error
 (`release_gate_repository_not_found`) whatever `on_missing_data` says; every other
@@ -691,6 +725,7 @@ sequenceDiagram
 | `release_gate_missing_data`           | per `on_missing_data`             | No credential/commit, outage, timeout, unparseable            |
 | `release_gate_repository_not_found`   | error                             | `GateNotFoundError`                                           |
 | `release_gate_commit_invalid`         | warning                           | A commit source had an invalid value; next source tried       |
+| `release_gate_commit_mismatch`        | error (`deny`) / warning (`warn`) | Pinned policy `commit` differs from the CI variable (D6a)     |
 | `image_gate_violation`                | error / warning                   | Counted issues above `max_count`                              |
 | `image_gate_passed`                   | info                              | Within threshold                                              |
 | `image_gate_counted`                  | info                              | Within threshold, but an image error fails the gate anyway    |
@@ -736,9 +771,10 @@ in the plan.
 
 ## 12. Risks and open questions
 
-| #      | Item                                                                                                                                                        | Resolution                                                                                                |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| R1-R10 | Aikido-side unknowns (OAuth body, REST envelopes, container naming, repository by name, `version` field, rate limits, scopes, region parity, severity case) | ref §13; plan Phase 7 (first contact)                                                                     |
-| R11    | A class inheriting two capability ABCs (diamond on `Integration`)                                                                                           | Plain cooperative ABCs, no `__init__` in the ABCs; `find_capability_mismatches()` test covers the pairing |
-| R12    | The semantic check needs a class's capabilities without constructing it                                                                                     | `registry.get_class()` exists; plugin types go through the same function                                  |
-| R13    | Generic names must not hide vendor detail operators need                                                                                                    | Messages always name integration type and document (D8); `policy_type` records the vendor (D9)            |
+| #      | Item                                                                                                                                                        | Resolution                                                                                                                                                                                              |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1-R10 | Aikido-side unknowns (OAuth body, REST envelopes, container naming, repository by name, `version` field, rate limits, scopes, region parity, severity case) | ref §13; plan Phase 7 (first contact)                                                                                                                                                                   |
+| R11    | A class inheriting two capability ABCs (diamond on `Integration`)                                                                                           | Plain cooperative ABCs, no `__init__` in the ABCs; `find_capability_mismatches()` test covers the pairing                                                                                               |
+| R12    | The semantic check needs a class's capabilities without constructing it                                                                                     | `registry.get_class()` exists; plugin types go through the same function                                                                                                                                |
+| R13    | Generic names must not hide vendor detail operators need                                                                                                    | Messages always name integration type and document (D8); `policy_type` records the vendor (D9)                                                                                                          |
+| R14    | Should `strata validate` check that gate credentials resolve?                                                                                               | **No** (decided 2026-10-27). Validate stays offline and machine-independent (integration-readiness D23); `strata integration check NAME --deployment D` and `strata policy check` resolve and test them |

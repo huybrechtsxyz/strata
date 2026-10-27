@@ -265,9 +265,10 @@ def test_each_commit_variable_is_a_source(tmp_path, script, monkeypatch, variabl
 
 
 def test_commit_order_override_then_policy_then_environment(tmp_path, script, monkeypatch):
+    """Under `warn` the pin still wins over the CI variable (D6a only adds a warning)."""
     monkeypatch.setenv("GITHUB_SHA", "c" * 40)
-    _release(tmp_path, script, release={"commit": "d" * 40}, commit_override="e" * 40)
-    _release(tmp_path, script, release={"commit": "d" * 40})
+    _release(tmp_path, script, release={"commit": "d" * 40, "enforcement": "warn"}, commit_override="e" * 40)
+    _release(tmp_path, script, release={"commit": "d" * 40, "enforcement": "warn"})
     assert [request.commit for request in script.requests] == ["e" * 40, "d" * 40]
 
 
@@ -296,6 +297,61 @@ def test_no_commit_anywhere_is_missing_data(tmp_path, script):
     evaluation = _release(tmp_path, script, release={"commit": None})
     assert _codes(evaluation.diagnostics.errors) == ["release_gate_missing_data"]
     assert script.requests == []
+
+
+# ---------------------------------------------------------------------------
+# Pinned commit vs the run's commit (design D6a)
+# ---------------------------------------------------------------------------
+
+
+def test_a_pin_differing_from_ci_warns_under_warn_and_still_judges_the_pin(tmp_path, script, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", "c" * 40)
+    evaluation = _release(tmp_path, script, release={"enforcement": "warn"})
+    [warning] = [d for d in evaluation.diagnostics.warnings if d.code == "release_gate_commit_mismatch"]
+    assert (
+        "pinned commit aaaaaaaaaaaa" in warning.message
+        and "GITHUB_SHA says this run builds cccccccccccc" in warning.message
+    )
+    assert warning.location == "spec.release_gate_policy.commit"
+    assert [request.commit for request in script.requests] == [COMMIT]
+
+
+def test_a_pin_differing_from_ci_is_an_error_under_deny_and_asks_nothing(tmp_path, script, monkeypatch):
+    monkeypatch.setenv("BUILD_SOURCEVERSION", "c" * 40)
+    evaluation = _release(tmp_path, script)
+    assert _codes(evaluation.diagnostics.errors) == ["release_gate_commit_mismatch"]
+    assert script.requests == []
+    [result] = evaluation.policy_results(_workspace(release={"commit": COMMIT}))
+    assert result.passed is False and "pinned commit" in result.violations[0]
+
+
+def test_a_pin_matching_ci_is_silent(tmp_path, script, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", COMMIT.upper())
+    evaluation = _release(tmp_path, script)
+    assert "release_gate_commit_mismatch" not in _codes(evaluation.diagnostics)
+    assert evaluation.diagnostics.ok
+
+
+def test_commit_override_is_never_compared(tmp_path, script, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", "c" * 40)
+    evaluation = _release(tmp_path, script, commit_override="e" * 40)
+    assert evaluation.diagnostics.ok
+    assert script.requests[0].commit == "e" * 40
+
+
+def test_a_pin_outside_ci_is_not_compared_with_git_head(tmp_path, script, monkeypatch):
+    monkeypatch.setattr(
+        gates_module, "run_command", lambda *a, **k: CommandResult(returncode=0, stdout="f" * 40, stderr="")
+    )
+    evaluation = _release(tmp_path, script)
+    assert evaluation.diagnostics.ok
+    assert script.requests[0].commit == COMMIT
+
+
+def test_an_invalid_ci_value_is_not_a_mismatch(tmp_path, script, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", "abc1234")
+    evaluation = _release(tmp_path, script)
+    assert evaluation.diagnostics.ok
 
 
 # ---------------------------------------------------------------------------

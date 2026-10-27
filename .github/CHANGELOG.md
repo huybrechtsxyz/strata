@@ -18,3 +18,4 @@ v2 is a ground-up rebuild of strata, evidence-driven from real v1 consumer usage
 ### Changed
 
 - `checkov_policy` now counts a failed check with no severity (what open-source Checkov reports without an API key) at any `severity_gate`. Before, such findings were never counted, so the gate could not fail; a `deny` policy with failed checks now fails `strata build run` and `strata policy check`. Use `enforcement: warn`, `skip_checks` or `include_checks` to relax it.
+- `release_gate_policy`: a pinned `commit` that differs from the CI's commit variable is now reported (`release_gate_commit_mismatch`): a warning under `enforcement: warn`, an error under `deny`, which stops the gate. Pass `--commit` to judge a different commit on purpose; it is not compared.

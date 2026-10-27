@@ -380,7 +380,8 @@ def _print_image_findings(report: ImageFindingsReport) -> None:
         for issue in found.issues[:_CONSOLE_ISSUES]:
             marker = " [allowlisted]" if issue.id in found.allowlisted else ""
             ident = issue.cve_id or issue.id
-            click.echo(f"      {issue.severity:<8} {ident} in {issue.package or '?'}{marker}")
+            link = f" {issue.link}" if issue.link else ""
+            click.echo(f"      {issue.severity:<8} {ident} in {issue.package or '?'}{marker}{link}")
         if len(found.issues) > _CONSOLE_ISSUES:
             click.echo(f"      ... {len(found.issues) - _CONSOLE_ISSUES} more (--output json lists all)")
 

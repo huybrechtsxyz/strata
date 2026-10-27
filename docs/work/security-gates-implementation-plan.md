@@ -297,7 +297,8 @@ here so the command's scope can stay small now without losing the follow-up.
 
 **Tasks**
 
-1. `resolve_release_gate_integration()` / `resolve_image_findings_integration()`: named document ->
+1. `resolve_release_gate_integration()` / `resolve_image_findings_integration()` (built as one
+   private `_resolve_integration()`, see design §6.3): named document ->
    `registry.get(type, config)` -> `isinstance` check (mirrors `resolve_output_store_integration()` /
    `_require_key_value_integration()`); `None` when the policy is unset; construction
    `IntegrationError` -> `integration_configuration_invalid`.
@@ -447,6 +448,48 @@ and simplify code where a fallback proves unnecessary (keep defensive parsing).
 | 8   | CI token probe              | `strata integration check aikido-ci --deployment <d>`, valid vs invalid token                                                            | ref A.3.4 |
 | 9   | Region                      | repeat 1-4 against a non-EU workspace if available                                                                                       | ref R9    |
 | 10  | End to end                  | `strata build run` then `strata deploy run --dry-run` with both policies; clean repo passes; a test repo with a known critical CVE fails | -         |
+| 11  | Image issue links           | open `<base_url>/queue?sidebarIssue=<id>` and `...=<group_id>` for one exported issue; note which opens that issue                       | L2        |
+
+### Review item 7 - image issue links (design 2026-10-27)
+
+Verified first:
+
+- `SecurityIssue.link` is never set: `aikido.py`'s export mapping fills id, severity, status,
+  CVE and package only, so every image-gate issue has `link: null` in `policy findings` JSON
+  (and a test pins `"link": None`). The console listing does not show links at all.
+- The issue export (ref A.4.3) has no URL field; its records carry `id` and `group_id`.
+- The release gate does get links: `issue_links` such as
+  `https://app.aikido.dev/queue?sidebarIssue=1`. Those use the same regional host as
+  `base_url` (`app.aikido.dev`, `app.us.aikido.dev`, ...), so the UI and the API share a host.
+- Unknown: whether `sidebarIssue` takes an issue `id` or a `group_id` (the release gate example
+  ids 1 and 2 do not say), and whether it works for container issues at all.
+
+Decisions:
+
+- **L1 - Keep `link` on `SecurityIssue`.** It is vendor-neutral and optional: a platform that
+  gives no URL leaves it `None`. Removing it would only have to be undone for the next vendor.
+- **L2 - Aikido builds the link, but only once verified.** After Phase 7 check 11:
+  `f"{base_url}/queue?sidebarIssue={<the id that works>}"`, built in `_issue()` from the
+  integration's own `base_url` (region and `endpoints.address` already resolved). Until then it
+  stays `None`: a guessed link that opens the wrong issue is worse than no link. If neither id
+  works, it stays `None` for good and the reference records why.
+- **L3 - Show it where people look.** `policy findings` console lines append the link when set;
+  the JSON shape is unchanged (`link` is already there). A failed image gate's diagnostic keeps
+  counting issues, not linking each one; the findings command is where links belong.
+- **L4 - Tests.** `_issue()` builds the link from `base_url` for the EU default, a region and an
+  `endpoints.address` override; a missing id yields no issue (unchanged); console shows the link
+  only when set. The existing `"link": None` assertion changes with L2.
+
+**Done when** `policy findings --policy image_gate_policy` prints a link that opens the issue in
+Aikido, or the reference records that the export cannot be linked.
+
+**Status (2026-10-27).** L1 and L3 done: `policy findings` prints an issue's link after it when
+the integration sets one (test `test_findings_console_shows_an_issue_link_only_when_set`). L2
+waits for Phase 7 check 11; Aikido's API docs could not be fetched to settle `id` vs `group_id`
+offline. Remaining work then: in `aikido.py` `_issue()`, set
+`link=f"{self.base_url}/queue?sidebarIssue={<verified field>}"` (it needs `base_url`, so pass it in
+or make `_issue` a method), add the L4 tests, and change the `"link": None` expectation in
+`test_findings_json_shape`.
 
 ---
 

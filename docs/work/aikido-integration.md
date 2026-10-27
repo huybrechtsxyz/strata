@@ -214,13 +214,24 @@ Still open, outside the design:
 - **Evidence check:** compare, for one real deployment (haven `prd`), Aikido's repo scan with
   strata's Checkov on the rendered `build/` output. Not needed to build the gates, but it decides
   whether the deferred upload/local-scanner work (D12) is worth doing.
+  - **Strata side done (2026-10-27)**, checkov 3.3.30 on `.v2-haven/build/haven_deploy_prd`
+    (built 2026-10-24): Terraform (`haven_iac`, 14 `.tf`, Hetzner) 0 failed checks; Helm
+    (13 charts under `services/forge`, `--framework helm`) 1101 passed, **308 failed, every one
+    `severity: null`**. Top checks: CKV_K8S_21 default namespace (x52, likely charts rendered
+    without `--namespace`), then x15 each for resource requests/limits, image digests,
+    securityContext, seccomp, capabilities, privilege escalation, read-only root FS. So a `deny`
+    `checkov_policy` with `framework: helm` fails haven `prd` since Phase 9b.
+  - **Aikido side open**: needs haven connected to an Aikido workspace; export its IaC/Kubernetes
+    findings for the same commit and compare check by check.
 - **Safe Chain** in consumer pipelines: the 48-hour package-age exclusion for `xyz-strata` and the
   private-feed `customRegistries` (see Gotchas above). Not a strata change; a recipe for haven and
   cfg-int, and a candidate for the `project-gotchas` skill.
 - **Azure DevOps** (cfg-int) vs GitHub (haven): commit SHA resolution covers both
-  (`BUILD_SOURCEVERSION`, `GITHUB_SHA`), but repository registration in Aikido is unconfirmed.
-- **Device Protection** may flag or block a sideloaded strata `.vsix` or the scaffolded
-  `.claude/skills/`.
+  (`BUILD_SOURCEVERSION`, `GITHUB_SHA`). Registering the repositories in Aikido is the consumer's
+  setup, not a strata task (2026-10-27).
+- ~~**Device Protection** may flag or block a sideloaded strata `.vsix`~~ - dropped 2026-10-27: after
+  release the extension ships through the Marketplace, so it is not sideloaded. The scaffolded
+  `.claude/skills/` remain unchecked, only relevant if Device Protection is rolled out.
 - **Pricing tier** for the CI API and REST API, and data residency (EU host is the default).
 - **Release timing:** the design targets strata 2.x after 2.0.0; schedule against the RC trial.
 

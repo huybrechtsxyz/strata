@@ -113,6 +113,9 @@ spec:
 - An unknown repository is always an error, whatever `on_missing_data` says.
 - The commit judged is, in order: `--commit`, the policy's `commit`, `STRATA_COMMIT_SHA`, the CI's
   own variable (`GITHUB_SHA`, `BUILD_SOURCEVERSION`, `CI_COMMIT_SHA`, ...), then `git rev-parse HEAD`.
+- A policy `commit` that differs from the CI variable is reported (`release_gate_commit_mismatch`):
+  a warning under `warn`, an error under `deny`, so a forgotten pin cannot keep passing new
+  deploys. To judge a different commit on purpose, pass `--commit` instead; it is not compared.
 - The solution's `cve_allowed` allowlist also suppresses image issues with a matching CVE id.
 
 ## 5. Check before deploying

@@ -14,6 +14,7 @@ strata-v2
    :maxdepth: 1
    :caption: How-To Guides:
 
+   how-to/aikido-safe-chain
    how-to/azure-certificates
    how-to/azure-private-dns-zones
    how-to/composite-variable-fragments
