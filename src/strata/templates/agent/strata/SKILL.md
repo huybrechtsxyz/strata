@@ -30,6 +30,7 @@ Exit codes: 0 success, 1 system failure, 2 usage error, 3 validation failure (th
 | `strata validate [PATH]` | Validate every document in the solution. |
 | `strata graph [PATH]` | Every cross-document reference, resolved or not. |
 | `strata path get KIND NAME` / `strata path list KIND` | Find a document's real file. |
+| `strata deployment list` | Every deployment with the workspace and environments it resolves to (through `extends`); partial bases are marked. |
 | `strata build run DEPLOYMENT` | Render a deployment into `build/` (never executes anything). `--dry-run` reports only. |
 | `strata deploy setup / check / plan / apply / run DEPLOYMENT` | init, validate, plan, apply a saved plan, or all of it. |
 | `strata values list / resolve / status DEPLOYMENT` | Inspect variables, secrets and features without revealing values. |

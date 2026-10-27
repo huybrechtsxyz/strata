@@ -61,6 +61,36 @@
         "command": "strata.updateSolution",
         "title": "Strata: Update Solution Files (schemas, scaffold)",
         "icon": "$(sync)"
+      },
+      {
+        "command": "strata.selectDeployment",
+        "title": "Strata: Select Deployment",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "strata.refreshIntegrations",
+        "title": "Strata: Refresh Integrations",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "strata.checkIntegration",
+        "title": "Check Connection",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "strata.refreshPolicies",
+        "title": "Strata: Refresh Policies",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "strata.checkPolicy",
+        "title": "Strata: Check Policies",
+        "icon": "$(play)"
+      },
+      {
+        "command": "strata.showPolicyFindings",
+        "title": "Show Findings",
+        "icon": "$(list-unordered)"
       }
     ],
     "menus": {
@@ -69,11 +99,56 @@
           "command": "strata.refreshGraph",
           "when": "view == strataGraph",
           "group": "navigation"
+        },
+        {
+          "command": "strata.selectDeployment",
+          "when": "view == strataIntegrations || view == strataPolicies",
+          "group": "navigation@1"
+        },
+        {
+          "command": "strata.refreshIntegrations",
+          "when": "view == strataIntegrations",
+          "group": "navigation@2"
+        },
+        {
+          "command": "strata.checkPolicy",
+          "when": "view == strataPolicies",
+          "group": "navigation@2"
+        },
+        {
+          "command": "strata.refreshPolicies",
+          "when": "view == strataPolicies",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "strata.checkIntegration",
+          "when": "view == strataIntegrations && viewItem == integration",
+          "group": "inline"
+        },
+        {
+          "command": "strata.checkPolicy",
+          "when": "view == strataPolicies && viewItem =~ /;check/",
+          "group": "inline@1"
+        },
+        {
+          "command": "strata.showPolicyFindings",
+          "when": "view == strataPolicies && viewItem =~ /;findings/",
+          "group": "inline@2"
         }
       ],
       "commandPalette": [
         {
           "command": "strata.openGraphLocation",
+          "when": "false"
+        },
+        {
+          "command": "strata.checkIntegration",
+          "when": "false"
+        },
+        {
+          "command": "strata.showPolicyFindings",
           "when": "false"
         }
       ]
@@ -92,6 +167,14 @@
         {
           "id": "strataGraph",
           "name": "Graph"
+        },
+        {
+          "id": "strataIntegrations",
+          "name": "Integrations"
+        },
+        {
+          "id": "strataPolicies",
+          "name": "Policies"
         }
       ]
     },

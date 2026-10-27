@@ -68,6 +68,122 @@ export interface GraphData {
     edges: GraphEdge[];
 }
 
+/** One `strata deployment list` row (`DeploymentSummary` in deployment_resolution.py). */
+export interface DeploymentRow {
+    name: string;
+    workspace: string | null;
+    environments: string[];
+    partial: boolean;
+    source: string;
+}
+
+export interface ReadinessProblem {
+    code: string;
+    message: string;
+}
+
+/** One `strata integration list` row (`_row_json` in integration_command.py). */
+export interface IntegrationRow {
+    name: string;
+    type: string;
+    declared: boolean;
+    registered: boolean;
+    enabled: boolean;
+    required: boolean;
+    local_tool: boolean;
+    command: string | null;
+    available: boolean | null;
+    required_version: string | null;
+    installed_version: string | null;
+    connection_check: boolean;
+    ok: boolean;
+    credential_holder: boolean;
+    problems: ReadinessProblem[];
+    used_for: string[];
+    source: string | null;
+}
+
+/** `ManifestPolicyResultModel`, as recorded in policy_results.json. */
+export interface PolicyResult {
+    policy_name: string;
+    policy_type: string;
+    phase: string;
+    enforcement: string;
+    passed: boolean;
+    violations: string[];
+}
+
+/** One `strata policy list` row. */
+export interface PolicyRow {
+    name: string;
+    phase: string;
+    enforcement: string;
+    backing: string;
+    check: boolean;
+    findings: boolean;
+    last_result: PolicyResult | null;
+}
+
+/** `strata policy findings` data: one of three shapes, told apart by its keys. */
+export interface CveFindingsData {
+    policy: string;
+    scanner: string;
+    scanner_version: string;
+    severities: string[];
+    findings: {
+        vulnerability_id: string;
+        severity: string;
+        package_name: string;
+        installed_version: string;
+        fixed_version: string | null;
+        allowlisted: boolean;
+    }[];
+}
+
+export interface CheckovFindingsData {
+    policy: string;
+    scanner_version: string | null;
+    framework: string;
+    severities: string[];
+    nothing: string | null;
+    targets: {
+        target: string;
+        path: string | null;
+        missing: string | null;
+        findings: {
+            check_id: string;
+            check_name: string;
+            resource: string;
+            file_path: string;
+            file_line_range: number[] | null;
+            severity: string;
+            unrated: boolean;
+        }[];
+    }[];
+}
+
+export interface ImageFindingsData {
+    policy: string;
+    integration: string;
+    severities: string[];
+    images: {
+        image: string;
+        platform_name: string | null;
+        status: string;
+        detail: string | null;
+        issues: {
+            id: string;
+            severity: string;
+            cve_id: string | null;
+            package: string | null;
+            link: string | null;
+            allowlisted: boolean;
+        }[];
+    }[];
+}
+
+export type FindingsData = CveFindingsData | CheckovFindingsData | ImageFindingsData;
+
 /** The CLI itself could not be found on `strata.cliPath` (ENOENT), nor in a workspace `.venv`. */
 export class StrataCLINotFoundError extends Error {
     constructor(cliPath: string) {
@@ -167,6 +283,36 @@ export class StrataClient {
     /** `strata sln update` — rewrites `.strata/` and creates missing scaffold files; never overwrites a user-owned one. */
     async slnUpdate(): Promise<Envelope<Record<string, never>>> {
         return this.run<Record<string, never>>(['sln', 'update']);
+    }
+
+    /** `strata deployment list` — every deployment, partial bases marked. */
+    async deploymentList(): Promise<Envelope<{ deployments: DeploymentRow[] }>> {
+        return this.run(['deployment', 'list']);
+    }
+
+    /** `strata integration list [--deployment D]` — local readiness; offline. */
+    async integrationList(deployment?: string): Promise<Envelope<{ integrations: IntegrationRow[] }>> {
+        return this.run(['integration', 'list', ...(deployment ? ['--deployment', deployment] : [])]);
+    }
+
+    /** `strata integration check NAME [--deployment D]` — readiness plus the connection check. */
+    async integrationCheck(name: string, deployment?: string): Promise<Envelope<unknown>> {
+        return this.run(['integration', 'check', name, ...(deployment ? ['--deployment', deployment] : [])]);
+    }
+
+    /** `strata policy list D` — configured policies with their last recorded result; offline. */
+    async policyList(deployment: string): Promise<Envelope<{ policies: PolicyRow[] }>> {
+        return this.run(['policy', 'list', deployment]);
+    }
+
+    /** `strata policy check D [--policy N]` — evaluates now and records the results. */
+    async policyCheck(deployment: string, policy?: string): Promise<Envelope<{ checked: string[] }>> {
+        return this.run(['policy', 'check', deployment, ...(policy ? ['--policy', policy] : [])]);
+    }
+
+    /** `strata policy findings D --policy N` — itemised findings, read-only. */
+    async policyFindings(deployment: string, policy: string): Promise<Envelope<FindingsData>> {
+        return this.run(['policy', 'findings', deployment, '--policy', policy]);
     }
 
     /** `strata version` — a bare string, not an envelope. */

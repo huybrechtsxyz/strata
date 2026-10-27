@@ -307,6 +307,34 @@ def test_list_without_a_deployment_shows_every_document(tmp_path, http, tools):
     assert rows["git-old"]["registered"] and rows["git-old"]["command"] == "git"
     assert rows["terraform"]["installed_version"] == "1.9.2" and rows["terraform"]["ok"]
     assert all(row["used_for"] == [] for row in rows.values())
+    assert Path(rows["terraform"]["source"]).name == "terraform.yaml"
+    assert Path(rows["terraform"]["source"]).is_absolute()
+
+
+def test_list_type_default_rows_have_no_source(tmp_path, http, tools):
+    """docs/work/vscode-integrations-policies-views.md V1: only a declared document has a file."""
+    root = _solution(tmp_path)
+    (root / "terraform.yaml").unlink()
+    _write(
+        root,
+        "workspace.yaml",
+        "workspace",
+        "main",
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply\n      provisioner: tf_main\n      resources: [r1]\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "resource",
+        "r1",
+        "  provider_type: local\n  resource_type: server\n  category: compute\n  default_tags:\n    managed-by: strata\n",
+    )
+    result = _list(root, "--deployment", "app", "--output", "json")
+    rows = {row["name"]: row for row in json.loads(result.output)["data"]["integrations"]}
+    assert rows["terraform"]["declared"] is False and rows["terraform"]["source"] is None
 
 
 def test_list_does_not_warn_about_a_disabled_document_nothing_uses(tmp_path, http, tools):

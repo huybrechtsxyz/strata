@@ -745,18 +745,21 @@ already allows); `findings` = the violations OPA returns. Joins `strata policy` 
 
 ## Definition of done
 
-- [ ] Phases 1-6 merged; CI green (mypy strict, ruff, import-linter, pytest).
-- [ ] No vendor name outside `integrations/aikido.py`, the registry entry, tests and docs.
-- [ ] No new credential mechanism: credentials only via `AuthenticationModel` (or vendor env
+Checked 2026-10-27: every item but the last is met offline.
+
+- [x] Phases 1-6 merged; CI green (mypy strict, ruff, import-linter, pytest). On `v2-beta`, 3522 passed.
+- [x] No vendor name outside `integrations/aikido.py`, the registry entry, tests and docs. One
+      docstring in `security_gate_model.py` names Aikido as an example; no code does.
+- [x] No new credential mechanism: credentials only via `AuthenticationModel` (or vendor env
       fallback without a block).
-- [ ] Coverage of `security_gate_controller.py` and `aikido.py` >= 90% lines.
-- [ ] No new runtime dependency.
-- [ ] `deploy run` without gate policies behaves exactly as before (existing deploy tests unchanged).
-- [ ] Secret-leak tests pass.
-- [ ] Docs and agent skill updated.
+- [x] Coverage of `security_gate_controller.py` and `aikido.py` >= 90% lines. 96% and 98%.
+- [x] No new runtime dependency.
+- [x] `deploy run` without gate policies behaves exactly as before (existing deploy tests unchanged).
+- [x] Secret-leak tests pass.
+- [x] Docs and agent skill updated.
 - [ ] ADR recorded (done 2026-10-27: ADR-0047, ADR-0048, ADR-0049); Phase 7 findings folded in; design graduates to `docs/design/security-gates.md`,
       index + reference + plan to `docs/archive/` (Phases 8-10 move to their own work docs first if
-      still open then).
+      still open then). **Open: Phase 7 (needs an Aikido workspace), then the moves.**
 
 ## File checklist
 

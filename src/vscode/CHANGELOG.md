@@ -42,4 +42,12 @@ The extension rebuilt for strata v2. It replaces 1.x on the same Marketplace lis
   that field via **Strata: Open Reference Location**.
 - **Status bar** — shows the CLI version once resolved, or the reason it couldn't be (CLI not
   found, or any other failure), from a single `strata version` call.
+- **Deployment selector** — a status bar item and **Strata: Select Deployment**, backed by
+  `strata deployment list`; the choice is kept per workspace and scopes the two views below.
+- **Integrations view** — `strata integration list`: readiness icon, type and tool version, the
+  problems and what uses each integration; an inline action runs `strata integration check`.
+- **Policies view** — `strata policy list`: phase, enforcement and last result per policy;
+  inline actions run `strata policy check` (one, or all from the view title) and
+  `strata policy findings`, whose findings appear as child rows (`[allowlisted]`/`[unrated]`
+  marked, issue links clickable, 10 per target).
 - **`strata.cliPath`** / **`strata.validateOnSave`** settings.

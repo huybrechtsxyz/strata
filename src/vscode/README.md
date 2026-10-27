@@ -45,6 +45,14 @@ which workspace uses which providers and modules. References that don't resolve 
 click takes you straight to the field. Use it to answer *"what breaks if I rename this?"* before
 you rename it.
 
+### Integrations and policies at a glance
+
+Pick a deployment from the status bar (**Strata: Select Deployment**) and two more views follow
+it. **Integrations** shows every integration the deployment needs, whether its tool is installed
+at the right version, and what uses it; the plug button runs its connection check. **Policies**
+shows each policy's phase, enforcement and last recorded result; the play button checks it now,
+and the list button shows its CVE, Checkov or image findings right in the tree.
+
 ### Autocomplete for every document kind
 
 **Strata: Update Solution Files** exports a JSON Schema for each document kind. Together with the
@@ -98,6 +106,8 @@ Open the Command Palette (`Ctrl+Shift+P`) and type **Strata**.
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Strata: Validate Solution**     | Validate the whole solution now and show a summary.                                                                                              |
 | **Strata: Refresh Graph**         | Reload the Graph view after larger edits.                                                                                                        |
+| **Strata: Select Deployment**     | Choose the deployment the Integrations and Policies views show. Also on the status bar.                                                          |
+| **Strata: Check Policies**        | Run `strata policy check` for the selected deployment and record the results.                                                                    |
 | **Strata: Update Solution Files** | Run `strata sln update`: refresh the JSON Schemas and the strata agent skill, and add any missing starter files. Asks before it writes anything. |
 
 **Update Solution Files** always rewrites `.strata/`. It rewrites the strata agent skill

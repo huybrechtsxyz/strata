@@ -1,7 +1,7 @@
 # Integration readiness - Work
 
-- Status: in-progress (Phases 1-8 done; remaining open questions only)
-- Last updated: 2026-10-26
+- Status: in-progress (Phases 1-9 done; recorded as [ADR-0050](../decisions/0050-one-offline-integration-readiness-check.md) and [ADR-0051](../decisions/0051-local-tools-as-declarable-integration-types.md))
+- Last updated: 2026-10-27
 
 ## Overview
 
@@ -390,8 +390,8 @@ exits 0 with only the warning. `config/` still validates.
 5. **Validate-time gaps** found on the way: ~~a provisioner naming a disabled Integration document~~
    and ~~`required: true` with `enabled: false`~~ (both Phase 9); still open: v1 types not yet
    ported reported with the generic "unknown type" message by `integration check`.
-6. **Graduation:** once 2 and 5 are decided, an ADR for the readiness model and this doc to
-   `docs/design/`.
+6. **Graduation:** ~~an ADR for the readiness model~~ (ADR-0050, ADR-0051, 2026-10-27); this doc to
+   `docs/design/` once 5 is decided.
 
 ## Changelog
 

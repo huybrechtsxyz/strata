@@ -24,6 +24,7 @@ import click
 from strata.commands.audit_command import audit_command
 from strata.commands.build_command import build_command
 from strata.commands.deploy_command import deploy_command
+from strata.commands.deployment_command import deployment_command
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE  # noqa: F401  (re-exported for callers)
 from strata.commands.graph_command import graph_command
 from strata.commands.integration_command import integration_command
@@ -55,6 +56,7 @@ cli.add_command(version_command)
 cli.add_command(promote_command)
 cli.add_command(policy_command)
 cli.add_command(integration_command)
+cli.add_command(deployment_command)
 
 
 def main() -> None:

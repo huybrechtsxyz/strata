@@ -30,6 +30,7 @@ from strata.controllers.solution_context import SolutionContext, open_solution
 from strata.controllers.value_controller import resolve_deployment
 from strata.integrations.capabilities import ConnectionCheckIntegration, CredentialedIntegration
 from strata.integrations.errors import IntegrationCredentialError, IntegrationError
+from strata.models.common_models import PlatformKind
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 
@@ -192,7 +193,15 @@ def list_command(
         run.report(diagnostics, root=context.root)
         run.ok = diagnostics.ok
         if isinstance(run.reporter, JsonReporter):
-            run.reporter.data = {"integrations": [_row_json(row) for row in rows]}
+            sources = {
+                entry.ref.name: str(entry.source) for entry in context.controller.index.all_of(PlatformKind.INTEGRATION)
+            }
+            run.reporter.data = {
+                "integrations": [
+                    {**_row_json(row), "source": sources.get(row.readiness.name) if row.readiness.declared else None}
+                    for row in rows
+                ]
+            }
 
 
 def _print_rows(rows: list[IntegrationUse], *, with_usage: bool) -> None:

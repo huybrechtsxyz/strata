@@ -48,6 +48,7 @@ function's output wants the same fully-resolved deployment, and a second
 call site is one more place to forget to call it.
 """
 
+from dataclasses import dataclass
 from typing import Any, cast
 
 from pydantic import ValidationError
@@ -73,6 +74,36 @@ class _CircularExtendsError(Exception):
     def __init__(self, cycle: list[str]) -> None:
         super().__init__(f"circular extends chain: {' -> '.join(cycle)}")
         self.cycle = cycle
+
+
+@dataclass(frozen=True)
+class DeploymentSummary:
+    """One `strata deployment list` row; `workspace`/`environments` as resolved through `extends`."""
+
+    name: str
+    workspace: str | None
+    environments: tuple[str, ...]
+    partial: bool
+    source: str
+
+
+def list_deployments(index: DocumentIndex) -> list[DeploymentSummary]:
+    """Every deployment document, partial bases included and marked (docs/work/vscode-integrations-policies-views.md V1)."""
+    resolved, _ = resolve_deployment_chains(index)
+    rows = []
+    for entry in index.all_of(PlatformKind.DEPLOYMENT):
+        raw = cast(DeploymentModel, entry.model)
+        deployment = resolved.get(entry.ref.name, raw)
+        rows.append(
+            DeploymentSummary(
+                name=entry.ref.name,
+                workspace=deployment.spec.workspace,
+                environments=tuple(deployment.spec.environments or ()),
+                partial=bool(raw.spec.partial),
+                source=str(entry.source),
+            )
+        )
+    return rows
 
 
 def deployment_workspace(index: DocumentIndex, deployment: DeploymentModel) -> WorkspaceModel | None:
