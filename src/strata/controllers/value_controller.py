@@ -26,7 +26,7 @@ from pathlib import Path
 from sys import stdin
 from typing import Any, cast
 
-from strata.controllers.deployment_resolution import resolve_deployment_chains
+from strata.controllers.deployment_resolution import deployment_workspace, resolve_deployment_chains
 from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
@@ -186,12 +186,12 @@ def resolve_deployment_workspace(
     deployment = resolve_deployment(context, deployment_name, version_pin=version_pin)
     if deployment.spec.workspace is None:
         raise UsageError(f"Deployment '{deployment_name}' has no workspace.")
-    entry = context.controller.index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-    if entry is None:
+    workspace = deployment_workspace(context.controller.index, deployment)
+    if workspace is None:
         raise UsageError(
             f"Deployment '{deployment_name}' names workspace '{deployment.spec.workspace}', which is not in the index."
         )
-    return deployment, cast(WorkspaceModel, entry.model)
+    return deployment, workspace
 
 
 def resolve_tenant(context: SolutionContext, deployment: DeploymentModel) -> TenantModel | None:

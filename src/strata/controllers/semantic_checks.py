@@ -35,6 +35,7 @@ from typing import Any, cast
 from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
+from strata.controllers.deployment_resolution import deployment_workspace
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
 from strata.integrations.base import Integration
@@ -160,12 +161,10 @@ def _check_deployments(
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         raw = cast(DeploymentModel, entry.model)
         deployment = resolved.get(entry.ref.name, raw)
-        if deployment.spec.workspace:
-            workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-            if workspace_entry is not None:
-                service = DeploymentService.from_model(deployment)
-                workspace = cast(WorkspaceModel, workspace_entry.model)
-                diagnostics.extend(service.validate_stages_against_workspace(workspace), source=str(entry.source))
+        workspace = deployment_workspace(index, deployment)
+        if workspace is not None:
+            service = DeploymentService.from_model(deployment)
+            diagnostics.extend(service.validate_stages_against_workspace(workspace), source=str(entry.source))
         diagnostics.extend(_check_deployment_layers(index, entry, deployment, root), source=str(entry.source))
         diagnostics.extend(_check_deployment_tenant_geography(index, deployment), source=str(entry.source))
         diagnostics.extend(
@@ -278,12 +277,9 @@ def _check_deployment_tenant_geography(index: DocumentIndex, deployment: Deploym
     if not tenant.spec.geographies:
         return diagnostics
 
-    if deployment.spec.workspace is None:
+    workspace = deployment_workspace(index, deployment)
+    if workspace is None:
         return diagnostics
-    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-    if workspace_entry is None:
-        return diagnostics
-    workspace = cast(WorkspaceModel, workspace_entry.model)
     if not workspace.spec.providers:
         return diagnostics
 
@@ -342,12 +338,11 @@ def _check_slot_bindings(
     `validate_references`' job, so a missing one is skipped here.
     """
     diagnostics = Diagnostics()
-    if not bindings or deployment.spec.partial or deployment.spec.workspace is None:
+    if not bindings or deployment.spec.partial:
         return diagnostics
-    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-    if workspace_entry is None:
+    workspace = deployment_workspace(index, deployment)
+    if workspace is None:
         return diagnostics  # reference existence already reports this
-    workspace = cast(WorkspaceModel, workspace_entry.model)
     defaults = defaults_of(workspace)
     # The merged binding may come from a base in another file; the finding is attributed to this one.
     inherited = " (the binding may be inherited through 'extends')" if uses_extends else ""
@@ -454,13 +449,12 @@ def _check_deployment_fetch_credentials(
     question and is not checked here.
     """
     diagnostics = Diagnostics()
-    if deployment.spec.partial or deployment.spec.workspace is None:
+    if deployment.spec.partial:
         return diagnostics
-    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+    workspace = deployment_workspace(index, deployment)
     declared_by_kind = _merged_declared_keys(index, deployment)
-    if workspace_entry is None or declared_by_kind is None:
+    if workspace is None or declared_by_kind is None:
         return diagnostics
-    workspace = cast(WorkspaceModel, workspace_entry.model)
     declared = set().union(*declared_by_kind.values())
     remotes = {remote.name: remote for remote in (solution.spec.remotes or [])} if solution is not None else {}
     bound = effective_assets(workspace, deployment)
@@ -838,11 +832,9 @@ def _merged_effective_value(index: DocumentIndex, deployment: DeploymentModel, b
         stores = variables.values() if block == "variables" else features.values()
         return reshape_block_value(list(stores), block)
 
-    assert deployment.spec.workspace is not None  # callers already skip workspace-less deployments
-    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-    if workspace_entry is None:
+    workspace = deployment_workspace(index, deployment)
+    if workspace is None:
         return None
-    workspace = cast(WorkspaceModel, workspace_entry.model)
     return merge_workspace_environment_deployment_properties(workspace, environments, deployment, block)
 
 

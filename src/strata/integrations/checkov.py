@@ -138,7 +138,7 @@ class CheckovIntegration(ScannerIntegration):
             failed=summary.get("failed", 0),
             skipped=summary.get("skipped", 0),
             findings=findings,
-            scanner_version=self.get_version() or "unknown",
+            scanner_version=summary.get("checkov_version") or self.get_version() or "unknown",
             framework=framework,
             scanned_path=str(directory),
         )

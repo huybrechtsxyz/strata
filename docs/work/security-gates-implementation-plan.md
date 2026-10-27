@@ -675,6 +675,14 @@ on unrated; `build run` fails on an unrated finding; the CLI case pinned in Phas
 CLI pin flipped to exit 3; three mutants (no unrated counting, no message note, only the literal
 `UNKNOWN` treated as unrated), all killed. P9-7 is closed.
 
+**Verified end to end (2026-10-27)** with real checkov 3.3.30 (no API key) on a throwaway solution
+(one `aws_s3_bucket`, `severity_gate: critical`, `deny`): 7 failed checks, all `severity: null`;
+`build run` and `policy check` exit 3 ("7 finding(s) ... 7 of them unrated"), `policy findings`
+lists all 7 `[unrated]`. Found on the way: `scanner_version` came from a separate
+`checkov --version` call that took 7-9 s on Windows against a 10 s timeout, so it flipped to
+`unknown`; it now comes from the scan's own `summary.checkov_version` (fallback `--version`), which
+also halved `policy check` (22 s to 10 s).
+
 ---
 
 ## Phase 10 - Follow-on: a future `opa_policy` (design first, only on real demand)

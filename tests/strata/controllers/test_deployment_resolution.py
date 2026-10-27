@@ -5,11 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from strata.controllers.deployment_resolution import resolve_deployment_chains
+from strata.controllers.deployment_resolution import deployment_workspace, resolve_deployment_chains
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.tenant_model import TenantModel
+from strata.models.workspace_model import WorkspaceModel
 
 
 def _deployment(name: str, spec: dict) -> DeploymentModel:
@@ -29,6 +30,39 @@ def _index(*deployments: DeploymentModel, tenants: tuple[TenantModel, ...] = ())
         ref = DocumentRef(kind=PlatformKind.TENANT, name=tenant.meta.name)
         index.add(IndexEntry(ref=ref, model=tenant, source=Path(f"{tenant.meta.name}.tenant.yaml")))
     return index
+
+
+# ---------------------------------------------------------------------------
+# deployment_workspace(): the non-raising lookup
+# ---------------------------------------------------------------------------
+
+
+def _with_workspace(index: DocumentIndex, name: str) -> WorkspaceModel:
+    workspace = WorkspaceModel.model_validate(
+        {
+            "meta": {"name": name},
+            "spec": {
+                "providers": ["p"],
+                "provisioners": [{"name": "tf", "tool": "terraform", "source": {"source_path": "infra"}}],
+            },
+        }
+    )
+    ref = DocumentRef(kind=PlatformKind.WORKSPACE, name=name)
+    index.add(IndexEntry(ref=ref, model=workspace, source=Path(f"{name}.workspace.yaml")))
+    return workspace
+
+
+def test_deployment_workspace_returns_the_named_workspace():
+    index = _index()
+    workspace = _with_workspace(index, "main")
+    assert deployment_workspace(index, _deployment("app", {"workspace": "main", "environments": ["prd"]})) is workspace
+
+
+@pytest.mark.parametrize("spec", [{"partial": True}, {"workspace": "ghost", "environments": ["prd"]}])
+def test_deployment_workspace_is_none_without_a_resolvable_workspace(spec):
+    index = _index()
+    _with_workspace(index, "main")
+    assert deployment_workspace(index, _deployment("app", spec)) is None
 
 
 # ---------------------------------------------------------------------------

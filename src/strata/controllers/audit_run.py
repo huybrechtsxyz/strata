@@ -51,6 +51,7 @@ from strata.controllers.audit_event_rendering import render_manifest_event, rend
 from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
 from strata.controllers.build_controller import apply_remote_version_pins
+from strata.controllers.deployment_resolution import deployment_workspace
 from strata.controllers.policy_results import read_policy_results
 from strata.controllers.sbom_controller import SBOM_FORMAT
 from strata.controllers.solution_context import SolutionContext
@@ -83,7 +84,6 @@ from strata.models.deployment_model import DeploymentModel
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
-from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
@@ -502,12 +502,9 @@ def _collect_artifacts_bom(
     solution = context.controller.solution
     version = resolve_version(context, deployment)
 
-    if deployment.spec.workspace is None:
+    workspace = deployment_workspace(index, deployment)
+    if workspace is None:
         return None, None, None
-    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-    if workspace_entry is None:
-        return None, None, None
-    workspace = cast(WorkspaceModel, workspace_entry.model)
 
     modules: list[ModuleModel] = []
     for namespace_name in workspace.spec.namespaces or []:

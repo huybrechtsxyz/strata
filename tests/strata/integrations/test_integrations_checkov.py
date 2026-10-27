@@ -238,3 +238,16 @@ def test_scan_version_is_unknown_when_get_version_fails(monkeypatch, tmp_path: P
     result = CheckovIntegration().scan(tmp_path)
 
     assert result.scanner_version == "unknown"
+
+
+def test_scan_takes_the_version_from_its_own_summary_without_a_second_call(monkeypatch, tmp_path: Path):
+    """Real checkov 3.3.30 reports `summary.checkov_version`; `--version` alone took 7-9 s on Windows."""
+    _patch_which(monkeypatch, True)
+    payload = json.loads(_CHECKOV_JSON)
+    payload["summary"]["checkov_version"] = "3.3.30"
+    calls = _patch_run(monkeypatch, CommandResult(returncode=0, stdout=json.dumps(payload), stderr=""))
+
+    result = CheckovIntegration().scan(tmp_path)
+
+    assert result.scanner_version == "3.3.30"
+    assert len(calls) == 1

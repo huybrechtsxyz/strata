@@ -57,6 +57,7 @@ from strata.logging.config import get_logger
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.tenant_model import TenantModel
+from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import diagnostics_from_validation_error
 from strata.services.deployment_service import merge_deployment_specs
 from strata.utils.diagnostics import Diagnostics
@@ -72,6 +73,18 @@ class _CircularExtendsError(Exception):
     def __init__(self, cycle: list[str]) -> None:
         super().__init__(f"circular extends chain: {' -> '.join(cycle)}")
         self.cycle = cycle
+
+
+def deployment_workspace(index: DocumentIndex, deployment: DeploymentModel) -> WorkspaceModel | None:
+    """The workspace `deployment` names, or `None` when it names none or one not in the index.
+
+    Never raises: validation and the audit manifest skip a missing workspace (the reference walk reports
+    it); `value_controller.resolve_deployment_workspace()` is the raising form for commands.
+    """
+    if not deployment.spec.workspace:
+        return None
+    entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+    return cast(WorkspaceModel, entry.model) if entry is not None else None
 
 
 def resolve_deployment_chains(index: DocumentIndex) -> tuple[dict[str, DeploymentModel], Diagnostics]:
