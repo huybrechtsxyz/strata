@@ -1971,6 +1971,106 @@ def test_spec_version_with_a_networked_transport_is_an_error(tmp_path):
     assert len(_version_findings(_resolve(root))) == 1
 
 
+# ---------------------------------------------------------------------------
+# Disabled integrations (docs/work/integration-readiness.md D29-D30)
+# ---------------------------------------------------------------------------
+
+
+def _tool_integration(root: Path, name: str, *, enabled: bool = True, required: bool = False) -> None:
+    _write(
+        root,
+        f"integrations/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: {name}\nspec:\n"
+        f"  type: terraform\n  capabilities: [x-test]\n"
+        f"  enabled: {str(enabled).lower()}\n  required: {str(required).lower()}\n",
+    )
+
+
+def _bind_step_provisioner(root: Path, integration: str, dependency: str | None = None) -> None:
+    """Bind the base workspace's step provisioner `tf`; optionally add a `depends_on`-only one bound to `dependency`."""
+    path = root / "workspace.yaml"
+    text = path.read_text(encoding="utf-8")
+    bound = f"      source: {{source_path: terraform/main}}\n      integration: {integration}\n"
+    if dependency is not None:
+        bound += (
+            "      depends_on: [shared]\n"
+            "    - name: shared\n      tool: terraform\n      source: {source_path: terraform/shared}\n"
+            f"      integration: {dependency}\n"
+        )
+    path.write_text(text.replace("      source: {source_path: terraform/main}\n", bound), encoding="utf-8")
+
+
+def _disabled_findings(context) -> list:
+    return [d for d in context.diagnostics.items if d.code == "provisioner_integration_disabled"]
+
+
+def test_a_step_provisioner_bound_to_a_disabled_integration_is_an_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _tool_integration(root, "tf-cli", enabled=False)
+    _bind_step_provisioner(root, "tf-cli")
+
+    context = _resolve(root)
+
+    [finding] = _disabled_findings(context)
+    assert finding.severity.value == "error" and not context.ok
+    assert finding.location == "spec.provisioners.0.integration"
+    assert "provisioner 'tf' names integration 'tf-cli', which is disabled" in finding.message
+
+
+def test_a_step_provisioner_bound_to_an_enabled_integration_passes(tmp_path):
+    root = _base_solution(tmp_path)
+    _tool_integration(root, "tf-cli")
+    _bind_step_provisioner(root, "tf-cli")
+
+    context = _resolve(root)
+
+    assert context.ok, context.diagnostics.messages()
+    assert _disabled_findings(context) == []
+
+
+def test_a_depends_on_only_provisioner_bound_to_a_disabled_integration_is_not_reported(tmp_path):
+    root = _base_solution(tmp_path)
+    _tool_integration(root, "tf-cli")
+    _tool_integration(root, "tf-off", enabled=False)
+    _bind_step_provisioner(root, "tf-cli", dependency="tf-off")
+
+    assert _disabled_findings(_resolve(root)) == []
+
+
+def test_a_provisioner_naming_an_unknown_integration_is_only_a_reference_error(tmp_path):
+    root = _base_solution(tmp_path)
+    _bind_step_provisioner(root, "nowhere")
+
+    context = _resolve(root)
+
+    assert any("nowhere" in m for m in context.diagnostics.messages())
+    assert _disabled_findings(context) == []
+
+
+def _required_findings(context) -> list:
+    return [d for d in context.diagnostics.items if d.code == "integration_required_disabled"]
+
+
+def test_required_and_disabled_is_a_warning(tmp_path):
+    root = _base_solution(tmp_path)
+    _tool_integration(root, "tf-cli", enabled=False, required=True)
+
+    context = _resolve(root)
+
+    [finding] = _required_findings(context)
+    assert finding.severity.value == "warning" and finding.location == "spec.required"
+    assert "'tf-cli' is required (spec.required: true) but disabled" in finding.message
+    assert context.ok, context.diagnostics.messages()
+
+
+@pytest.mark.parametrize(("enabled", "required"), [(True, True), (False, False)])
+def test_required_and_enabled_or_disabled_and_optional_is_silent(tmp_path, enabled, required):
+    root = _base_solution(tmp_path)
+    _tool_integration(root, "tf-cli", enabled=enabled, required=required)
+
+    assert _required_findings(_resolve(root)) == []
+
+
 def _gate_integration(root: Path, name: str, integration_type: str, capabilities: str, enabled: bool = True) -> None:
     _write(
         root,

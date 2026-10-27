@@ -141,6 +141,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_version_workspace(index, resolved))
     diagnostics.extend(_check_dns_records(index))
     diagnostics.extend(_check_integration_versions(index))
+    diagnostics.extend(_check_integration_required_disabled(index))
     return diagnostics
 
 
@@ -970,6 +971,7 @@ def _check_workspaces(index: DocumentIndex) -> Diagnostics:
 
         diagnostics.extend(_check_workspace_key_value_store_supports_cas(index, workspace), source=str(entry.source))
         diagnostics.extend(_check_workspace_security_gates(index, workspace), source=str(entry.source))
+        diagnostics.extend(_check_provisioner_integrations(index, workspace), source=str(entry.source))
         if security is not None:
             diagnostics.extend(
                 _check_workspace_key_value_store_allowed(index, workspace, security), source=str(entry.source)
@@ -1113,6 +1115,30 @@ def _check_workspace_security_gates(index: DocumentIndex, workspace: WorkspaceMo
     return diagnostics
 
 
+def _check_provisioner_integrations(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
+    """A step's provisioner must not be bound to a disabled Integration (docs/work/integration-readiness.md D29).
+
+    Only provisioners an execution step names: deploy resolves no others, so a `depends_on`-only binding is
+    never used. An unknown name is the generic reference walk's finding.
+    """
+    diagnostics = Diagnostics()
+    stepped = {step.provisioner for step in workspace.spec.execution or []}
+    for position, provisioner in enumerate(workspace.spec.provisioners):
+        if provisioner.name not in stepped or provisioner.integration is None:
+            continue
+        entry = index.get(PlatformKind.INTEGRATION, provisioner.integration)
+        if entry is None or cast(IntegrationModel, entry.model).spec.enabled:
+            continue
+        diagnostics.error(
+            f"Workspace '{workspace.meta.name}': provisioner '{provisioner.name}' names integration "
+            f"'{provisioner.integration}', which is disabled (spec.enabled: false), so its execution step "
+            "cannot deploy. Enable the integration or bind another one.",
+            location=f"spec.provisioners.{position}.integration",
+            code="provisioner_integration_disabled",
+        )
+    return diagnostics
+
+
 def _check_integration_versions(index: DocumentIndex) -> Diagnostics:
     """`spec.version` must be checkable: only a `cli` transport has an installed version to read.
 
@@ -1139,6 +1165,23 @@ def _check_integration_versions(index: DocumentIndex) -> Diagnostics:
             location="spec.version",
             code="integration_version_unenforceable",
         )
+    return diagnostics
+
+
+def _check_integration_required_disabled(index: DocumentIndex) -> Diagnostics:
+    """`required: true` on a disabled Integration is inert: the preflight skips disabled documents (D19, D30)."""
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.INTEGRATION):
+        spec = cast(IntegrationModel, entry.model).spec
+        if spec.required and not spec.enabled:
+            diagnostics.warning(
+                f"Integration '{entry.ref.name}' is required (spec.required: true) but disabled "
+                "(spec.enabled: false); a disabled integration is never checked, so 'required' has no effect. "
+                "Enable it or drop 'required'.",
+                source=str(entry.source),
+                location="spec.required",
+                code="integration_required_disabled",
+            )
     return diagnostics
 
 

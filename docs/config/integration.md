@@ -32,8 +32,11 @@ real integration (Infisical, Azure Key Vault, Azure App Configuration).
 - `spec.required` — whether this integration must be ready on the machine running strata (default
   `false`). `strata build run`, every `strata deploy` command and `strata integration list` check
   every enabled integration first: a required one that is not ready (tool not on PATH, wrong
-  version, misconfigured) is an error and stops the run; any other is a warning
-- `spec.enabled` — whether it's active (default `true`)
+  version, misconfigured) is an error and stops the run; any other is a warning. `strata validate`
+  warns when a disabled integration is also `required: true`, since `required` then has no effect
+- `spec.enabled` — whether it's active (default `true`). A provisioner that an execution step runs
+  must not name a disabled integration: `strata validate` reports it
+  (`provisioner_integration_disabled`)
 - `spec.authentication` — same shape as [provider.md](provider.md)'s
 - `spec.transport` — how it's reached (`cli`, `http`, `sdk`, ...) — checked against the resolved
   class's own supported transports at runtime, not schema time

@@ -311,6 +311,45 @@ Per phase:
 - **Phase 8 - `checkov`.** Register `CheckovIntegration` (out of the v1 list); `checkov_controller`
   binds an enabled `checkov` document for both its provisioner and Helm paths.
 
+## Phase 9 design - validate-time gaps
+
+Two contradictions in the documents that `strata validate` passes today (Remaining Work 5).
+Verified before deciding (2026-10-27):
+
+- **A provisioner naming a disabled Integration.** `build run` does not notice:
+  `resolve_integration()` takes a named document whether or not it is enabled. Deploy's step
+  preflight then fails with `integration_disabled`, but only after a full build. Deploy resolves
+  integrations only for provisioners named by an execution step; a `depends_on`-only provisioner
+  never has its integration resolved (`test_build_run_never_resolves_integration_for_a_dependency_only_provisioner`).
+- **`required: true` with `enabled: false`.** The preflight skips disabled documents (D19), so
+  `required` has no effect on them. Nothing reports the contradiction.
+- Precedents: a gate policy naming a disabled Integration is a validate error
+  (`gate_integration_capability_missing`), and so is a remote naming one
+  (`remote_integration_disabled`). `semantic_checks.py` is document-only: no PATH, no
+  construction (D23).
+
+Decisions:
+
+- **D29 - A step's provisioner naming a disabled Integration is a validate error**,
+  `provisioner_integration_disabled`, at `spec.provisioners.<i>.integration` of the workspace. It
+  only applies to provisioners named by an execution step, the same set deploy resolves. A
+  `depends_on`-only or unused provisioner is not reported, because nothing would ever use the
+  binding (the remote rule: "a remote nothing deploys from never fails the run"). An unknown name
+  is left to the generic reference walk.
+- **D30 - `required: true` with `enabled: false` is a validate warning**,
+  `integration_required_disabled`, at `spec.required`. It is a warning, not an error: nothing
+  breaks, the flag is only inert, and disabling an integration for a while is legitimate. The
+  message says why it matters ("a disabled integration is never checked, so `required` has no
+  effect") and what to do (enable it or drop `required`).
+- **D31 - No change to `build run` or deploy.** Validate runs before both, so the earlier error is
+  enough. The deploy preflight keeps its own check for callers that skip validate.
+
+**Tests**: D29 - a step provisioner bound to a disabled document errors at the right location; the
+same document enabled passes; a `depends_on`-only provisioner bound to a disabled document passes;
+an unknown name is not double-reported. D30 - warning with the location; `required: true` with
+`enabled: true`, and `enabled: false` without `required`, are both silent; `strata validate` still
+exits 0 with only the warning. `config/` still validates.
+
 ## Implementation Plan
 
 - [x] **Phase 1 - version enforcement (bug fix).** As designed above: `parse_version_constraint()`,
@@ -337,6 +376,8 @@ Per phase:
       after a declared Trivy. Done 2026-10-27.
 - [x] **Phase 8 - `checkov`** registered (out of the v1 list); the Checkov gate binds a declared
       document on both its provisioner and Helm paths. Done 2026-10-27.
+- [x] **Phase 9 - validate-time gaps** (D29-D31): `provisioner_integration_disabled` (error) and
+      `integration_required_disabled` (warning) in `semantic_checks.py`. Done 2026-10-27.
 
 ## Remaining Work / Open Questions
 
@@ -346,13 +387,19 @@ Per phase:
    behaviour.
 3. ~~**Usage map scope.**~~ Resolved in Phase 4 design D16 (deploy-time bindings only).
 4. ~~**`--missing` filters.**~~ Resolved in D18: none; JSON plus `jq` covers them.
-5. **Validate-time gaps** found on the way: a provisioner naming a disabled Integration document
-   (caught only at deploy preflight since Phase 2), and v1 types not yet ported reported with the
-   generic "unknown type" message by `integration check`.
+5. **Validate-time gaps** found on the way: ~~a provisioner naming a disabled Integration document~~
+   and ~~`required: true` with `enabled: false`~~ (both Phase 9); still open: v1 types not yet
+   ported reported with the generic "unknown type" message by `integration check`.
 6. **Graduation:** once 2 and 5 are decided, an ADR for the readiness model and this doc to
    `docs/design/`.
 
 ## Changelog
+
+- 2026-10-27: Phase 9 built: `strata validate` reports a step's provisioner bound to a disabled
+  Integration (`provisioner_integration_disabled`, error; `depends_on`-only provisioners are not
+  reported, as deploy never resolves them) and `required: true` on a disabled one
+  (`integration_required_disabled`, warning). No new findings on `config/`, `.v2-haven` or
+  `.v2-cfg`; three mutants, all killed.
 
 - 2026-10-27: Phases 6-8 built: `trivy`, `grype` and `checkov` are registered `scanner` types. A
   declared, enabled document is what the CVE gate (Trivy first, then Grype) and the Checkov gate
