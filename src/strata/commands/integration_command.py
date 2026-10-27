@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""`strata integration check NAME` (docs/work/integration-readiness.md D9-D13).
+"""`strata integration check NAME` and `strata integration list` (docs/work/integration-readiness.md).
 
-Local readiness first (`integration_readiness.assess_integration()`, the same check deploy preflight
-runs), then - for a type implementing `ConnectionCheckIntegration` - credentials and reachability,
-changing nothing. Credentials referenced by `spec.authentication` resolve through `--deployment`, as
-`deploy run` resolves them.
+Both report local readiness (`integration_readiness`, the same check deploy preflight runs: enabled,
+tool on PATH, version). `check` then verifies credentials and reachability for a type implementing
+`ConnectionCheckIntegration`, changing nothing; credentials referenced by `spec.authentication`
+resolve through `--deployment`, as `deploy run` resolves them. `list` stays offline and, with
+`--deployment`, shows what that deployment binds.
 """
 
 from dataclasses import asdict
@@ -13,6 +14,7 @@ from typing import cast
 
 import click
 
+from strata.commands.exit_codes import EXIT_FAILURE
 from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
@@ -28,7 +30,7 @@ from strata.controllers.value_controller import resolve_deployment
 from strata.integrations.capabilities import ConnectionCheckIntegration, CredentialedIntegration
 from strata.integrations.errors import IntegrationCredentialError, IntegrationError
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.errors import SystemError, UsageError, ValidationError
+from strata.utils.errors import UsageError
 
 
 @click.group("integration")
@@ -105,12 +107,17 @@ def check_command(
         lines: list[str] = []
         if readiness.ok and readiness.connection_check:
             integration = cast(ConnectionCheckIntegration, subject.integration)
-            lines = _check_connection(context, integration, deployment, pin)
-            for line in lines:
-                diagnostics.info(line, code="integration_check_ok")
-        elif readiness.ok and not readiness.credential_holder:
+            lines, failure_code = _check_connection(context, integration, deployment, pin, diagnostics)
+            if failure_code is not None:
+                run.failure_code = failure_code
+        elif readiness.ok and readiness.local_tool:
             diagnostics.info(
                 f"type '{readiness.type}' has no connection check; local checks only.",
+                code="integration_no_connection_check",
+            )
+        elif readiness.ok and not readiness.credential_holder:
+            diagnostics.info(
+                f"type '{readiness.type}' is networked and has no connection check; nothing to verify.",
                 code="integration_no_connection_check",
             )
 
@@ -121,11 +128,7 @@ def check_command(
                 "integration": readiness.name,
                 "type": readiness.type,
                 "declared": readiness.declared,
-                "readiness": {
-                    **{key: value for key, value in asdict(readiness).items() if key != "problems"},
-                    "ok": readiness.ok,
-                    "problems": [asdict(problem) for problem in readiness.problems],
-                },
+                "readiness": _readiness_json(readiness),
                 "checks": lines,
             }
 
@@ -180,6 +183,8 @@ def list_command(
         run.step(f"{len(rows)} integration(s)")
         diagnostics = Diagnostics()
         for row in rows:
+            if not row.used_for and not row.readiness.enabled:
+                continue
             report = diagnostics.error if row.used_for else diagnostics.warning
             for problem in row.readiness.problems:
                 report(problem.message, code=problem.code)
@@ -198,7 +203,7 @@ def _print_rows(rows: list[IntegrationUse], *, with_usage: bool) -> None:
     headers = ("NAME", "TYPE", "STATUS", "TOOL", "VERSION", "CHECK") + (("USED FOR",) if with_usage else ())
     table = [
         (
-            row.readiness.name,
+            row.readiness.name if row.readiness.declared else f"{row.readiness.name} (type default)",
             row.readiness.type,
             _status(row.readiness),
             _tool(row.readiness),
@@ -234,19 +239,31 @@ def _version(readiness: IntegrationReadiness) -> str:
     return f"{installed} ({readiness.required_version})" if readiness.required_version else installed
 
 
-def _row_json(row: IntegrationUse) -> dict[str, object]:
+def _readiness_json(readiness: IntegrationReadiness) -> dict[str, object]:
     return {
-        **{key: value for key, value in asdict(row.readiness).items() if key != "problems"},
-        "ok": row.readiness.ok,
-        "credential_holder": row.readiness.credential_holder,
-        "problems": [asdict(problem) for problem in row.readiness.problems],
-        "used_for": list(row.used_for),
+        **{key: value for key, value in asdict(readiness).items() if key != "problems"},
+        "ok": readiness.ok,
+        "credential_holder": readiness.credential_holder,
+        "problems": [asdict(problem) for problem in readiness.problems],
     }
 
 
+def _row_json(row: IntegrationUse) -> dict[str, object]:
+    return {**_readiness_json(row.readiness), "used_for": list(row.used_for)}
+
+
 def _check_connection(
-    context: SolutionContext, integration: ConnectionCheckIntegration, deployment: str | None, pin: str | None
-) -> list[str]:
+    context: SolutionContext,
+    integration: ConnectionCheckIntegration,
+    deployment: str | None,
+    pin: str | None,
+    diagnostics: Diagnostics,
+) -> tuple[list[str], int | None]:
+    """Run the connection check; failures become diagnostics (R6). Returns the lines and an exit code override.
+
+    Raises:
+        UsageError: `--deployment` is needed, or names an unknown deployment.
+    """
     config = integration.config
     if config is not None and config.spec.authentication is not None and deployment is None:
         raise UsageError(
@@ -257,15 +274,21 @@ def _check_connection(
         resolve_deployment(context, deployment, version_pin=pin)  # a typo fails even when no key needs it
         credentials = bind_resolved_credentials(context, integration, None, deployment, version_pin=pin)
         if not credentials.ok:
-            raise ValidationError(credentials, credentials.errors[0].message)
+            diagnostics.extend(credentials)
+            return [], None
     elif isinstance(integration, CredentialedIntegration):
         integration.bind_credentials({})
     try:
-        return integration.check_connection()
+        lines = integration.check_connection()
     except IntegrationCredentialError as exc:
-        raise ValidationError(_diagnostic(exc), str(exc)) from None
+        diagnostics.error(str(exc), code="integration_credentials_rejected")
+        return [], None
     except IntegrationError as exc:
-        raise SystemError(str(exc)) from None
+        diagnostics.error(str(exc), code="integration_unreachable")
+        return [], EXIT_FAILURE
+    for line in lines:
+        diagnostics.info(line, code="integration_check_ok")
+    return lines, None
 
 
 def _describe(readiness: IntegrationReadiness) -> str:
@@ -286,9 +309,3 @@ def _describe(readiness: IntegrationReadiness) -> str:
     if not readiness.enabled:
         parts.append("disabled")
     return ", ".join(parts) + "."
-
-
-def _diagnostic(error: IntegrationError) -> Diagnostics:
-    diagnostics = Diagnostics()
-    diagnostics.error(str(error), code="integration_check_failed")
-    return diagnostics

@@ -90,8 +90,10 @@ spec:
   Exit 0 ready, 1 unreachable, 2 unknown name / ambiguous type / `--deployment` needed, 3 not
   ready locally or credentials missing or rejected.
 - `strata integration list [--deployment D]` lists every Integration document with the same local
-  readiness (reads each local tool's version; never contacts a remote service). A `sources`-only
-  document whose type has no integration class (e.g. `type: git`) is shown as a credential holder,
-  not as a problem. With `--deployment` it adds what that deployment binds at deploy time - step
+  readiness (reads each local tool's version; never contacts a remote service). A `type: git`
+  document is checked as the `git` CLI that source sync, remotes, assets and audit pushes run (PATH,
+  `spec.version`). Another `sources`-only document whose type has no integration class is shown as
+  a credential holder, not as a problem. A disabled document nothing uses is listed, never warned
+  about. With `--deployment` it adds what that deployment binds at deploy time - step
   provisioners, value stores, the output store, gate policies (including types bound without a
   document) - and exits 3 when one of those is not ready: an offline CI preflight.

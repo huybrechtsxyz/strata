@@ -1,14 +1,104 @@
 #!/usr/bin/env python3
-"""Tests for `integration_readiness.py` (docs/work/integration-readiness.md D5-D8)."""
+"""Tests for `integration_readiness.py` (docs/work/integration-readiness.md D5-D18, R1-R11)."""
 
 import sys
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from strata.controllers.integration_readiness import assess_integration
+from strata.controllers.integration_readiness import (
+    assess_document,
+    assess_integration,
+    assess_named,
+    list_integrations,
+)
+from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.integrations.aikido import AikidoIntegration
 from strata.integrations.base import Integration
+from strata.models.common_models import PlatformKind
 from strata.models.integration_model import IntegrationModel
+from strata.utils.errors import UsageError
+
+
+def _doc(name: str, integration_type: str, capabilities: list[str], **spec) -> IntegrationModel:
+    return IntegrationModel.model_validate(
+        {"meta": {"name": name}, "spec": {"type": integration_type, "capabilities": capabilities, **spec}}
+    )
+
+
+def _index(*documents: IntegrationModel) -> DocumentIndex:
+    index = DocumentIndex()
+    for document in documents:
+        index.add(
+            IndexEntry(
+                ref=DocumentRef(kind=PlatformKind.INTEGRATION, name=document.meta.name),
+                model=document,
+                source=Path(f"{document.meta.name}.yaml"),
+            )
+        )
+    return index
+
+
+def test_an_unregistered_sources_only_document_is_a_credential_holder():
+    readiness = assess_document(_doc("forge", "forgejo", ["sources"])).readiness
+    assert readiness.ok and readiness.credential_holder and not readiness.registered
+
+
+def test_a_disabled_credential_holder_is_reported_disabled_not_as_a_holder():
+    readiness = assess_document(_doc("forge", "forgejo", ["sources"], enabled=False)).readiness
+    assert [p.code for p in readiness.problems] == ["integration_disabled"]
+    assert not readiness.credential_holder
+
+
+def test_an_unregistered_document_with_other_capabilities_is_a_problem():
+    readiness = assess_document(_doc("old", "ansible", ["infrastructure"])).readiness
+    assert [p.code for p in readiness.problems] == ["integration_type_unregistered"]
+    assert not readiness.registered
+
+
+def test_a_registered_type_rejecting_its_configuration_is_still_registered():
+    subject = assess_document(_doc("aikido-ci", "aikido", ["release_gate"], configuration={"nope": 1}))
+    assert subject.integration is None
+    assert subject.readiness.registered
+    assert [p.code for p in subject.readiness.problems] == ["integration_configuration_invalid"]
+
+
+def test_a_git_document_is_the_git_tool():
+    subject = assess_document(_doc("git-creds", "git", ["sources"]), read_version=False)
+    assert subject.readiness.registered and subject.readiness.local_tool
+    assert subject.readiness.command == "git"
+
+
+def test_assess_named_prefers_the_document_then_the_type_default():
+    index = _index(_doc("tf", "terraform", ["infrastructure"]))
+    assert assess_named(index, "tf", read_version=False).readiness.declared
+    helm = assess_named(index, "helm", read_version=False).readiness
+    assert helm.name == "helm" and not helm.declared
+
+
+def test_assess_named_by_type_binds_the_single_enabled_document():
+    index = _index(_doc("tf", "terraform", ["infrastructure"]))
+    assert assess_named(index, "terraform", read_version=False).readiness.name == "tf"
+
+
+def test_assess_named_refuses_an_ambiguous_type_and_an_unknown_name():
+    index = _index(_doc("a", "terraform", ["infrastructure"]), _doc("b", "terraform", ["infrastructure"]))
+    with pytest.raises(UsageError, match=r"Several enabled 'terraform' Integration documents \(a, b\)"):
+        assess_named(index, "terraform")
+    with pytest.raises(UsageError, match="not a known integration type"):
+        assess_named(index, "nope")
+
+
+def test_list_integrations_without_a_deployment_lists_every_document_sorted():
+    context = SimpleNamespace(
+        controller=SimpleNamespace(
+            index=_index(_doc("z", "forgejo", ["sources"]), _doc("a", "aikido", ["release_gate"]))
+        )
+    )
+    rows = list_integrations(context)
+    assert [row.readiness.name for row in rows] == ["a", "z"]
+    assert all(row.used_for == () for row in rows)
 
 
 def _document(**spec) -> IntegrationModel:

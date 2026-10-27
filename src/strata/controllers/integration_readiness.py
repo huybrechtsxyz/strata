@@ -101,6 +101,15 @@ def assess_named(index: DocumentIndex, name: str, *, read_version: bool = True) 
             f"'{name}' is not declared and is not a known integration type. "
             f"Declared: {declared}. Known types: {', '.join(types)}."
         )
+    same_type = sorted(
+        entry.ref.name
+        for entry in index.all_of(PlatformKind.INTEGRATION)
+        if cast(IntegrationModel, entry.model).spec.type == name and cast(IntegrationModel, entry.model).spec.enabled
+    )
+    if len(same_type) > 1:
+        raise UsageError(
+            f"Several enabled '{name}' Integration documents ({', '.join(same_type)}); check one of them by name."
+        )
     config = bind_integration_config(index, name, requester=f"Integration '{name}'")
     if config is not None:
         return assess_document(config, read_version=read_version)
@@ -117,10 +126,10 @@ def assess_document(config: IntegrationModel, *, read_version: bool = True) -> C
             for capability in config.spec.capabilities
         )
         problem = None if holder else ReadinessProblem("integration_type_unregistered", f"{config.meta.name}: {exc}")
-        return CheckSubject(None, _unconstructed(config.meta.name, config.spec.type, config, problem))
+        return CheckSubject(None, _unconstructed(config.meta.name, config.spec.type, config, problem, registered=False))
     except IntegrationError as exc:
         problem = ReadinessProblem("integration_configuration_invalid", str(exc))
-        return CheckSubject(None, _unconstructed(config.meta.name, config.spec.type, config, problem))
+        return CheckSubject(None, _unconstructed(config.meta.name, config.spec.type, config, problem, registered=True))
     return CheckSubject(integration, assess_integration(integration, read_version=read_version))
 
 
@@ -204,9 +213,10 @@ def list_integrations(
                 used[key] = (assess(), [])
             used[key][1].append(purpose)
     rows = [IntegrationUse(readiness, tuple(purposes)) for readiness, purposes in used.values()]
-    used_names = {readiness.name for readiness, _ in used.values()}
+    # A type-default row may share a name with a document (R9); only the document's own row hides it.
+    used_documents = {readiness.name for readiness, _ in used.values() if readiness.declared}
     for entry in context.controller.index.all_of(PlatformKind.INTEGRATION):
-        if entry.ref.name not in used_names:
+        if entry.ref.name not in used_documents:
             rows.append(IntegrationUse(assess_document(cast(IntegrationModel, entry.model)).readiness, ()))
     return sorted(rows, key=lambda row: (row.readiness.name, row.readiness.command or ""))
 
@@ -269,12 +279,17 @@ def _assess_type(integration_type: str, *, read_version: bool = True) -> CheckSu
         integration = get_integration(integration_type)
     except IntegrationError as exc:
         problem = ReadinessProblem("integration_type_unregistered", str(exc))
-        return CheckSubject(None, _unconstructed(integration_type, integration_type, None, problem))
+        return CheckSubject(None, _unconstructed(integration_type, integration_type, None, problem, registered=False))
     return CheckSubject(integration, assess_integration(integration, read_version=read_version))
 
 
 def _unconstructed(
-    name: str, integration_type: str, config: IntegrationModel | None, problem: ReadinessProblem | None
+    name: str,
+    integration_type: str,
+    config: IntegrationModel | None,
+    problem: ReadinessProblem | None,
+    *,
+    registered: bool,
 ) -> IntegrationReadiness:
     enabled = config.spec.enabled if config is not None else True
     problems = _disabled(name, enabled) + ([problem] if problem is not None else [])
@@ -282,7 +297,7 @@ def _unconstructed(
         name=name,
         type=integration_type,
         declared=config is not None,
-        registered=False,
+        registered=registered,
         enabled=enabled,
         local_tool=False,
         command=None,

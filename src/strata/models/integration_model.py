@@ -229,7 +229,7 @@ class IntegrationSpecModel(PlatformBaseModel):
     @field_validator("version")
     @classmethod
     def validate_version(cls, v: str | None) -> str | None:
-        """Reject a constraint `ensure_version()` could not parse (docs/work/integration-readiness.md D3)."""
+        """Reject a constraint the readiness check could not parse (docs/work/integration-readiness.md D3)."""
         if v is not None:
             parse_version_constraint(v)
         return v

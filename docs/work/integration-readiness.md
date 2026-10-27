@@ -202,6 +202,40 @@ Decisions:
   deployment or an ambiguous auto-bind (as deploy).
 - **D18 - No filter flags yet** (open question 4): `--output json` plus `jq` covers them.
 
+## Review fixes design (2026-10-27)
+
+Code review of Phases 1-4 (findings R1-R11). Verified before deciding: `git` is invoked as a CLI by
+`git_checkout.py`, `remote_resolution.py`, `git_push.py`, `audit_push.py` and the gitops integration
+(`COMMAND = "git"`), yet `type: git` has no registered class; `CAPABILITY_ABCS` has no entry for
+`sources`, so a `sources`-only class needs no ABC; `ensure_version()` has no production caller since
+Phase 2 (deploy uses `assess_integration()`).
+
+- **R1 - Register `git` as a local tool.** A minimal `GitIntegration` (`sources`, `cli`, command
+  `git`, version from `git --version`); `git` leaves the "v1 type not ported" list. A `type: git`
+  document is then checked like any CLI tool (PATH, `spec.version`) by `integration check|list`
+  and by the Phase 1 validate rule. Enforcing it during `build run` belongs to the build-time
+  preflight (open question 2). Unregistered `sources`-only documents stay credential holders.
+- **R2 - Remove `ensure_version()`.** One comparison path (`assess_integration()` +
+  `version_satisfies()`); its tests move to the readiness and constraint tests.
+- **R3 - `registered` means "type is registered".** A known type whose class rejects its
+  configuration is `registered: true` with `integration_configuration_invalid`.
+- **R4 - Disabled and unused is not a warning.** `integration list` reports nothing for a disabled
+  document no deployment uses; the STATUS column still says `disabled`.
+- **R5 - Networked type without a connection check** says "nothing to verify without a connection
+  check" instead of "local checks only".
+- **R6 - Connection failures become diagnostics.** Credentials unresolved/missing/rejected -> error,
+  exit 3; unreachable -> error, exit 1; the readiness line and JSON `data` survive. `--deployment`
+  needed and an unknown deployment stay usage errors (exit 2).
+- **R7 - One JSON shape** for a readiness record in `check` and `list` (`ok`, `credential_holder`,
+  `problems` included in both).
+- **R8 - Ambiguous type in `check`:** "several enabled '<type>' documents (a, b); check one by name".
+- **R9 - Name clash in `list`:** a declared document is only hidden by a row for the same
+  *declared* document; a type-default row shows as `<type> (type default)`.
+- **R10 - Module docstring** covers both commands.
+- **R11 - Tests:** two script provisioners with different interpreters (deploy preflight), `list
+  --pin`, controller-level tests for `assess_document`/`assess_named`/`list_integrations`, and a
+  disabled credential holder.
+
 ## Implementation Plan
 
 - [x] **Phase 1 - version enforcement (bug fix).** As designed above: `parse_version_constraint()`,
@@ -236,6 +270,12 @@ Decisions:
 
 ## Changelog
 
+- 2026-10-27: Review fixes R1-R11 built: `git` registered as a local tool (`integrations/git_cli.py`),
+  `ensure_version()` removed, `registered` made truthful, no warning for disabled unused documents,
+  networked types without a connection check say "nothing to verify", connection failures keep the
+  readiness report (exit 1/3 via diagnostics), one JSON shape, a clear ambiguous-type message, no
+  more hidden rows on a name clash, and the missing tests (a mutation check caught all four
+  injected faults).
 - 2026-10-26: Phase 4 built: `strata integration list [--deployment D]` (D14-D18) and
   `list_integrations()`; readiness gained `registered`/`credential_holder`, so `integration check
   git-customers` now exits 0 (credential holder) instead of a false 3. Dogfooded on `config/`.

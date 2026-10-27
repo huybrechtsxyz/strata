@@ -3,7 +3,7 @@
 
 import pytest
 
-from strata.utils.version_constraints import parse_version_constraint
+from strata.utils.version_constraints import parse_version_constraint, version_satisfies
 
 
 @pytest.mark.parametrize(
@@ -25,3 +25,17 @@ def test_constraints_match_like_terraform(constraint, inside, outside):
 def test_an_invalid_constraint_is_a_value_error_with_examples(constraint):
     with pytest.raises(ValueError, match="is not a version constraint"):
         parse_version_constraint(constraint)
+
+
+@pytest.mark.parametrize(
+    ("installed", "constraint", "ok"),
+    [
+        ("1.12.0", "~> 1.9", True),
+        ("2.0.0", "~> 1.9", False),
+        ("1.10.0-beta1", ">= 1.7", True),
+        ("v3.14.0", ">= 3.0", True),
+        ("not-a-version", ">= 0", False),
+    ],
+)
+def test_version_satisfies(installed, constraint, ok):
+    assert version_satisfies(installed, constraint) is ok

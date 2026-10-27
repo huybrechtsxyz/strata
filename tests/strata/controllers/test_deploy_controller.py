@@ -1479,6 +1479,38 @@ def test_deploy_run_reports_an_unavailable_tool_once_for_all_its_steps(tmp_path:
     assert error.code == "integration_unavailable" and "step 'apply_infra'" in error.message
 
 
+def test_deploy_run_preflight_keys_readiness_by_name_and_command(tmp_path: Path, monkeypatch):
+    """A script integration's command depends on its provisioner, so one name can mean two tools (R11)."""
+    from strata.controllers import deploy_controller
+    from strata.integrations.base import Integration
+
+    root = _terraform_solution(tmp_path, second_step=True)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _tool(command: str) -> Integration:
+        class _Tool(Integration):
+            TYPE = "script"
+            CAPABILITIES = frozenset()
+            TRANSPORTS = frozenset({"cli"})
+            COMMAND = command
+
+        return _Tool(None)
+
+    tools = iter([_tool("tool-a"), _tool("tool-b")])
+    monkeypatch.setattr(deploy_controller, "resolve_integration", lambda index, provisioner: next(tools))
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: "/usr/bin/tool-a" if cmd == "tool-a" else None)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "integration_unavailable"
+    assert "'tool-b'" in error.message and "step 'apply_apps'" in error.message
+
+
 def test_deploy_run_preflight_fails_for_a_provisioner_naming_a_disabled_integration(tmp_path: Path, _capture):
     root = _terraform_solution(tmp_path)
     _write(

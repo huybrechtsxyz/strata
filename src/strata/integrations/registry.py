@@ -47,6 +47,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "otel": ("strata.integrations.otel", "OtelIntegration"),
     "sentinel": ("strata.integrations.sentinel", "SentinelIntegration"),
     "aikido": ("strata.integrations.aikido", "AikidoIntegration"),
+    "git": ("strata.integrations.git_cli", "GitIntegration"),
     # ansible/git/bicep/opentofu/vault/consul/etcd/bitwarden/flagsmith/cost/
     # cve/splunk/syslog/identity as each gets a real v2 consumer (ADR-0021
     # Phase 7+).
@@ -58,7 +59,6 @@ _KNOWN_V1_TYPES = frozenset(
     {
         "opentofu",
         "ansible",
-        "git",
         "bicep",
         "vault",
         "consul",

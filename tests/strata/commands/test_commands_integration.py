@@ -39,7 +39,8 @@ def _solution(tmp_path: Path) -> Path:
         "terraform",
         "  type: terraform\n  capabilities: [infrastructure]\n  version: '>= 1.7'\n",
     )
-    _write(root, "git.yaml", "integration", "git-old", "  type: git\n  capabilities: [sources]\n")
+    _write(root, "git.yaml", "integration", "git-old", "  type: git\n  capabilities: [sources]\n  version: '>= 2.30'\n")
+    _write(root, "forge.yaml", "integration", "forge-creds", "  type: forgejo\n  capabilities: [sources]\n")
     _write(
         root,
         "environment.yaml",
@@ -192,13 +193,49 @@ def test_an_undeclared_known_type_is_checked_with_its_defaults(tmp_path, http, t
 def test_a_type_with_several_enabled_documents_is_two(tmp_path, http):
     result = _check(_solution(tmp_path), "aikido")
     assert result.exit_code == EXIT_USAGE, result.output
-    assert "multiple 'aikido' integrations" in result.output
+    assert "Several enabled 'aikido' Integration documents (aikido-ci, aikido-env)" in result.output
+    assert "check one of them by name" in result.output
 
 
 def test_a_sources_only_document_without_a_class_is_a_credential_holder(tmp_path, http):
-    result = _check(_solution(tmp_path), "git-old")
+    result = _check(_solution(tmp_path), "forge-creds")
     assert result.exit_code == EXIT_SUCCESS, result.output
     assert "credential holder" in result.output and "no connection check" not in result.output
+
+
+def test_a_git_document_is_checked_as_the_git_tool(tmp_path, http, tools):
+    tools["version"] = "2.45.1"
+    result = _check(_solution(tmp_path), "git-old", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    readiness = json.loads(result.output)["data"]["readiness"]
+    assert readiness["command"] == "git" and readiness["installed_version"] == "2.45.1"
+    assert tools["runs"] == [["git", "--version"]]
+
+
+def test_a_git_document_with_too_old_a_git_is_three(tmp_path, http, tools):
+    tools["version"] = "2.20.0"
+    result = _check(_solution(tmp_path), "git-old")
+    assert result.exit_code == EXIT_VALIDATION, result.output
+    assert "integration_version_mismatch" in result.output
+
+
+def test_a_networked_type_without_a_connection_check_says_nothing_was_verified(tmp_path, http):
+    result = _check(_solution(tmp_path), "azure-keyvault")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "nothing to verify" in result.output and "local checks only" not in result.output
+
+
+def test_a_failed_connection_keeps_the_readiness_report(tmp_path, http, monkeypatch):
+    answer, _ = http
+    answer["result"] = HttpResult(status=NO_RESPONSE, body="connection refused")
+    monkeypatch.setenv("AIKIDO_CI_TOKEN", TOKEN)
+    result = CliRunner().invoke(
+        cli, ["integration", "check", "aikido-env", "--path", str(_solution(tmp_path)), "--output", "json"]
+    )
+    assert result.exit_code == EXIT_FAILURE, result.output
+    payload = json.loads(result.output)
+    assert payload["data"]["readiness"]["ok"] is True
+    assert [d["code"] for d in payload["diagnostics"]] == ["integration_ready", "integration_unreachable"]
 
 
 def test_a_document_of_an_unregistered_type_is_three(tmp_path, http):
@@ -265,10 +302,43 @@ def test_list_without_a_deployment_shows_every_document(tmp_path, http, tools):
     result = _list(_solution(tmp_path), "--output", "json")
     assert result.exit_code == EXIT_SUCCESS, result.output
     rows = {row["name"]: row for row in json.loads(result.output)["data"]["integrations"]}
-    assert sorted(rows) == ["aikido-ci", "aikido-env", "git-old", "terraform"]
-    assert rows["git-old"]["credential_holder"] and not rows["git-old"]["registered"]
+    assert sorted(rows) == ["aikido-ci", "aikido-env", "forge-creds", "git-old", "terraform"]
+    assert rows["forge-creds"]["credential_holder"] and not rows["forge-creds"]["registered"]
+    assert rows["git-old"]["registered"] and rows["git-old"]["command"] == "git"
     assert rows["terraform"]["installed_version"] == "1.9.2" and rows["terraform"]["ok"]
     assert all(row["used_for"] == [] for row in rows.values())
+
+
+def test_list_does_not_warn_about_a_disabled_document_nothing_uses(tmp_path, http, tools):
+    root = _solution(tmp_path)
+    document = root / "terraform.yaml"
+    document.write_text(document.read_text(encoding="utf-8") + "  enabled: false\n", encoding="utf-8")
+    result = _list(root, "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    payload = json.loads(result.output)
+    assert not [d for d in payload["diagnostics"] if "terraform" in d["message"]]
+    assert {row["name"]: row["enabled"] for row in payload["data"]["integrations"]}["terraform"] is False
+
+
+def test_list_keeps_a_disabled_document_named_like_a_type_default_row(tmp_path, http, tools):
+    root = _deployable(_solution(tmp_path))
+    _write(
+        root,
+        "akv.yaml",
+        "integration",
+        "azure-keyvault",
+        "  type: azure-keyvault\n  capabilities: [secrets]\n  enabled: false\n",
+    )
+    result = _list(root, "--deployment", "app", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    rows = [row for row in json.loads(result.output)["data"]["integrations"] if row["name"] == "azure-keyvault"]
+    assert sorted(row["declared"] for row in rows) == [False, True]
+    assert "azure-keyvault (type default)" in _list(root, "--deployment", "app").output
+
+
+def test_list_with_a_pin_resolves_the_deployment_with_it(tmp_path, http, tools):
+    root = _deployable(_solution(tmp_path))
+    assert _list(root, "--deployment", "app", "--pin", "ghost").exit_code == EXIT_USAGE
 
 
 def test_list_with_a_deployment_shows_what_it_uses(tmp_path, http, tools):
