@@ -1,0 +1,332 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Gate deploys on security findings &mdash; strata 2.0.0-RC2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ff08b871"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Configuration Files" href="../config/readme.html" />
+    <link rel="prev" title="How To: Use the SBOM Feature (CycloneDX)" href="sbom-generation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Gate deploys on security findings</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#create-the-credentials-in-aikido">1. Create the credentials in Aikido</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#declare-them-in-an-environment">2. Declare them in an Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#add-one-integration-document-per-credential">3. Add one Integration document per credential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#add-the-policies-to-the-workspace">4. Add the policies to the workspace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#check-before-deploying">5. Check before deploying</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/attributeconfig.html">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/chart-registries.html">Chart registries (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Gate deploys on security findings</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/security-gates.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-gate-deploys-on-security-findings">
+<h1>How To: Gate deploys on security findings<a class="headerlink" href="#how-to-gate-deploys-on-security-findings" title="Link to this heading"></a></h1>
+<p>Two workspace policies let a deploy ask a security platform before it changes anything:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">release_gate_policy</span></code> - the platform’s pass/fail verdict on the repository at the commit being
+deployed (code, dependency, IaC and secret scanning done by the platform).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">image_gate_policy</span></code> - the platform’s open issues for every container image in the build’s
+<code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>, counted against a severity threshold.</p></li>
+</ul>
+<p>Both run in <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code> after values resolve and before any step, and both can be run on
+their own with <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">check</span></code>. They are vendor-neutral: an Integration document with the
+<code class="docutils literal notranslate"><span class="pre">release_gate</span></code> or <code class="docutils literal notranslate"><span class="pre">image_findings</span></code> capability backs each one. Aikido Security (<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">aikido</span></code>) is
+the first such integration; this guide uses it throughout.</p>
+<section id="create-the-credentials-in-aikido">
+<h2>1. Create the credentials in Aikido<a class="headerlink" href="#create-the-credentials-in-aikido" title="Link to this heading"></a></h2>
+<p>Aikido uses two unrelated credentials, one per API:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Credential</p></th>
+<th class="head"><p>Used for</p></th>
+<th class="head"><p>Where to create it</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>CI token (<code class="docutils literal notranslate"><span class="pre">AIK_CI_...</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">release_gate</span></code></p></td>
+<td><p>Settings - Integrations - Continuous Integration (shown once)</p></td>
+</tr>
+<tr class="row-odd"><td><p>API client (client id + secret, OAuth2)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">image_findings</span></code></p></td>
+<td><p>The integrations page, “API clients” (a workspace admin creates it)</p></td>
+</tr>
+</tbody>
+</table>
+<p>Store the secret values in your secret store (for example Azure Key Vault). strata never reads
+them from YAML.</p>
+</section>
+<section id="declare-them-in-an-environment">
+<h2>2. Declare them in an Environment<a class="headerlink" href="#declare-them-in-an-environment" title="Link to this heading"></a></h2>
+<p>Any store works; the deployment must reach this environment.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> key</span><span class="p">:</span><span class="w"> </span><span class="nv">AIKIDO_CI_TOKEN</span><span class="p p-Indicator">,</span><span class="nt"> store</span><span class="p">:</span><span class="w"> </span><span class="nv">azure-keyvault</span><span class="p p-Indicator">,</span><span class="nt"> value</span><span class="p">:</span><span class="w"> </span><span class="nv">aikido-ci-token</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> key</span><span class="p">:</span><span class="w"> </span><span class="nv">AIKIDO_CLIENT_SECRET</span><span class="p p-Indicator">,</span><span class="nt"> store</span><span class="p">:</span><span class="w"> </span><span class="nv">azure-keyvault</span><span class="p p-Indicator">,</span><span class="nt"> value</span><span class="p">:</span><span class="w"> </span><span class="nv">aikido-client-secret</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> key</span><span class="p">:</span><span class="w"> </span><span class="nv">AIKIDO_CLIENT_ID</span><span class="p p-Indicator">,</span><span class="nt"> store</span><span class="p">:</span><span class="w"> </span><span class="nv">constant</span><span class="p p-Indicator">,</span><span class="nt"> value</span><span class="p">:</span><span class="w"> </span><span class="s">"aik_client_xxxxxxxx"</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+</section>
+<section id="add-one-integration-document-per-credential">
+<h2>3. Add one Integration document per credential<a class="headerlink" href="#add-one-integration-document-per-credential" title="Link to this heading"></a></h2>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integration</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aikido-ci</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aikido</span>
+<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">release_gate</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">authentication</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">api_key</span>
+<span class="w">    </span><span class="nt">api_key</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AIKIDO_CI_TOKEN</span><span class="w">        </span><span class="c1"># a key from step 2, never a value</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu</span><span class="w">                        </span><span class="c1"># eu | us | me | au | us-gov</span>
+<span class="w">    </span><span class="nt">release_gate</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minimum_severity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">high</span><span class="w">          </span><span class="c1"># critical | high | medium | low</span>
+<span class="w">      </span><span class="nt">fail_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">dependency</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">iac</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">secrets</span><span class="p p-Indicator">]</span>
+<span class="nn">---</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integration</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aikido-api</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aikido</span>
+<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">image_findings</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">authentication</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">oauth2</span>
+<span class="w">    </span><span class="nt">oauth2</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AIKIDO_CLIENT_ID</span>
+<span class="w">      </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AIKIDO_CLIENT_SECRET</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu</span>
+<span class="w">    </span><span class="nt">images</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name_strategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repository</span><span class="w">       </span><span class="c1"># repository | full</span>
+<span class="w">      </span><span class="nt">names</span><span class="p">:</span><span class="w">                          </span><span class="c1"># optional: image path -&gt; Aikido container name</span>
+<span class="w">        </span><span class="nt">ghcr.io/acme/api</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme/api</span>
+</pre></div>
+</div>
+<p>Without an <code class="docutils literal notranslate"><span class="pre">authentication</span></code> block the integration reads <code class="docutils literal notranslate"><span class="pre">AIKIDO_CI_TOKEN</span></code> (or <code class="docutils literal notranslate"><span class="pre">AIKIDO_API_KEY</span></code>)
+and <code class="docutils literal notranslate"><span class="pre">AIKIDO_CLIENT_ID</span></code> / <code class="docutils literal notranslate"><span class="pre">AIKIDO_CLIENT_SECRET</span></code> from the process environment instead. Unknown
+<code class="docutils literal notranslate"><span class="pre">configuration</span></code> keys and mismatched authentication (<code class="docutils literal notranslate"><span class="pre">api_key</span></code> on an <code class="docutils literal notranslate"><span class="pre">image_findings</span></code> document,
+<code class="docutils literal notranslate"><span class="pre">oauth2</span></code> on a <code class="docutils literal notranslate"><span class="pre">release_gate</span></code> one) fail validation.</p>
+</section>
+<section id="add-the-policies-to-the-workspace">
+<h2>4. Add the policies to the workspace<a class="headerlink" href="#add-the-policies-to-the-workspace" title="Link to this heading"></a></h2>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">release_gate_policy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aikido-ci</span>
+<span class="w">    </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme/infra</span><span class="w">            </span><span class="c1"># Aikido's repository id or name</span>
+<span class="w">    </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span><span class="w">                 </span><span class="c1"># deny | warn</span>
+<span class="w">    </span><span class="nt">on_missing_data</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">block</span><span class="w">            </span><span class="c1"># skip | warn | block</span>
+<span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">900</span><span class="w">                      </span><span class="c1"># seconds to wait for the verdict (30-7200)</span>
+<span class="w">    </span><span class="nt">poll_interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">  </span><span class="nt">image_gate_policy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aikido-api</span>
+<span class="w">    </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
+<span class="w">    </span><span class="nt">on_missing_data</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">block</span>
+<span class="w">    </span><span class="nt">max_severity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HIGH</span><span class="w">                </span><span class="c1"># CRITICAL | HIGH | MEDIUM | LOW</span>
+<span class="w">    </span><span class="nt">max_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">    </span><span class="nt">on_unknown_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span><span class="w">            </span><span class="c1"># an image Aikido does not know: skip | warn | block</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">enforcement:</span> <span class="pre">warn</span></code> reports a breach and lets the deploy continue.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">on_missing_data</span></code> decides what an outage, a timeout or a missing <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code> does. <code class="docutils literal notranslate"><span class="pre">block</span></code> (the
+default) fails the gate: “could not confirm” is not “clean”.</p></li>
+<li><p>An unknown repository is always an error, whatever <code class="docutils literal notranslate"><span class="pre">on_missing_data</span></code> says.</p></li>
+<li><p>The commit judged is, in order: <code class="docutils literal notranslate"><span class="pre">--commit</span></code>, the policy’s <code class="docutils literal notranslate"><span class="pre">commit</span></code>, <code class="docutils literal notranslate"><span class="pre">STRATA_COMMIT_SHA</span></code>, the CI’s
+own variable (<code class="docutils literal notranslate"><span class="pre">GITHUB_SHA</span></code>, <code class="docutils literal notranslate"><span class="pre">BUILD_SOURCEVERSION</span></code>, <code class="docutils literal notranslate"><span class="pre">CI_COMMIT_SHA</span></code>, …), then <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">rev-parse</span> <span class="pre">HEAD</span></code>.</p></li>
+<li><p>A policy <code class="docutils literal notranslate"><span class="pre">commit</span></code> that differs from the CI variable is reported (<code class="docutils literal notranslate"><span class="pre">release_gate_commit_mismatch</span></code>):
+a warning under <code class="docutils literal notranslate"><span class="pre">warn</span></code>, an error under <code class="docutils literal notranslate"><span class="pre">deny</span></code>, so a forgotten pin cannot keep passing new
+deploys. To judge a different commit on purpose, pass <code class="docutils literal notranslate"><span class="pre">--commit</span></code> instead; it is not compared.</p></li>
+<li><p>The solution’s <code class="docutils literal notranslate"><span class="pre">cve_allowed</span></code> allowlist also suppresses image issues with a matching CVE id.</p></li>
+</ul>
+</section>
+<section id="check-before-deploying">
+<h2>5. Check before deploying<a class="headerlink" href="#check-before-deploying" title="Link to this heading"></a></h2>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">integration</span> <span class="n">check</span> <span class="n">aikido-ci</span> <span class="p">-</span><span class="n">-deployment</span> <span class="n">prd-app</span>      <span class="c"># 0 ok, 1 unreachable, 3 credential rejected</span>
+<span class="n">strata</span> <span class="n">integration</span> <span class="n">check</span> <span class="n">aikido-api</span> <span class="p">-</span><span class="n">-deployment</span> <span class="n">prd-app</span>
+<span class="n">strata</span> <span class="n">build</span> <span class="n">run</span> <span class="n">prd-app</span>                                     <span class="c"># writes sbom.json</span>
+<span class="n">strata</span> <span class="n">policy</span> <span class="n">list</span> <span class="n">prd-app</span>                                   <span class="c"># what is configured, last results</span>
+<span class="n">strata</span> <span class="n">policy</span> <span class="n">check</span> <span class="n">prd-app</span>                                  <span class="c"># every build and deploy policy, as build/deploy run them</span>
+<span class="n">strata</span> <span class="n">policy</span> <span class="n">findings</span> <span class="n">prd-app</span> <span class="p">-</span><span class="n">-policy</span> <span class="n">image_gate_policy</span>    <span class="c"># per image, allowlisted issues marked</span>
+<span class="n">strata</span> <span class="n">policy</span> <span class="n">findings</span> <span class="n">prd-app</span> <span class="p">-</span><span class="n">-policy</span> <span class="n">cve_policy</span>           <span class="c"># per CVE in sbom.json, allowlisted ones marked</span>
+<span class="n">strata</span> <span class="n">policy</span> <span class="n">findings</span> <span class="n">prd-app</span> <span class="p">-</span><span class="n">-policy</span> <span class="n">checkov_policy</span>       <span class="c"># per provisioner/Helm module, failed checks</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">check</span></code> exits 0 on pass (a <code class="docutils literal notranslate"><span class="pre">warn</span></code> breach included), 3 on a <code class="docutils literal notranslate"><span class="pre">deny</span></code> breach or missing
+data under <code class="docutils literal notranslate"><span class="pre">block</span></code>, and 2 when there is nothing to check. Its results are appended to
+<code class="docutils literal notranslate"><span class="pre">policy_results.json</span></code> in the build path, which the deploy audit record picks up.</p>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">findings</span> <span class="pre">--integration</span> <span class="pre">aikido-api</span></code> works before <code class="docutils literal notranslate"><span class="pre">image_gate_policy</span></code> is configured,
+so you can see what the gate would count before adopting it. <code class="docutils literal notranslate"><span class="pre">--severity</span></code> lowers or raises the
+threshold for the listing only; for <code class="docutils literal notranslate"><span class="pre">cve_policy</span></code> it defaults to <code class="docutils literal notranslate"><span class="pre">severity_threshold</span></code>, else
+<code class="docutils literal notranslate"><span class="pre">max_severity</span></code>. <code class="docutils literal notranslate"><span class="pre">policy</span> <span class="pre">findings</span> <span class="pre">--policy</span> <span class="pre">cve_policy</span></code> exits 2 without <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code> and 1 when no
+scanner is available or the scan fails.</p>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">--smoke-test</span></code> only reports that the gates would run; <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> runs them.</p></li>
+<li><p>Credential values are added to the deploy’s redaction set and never appear in diagnostics,
+<code class="docutils literal notranslate"><span class="pre">policy_results.json</span></code> or streamed output.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cve_policy</span></code> is checked by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">check</span></code> against the build path’s <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>, with the
+same scanner, allowlist and <code class="docutils literal notranslate"><span class="pre">on_missing_data</span></code> as <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code>, and its result replaces the
+build’s entry in <code class="docutils literal notranslate"><span class="pre">policy_results.json</span></code>. <code class="docutils literal notranslate"><span class="pre">checkov_policy</span></code> is checked the same way against the
+rendered sources in the build path; <code class="docutils literal notranslate"><span class="pre">.terraform/</span></code> left by a deploy is not scanned.</p></li>
+<li><p>Open-source Checkov (no API key) reports no severity. <code class="docutils literal notranslate"><span class="pre">checkov_policy</span></code> counts such an unrated
+failed check at any <code class="docutils literal notranslate"><span class="pre">severity_gate</span></code>, so a <code class="docutils literal notranslate"><span class="pre">deny</span></code> policy fails on it; use <code class="docutils literal notranslate"><span class="pre">enforcement:</span> <span class="pre">warn</span></code>,
+<code class="docutils literal notranslate"><span class="pre">skip_checks</span></code> or <code class="docutils literal notranslate"><span class="pre">include_checks</span></code> to relax it. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">findings</span> <span class="pre">--policy</span> <span class="pre">checkov_policy</span></code>
+marks them <code class="docutils literal notranslate"><span class="pre">[unrated]</span></code>.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="sbom-generation.html" class="btn btn-neutral float-left" title="How To: Use the SBOM Feature (CycloneDX)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../config/readme.html" class="btn btn-neutral float-right" title="Configuration Files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

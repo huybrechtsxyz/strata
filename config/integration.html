@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Integration (kind: integration) &mdash; strata 2.0.0-RC1 documentation</title>
+  <title>Integration (kind: integration) &mdash; strata 2.0.0-RC2 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=c8f0321b"></script>
+      <script src="../_static/documentation_options.js?v=ff08b871"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -53,6 +53,7 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
@@ -60,6 +61,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
 <ul class="current">
@@ -144,13 +146,32 @@ real integration (Infisical, Azure Key Vault, Azure App Configuration).</p>
 <code class="docutils literal notranslate"><span class="pre">sources</span></code> is what a remote in <code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code> or an asset’s <code class="docutils literal notranslate"><span class="pre">spec.location</span></code> needs from its
 <code class="docutils literal notranslate"><span class="pre">integration</span></code>: credentials for cloning a private git repository (see
 <a class="reference internal" href="../integrations/git.html"><span class="std std-doc">integrations/git.md</span></a>) or pulling a chart from a private chart registry (see
-<a class="reference internal" href="../integrations/chart-registries.html"><span class="std std-doc">integrations/chart-registries.md</span></a>)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.required</span></code> — whether this integration must be available for platform operation (default <code class="docutils literal notranslate"><span class="pre">false</span></code>)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.enabled</span></code> — whether it’s active (default <code class="docutils literal notranslate"><span class="pre">true</span></code>)</p></li>
+<a class="reference internal" href="../integrations/chart-registries.html"><span class="std std-doc">integrations/chart-registries.md</span></a>).
+<code class="docutils literal notranslate"><span class="pre">release_gate</span></code> (a platform’s pass/fail verdict on a repository at a commit) and <code class="docutils literal notranslate"><span class="pre">image_findings</span></code>
+(a platform’s open issues for a container image) back the workspace’s <code class="docutils literal notranslate"><span class="pre">release_gate_policy</span></code> and
+<code class="docutils literal notranslate"><span class="pre">image_gate_policy</span></code> (see <a class="reference internal" href="../how-to/security-gates.html"><span class="std std-doc">how-to/security-gates.md</span></a>); <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">aikido</span></code>
+provides both, one document per credential.
+<code class="docutils literal notranslate"><span class="pre">scanner</span></code> is declared by <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">trivy</span></code>, <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">grype</span></code> (the <code class="docutils literal notranslate"><span class="pre">cve_policy</span></code> scanner) and
+<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">checkov</span></code> (the <code class="docutils literal notranslate"><span class="pre">checkov_policy</span></code> scanner). Declaring one fixes which tool the policy uses
+(Trivy before Grype when both are declared) and lets you require it and pin its version; without
+a document, the policies use whichever tool is on PATH</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> — integration-specific settings, validated by the integration itself (an
+unknown key is an error, not silently ignored)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.required</span></code> — whether this integration must be ready on the machine running strata (default
+<code class="docutils literal notranslate"><span class="pre">false</span></code>). <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code>, every <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code> command and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">integration</span> <span class="pre">list</span></code> check
+every enabled integration first: a required one that is not ready (tool not on PATH, wrong
+version, misconfigured) is an error and stops the run; any other is a warning. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>
+warns when a disabled integration is also <code class="docutils literal notranslate"><span class="pre">required:</span> <span class="pre">true</span></code>, since <code class="docutils literal notranslate"><span class="pre">required</span></code> then has no effect</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.enabled</span></code> — whether it’s active (default <code class="docutils literal notranslate"><span class="pre">true</span></code>). A provisioner that an execution step runs
+must not name a disabled integration: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> reports it
+(<code class="docutils literal notranslate"><span class="pre">provisioner_integration_disabled</span></code>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.authentication</span></code> — same shape as <a class="reference internal" href="provider.html"><span class="std std-doc">provider.md</span></a>’s</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.transport</span></code> — how it’s reached (<code class="docutils literal notranslate"><span class="pre">cli</span></code>, <code class="docutils literal notranslate"><span class="pre">http</span></code>, <code class="docutils literal notranslate"><span class="pre">sdk</span></code>, …) — checked against the resolved
 class’s own supported transports at runtime, not schema time</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.version</span></code> — an expected version constraint (e.g. <code class="docutils literal notranslate"><span class="pre">&gt;=</span> <span class="pre">1.7</span></code>), checked at preflight</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.version</span></code> — the version the local tool must satisfy: a PEP 440 constraint (<code class="docutils literal notranslate"><span class="pre">&gt;=</span> <span class="pre">1.7</span></code>,
+<code class="docutils literal notranslate"><span class="pre">~=</span> <span class="pre">1.9</span></code>, <code class="docutils literal notranslate"><span class="pre">&gt;=</span> <span class="pre">1.7,</span> <span class="pre">&lt;</span> <span class="pre">2.0</span></code>) or Terraform’s <code class="docutils literal notranslate"><span class="pre">~&gt;</span> <span class="pre">1.9</span></code> (read as <code class="docutils literal notranslate"><span class="pre">~=</span> <span class="pre">1.9</span></code>). Checked by every <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code> command before any step runs (not under <code class="docutils literal notranslate"><span class="pre">--smoke-test</span></code>, which never runs a tool). Only for
+CLI tools: on a networked integration (e.g. <code class="docutils literal notranslate"><span class="pre">azure-keyvault</span></code>, <code class="docutils literal notranslate"><span class="pre">aikido</span></code>) it is a validation error,
+since strata cannot read a remote service’s version</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.command</span></code> — override the class’s default executable</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.endpoints</span></code> — address, for a networked transport</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.lifecycle</span></code> — hook scripts (<code class="docutils literal notranslate"><span class="pre">.py</span></code> only)</p></li>
@@ -197,6 +218,23 @@ more than one candidate exists.</p></li>
 <li><p>Version/transport/authentication are owned here, once — v1 modelled the same fact in three
 places (<code class="docutils literal notranslate"><span class="pre">IntegrationModel.validation</span></code>, <code class="docutils literal notranslate"><span class="pre">WorkspaceIacModel.version</span></code>, the tool binding itself)
 with nothing arbitrating between them.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">integration</span> <span class="pre">check</span> <span class="pre">NAME</span> <span class="pre">[--deployment</span> <span class="pre">D]</span></code> changes nothing. It first checks local readiness,
+the same check every <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code> command runs before any step: enabled, tool on PATH,
+installed version against <code class="docutils literal notranslate"><span class="pre">spec.version</span></code>. For a type with a connection check (<code class="docutils literal notranslate"><span class="pre">aikido</span></code> today) it
+then verifies credentials and reachability; with <code class="docutils literal notranslate"><span class="pre">--deployment</span></code>, the <code class="docutils literal notranslate"><span class="pre">authentication</span></code> key
+references resolve through that deployment. NAME is a document name or an integration type
+(<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">integration</span> <span class="pre">check</span> <span class="pre">terraform</span></code> checks what a <code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">terraform</span></code> provisioner would bind).
+Exit 0 ready, 1 unreachable, 2 unknown name / ambiguous type / <code class="docutils literal notranslate"><span class="pre">--deployment</span></code> needed, 3 not
+ready locally or credentials missing or rejected.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">integration</span> <span class="pre">list</span> <span class="pre">[--deployment</span> <span class="pre">D]</span></code> lists every Integration document with the same local
+readiness (reads each local tool’s version; never contacts a remote service). A <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">git</span></code>
+document is checked as the <code class="docutils literal notranslate"><span class="pre">git</span></code> CLI that source sync, remotes, assets and audit pushes run (PATH,
+<code class="docutils literal notranslate"><span class="pre">spec.version</span></code>). Another <code class="docutils literal notranslate"><span class="pre">sources</span></code>-only document whose type has no integration class is shown as
+a credential holder, not as a problem. A disabled document nothing uses is listed, never warned
+about. With <code class="docutils literal notranslate"><span class="pre">--deployment</span></code> it adds what that deployment binds at deploy time - step
+provisioners, value stores, the output store, gate policies (including types bound without a
+document) - and exits 3 when one of those is not ready: an offline CI preflight. With or without
+<code class="docutils literal notranslate"><span class="pre">--deployment</span></code> it also exits 3 when a <code class="docutils literal notranslate"><span class="pre">required:</span> <span class="pre">true</span></code> integration is not ready.</p></li>
 </ul>
 </section>
 </section>
