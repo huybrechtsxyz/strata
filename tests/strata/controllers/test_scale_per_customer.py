@@ -127,7 +127,27 @@ def test_every_customer_deployment_reaches_its_own_asset_in_the_graph(large: _Sc
     assert all(e.resolved for e in edges if e.source_name.startswith("prd-c1"))
 
 
-def test_a_build_touches_only_its_own_customers_asset(large: _Scaled, tmp_path: Path):
+@pytest.fixture
+def terraform_on_path(monkeypatch):
+    """The example requires terraform >= 1.7 at build preflight; CI runners do not have it."""
+    import strata.integrations.base as base_module
+    from strata.utils.transport import CommandResult
+
+    real_which, real_run = shutil.which, base_module.run_command
+
+    def _which(cmd: str) -> str | None:
+        return f"/usr/bin/{cmd}" if cmd == "terraform" else real_which(cmd)
+
+    def _run(args, **kwargs):
+        if Path(args[0]).stem == "terraform":
+            return CommandResult(returncode=0, stdout="Terraform v1.9.2", stderr="")
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(base_module.shutil, "which", _which)
+    monkeypatch.setattr(base_module, "run_command", _run)
+
+
+def test_a_build_touches_only_its_own_customers_asset(large: _Scaled, tmp_path: Path, terraform_on_path):
     steps: list[str] = []
     middle = _code(LARGE // 2)
 

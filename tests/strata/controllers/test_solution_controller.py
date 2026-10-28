@@ -427,8 +427,28 @@ def test_shipped_example_binds_the_asset_slot_per_customer_without_a_manifest_re
     assert not remote_names & {"c0062-api", "c0063-api"}
 
 
+@pytest.fixture
+def terraform_on_path(monkeypatch):
+    """The example requires terraform >= 1.7 at build preflight; CI runners do not have it."""
+    import strata.integrations.base as base_module
+    from strata.utils.transport import CommandResult
+
+    real_which, real_run = shutil.which, base_module.run_command
+
+    def _which(cmd: str) -> str | None:
+        return f"/usr/bin/{cmd}" if cmd == "terraform" else real_which(cmd)
+
+    def _run(args, **kwargs):
+        if Path(args[0]).stem == "terraform":
+            return CommandResult(returncode=0, stdout="Terraform v1.9.2", stderr="")
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(base_module.shutil, "which", _which)
+    monkeypatch.setattr(base_module, "run_command", _run)
+
+
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
-def test_shipped_example_builds_offline_and_projects_the_default_asset(tmp_path):
+def test_shipped_example_builds_offline_and_projects_the_default_asset(tmp_path, terraform_on_path):
     """The default deployment's asset comes from the local `infra` stand-in, so the example
     builds end to end with no network; the customer deployments need their own repositories."""
     root = tmp_path / "config"

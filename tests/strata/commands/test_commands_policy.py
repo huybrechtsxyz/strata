@@ -108,6 +108,8 @@ def gate(monkeypatch):
     )
     monkeypatch.setattr(gates_module, "get_integration", lambda integration_type, config=None: _FakeGate(config, state))
     monkeypatch.delenv("STRATA_OUTPUT", raising=False)
+    for name in gates_module._COMMIT_ENV_VARS:  # CI sets GITHUB_SHA etc.; a pinned commit must not be compared to it
+        monkeypatch.delenv(name, raising=False)
     return state
 
 
