@@ -246,6 +246,23 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-10-28: **Built RC2** - bumped `VERSION.txt` from `2.0.0-RC1` to `2.0.0-RC2` (normalizes to `2.0.0rc2`;
+  confirmed via `packaging.version.Version` first; no trailing newline). Still cut from `v2-beta`; RC1's note on the
+  skipped Stage 2/4 gates applies unchanged. Contents since RC1 (`8941d70`): security gates (`release_gate_policy`,
+  `image_gate_policy` via Aikido, `cve_policy`, `checkov_policy`) and the `strata policy list|check|findings` group;
+  integration readiness (`strata integration list|check`, local tools as declarable integration types, ADR-0050/0051,
+  `provisioner_integration_disabled`/`integration_required_disabled` validate checks); `strata deployment list`; the
+  VS Code Integrations and Policies views with a deployment selector; the Aikido Safe Chain how-to. **Breaking for its
+  notes:** `checkov_policy` now counts unrated (`UNKNOWN` severity) findings against the gate. Open-source Checkov
+  rates nothing, so every failed check counts, at any `severity_gate`; haven's Helm charts go from 0 to 308 counted
+  findings. Before upgrading, use `enforcement: warn`, `skip_checks` or `include_checks` where that would block a
+  deploy. Full check suite green
+  (`scripts/Check.ps1`): ruff, mypy, import-linter, pytest (3528 passed), smoke test, Sphinx. `uv sync --all-extras
+  --all-groups --reinstall-package xyz-strata` refreshed the dev install (`strata version` -> `2.0.0rc2`). `uv build`
+  produced `xyz_strata-2.0.0rc2-py3-none-any.whl`/`.tar.gz`; a fresh isolated venv confirmed `strata version` ->
+  `2.0.0rc2`, the command list (now also `deployment`, `integration`, `policy`), `strata validate` and
+  `strata deployment list` on `config/`, and that the agent-skill template ships in the wheel. Verification venv
+  removed after. The commit and the `v2.0.0-rc2` tag are left to the maintainer.
 - 2026-10-25: **Built RC1** - bumped `VERSION.txt` from `2.0.0-Alpha27` to `2.0.0-RC1` (normalizes to `2.0.0rc1`, a
   PEP 440 pre-release; confirmed via `packaging.version.Version` first; no trailing newline, as before). **A maintainer
   decision that skips this doc's own gates:** no beta was cut, Stage 2's entry bar is not met (`.v2-haven` and cfg-int
