@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vendor-neutral types for the security gate capabilities (docs/work/security-gates-design.md D1).
+"""Vendor-neutral types for the security gate capabilities (docs/design/security-gates.md D1).
 
 `release_gate` and `image_findings` integrations return these, so the gate controller never sees a
 vendor's wire format. Frozen dataclasses, not `PlatformBaseModel`: they are runtime results, never

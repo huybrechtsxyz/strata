@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `strata policy`'s controller (docs/work/security-gates-design.md D7; plan Phase 6).
+"""Tests for `strata policy`'s controller (docs/design/security-gates.md D7; plan Phase 6).
 
 A real on-disk solution is loaded with `open_solution()`; the gate integration is a vendor-neutral
 fake returned by a monkeypatched `security_gate_controller.get_integration`, so no vendor code runs.

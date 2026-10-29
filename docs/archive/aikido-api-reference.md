@@ -1,22 +1,24 @@
 # Aikido Security - API reference
 
-> **Read this first (2026-10-26).** This was the first, Aikido-only design. It is superseded by
-> the vendor-neutral [security-gates-design.md](security-gates-design.md), where Aikido is the
+> **Archived 2026-10-28 (vendor reference).** Written 2026-10-26. This was the first, Aikido-only design. It is superseded by
+> the vendor-neutral [security-gates.md](../design/security-gates.md), where Aikido is the
 > first implementation of two capabilities (`release-gate`, `image-findings`).
 >
 > - **Sections 1-13 are superseded.** Kept for history and for the Aikido-specific reasoning they
 >   carry (credentials D3, commit SHA D7, image naming D8, missing-data D10, deferrals D12). Where
->   they disagree with security-gates-design.md, that document wins.
+>   they disagree with security-gates.md, that document wins.
 > - **Appendices A-D are authoritative** and are what the new design points to: the offline Aikido
 >   API reference (A), test fixtures (B), strata code anchors (C) and sources (D).
+>   Items marked **[U]** are confirmed on first use against a real Aikido workspace; correct this
+>   file and `integrations/aikido.py` then.
 
 |                   |                                                                                                                                                                                                                                                                                                                                     |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**        | Superseded (sections 1-13); reference (appendices)                                                                                                                                                                                                                                                                                  |
+| **Status**        | Archived: sections 1-13 superseded, appendices are the vendor reference                                                                                                                                                                                                                                                             |
 | **Author**        | Vincent Huybrechts                                                                                                                                                                                                                                                                                                                  |
 | **Date**          | 2026-10-26                                                                                                                                                                                                                                                                                                                          |
 | **Target**        | strata 2.x (after 2.0.0; designed against 2.0.0rc1)                                                                                                                                                                                                                                                                                 |
-| **Work document** | [docs/work/aikido-integration.md](../work/aikido-integration.md)                                                                                                                                                                                                                                                                    |
+| **Work document** | [docs/archive/aikido-integration.md](aikido-integration.md)                                                                                                                                                                                                                                                                         |
 | **Related**       | ADR-0003 (layering), ADR-0004 (exit codes), ADR-0021 (integration layer), ADR-0022 D4 (build renders, deploy resolves), docs/archive/cve-scanner-integration.md, docs/archive/checkov-integration.md, docs/design/audit-sink-dispatch.md (D4: credentials), docs/work/audit-trail.md (policy_results), docs/work/sbom-generation.md |
 
 > **This document is self-contained on purpose.** It will be implemented where

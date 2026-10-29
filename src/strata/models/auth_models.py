@@ -273,7 +273,7 @@ class AuthenticationModel(PlatformBaseModel):
     def key_references(self) -> tuple[str, ...]:
         """Every key reference the active method's block sets, for a caller to resolve before use.
 
-        docs/work/security-gates-design.md D2. Methods with no consumer yet return `()`; literal
+        docs/design/security-gates.md D2. Methods with no consumer yet return `()`; literal
         fields (`token.username`) and flags are never key references.
         """
         names = _KEY_REFERENCE_FIELDS.get(self.method)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `strata policy list | check | findings` (docs/work/security-gates-design.md D7; plan Phase 6).
+"""Tests for `strata policy list | check | findings` (docs/design/security-gates.md D7; plan Phase 6).
 
 Exit codes and output shape through the real CLI; the gate integration is a vendor-neutral fake.
 """

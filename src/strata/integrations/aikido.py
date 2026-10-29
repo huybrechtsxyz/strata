@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Aikido Security: the first `release_gate` and `image_findings` integration.
 
-docs/work/security-gates-design.md D11; Aikido's API is in docs/work/aikido-api-reference.md
+docs/design/security-gates.md D11; Aikido's API is in docs/archive/aikido-api-reference.md
 Appendix A. Two Aikido APIs need two unrelated credentials, so a solution declares one Integration
 document per credential (D2): `api_key` (the CI token) for `release_gate`, `oauth2` (client
 credentials) for `image_findings`. Without an `authentication` block the class reads Aikido's

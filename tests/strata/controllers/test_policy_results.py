@@ -53,7 +53,7 @@ def test_read_policy_results_is_none_when_file_is_missing(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# append_policy_result() (docs/work/security-gates-design.md D9)
+# append_policy_result() (docs/design/security-gates.md D9)
 # ---------------------------------------------------------------------------
 
 _GATE = {"policy_name": "release_gate_policy", "policy_type": "aikido", "phase": "deploy"}

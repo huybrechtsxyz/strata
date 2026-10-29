@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the security gate policy models (docs/work/security-gates-design.md D3, section 6.1)."""
+"""Tests for the security gate policy models (docs/design/security-gates.md D3, section 6.1)."""
 
 import pytest
 from pydantic import ValidationError

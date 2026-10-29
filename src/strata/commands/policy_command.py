@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`strata policy list | check | findings` (docs/work/security-gates-design.md D7).
+"""`strata policy list | check | findings` (docs/design/security-gates.md D7).
 
 Thin layer over `controllers/policy_controller.py`. `check` evaluates the deploy-phase gates now,
 exactly as `deploy run` would, so a pipeline can fail before it starts deploying; `list` and

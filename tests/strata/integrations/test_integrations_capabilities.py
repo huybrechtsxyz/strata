@@ -373,7 +373,7 @@ def test_no_mismatch_for_a_compliant_scanner_integration():
 
 
 # ---------------------------------------------------------------------------
-# Security gate capabilities (docs/work/security-gates-design.md D1, D2, D7)
+# Security gate capabilities (docs/design/security-gates.md D1, D2, D7)
 # ---------------------------------------------------------------------------
 
 

@@ -1929,7 +1929,7 @@ def test_workspace_without_output_store_is_unaffected_by_the_cas_check(tmp_path)
 
 # ---------------------------------------------------------------------------
 # Workspace security gate policies -> their Integration must declare the capability
-# and be of a type implementing it (docs/work/security-gates-design.md D3).
+# and be of a type implementing it (docs/design/security-gates.md D3).
 # ---------------------------------------------------------------------------
 
 _GATE_POLICIES = (

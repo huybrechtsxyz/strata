@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Security gates at deploy preflight (docs/work/security-gates-design.md D5, D6, section 6.3).
+"""Security gates at deploy preflight (docs/design/security-gates.md D5, D6, section 6.3).
 
 Vendor-neutral: everything here talks to `ReleaseGateIntegration` / `ImageFindingsIntegration`
 (`integrations/capabilities.py`) and the neutral types in `integrations/security_findings.py`;

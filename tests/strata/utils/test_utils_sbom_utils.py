@@ -13,7 +13,7 @@ from strata.utils.sbom_utils import (
 )
 
 # ---------------------------------------------------------------------------
-# split_registry() (docs/work/security-gates-design.md D1)
+# split_registry() (docs/design/security-gates.md D1)
 # ---------------------------------------------------------------------------
 
 

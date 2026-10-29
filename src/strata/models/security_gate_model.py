@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Security gate policies (docs/work/security-gates-design.md D3, section 6.1).
+"""Security gate policies (docs/design/security-gates.md D3, section 6.1).
 
 Vendor-neutral on purpose: each policy names the Integration document that answers it, and every
 vendor-specific option (Aikido's `fail_on`, image naming, ...) lives on that document instead

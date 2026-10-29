@@ -565,7 +565,7 @@ class ScannerIntegration(Integration):
 class ReleaseGateIntegration(Integration):
     """Capability: `release_gate`. A remote platform's pass/fail verdict on a repository at a commit.
 
-    docs/work/security-gates-design.md D1. Vendor thresholds come from the class's own Integration
+    docs/design/security-gates.md D1. Vendor thresholds come from the class's own Integration
     document (D4), never from the request, so the gate policy stays vendor-neutral.
     """
 
@@ -591,7 +591,7 @@ class ReleaseGateIntegration(Integration):
 class ImageFindingsIntegration(Integration):
     """Capability: `image_findings`. A remote platform's open issues for one container image.
 
-    docs/work/security-gates-design.md D1. How the platform names an image is the class's own
+    docs/design/security-gates.md D1. How the platform names an image is the class's own
     concern, configured on its Integration document.
     """
 
@@ -610,7 +610,7 @@ class ImageFindingsIntegration(Integration):
 class CredentialedIntegration(Integration):
     """Not a capability: an integration whose `spec.authentication` keys strata resolves before use.
 
-    docs/work/security-gates-design.md D2. The controller resolves
+    docs/design/security-gates.md D2. The controller resolves
     `spec.authentication.key_references()` through the value pipeline and hands the values over
     here, so this layer never imports `controllers` (ADR-0003).
     """
@@ -626,7 +626,7 @@ class CredentialedIntegration(Integration):
 class ConnectionCheckIntegration(Integration):
     """Not a capability: an integration that can verify its credentials and reachability.
 
-    docs/work/security-gates-design.md D7; backs `strata integration check`.
+    docs/design/security-gates.md D7; backs `strata integration check`.
     """
 
     @abstractmethod

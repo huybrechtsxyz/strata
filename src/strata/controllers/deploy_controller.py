@@ -555,7 +555,7 @@ def deploy_run(
             text = text.replace(value, "***")
         return text
 
-    # Security gates (docs/work/security-gates-design.md D5): after values resolve, before any step.
+    # Security gates (docs/design/security-gates.md D5): after values resolve, before any step.
     if workspace.spec.release_gate_policy is not None or workspace.spec.image_gate_policy is not None:
         if smoke_test:
             _step("would run security gates (release_gate_policy / image_gate_policy)")

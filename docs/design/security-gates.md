@@ -1,20 +1,15 @@
 # Security gates (release gate, image gate) - Design
 
-|                      |                                                                                                                                                                                                                                                                                                                                                    |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**           | Accepted - recorded as [ADR-0047](../decisions/0047-deploy-security-gates-as-vendor-neutral-capabilities.md) (capabilities, D1/D3/D5/D6/D11), [ADR-0048](../decisions/0048-integration-credentials-through-authentication-key-references.md) (credentials, D2), [ADR-0049](../decisions/0049-strata-policy-command-group.md) (`strata policy`, D7) |
-| **Date**             | 2026-10-26                                                                                                                                                                                                                                                                                                                                         |
-| **Target**           | strata 2.x (after 2.0.0; checked against 2.0.0rc1 / `v2-beta`)                                                                                                                                                                                                                                                                                     |
-| **Index**            | [aikido-integration.md](aikido-integration.md) (status, open questions)                                                                                                                                                                                                                                                                            |
-| **Plan**             | [security-gates-implementation-plan.md](security-gates-implementation-plan.md)                                                                                                                                                                                                                                                                     |
-| **Vendor reference** | [aikido-api-reference.md](aikido-api-reference.md) - Appendix A (offline Aikido API), B (fixtures), C (code anchors), D (sources)                                                                                                                                                                                                                  |
-| **Related**          | ADR-0003 (layering), ADR-0004 (exit codes), ADR-0021 (integration layer), ADR-0022 D4 (build renders, deploy resolves), [cve-scanner-integration.md](../archive/cve-scanner-integration.md), [checkov-integration.md](../archive/checkov-integration.md)                                                                                           |
+- Status: current
+- Last updated: 2026-10-28
+- Target: strata 2.x (2.0.0rc2, `v2-beta`)
+- Vendor reference: [aikido-api-reference.md](../archive/aikido-api-reference.md) - Appendix A (offline Aikido API), B (fixtures), C (code anchors), D (sources)
+- Related: ADR-0003 (layering), ADR-0004 (exit codes), ADR-0021 (integration layer), ADR-0022 D4 (build renders, deploy resolves), [cve-scanner-integration.md](../archive/cve-scanner-integration.md), [checkov-integration.md](../archive/checkov-integration.md), [integration-readiness.md](../work/integration-readiness.md)
 
-> **Offline-ready.** This document plus [aikido-api-reference.md](aikido-api-reference.md)
-> Appendices A-D are everything needed to implement it without internet access. Facts about
-> Aikido are labelled there **[V]** (verified) or **[U]** (unverified, resolved in plan Phase 7).
-> This design supersedes that document's sections 1-13; its Aikido-specific reasoning is reused
-> where noted ("ref D7" = aikido-api-reference.md decision D7).
+> Facts about Aikido in the vendor reference are labelled **[V]** (verified against a primary source)
+> or **[U]** (not yet confirmed against a live workspace, see section 12). This design replaces that
+> document's sections 1-13 and reuses its Aikido-specific reasoning where noted ("ref D7" =
+> aikido-api-reference.md decision D7).
 
 ---
 
@@ -37,8 +32,8 @@ can join (D7):
 
 ```
 strata policy list <deployment>        # configured policies and their last recorded result
-strata policy check <deployment>       # evaluate policies now (this iteration: the two gates)
-strata policy findings <deployment>    # read-only detail (this iteration: the image gate)
+strata policy check <deployment>       # evaluate policies now (the gates, cve_policy, checkov_policy)
+strata policy findings <deployment>    # read-only detail (the image gate, cve_policy, checkov_policy)
 strata integration check <name>        # credentials and reachability of one integration
 ```
 
@@ -89,7 +84,7 @@ would force every implementation to stub half of it.
 - G6. `strata policy list | check | findings` and `strata integration check` for CI use.
 - G7. Aikido as the first implementation of both capabilities. No new runtime dependency.
 
-**Non-goals (this iteration)** - see D10.
+**Non-goals** - see D10.
 
 ## 4. Decisions
 
@@ -111,7 +106,7 @@ IMAGE_FINDINGS = "image_findings"  #: Open security issues for a container image
 
 ```python
 class ReleaseGateIntegration(Integration):
-    """A platform that can judge a repository at a commit (docs/work/security-gates-design.md D1)."""
+    """A platform that can judge a repository at a commit (docs/design/security-gates.md D1)."""
 
     @abstractmethod
     def run_release_gate(
@@ -309,7 +304,7 @@ solution root; 40-hex validation), SBOM image extraction to `ImageRef` (purl-der
 and policy results. The vendor class owns only the API conversation and how it names images
 (ref D8 second half, now Aikido configuration).
 
-### D6a - A pinned commit that differs from the run's commit (added 2026-10-27)
+### D6a - A pinned commit that differs from the run's commit
 
 The policy's `commit` comes before the CI variables, so a pin left in the workspace after testing
 keeps judging an old commit while CI deploys a newer one: an old pass lets every new deploy
@@ -330,7 +325,7 @@ through, and only "via policy commit" in the step line hints at it.
 **Why `policy`, not `security`.** "Policy" is already the shared concept in strata: the
 workspace fields (`cve_policy`, `checkov_policy`, `release_gate_policy`, `image_gate_policy`), the
 audit file (`policy_results.json`, `ManifestPolicyResultModel` with `phase: validate | build | plan
-| deploy`) and [policy-engine-architecture.md](policy-engine-architecture.md). The policies differ
+| deploy`) and [policy-engine-architecture.md](../work/policy-engine-architecture.md). The policies differ
 in what checks them (a local tool or an integration) and when (build or deploy), but share one
 lifecycle: configured on the workspace, evaluated, enforced `deny`/`warn`, recorded. `security`
 would exclude a future OPA policy, which typically checks tags, naming, regions or cost. `gate`
@@ -343,22 +338,22 @@ is a dispatch table, not a generic policy model, so it stays within
 policy-engine-architecture.md's "bespoke, no generic engine" decision. A new policy adds its field,
 its evaluator and one table row; `list`, `check` and the audit record then work unchanged.
 
-**Scope this iteration (kept small):** `policy check` evaluates the two gate policies only, and
-`policy findings` supports the image gate only. Each other policy joins in its own later phase of
-the implementation plan (`cve_policy`, `checkov_policy`, then a future `opa_policy`).
-`cve_policy` joined both in Phase 8 (2026-10-27): `check` includes it by default and records it
-with `phase: "build"`; `findings` lists each CVE with allowlisted ones marked, `--severity`
-defaulting to `severity_threshold`, else `max_severity`.
-`checkov_policy` joined both in Phase 9 (2026-10-27): the rendered source paths are re-derived
-from the model (no build-output change); `findings` lists failed checks per provisioner or Helm
-module, marking findings without a severity, which the gate never counts (plan P9-7).
+**Scope.** `policy check` evaluates `cve_policy`, `checkov_policy` and the two gate policies;
+`policy findings` lists itemised findings for the image gate, `cve_policy` and `checkov_policy` (the
+release gate has no itemised API). A future policy adds its field, its evaluator and one table row.
+`cve_policy` is recorded with `phase: "build"`, the same verdict as `build run`, and `findings` lists
+each CVE with allowlisted ones marked (`--severity` defaults to `severity_threshold`, else
+`max_severity`). `checkov_policy` re-derives the rendered source paths from the model (no
+build-output change); `findings` lists failed checks per provisioner or Helm module. A failed check
+with no severity (open-source Checkov reports none) counts against the gate at any `severity_gate`
+and is marked `[unrated]`.
 
 | Command                                                                                     | Purpose                                                                                                                                                                                                                                                                                                                                                                                                  | Exit                                                                                                                                                                                           |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `strata policy list <deployment>`                                                           | Every policy the workspace configures: name, phase, enforcement, what backs it (`trivy`, `checkov`, `aikido 'aikido-ci'`), whether `policy check` can run it yet, and its last result from `policy_results.json` under the build path. Read-only, no network.                                                                                                                                            | 0; 2 unknown deployment                                                                                                                                                                        |
+| `strata policy list <deployment>`                                                           | Every policy the workspace configures: name, phase, enforcement, what backs it (`trivy`, `checkov`, `aikido 'aikido-ci'`), whether `policy check` can run it, and its last result from `policy_results.json` under the build path. Read-only, no network.                                                                                                                                                | 0; 2 unknown deployment                                                                                                                                                                        |
 | `strata policy check <deployment> [--policy NAME ...] [--commit SHA]`                       | Evaluate the selected policies now (default: every policy `check` supports and the workspace configures), exactly as the deploy does; append the results to `policy_results.json` when the build path exists.                                                                                                                                                                                            | 0 pass (a `warn` breach too); 2 nothing to check, or `--policy` names one that is not configured or not yet supported; 3 a `deny` breach, missing data under `block`, or a configuration error |
 | `strata policy findings <deployment> --policy NAME [--severity LEVEL] [--integration NAME]` | Read-only detail for a policy that produces itemised findings: per image, the platform's name, status, counts by severity and up to 10 issues; issues the `cve_allowed` allowlist would suppress are shown and marked, not hidden. `--severity` defaults to the policy's `max_severity`, else `HIGH`. `--integration` lets the image gate's lookup run without a policy configured (before adopting it). | 0 listed; 1 platform unreachable or credentials rejected; 2 unsupported policy, no integration, or no `sbom.json`                                                                              |
-| `strata integration check <name> [--deployment D]`                                          | Verify one integration's credentials and reachability. With `--deployment`, the document's `authentication` key references are resolved through that deployment, as deploy resolves them; without it, only a document with no `authentication` block (environment fallback) can be checked.                                                                                                              | 0 ok; 1 unreachable; 2 unknown name, check not supported, or `--deployment` needed; 3 credentials missing, rejected or unresolved                                                              |
+| `strata integration check <name> [--deployment D]`                                          | Verify one integration's credentials and reachability. With `--deployment`, the document's `authentication` key references are resolved through that deployment, as deploy resolves them; without it, only a document with no `authentication` block (environment fallback) can be checked.                                                                                                              | 0 ok; 1 unreachable; 2 unknown name, or `--deployment` needed; 3 credentials missing, rejected or unresolved                                                                                   |
 
 Common options on the `policy` commands, mirroring `deploy`: `--path`, `--build-path` (default
 `<solution root>/build/<deployment>`), `--pin` (so credentials resolve exactly as a `deploy --pin`
@@ -369,16 +364,15 @@ deploy, "could not confirm" fails the gate.
 `integration check` uses a small mixin, `ConnectionCheckIntegration.check_connection() ->
 list[str]` (one line per verified aspect; raises `IntegrationError` on failure). Only Aikido
 implements it now; any integration can add it later, which is why it is not under `policy`.
-Since integration-readiness.md Phase 3 the command also checks local readiness first and accepts
-a type name; a type without a connection check passes on local readiness (exit 0, no longer 2) and a
-disabled integration exits 3 (no longer 2) - see that doc's D9-D13.
+The command also checks local readiness first and accepts a type name; a type without a connection
+check passes on local readiness (exit 0) and a disabled integration exits 3 (integration-readiness.md
+D9-D13, [ADR-0050](../decisions/0050-one-offline-integration-readiness-check.md)).
 A credential that is missing or rejected (HTTP 401/403) is raised as `IntegrationCredentialError`,
 a subclass, so the command can tell exit 3 (fix the credential) from exit 1 (platform unreachable).
 
-As built (Phase 6): each table row carries its own check function (the gate rows call
-`evaluate_security_gates(..., only=<gate>)`), so a later policy adds exactly one function and one
-row. A `--policy` that `check` cannot run yet is a usage error naming the lifecycle phase that does
-run it (`strata build run` for `cve_policy`/`checkov_policy`). `policy findings` also exits 3 when
+Each table row carries its own check function (the gate rows call
+`evaluate_security_gates(..., only=<gate>)`), so a new policy adds exactly one function and one
+row. A `--policy` that `check` does not support is a usage error. `policy findings` also exits 3 when
 the integration is misconfigured or its declared credentials do not resolve.
 
 All commands honour `--output json` / `STRATA_OUTPUT=json` via the existing command machinery.
@@ -399,14 +393,14 @@ finalize picks them up unchanged.
 
 ### D10 - Deferred, with reasons
 
-| Item                                                                                         | Why deferred                                                                                     |
-| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `policy check` / `policy findings` for `cve_policy`, `checkov_policy`, a future `opa_policy` | Kept out to keep this iteration small; each has its own phase in the implementation plan (8-10). |
-| Merging `image_gate_policy` with `cve_policy` (`source: trivy \| grype \| aikido`)           | Reworks a shipped feature; wait until both run in real pipelines.                                |
-| Auto-bind by capability (policy without `integration`)                                       | Explicit is clearer with several documents; add if repetition becomes a burden.                  |
-| A second vendor                                                                              | Build exactly one until a consumer needs another.                                                |
-| Upload of Checkov results / SBOM to Aikido; `aikido-local-scanner` on rendered output        | Ref D12 (SARIF / Syft JSON formats; network from `build run`).                                   |
-| PR gating, webhooks, write-back (snooze/ignore)                                              | Ref D12.                                                                                         |
+| Item                                                                                  | Why deferred                                                                                                                                   |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| A future `opa_policy` in `strata policy`                                              | Only on real consumer demand for policy-as-code (tags, naming, regions, cost): it would add a capability, a workspace field and one table row. |
+| Merging `image_gate_policy` with `cve_policy` (`source: trivy \| grype \| aikido`)    | Reworks a shipped feature; wait until both run in real pipelines.                                                                              |
+| Auto-bind by capability (policy without `integration`)                                | Explicit is clearer with several documents; add if repetition becomes a burden.                                                                |
+| A second vendor                                                                       | Build exactly one until a consumer needs another.                                                                                              |
+| Upload of Checkov results / SBOM to Aikido; `aikido-local-scanner` on rendered output | Ref D12 (SARIF / Syft JSON formats; network from `build run`).                                                                                 |
+| PR gating, webhooks, write-back (snooze/ignore)                                       | Ref D12.                                                                                                                                       |
 
 ### D11 - Aikido as the first implementation
 
@@ -544,7 +538,7 @@ spec:
 
 ## 6. Component design
 
-### 6.1 Models - `models/security_gate_model.py` (new)
+### 6.1 Models - `models/security_gate_model.py`
 
 ```python
 class ReleaseGatePolicyModel(PlatformBaseModel):
@@ -578,17 +572,17 @@ policy, following D3's two precedents: named document disabled or not declaring 
 
 ### 6.2 Integration layer
 
-- `integrations/security_findings.py` (new): D1 types and `SECURITY_SEVERITY_ORDER`.
+- `integrations/security_findings.py`: D1 types and `SECURITY_SEVERITY_ORDER`.
 - `integrations/errors.py`: `GateNotFoundError`, `GateTimeoutError`.
 - `utils/sbom_utils.py`: `split_registry()` next to `parse_image_ref()`.
 - `integrations/capabilities.py`: `ReleaseGateIntegration`, `ImageFindingsIntegration`,
   `CredentialedIntegration`, `ConnectionCheckIntegration`; two new `CAPABILITY_ABCS` entries.
 - `models/integration_model.py`: two `Capability` values.
 - `models/auth_models.py`: `AuthenticationModel.key_references()` (D2).
-- `integrations/aikido.py` (new): D11.
+- `integrations/aikido.py`: D11.
 - `integrations/registry.py`: `_KNOWN["aikido"] = ("strata.integrations.aikido", "AikidoIntegration")`.
 
-### 6.3 Controller - `controllers/security_gate_controller.py` (new)
+### 6.3 Controller - `controllers/security_gate_controller.py`
 
 ```python
 Gate = Literal["release", "images"]
@@ -629,11 +623,6 @@ class ImageFindings:               # one SBOM image: platform name, lookup statu
 @dataclass(frozen=True)
 class ImageFindingsReport:         # integration label, severities listed, one ImageFindings per image
 ```
-
-As built (2026-10-27 review item 10): the two public `resolve_release_gate_integration()` /
-`resolve_image_findings_integration()` first named here became the single private
-`_resolve_integration()`, parameterised by capability ABC; `list_image_findings()` and its report
-types were added in Phase 6.
 
 Rules: integration calls are wrapped; `GateNotFoundError` is a hard error
 (`release_gate_repository_not_found`) whatever `on_missing_data` says; every other
@@ -681,11 +670,11 @@ append, write; create the file when absent. Module docstring: no longer build-ph
 
 ### 6.6 Commands
 
-- `controllers/policy_controller.py` (new): the policy dispatch table (D7) and the functions
+- `controllers/policy_controller.py`: the policy dispatch table (D7) and the functions
   `list_policies()`, `check_policies()`, `policy_findings()`; the gate rows delegate to
   `security_gate_controller` (`evaluate_security_gates()`, plus a read-only image findings lookup).
-- `commands/policy_command.py` (new): group `policy`, subcommands `list`, `check`, `findings` (D7).
-- `commands/integration_command.py` (new): group `integration`, subcommand `check`.
+- `commands/policy_command.py`: group `policy`, subcommands `list`, `check`, `findings` (D7).
+- `commands/integration_command.py`: group `integration`, subcommands `check` and `list` (`list`: integration-readiness.md).
 - `commands/cli.py`: register both.
 
 ## 7. Flow
@@ -766,15 +755,42 @@ scan request itself; `warn` mode is visible in `policy_results` (`passed: true` 
 Offline only: monkeypatch `strata.integrations.aikido.http_request` with a scripted fake; inject
 `sleep`/`clock`. Fixtures from ref Appendix B in `tests/strata/fixtures/aikido/`. The controller
 and command tests use a **fake capability implementation** (a tiny in-test class implementing
-both ABCs) rather than Aikido, which proves the controller is vendor-neutral. Per-phase lists are
-in the plan.
+both ABCs) rather than Aikido, which proves the controller is vendor-neutral. The phase-by-phase
+test lists are in the archived [implementation plan](../archive/security-gates-implementation-plan.md).
 
-## 12. Risks and open questions
+## 12. Risks and limits
 
-| #      | Item                                                                                                                                                        | Resolution                                                                                                                                                                                              |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1-R10 | Aikido-side unknowns (OAuth body, REST envelopes, container naming, repository by name, `version` field, rate limits, scopes, region parity, severity case) | ref §13; plan Phase 7 (first contact)                                                                                                                                                                   |
-| R11    | A class inheriting two capability ABCs (diamond on `Integration`)                                                                                           | Plain cooperative ABCs, no `__init__` in the ABCs; `find_capability_mismatches()` test covers the pairing                                                                                               |
-| R12    | The semantic check needs a class's capabilities without constructing it                                                                                     | `registry.get_class()` exists; plugin types go through the same function                                                                                                                                |
-| R13    | Generic names must not hide vendor detail operators need                                                                                                    | Messages always name integration type and document (D8); `policy_type` records the vendor (D9)                                                                                                          |
-| R14    | Should `strata validate` check that gate credentials resolve?                                                                                               | **No** (decided 2026-10-27). Validate stays offline and machine-independent (integration-readiness D23); `strata integration check NAME --deployment D` and `strata policy check` resolve and test them |
+Built and tested offline. What was assumed about Aikido's API, and what is handled by design:
+
+| #      | Item                                                                                                                                                                                                                                   | Handling                                                                                                                                                                                                                                                                                                                                                     |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| R1-R10 | Aikido behaviour not yet confirmed against a live workspace: OAuth body encoding, REST list envelopes, container naming, repository by name or id, the CI API `version` field, rate limits, OAuth scopes, region parity, severity case | Parsed defensively (JSON-then-form OAuth fallback, tolerant list envelopes); a response that cannot be read is missing data, which blocks by default. The first run against a real workspace confirms or corrects each one in `integrations/aikido.py`; the list is in the vendor reference, section 13.                                                     |
+| R11    | A class inheriting two capability ABCs (diamond on `Integration`)                                                                                                                                                                      | Plain cooperative ABCs, no `__init__` in the ABCs; the `find_capability_mismatches()` test covers the pairing                                                                                                                                                                                                                                                |
+| R12    | The semantic check needs a class's capabilities without constructing it                                                                                                                                                                | `registry.get_class()` provides it; plugin types go through the same function                                                                                                                                                                                                                                                                                |
+| R13    | Generic names must not hide vendor detail operators need                                                                                                                                                                               | Messages always name the integration type and document (D8); `policy_type` records the vendor (D9)                                                                                                                                                                                                                                                           |
+| R14    | `strata validate` does not check that gate credentials resolve                                                                                                                                                                         | Validate stays offline and machine-independent (integration-readiness D23); `strata integration check NAME --deployment D` and `strata policy check` resolve and test them                                                                                                                                                                                   |
+| R15    | `SecurityIssue.link` is `None` for Aikido image issues                                                                                                                                                                                 | The export has no URL field. Aikido's UI link (`<base_url>/queue?sidebarIssue=<id>`) is built only once a real workspace shows whether `id` or `group_id` opens the issue: a link that opens the wrong issue is worse than none. `policy findings` prints a link whenever an integration sets one (the release gate's come from Aikido's own `issue_links`). |
+
+## Related Decisions
+
+- [ADR-0047](../decisions/0047-deploy-security-gates-as-vendor-neutral-capabilities.md) - two vendor-neutral capabilities, the two policies, deploy preflight, Aikido first (D1, D3, D5, D6, D11)
+- [ADR-0048](../decisions/0048-integration-credentials-through-authentication-key-references.md) - credentials through `AuthenticationModel` key references (D2)
+- [ADR-0049](../decisions/0049-strata-policy-command-group.md) - the general `strata policy` group (D7)
+- [ADR-0050](../decisions/0050-one-offline-integration-readiness-check.md) - the local half of `integration check`
+- [ADR-0051](../decisions/0051-local-tools-as-declarable-integration-types.md) - local tools as declarable integration types
+- [ADR-0021](../decisions/0021-integration-layer.md) - the integration layer the capabilities extend
+- [ADR-0022](../decisions/0022-strata-build-run.md) D4 - build renders, deploy resolves (why the gates run at deploy)
+
+## History
+
+- It was first designed as an Aikido-only `strata aikido check | gate | findings` with its own policy and diagnostic codes, and made vendor-neutral before any code was written: every strata command is named by function with vendors behind it (`values`, `deploy`, `audit`), and renaming a CLI command breaks consumer pipelines. Two narrow capabilities, not one "devsecops platform" base class, because platforms cover different slices and a grab-bag ABC forces stubs.
+- The command group is `policy`, not `security`, `gate`, `compliance` or `check`: "policy" is already the shared concept (the `*_policy` workspace fields, `policy_results.json`), `security` would exclude a future OPA policy, `gate` sounds deploy-only, and `check` clashes with `deploy check` and `integration check`. A dispatch table rather than a policy engine keeps policy-engine-architecture.md's "bespoke" decision.
+- Credentials first lived under `spec.configuration.credentials`. They moved to `AuthenticationModel` key references, the mechanism git remotes and OCI registries already use: no second mechanism, and its one-method-per-document rule is why Aikido's two unrelated credentials (a CI token for the release gate, OAuth client credentials for the REST API) are two Integration documents, each declaring only the capability it serves. strata never exchanges one credential for the other.
+- The SBOM's container component `name` is the compose or module service name, not the image, so the image reference is taken from the purl. A digest-pinned image arrives without its tag, so tag matching can never apply to it.
+- The release verdict is strict: `gate_passed` must be literally `true`, and a poll response without `all_scans_completed` counts as not complete (stricter than Aikido's own client), so a malformed body cannot pass the gate.
+- The gates run at deploy preflight and never in `build run`, which has no network and no resolved secrets. `--dry-run` runs them, because a reviewer wants to know whether the real run would be blocked; `--smoke-test` does not.
+- `strata validate` deliberately does not resolve gate credentials, so it stays offline and machine-independent.
+- A pinned `commit` outranks the CI variables, so a pin left behind after testing kept judging an old commit while CI deployed a newer one. It is reported as `release_gate_commit_mismatch` (error under `deny`, warning under `warn`) rather than prevented with a new field; `--commit` is the deliberate override. Consequence for tests: any test that pins a commit must clear every CI commit variable, because `GITHUB_SHA` is set on the CI runner and the failure shows nowhere else.
+- Unrated Checkov findings count against `checkov_policy` at any `severity_gate`. The alternative, a field that ignores them by default, left the gate silent until someone found the field, making "never scanned" look like "scanned clean", the risk `on_missing_data` exists to prevent. CVE and image gates are unchanged: there `UNKNOWN` is a severity the vendor actually assigned or the mapping could not translate. Consequence: open-source Checkov users with failed checks now fail under `deny`; a real Helm consumer went from 0 to 308 counted findings, all unrated.
+- `link` stays on the vendor-neutral `SecurityIssue` (optional, so a platform without URLs leaves it `None`); removing it would only have to be undone for the next vendor.
+- It was built and verified entirely offline. The Aikido-side assumptions (section 12) are confirmed on first real use, not before.

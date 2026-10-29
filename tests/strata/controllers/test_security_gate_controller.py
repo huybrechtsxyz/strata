@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the vendor-neutral security gate controller (docs/work/security-gates-design.md D5, D6, D9).
+"""Tests for the vendor-neutral security gate controller (docs/design/security-gates.md D5, D6, D9).
 
 A fake integration implementing both capability ABCs stands in for any vendor (no Aikido code runs),
 which is what proves the controller is vendor-neutral. The index is built directly, as

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for the Aikido integration (docs/work/security-gates-design.md D11; plan Phases 3 and 4).
+"""Tests for the Aikido integration (docs/design/security-gates.md D11; plan Phases 3 and 4).
 
 Offline only: `strata.integrations.aikido.http_request` is replaced by a scripted fake, and
-`sleep`/`clock` are injected. Fixtures are Appendix B of docs/work/aikido-api-reference.md.
+`sleep`/`clock` are injected. Fixtures are Appendix B of docs/archive/aikido-api-reference.md.
 """
 
 import base64

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`deploy_run()` with security gates (docs/work/security-gates-design.md D5, D9; plan Phase 5).
+"""`deploy_run()` with security gates (docs/design/security-gates.md D5, D9; plan Phase 5).
 
 A real solution is built with `build_run()` and deployed with Terraform stubbed, as in
 `test_deploy_controller.py`. The gate integration is a vendor-neutral fake returned by a

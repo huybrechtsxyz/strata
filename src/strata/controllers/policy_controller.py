@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`strata policy list | check | findings` (docs/work/security-gates-design.md D7).
+"""`strata policy list | check | findings` (docs/design/security-gates.md D7).
 
 A dispatch table, not a policy engine (policy-engine-architecture.md's "bespoke" decision, ADR-0049):
 one row per workspace policy field, naming its phase, the function that evaluates it now and the

@@ -14,7 +14,7 @@ neither of them completely:
 | Is it reachable **now**? | credentials resolve and the platform accepts them                           | a deployment (for credentials), network |
 
 v1 answered the first with `strata tools status|check`; v2's `strata integration check` (added for
-security gates, [security-gates-design.md](security-gates-design.md) D7) answers only the second.
+security gates, [security-gates.md](../design/security-gates.md) D7) answers only the second.
 This doc plans one readiness check that answers both, used by deploy preflight and by the commands.
 
 ## Current Design / Progress

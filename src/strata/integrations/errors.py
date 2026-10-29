@@ -32,12 +32,12 @@ class IntegrationCredentialError(IntegrationError):
     """A credential is missing, or the platform rejected it (HTTP 401/403).
 
     A subclass, so `strata integration check` can tell "fix the credential" from "the platform is
-    unreachable" (security-gates-design.md D7) while every `except IntegrationError` still catches it.
+    unreachable" (docs/design/security-gates.md D7) while every `except IntegrationError` still catches it.
     """
 
 
 class GateNotFoundError(IntegrationError):
-    """A release-gate platform does not know the repository or commit (docs/work/security-gates-design.md D1).
+    """A release-gate platform does not know the repository or commit (docs/design/security-gates.md D1).
 
     A configuration error, so the gate controller reports it as a hard error instead of routing it
     through `on_missing_data` like an outage. `reason` is the platform's own explanation, if any.
@@ -49,7 +49,7 @@ class GateNotFoundError(IntegrationError):
 
 
 class GateTimeoutError(IntegrationError):
-    """A release-gate platform gave no verdict within the request's timeout (security-gates-design.md D1)."""
+    """A release-gate platform gave no verdict within the request's timeout (docs/design/security-gates.md D1)."""
 
 
 class ValueResolutionError(Exception):

@@ -2,8 +2,8 @@
 
 - Status: accepted
 - Date: 2026-10-27
-- Related: [docs/work/security-gates-design.md](../work/security-gates-design.md) (full design, D1-D11),
-  [docs/work/security-gates-implementation-plan.md](../work/security-gates-implementation-plan.md) (phases and
+- Related: [docs/design/security-gates.md](../design/security-gates.md) (full design, D1-D11),
+  [docs/archive/security-gates-implementation-plan.md](../archive/security-gates-implementation-plan.md) (phases and
   remaining work), [ADR-0021](0021-integration-layer.md) (integration layer and capabilities),
   [ADR-0022](0022-strata-build-run.md) D4 (build renders, deploy resolves), [ADR-0048](0048-integration-credentials-through-authentication-key-references.md),
   [ADR-0049](0049-strata-policy-command-group.md)

@@ -3,9 +3,9 @@
 - Status: accepted
 - Date: 2026-10-27
 - Related: [ADR-0047](0047-deploy-security-gates-as-vendor-neutral-capabilities.md),
-  [docs/work/security-gates-design.md](../work/security-gates-design.md) D7 (command table, exit codes),
+  [docs/design/security-gates.md](../design/security-gates.md) D7 (command table, exit codes),
   [docs/work/policy-engine-architecture.md](../work/policy-engine-architecture.md) ("bespoke, no generic engine"),
-  [docs/work/security-gates-implementation-plan.md](../work/security-gates-implementation-plan.md) Phases 8-10
+  [docs/archive/security-gates-implementation-plan.md](../archive/security-gates-implementation-plan.md) Phases 8-10
 
 ## Context and Problem Statement
 

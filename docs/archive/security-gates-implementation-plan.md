@@ -2,10 +2,10 @@
 
 |                      |                                                                                               |
 | -------------------- | --------------------------------------------------------------------------------------------- |
-| **Design**           | [security-gates-design.md](security-gates-design.md) (read it first; D/§ numbers refer to it) |
+| **Design**           | [security-gates.md](../design/security-gates.md) (read it first; D/§ numbers refer to it) |
 | **Vendor reference** | [aikido-api-reference.md](aikido-api-reference.md) Appendices A-D ("ref" below)               |
 | **Index**            | [aikido-integration.md](aikido-integration.md)                                                |
-| **Status**           | Phases 1-6 done (2026-10-26); Phase 7 next (needs a real Aikido workspace)                    |
+| **Status**           | Archived 2026-10-28: Phases 1-6, 8, 9 done; Phase 7 left to first real use; Phase 10 not planned                    |
 | **Updated**          | 2026-10-26 (review fixes 1-4; credentials via `AuthenticationModel`)                          |
 | **Baseline**         | strata 2.0.0rc1 (`v2-beta`)                                                                   |
 
@@ -36,7 +36,7 @@
 - Platform payload types are frozen dataclasses, not `PlatformBaseModel` (extra=forbid).
 - Severities use the uppercase vocabulary `CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN` everywhere in
   strata; only Aikido's own wire format is lowercase.
-- Docstrings explain why and cite the design (`docs/work/security-gates-design.md D6`).
+- Docstrings explain why and cite the design (`docs/design/security-gates.md D6`).
 - Tests: `tests/strata/<layer>/test_<layer>_<name>.py` (existing files extended where named below);
   fixtures in `tests/strata/fixtures/aikido/` (new folder).
 - One commit per phase, prefix `feat(security-gates):` / `test(security-gates):`.
@@ -757,9 +757,10 @@ Checked 2026-10-27: every item but the last is met offline.
 - [x] `deploy run` without gate policies behaves exactly as before (existing deploy tests unchanged).
 - [x] Secret-leak tests pass.
 - [x] Docs and agent skill updated.
-- [ ] ADR recorded (done 2026-10-27: ADR-0047, ADR-0048, ADR-0049); Phase 7 findings folded in; design graduates to `docs/design/security-gates.md`,
-      index + reference + plan to `docs/archive/` (Phases 8-10 move to their own work docs first if
-      still open then). **Open: Phase 7 (needs an Aikido workspace), then the moves.**
+- [x] ADRs recorded (ADR-0047, ADR-0048, ADR-0049); design graduated to
+      `docs/design/security-gates.md`; index, reference and plan moved to `docs/archive/` (2026-10-28).
+- [ ] Phase 7 findings folded into the reference: **not done**, it runs on first real use of an Aikido
+      workspace (fold the answers into `aikido.py` and the reference then).
 
 ## File checklist
 

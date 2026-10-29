@@ -1,7 +1,10 @@
 # Aikido Security - Work
 
-- Status: in-progress (design accepted; Phases 1-6 of 7 done)
-- Last updated: 2026-10-26
+- Status: **Archived (2026-10-28)** - Phases 1-6, 8 and 9 are built and the design graduated to
+  [docs/design/security-gates.md](../design/security-gates.md). Phase 7 (first contact with a real
+  Aikido workspace) was not done: its checks run on first real use. Phase 10 (`opa_policy`) is not
+  planned until a consumer needs it.
+- Last updated: 2026-10-28
 
 ## Overview
 
@@ -13,7 +16,7 @@ A design is now proposed, **vendor-neutral**: two deploy gates (release gate, im
 two integration capabilities (`release_gate`, `image_findings`), with Aikido as the first
 implementation of both. Companion docs, written to be implemented offline:
 
-- [security-gates-design.md](security-gates-design.md) - the design (decisions D1-D11,
+- [security-gates.md](../design/security-gates.md) - the design (decisions D1-D11,
   configuration, component design, diagnostic codes, risks).
 - [security-gates-implementation-plan.md](security-gates-implementation-plan.md) - seven phases
   with files, tasks, tests and a definition of done.
@@ -51,7 +54,7 @@ v2 already ships its own scanner-type integrations, so Aikido overlaps rather th
   ([checkov-integration.md](../archive/checkov-integration.md), shipped).
 - **CVE scanning** - Trivy/Grype over the CycloneDX SBOM, with a solution-wide allowlist
   ([cve-scanner-integration.md](../archive/cve-scanner-integration.md), shipped).
-- **SBOM generation** - CycloneDX, Phase 1 collectors ([sbom-generation.md](sbom-generation.md)).
+- **SBOM generation** - CycloneDX, Phase 1 collectors ([sbom-generation.md](../work/sbom-generation.md)).
 
 ### The core tension: Aikido scans repositories, strata's risk is in build output
 
@@ -73,7 +76,7 @@ Aikido's CSPM sees the result after it is deployed, which is later than we want 
 
 ### Proposed design (summary)
 
-Full detail in [security-gates-design.md](security-gates-design.md). In short:
+Full detail in [security-gates.md](../design/security-gates.md). In short:
 
 - **Two capabilities, not a "platform" type** (D1): `release_gate` ("does repository X at commit Y
   pass?") and `image_findings` ("which open issues does image Z have?"), each with its own ABC in
@@ -122,9 +125,8 @@ Paths that did not match the repo were corrected in the copies: test files follo
 the how-to goes in `docs/how-to/` (there is no `docs/guides/`), and `sbom-generation.md` is in
 `docs/work/`.
 
-Code docstrings cite `docs/work/security-gates-design.md`; when the feature is finished the design
-graduates to `docs/design/security-gates.md`, and this index, the plan and the Aikido reference go
-to `docs/archive/`.
+Code docstrings cite `docs/design/security-gates.md`: the design graduated there on 2026-10-28, and
+this index, the plan and the Aikido reference moved to `docs/archive/`.
 
 ### Brainstorm (2026-10-26, kept for context)
 
@@ -179,7 +181,7 @@ Candidates for the scaffolded `project-gotchas` agent skill once confirmed in a 
 
 - [ADR-0046](../decisions/0046-strata-agent-skills-with-generated-marker.md) - scaffolded agent
   skills; the `project-gotchas` skill is where confirmed Aikido/Safe Chain lessons would go.
-- [policy-engine-architecture.md](policy-engine-architecture.md) - Checkov and CVE scanning are
+- [policy-engine-architecture.md](../work/policy-engine-architecture.md) - Checkov and CVE scanning are
   its "bucket C" (real external scanner) concerns; any change here belongs in that framing.
 
 ## Remaining Work / Open Questions
@@ -210,7 +212,7 @@ Still open, outside the design:
 
 - **Integration readiness** (local tool/version checks next to `integration check`'s connection
   check, and the unenforced `spec.version`): tracked separately in
-  [integration-readiness.md](integration-readiness.md).
+  [integration-readiness.md](../work/integration-readiness.md).
 - **Evidence check:** compare, for one real deployment (haven `prd`), Aikido's repo scan with
   strata's Checkov on the rendered `build/` output. Not needed to build the gates, but it decides
   whether the deferred upload/local-scanner work (D12) is worth doing.
@@ -306,7 +308,7 @@ Still open, outside the design:
   `strata integration check`, with Aikido as the first implementation. Reason: every strata command
   is named by function with vendors behind it (`values`, `deploy`, `audit`), and renaming a CLI
   command later breaks consumer pipelines. New
-  [security-gates-design.md](security-gates-design.md) and
+  [security-gates.md](../design/security-gates.md) and
   [security-gates-implementation-plan.md](security-gates-implementation-plan.md); the Aikido-only
   design became [aikido-api-reference.md](aikido-api-reference.md) (appendices authoritative,
   sections 1-13 superseded); the Aikido-only plan was removed (superseded entirely).

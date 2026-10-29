@@ -7,7 +7,7 @@ matches the existing `resolved.yaml`/`sbom.json` hand-off precedent
 between the two commands.
 
 Written by build-phase policies (`cve_policy`, `checkov_policy`) and appended to by deploy-phase
-ones (`release_gate_policy`, `image_gate_policy`, docs/work/security-gates-design.md D9) —
+ones (`release_gate_policy`, `image_gate_policy`, docs/design/security-gates.md D9) —
 validate-phase policies (`tenant_zone`/`path_convention`) are explicitly out of scope for
 this pass, since `strata validate` has no `build_path` concept and no
 enforced 1:1 relationship to any one later `deploy run` invocation.

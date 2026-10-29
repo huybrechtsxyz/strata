@@ -845,7 +845,7 @@ def test_workspace_cve_policy_rejects_unknown_fields():
 
 
 # ---------------------------------------------------------------------------
-# spec.release_gate_policy / spec.image_gate_policy (docs/work/security-gates-design.md D3)
+# spec.release_gate_policy / spec.image_gate_policy (docs/design/security-gates.md D3)
 # ---------------------------------------------------------------------------
 
 

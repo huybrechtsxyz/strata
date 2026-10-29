@@ -3,7 +3,7 @@
 - Status: accepted
 - Date: 2026-10-27
 - Related: [ADR-0047](0047-deploy-security-gates-as-vendor-neutral-capabilities.md) (the first consumer),
-  [docs/work/security-gates-design.md](../work/security-gates-design.md) D2,
+  [docs/design/security-gates.md](../design/security-gates.md) D2,
   [ADR-0021](0021-integration-layer.md) (integration layer; `integrations` never imports `controllers`)
 
 ## Context and Problem Statement

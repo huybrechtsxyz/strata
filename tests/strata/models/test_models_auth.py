@@ -113,7 +113,7 @@ def test_auth_token_mismatched_config_is_invalid():
 
 
 # ---------------------------------------------------------------------------
-# key_references() (docs/work/security-gates-design.md D2)
+# key_references() (docs/design/security-gates.md D2)
 # ---------------------------------------------------------------------------
 
 

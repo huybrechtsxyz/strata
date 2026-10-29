@@ -1051,7 +1051,7 @@ def _check_workspace_key_value_store_supports_cas(index: DocumentIndex, workspac
 
 
 #: Workspace gate policy field -> the capability its Integration must declare and the ABC its class must
-#: implement (docs/work/security-gates-design.md D3).
+#: implement (docs/design/security-gates.md D3).
 _SECURITY_GATE_POLICIES: tuple[tuple[str, Capability, type[Integration]], ...] = (
     ("release_gate_policy", Capability.RELEASE_GATE, ReleaseGateIntegration),
     ("image_gate_policy", Capability.IMAGE_FINDINGS, ImageFindingsIntegration),

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the vendor-neutral security gate types (docs/work/security-gates-design.md D1)."""
+"""Tests for the vendor-neutral security gate types (docs/design/security-gates.md D1)."""
 
 from dataclasses import FrozenInstanceError
 

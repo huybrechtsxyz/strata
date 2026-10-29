@@ -129,7 +129,7 @@ class Capability(StrEnum):
     # has more than one real consumer planned, see that doc's own
     # Terminology section).
     KEY_VALUE = "key_value"  #: Small, keyed records needing optional compare-and-swap writes
-    # docs/work/security-gates-design.md D1. Not `scanner`: that ABC is about a locally installed
+    # docs/design/security-gates.md D1. Not `scanner`: that ABC is about a locally installed
     # tool (`ensure_available()`); this is a remote service's verdict, nothing runs locally.
     RELEASE_GATE = "release_gate"  #: Pass/fail verdict for a repository at a commit
     # Same design, same "not scanner" reasoning: a lookup of a remote service's open issues.

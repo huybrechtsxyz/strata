@@ -25,7 +25,7 @@ def test_integration_minimal_is_valid():
 
 
 def test_integration_accepts_the_security_gate_capabilities():
-    """docs/work/security-gates-design.md D1: core capabilities, declarable without an x- prefix."""
+    """docs/design/security-gates.md D1: core capabilities, declarable without an x- prefix."""
     data = _minimal_integration()
     data["spec"] = {"type": "aikido", "capabilities": ["release_gate", "image_findings"]}
     model = IntegrationModel.model_validate(data)

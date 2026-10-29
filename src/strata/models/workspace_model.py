@@ -527,13 +527,13 @@ class WorkspaceSpecModel(PlatformBaseModel):
     release_gate_policy: ReleaseGatePolicyModel | None = Field(
         None,
         description="Gates 'deploy run' on a security platform's verdict for the solution repository at the "
-        "deployed commit (docs/work/security-gates-design.md). Runs at deploy preflight, not build: it "
+        "deployed commit (docs/design/security-gates.md). Runs at deploy preflight, not build: it "
         "needs the network and resolved credentials.",
     )
     image_gate_policy: ImageGatePolicyModel | None = Field(
         None,
         description="Gates 'deploy run' on a security platform's open issues for the container images in "
-        "sbom.json (docs/work/security-gates-design.md). Runs at deploy preflight, like release_gate_policy.",
+        "sbom.json (docs/design/security-gates.md). Runs at deploy preflight, like release_gate_policy.",
     )
 
     @model_validator(mode="after")
