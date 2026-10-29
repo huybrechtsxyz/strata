@@ -4,7 +4,6 @@ meta:
   name: azure
 spec:
   description: "Microsoft Azure provider type registry"
-  version: "~>3.0"
   additional_regions: false
   regions:
     - name: westeurope

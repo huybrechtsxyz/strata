@@ -27,6 +27,14 @@ def test_provider_config_minimal_is_valid():
     assert model.kind.value == "providerconfig"
 
 
+def test_provider_config_rejects_a_version_field():
+    """ADR-0052: `spec.version` was removed; nothing ever read it, so a document setting it must fail."""
+    data = _minimal_provider_config()
+    data["spec"]["version"] = "~>3.0"
+    with pytest.raises(ValidationError, match="version"):
+        ProviderConfigModel.model_validate(data)
+
+
 def test_provider_config_requires_regions_unless_additional_regions():
     """additional_regions=False (default) with no regions raises a ValidationError."""
     data = _minimal_provider_config()

@@ -1,6 +1,6 @@
 # Provider Model — v2 Design Decisions
 
-- Status: accepted
+- Status: accepted — section 7's `ProviderConfig.spec.version` was later removed, see ADR-0052
 - Date: 2026-09-20
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis), [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)

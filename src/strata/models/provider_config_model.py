@@ -67,7 +67,6 @@ class ProviderConfigSpecModel(PlatformBaseModel):
     """A provider type's registry entry: valid regions and resource types."""
 
     description: str = Field(description="Description of the provider type")
-    version: str | None = Field(None, description="Provider version constraint (e.g., ~>3.0, >=1.0)")
     additional_regions: bool = Field(
         False,
         description="Allow regions not listed in the configuration for this provider",

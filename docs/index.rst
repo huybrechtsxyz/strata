@@ -17,6 +17,7 @@ strata-v2
    how-to/aikido-safe-chain
    how-to/azure-certificates
    how-to/azure-private-dns-zones
+   how-to/ci-deploy-pipeline
    how-to/composite-variable-fragments
    how-to/deploy-run-streaming
    how-to/generate-per-instance-terraform-blocks

@@ -11,7 +11,6 @@ its own file, own PR, own reviewer.
 ## Schema
 
 - `spec.description` — description of the provider type
-- `spec.version` — optional provisioner version constraint (e.g. `~>3.0`)
 - `spec.regions[]` — supported regions, each `{name, geography, description, custom}`.
   `geography` is an optional compliance/deployment boundary tag grouping several regions
   (mirrors Azure's own "geography" concept) — referenced by [`tenant.md`](tenant.md)'s
@@ -34,7 +33,6 @@ meta:
   name: azure
 spec:
   description: "Microsoft Azure provider type registry"
-  version: "~>3.0"
   additional_regions: false
   regions:
     - name: westeurope
