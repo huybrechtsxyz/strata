@@ -46,7 +46,7 @@ Implemented. The shape:
 | `strata values list --type artifacts` | No. No `--pin`, only sees `store: artifact` variables, resolves other stores live.                                                                                          |
 | `strata version ...`                  | No. That group manages version documents. A listing of effective pins across all five categories is a different question.                                                   |
 | A file in the build output            | Works after `build run` without a new command, but needs a full build (source clones) and cannot take `--pin` on its own. Could be fed by the same resolver.                |
-| **`strata deploy images DEPLOYMENT`** | Chosen. `deploy` is where the commands about a deployment live (`deploy list` already, and the surveyed `show`/`status` ones). Needs no build and no store access.         |
+| **`strata deploy images DEPLOYMENT`** | Chosen. `deploy` is where the commands about a deployment live (`deploy list` already, and the surveyed `show`/`status` ones). Needs no build and no store access.          |
 
 Named `images`, not `artifacts`: the kind is "a container image today, possibly other identifiers
 later", and the consumer needs images. A later `deploy show` can include other identifiers.
