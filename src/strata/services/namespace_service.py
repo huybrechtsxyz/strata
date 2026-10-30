@@ -13,7 +13,8 @@ class NamespaceService(BaseService[NamespaceModel]):
     `repo_map` (built from `ConfigurationModel`/registered repositories).
     v2's `modules[].module` names a Module document instead of a path, so the
     check becomes "does this name resolve in the discovery index" — which
-    needs the solution loading layer that doesn't exist yet. Add when it does.
+    `validate_references()` already answers for every `References()` field
+    (`ModuleReferenceModel.module`), so there is nothing left to add here.
     """
 
     def _get_model_class(self) -> type[NamespaceModel]:

@@ -154,8 +154,8 @@ class OutputModel(PlatformBaseModel):
 
     `build run` can only **validate** `template` (its referenced names exist
     somewhere in the declared schema - no rendering, since build never has
-    every value resolved). The actual render is deploy-time only, blocked on
-    `deploy run` not existing yet - see docs/design/value-token-resolution.md.
+    every value resolved). The actual render is deploy-time only: `deploy run` does it,
+    once every value is resolved - see docs/design/value-token-resolution.md.
     """
 
     template: str | None = Field(

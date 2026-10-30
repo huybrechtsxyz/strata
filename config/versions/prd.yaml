@@ -12,7 +12,7 @@ spec:
   pins:
     images:
       # Shorthand — nothing is being held back.
-      caddy: caddy:2-alpine
+      portainer: portainer/portainer-ce:2.39.3-alpine
       # Structured — deliberately behind upstream, and it says so.
       db:
         version: docker.io/library/postgres:16-alpine
@@ -21,9 +21,9 @@ spec:
         reason: "postgres majors need pg_upgrade/dump-restore; plan as its own migration task"
         reviewed: 2026-09-08
     charts:
-      immich: 0.13.1
-      gatus:
-        version: 1.0.0
+      # Keyed by the chart module's document name.
+      authentik:
+        version: 2026.5.2
         status: unverified
         reason: "chart version could not be confirmed upstream; re-verify before bumping"
         reviewed: 2026-09-08

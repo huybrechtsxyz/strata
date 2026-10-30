@@ -117,14 +117,12 @@ class AuditSinkModel(PlatformBaseModel):
 
     integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         default=None,
-        description="Name of an Integration document to send events through (SIEM, webhook or "
-        "syslog). Not delivered yet: a sink that uses it only produces an "
-        "informational finding.\n\n"
-        "Design notes: Arm 1 — references an Integration document "
-        "(siem/webhook/syslog). Dispatch through this arm is not implemented yet "
-        "(docs/design/audit-trail.md's Layer 2 Implementation Plan, Phase 5) — a "
-        "configured integration sink produces an explicit info-level finding instead "
-        "of silently doing nothing.",
+        description="Name of an Integration document that provides the `audit` capability, such as a "
+        "`webhook`, `otel` or `sentinel` integration. Each admitted event is sent through it. A delivery "
+        "failure only warns unless `required` is set.\n\n"
+        "Design notes: Arm 1 - references an Integration document that provides the audit "
+        "capability (docs/design/audit-sink-dispatch.md). A missing, unavailable or non-audit "
+        "integration is reported through the sink's own `required` flag; a disabled one is skipped.",
     )
     git: AuditGitSinkTargetModel | None = Field(
         default=None, description="Push events to a git repository instead; see `remote`, `branch` and `path`."

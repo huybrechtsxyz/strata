@@ -389,6 +389,15 @@ def test_shipped_example_solution_loads_cleanly():
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_validates_with_no_warnings():
+    """Every pin, reference and check in the example must hit something real; a stale pin shows up here."""
+    context = open_solution(_repo_config_dir())
+    context.resolve()
+    assert context.ok, context.diagnostics.messages()
+    assert context.diagnostics.warnings == [], context.diagnostics.messages()
+
+
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
 def test_shipped_example_rebinds_the_provider_slot_for_the_second_region():
     """The same workspace targets westeurope by default and northeurope through the
     `region-north` base — the example doubles as the provider-slot dogfood."""
