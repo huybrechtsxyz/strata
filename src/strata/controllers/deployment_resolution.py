@@ -58,10 +58,12 @@ from strata.logging.config import get_logger
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.tenant_model import TenantModel
+from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import diagnostics_from_validation_error
 from strata.services.deployment_service import merge_deployment_specs
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.errors import UsageError
 
 log = get_logger(__name__)
 
@@ -78,31 +80,96 @@ class _CircularExtendsError(Exception):
 
 @dataclass(frozen=True)
 class DeploymentSummary:
-    """One `strata deployment list` row; `workspace`/`environments` as resolved through `extends`."""
+    """One `strata deploy list` row.
+
+    `workspace`, `tenant`, `version` and `environments` are as resolved through `extends`; `extends` is the
+    declared parent. `ring`, `order` and `wave` are the version document's `spec.promotion`, `None` when the
+    deployment has no version or the document is not tagged.
+    """
 
     name: str
     workspace: str | None
+    extends: str | None
+    tenant: str | None
+    version: str | None
+    ring: str | None
+    order: int | None
+    wave: str | None
     environments: tuple[str, ...]
     partial: bool
     source: str
 
 
-def list_deployments(index: DocumentIndex) -> list[DeploymentSummary]:
-    """Every deployment document, partial bases included and marked (docs/work/vscode-integrations-policies-views.md V1)."""
+def _version_rings(index: DocumentIndex) -> set[str]:
+    """Every ring some version document declares."""
+    rings: set[str] = set()
+    for entry in index.all_of(PlatformKind.VERSION):
+        promotion = cast(VersionModel, entry.model).spec.promotion
+        if promotion is not None and promotion.ring is not None:
+            rings.add(promotion.ring)
+    return rings
+
+
+def _require_known_filters(
+    index: DocumentIndex, *, workspace: str | None, tenant: str | None, version: str | None, ring: str | None
+) -> None:
+    """A filter naming nothing is an error, not an empty list: a typo would otherwise pass a CI matrix with nothing in it."""
+    for option, kind, value in (
+        ("workspace", PlatformKind.WORKSPACE, workspace),
+        ("tenant", PlatformKind.TENANT, tenant),
+        ("version", PlatformKind.VERSION, version),
+    ):
+        if value is not None and index.get(kind, value) is None:
+            raise UsageError(
+                f"--{option} names no {kind.value} document: '{value}'. Available: {sorted(index.names_of(kind))}"
+            )
+    if ring is not None and ring not in (rings := _version_rings(index)):
+        raise UsageError(f"--ring names no ring a version document declares: '{ring}'. Available: {sorted(rings)}")
+
+
+def list_deployments(
+    index: DocumentIndex,
+    *,
+    workspace: str | None = None,
+    tenant: str | None = None,
+    version: str | None = None,
+    ring: str | None = None,
+    deployable: bool = False,
+) -> list[DeploymentSummary]:
+    """Every deployment document, partial bases included and marked (docs/work/vscode-integrations-policies-views.md V1).
+
+    The filters compare against the resolved values and combine with AND; `deployable` drops partial bases.
+
+    Raises:
+        UsageError: `workspace`, `tenant`, `version` or `ring` names nothing that exists.
+    """
+    _require_known_filters(index, workspace=workspace, tenant=tenant, version=version, ring=ring)
     resolved, _ = resolve_deployment_chains(index)
     rows = []
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         raw = cast(DeploymentModel, entry.model)
         deployment = resolved.get(entry.ref.name, raw)
-        rows.append(
-            DeploymentSummary(
-                name=entry.ref.name,
-                workspace=deployment.spec.workspace,
-                environments=tuple(deployment.spec.environments or ()),
-                partial=bool(raw.spec.partial),
-                source=str(entry.source),
-            )
+        version_entry = index.get(PlatformKind.VERSION, deployment.spec.version) if deployment.spec.version else None
+        promotion = cast(VersionModel, version_entry.model).spec.promotion if version_entry is not None else None
+        row = DeploymentSummary(
+            name=entry.ref.name,
+            workspace=deployment.spec.workspace,
+            extends=raw.spec.extends,
+            tenant=deployment.spec.tenant,
+            version=deployment.spec.version,
+            ring=promotion.ring if promotion is not None else None,
+            order=promotion.order if promotion is not None else None,
+            wave=promotion.wave if promotion is not None else None,
+            environments=tuple(deployment.spec.environments or ()),
+            partial=bool(raw.spec.partial),
+            source=str(entry.source),
         )
+        if deployable and row.partial:
+            continue
+        wanted = ((workspace, row.workspace), (tenant, row.tenant), (version, row.version), (ring, row.ring))
+        if any(want is not None and want != got for want, got in wanted):
+            continue
+        rows.append(row)
     return rows
 
 

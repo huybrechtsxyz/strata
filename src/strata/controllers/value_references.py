@@ -107,6 +107,24 @@ def _walk_value_reference_path(node: Any, segments: list[str]) -> Any:
     return node
 
 
+def _pin_category(kind: PlatformKind, path: list[str]) -> str | None:
+    """The `kind: version` pin category that overrides the field `path` names on a `kind` document, if any.
+
+    A `${value:}` token resolves once per solution, with no deployment and so no `spec.version`: it
+    would return the unpinned value while build and deploy use the pinned one.
+    """
+    if kind is PlatformKind.ARTIFACT and path == ["spec", "image_tag"]:
+        return "artifacts"
+    if kind is PlatformKind.MODULE:
+        if path == ["spec", "source", "chart_version"]:
+            return "charts"
+        if len(path) == 4 and path[:2] == ["spec", "services"] and path[3] == "image":
+            return "images"
+    if kind is PlatformKind.ASSET and path == ["spec", "location", "reference"]:
+        return "assets"
+    return None
+
+
 def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, str], Diagnostics]:
     """Resolve every `${value:kind.name.path.to.field}` token anywhere in
     the loaded solution (docs/design/cross-document-value-references.md)
@@ -156,6 +174,8 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
        resolves to the whole document dict, which then fails check 5
        instead, exactly matching "referencing a whole sub-object is out
        of scope."
+    4a. The path is not a field a `kind: version` pin overrides
+       (`_pin_category()`, `value_reference_pinnable_field`).
     5. That leaf is a scalar — `str`/`int`/`float`/`bool`, never a
        `dict`/`list`/`None` (`value_reference_not_scalar`).
     6. If the leaf is a string, it contains no `${...}` token of any kind
@@ -241,6 +261,22 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
                         source=str(entry.source),
                         location=location,
                         code="value_reference_invalid_path",
+                    )
+                    continue
+                pin_category = _pin_category(target_kind, path_segments)
+                if pin_category is not None:
+                    hint = (
+                        " Use a 'store: artifact' variable with field 'image_tag' instead."
+                        if pin_category == "artifacts"
+                        else ""
+                    )
+                    diagnostics.error(
+                        f"'${{value:{full_key}}}' reads a field that a kind: version pin "
+                        f"('pins.{pin_category}') overrides per deployment, and '${{value:}}' cannot see the pin."
+                        f"{hint}",
+                        source=str(entry.source),
+                        location=location,
+                        code="value_reference_pinnable_field",
                     )
                     continue
                 if not isinstance(resolved, (str, int, float, bool)):

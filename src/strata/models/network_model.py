@@ -2,7 +2,7 @@
 """Pydantic models for network topology configuration validation."""
 
 import ipaddress
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -18,7 +18,11 @@ from strata.utils.value_tokens import has_value_tokens, validate_cidr_or_token
 
 
 class SubnetModel(PlatformBaseModel):
-    """Model for a subnet within a network definition.
+    """A subnet of a network: a `name` and a `cidr`, either a literal CIDR such as `10.0.1.0/24` or a
+    string with value tokens such as `${var:KEY}`.
+
+    Design notes:
+    Model for a subnet within a network definition.
 
     ``cidr`` is a Value binding (ADR-0002): a literal CIDR (e.g.
     ``"10.0.1.0/24"``) or a string containing ``${var:KEY}``/``${secret:KEY}``/
@@ -35,14 +39,22 @@ class SubnetModel(PlatformBaseModel):
     )
     configuration: dict[str, Any] | None = Field(
         None,
-        description="Raw provisioner-specific passthrough configuration for this subnet (e.g. delegations, "
-        "service endpoints, NSG association). Not validated by strata, passed through as-is to the provisioner.",
+        description="Free-form provisioner settings for this subnet (for example delegations, "
+        "service endpoints or a security group association), passed to Terraform as "
+        "`strata.networks.<name>.networks.<network>.subnets.<subnet>.configuration`. "
+        "Strata does not validate them.\n\n"
+        "Design notes: Raw provisioner-specific passthrough configuration for this "
+        "subnet (e.g. delegations, service endpoints, NSG association). Not validated "
+        "by strata, passed through as-is to the provisioner.",
     )
     custom: dict[str, Any] | None = Field(
         None,
-        description="Custom user-defined data for scripts or extensions. Rides inside this subnet's entry "
-        "in the `networks` category payload, delivered as part of one shared `TF_VAR_networks` env var — "
-        "not its own env var.",
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.networks.<name>.networks.<network>.subnets.<subnet>.custom`. "
+        "Strata does not interpret them.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside this subnet's entry in the `networks` category payload, delivered as "
+        "part of one shared `TF_VAR_networks` env var — not its own env var.",
     )
 
     @field_validator("cidr")
@@ -61,12 +73,24 @@ class PeeringReferenceModel(PlatformBaseModel):
 
 
 class NetworkDefinitionModel(PlatformBaseModel):
-    """Model for a single network definition with subnets and peerings.
+    """One virtual network: its address space, subnets and optional peerings. Each network is its own cloud
+    resource, so its configuration, custom values and tags are set here; one document can hold several
+    networks.
+
+    Design notes:
+    Model for a single network definition with subnets and peerings.
 
     Each network is a real, independently-tagged cloud resource (e.g. an
     Azure VNet) — configuration/custom/tags live here, not on
     `NetworkSpecModel`, since a single file can declare multiple networks.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Subnet names must be unique within the network.",
+        "Peering names must be unique within the network, and a network cannot peer with itself.",
+        "Subnets must not overlap each other and must fit inside the network's address space. This "
+        "is only checked when all the CIDRs involved are literals rather than tokens.",
+    )
 
     name: PlatformName = Field(..., description="Unique network name within the spec")
     description: str | None = Field(None, description="Optional description of the network")
@@ -82,24 +106,39 @@ class NetworkDefinitionModel(PlatformBaseModel):
     )
     configuration: dict[str, Any] | None = Field(
         None,
-        description="Raw provisioner-specific passthrough configuration for this network. Not validated by "
-        "strata, passed through as-is to the provisioner.",
+        description="Free-form provisioner settings for this network, passed to Terraform as "
+        "`strata.networks.<name>.networks.<network>.configuration`. Strata does not "
+        "validate them.\n\n"
+        "Design notes: Raw provisioner-specific passthrough configuration for this "
+        "network. Not validated by strata, passed through as-is to the provisioner.",
     )
     custom: dict[str, Any] | None = Field(
         None,
-        description="Custom user-defined data for scripts or extensions. Rides inside this network's entry "
-        "in the `networks` category payload, delivered as part of one shared `TF_VAR_networks` env var — "
-        "not its own env var.",
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.networks.<name>.networks.<network>.custom`. Strata does not "
+        "interpret them.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside this network's entry in the `networks` category payload, delivered as "
+        "part of one shared `TF_VAR_networks` env var — not its own env var.",
     )
     default_tags: dict[str, str] | None = Field(
         None,
-        description="Baseline cloud provider tags for this network (e.g. cost-center, environment, "
-        "owner). Deliberately distinct from meta.tags (a free-form list used for strata-internal "
-        "categorization/documentation, not cloud tags). Optional (v1-derived documents commonly carry no "
-        "cloud tags at all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum tag count.",
+        description="Baseline cloud tags for this network (for example `cost-center`, "
+        "`environment`, `owner`), passed to Terraform as "
+        "`strata.networks.<name>.networks.<network>.default_tags`. Not the same as "
+        "`meta.tags`, which is a free-form list for documentation. Strata does not "
+        "limit the number of tags, so stay within your cloud provider's limit.\n\n"
+        "Design notes: Baseline cloud provider tags for this network (e.g. "
+        "cost-center, environment, owner). Deliberately distinct from meta.tags (a "
+        "free-form list used for strata-internal categorization/documentation, not "
+        "cloud tags). Optional (v1-derived documents commonly carry no cloud tags at "
+        "all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum "
+        "tag count.",
     )
     custom_tags: dict[str, str] | None = Field(
-        None, description="Optional additional cloud provider tags beyond default_tags."
+        None,
+        description="Additional cloud tags on top of `default_tags`, for one-off needs.\n\n"
+        "Design notes: Optional additional cloud provider tags beyond default_tags.",
     )
 
     @field_validator("address_space")
@@ -176,12 +215,21 @@ class NetworkDefinitionModel(PlatformBaseModel):
 
 
 class NetworkSpecModel(PlatformBaseModel):
-    """Network specification: a list of network definitions.
+    """The networks declared by this document.
+
+    Design notes:
+    Network specification: a list of network definitions.
 
     No ``references`` field (ADR-0002): Value bindings (``${var:}``/``${secret:}``
     tokens in `address_space`/subnet `cidr`) are checked against a real
     Environment in Phase 2, not an internal declared-keys list.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Network names must be unique within the document.",
+        "Every peering `target` must name a network in the same document.",
+        "Peered networks must not have overlapping address spaces. This is only checked for literal CIDRs.",
+    )
 
     networks: list[NetworkDefinitionModel] = Field(
         ..., min_length=1, description="List of network definitions (at least one required)"
@@ -265,7 +313,12 @@ class NetworkMetaModel(PlatformBaseModel):
 
 
 class NetworkModel(PlatformBaseModel):
-    """Root model for a network topology configuration file."""
+    """Virtual networks with their address spaces, subnets and peerings. A workspace uses it by listing the
+    document in `networks`, and a workspace resource can be placed on one of its subnets.
+
+    Design notes:
+    Root model for a network topology configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

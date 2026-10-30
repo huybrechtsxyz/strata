@@ -24,7 +24,7 @@ carried a `description`, which belongs on the target document's own `meta`
 rather than being restated at every reference site.
 """
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -48,7 +48,11 @@ from strata.utils.names import check_unique_names
 
 
 class WorkspaceResourceSubnetModel(PlatformBaseModel):
-    """Structured reference to a subnet within one of this workspace's networks.
+    """A subnet for a resource: `network` names one of the workspace's networks and `subnet` a subnet
+    inside that Network document.
+
+    Design notes:
+    Structured reference to a subnet within one of this workspace's networks.
 
     Replaces v1's unvalidated 'network_name/subnet_name' string — in v1
     that string was never checked against anything real (the only code that
@@ -61,12 +65,20 @@ class WorkspaceResourceSubnetModel(PlatformBaseModel):
 
     network: PlatformName = Field(description="Network reference name (must exist in this workspace's spec.networks)")
     subnet: PlatformName = Field(
-        description="Subnet name within that network (validated in Phase 2, once the network file is loaded)"
+        description="Subnet name inside that Network document; checked against the document's "
+        "subnets when the solution is validated.\n\n"
+        "Design notes: Subnet name within that network (validated in Phase 2, once the "
+        "network file is loaded)"
     )
 
 
 class WorkspaceResourceModel(PlatformBaseModel):
-    """Workspace resource definition — the gluing layer between a Resource
+    """An instance of a Resource in this workspace, with workspace-specific overrides. `name` is the
+    instance name and `resource` names the Resource document it is built from, so one Resource can be
+    instantiated several times.
+
+    Design notes:
+    Workspace resource definition — the gluing layer between a Resource
     document and this workspace's deployment-specific overrides.
 
     No `modules` field here (unlike v1's `WorkspaceModuleReferenceModel`) —
@@ -75,6 +87,10 @@ class WorkspaceResourceModel(PlatformBaseModel):
     same two-places-for-one-fact problem already resolved for
     `NamespaceModuleModel`/`ModuleReferenceModel`.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Set exactly one of `resource` (a Resource document name) or `managed_by: provisioner`.",
+    )
 
     name: PlatformName = Field(description="Unique resource name")
     resource: Annotated[PlatformName, References(PlatformKind.RESOURCE)] | None = Field(
@@ -91,42 +107,90 @@ class WorkspaceResourceModel(PlatformBaseModel):
     description: str | None = Field(None, description="Optional description for documentation purposes")
     enabled: bool = Field(
         default=True,
-        description="Whether this resource is deployed in this workspace (ADR-0083, v1). Set false to "
-        "exclude it from the built platform artifact, and therefore from every provisioner that consumes "
-        "it. Intended to be overridable per-environment via environment.spec.resources[].enabled once "
-        "Environment is built. 'enabled' is strata's consistent cross-schema keyword for conditional "
+        description="Whether this resource is deployed. Set false to leave it out of the build, "
+        "and so out of every provisioner that uses it.\n\n"
+        "Design notes: Whether this resource is deployed in this workspace (ADR-0083, "
+        "v1). Set false to exclude it from the built platform artifact, and therefore "
+        "from every provisioner that consumes it. Intended to be overridable "
+        "per-environment via environment.spec.resources[].enabled once Environment is "
+        "built. 'enabled' is strata's consistent cross-schema keyword for conditional "
         "inclusion — 'condition'/'when'/'if' are not accepted.",
     )
-    role: PlatformName | None = Field(None, description="Role of the resource (e.g., networking, database, api)")
-    count: int = Field(default=1, ge=1, le=100, description="Number of resource instances")
-    depends_on: list[str] | None = Field(
-        None, description="List of resource names this resource depends on (workspace-specific gluing)"
+    role: PlatformName | None = Field(
+        None,
+        description="Role of the resource (for example `control-plane` or `worker`), matched "
+        "against the component roles of the TopologyConfig for its topology's type. "
+        "Also passed to Terraform.\n\n"
+        "Design notes: Role of the resource (e.g., networking, database, api)",
     )
-    firewalls: list[str] | None = Field(None, description="References to firewall resource names for network security")
+    count: int = Field(
+        default=1,
+        ge=1,
+        le=100,
+        description="Number of instances, 1 to 100, passed to Terraform as "
+        "`strata.resources.<name>.count`.\n\n"
+        "Design notes: Number of resource instances",
+    )
+    depends_on: list[str] | None = Field(
+        None,
+        description="Names of other resources in this workspace this one depends on. Documentation "
+        "only for now: strata does not order or enforce it. Use a step's `depends_on` "
+        "for ordering.\n\n"
+        "Design notes: List of resource names this resource depends on "
+        "(workspace-specific gluing)",
+    )
+    firewalls: list[str] | None = Field(
+        None,
+        description="Names of firewall documents (from the workspace's `firewalls`) applied to "
+        "this resource, passed to Terraform as `strata.resources.<name>.firewalls`.\n\n"
+        "Design notes: References to firewall resource names for network security",
+    )
     dns_zones: list[str] | None = Field(
         None,
-        description="References to DNS document names this resource is associated with (mirrors `firewalls` "
-        "above). A structural, provisioning-time fact — not itself a claim of ${output:...} ownership; see "
-        "`WorkspaceSpecModel.validate_execution()`'s `target_names` for the separate claiming mechanism.",
+        description="Names of DNS documents (from the workspace's `dns_zones`) associated with "
+        "this resource, passed to Terraform as `strata.resources.<name>.dns_zones`. A "
+        "step that provisions this resource can use `${output:STEP.KEY}` tokens in "
+        "those documents.\n\n"
+        "Design notes: References to DNS document names this resource is associated "
+        "with (mirrors `firewalls` above). A structural, provisioning-time fact — not "
+        "itself a claim of ${output:...} ownership; see "
+        "`WorkspaceSpecModel.validate_execution()`'s `target_names` for the separate "
+        "claiming mechanism.",
     )
     subnet: WorkspaceResourceSubnetModel | None = Field(
         None, description="Structured reference to a subnet within one of this workspace's networks"
     )
     configuration: dict[str, Any] | None = Field(
-        None, description="Workspace-specific configuration overrides (merged with resource file configuration)"
+        None,
+        description="Overrides and additions to the Resource document's `configuration` (workspace "
+        "values win), passed to Terraform as `strata.resources.<name>.configuration`.\n\n"
+        "Design notes: Workspace-specific configuration overrides (merged with "
+        "resource file configuration)",
     )
-    custom: dict[str, Any] | None = Field(None, description="Optional additional properties for the resource")
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Overrides and additions to the Resource document's `custom` values (workspace "
+        "values win), passed to Terraform as `strata.resources.<name>.custom`.\n\n"
+        "Design notes: Optional additional properties for the resource",
+    )
     labels: dict[str, Any] | None = Field(None, description="Optional labels (key-value pairs for classification)")
     tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
     default_tags: dict[str, str] | None = Field(
         None,
-        description="Workspace-specific override for this resource's default_tags (see "
-        "ResourceSpecModel.default_tags). Deliberately distinct from the `tags` field above (a free-form "
-        "list for strata-internal categorization, not cloud tags).",
+        description="Cloud tags merged over the Resource document's `default_tags` (workspace "
+        "values win). Not the same as `meta.tags`, which is a free-form list for "
+        "documentation.\n\n"
+        "Design notes: Workspace-specific override for this resource's default_tags "
+        "(see ResourceSpecModel.default_tags). Deliberately distinct from the `tags` "
+        "field above (a free-form list for strata-internal categorization, not cloud "
+        "tags).",
     )
     custom_tags: dict[str, str] | None = Field(
         None,
-        description="Workspace-specific additions to this resource's custom_tags (see ResourceSpecModel.custom_tags).",
+        description="Cloud tags merged over the Resource document's `custom_tags` (workspace "
+        "values win).\n\n"
+        "Design notes: Workspace-specific additions to this resource's custom_tags "
+        "(see ResourceSpecModel.custom_tags).",
     )
 
     @field_validator("depends_on", mode="before")
@@ -151,7 +215,11 @@ class WorkspaceResourceModel(PlatformBaseModel):
 
 
 class TopologyComponentModel(PlatformBaseModel):
-    """A resource reference belonging to a topology, optionally with modules attached.
+    """A resource that belongs to a topology, optionally with modules (application code) attached directly
+    to it, for example function code on an Azure Function App.
+
+    Design notes:
+    A resource reference belonging to a topology, optionally with modules attached.
 
     ``modules`` attaches application code directly to this resource (e.g. an
     Azure Function App's function code onto its Function App resource) —
@@ -160,6 +228,11 @@ class TopologyComponentModel(PlatformBaseModel):
     "a pointer to a Module document plus placement metadata," just attached
     at different levels (namespace grouping vs. a single resource).
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Module reference names must be unique within the component.",
+        "When several modules are enabled on one resource, exactly one must have `slot_type: main`.",
+    )
 
     resource: PlatformName = Field(
         ..., description="Resource name reference (must exist in this workspace's spec.resources)"
@@ -225,7 +298,13 @@ class TopologyVolumeModel(PlatformBaseModel):
 
 
 class TopologySpecModel(PlatformBaseModel):
-    """A named grouping of resources and namespaces that conceptually belong
+    """A named grouping of resources and namespaces that belong together, for example a Kubernetes cluster
+    with its storage and key vault. Used for documentation, diagrams and placement. It has no provider
+    or provisioner: which tool builds it, and in what order, is defined by provisioners and execution
+    steps.
+
+    Design notes:
+    A named grouping of resources and namespaces that conceptually belong
     together (e.g. "the AKS cluster + its blob store + its key vault"), for
     documentation, diagramming, and workload placement. It deliberately has
     **no** `provider`/`provisioner` field: which tool builds/deploys these
@@ -243,8 +322,19 @@ class TopologySpecModel(PlatformBaseModel):
     isolation; see ADR-0028 for the full evidence.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A resource may appear only once in `components`, a namespace only once in `namespaces`, "
+        "and a volume name only once in `volumes`.",
+    )
+
     name: PlatformName = Field(description="Unique topology name within this workspace")
-    type: PlatformName = Field(..., description="Topology type (e.g., dockerswarm, kubernetes, azure-native)")
+    type: PlatformName = Field(
+        ...,
+        description="Topology type, for example `kubernetes`, `dockerswarm` or `azure-native`. "
+        "Should be registered by a TopologyConfig listed in the Configuration, unless "
+        "the Configuration allows additional topologies.\n\n"
+        "Design notes: Topology type (e.g., dockerswarm, kubernetes, azure-native)",
+    )
     components: list[TopologyComponentModel] = Field(
         ..., min_length=1, description="Resource references that belong to this topology"
     )
@@ -360,7 +450,12 @@ class WorkspaceMetaModel(PlatformBaseModel):
 
 
 class WorkspaceProviderModel(PlatformBaseModel):
-    """A named provider slot with its default Provider document
+    """A named provider slot with its default Provider document. IaC code addresses the provider as
+    `strata.providers.<slot>`, and a deployment can rebind the slot to another Provider. A bare string
+    is shorthand for a slot named after its own document.
+
+    Design notes:
+    A named provider slot with its default Provider document
     (docs/design/provider-slots.md).
 
     `slot` is the stable key IaC code addresses (`strata.providers.<slot>`);
@@ -390,7 +485,12 @@ class WorkspaceProviderModel(PlatformBaseModel):
 
 
 class WorkspaceAssetModel(PlatformBaseModel):
-    """A named asset slot with its default Asset document (docs/design/asset-management.md).
+    """A named asset slot with its default Asset document. A step selects the slot in its `assets`, and IaC
+    code addresses the files as `strata.assets.<slot>`. A bare string is shorthand for a slot named
+    after its own document.
+
+    Design notes:
+    A named asset slot with its default Asset document (docs/design/asset-management.md).
 
     `slot` is the stable key a step selects (`step.assets`) and IaC addresses
     (`strata.assets.<slot>`, `build_path/assets/<slot>/`); `asset` is the
@@ -416,7 +516,15 @@ class WorkspaceAssetModel(PlatformBaseModel):
 
 
 class WorkspaceSpecModel(PlatformBaseModel):
-    """Workspace specification: the static declaration of everything a solution needs.
+    """Everything a solution deploys. `providers` say where (target accounts), `provisioners` say with what
+    (tool definitions) and `execution` says what runs in what order. Alongside them are the `resources`,
+    `namespaces`, `firewalls`, `dns_zones`, `networks` and `assets` they use, optional `topology`
+    groupings and the security policies that gate build and deploy.
+
+    References to other documents are document names, not file paths.
+
+    Design notes:
+    Workspace specification: the static declaration of everything a solution needs.
 
     No `references` field (ADR-0002). No `WorkspaceIacModel`-style embedded
     provisioner-topology binding (ADR-0011) — `topology` is a list of inline
@@ -438,25 +546,87 @@ class WorkspaceSpecModel(PlatformBaseModel):
     `WorkspaceResourceSubnetModel`).
     """
 
-    lifecycle: CommonLifecycleModel | None = Field(None, description="Workspace lifecycle phases")
-    properties: dict[str, Any] | None = Field(None, description="Workspace properties")
-    configuration: dict[str, Any] | None = Field(None, description="Workspace-level configuration passthrough")
-    custom: dict[str, Any] | None = Field(None, description="Optional additional properties (key-value pairs)")
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Provider slots, provisioner names, topology names, resource names, namespace names, "
+        "firewall names, DNS zone names, network names and asset slots must each be unique within "
+        "their list.",
+        "Every topology component `resource` must be declared in `resources`, and every topology "
+        "namespace must be listed in `namespaces`.",
+        "A resource's `firewalls` must be listed in this workspace's `firewalls`, its `dns_zones` "
+        "in `dns_zones` and its `subnet.network` in `networks`.",
+        "Every execution step must name a declared provisioner, and its `resources`, `namespaces`, "
+        "`topologies`, `dns_zones`, `firewalls`, `networks` and `assets` must exist in the "
+        "matching list of this workspace.",
+        "Step names must be unique, a step's `depends_on` must name existing steps, and the steps "
+        "must have no dependency cycle.",
+        "Two steps that act on the same target must be ordered by `depends_on`, directly or "
+        "through other steps. A target is a resource, namespace or topology member, or a firewall, "
+        "DNS document or network claimed by a step or by a resource it provisions. Otherwise the "
+        "order is ambiguous and validation fails.",
+        "A provisioner's `depends_on` must name declared provisioners, with no dependency cycle.",
+    )
+
+    lifecycle: CommonLifecycleModel | None = Field(
+        None,
+        description="Hook scripts per phase name. Accepted and validated, but strata does not run "
+        "lifecycle hooks yet.\n\n"
+        "Design notes: Workspace lifecycle phases",
+    )
+    properties: dict[str, Any] | None = Field(
+        None,
+        description="Base layer of the `properties` that are merged with those of the environments "
+        "and the deployment, passed to Terraform as `strata.properties`. Strata does "
+        "not validate the keys itself: add an `attributeconfig` with `target.kind: "
+        "workspace` and `target.block: properties` to do so.\n\n"
+        "Design notes: Workspace properties",
+    )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Free-form workspace settings, passed to Terraform as "
+        "`strata.workspace.configuration`. Strata does not validate the keys itself: "
+        "add an `attributeconfig` with `target.kind: workspace` and `target.block: "
+        "configuration` to do so.\n\n"
+        "Design notes: Workspace-level configuration passthrough",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Base layer of the `custom` values that are merged with those of the "
+        "environments and the deployment (`strata.custom`); also passed as "
+        "`strata.workspace.custom`. Strata does not interpret them.\n\n"
+        "Design notes: Optional additional properties (key-value pairs)",
+    )
     default_tags: dict[str, str] | None = Field(
         None,
-        description="Solution-wide baseline cloud provider tags (e.g. 'managed-by: strata'), applied on top "
-        "of/underneath each Provider's own default_tags — useful when a workspace spans multiple providers. "
-        "Optional (unlike ResourceSpecModel.default_tags): not every workspace needs an organization-wide "
-        "tagging policy.",
+        description="Solution-wide baseline cloud tags (for example `managed-by: strata`), passed "
+        "to Terraform as `strata.default_tags`. Useful when a workspace spans several "
+        "providers. Not the same as `meta.tags`, which is a free-form list for "
+        "documentation.\n\n"
+        "Design notes: Solution-wide baseline cloud provider tags (e.g. 'managed-by: "
+        "strata'), applied on top of/underneath each Provider's own default_tags — "
+        "useful when a workspace spans multiple providers. Optional (unlike "
+        "ResourceSpecModel.default_tags): not every workspace needs an "
+        "organization-wide tagging policy.",
     )
 
     providers: list[WorkspaceProviderModel] = Field(
         ...,
         min_length=1,
-        description="Provider slots: a Provider document name, or {slot, provider} to give the slot a stable "
-        "name a deployment can rebind (docs/design/provider-slots.md)",
+        description="Provider slots, at least one: a Provider document name, or `{slot, provider}` "
+        "to give the slot a stable name. IaC code addresses a provider as "
+        "`strata.providers.<slot>`, and a deployment can rebind a slot to another "
+        "Provider.\n\n"
+        "Design notes: Provider slots: a Provider document name, or {slot, provider} "
+        "to give the slot a stable name a deployment can rebind "
+        "(docs/design/provider-slots.md)",
     )
-    provisioners: list[ProvisionerModel] = Field(..., min_length=1, description="Provisioner (tool) definitions")
+    provisioners: list[ProvisionerModel] = Field(
+        ...,
+        min_length=1,
+        description="Tool definitions, at least one: which tool runs, where its code is and its "
+        "tool-specific settings. A provisioner runs against targets only when an "
+        "`execution` step uses it.\n\n"
+        "Design notes: Provisioner (tool) definitions",
+    )
     execution: list[ProvisioningStepModel] | None = Field(
         None,
         description="The ordered recipe: steps binding a Provisioner to a set of targets. Named 'execution' "
@@ -465,11 +635,18 @@ class WorkspaceSpecModel(PlatformBaseModel):
     )
     output_store: PlatformName | None = Field(
         None,
-        description="Key/value backend TYPE for cross-run step-output persistence (e.g. 'azure-keyvault', "
-        "'azure-appconfig', 'azure-blob') — auto-binds to zero-or-one enabled Integration document of this "
-        "type, same rule as a Provisioner's bare 'tool' (ADR-0022 D2). Omit to disable cross-run output "
-        "persistence entirely (today's in-memory-only behavior). Checked against Configuration.spec.security."
-        "allowed_key_value_stores when set (docs/work/cross-run-step-output-delivery.md).",
+        description="Key/value backend type for keeping step outputs across runs (for example "
+        "`azure-keyvault`, `azure-appconfig` or `azure-blob`). It binds to the single "
+        "enabled Integration of that type. Omit to keep step outputs in memory only. "
+        "When set, the type must be allowed by the Configuration's "
+        "`spec.security.allowed_key_value_stores`.\n\n"
+        "Design notes: Key/value backend TYPE for cross-run step-output persistence "
+        "(e.g. 'azure-keyvault', 'azure-appconfig', 'azure-blob') — auto-binds to "
+        "zero-or-one enabled Integration document of this type, same rule as a "
+        "Provisioner's bare 'tool' (ADR-0022 D2). Omit to disable cross-run output "
+        "persistence entirely (today's in-memory-only behavior). Checked against "
+        "Configuration.spec.security.allowed_key_value_stores when set "
+        "(docs/work/cross-run-step-output-delivery.md).",
     )
     output_store_integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         None,
@@ -486,9 +663,13 @@ class WorkspaceSpecModel(PlatformBaseModel):
     )
     topology: list[TopologySpecModel] | None = Field(
         None,
-        description="Inline topology groupings (type, components, namespaces, volumes) — pure grouping, no "
-        "provider/provisioner field (ADR-0011). Inline rather than a standalone-document reference "
-        "(ADR-0028, reverted from the original standalone-kind design of ADR-0011).",
+        description="Optional inline groupings of resources and namespaces (type, components, "
+        "namespaces, volumes), for documentation, diagrams and placement. A topology "
+        "has no provider or provisioner; a step can target one with `topologies`.\n\n"
+        "Design notes: Inline topology groupings (type, components, namespaces, "
+        "volumes) — pure grouping, no provider/provisioner field (ADR-0011). Inline "
+        "rather than a standalone-document reference (ADR-0028, reverted from the "
+        "original standalone-kind design of ADR-0011).",
     )
     resources: list[WorkspaceResourceModel] | None = Field(None, description="Workspace resource definitions")
     namespaces: list[Annotated[PlatformName, References(PlatformKind.NAMESPACE)]] | None = Field(
@@ -505,35 +686,52 @@ class WorkspaceSpecModel(PlatformBaseModel):
     )
     assets: list[WorkspaceAssetModel] | None = Field(
         None,
-        description="Asset slots this workspace may materialise into a build (docs/design/asset-management.md, "
-        "docs/design/asset-management.md): an Asset document name, or {slot, asset} to give the slot a stable name. "
-        "A step claims which slots it needs via its own 'assets' field, cross-checked in "
-        "validate_execution() below (a second, independent set from 'target_names' — an asset is "
-        "materialised input, not a provisioning target).",
+        description="Asset slots this workspace can materialise into a build: an Asset document "
+        "name, or `{slot, asset}` to give the slot a stable name. A step lists the "
+        "slots it needs in its own `assets`.\n\n"
+        "Design notes: Asset slots this workspace may materialise into a build "
+        "(docs/design/asset-management.md, docs/design/asset-management.md): an Asset "
+        "document name, or {slot, asset} to give the slot a stable name. A step claims "
+        "which slots it needs via its own 'assets' field, cross-checked in "
+        "validate_execution() below (a second, independent set from 'target_names' — "
+        "an asset is materialised input, not a provisioning target).",
     )
     cve_policy: CveMaxSeverityPolicyModel | None = Field(
         None,
-        description="Gates 'build run' on CVE findings in the SBOM it just generated (docs/archive/"
-        "cve-scanner-integration.md). Lives here, not on Deployment, because it is a build-phase "
-        "concern — the same scope `execution`/`provisioners` already own — not a per-deployment one.",
+        description="Gates `build run` on CVE findings in the SBOM it generates. It lives on the "
+        "workspace because it is a build concern, not a per-deployment one.\n\n"
+        "Design notes: Gates 'build run' on CVE findings in the SBOM it just generated "
+        "(docs/archive/cve-scanner-integration.md). Lives here, not on Deployment, "
+        "because it is a build-phase concern — the same scope "
+        "`execution`/`provisioners` already own — not a per-deployment one.",
     )
     checkov_policy: CheckovPolicyModel | None = Field(
         None,
-        description="Gates 'build run' on Checkov static-IaC-security findings for this workspace's "
-        "terraform/bicep/ansible provisioners, or its Helm namespace modules (docs/archive/"
-        "checkov-integration.md). Same placement reasoning as cve_policy — a build-phase concern, "
-        "not a per-deployment one.",
+        description="Gates `build run` on Checkov static security findings for this workspace's "
+        "terraform, bicep and ansible provisioners, or its Helm namespace modules.\n\n"
+        "Design notes: Gates 'build run' on Checkov static-IaC-security findings for "
+        "this workspace's terraform/bicep/ansible provisioners, or its Helm namespace "
+        "modules (docs/archive/checkov-integration.md). Same placement reasoning as "
+        "cve_policy — a build-phase concern, not a per-deployment one.",
     )
     release_gate_policy: ReleaseGatePolicyModel | None = Field(
         None,
-        description="Gates 'deploy run' on a security platform's verdict for the solution repository at the "
-        "deployed commit (docs/design/security-gates.md). Runs at deploy preflight, not build: it "
-        "needs the network and resolved credentials.",
+        description="Gates `deploy run` on a security platform's verdict for the solution "
+        "repository at the deployed commit. Runs at deploy preflight, not at build, "
+        "because it needs the network and resolved credentials.\n\n"
+        "Design notes: Gates 'deploy run' on a security platform's verdict for the "
+        "solution repository at the deployed commit (docs/design/security-gates.md). "
+        "Runs at deploy preflight, not build: it needs the network and resolved "
+        "credentials.",
     )
     image_gate_policy: ImageGatePolicyModel | None = Field(
         None,
-        description="Gates 'deploy run' on a security platform's open issues for the container images in "
-        "sbom.json (docs/design/security-gates.md). Runs at deploy preflight, like release_gate_policy.",
+        description="Gates `deploy run` on a security platform's open issues for the container "
+        "images listed in `sbom.json`. Runs at deploy preflight, like "
+        "`release_gate_policy`.\n\n"
+        "Design notes: Gates 'deploy run' on a security platform's open issues for the "
+        "container images in sbom.json (docs/design/security-gates.md). Runs at deploy "
+        "preflight, like release_gate_policy.",
     )
 
     @model_validator(mode="after")
@@ -768,7 +966,14 @@ class WorkspaceSpecModel(PlatformBaseModel):
 
 
 class WorkspaceModel(PlatformBaseModel):
-    """Root model for a workspace configuration file."""
+    """The static declaration of everything a solution deploys: providers, provisioners and the ordered
+    execution recipe, plus the resources, namespaces, firewalls, DNS zones, networks and assets they
+    use, and the security policies that gate build and deploy. A deployment runs it against an
+    environment.
+
+    Design notes:
+    Root model for a workspace configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

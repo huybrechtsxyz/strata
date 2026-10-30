@@ -80,7 +80,12 @@ class CheckovScanResultModel(PlatformBaseModel):
 
 
 class CheckovPolicyModel(PlatformBaseModel):
-    """Per-provisioner Checkov policy configuration (docs/work/
+    """Gate for `build run` on Checkov static security findings in a workspace's rendered IaC. `framework`
+    selects what to scan, `severity_gate` is the lowest severity that fails the build, and `scope`
+    selects which provisioners or namespaces are scanned.
+
+    Design notes:
+    Per-provisioner Checkov policy configuration (docs/work/
     checkov-integration.md's "v2 design decision" section).
 
     Field names/defaults/casing (`framework`, `severity_gate`, `scope`,
@@ -104,10 +109,16 @@ class CheckovPolicyModel(PlatformBaseModel):
     )
     scope: str = Field(
         default="staged",
-        description="For terraform/bicep/ansible: 'staged' (default, provisioners with their own execution "
-        "step) | 'all' (every declared provisioner of this framework) | the name of one specific "
-        "execution step. For helm: 'staged' and 'all' are equivalent (every namespace this workspace "
-        "references) | the name of one specific namespace (docs/archive/checkov-integration.md Phase 3).",
+        description="For terraform, bicep and ansible: `staged` (default: provisioners that have "
+        "their own execution step), `all` (every declared provisioner of that "
+        "framework) or the name of one execution step. For helm: `staged` and `all` "
+        "both mean every namespace the workspace references, or give the name of one "
+        "namespace.\n\n"
+        "Design notes: For terraform/bicep/ansible: 'staged' (default, provisioners "
+        "with their own execution step) | 'all' (every declared provisioner of this "
+        "framework) | the name of one specific execution step. For helm: 'staged' and "
+        "'all' are equivalent (every namespace this workspace references) | the name "
+        "of one specific namespace (docs/archive/checkov-integration.md Phase 3).",
     )
     skip_checks: list[str] | None = Field(
         None, description="Check IDs to suppress (mutually exclusive with include_checks)"
@@ -120,7 +131,11 @@ class CheckovPolicyModel(PlatformBaseModel):
     )
     on_missing_data: Literal["skip", "warn", "block"] = Field(
         default="block",
-        description="What to do when the provisioner this policy targets has no materialised source to scan. "
-        "Defaults to 'block' (not the generic 'skip'), matching CveMaxSeverityPolicyModel's own rationale: "
-        "'skip' makes 'never scanned' indistinguishable from 'scanned, found nothing'.",
+        description="What to do when the targeted provisioner has no materialised source to scan: "
+        '`skip`, `warn` or `block` (default). The default is `block` so that "never '
+        'scanned" cannot be mistaken for "scanned, nothing found".\n\n'
+        "Design notes: What to do when the provisioner this policy targets has no "
+        "materialised source to scan. Defaults to 'block' (not the generic 'skip'), "
+        "matching CveMaxSeverityPolicyModel's own rationale: 'skip' makes 'never "
+        "scanned' indistinguishable from 'scanned, found nothing'.",
     )

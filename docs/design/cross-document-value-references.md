@@ -227,6 +227,11 @@ and `deploy_run()` (both already call `resolve_values()`), though only
   own still-unimplemented feature, `DocumentRef.remote` always `None`
   today per `solution_controller.py`) — inherits that limitation for free,
   not a new one.
+- **Referencing a field a `kind: version` pin overrides** (an artifact's `image_tag`, a module
+  service's `image`, a module's `source.chart_version`, an asset's `location.reference`) —
+  rejected as `value_reference_pinnable_field`. `${value:}` resolves once per solution with no
+  deployment, so it cannot apply a pin; it would read the unpinned value while build and deploy
+  use the pinned one. `_pin_category()` in `value_references.py` lists the paths.
 - **Wildcard/array-producing paths** (e.g. "every module in this
   namespace") — one path resolves to exactly one scalar, matching how
   `${var:KEY}`/`${output:step.key}` are both single-value lookups too.
@@ -386,4 +391,8 @@ Organized by how much changes, smallest first.
   Deliberately left unchanged for the build-time path
   (`build_value_references()`), matching the existing "build renders
   literally, deploy resolves" split (ADR-0022 D4).
+- 2026-10-30: a `${value:artifact.X.spec.image_tag}` reference returned the unpinned tag while
+  `store: artifact` returned the pinned one. A pin cannot be applied here (no deployment in
+  scope), so every field a `kind: version` pin overrides is now rejected instead
+  (`value_reference_pinnable_field`).
 

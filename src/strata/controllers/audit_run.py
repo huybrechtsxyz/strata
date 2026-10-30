@@ -52,6 +52,7 @@ from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
 from strata.controllers.build_controller import apply_remote_version_pins
 from strata.controllers.deployment_resolution import deployment_workspace
+from strata.controllers.effective_images import effective_images
 from strata.controllers.policy_results import read_policy_results
 from strata.controllers.sbom_controller import SBOM_FORMAT
 from strata.controllers.solution_context import SolutionContext
@@ -477,15 +478,13 @@ def _collect_artifacts_bom(
     deployment's workspace actually reaches — the fix for ADR-0019's own
     flagged gap (docs/work/version-lifecycle.md's "The audit gap").
 
-    Deliberately **not** sourced from `sbom.json`: `write_sbom()` resolves
-    every module straight off the `DocumentIndex` (`sbom_controller.
-    _resolve_all_modules()`), with no `kind: version` pin overlay applied
-    at all — accurate for *which* images/charts exist, silently wrong for
-    their *effective* version whenever a pin is active. Reuses the exact
-    same overlay functions `build_run()` itself calls instead —
-    `workload_controller.apply_version_pins()` and
+    Images come from `effective_images()` (module service images and artifacts, pins
+    applied). Charts and repositories reuse the exact same overlay functions
+    `build_run()` itself calls — `workload_controller.apply_version_pins()` and
     `build_controller.apply_remote_version_pins()` — one resolution path,
-    not a second, independently-maintained copy of the same logic.
+    not a second, independently-maintained copy of the same logic. Deliberately
+    not read back from `sbom.json`, which is a build-time file that may be stale
+    or missing at deploy.
 
     Scoped to what this deployment's own workspace reaches (its
     provisioners' and workload modules' `source.remote`, its namespaces'
@@ -518,8 +517,12 @@ def _collect_artifacts_bom(
             modules.append(apply_version_pins(resolve_module(index, reference), version))
 
     images: list[ManifestImageModel] = []
-    charts: list[ManifestChartModel] = []
     seen_images: set[str] = set()
+    for row in effective_images(context, deployment):
+        if row.image_ref not in seen_images:
+            seen_images.add(row.image_ref)
+            images.append(ManifestImageModel(name=row.name, image=row.image_ref))
+    charts: list[ManifestChartModel] = []
     for module in modules:
         if module.spec.source.chart_name is not None:
             charts.append(
@@ -529,10 +532,6 @@ def _collect_artifacts_bom(
                     version=module.spec.source.chart_version,
                 )
             )
-        for service in module.spec.services or []:
-            if service.image and service.image not in seen_images:
-                seen_images.add(service.image)
-                images.append(ManifestImageModel(name=service.name, image=service.image))
 
     remote_names: set[str] = set()
     for provisioner in workspace.spec.provisioners:

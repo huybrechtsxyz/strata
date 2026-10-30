@@ -3,7 +3,10 @@
 
 from pathlib import Path
 
+import pytest
+
 from strata.controllers.solution_context import open_solution
+from strata.models.version_model import PIN_CATEGORIES
 
 MANIFEST_TEMPLATE = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
@@ -197,6 +200,51 @@ def test_asset_pin_against_a_fetch_external_location_is_an_error(tmp_path):
     error = context.diagnostics.errors[0]
     assert error.code == "pin_not_applicable"
     assert "fetch:external" in error.message
+
+
+# ---------------------------------------------------------------------------
+# Artifact pins
+# ---------------------------------------------------------------------------
+
+
+def _with_artifact(root: Path) -> Path:
+    _write(
+        root,
+        "artifact.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: datahub\n"
+        "spec:\n  image_name: int-docker-test/src/datahub.api\n",
+    )
+    return root
+
+
+def test_artifact_pin_against_a_real_artifact_is_clean(tmp_path):
+    root = _with_artifact(_solution(tmp_path, "  pins:\n    artifacts:\n      datahub: '1.2.3'\n"))
+    assert _resolve(root).diagnostics.messages() == []
+
+
+def test_artifact_pin_matching_no_artifact_is_a_warning(tmp_path):
+    root = _with_artifact(_solution(tmp_path, "  pins:\n    artifacts:\n      datahub-api: '1.2.3'\n"))
+    context = _resolve(root)
+    assert context.ok
+    warning = context.diagnostics.warnings[0]
+    assert warning.code == "stale_pin"
+    assert warning.location == "spec.pins.artifacts.datahub-api"
+    assert "datahub-api" in warning.message
+
+
+# ---------------------------------------------------------------------------
+# Every category is checked
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("category", PIN_CATEGORIES)
+def test_every_pin_category_reports_a_pin_naming_nothing_as_stale(tmp_path, category):
+    """A new category added to `PIN_CATEGORIES` without a branch in `check_version_pins()` fails here."""
+    context = _resolve(_solution(tmp_path, f"  pins:\n    {category}:\n      ghost: x\n"))
+    assert context.ok
+    warnings = context.diagnostics.warnings
+    assert [w.code for w in warnings] == ["stale_pin"]
+    assert warnings[0].location == f"spec.pins.{category}.ghost"
 
 
 # ---------------------------------------------------------------------------

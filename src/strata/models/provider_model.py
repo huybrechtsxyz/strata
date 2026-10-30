@@ -21,25 +21,42 @@ from strata.models.common_models import (
 
 
 class ProviderSpecModel(PlatformBaseModel):
-    """
+    """A cloud or infrastructure account: its provider `type`, primary `region`, how to authenticate, and
+    optional free-form settings and default tags.
+
+    Design notes:
     Provider specification containing properties and lifecycle configuration.
     """
 
     lifecycle: CommonLifecycleModel | None = Field(
         None,
-        description="IaC workflow lifecycle phases, keyed by phase name "
-        "(e.g. deploy_check, deploy_plan_before, deploy_provision, deploy_destroy_after)",
+        description="Hook scripts per phase name, for example `deploy_plan_before` or "
+        "`deploy_destroy_after`. Accepted and validated, but strata does not run "
+        "lifecycle hooks yet.\n\n"
+        "Design notes: IaC workflow lifecycle phases, keyed by phase name (e.g. "
+        "deploy_check, deploy_plan_before, deploy_provision, deploy_destroy_after)",
     )
     type: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Cloud or infrastructure provider (e.g., kamatera, local). Must match a provider type in configuration.yaml."
+        description="Provider type, for example `azure` or `kamatera`. Must be listed in the "
+        "Configuration's `spec.providers`, and is matched to the ProviderConfig "
+        "document of that name.\n\n"
+        "Design notes: Cloud or infrastructure provider (e.g., kamatera, local). Must "
+        "match a provider type in configuration.yaml."
     )
     region: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Primary region/datacenter for this provider account, cross-checked in Phase 2 against "
-        "ProviderConfig.spec.regions. This is strata's own governance identifier, not necessarily a literal "
-        "provider-block argument for every provisioner (e.g. azurerm has none at that level) — each region "
-        "entry in ProviderConfig.spec.regions may optionally carry a 'geography' tag (a compliance/deployment "
-        "boundary grouping several regions, e.g. Azure's 'geography' concept); geography is derived from that "
-        "registry, not duplicated here."
+        description="Primary region or datacenter of this account, for example `westeurope`. Must "
+        "be one of the regions in the ProviderConfig of this `type`, unless that "
+        "ProviderConfig allows additional regions. It is strata's own identifier, not "
+        "necessarily an argument of the Terraform provider block; the region's "
+        "geography comes from the ProviderConfig.\n\n"
+        "Design notes: Primary region/datacenter for this provider account, "
+        "cross-checked in Phase 2 against ProviderConfig.spec.regions. This is "
+        "strata's own governance identifier, not necessarily a literal provider-block "
+        "argument for every provisioner (e.g. azurerm has none at that level) — each "
+        "region entry in ProviderConfig.spec.regions may optionally carry a "
+        "'geography' tag (a compliance/deployment boundary grouping several regions, "
+        "e.g. Azure's 'geography' concept); geography is derived from that registry, "
+        "not duplicated here."
     )
     display_name: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
         None,
@@ -52,27 +69,42 @@ class ProviderSpecModel(PlatformBaseModel):
     )
     configuration: dict[str, Any] | None = Field(
         None,
-        description="Raw provisioner-specific passthrough configuration (e.g. extra Terraform "
-        "provider-block arguments such as 'skip_provider_registration' or 'partner_id'). "
-        "Unlike `type`/`region`, these keys are not validated by strata and are passed through "
-        "as-is to the provisioner. Must be consumed by the corresponding builder/service — "
-        "a field here is inert until that layer exists.",
+        description="Free-form provisioner settings (for example extra Terraform provider-block "
+        "arguments such as `skip_provider_registration`), passed to Terraform as "
+        "`strata.providers.<slot>.configuration`. Strata does not validate the keys "
+        "itself: add an `attributeconfig` with `target.kind: provider` and "
+        "`target.block: configuration` to do so.\n\n"
+        "Design notes: Raw provisioner-specific passthrough configuration (e.g. extra "
+        "Terraform provider-block arguments such as 'skip_provider_registration' or "
+        "'partner_id'). Unlike `type`/`region`, these keys are not validated by strata "
+        "and are passed through as-is to the provisioner. Must be consumed by the "
+        "corresponding builder/service — a field here is inert until that layer "
+        "exists.",
     )
     custom: dict[str, Any] | None = Field(
         None,
-        description="Optional custom key-value pairs for automation/bookkeeping (e.g. cost center, "
-        "billing account). Not consumed by any provisioner — for external tooling/documentation "
-        "only. Must be explicitly wired through by the builder/service layer if it needs to reach "
-        "build output; it is not automatic.",
+        description="Free-form key/value pairs for your own scripts and Terraform code (for "
+        "example cost center or billing account), passed to Terraform as "
+        "`strata.providers.<slot>.custom`. Strata does not interpret them. Validate "
+        "them with an `attributeconfig` targeting `provider` and `custom`.\n\n"
+        "Design notes: Optional custom key-value pairs for automation/bookkeeping "
+        "(e.g. cost center, billing account). Not consumed by any provisioner — for "
+        "external tooling/documentation only. Must be explicitly wired through by the "
+        "builder/service layer if it needs to reach build output; it is not automatic.",
     )
     default_tags: dict[str, str] | None = Field(
         None,
-        description="Default tags to apply to all resources created by this provider (ignored if provider "
-        "doesn't support tagging). Deliberately distinct from meta.tags (a free-form list used for "
-        "strata-internal categorization/documentation, not cloud tags). Optional (unlike "
-        "ResourceSpecModel.default_tags) — not every provider account needs an organization-wide tagging "
-        "policy; no custom_tags sibling either, since this is a broad provider-scope default, not an "
-        "individually-tagged resource.",
+        description="Default cloud tags for everything created through this provider, passed to "
+        "Terraform as `strata.providers.<slot>.default_tags`. Not the same as "
+        "`meta.tags`, which is a free-form list for documentation. Strata does not "
+        "limit the number of tags, so stay within your cloud provider's limit.\n\n"
+        "Design notes: Default tags to apply to all resources created by this provider "
+        "(ignored if provider doesn't support tagging). Deliberately distinct from "
+        "meta.tags (a free-form list used for strata-internal "
+        "categorization/documentation, not cloud tags). Optional (unlike "
+        "ResourceSpecModel.default_tags) — not every provider account needs an "
+        "organization-wide tagging policy; no custom_tags sibling either, since this "
+        "is a broad provider-scope default, not an individually-tagged resource.",
     )
 
     @field_validator("type")
@@ -111,7 +143,13 @@ class ProviderMetaModel(PlatformBaseModel):
 
 
 class ProviderModel(PlatformBaseModel):
-    """Root model for a provider configuration file."""
+    """A cloud or infrastructure account, for example one Azure subscription: its provider type, primary
+    region and credentials. Create one per account. A workspace uses providers through named slots,
+    which a deployment can rebind to another provider.
+
+    Design notes:
+    Root model for a provider configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

@@ -318,6 +318,57 @@ def test_scaffold_from_drops_keys_with_no_current_value_to_seed(tmp_path):
     assert "sidecar" not in data["spec"]["pins"].get("images", {})
 
 
+BLANK_TAG_ARTIFACTS = {
+    "empty": ARTIFACT.replace('image_tag: "1.0.0"', 'image_tag: ""'),
+    "omitted": ARTIFACT.replace('  image_tag: "1.0.0"\n', ""),
+}
+
+
+@pytest.mark.parametrize("artifact_yaml", BLANK_TAG_ARTIFACTS.values(), ids=BLANK_TAG_ARTIFACTS.keys())
+def test_scaffold_from_drops_an_artifact_pin_whose_artifact_has_a_blank_tag(tmp_path, artifact_yaml):
+    pins = "  pins:\n    artifacts:\n      dspapi_container: '2.0.0'\n"
+    root = _solution(
+        tmp_path,
+        extra={"artifact.yaml": artifact_yaml, "version.yaml": _version_doc(workspace="main", pins=pins)},
+    )
+    context = open_solution(root)
+
+    destination = scaffold_version(
+        root, context.controller.index, context.controller.solution, "dev", workspace="main", from_name="prd"
+    )
+
+    data = yaml.safe_load(destination.read_text(encoding="utf-8"))
+    assert "dspapi_container" not in data["spec"]["pins"].get("artifacts", {})
+
+
+@pytest.mark.parametrize("artifact_yaml", BLANK_TAG_ARTIFACTS.values(), ids=BLANK_TAG_ARTIFACTS.keys())
+def test_reconcile_offers_no_add_for_an_artifact_with_a_blank_tag(tmp_path, artifact_yaml):
+    root = _solution(tmp_path, extra={"artifact.yaml": artifact_yaml, "version.yaml": _version_doc()})
+    context = open_solution(root)
+    entry = context.controller.index.get(PlatformKind.VERSION, "prd")
+
+    rows = reconcile_version(context.controller.index, context.controller.solution, entry.model)
+
+    assert not any(r.category == "artifacts" for r in rows)
+
+
+def test_reconcile_does_not_report_a_pin_on_a_blank_tag_artifact_as_stale(tmp_path):
+    pins = "  pins:\n    artifacts:\n      dspapi_container: '2.0.0'\n"
+    root = _solution(
+        tmp_path,
+        extra={
+            "artifact.yaml": BLANK_TAG_ARTIFACTS["omitted"],
+            "version.yaml": _version_doc(workspace="main", pins=pins),
+        },
+    )
+    context = open_solution(root)
+    entry = context.controller.index.get(PlatformKind.VERSION, "prd")
+
+    rows = reconcile_version(context.controller.index, context.controller.solution, entry.model)
+
+    assert not any(r.category == "artifacts" for r in rows)
+
+
 def test_scaffold_produces_a_real_file_discoverable_via_path_get(tmp_path):
     """Round-trip through path_controller — the same resolution
     `version set` (Phase 4) will reuse internally."""

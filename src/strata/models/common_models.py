@@ -5,7 +5,7 @@ import warnings
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from pydantic import (
     BaseModel,
@@ -131,7 +131,15 @@ CANONICAL_API_VERSION = PlatformVersion.v2
 
 
 class SourceModel(PlatformBaseModel):
-    """Reusable model for source configuration.
+    """Where the code of a module or provisioner comes from. Pick one mode:
+
+    - Git-based: `source_path`, optionally with `remote`. Omit `remote` for this solution's own
+      repository. Used for Terraform modules, local charts and similar.
+    - Chart-based: `chart_name` with exactly one of `remote` (a remote from the solution manifest) or
+      `chart_repository` (an inline URL). Used for Helm and Argo CD charts.
+
+    Design notes:
+    Reusable model for source configuration.
 
     One field names *which remote* (`remote`); the selection field that
     accompanies it decides the mode:
@@ -188,6 +196,14 @@ class SourceModel(PlatformBaseModel):
           chart_version: "2024.12.0"
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Exactly one mode is used: git-based (`source_path`) or chart-based (`chart_name`), never "
+        "both and never neither.",
+        "A chart-based source needs exactly one of `remote` or `chart_repository`.",
+        "`chart_repository` and `chart_version` are only valid for chart-based sources.",
+        "`source_path` and `target_path` must be relative paths without `..`.",
+    )
+
     remote: Annotated[PlatformName, RemoteReference()] | None = Field(
         None,
         description="Name of a remote declared in the solution manifest's spec.remotes (strata.yaml). The "
@@ -231,14 +247,22 @@ class SourceModel(PlatformBaseModel):
     )
     chart_repository: str | None = Field(
         None,
-        description="Inline Helm chart repository URL or OCI reference (e.g. "
-        "'https://charts.goauthentik.io' or 'oci://ghcr.io/org/charts'), for the common case where this "
-        "chart source is used by exactly one module and needs no registry credentials. Only valid in "
-        "chart-based mode; mutually exclusive with `remote` — use `remote` instead once the registry is "
-        "shared across modules (so they can't silently drift to different underlying URLs) or needs "
-        "credentials (`SolutionRemoteModel.integration`). Unlike `remote`, this is a raw string strata "
-        "never validates against the solution manifest — a typo here is caught only when `helm repo add` "
-        "itself fails, not at schema time.",
+        description="Inline Helm chart repository URL or OCI reference (for example "
+        "`https://charts.goauthentik.io` or `oci://ghcr.io/org/charts`), for a chart "
+        "used by exactly one module that needs no credentials. Only valid in "
+        "chart-based mode and mutually exclusive with `remote`. Use `remote` once the "
+        "registry is shared by several modules or needs credentials. The URL is not "
+        "checked against the solution manifest, so a typo only shows up when Helm "
+        "fails to add the repository.\n\n"
+        "Design notes: Inline Helm chart repository URL or OCI reference (e.g. "
+        "'https://charts.goauthentik.io' or 'oci://ghcr.io/org/charts'), for the "
+        "common case where this chart source is used by exactly one module and needs "
+        "no registry credentials. Only valid in chart-based mode; mutually exclusive "
+        "with `remote` — use `remote` instead once the registry is shared across "
+        "modules (so they can't silently drift to different underlying URLs) or needs "
+        "credentials (`SolutionRemoteModel.integration`). Unlike `remote`, this is a "
+        "raw string strata never validates against the solution manifest — a typo here "
+        "is caught only when `helm repo add` itself fails, not at schema time.",
     )
 
     @model_validator(mode="after")
@@ -316,7 +340,14 @@ def validate_slot_type(value: str | None) -> str | None:
 
 
 class ModuleReferenceModel(PlatformBaseModel):
-    """A pointer to a `Module` document, plus placement/override metadata.
+    """A reference to a Module document with placement options. Used in a namespace's `modules` and in a
+    topology component's `modules`.
+
+    `name` is the reference's own name and `module` the Module document it points at, so one module can
+    be referenced several times under different names.
+
+    Design notes:
+    A pointer to a `Module` document, plus placement/override metadata.
 
     Shared by `namespace_model.py` (`NamespaceSpecModel.modules` — modules
     grouped under a container-orchestration namespace) and
@@ -339,12 +370,20 @@ class ModuleReferenceModel(PlatformBaseModel):
     description: str | None = Field(None, description="Optional description of what this module provides")
     slot_type: str | None = Field(
         "main",
-        description="Deployment slot type: 'main' (primary/production), 'staging', 'canary', 'sidecar', 'init'. "
-        "Defaults to 'main'. Custom values allowed but may generate warnings.",
+        description="Deployment slot type: `main` (default), `staging`, `canary`, `sidecar` or "
+        "`init`. Other values are allowed but give a warning. Strata only uses it for "
+        "the rule that exactly one of several enabled modules on a resource must be "
+        "`main`.\n\n"
+        "Design notes: Deployment slot type: 'main' (primary/production), 'staging', "
+        "'canary', 'sidecar', 'init'. Defaults to 'main'. Custom values allowed but "
+        "may generate warnings.",
     )
     enabled: bool = Field(default=True, description="Whether this module is enabled/deployed")
     configuration: dict[str, Any] | None = Field(
-        None, description="Module-specific configuration overrides in this context"
+        None,
+        description="Settings for this reference only. Accepted and validated, but strata does not "
+        "apply them yet; put settings on the Module document instead.\n\n"
+        "Design notes: Module-specific configuration overrides in this context",
     )
 
     @field_validator("slot_type")
@@ -422,7 +461,12 @@ class ScriptsModel(PlatformBaseModel):
     """Model for validating script paths with scope-aware execution."""
 
     description: str | None = Field(None, description="Optional description for documentation purposes")
-    scripts: list[str | ScriptPathModel] | None = None
+    scripts: list[str | ScriptPathModel] | None = Field(
+        None,
+        description="Scripts to run. Each entry is a path relative to the solution root, with one of the "
+        "extensions " + ", ".join(sorted(e[1:] for e in SCRIPT_EXTENSIONS)) + ", or an object with `file`, "
+        "`scope`, `priority` and `target`.",
+    )
 
     @field_validator("scripts")
     @classmethod

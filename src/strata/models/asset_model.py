@@ -18,7 +18,7 @@ Helm pull). Re-declaring just the two fields it does need avoids inheriting
 be meaningless for an asset.
 """
 
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
@@ -40,7 +40,12 @@ from strata.utils.path_safety import (
 
 
 class AssetLocationModel(PlatformBaseModel):
-    """The git repository an asset's files live in, declared on the asset itself
+    """A git repository that holds an asset's files, declared on the asset itself instead of as a remote in
+    the manifest. It lets a small per-customer asset point at that customer's own repository. Only
+    `type: git` is supported.
+
+    Design notes:
+    The git repository an asset's files live in, declared on the asset itself
     (docs/design/asset-management.md) — instead of a remote named in `strata.yaml`.
 
     Lets one small asset document per customer point at that customer's own
@@ -95,13 +100,22 @@ class AssetLocationModel(PlatformBaseModel):
 
 
 class AssetSpecModel(PlatformBaseModel):
-    """Asset specification: where its files live, plus optional documentation data."""
+    """Where an asset's files live, plus optional documentation. Use `remote` for a remote from the
+    manifest, `location` for a repository declared here, or neither for this solution's own repository.
+
+    Design notes:
+    Asset specification: where its files live, plus optional documentation data.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = ("The files live in one place: set `remote` or `location`, not both.",)
 
     description: str | None = Field(None, description="Optional description for documentation purposes")
     remote: Annotated[PlatformName, RemoteReference()] | None = Field(
         None,
-        description="Remote this asset's files live under (SourceModel's own field/meaning, reused "
-        "unchanged). None means this solution's own repository.",
+        description="Name of a remote from the solution manifest that the files live under. Omit "
+        "for this solution's own repository.\n\n"
+        "Design notes: Remote this asset's files live under (SourceModel's own "
+        "field/meaning, reused unchanged). None means this solution's own repository.",
     )
     location: AssetLocationModel | None = Field(
         None,
@@ -110,14 +124,23 @@ class AssetSpecModel(PlatformBaseModel):
         "repository.",
     )
     source_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Path to the file or directory, relative to the resolved remote's root. May contain "
-        "'{name}' segment tokens, filled from the deployment's resolved spec.properties at build time "
-        "(same token syntax path_conventions.compile_pattern() uses for matching, reused via "
-        "path_conventions.fill_pattern() for filling). May also contain glob wildcards ('*', '**', '?', "
-        "'[abc]') to select a subset of files, e.g. 'assets/{deploy_tier}/openapi/*.json'; a path with "
-        "no wildcard names a single file or directory exactly as before. Shell brace expansion "
-        "('{a,b}') is NOT supported. Must be relative — an absolute path or one containing '..' is "
-        "rejected; use 'remote' to point at files outside this solution's own repository."
+        description="Path of the file or directory, relative to the root of the resolved remote or "
+        "location. May contain `{name}` tokens, filled from the deployment's resolved "
+        "`properties` at build time, and glob wildcards (`*`, `**`, `?`, `[abc]`) to "
+        "select a subset of files, for example `assets/{deploy_tier}/openapi/*.json`. "
+        "Brace expansion such as `{a,b}` is not supported. Must be relative and "
+        "without `..`.\n\n"
+        "Design notes: Path to the file or directory, relative to the resolved "
+        "remote's root. May contain '{name}' segment tokens, filled from the "
+        "deployment's resolved spec.properties at build time (same token syntax "
+        "path_conventions.compile_pattern() uses for matching, reused via "
+        "path_conventions.fill_pattern() for filling). May also contain glob wildcards "
+        "('*', '**', '?', '[abc]') to select a subset of files, e.g. "
+        "'assets/{deploy_tier}/openapi/*.json'; a path with no wildcard names a single "
+        "file or directory exactly as before. Shell brace expansion ('{a,b}') is NOT "
+        "supported. Must be relative — an absolute path or one containing '..' is "
+        "rejected; use 'remote' to point at files outside this solution's own "
+        "repository."
     )
 
     @field_validator("source_path")
@@ -151,7 +174,13 @@ class AssetMetaModel(PlatformBaseModel):
 
 
 class AssetModel(PlatformBaseModel):
-    """Root model for an asset configuration document."""
+    """A named, reusable location of plain input files that are not IaC code, such as an OpenAPI contract,
+    images or a certificate bundle, and whose variant can differ per deployment. A workspace lists it in
+    `assets` as a slot, a step selects the slot, and a deployment can rebind the slot to another Asset.
+
+    Design notes:
+    Root model for an asset configuration document.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2, frozen=True, description="API version for asset configuration"

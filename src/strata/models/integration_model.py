@@ -44,7 +44,7 @@ deferred. ADR-0021 replaces both with `strata.integrations`.
 """
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, RootModel, field_validator
 
@@ -147,7 +147,12 @@ VALID_INTEGRATION_CAPABILITIES: frozenset[Capability] = frozenset(Capability)
 
 
 class IntegrationSpecModel(PlatformBaseModel):
-    """Integration specification: what external tool/service this is and what it can do.
+    """What an external tool or service is and what it can do: its `type`, its `capabilities`, how to reach
+    it and how to authenticate. Other documents bind to it by name, for example a provisioner, a remote,
+    an audit sink, a security gate or a value store.
+
+    Design notes:
+    Integration specification: what external tool/service this is and what it can do.
 
     `type` is an open `PlatformName` string (matches `ProvisionerModel.tool`'s
     pattern, ADR-0011) — describes a *specific* tool/service (terraform,
@@ -157,32 +162,88 @@ class IntegrationSpecModel(PlatformBaseModel):
     extension tier (ADR-0021 D9).
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Every capability must be one of "
+        + ", ".join(sorted(c.value for c in VALID_INTEGRATION_CAPABILITIES))
+        + ", or start with `x-`.",
+        "`version` must be a constraint strata can parse, such as `~> 1.9` or `>= 1.17`.",
+    )
+
     type: PlatformName = Field(
-        description="Integration type (e.g. terraform, vault, azure-keyvault, bitwarden, git, or a custom name)"
+        description="Type of the tool or service. Built-in types and the capabilities they "
+        "provide:\n\n"
+        "- `terraform`: infrastructure. Runs Terraform.\n"
+        "- `compose`: container. Docker Compose.\n"
+        "- `helm`: container. Helm charts.\n"
+        "- `script`: infrastructure. Runs a script.\n"
+        "- `argocd`: infrastructure. Pushes rendered configuration to the git "
+        "repository Argo CD watches.\n"
+        "- `flux`: infrastructure. Pushes rendered configuration to the git repository "
+        "Flux watches.\n"
+        "- `git`: sources. Git credentials for remotes.\n"
+        "- `infisical`: variables, secrets. Infisical.\n"
+        "- `azure-keyvault`: secrets, key_value. Azure Key Vault.\n"
+        "- `azure-appconfig`: variables, features, key_value. Azure App Configuration.\n"
+        "- `azure-blob`: key_value. Records in Azure Blob Storage.\n"
+        "- `webhook`: audit. Posts audit events as JSON.\n"
+        "- `otel`: audit. Sends audit events as OpenTelemetry logs.\n"
+        "- `sentinel`: audit. Sends audit events to Microsoft Sentinel.\n"
+        "- `aikido`: release_gate, image_findings. The Aikido security platform.\n"
+        "- `trivy`: scanner. CVE scanner.\n"
+        "- `grype`: scanner. CVE scanner.\n"
+        "- `checkov`: scanner. Static IaC security scanner.\n\n"
+        "Any other type needs a plugin registered under the `strata.integrations` "
+        "entry point group.\n\n"
+        "Design notes: Integration type (e.g. terraform, vault, azure-keyvault, "
+        "bitwarden, git, or a custom name)"
     )
     capabilities: set[str] = Field(
         default_factory=set,
-        description="Capabilities this integration provides — core (see VALID_INTEGRATION_CAPABILITIES) or an "
-        "'x-'-prefixed extension strata does not dispatch on",
+        description="What this integration provides. Core capabilities: `variables`, `secrets` and "
+        "`features` (value stores), `key_value` (small keyed records with optional "
+        "compare-and-swap), `infrastructure` (IaC and configuration tools such as "
+        "terraform), `container` (Compose and Helm), `sources` (credentials for git, "
+        "OCI and Helm remotes), `audit` (audit event destinations), `scanner` "
+        "(security scanners), `release_gate` (pass/fail verdict for a repository at a "
+        "commit) and `image_findings` (open issues for container images). A name "
+        "starting with `x-` is a custom capability that strata does not dispatch on.\n\n"
+        "Design notes: Capabilities this integration provides — core (see "
+        "VALID_INTEGRATION_CAPABILITIES) or an 'x-'-prefixed extension strata does not "
+        "dispatch on",
     )
     description: str | None = Field(None, description="Human-readable description of the integration")
     required: bool = Field(False, description="Whether this integration is required for platform operation")
-    enabled: bool = Field(True, description="Whether this integration is enabled")
+    enabled: bool = Field(
+        True,
+        description="Whether this integration is enabled. A disabled integration is not "
+        "auto-bound.\n\n"
+        "Design notes: Whether this integration is enabled",
+    )
     authentication: AuthenticationModel | None = Field(
         None, description="Authentication configuration for accessing the integration"
     )
     transport: str | None = Field(
         None,
-        description="How this integration is reached (e.g. 'cli', 'http', 'sdk'). An open string, checked against "
-        "the resolved integration class's own supported transports at runtime — not here, since a bare document "
-        "has no way to know what class 'type' will resolve to. Omitted lets the class choose (ADR-0021 D1).",
+        description="How the integration is reached, for example `cli`, `http` or `sdk`. Omit to "
+        "let the integration type choose. It is checked against the transports the "
+        "type supports when the integration runs, not when the document is loaded.\n\n"
+        "Design notes: How this integration is reached (e.g. 'cli', 'http', 'sdk'). An "
+        "open string, checked against the resolved integration class's own supported "
+        "transports at runtime — not here, since a bare document has no way to know "
+        "what class 'type' will resolve to. Omitted lets the class choose (ADR-0021 "
+        "D1).",
     )
     version: str | None = Field(
         None,
-        description="Tool/service version this integration expects (e.g. '~> 1.9', '>= 1.17'). An assertion, not "
-        "an install instruction: strata never installs software, so this is checked at preflight and fails on a "
-        "mismatch. The single owner of this fact (ADR-0021 D4) — a Provisioner names an Integration rather than "
-        "asserting its own version.",
+        description="Version constraint of the tool or service this integration expects, for "
+        "example `~> 1.9` or `>= 1.17`. An assertion, not an installation: strata "
+        "never installs software, so a mismatch fails the preflight check. A "
+        "provisioner names an integration rather than stating its own version.\n\n"
+        "Design notes: Tool/service version this integration expects (e.g. '~> 1.9', "
+        "'>= 1.17'). An assertion, not an install instruction: strata never installs "
+        "software, so this is checked at preflight and fails on a mismatch. The single "
+        "owner of this fact (ADR-0021 D4) — a Provisioner names an Integration rather "
+        "than asserting its own version.",
     )
     command: str | None = Field(
         None,
@@ -192,22 +253,39 @@ class IntegrationSpecModel(PlatformBaseModel):
     )
     endpoints: "IntegrationEndpointsModel | None" = Field(
         None,
-        description="Service endpoint. Required once 'transport' is networked; meaningless for a CLI-only integration.",
+        description="Service endpoint, as `address` (a URL). Required by azure-keyvault, "
+        "azure-appconfig, azure-blob, webhook, otel and sentinel; meaningless for "
+        "CLI-only integrations such as terraform.\n\n"
+        "Design notes: Service endpoint. Required once 'transport' is networked; "
+        "meaningless for a CLI-only integration.",
     )
     lifecycle: "IntegrationLifecycleModel | None" = Field(
         None,
-        description="Hook scripts keyed by phase name (e.g. 'connect_before', 'teardown'). Restricted to "
-        "Python scripts — see IntegrationLifecyclePhaseModel.",
+        description="Hook scripts per phase name, Python only. Accepted and validated, but strata "
+        "does not run lifecycle hooks yet.\n\n"
+        "Design notes: Hook scripts keyed by phase name (e.g. 'connect_before', "
+        "'teardown'). Restricted to Python scripts — see "
+        "IntegrationLifecyclePhaseModel.",
     )
     configuration: dict[str, Any] | None = Field(
         None,
-        description="Raw passthrough configuration for this integration (e.g. SDK-specific setup not otherwise "
-        "modeled). Not validated by strata, passed through as-is.",
+        description="Settings read by the integration's own type, not validated by strata. Known "
+        "keys: `webhook`: `headers`, `token_env_var`, `auth_scheme`; `otel`: "
+        "`resource_attributes`; `sentinel`: `data_collection_rule_id`, `stream_name`; "
+        "`infisical`: `project_id`, `environment`; `aikido`: `region`, `release_gate`, "
+        "`images`. Add an `attributeconfig` with `target.kind: integration` and "
+        "`target.block: configuration` to validate them.\n\n"
+        "Design notes: Raw passthrough configuration for this integration (e.g. "
+        "SDK-specific setup not otherwise modeled). Not validated by strata, passed "
+        "through as-is.",
     )
     custom: dict[str, Any] | None = Field(
         None,
-        description="Custom user-defined data for scripts or extensions. Integration is not part of the "
-        "deploy-value pipeline at all — this is not delivered as an env var or forwarded anywhere yet.",
+        description="Free-form values for your own scripts. Strata does not deliver them anywhere "
+        "yet.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Integration "
+        "is not part of the deploy-value pipeline at all — this is not delivered as an "
+        "env var or forwarded anywhere yet.",
     )
     # No default_tags/custom_tags: an Integration describes a connection to an external
     # system, not a deployed/tagged cloud resource of its own.
@@ -242,7 +320,11 @@ class IntegrationEndpointsModel(PlatformBaseModel):
 
 
 class IntegrationLifecyclePhaseModel(PlatformBaseModel):
-    """One lifecycle phase: a description plus the Python scripts it runs.
+    """One lifecycle phase: an optional description and the Python scripts it runs, as paths relative to
+    the solution root. Only Python scripts are accepted for an integration.
+
+    Design notes:
+    One lifecycle phase: a description plus the Python scripts it runs.
 
     Deliberately its own small model rather than reusing `ScriptsModel`/
     `CommonLifecycleModel` (used by deployment/module/namespace/provider/
@@ -269,7 +351,11 @@ class IntegrationLifecyclePhaseModel(PlatformBaseModel):
 
 
 class IntegrationLifecycleModel(RootModel[dict[str, IntegrationLifecyclePhaseModel]]):
-    """Lifecycle phases for an Integration, keyed by phase name.
+    """Lifecycle hooks of an integration, keyed by phase name, for example `connect_before` or `teardown`.
+    Accepted and validated, but strata does not run lifecycle hooks yet.
+
+    Design notes:
+    Lifecycle phases for an Integration, keyed by phase name.
 
     Open map (any phase name allowed), same shape as `CommonLifecycleModel`
     used elsewhere — only the phase's own script model differs (see
@@ -293,7 +379,12 @@ class IntegrationMetaModel(PlatformBaseModel):
 
 
 class IntegrationModel(PlatformBaseModel):
-    """Root model for an integration configuration file."""
+    """A connection to an external tool or service: Terraform, a secrets store, a git host, a scanner, an
+    audit destination. Create one per tool or service and reference it by name where it is needed.
+
+    Design notes:
+    Root model for an integration configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

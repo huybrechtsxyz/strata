@@ -30,7 +30,7 @@ Verified before deciding (2026-10-27):
 
 Decisions:
 
-- **V1 - CLI first, two small additions.** `strata deployment list` (name, workspace, environments,
+- **V1 - CLI first, two small additions.** `strata deploy list` (name, workspace, environments,
   partial, source; resolved through `extends` like `build run`, partials listed and marked) and a
   `source` field on `integration list` rows (`null` for type defaults). Paths are absolute, as
   `strata path` reports them. `strata path list deployment` already lists the files but cannot mark
@@ -55,10 +55,19 @@ Decisions:
   output channel, failures to an error message naming the first error.
 - **V7 - Tests stay in Python.** The CLI additions get pytest coverage; the extension keeps
   `tsc --strict` and a manual check against `config/` (`.v2-haven`), as for the Graph view.
+- **V8 - `deploy list` as the deployment matrix.** Scripts and CI need more than the extension: each row
+  also carries `extends` (the declared parent), `tenant` and `version` (both resolved through `extends`),
+  and `ring`, `order`, `wave` from the version document's `spec.promotion` (all `null` when there is no
+  version or it is untagged). Filters `--workspace`, `--tenant`, `--version`, `--ring` and `--deployable`
+  (drops partials) combine with AND and compare resolved values. A filter naming something that does not
+  exist (workspace, tenant, version, or a ring no version declares) exits 2 instead of returning an empty
+  list, so a typo cannot pass a CI matrix with nothing in it. Still schema-only: a dangling `version`
+  shows its name with a null ring, and `strata validate` reports it. The extension keeps its own
+  non-partial filter; the new fields are additive.
 
 ## Implementation Plan
 
-- [x] **Phase 1 - CLI.** `strata deployment list` (command, agent-skill row, tests); `source` on
+- [x] **Phase 1 - CLI.** `strata deploy list` (command, agent-skill row, tests); `source` on
       `integration list` rows (test).
 - [x] **Phase 2 - Deployment selector and Integrations view** (V2, V3).
 - [x] **Phase 3 - Policies view with Check and Show findings** (V4-V6).
@@ -82,3 +91,9 @@ Decisions:
   stubbed `vscode` module against `config/`: deployments (partials marked), Integrations with and
   without `prd-deployment` (`used_for` children appear), Policies ("Select a deployment" / "No
   policies configured"), and `findingGroups()` on all three findings shapes (cap, markers, link).
+- 2026-10-30: `strata deployment list` moved to `strata deploy list` (`commands/deploy_list_command.py`);
+  the `deployment` group is gone. The entries above keep the original name.
+- 2026-10-30: V8 - `deploy list` gains `extends`, `tenant`, `version`, `ring`/`order`/`wave`, the five
+  filters and the TENANT/VERSION/RING console columns (`list_deployments()` in
+  `deployment_resolution.py`, `commands/deploy_list_command.py`); `DeploymentRow` in the extension
+  mirrors the new fields.

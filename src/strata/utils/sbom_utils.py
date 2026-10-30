@@ -40,6 +40,15 @@ def is_floating_tag(tag: str | None) -> bool:
     return True
 
 
+def is_mutable_alias_tag(tag: str | None) -> bool:
+    """True for a tag that is a known mutable alias (`latest`, `main`, `dev`, ...).
+
+    Unlike `is_floating_tag()`, a tag that merely is not semver-shaped (a build number such as
+    `env_sbx_20260907.11`) is not mutable: used for a tag a `kind: version` pin chose on purpose.
+    """
+    return tag is not None and tag.lower() in _FLOATING_TAGS
+
+
 def parse_image_ref(image: str) -> tuple[str, str | None, str | None]:
     """Parse an image reference into `(name, tag, digest)`.
 

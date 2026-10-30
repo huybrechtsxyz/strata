@@ -3,7 +3,7 @@
 
 import warnings
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -20,38 +20,75 @@ from strata.utils.names import check_unique_names
 
 
 class NamespaceType(str, Enum):
-    """Namespace ownership type — controls cross-layer overlap validation."""
+    """`dedicated`: the namespace belongs to one deployment layer. `shared`: it is intentionally used by
+    several layers. Documents intent only: strata does not check cross-layer overlap yet.
+
+    Design notes:
+    Namespace ownership type — controls cross-layer overlap validation.
+    """
 
     DEDICATED = "dedicated"
     SHARED = "shared"
 
 
 class NamespaceSpecModel(PlatformBaseModel):
-    """Model for namespace spec (type, lifecycle, modules).
+    """A group of modules deployed together, typically a Kubernetes namespace or a Compose deployment: its
+    `modules`, plus optional lifecycle hooks, labels and free-form settings.
+
+    Design notes:
+    Model for namespace spec (type, lifecycle, modules).
 
     No ``references`` field (ADR-0002): scoping/typo-catching for any future
     Value bindings is a direct Phase 2 check against a real Environment, not
     an internal declared-keys list.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A namespace needs `modules`, `lifecycle` or both; an empty namespace is rejected. A "
+        "namespace with only `lifecycle` gives a warning.",
+        "Module reference names must be unique within the namespace.",
+    )
+
     type: NamespaceType = Field(
         default=NamespaceType.DEDICATED,
-        description="Namespace ownership type. 'dedicated' (default) means this namespace belongs "
-        "to a single deployment layer — cross-layer overlap is flagged as a warning. "
-        "'shared' means the namespace is intentionally used by multiple layers (e.g. "
-        "kube-system, traefik) — cross-layer overlap is suppressed.",
+        description="`dedicated` (default) or `shared`. Documents whether the namespace is used by "
+        "one deployment layer or intentionally by several; strata does not act on it "
+        "yet.\n\n"
+        "Design notes: Namespace ownership type. 'dedicated' (default) means this "
+        "namespace belongs to a single deployment layer — cross-layer overlap is "
+        "flagged as a warning. 'shared' means the namespace is intentionally used by "
+        "multiple layers (e.g. kube-system, traefik) — cross-layer overlap is "
+        "suppressed.",
     )
-    lifecycle: CommonLifecycleModel | None = Field(None, description="Namespace lifecycle phases")
-    modules: list[ModuleReferenceModel] | None = Field(None, description="List of modules in the namespace")
+    lifecycle: CommonLifecycleModel | None = Field(
+        None,
+        description="Hook scripts per phase name. Accepted and validated, but strata does not run "
+        "lifecycle hooks yet.\n\n"
+        "Design notes: Namespace lifecycle phases",
+    )
+    modules: list[ModuleReferenceModel] | None = Field(
+        None,
+        description="Modules deployed in this namespace, each a reference to a Module document. "
+        "Disabled references are skipped.\n\n"
+        "Design notes: List of modules in the namespace",
+    )
     configuration: dict[str, Any] | None = Field(
         None,
-        description="Raw passthrough configuration for this namespace (e.g. k8s namespace annotations/quotas "
-        "not otherwise modeled). Not validated by strata, passed through as-is to the builder.",
+        description="Free-form settings for this namespace (for example annotations or quotas), "
+        "passed to Terraform as `strata.namespaces.<name>.configuration`. Strata does "
+        "not validate the keys itself: add an `attributeconfig` with `target.kind: "
+        "namespace` and `target.block: configuration` to do so.\n\n"
+        "Design notes: Raw passthrough configuration for this namespace (e.g. k8s "
+        "namespace annotations/quotas not otherwise modeled). Not validated by strata, "
+        "passed through as-is to the builder.",
     )
     custom: dict[str, Any] | None = Field(
         None,
-        description="Custom user-defined data for scripts or extensions. Rides inside the `namespaces` "
-        "category payload, delivered as part of one shared `TF_VAR_namespaces` env var — not its own.",
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.namespaces.<name>.custom`. Strata does not interpret them.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside the `namespaces` category payload, delivered as part of one shared "
+        "`TF_VAR_namespaces` env var — not its own.",
     )
     # No default_tags/custom_tags: a Namespace is a Kubernetes-native grouping concept, not an
     # individually cloud-tagged ARM/AWS resource. Instead it gets default_labels/custom_labels —
@@ -60,10 +97,14 @@ class NamespaceSpecModel(PlatformBaseModel):
     # to the individual Modules/workloads placed inside it.
     default_labels: dict[str, str] | None = Field(
         None,
-        description="Baseline labels applied to this namespace itself (Kubernetes "
+        description="Baseline labels for this namespace (for example `environment`, `team`), "
+        "passed to Terraform as `strata.namespaces.<name>.default_labels`. Strata does "
+        "not set them on the Kubernetes Namespace object itself.\n\n"
+        "Design notes: Baseline labels applied to this namespace itself (Kubernetes "
         "metadata.labels on the generated Namespace object) — e.g. environment, team, "
-        "istio-injection. Optional (v1-derived documents commonly carry no labels at all — gap #4, "
-        "docs/design/gap_fit_v1.md). Strata does not enforce a maximum label count.",
+        "istio-injection. Optional (v1-derived documents commonly carry no labels at "
+        "all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum "
+        "label count.",
     )
     custom_labels: dict[str, str] | None = Field(
         None, description="Optional additional namespace labels beyond default_labels."
@@ -108,7 +149,12 @@ class NamespaceMetaModel(PlatformBaseModel):
 
 
 class NamespaceModel(PlatformBaseModel):
-    """Root model for a namespace resource."""
+    """A group of modules deployed together, for example a Kubernetes namespace or a Compose deployment.
+    Create one per group, list it in a workspace's `namespaces`, and let an execution step deploy it.
+
+    Design notes:
+    Root model for a namespace resource.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

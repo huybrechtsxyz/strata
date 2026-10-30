@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from sys import stdin
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from strata.controllers.deployment_resolution import deployment_workspace, resolve_deployment_chains
 from strata.controllers.integration_resolution import bind_integration_config
@@ -249,6 +249,56 @@ def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactMo
     return cast(ArtifactModel, entry.model)
 
 
+@dataclass(frozen=True)
+class ArtifactTag:
+    """An artifact's effective tag and where it came from.
+
+    `source` is `pin` (a `kind: version` pin won), `declared` (the artifact's own `image_tag`) or `none`
+    (neither supplied one; `value` is `None`). `version` names the version document for a `pin`.
+    """
+
+    value: str | None
+    source: Literal["pin", "declared", "none"]
+    version: str | None = None
+
+
+def resolve_artifact_tag(
+    context: SolutionContext, deployment: DeploymentModel, artifact_name: str
+) -> ArtifactTag | None:
+    """The effective tag of `artifact_name` for `deployment`, or `None` when the artifact does not exist.
+
+    Consults `deployment.spec.version` -> `VersionModel.spec.pins.artifacts[artifact_name]` first (via
+    `VersionService.resolve()`, the single shared pin lookup every overlay category uses,
+    docs/design/version-pin-overlay.md), then the artifact's own `image_tag`. Every pin application is
+    logged (ADR-0019 decision 7). `None` means "no such artifact", never "no tag": that is an
+    `ArtifactTag` with `source="none"`.
+    """
+    artifact = resolve_artifact(context, artifact_name)
+    if artifact is None:
+        return None
+    declared = artifact.spec.image_tag or None
+    if deployment.spec.version:
+        version_entry = context.controller.index.get(PlatformKind.VERSION, deployment.spec.version)
+        if version_entry is not None:
+            version = cast(VersionModel, version_entry.model)
+            pin = VersionService.from_model(version).resolve("artifacts", artifact_name)
+            if pin is not None:
+                log_pin_applied("artifacts", artifact_name, declared, pin.version, version.meta.name)
+                return ArtifactTag(pin.version, "pin", version.meta.name)
+    return ArtifactTag(declared, "declared" if declared else "none")
+
+
+def compose_image_ref(image_name: str, image_tag: str | None) -> str:
+    """`name:tag`, `name@algo:digest` for a digest, or the bare name when there is no tag.
+
+    A tag never contains `:`, so a value that does is a digest (`sha256:...`).
+    """
+    if not image_tag:
+        return image_name
+    separator = "@" if ":" in image_tag else ":"
+    return f"{image_name}{separator}{image_tag}"
+
+
 def resolve_artifact_field(
     context: SolutionContext, deployment: DeploymentModel, artifact_name: str, field: str
 ) -> str | None:
@@ -260,18 +310,15 @@ def resolve_artifact_field(
     - `image_name` is identity — read straight off the artifact document,
       never pin-overlaid (matches `chart_name`'s treatment — a pin never
       changes what's being pinned, only its version).
-    - `image_tag` consults `deployment.spec.version` -> `VersionModel.spec.
-      pins.artifacts[artifact_name]` first (via `VersionService.resolve()`,
-      the single shared pin lookup every overlay category uses,
-      docs/design/version-pin-overlay.md); falls back to the artifact's
-      own declared `image_tag` when unset or no pin exists. Every
-      application is logged (ADR-0019 decision 7).
-    - `image_ref` synthesises `"{image_name}:{image_tag}"` (or bare
-      `image_name` when the tag is blank/unset) — adminapp's real combined
-      Terraform variable shape (docs/work/artifact-references.md).
+    - `image_tag` is the effective tag (`resolve_artifact_tag()`), `""` when
+      neither a pin nor the artifact supplies one.
+    - `image_ref` is `compose_image_ref()` of the name and effective tag —
+      adminapp's real combined Terraform variable shape
+      (docs/work/artifact-references.md).
 
-    Returns `None` when `artifact_name` doesn't resolve — same
+    Returns `None` only when `artifact_name` doesn't resolve — same
     silently-return-None treatment as `resolve_artifact()`/`resolve_tenant()`.
+    A blank tag is `""`, not `None`.
     """
     artifact = resolve_artifact(context, artifact_name)
     if artifact is None:
@@ -279,22 +326,12 @@ def resolve_artifact_field(
     if field == "image_name":
         return artifact.spec.image_name
 
-    image_tag = artifact.spec.image_tag
-    if deployment.spec.version:
-        version_entry = context.controller.index.get(PlatformKind.VERSION, deployment.spec.version)
-        if version_entry is not None:
-            version = cast(VersionModel, version_entry.model)
-            pin = VersionService.from_model(version).resolve("artifacts", artifact_name)
-            if pin is not None:
-                log_pin_applied("artifacts", artifact_name, image_tag, pin.version, version.meta.name)
-                image_tag = pin.version
-
+    tag = resolve_artifact_tag(context, deployment, artifact_name)
+    image_tag = tag.value if tag is not None else None
     if field == "image_tag":
-        return image_tag
+        return image_tag or ""
     # field == "image_ref": synthesised, never a stored field.
-    if not image_tag:
-        return artifact.spec.image_name
-    return f"{artifact.spec.image_name}:{image_tag}"
+    return compose_image_ref(artifact.spec.image_name, image_tag)
 
 
 def reachable_environments(context: SolutionContext, deployment: DeploymentModel) -> list[EnvironmentModel]:

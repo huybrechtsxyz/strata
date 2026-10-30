@@ -9,7 +9,7 @@ shouldn't have to grow one shared file for every new type. Referenced from
 `Configuration` by name+file, same pattern as everywhere else.
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -26,7 +26,14 @@ from strata.utils.names import check_unique_names
 class TopologyConfigComponentModel(PlatformBaseModel):
     """A topology type's registry entry for one expected component role."""
 
-    role: PlatformName = Field(description="Component role (matched against WorkspaceResourceModel.role)")
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`max_count` must be at least `min_count`, unless `max_count` is 0 (unlimited).",
+    )
+
+    role: PlatformName = Field(
+        description="Component role, matched against the `role` of a workspace's resources.\n\n"
+        "Design notes: Component role (matched against WorkspaceResourceModel.role)"
+    )
     description: str | None = Field(None, description="Description of this component role")
     uses_module: bool = Field(False, description="Whether a resource with this role must have a module attached")
     required: bool = Field(True, description="Whether at least one resource with this role must be present")
@@ -45,6 +52,8 @@ class TopologyConfigComponentModel(PlatformBaseModel):
 
 class TopologyConfigSpecModel(PlatformBaseModel):
     """A topology type's registry entry: its expected component roles."""
+
+    schema_rules: ClassVar[tuple[str, ...]] = ("Component roles must be unique within the topology type.",)
 
     description: str | None = Field(None, description="Description of the topology type")
     additional_components: bool = Field(
@@ -80,7 +89,13 @@ class TopologyConfigMetaModel(PlatformBaseModel):
 
 
 class TopologyConfigModel(PlatformBaseModel):
-    """Root model for a topology type registry entry."""
+    """Registry entry for one topology type (for example `kubernetes`): the component roles a workspace of
+    that type is expected to have. Create one per topology type and list its name in the Configuration's
+    `spec.topologies`. `meta.name` is matched against a Topology's `spec.type`.
+
+    Design notes:
+    Root model for a topology type registry entry.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

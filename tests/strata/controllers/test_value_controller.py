@@ -10,11 +10,13 @@ import pytest
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import (
     build_value_references,
+    compose_image_ref,
     is_direct_store,
     list_values,
     reachable_environments,
     resolve_artifact,
     resolve_artifact_field,
+    resolve_artifact_tag,
     resolve_deployment,
     resolve_deployment_workspace,
     resolve_diagnostic,
@@ -528,6 +530,92 @@ def test_resolve_artifact_field_returns_none_when_artifact_missing(tmp_path):
     assert resolve_artifact_field(context, deployment, "ghost", "image_tag") is None
 
 
+def _tag_context(tmp_path, *, image_tag=None, pins=None, version=False):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int/api", image_tag=image_tag)
+    if pins:
+        _version_doc(root, "prd", artifact_pins=pins)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", version="prd" if version else None, environments=["prd"])
+    context = _context(root)
+    return context, resolve_deployment(context, "app")
+
+
+def test_resolve_artifact_tag_reports_a_pin_and_its_version_document(tmp_path):
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"dspapi_container": "2.0.0"}, version=True)
+    tag = resolve_artifact_tag(context, deployment, "dspapi_container")
+    assert (tag.value, tag.source, tag.version) == ("2.0.0", "pin", "prd")
+
+
+def test_resolve_artifact_tag_reports_a_declared_tag(tmp_path):
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0")
+    tag = resolve_artifact_tag(context, deployment, "dspapi_container")
+    assert (tag.value, tag.source, tag.version) == ("1.0.0", "declared", None)
+
+
+@pytest.mark.parametrize("declared", [None, ""])
+def test_resolve_artifact_tag_with_no_tag_and_no_pin_is_none_not_a_missing_artifact(tmp_path, declared):
+    context, deployment = _tag_context(tmp_path, image_tag=declared)
+    tag = resolve_artifact_tag(context, deployment, "dspapi_container")
+    assert tag is not None
+    assert (tag.value, tag.source) == (None, "none")
+
+
+def test_resolve_artifact_tag_is_none_for_an_unknown_artifact(tmp_path):
+    context, deployment = _tag_context(tmp_path)
+    assert resolve_artifact_tag(context, deployment, "ghost") is None
+
+
+@pytest.mark.parametrize("declared", [None, ""])
+def test_resolve_artifact_field_image_tag_is_an_empty_string_when_blank(tmp_path, declared):
+    """A blank tag is `""`, never `None`: `None` means the artifact does not exist."""
+    context, deployment = _tag_context(tmp_path, image_tag=declared)
+    assert resolve_artifact_field(context, deployment, "dspapi_container", "image_tag") == ""
+
+
+def test_a_store_artifact_variable_with_no_tag_resolves_to_empty_not_unknown_artifact(tmp_path):
+    """Used to report "not a known artifact" for an artifact that exists but has no tag."""
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int/api")
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: API_TAG\n      store: artifact\n      value: dspapi_container\n"
+        "      field: image_tag\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    result = resolve_values(_context(root), "app", ["API_TAG"])
+
+    assert result.diagnostics.ok, result.diagnostics.messages()
+    assert result.values == {"API_TAG": ""}
+
+
+def test_a_store_artifact_variable_for_an_unknown_artifact_still_reports_it(tmp_path):
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: API_TAG\n      store: artifact\n      value: ghost\n      field: image_tag\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    result = resolve_values(open_solution(root), "app", ["API_TAG"])
+
+    assert not result.diagnostics.ok
+    assert "not a known artifact" in result.diagnostics.errors[0].message
+
+
+@pytest.mark.parametrize(
+    ("tag", "expected"),
+    [("1.0.0", "img:1.0.0"), (None, "img"), ("", "img"), ("sha256:abc", "img@sha256:abc")],
+)
+def test_compose_image_ref(tag, expected):
+    assert compose_image_ref("img", tag) == expected
+
+
 def test_build_value_references_artifact_store_resolves_with_context_and_deployment(tmp_path):
     root = _solution(tmp_path)
     _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
@@ -767,6 +855,95 @@ def test_resolve_document_value_references_resolves_a_nested_spec_field(tmp_path
 
     assert diagnostics.ok, diagnostics.messages()
     assert values == {"tenant.c0062.spec.display_name": "GSK plc"}
+
+
+_PINNABLE_MODULE = """apiVersion: strata.huybrechts.xyz/v2
+kind: module
+meta:
+  name: web-module
+spec:
+  type: docker-compose
+  default_labels:
+    environment: test
+  source:
+    source_path: modules/web
+  services:
+    - name: web
+      image: nginx:1.27
+"""
+
+_PINNABLE_ASSET = """apiVersion: strata.huybrechts.xyz/v2
+kind: asset
+meta:
+  name: located-api
+spec:
+  source_path: api
+  location:
+    type: git
+    url: https://example.com/c.git
+    reference: v1
+"""
+
+
+@pytest.mark.parametrize(
+    ("token", "category"),
+    [
+        ("${value:artifact.api.spec.image_tag}", "artifacts"),
+        ("${value:module.web-module.spec.services.web.image}", "images"),
+        ("${value:module.web-module.spec.services.0.image}", "images"),
+        ("${value:asset.located-api.spec.location.reference}", "assets"),
+    ],
+)
+def test_resolve_document_value_references_rejects_a_field_a_version_pin_overrides(tmp_path, token, category):
+    root = _solution(tmp_path)
+    _artifact(root, "api", image_name="int/api", image_tag="1.0.0")
+    _write(root, "module.yaml", _PINNABLE_MODULE)
+    _write(root, "asset.yaml", _PINNABLE_ASSET)
+    _probe(root, token)
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert values == {}
+    assert diagnostics.items[0].code == "value_reference_pinnable_field"
+    assert f"pins.{category}" in diagnostics.items[0].message
+
+
+def test_resolve_document_value_references_points_an_artifact_tag_reference_at_store_artifact(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "api", image_name="int/api", image_tag="1.0.0")
+    _probe(root, "${value:artifact.api.spec.image_tag}")
+    context = _context(root)
+
+    _values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert "store: artifact" in diagnostics.items[0].message
+
+
+def test_pin_category_covers_the_chart_version_path_and_ignores_other_module_fields():
+    from strata.controllers.value_references import _pin_category
+    from strata.models.common_models import PlatformKind
+
+    assert _pin_category(PlatformKind.MODULE, ["spec", "source", "chart_version"]) == "charts"
+    assert _pin_category(PlatformKind.MODULE, ["spec", "source", "chart_name"]) is None
+    assert _pin_category(PlatformKind.TENANT, ["spec", "image_tag"]) is None
+
+
+def test_resolve_document_value_references_still_resolves_unpinned_artifact_and_module_fields(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "api", image_name="int/api", image_tag="1.0.0")
+    _write(root, "module.yaml", _PINNABLE_MODULE)
+    _probe(root, "${value:artifact.api.spec.image_name}")
+    _probe(root, "${value:module.web-module.spec.services.web.name}", name="probe2")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert values == {
+        "artifact.api.spec.image_name": "int/api",
+        "module.web-module.spec.services.web.name": "web",
+    }
 
 
 def test_resolve_document_value_references_rejects_unknown_kind(tmp_path):

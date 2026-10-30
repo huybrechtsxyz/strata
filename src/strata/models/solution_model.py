@@ -41,7 +41,7 @@ but the loader's index must be keyed `(remote, kind, name)` with
 """
 
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -62,7 +62,12 @@ from strata.utils.path_safety import (
 
 
 class RemoteType(str, Enum):
-    """Remote artifact-source type — *what kind of thing* a remote is.
+    """What kind of source a remote is: `git` (a git repository), `oci` (an OCI registry serving images,
+    Helm charts or other artifacts), `helm` (a Helm chart repository index) or `local` (a directory
+    inside the solution). Who fetches the remote is a separate setting, `fetch`.
+
+    Design notes:
+    Remote artifact-source type — *what kind of thing* a remote is.
 
     Ports v1's `RemoteType` with clearer names: `GITOPS` -> `GIT` (GitOps is
     a delivery methodology, not a source type — the thing being declared is
@@ -81,7 +86,12 @@ class RemoteType(str, Enum):
 
 
 class RemoteFetch(str, Enum):
-    """Who is responsible for materialising a remote on disk.
+    """Who materialises a remote on disk: `strata` (default) fetches it, `external` means CI or the
+    developer already checked it out and strata only reads it. Use `external` with the real `type` (for
+    example `git` plus the pinned `reference`) when a pipeline clones the repository itself.
+
+    Design notes:
+    Who is responsible for materialising a remote on disk.
 
     Split out of `type` because v1 conflated the two, and real deployments
     had to lie about the type to get the behaviour they needed. A production
@@ -101,7 +111,15 @@ class RemoteFetch(str, Enum):
 
 
 class SolutionRemoteModel(PlatformBaseModel):
-    """A named remote artifact source, referenced elsewhere as ``@<name>/<path>``.
+    """A named remote source of modules, charts or files, referenced elsewhere as `@<name>/<path>` (for
+    example `source: @infra/modules/network`).
+
+    A remote only says where the source is, at which ref and how to authenticate. What to take from it
+    is chosen where it is used. Declaring a source once here gives one place to rotate credentials, one
+    place to redirect to a mirror, and a single pinned ref per repository for the whole solution.
+
+    Design notes:
+    A named remote artifact source, referenced elsewhere as ``@<name>/<path>``.
 
     Declares *identity and location only* — "where `infra` is, at which ref,
     authenticated how". Selecting *what* to take from it belongs at the use
@@ -147,9 +165,24 @@ class SolutionRemoteModel(PlatformBaseModel):
             integration: corp-git
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`reference` is required for type `git`: pin a branch, tag or commit SHA.",
+        "`reference` is not allowed for type `helm` or `local`; pick chart versions where the "
+        "chart is used (`chart_version`).",
+        "For type `oci`, `reference` is required when the remote serves a non-chart artifact (pin "
+        "one tag or digest) and optional when it only serves charts.",
+        "Type `local`: `url` is a path relative to the solution root without `..`, and "
+        "`integration` and a non-default `fetch` are not allowed.",
+        "`url` must not embed credentials or start with `-`; put credentials in an Integration and "
+        "name it in `integration`.",
+    )
+
     name: PlatformName = Field(
-        description="Remote name, used as the '@<name>' prefix at every use site. Required — v1 made this "
-        "field Optional, and its own get_remote_map() then silently skipped unnamed entries."
+        description="Remote name, used as the `@<name>` prefix wherever the remote is referenced "
+        "(for example `@infra/modules/network`). Required.\n\n"
+        "Design notes: Remote name, used as the '@<name>' prefix at every use site. "
+        "Required — v1 made this field Optional, and its own get_remote_map() then "
+        "silently skipped unnamed entries."
     )
     type: RemoteType = Field(description="What kind of source this is: git, oci, helm, or local")
     url: str = Field(
@@ -159,14 +192,22 @@ class SolutionRemoteModel(PlatformBaseModel):
     reference: str | None = Field(
         None,
         min_length=1,
-        description="Ref every artifact from this remote is taken at (git branch/tag/commit SHA, or OCI "
-        "tag/digest). Required for git remotes always. For OCI, required only when the remote serves "
-        "non-chart artifacts (a real image/blob pinned at one immutable digest) — optional when every "
-        "consumer is a chart-based SourceModel, since a chart index legitimately serves many versions and "
-        "the real pin is SourceModel.chart_version instead. Whether an OCI remote is chart-serving needs "
-        "the loaded solution's SourceModel usages, so that half of the rule is a Phase 2 check "
-        "(docs/design/solution-loading-and-phase2-validation.md, gap #3) — this field is merely optional "
-        "here, and schema-valid to omit even for a non-chart OCI remote until Phase 2 sees a real consumer.",
+        description="The ref every artifact of this remote is taken at: a git branch, tag or "
+        "commit SHA, or an OCI tag or digest. Required for `git`. For `oci`, required "
+        "when the remote serves a real image or blob (pinned at one immutable digest) "
+        "and optional when it only serves Helm charts, where the version is chosen per "
+        "chart with `chart_version`. Not allowed for `helm` or `local`.\n\n"
+        "Design notes: Ref every artifact from this remote is taken at (git "
+        "branch/tag/commit SHA, or OCI tag/digest). Required for git remotes always. "
+        "For OCI, required only when the remote serves non-chart artifacts (a real "
+        "image/blob pinned at one immutable digest) — optional when every consumer is "
+        "a chart-based SourceModel, since a chart index legitimately serves many "
+        "versions and the real pin is SourceModel.chart_version instead. Whether an "
+        "OCI remote is chart-serving needs the loaded solution's SourceModel usages, "
+        "so that half of the rule is a Phase 2 check "
+        "(docs/design/solution-loading-and-phase2-validation.md, gap #3) — this field "
+        "is merely optional here, and schema-valid to omit even for a non-chart OCI "
+        "remote until Phase 2 sees a real consumer.",
     )
     fetch: RemoteFetch = Field(
         default=RemoteFetch.STRATA,
@@ -255,7 +296,12 @@ class SolutionRemoteModel(PlatformBaseModel):
 
 
 class SolutionDiscoveryModel(PlatformBaseModel):
-    """Tuning for the document discovery scan (ADR-0015).
+    """Tuning for how strata finds documents under the solution root. Only `exclude` exists: add patterns
+    for folders that hold strata-shaped YAML which must not be loaded, such as a `templates/` or
+    `examples/` folder with placeholders.
+
+    Design notes:
+    Tuning for the document discovery scan (ADR-0015).
 
     Only `exclude` — deliberately no `include`. An include list overlaps with
     "where the solution root is", and include/exclude precedence is a
@@ -290,6 +336,10 @@ class SolutionDiscoveryModel(PlatformBaseModel):
 
 class SolutionSpecModel(PlatformBaseModel):
     """Solution specification: where Configuration lives, and what this solution is composed of."""
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Remote names must be unique, because the name is how `@<name>/...` references are resolved.",
+    )
 
     configuration: str = Field(
         "config",
@@ -334,7 +384,13 @@ class SolutionMetaModel(PlatformBaseModel):
 
 
 class SolutionModel(PlatformBaseModel):
-    """Root model for the solution manifest (`strata.yaml`)."""
+    """The solution manifest, `strata.yaml`, at the root of every strata solution. It names the solution,
+    points to the Configuration (`spec.configuration`) and declares the remotes (git, OCI, Helm or local
+    sources) that other documents reference as `@<name>/<path>`. One per solution.
+
+    Design notes:
+    Root model for the solution manifest (`strata.yaml`).
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

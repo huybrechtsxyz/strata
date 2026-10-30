@@ -11,8 +11,11 @@ strata validate  ->  strata build run D  ->  strata policy check D  ->  strata d
    offline            renders, no network       optional gate              executes tools
 ```
 
-`D` is the `meta.name` of a `kind: deployment` document. `strata deployment list` lists them; a
-deployment marked `(partial)` is a base that others extend and cannot be deployed.
+`D` is the `meta.name` of a `kind: deployment` document. `strata deploy list` lists them; a
+deployment marked `(partial)` is a base that others extend and cannot be deployed. To build a CI matrix, ask for
+the deployable ones of one workspace and ring: `strata deploy list --workspace W --ring R --deployable -o json`
+returns `data.deployments[]` (`name`, `tenant`, `version`, `ring`, `order`, ...). A filter that names nothing
+exits 2 instead of returning an empty list.
 
 ## 1. The four steps
 
@@ -164,6 +167,11 @@ Notes on the workflow:
   execution step, for example `infra` or `apps`) or `--stage NAME`. A workflow that needs no
   kubeconfig can then never touch the Helm steps.
 - `--follow` streams the tools' output live; see [deploy-run-streaming.md](deploy-run-streaming.md).
+- To copy the deployment's images to a registry before `deploy run` (for example from a build feed to the
+  registry the apps pull from), list them with `strata deploy images "$DEPLOYMENT" -o json`. Each entry in
+  `data.images[]` has `image_name`, `image_tag`, `image_ref` and `registry`, with any version pin applied.
+  It needs no build and reads no secret, and takes `--pin` like the other commands. An image with no tag
+  is reported as a warning.
 
 ## 5. Plan in one job, apply in another
 

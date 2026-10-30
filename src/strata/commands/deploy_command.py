@@ -25,6 +25,8 @@ from typing import Literal, TypeVar
 
 import click
 
+from strata.commands.deploy_images_command import deploy_images_command
+from strata.commands.deploy_list_command import deploy_list_command
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
@@ -38,7 +40,11 @@ _F = TypeVar("_F", bound=Callable[..., object])
 
 @click.group("deploy")
 def deploy_command() -> None:
-    """Execute a deployment's workspace provisioners."""
+    """List deployments and their images, or execute a deployment's workspace provisioners."""
+
+
+deploy_command.add_command(deploy_list_command)
+deploy_command.add_command(deploy_images_command)
 
 
 def _shared_deploy_options(follow_default: str | None = None) -> Callable[[_F], _F]:

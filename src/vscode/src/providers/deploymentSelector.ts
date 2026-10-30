@@ -3,7 +3,7 @@
  * are scoped to (docs/work/vscode-integrations-policies-views.md V2).
  *
  * One status bar item plus the `Strata: Select Deployment` quick pick of
- * every non-partial deployment from `strata deployment list`. The choice is
+ * every non-partial deployment from `strata deploy list`. The choice is
  * kept in workspaceState, so it survives a reload; `onDidChange` tells both
  * views to refresh.
  */

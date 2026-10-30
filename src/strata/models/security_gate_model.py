@@ -8,7 +8,7 @@ guardrails; unlike those two they run at deploy preflight, because they need the
 resolved credentials (ADR-0022 D4).
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import Field, model_validator
 
@@ -18,6 +18,8 @@ from strata.models.reference_fields import References
 
 class ReleaseGatePolicyModel(PlatformBaseModel):
     """Gate a deploy on a platform's verdict for the solution repository at the deployed commit."""
+
+    schema_rules: ClassVar[tuple[str, ...]] = ("`poll_interval` must be smaller than `timeout`.",)
 
     integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] = Field(
         description="Integration document declaring the 'release_gate' capability that gives the verdict"

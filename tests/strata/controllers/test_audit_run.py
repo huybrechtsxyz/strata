@@ -416,6 +416,81 @@ def test_manifest_pin_records_the_pinned_effective_values_not_the_on_disk_ones(t
     assert {"name": "authentik", "chart": "authentik", "version": "2024.2.0"} in artifacts["charts"]
 
 
+def _add_artifact_image(root: Path, *, pin: str | None) -> None:
+    """A `store: artifact` variable on `prd` for an artifact with no tag of its own, plus (optionally) its pin."""
+    _write(
+        root,
+        "artifact.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: datahub\nspec:\n"
+        "  image_name: int-docker-test/src/datahub.api\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: DATAHUB_TAG\n      store: artifact\n      value: datahub\n      field: image_tag\n",
+    )
+    if pin is not None:
+        version = root / "version.yaml"
+        version.write_text(version.read_text() + f"    artifacts:\n      datahub: '{pin}'\n")
+
+
+def test_manifest_records_an_artifact_image_with_its_pinned_tag(tmp_path: Path, _terraform_stub):
+    """A `store: artifact` image reaches no module, so the module-only walk used to leave it out."""
+    root = _solution_with_workload(tmp_path, version_doc=_WORKLOAD_VERSION_DOC)
+    _add_artifact_image(root, pin="1.2.3")
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    import json as _json
+
+    manifest = _json.loads(next(layout.audit_dir(root).rglob("_manifest.json")).read_text())
+    images = manifest["artifacts"]["images"]
+    assert {"name": "datahub", "image": "int-docker-test/src/datahub.api:1.2.3"} in images
+    assert {"name": "redis", "image": "redis:7.2"} in images
+
+
+def test_sbom_lists_the_pinned_module_image_and_the_artifact_image(tmp_path: Path, _terraform_stub):
+    """`sbom.json` used to list `redis:7` (the declared image) and no artifact at all."""
+    import json as _json
+
+    root = _solution_with_workload(tmp_path, version_doc=_WORKLOAD_VERSION_DOC)
+    _add_artifact_image(root, pin="1.2.3")
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    components = _json.loads((build_path / "sbom.json").read_text())["components"]
+    containers = {c["name"]: c for c in components if c["type"] == "container"}
+
+    assert containers["redis"]["version"] == "7.2"
+    assert containers["datahub"]["version"] == "1.2.3"
+    assert not any(p["name"] == "strata:tag-stability" for p in containers["datahub"].get("properties", []))
+
+
+def test_sbom_applies_the_chart_pin_too(tmp_path: Path, _terraform_stub):
+    import json as _json
+
+    root = _solution_with_workload(tmp_path, version_doc=_WORKLOAD_VERSION_DOC)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    components = _json.loads((build_path / "sbom.json").read_text())["components"]
+
+    assert any(c["name"] == "authentik" and c.get("version") == "2024.2.0" for c in components)
+
+
+def test_sbom_flags_an_artifact_image_with_no_tag_as_floating(tmp_path: Path, _terraform_stub):
+    import json as _json
+
+    root = _solution_with_workload(tmp_path, version_doc=_WORKLOAD_VERSION_DOC)
+    _add_artifact_image(root, pin=None)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    components = _json.loads((build_path / "sbom.json").read_text())["components"]
+    datahub = next(c for c in components if c["name"] == "datahub")
+
+    assert {"name": "strata:tag-stability", "value": "floating"} in datahub["properties"]
+
+
 def test_manifest_artifacts_bom_absent_when_workspace_reaches_nothing(tmp_path: Path, _terraform_stub):
     """The base `_solution_root()` fixture (no namespaces/modules/remotes
     reachable) must not regress — repositories/images/charts stay unset,

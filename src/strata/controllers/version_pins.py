@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """Version pin checking — does a declared pin target anything real?
 
-There is no build/deploy layer yet, so a pin cannot be "applied" to a
-rendered artifact — nothing renders artifacts. What `strata validate` can
-honestly do today is check *existence and applicability*: does the pinned
+Applying a pin is not this module's job: `build run` overlays images, charts, remotes
+and assets, and `store: artifact` resolves `artifacts` pins at deploy time. What
+`strata validate` checks here is *existence and applicability*: does the pinned
 target exist, and if it does, is pinning it even meaningful (a chart pin
 against a git-mode module, a remote pin against one CI already placed)?
-Computing an "effective image/chart/ref" map for a future builder to consume
-would be machinery with no consumer yet — the same restraint this session
-applied to ring/promotion and NDJSON.
 
 Checked once per **Version document**, not once per deployment that
 references it — a pin is a fact about the version document, independent of
@@ -135,6 +132,15 @@ def check_version_pins(index: DocumentIndex, solution: SolutionModel | None) -> 
                         source=str(entry.source),
                         location=location,
                         code="pin_not_applicable",
+                    )
+
+            elif category == "artifacts":
+                if index.get(PlatformKind.ARTIFACT, name) is None:
+                    diagnostics.warning(
+                        f"artifact pin '{name}' matched no artifact document",
+                        source=str(entry.source),
+                        location=location,
+                        code="stale_pin",
                     )
 
             elif category == "assets":

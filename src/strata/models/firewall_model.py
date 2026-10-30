@@ -3,7 +3,7 @@
 
 import re
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -41,7 +41,12 @@ class FirewallProtocol(str, Enum):
 
 
 class FirewallRuleModel(PlatformBaseModel):
-    """Model for an individual firewall rule.
+    """One firewall rule: `direction`, and optionally `proto`, `port`, `interface`, `from`, `to` and a
+    `comment`. `from` and `to` are a literal IP or CIDR, or a string with value tokens such as
+    `${var:KEY}`, `${secret:KEY}` or `${feature:KEY}`.
+
+    Design notes:
+    Model for an individual firewall rule.
 
     Supports direction, protocol, port(s), interface, source/destination, and
     comment. ``from``/``to`` are Value bindings (ADR-0002): a literal IP or
@@ -53,23 +58,39 @@ class FirewallRuleModel(PlatformBaseModel):
     built for `network`/`dns`).
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`proto` is required when `port` is set.",
+        "An `icmp` rule cannot set `port`.",
+    )
+
     model_config = ConfigDict(populate_by_name=True)
 
     name: str | None = Field(
         None,
-        description="Optional rule identifier, unique within the ruleset (across both allow and deny) when "
-        "set. Required by most real implementations (e.g. Azure NSG, GCP firewall rules) but optional here "
-        "to stay non-breaking for existing documents that predate this field.",
+        description="Optional rule identifier, unique within the ruleset (across `allow` and "
+        "`deny`) when set. Most clouds require one, for example Azure NSG and GCP "
+        "firewall rules.\n\n"
+        "Design notes: Optional rule identifier, unique within the ruleset (across "
+        "both allow and deny) when set. Required by most real implementations (e.g. "
+        "Azure NSG, GCP firewall rules) but optional here to stay non-breaking for "
+        "existing documents that predate this field.",
     )
     priority: int | None = Field(
         None,
-        description="Optional explicit evaluation order (lower evaluated first, matching Azure NSG/GCP "
-        "firewall semantics) — not universal (AWS Security Groups have no such concept at all), so left "
-        "optional rather than required. Makes ordering intent part of the reviewable YAML source instead of "
-        "an emergent property of list position plus whatever the consuming provisioner's translation layer "
-        "invents. Does not by itself guarantee precedence over a cloud provider's own injected default rules "
-        "(e.g. Azure's non-removable AllowAzureLoadBalancerInBound) — those live at cloud-reserved priority "
-        "numbers strata's schema has no knowledge of; the author still has to pick a safe value.",
+        description="Optional evaluation order, lower first, as in Azure NSG and GCP firewall "
+        "rules. AWS security groups have no such concept. It does not guarantee "
+        "precedence over a cloud's own reserved default rules, so pick a value that is "
+        "safe for your provider.\n\n"
+        "Design notes: Optional explicit evaluation order (lower evaluated first, "
+        "matching Azure NSG/GCP firewall semantics) — not universal (AWS Security "
+        "Groups have no such concept at all), so left optional rather than required. "
+        "Makes ordering intent part of the reviewable YAML source instead of an "
+        "emergent property of list position plus whatever the consuming provisioner's "
+        "translation layer invents. Does not by itself guarantee precedence over a "
+        "cloud provider's own injected default rules (e.g. Azure's non-removable "
+        "AllowAzureLoadBalancerInBound) — those live at cloud-reserved priority "
+        "numbers strata's schema has no knowledge of; the author still has to pick a "
+        "safe value.",
     )
     direction: FirewallDirection = Field(..., description="Direction of traffic: 'in' for inbound, 'out' for outbound.")
     proto: FirewallProtocol | None = Field(
@@ -95,9 +116,13 @@ class FirewallRuleModel(PlatformBaseModel):
     comment: str | None = Field(None, description="Optional comment or documentation for the rule.")
     custom: dict[str, Any] | None = Field(
         None,
-        description="Raw provider-specific passthrough for this rule (e.g. Azure's 'destination is an "
-        "Application Security Group, not an address' pattern, which has no cross-cloud equivalent). Not "
-        "validated by strata, passed through as-is to the provisioner.",
+        description="Provider-specific values for this rule, for example Azure's \"destination is "
+        'an Application Security Group" pattern, passed to Terraform inside the rule. '
+        "Strata does not validate them.\n\n"
+        "Design notes: Raw provider-specific passthrough for this rule (e.g. Azure's "
+        "'destination is an Application Security Group, not an address' pattern, which "
+        "has no cross-cloud equivalent). Not validated by strata, passed through as-is "
+        "to the provisioner.",
     )
 
     @field_validator("from_", "to")
@@ -164,13 +189,24 @@ class FirewallDefaultsModel(PlatformBaseModel):
 
 
 class FirewallSpecModel(PlatformBaseModel):
-    """Model for a firewall ruleset specification.
+    """A firewall ruleset: optional default allow or deny per direction, plus explicit `allow` and `deny`
+    rules. A workspace uses it by listing the document in `firewalls`; a workspace resource can attach
+    it.
+
+    Design notes:
+    Model for a firewall ruleset specification.
 
     No ``references`` field: v1 never had one for Firewall either (ADR-0001
     flagged this as a gap and proposed adding it; superseded by ADR-0002 —
     parametrization is now handled via Value tokens directly on `from`/`to`,
     not a hand-authored declared-keys list).
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Default rules must have unique directions: at most one for `in` and one for `out`.",
+        "The same rule (direction, proto, port, from and to) must not appear in both `allow` and `deny`.",
+        "Rule names, where set, must be unique across `allow` and `deny` together.",
+    )
 
     reset: bool | None = Field(
         False,
@@ -184,23 +220,42 @@ class FirewallSpecModel(PlatformBaseModel):
     allow: list[FirewallRuleModel] | None = Field(None, description="List of explicit allow rules.")
     configuration: dict[str, Any] | None = Field(
         None,
-        description="Raw provisioner-specific passthrough configuration (e.g. Terraform NSG arguments not "
-        "otherwise modeled). Not validated by strata, passed through as-is to the provisioner.",
+        description="Free-form provisioner settings (for example Terraform NSG arguments strata "
+        "does not model), passed to Terraform as "
+        "`strata.firewalls.<name>.configuration`. Strata does not validate the keys "
+        "itself: add an `attributeconfig` with `target.kind: firewall` and "
+        "`target.block: configuration` to do so.\n\n"
+        "Design notes: Raw provisioner-specific passthrough configuration (e.g. "
+        "Terraform NSG arguments not otherwise modeled). Not validated by strata, "
+        "passed through as-is to the provisioner.",
     )
     custom: dict[str, Any] | None = Field(
         None,
-        description="Custom user-defined data for scripts or extensions. Rides inside the `firewalls` "
-        "category payload, delivered as part of one shared `TF_VAR_firewalls` env var — not its own.",
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.firewalls.<name>.custom`. Strata does not interpret them. Validate "
+        "them with an `attributeconfig` targeting `firewall` and `custom`.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside the `firewalls` category payload, delivered as part of one shared "
+        "`TF_VAR_firewalls` env var — not its own.",
     )
     default_tags: dict[str, str] | None = Field(
         None,
-        description="Baseline cloud provider tags for this firewall/NSG (e.g. cost-center, "
-        "environment, owner). Deliberately distinct from meta.tags (a free-form list used for strata-internal "
-        "categorization/documentation, not cloud tags). Optional (v1-derived documents commonly carry no "
-        "cloud tags at all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum tag count.",
+        description="Baseline cloud tags for this firewall (for example `cost-center`, "
+        "`environment`, `owner`), passed to Terraform as "
+        "`strata.firewalls.<name>.default_tags`. Not the same as `meta.tags`, which is "
+        "a free-form list for documentation. Strata does not limit the number of tags, "
+        "so stay within your cloud provider's limit.\n\n"
+        "Design notes: Baseline cloud provider tags for this firewall/NSG (e.g. "
+        "cost-center, environment, owner). Deliberately distinct from meta.tags (a "
+        "free-form list used for strata-internal categorization/documentation, not "
+        "cloud tags). Optional (v1-derived documents commonly carry no cloud tags at "
+        "all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum "
+        "tag count.",
     )
     custom_tags: dict[str, str] | None = Field(
-        None, description="Optional additional cloud provider tags beyond default_tags."
+        None,
+        description="Additional cloud tags on top of `default_tags`, for one-off needs.\n\n"
+        "Design notes: Optional additional cloud provider tags beyond default_tags.",
     )
 
     @model_validator(mode="after")
@@ -253,7 +308,13 @@ class FirewallMetaModel(PlatformBaseModel):
 
 
 class FirewallModel(PlatformBaseModel):
-    """Root model for a firewall ruleset configuration file."""
+    """A firewall or network security group ruleset: default allow or deny per direction and explicit rules
+    with ports, protocols and source or destination addresses. Create one per ruleset and list it in a
+    workspace's `firewalls`.
+
+    Design notes:
+    Root model for a firewall ruleset configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

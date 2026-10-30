@@ -68,7 +68,7 @@ designed to be hand-edited. Not deferred, not needed.
 from collections.abc import Iterator
 from datetime import date
 from enum import Enum
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from pydantic import ConfigDict, Field, StringConstraints, model_validator
 
@@ -107,7 +107,11 @@ class VersionPinStatus(str, Enum):
 
 
 class VersionPinModel(PlatformBaseModel):
-    """One pinned version, plus the reasoning a machine rewrite must preserve.
+    """One pinned version, with the reasoning that a machine rewrite must preserve. A bare string is
+    shorthand for `{version: <string>}`.
+
+    Design notes:
+    One pinned version, plus the reasoning a machine rewrite must preserve.
 
     Accepts a bare string as shorthand, so the simple majority stays terse::
 
@@ -122,6 +126,10 @@ class VersionPinModel(PlatformBaseModel):
 
     Both forms produce the same model, so consumers never branch on shape.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A pin with status `held` or `unverified` needs a `reason` that explains why.",
+    )
 
     model_config = ConfigDict(
         json_schema_extra=scalar_shorthand_schema(Annotated[str, StringConstraints(min_length=1)])
@@ -167,7 +175,20 @@ class VersionPinModel(PlatformBaseModel):
 
 
 class VersionPinsModel(PlatformBaseModel):
-    """Pins grouped by what they target.
+    """Pins grouped by what they target. The key is always the target's own name. A pin may only target
+    something strata itself materialises.
+
+    - `images`: a module service's `image`; the key is the service name.
+    - `charts`: a Helm module's `chart_version`; the key is the module name.
+    - `remotes`: a remote's `reference`; the key is the remote name. Only for remotes with `fetch:
+      strata`; a pin on an `external` remote is rejected.
+    - `artifacts`: an Artifact's `image_tag`; the key is the artifact name. `image_name` is never
+      pinned.
+    - `assets`: the `reference` of an asset's own `location`; the key is the asset name. Only with
+      `fetch: strata`. An asset that uses a manifest remote is pinned through `remotes`.
+
+    Design notes:
+    Pins grouped by what they target.
 
     Each category resolves against a different part of the schema, all of
     which already exist — nothing here needs a new override subtree (v1
@@ -195,15 +216,19 @@ class VersionPinsModel(PlatformBaseModel):
     """
 
     images: dict[PlatformName, VersionPinModel] | None = Field(
-        default=None, description="Container image pins. Key = ModuleServiceModel.name."
+        default=None,
+        description="Container image pins. The key is the module service name.\n\n"
+        "Design notes: Container image pins. Key = ModuleServiceModel.name.",
     )
     charts: dict[PlatformName, VersionPinModel] | None = Field(
         default=None, description="Helm chart version pins. Key = Module document name."
     )
     remotes: dict[PlatformName, VersionPinModel] | None = Field(
         default=None,
-        description="Git/OCI ref pins. Key = SolutionRemoteModel.name. Only valid for remotes strata "
-        "materialises itself (fetch: strata).",
+        description="Git or OCI ref pins. The key is the remote name. Only valid for remotes that "
+        "strata fetches itself (`fetch: strata`).\n\n"
+        "Design notes: Git/OCI ref pins. Key = SolutionRemoteModel.name. Only valid "
+        "for remotes strata materialises itself (fetch: strata).",
     )
     artifacts: dict[PlatformName, VersionPinModel] | None = Field(
         default=None,
@@ -229,7 +254,11 @@ class VersionPinsModel(PlatformBaseModel):
 
 
 class VersionPromotionModel(PlatformBaseModel):
-    """Optional ring/order/wave rollout-visibility tags (docs/work/promotion.md).
+    """Optional rollout tags that let `strata promote status` show where a version is across rings. Omit
+    for a product with no multi-ring rollout.
+
+    Design notes:
+    Optional ring/order/wave rollout-visibility tags (docs/work/promotion.md).
 
     Not a separate `kind: promotion` document — ADR-0015's identity
     mechanism (`Deployment.spec.version`) already lets several deployments
@@ -249,6 +278,11 @@ class VersionPromotionModel(PlatformBaseModel):
     needs to see every `Version` document sharing a workspace together,
     which is `build_promotion_view()`'s job (Phase 2), not this model's.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`wave` requires `ring`.",
+        "`ring` requires `order`.",
+    )
 
     ring: str | None = Field(
         None, min_length=1, description="Which ring this document represents (e.g. 'dev', 'qas', 'prd')"
@@ -286,16 +320,25 @@ class VersionSpecModel(PlatformBaseModel):
 
     workspace: Annotated[PlatformName, References(PlatformKind.WORKSPACE)] | None = Field(
         None,
-        description="Name of the Workspace document this version document applies to. Bounds the blast "
-        "radius of editing this file to deployments running that one workspace. Phase 2 validation checks "
-        "every Deployment referencing this document (via 'spec.version') agrees on the workspace: the first "
-        "real reference establishes it when unset here, a declared value is authoritative, and a mismatch "
-        "is an error.",
+        description="Name of the Workspace this version document applies to, which limits the "
+        "effect of editing it to deployments of that workspace. Every deployment that "
+        "references this document must use that workspace. When unset, the first "
+        "referencing deployment establishes it; a declared value is authoritative and "
+        "a mismatch is an error.\n\n"
+        "Design notes: Name of the Workspace document this version document applies "
+        "to. Bounds the blast radius of editing this file to deployments running that "
+        "one workspace. Phase 2 validation checks every Deployment referencing this "
+        "document (via 'spec.version') agrees on the workspace: the first real "
+        "reference establishes it when unset here, a declared value is authoritative, "
+        "and a mismatch is an error.",
     )
     promotion: VersionPromotionModel | None = Field(
         None,
-        description="Optional ring/order/wave rollout-visibility tags (docs/work/promotion.md). Omit "
-        "entirely for a product with no multi-ring rollout pipeline.",
+        description="Optional rollout tags (`ring`, `order`, `wave`). Omit for a product with no "
+        "multi-ring rollout.\n\n"
+        "Design notes: Optional ring/order/wave rollout-visibility tags "
+        "(docs/work/promotion.md). Omit entirely for a product with no multi-ring "
+        "rollout pipeline.",
     )
     pins: VersionPinsModel = Field(
         default=VersionPinsModel(),
@@ -318,7 +361,13 @@ class VersionMetaModel(PlatformBaseModel):
 
 
 class VersionModel(PlatformBaseModel):
-    """Root model for a version configuration document."""
+    """The single place to change to upgrade: it pins container images, Helm chart versions, remote refs,
+    artifact tags and asset refs, each with a status and the reason it is held. A deployment selects it
+    with `version`. Typically one per ring or channel, for example `prd`.
+
+    Design notes:
+    Root model for a version configuration document.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2, frozen=True, description="API version for version configuration"

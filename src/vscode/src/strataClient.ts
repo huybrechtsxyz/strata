@@ -68,10 +68,16 @@ export interface GraphData {
     edges: GraphEdge[];
 }
 
-/** One `strata deployment list` row (`DeploymentSummary` in deployment_resolution.py). */
+/** One `strata deploy list` row (`DeploymentSummary` in deployment_resolution.py). */
 export interface DeploymentRow {
     name: string;
     workspace: string | null;
+    extends: string | null;
+    tenant: string | null;
+    version: string | null;
+    ring: string | null;
+    order: number | null;
+    wave: string | null;
     environments: string[];
     partial: boolean;
     source: string;
@@ -285,9 +291,9 @@ export class StrataClient {
         return this.run<Record<string, never>>(['sln', 'update']);
     }
 
-    /** `strata deployment list` — every deployment, partial bases marked. */
+    /** `strata deploy list` — every deployment, partial bases marked. */
     async deploymentList(): Promise<Envelope<{ deployments: DeploymentRow[] }>> {
-        return this.run(['deployment', 'list']);
+        return this.run(['deploy', 'list']);
     }
 
     /** `strata integration list [--deployment D]` — local readiness; offline. */

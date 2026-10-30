@@ -32,7 +32,7 @@ from packageurl import PackageURL
 
 from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_controller import DocumentIndex
-from strata.controllers.workload_controller import resolve_module
+from strata.controllers.workload_controller import apply_version_pins, resolve_module
 from strata.integrations.cve_scanner import CveScannerIntegration, GrypeIntegration, TrivyIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
@@ -143,17 +143,19 @@ def write_sbom(build_path: Path, graph: ResolvedWorkspaceGraph, index: DocumentI
 
 def _resolve_all_modules(graph: ResolvedWorkspaceGraph, index: DocumentIndex) -> list[ModuleModel]:
     """Resolve every enabled module reference, across every namespace the
-    workspace references, into a real `ModuleModel` — the same "resolve
-    before any collector/integration sees it" step
-    `workload_controller.build_workload_modules()` already does, done once
-    here so every collector works from a flat list and never touches
-    `DocumentIndex` itself."""
+    workspace references, into a real `ModuleModel` with the deployment's
+    `kind: version` pins applied (`graph.version`, already reflecting
+    `--pin`) — the same "resolve before any collector/integration sees it"
+    step `workload_controller.build_workload_modules()` already does, done
+    once here so every collector works from a flat list and never touches
+    `DocumentIndex` itself. Without the overlay the SBOM would list the
+    declared image and chart versions, not the ones that are deployed."""
     modules: list[ModuleModel] = []
     for namespace in graph.namespaces.values():
         for reference in namespace.spec.modules or []:
             if not reference.enabled:
                 continue
-            modules.append(resolve_module(index, reference))
+            modules.append(apply_version_pins(resolve_module(index, reference), graph.version))
     return modules
 
 

@@ -103,6 +103,36 @@ class ValueReference:
 
 
 @dataclass(frozen=True)
+class EffectiveImage:
+    """One container image a deployment will run, after `kind: version` pins
+    (`effective_images.effective_images()`, docs/work/effective-images.md).
+
+    `origin` is `artifact` (a `kind: artifact`, reached through a `store: artifact` variable or a module
+    service's `artifact`) or `module-service` (a module service's literal `image`). `name` is the artifact
+    or service name; `artifact`/`module` say which document it came from, and `via` lists every use
+    (`variable:KEY`, `service:MODULE/SERVICE`).
+
+    `image_tag` is `None` when neither a pin nor the declaration supplies one, and `image_ref` is then the
+    bare name. `tag_source` is `pin`, `declared` or `none`; `pin_version` names the version document of a
+    pin, and `pin_flag` is true when that came from `--pin` rather than the deployment's `spec.version`.
+    """
+
+    origin: str
+    name: str
+    image_name: str
+    image_tag: str | None
+    image_ref: str
+    tag_source: str
+    artifact: str | None = None
+    module: str | None = None
+    via: tuple[str, ...] = ()
+    registry: str | None = None
+    configuration: dict[str, Any] | None = None
+    pin_version: str | None = None
+    pin_flag: bool = False
+
+
+@dataclass(frozen=True)
 class ResolvedWorkspaceGraph:
     """Already-resolved documents a workspace references.
 
@@ -178,6 +208,9 @@ class ResolvedWorkspaceGraph:
     deployment: DeploymentModel | None = None
     version: VersionModel | None = None
     resolved_assets: dict[str, "ResolvedAssetInfo"] = field(default_factory=dict)
+    images: list[EffectiveImage] = field(default_factory=list)
+    """Every image the deployment runs, pin-resolved (`effective_images()`); empty when the caller did not
+    compute them. The SBOM's image collector reads the `artifact` rows from here."""
     step_root: str = "."
     """The directory the step reading this graph runs in, relative to the build
     root (POSIX, e.g. 'terraform/apim'); '.' when no step is involved.

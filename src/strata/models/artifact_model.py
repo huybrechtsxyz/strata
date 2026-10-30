@@ -52,20 +52,22 @@ class ArtifactSpecModel(PlatformBaseModel):
     )
     image_tag: str | None = Field(
         None,
-        description="Image tag/digest to deploy. May be blank until a real image exists (same convention "
-        "as today's plain constant variables). Overridden by kind: version's pins.artifacts[name] when set.",
+        description="Image tag/digest to deploy. Optional: omit it when a kind: version pin always supplies "
+        "it; with neither, the tag is blank. Overridden by kind: version's pins.artifacts[name] when set.",
     )
     registry: str | None = Field(
         None,
-        description="Registry host, free text for documentation only (e.g. 'cdn-feeds.acme.com') — NOT a "
-        "SolutionRemoteModel reference, since strata never fetches an image (it stays in the registry and "
-        "is pulled by the runtime at deploy time, not materialised by strata at build time).",
+        description="Registry host, for documentation only (for example `registry.example.com`). "
+        "Strata never pulls the image: the container runtime does that at deploy time.\n\n"
+        "Design notes: Registry host, free text for documentation only (e.g. "
+        "'cdn-feeds.acme.com') — NOT a SolutionRemoteModel reference, since strata "
+        "never fetches an image (it stays in the registry and is pulled by the runtime "
+        "at deploy time, not materialised by strata at build time).",
     )
     integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         None,
-        description="Optional Integration (capability: sources) providing registry credentials — same "
-        "field name/pattern as SolutionRemoteModel.integration. Real environment files don't use this "
-        "today (plain variables/secrets instead); this is a supported upgrade path, not a requirement.",
+        description="Reserved. Must name an existing Integration, but nothing reads it: no registry "
+        "credentials are resolved from it. Supply them to whatever pulls or copies the image.",
     )
     description: str | None = Field(None, description="Optional description for documentation purposes")
     properties: dict[str, Any] | None = Field(
@@ -91,7 +93,13 @@ class ArtifactMetaModel(PlatformBaseModel):
 
 
 class ArtifactModel(PlatformBaseModel):
-    """Root model for an artifact configuration document."""
+    """A named, pinnable reference to something external that strata does not fetch or deploy itself: today
+    a container image. Reference it from a `store: artifact` variable or a module service's `artifact`;
+    a Version document can pin its tag.
+
+    Design notes:
+    Root model for an artifact configuration document.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2, frozen=True, description="API version for artifact configuration"

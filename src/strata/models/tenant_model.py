@@ -37,7 +37,7 @@ provisioned resource.
 """
 
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -53,7 +53,17 @@ from strata.utils.names import check_unique_names
 
 
 class TenantSpecModel(PlatformBaseModel):
-    """Tenant specification: identity, data residency, and deployment defaults."""
+    """A customer or organisation: its display name, the data-residency geographies it may deploy into, and
+    defaults (`environments`, `properties`, `custom`) that every deployment for it inherits.
+
+    Design notes:
+    Tenant specification: identity, data residency, and deployment defaults.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Geographies must be unique.",
+        "Environment references must be unique, because a repeat would merge twice.",
+    )
 
     display_name: str = Field(
         min_length=1,
@@ -62,36 +72,56 @@ class TenantSpecModel(PlatformBaseModel):
     )
     geographies: list[str] | None = Field(
         default=None,
-        description="Data residency boundaries this tenant may deploy into (e.g. 'europe'). Each must appear "
-        "as a `geography` on some region in a ProviderConfig's spec.regions — checked by "
-        "`TenantService.validate_geographies_against_provider_configs()`. A tenant's allowed set is what a "
-        "zone-isolation policy tests a planned resource's region against. None/omitted means this tenant has "
-        "no data-residency constraint at all — the real, common case (docs/design/tenant-zone-policy.md: no "
-        "real tenant in the one production consumer checked has this populated yet).",
+        description="Data-residency boundaries this tenant may deploy into, for example `europe`. "
+        "Each must be the `geography` of some region in a ProviderConfig. A deployment "
+        "for this tenant is flagged when its provider's region lies in a geography "
+        "that is not listed here. Omit for no restriction.\n\n"
+        "Design notes: Data residency boundaries this tenant may deploy into (e.g. "
+        "'europe'). Each must appear as a `geography` on some region in a "
+        "ProviderConfig's spec.regions — checked by "
+        "`TenantService.validate_geographies_against_provider_configs()`. A tenant's "
+        "allowed set is what a zone-isolation policy tests a planned resource's region "
+        "against. None/omitted means this tenant has no data-residency constraint at "
+        "all — the real, common case (docs/design/tenant-zone-policy.md: no real "
+        "tenant in the one production consumer checked has this populated yet).",
     )
     onboarded: date | None = Field(
         None, description="ISO date the tenant was onboarded (e.g. 2026-03-15). Informational only."
     )
     environments: list[Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)]] | None = Field(
         None,
-        description="Names of Environment documents merged in BEFORE a deployment's own environments, so "
-        "deployment values win. Use for tenant-wide defaults (shared variables, feature flags) without "
-        "repeating them per deployment.",
+        description="Names of Environment documents that merge before the deployment's own "
+        "environments, so the deployment's values win. Use for tenant-wide defaults "
+        "such as shared variables or feature flags.\n\n"
+        "Design notes: Names of Environment documents merged in BEFORE a deployment's "
+        "own environments, so deployment values win. Use for tenant-wide defaults "
+        "(shared variables, feature flags) without repeating them per deployment.",
     )
     properties: dict[str, Any] | None = Field(
         None,
-        description="Tenant-wide deployment properties, merged as a base layer into spec.properties of every "
-        "deployment referencing this tenant. Deployment values take precedence.",
+        description="Tenant-wide properties, merged as the base layer into the `properties` of "
+        "every deployment for this tenant. Deployment values win.\n\n"
+        "Design notes: Tenant-wide deployment properties, merged as a base layer into "
+        "spec.properties of every deployment referencing this tenant. Deployment "
+        "values take precedence.",
     )
     configuration: dict[str, Any] | None = Field(
         None,
-        description="Tenant-specific settings emitted verbatim to the provisioner (e.g. CRM ID, billing "
-        "code) — NOT merged into deployment properties, unlike `properties` above.",
+        description="Tenant-specific settings, for example a CRM id or billing code, passed to "
+        "Terraform as `strata.tenant.configuration`. Not merged into the deployment's "
+        "properties. Add an `attributeconfig` with `target.kind: tenant` and "
+        "`target.block: configuration` to validate them.\n\n"
+        "Design notes: Tenant-specific settings emitted verbatim to the provisioner "
+        "(e.g. CRM ID, billing code) — NOT merged into deployment properties, unlike "
+        "`properties` above.",
     )
     custom: dict[str, Any] | None = Field(
         None,
-        description="Tenant-wide custom data merged as a base layer into spec.custom of every deployment "
-        "referencing this tenant. Deployment values take precedence.",
+        description="Tenant-wide custom values, merged as the base layer into the `custom` values "
+        "of every deployment for this tenant. Deployment values win.\n\n"
+        "Design notes: Tenant-wide custom data merged as a base layer into spec.custom "
+        "of every deployment referencing this tenant. Deployment values take "
+        "precedence.",
     )
 
     @model_validator(mode="after")
@@ -123,7 +153,12 @@ class TenantMetaModel(PlatformBaseModel):
 
 
 class TenantModel(PlatformBaseModel):
-    """Root model for a tenant configuration file."""
+    """A customer or organisation identity. `meta.name` is the tenant code, for example `c0062`. Create one
+    per customer and reference it from a deployment's `tenant`. Typically one per customer directory.
+
+    Design notes:
+    Root model for a tenant configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

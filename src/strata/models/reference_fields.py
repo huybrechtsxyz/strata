@@ -35,9 +35,10 @@ invent failures on valid solutions.
 import types
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Annotated, Union, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, Any, Union, get_args, get_origin
 
-from pydantic import BaseModel
+from pydantic import BaseModel, GetJsonSchemaHandler
+from pydantic_core import CoreSchema
 
 if TYPE_CHECKING:
     # Only for the type hints below. `common_models` imports `References`/
@@ -64,6 +65,10 @@ class References:
 
     kind: "PlatformKind"
 
+    def __get_pydantic_json_schema__(self, core_schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        """Expose the target kind in the exported JSON Schema as `x-strata-references`."""
+        return {**handler(core_schema), "x-strata-references": self.kind.value}
+
 
 @dataclass(frozen=True)
 class RemoteReference:
@@ -73,6 +78,10 @@ class RemoteReference:
     `strata.yaml`, not the document index — remotes are bootstrap identity,
     not discovered documents (ADR-0015).
     """
+
+    def __get_pydantic_json_schema__(self, core_schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        """Mark the field in the exported JSON Schema as naming a remote from `strata.yaml`."""
+        return {**handler(core_schema), "x-strata-remote": True}
 
 
 @dataclass(frozen=True)

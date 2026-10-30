@@ -40,7 +40,7 @@ Configuration holds platform *policy*; the solution manifest holds
 *composition*.
 """
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -58,7 +58,13 @@ from strata.utils.names import check_unique_names
 
 
 class ConfigurationSecurityModel(PlatformBaseModel):
-    """Allow-lists restricting which store/backend types a `variable`/
+    """Allow-lists of the store types that environment documents may use platform-wide for variables,
+    secrets and features, and the key/value backends a workspace may use for step outputs. Each list is
+    closed: anything not listed is rejected, and built-in types such as `constant` or `environment` must
+    be listed to be allowed. Omit a list for no restriction.
+
+    Design notes:
+    Allow-lists restricting which store/backend types a `variable`/
     `secret`/`feature`/Workspace output-store may declare, platform-wide.
 
     Ported from v1's real, active usage (`config/stores.yaml`'s
@@ -97,15 +103,25 @@ class ConfigurationSecurityModel(PlatformBaseModel):
     )
     allowed_key_value_stores: list[str] | None = Field(
         None,
-        description="Key/value backend types (e.g. 'azure-keyvault', 'azure-appconfig', 'azure-blob') "
-        "permitted for a Workspace's 'output_store'/'output_store_integration' (docs/work/"
-        "cross-run-step-output-delivery.md). Named after the capability (KEY_VALUE), not the feature field, "
-        "since it already has more than one planned consumer. None means unrestricted.",
+        description="Key/value backend types (for example `azure-keyvault`, `azure-appconfig`, "
+        "`azure-blob`) allowed for a workspace's `output_store` and "
+        "`output_store_integration`. Omit for no restriction.\n\n"
+        "Design notes: Key/value backend types (e.g. 'azure-keyvault', "
+        "'azure-appconfig', 'azure-blob') permitted for a Workspace's "
+        "'output_store'/'output_store_integration' "
+        "(docs/work/cross-run-step-output-delivery.md). Named after the capability "
+        "(KEY_VALUE), not the feature field, since it already has more than one "
+        "planned consumer. None means unrestricted.",
     )
 
 
 class PathSegmentModel(PlatformBaseModel):
-    """One named capture within a `resolves: layers` `PathConventionModel.pattern`.
+    """One named capture of a path convention that resolves `layers`: `name` matches a `{name}` placeholder
+    in the convention's `pattern` or `filename_pattern`, and `pattern` is the regex the captured value
+    must match.
+
+    Design notes:
+    One named capture within a `resolves: layers` `PathConventionModel.pattern`.
 
     `pattern` is a static regex only — it cannot look up a value from
     elsewhere in the model (docs/design/path-conventions.md's own
@@ -120,7 +136,12 @@ class PathSegmentModel(PlatformBaseModel):
 
 
 class PathConventionModel(PlatformBaseModel):
-    """One directory-family naming convention (docs/design/path-conventions.md,
+    """A naming convention for where documents live: for documents under `scope`, the directory must match
+    `pattern` and, optionally, the file name must match `filename_pattern`, both templates with
+    `{segment}` captures. A deployment adopts a convention with `layers.follows`.
+
+    Design notes:
+    One directory-family naming convention (docs/design/path-conventions.md,
     docs/design/gap_fit_v1.md gap #7).
 
     Ported from v1's real, active `enforce-path-conventions` policy
@@ -142,7 +163,14 @@ class PathConventionModel(PlatformBaseModel):
     solved differently" section.
     """
 
-    name: PlatformName = Field(description="Convention name, referenced by DeploymentLayersModel.follows")
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`resolves: layers` requires `segments`, because the layers cannot be resolved without them.",
+    )
+
+    name: PlatformName = Field(
+        description="Convention name; a deployment selects it with `layers.follows`.\n\n"
+        "Design notes: Convention name, referenced by DeploymentLayersModel.follows"
+    )
     scope: str = Field(
         description="Directory prefix this convention governs, e.g. 'deploy/hubs/**'. Deliberately narrower "
         "than a full glob engine — always '<relative-dir>/**'."
@@ -160,19 +188,27 @@ class PathConventionModel(PlatformBaseModel):
     )
     resolves: Literal["tenant", "layers"] | None = Field(
         None,
-        description="'tenant': the single {code}-shaped capture (from 'pattern' or 'filename_pattern', "
-        "whichever declares it) is cross-checked against the real Tenant document filed there (meta.name). "
-        "'layers': this convention's segments are DeploymentLayersModel's resolution target — segments is "
-        "required when this is set. None: structural shape check only.",
+        description="`tenant`: the single `{code}` capture (from `pattern` or `filename_pattern`) "
+        "is checked against the name of the Tenant document filed there. `layers`: the "
+        "convention's `segments` define the layers a deployment is resolved from, so "
+        "`segments` is required. Omit for a structural shape check only.\n\n"
+        "Design notes: 'tenant': the single {code}-shaped capture (from 'pattern' or "
+        "'filename_pattern', whichever declares it) is cross-checked against the real "
+        "Tenant document filed there (meta.name). 'layers': this convention's segments "
+        "are DeploymentLayersModel's resolution target — segments is required when "
+        "this is set. None: structural shape check only.",
     )
     segments: list[PathSegmentModel] | None = Field(
         None, description="Per-segment name + validation pattern. Required when resolves == 'layers'."
     )
     enforcement: Literal["warn", "deny"] = Field(
         "warn",
-        description="'warn' (default, matches the one real enabled policy today) reports a mismatch without "
-        "failing validate; 'deny' fails it. Modeled directly here rather than through a separate policy "
-        "document — v1's generic policy engine (deny/warn dispatch across many policy types) is not ported; "
+        description="`warn` (default) reports a mismatch without failing validation; `deny` fails "
+        "it.\n\n"
+        "Design notes: 'warn' (default, matches the one real enabled policy today) "
+        "reports a mismatch without failing validate; 'deny' fails it. Modeled "
+        "directly here rather than through a separate policy document — v1's generic "
+        "policy engine (deny/warn dispatch across many policy types) is not ported; "
         "path_convention is the one real, active type.",
     )
 
@@ -188,7 +224,13 @@ class PathConventionModel(PlatformBaseModel):
 
 
 class ConfigurationSpecModel(PlatformBaseModel):
-    """Configuration specification.
+    """Platform-wide policy: the provider and topology types in use (by document name), the allowed store
+    types, path naming conventions, audit trail settings and the CVE allow-list. There are no
+    `properties`, `configuration` or `custom` blocks here; values shared across deployments belong in an
+    Environment.
+
+    Design notes:
+    Configuration specification.
 
     Only `providers`/`topologies`/`security`/`paths`/`audit`/`cve_allowed`
     are modeled so far — see module docstring for what v1 has that v2 is
@@ -201,6 +243,12 @@ class ConfigurationSpecModel(PlatformBaseModel):
     already met by referencing a shared Environment document instead
     (ADR-0024's merge chain).
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Names in `providers` must be unique.",
+        "Names in `topologies` must be unique.",
+        "Path convention names in `paths` must be unique.",
+    )
 
     providers: list[Annotated[PlatformName, References(PlatformKind.PROVIDERCONFIG)]] | None = Field(
         None, description="Provider type registry: names of ProviderConfig documents"
@@ -220,10 +268,15 @@ class ConfigurationSpecModel(PlatformBaseModel):
     )
     cve_allowed: list[CveAllowedEntryModel] | None = Field(
         None,
-        description="Solution-wide CVE suppression list, consumed by every workspace's own cve_policy gate "
-        "(docs/archive/cve-scanner-integration.md Phase 3). Lives here, not on Workspace, because v1's real "
-        "equivalent (.strata/cve-allowed.yaml) is keyed off the solution root, not any one workspace — one "
-        "list shared across every workspace, not duplicated per-workspace.",
+        description="Solution-wide list of accepted CVEs, honoured by every workspace's "
+        "`cve_policy`. Each entry names a CVE id and the reason it is accepted, "
+        "optionally limited to one package and given an expiry date.\n\n"
+        "Design notes: Solution-wide CVE suppression list, consumed by every "
+        "workspace's own cve_policy gate (docs/archive/cve-scanner-integration.md "
+        "Phase 3). Lives here, not on Workspace, because v1's real equivalent "
+        "(.strata/cve-allowed.yaml) is keyed off the solution root, not any one "
+        "workspace — one list shared across every workspace, not duplicated "
+        "per-workspace.",
     )
 
     @model_validator(mode="after")
@@ -260,7 +313,14 @@ class ConfigurationMetaModel(PlatformBaseModel):
 
 
 class ConfigurationModel(PlatformBaseModel):
-    """Root model for a configuration file."""
+    """Platform-wide policy for a solution: which provider and topology types exist, which store types are
+    allowed, path naming conventions, audit trail settings and the CVE allow-list. Usually one document,
+    placed where the solution manifest's `spec.configuration` points; several documents there are
+    merged.
+
+    Design notes:
+    Root model for a configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,
@@ -272,7 +332,9 @@ class ConfigurationModel(PlatformBaseModel):
         frozen=True,
         description="Platform kind: always 'configuration'.",
     )
-    meta: ConfigurationMetaModel = Field(description="Metadata for the configuration model.")
+    meta: ConfigurationMetaModel = Field(
+        description="Name, annotations, labels and tags of this configuration document."
+    )
     spec: ConfigurationSpecModel = Field(description="Specification for the configuration.")
 
     @field_validator("kind")

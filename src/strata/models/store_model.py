@@ -26,7 +26,7 @@ needing no integration at all.
 """
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field, model_validator
 
@@ -62,7 +62,11 @@ def _validate_field_not_on_builtin(
 
 
 class FeatureStoreType(str, Enum):
-    """Feature flag store backend type.
+    """Where a feature flag is read from: `constant` and `environment` are built in, `azure-appconfig` is
+    resolved through an Integration. `flagsmith` is recognised but has no resolver yet.
+
+    Design notes:
+    Feature flag store backend type.
 
     `CONSTANT`/`ENVIRONMENT` are built-in resolvers (no integration needed).
     `AZURE_APPCONFIG` resolves against a real `Integration` document today
@@ -77,7 +81,12 @@ class FeatureStoreType(str, Enum):
 
 
 class FeatureStoreModel(PlatformBaseModel):
-    """A single feature flag definition.
+    """A feature flag. `key` is what `${feature:KEY}` refers to; `store` and `value` say where it comes
+    from. `value` is a literal for `constant`, an environment variable name for `environment`, and a
+    flag name for an integration-backed store.
+
+    Design notes:
+    A single feature flag definition.
 
     `value` is the flag's identifier: a literal for `constant`, an
     environment variable name for `environment`, or a flag name/key for an
@@ -86,9 +95,17 @@ class FeatureStoreModel(PlatformBaseModel):
     since `constant`/`environment` have no store to seed (v1 precedent).
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`default` is only valid for an integration-backed store, not for `constant` or `environment`.",
+    )
+
     key: VariableKey = Field(description="Feature flag key name for referencing in configurations")
     store: FeatureStoreType = Field(
-        description="Feature store type: constant, environment, azure-appconfig, or flagsmith"
+        description="Where the flag comes from: `constant`, `environment` or `azure-appconfig`. "
+        "`flagsmith` is recognised but cannot be resolved yet. The Configuration's "
+        "`spec.security.allowed_feature_stores` can restrict the allowed types.\n\n"
+        "Design notes: Feature store type: constant, environment, azure-appconfig, or "
+        "flagsmith"
     )
     value: Any = Field(
         description="Feature flag identifier: literal for constant, env var name for environment, "
@@ -118,7 +135,11 @@ class FeatureStoreModel(PlatformBaseModel):
 
 
 class VariableValueType(str, Enum):
-    """Declared HCL type for Terraform variable emission.
+    """Declared Terraform type used when a variable is emitted: `string` (the default), `number`, `bool`,
+    `object`, `list` or `map`. Only checked against the value for `constant` stores.
+
+    Design notes:
+    Declared HCL type for Terraform variable emission.
 
     When set on a `VariableStoreModel`, controls how the value is serialized
     for provisioner consumption (e.g. `.auto.tfvars.json`): `STRING` (default
@@ -135,7 +156,12 @@ class VariableValueType(str, Enum):
 
 
 class VariableStoreType(str, Enum):
-    """Variable store backend type.
+    """Where a variable is read from: `constant`, `environment` and `artifact` (an Artifact document) are
+    built in; `azure-appconfig` and `infisical` are resolved through an Integration. `consul`, `vault`
+    and `etcd` are recognised but have no resolver yet.
+
+    Design notes:
+    Variable store backend type.
 
     `CONSTANT`/`ENVIRONMENT`/`ARTIFACT` are built-in resolvers (no
     integration needed) — `ARTIFACT` resolves against an in-solution
@@ -157,7 +183,12 @@ class VariableStoreType(str, Enum):
 
 
 class VariableStoreModel(PlatformBaseModel):
-    """A single variable definition.
+    """A variable. `key` is what `${var:KEY}` refers to; `store` and `value` say where it comes from.
+    `value` is a literal for `constant`, an environment variable name for `environment`, an Artifact
+    document name for `artifact`, and a path or key for an integration-backed store.
+
+    Design notes:
+    A single variable definition.
 
     `value` is the variable's identifier: a literal for `constant`, an
     environment variable name for `environment`, or a config path/key for an
@@ -166,14 +197,28 @@ class VariableStoreModel(PlatformBaseModel):
     time, so there is nothing yet to check the declared type against.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "On a `constant` store, `type` must match the value: `object` and `map` need a mapping, "
+        "`list` a sequence, `number` a number and `bool` a boolean.",
+        "`default` is only valid for an integration-backed store, not for `constant`, `environment` or `artifact`.",
+        "`store: artifact` requires `field`, and `field` is only valid with `store: artifact`.",
+    )
+
     key: VariableKey = Field(description="Variable key name for referencing in configurations")
     store: VariableStoreType = Field(
-        description="Variable store type: constant, environment, artifact, azure-appconfig, consul, vault, "
-        "infisical, or etcd"
+        description="Where the value comes from: `constant`, `environment`, `artifact`, "
+        "`azure-appconfig` or `infisical`. `consul`, `vault` and `etcd` are recognised "
+        "but cannot be resolved yet. The Configuration's "
+        "`spec.security.allowed_variable_stores` can restrict the allowed types.\n\n"
+        "Design notes: Variable store type: constant, environment, artifact, "
+        "azure-appconfig, consul, vault, infisical, or etcd"
     )
     value: Any = Field(
-        description="Variable identifier: literal for constant, env var name for environment, ArtifactModel."
-        "meta.name for artifact, config path/key for integration-backed stores"
+        description="Literal for `constant`, environment variable name for `environment`, Artifact "
+        "document name for `artifact`, path or key for an integration-backed store.\n\n"
+        "Design notes: Variable identifier: literal for constant, env var name for "
+        "environment, ArtifactModel.meta.name for artifact, config path/key for "
+        "integration-backed stores"
     )
     type: VariableValueType | None = Field(
         None,
@@ -291,7 +336,12 @@ class SecretRotateSpec(PlatformBaseModel):
 
 
 class SecretStoreType(str, Enum):
-    """Secret store backend type.
+    """Where a secret is read from: `constant`, `environment` and `github` are built in; `azure-keyvault`
+    and `infisical` are resolved through an Integration. `vault` and `bitwarden` are recognised but have
+    no resolver yet.
+
+    Design notes:
+    Secret store backend type.
 
     `CONSTANT`/`ENVIRONMENT`/`GITHUB` are built-in resolvers (no integration
     needed). `AZURE_KEYVAULT`/`INFISICAL` resolve against a real
@@ -309,7 +359,12 @@ class SecretStoreType(str, Enum):
 
 
 class SecretStoreModel(PlatformBaseModel):
-    """A single secret definition.
+    """A secret. `key` is what `${secret:KEY}` refers to; `store` and `value` say where it comes from.
+    `value` is a literal for `constant`, an environment variable name for `environment`, a GitHub
+    Actions secret name for `github`, and a path or ID for an integration-backed store.
+
+    Design notes:
+    A single secret definition.
 
     `value` is the secret's identifier: a literal for `constant`, an
     environment variable name for `environment`, a GitHub Actions secret
@@ -317,9 +372,22 @@ class SecretStoreModel(PlatformBaseModel):
     for an integration-backed store.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`generate` and `rotate` are only valid for an integration-backed store, not for "
+        "`constant`, `environment` or `github`.",
+        "A `rotate` policy of `rotate` needs a `generate` spec, because strata cannot regenerate a "
+        "secret it did not create. Use policy `warn` otherwise.",
+        "`version` is not supported for the `github` store.",
+    )
+
     key: VariableKey = Field(description="Secret key name for referencing in configurations")
     store: SecretStoreType = Field(
-        description="Secret store type: constant, environment, github, azure-keyvault, bitwarden, vault, or infisical"
+        description="Where the secret comes from: `constant`, `environment`, `github`, "
+        "`azure-keyvault` or `infisical`. `vault` and `bitwarden` are recognised but "
+        "cannot be resolved yet. The Configuration's "
+        "`spec.security.allowed_secret_stores` can restrict the allowed types.\n\n"
+        "Design notes: Secret store type: constant, environment, github, "
+        "azure-keyvault, bitwarden, vault, or infisical"
     )
     value: Any = Field(
         description="Secret identifier: literal for constant, env var name for environment, GitHub Actions "

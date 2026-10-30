@@ -19,7 +19,7 @@ carried over here:
   elsewhere (Provisioner `backend`/`properties`).
 """
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import Field, model_validator
 
@@ -161,7 +161,10 @@ class ManagedIdentityAuthenticationModel(PlatformBaseModel):
 
 
 class SSHKeyAuthenticationModel(PlatformBaseModel):
-    """
+    """SSH private key authentication, used for git deploy keys. Every field is a key reference, never the
+    key itself.
+
+    Design notes:
     SSH private key authentication (git deploy keys) — docs/design/
     gitops-integration.md's "Authentication" section: one of the two real
     git-native credential shapes neither v1 nor v2's prior closed `method`
@@ -179,7 +182,10 @@ class SSHKeyAuthenticationModel(PlatformBaseModel):
 
 
 class TokenAuthenticationModel(PlatformBaseModel):
-    """
+    """Bearer or personal access token authentication, used for git over HTTPS. `token` is a key reference;
+    `username` is a literal.
+
+    Design notes:
     Bearer/PAT token authentication (git HTTPS remotes) — the other real
     git-native credential shape (see `SSHKeyAuthenticationModel`'s docstring).
 
@@ -195,12 +201,23 @@ class TokenAuthenticationModel(PlatformBaseModel):
 
 
 class AuthenticationModel(PlatformBaseModel):
-    """
+    """How to authenticate to a cloud provider or an integration. `method` selects the scheme and the block
+    of the same name holds its settings.
+
+    Credential fields are key references: the names of variables or secrets declared in an Environment,
+    resolved when they are needed. Never put a credential value here.
+
+    Design notes:
     Authentication configuration for cloud provider or integration access.
 
     Specifies authentication method and corresponding credentials as key references.
     Keys are resolved at runtime from centralized environment declarations.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "The block named by `method` must be set (for example `method: oauth2` needs `oauth2`).",
+        "No other method's block may be set at the same time.",
+    )
 
     method: Literal[
         "oauth2",

@@ -10,7 +10,7 @@ in v1.
 """
 
 from datetime import date
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -96,7 +96,11 @@ class CveAuditResultModel(PlatformBaseModel):
 
 
 class CveAllowedEntryModel(PlatformBaseModel):
-    """A single entry in the CVE allowlist
+    """One accepted CVE. `id` and `reason` are required; add `package` to limit it to one package and
+    `expires` (an ISO date) to stop honouring it after that day.
+
+    Design notes:
+    A single entry in the CVE allowlist
     (`ConfigurationSpecModel.cve_allowed`, docs/work/
     cve-scanner-integration.md Phase 3).
 
@@ -129,7 +133,11 @@ class CveAllowedEntryModel(PlatformBaseModel):
 
 
 class CveMaxSeverityPolicyModel(PlatformBaseModel):
-    """`WorkspaceSpecModel.cve_policy` — gates `build run` on CVE findings in
+    """Gate for `build run` on the CVE findings in the SBOM it just generated: the build fails when the
+    findings at or above `max_severity` outnumber `max_count`.
+
+    Design notes:
+    `WorkspaceSpecModel.cve_policy` — gates `build run` on CVE findings in
     the SBOM it just generated (docs/archive/cve-scanner-integration.md).
 
     A small, dedicated field rather than a generic `policies:` list (v2 has
@@ -139,25 +147,37 @@ class CveMaxSeverityPolicyModel(PlatformBaseModel):
     configurable knobs this policy genuinely needs and that check didn't.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`severity_threshold` must be `max_severity` or a lower severity (CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN).",
+    )
+
     max_severity: Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"] = Field(
         description="Fail when findings at or above this severity exceed max_count"
     )
     max_count: int = Field(default=0, ge=0, description="Fail when the breaching count exceeds this (default 0)")
     severity_threshold: Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] | None = Field(
         default=None,
-        description="Minimum severity sent to the scanner itself. Defaults to max_severity when unset — lowering "
-        "it (e.g. to include UNKNOWN-severity noise in the raw result) is fine, but it can never be set "
-        "*more* restrictive than max_severity: the scanner would then filter out the very findings the "
-        "policy needs to see, silently under-counting a breach (enforced below).",
+        description="Minimum severity passed to the scanner. Defaults to `max_severity`. It may be "
+        "lower (more inclusive) but never higher, because the scanner would then hide "
+        "findings the policy needs to count.\n\n"
+        "Design notes: Minimum severity sent to the scanner itself. Defaults to "
+        "max_severity when unset — lowering it (e.g. to include UNKNOWN-severity noise "
+        "in the raw result) is fine, but it can never be set *more* restrictive than "
+        "max_severity: the scanner would then filter out the very findings the policy "
+        "needs to see, silently under-counting a breach (enforced below).",
     )
     enforcement: Literal["deny", "warn"] = Field(
         default="deny", description="deny fails the build; warn reports and continues"
     )
     on_missing_data: Literal["skip", "warn", "block"] = Field(
         default="block",
-        description="What to do when no SBOM/scanner is available to produce a result. Defaults to 'block' "
-        "(not the generic 'skip') — v1's own docstring explicitly warns that 'skip' makes 'never scanned' "
-        "indistinguishable from 'scanned, found nothing', a real risk for a security-flavored guardrail.",
+        description="What to do when no SBOM or scanner is available: `skip`, `warn` or `block` "
+        '(default). The default is `block` so that "never scanned" cannot be mistaken '
+        'for "scanned, nothing found".\n\n'
+        "Design notes: What to do when no SBOM/scanner is available to produce a "
+        "result. Defaults to 'block' (not the generic 'skip') — v1's own docstring "
+        "explicitly warns that 'skip' makes 'never scanned' indistinguishable from "
+        "'scanned, found nothing', a real risk for a security-flavored guardrail.",
     )
 
     @model_validator(mode="after")

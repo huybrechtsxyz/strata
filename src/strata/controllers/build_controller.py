@@ -39,6 +39,7 @@ from typing import Any, cast
 import yaml
 
 from strata.controllers.checkov_controller import evaluate_checkov_policy
+from strata.controllers.effective_images import effective_images
 from strata.controllers.integration_readiness import integration_preflight
 from strata.controllers.integration_resolution import find_provisioner, resolve_integration
 from strata.controllers.policy_results import checkov_policy_result as build_checkov_policy_result
@@ -69,6 +70,7 @@ from strata.controllers.version_pins import log_pin_applied
 from strata.controllers.workload_controller import build_workload_modules
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import (
+    EffectiveImage,
     ResolvedAssetInfo,
     ResolvedWorkspaceGraph,
     ValueReference,
@@ -204,6 +206,7 @@ def build_resolved_workspace_graph(
     tenant: TenantModel | None = None,
     deployment: DeploymentModel | None = None,
     version: VersionModel | None = None,
+    images: list[EffectiveImage] | None = None,
 ) -> ResolvedWorkspaceGraph:
     """Assemble a `ResolvedWorkspaceGraph` by walking every name `workspace`
     references (ADR-0022 D1a).
@@ -240,6 +243,7 @@ def build_resolved_workspace_graph(
         tenant=tenant,
         deployment=deployment,
         version=version,
+        images=images or [],
     )
 
 
@@ -610,6 +614,7 @@ def build_run(
         tenant=tenant,
         deployment=deployment,
         version=version,
+        images=effective_images(context, deployment, pinned_by_flag=pin is not None),
     )
     if dry_run:
         _step(f"would write {build_path / 'resolved.yaml'}")

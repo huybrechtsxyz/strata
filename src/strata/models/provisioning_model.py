@@ -18,7 +18,7 @@ in v1 with nothing arbitrating between them; see that ADR for the evidence
 and the reasoning for which one won.
 """
 
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -63,7 +63,12 @@ class ProvisionerAnsiblePropertiesModel(PlatformBaseModel):
 
 
 class ProvisionerGitOpsModel(PlatformBaseModel):
-    """Only valid when a Provisioner's `tool` is a `SYNC_PROVISIONER_TYPES` member
+    """Where a GitOps provisioner (`argocd` or `flux`) pushes the file it renders: an already-declared git
+    `remote` and the `output_file` path inside it. The Argo CD Application or Flux Kustomization that
+    watches that repository is set up separately and is outside strata.
+
+    Design notes:
+    Only valid when a Provisioner's `tool` is a `SYNC_PROVISIONER_TYPES` member
     (argocd, flux) — docs/design/gitops-integration.md.
 
     GitOps provisioners render a values/config file (via `output.template`,
@@ -81,7 +86,10 @@ class ProvisionerGitOpsModel(PlatformBaseModel):
         description="The already-declared git remote (strata.yaml spec.remotes) holding the GitOps config repo."
     )
     output_file: str = Field(
-        description="Path, relative to the remote's root, of the file this provisioner renders and pushes."
+        description="Path inside the remote's repository of the file this provisioner renders and "
+        "pushes. Relative, without `..`.\n\n"
+        "Design notes: Path, relative to the remote's root, of the file this "
+        "provisioner renders and pushes."
     )
 
     @field_validator("output_file")
@@ -108,7 +116,12 @@ SCRIPT_PROVISIONER_EXTENSIONS = frozenset({".ps1", ".sh", ".bash", ".py", ".bat"
 
 
 class ProvisionerScriptModel(PlatformBaseModel):
-    """Only valid when a Provisioner's `tool` is 'script' (docs/design/script-provisioner.md)."""
+    """What a `script` provisioner runs: a `file` relative to the provisioner's `source` directory, and
+    optional `args`.
+
+    Design notes:
+    Only valid when a Provisioner's `tool` is 'script' (docs/design/script-provisioner.md).
+    """
 
     file: str = Field(description="Script path, relative to this provisioner's 'source' directory")
     args: list[str] | None = Field(None, description="Arguments passed to the script")
@@ -126,7 +139,12 @@ class ProvisionerScriptModel(PlatformBaseModel):
 
 
 class OutputModel(PlatformBaseModel):
-    """The Jinja2 full-file-template escape hatch (ADR-0023 D3;
+    """Replaces the default Terraform output with a file rendered from a Jinja2 template, for cases the
+    default output does not cover. Valid for any tool. `build run` only validates the template; it
+    cannot render it because not every value is resolved at build time.
+
+    Design notes:
+    The Jinja2 full-file-template escape hatch (ADR-0023 D3;
     docs/design/value-token-resolution.md's "Value Supply Mechanisms", option
     C) - generating an entire custom file `default_output()`'s built-in
     projection doesn't produce. Valid for any `tool` - unlike `backend`/
@@ -142,13 +160,20 @@ class OutputModel(PlatformBaseModel):
 
     template: str | None = Field(
         None,
-        description="Workspace-relative path to a Jinja2 template rendered in place of the default output "
-        "projection. '@repo/' cross-repo templates not supported yet - no evidenced need for it.",
+        description="Path of a Jinja2 template rendered in place of the default output. "
+        "`@<remote>/` paths are not supported.\n\n"
+        "Design notes: Workspace-relative path to a Jinja2 template rendered in place "
+        "of the default output projection. '@repo/' cross-repo templates not supported "
+        "yet - no evidenced need for it.",
     )
 
 
 class ProvisionerModel(PlatformBaseModel):
-    """A tool, its source location, and tool-specific config.
+    """A tool definition: which `tool` runs, where its code is (`source`) and its tool-specific settings. A
+    provisioner does not say what it acts on: an `execution` step binds it to targets.
+
+    Design notes:
+    A tool, its source location, and tool-specific config.
 
     Deliberately has no topology/targets binding (ADR-0011) — see
     `ProvisioningStepModel` for that. `tool` is an open string, not a closed
@@ -163,11 +188,22 @@ class ProvisionerModel(PlatformBaseModel):
     these checks.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`source` is required unless `tool` is `argocd` or `flux`, which render from the platform artifact.",
+        "Tool-specific blocks are rejected for other known tools: `backend` only for terraform and "
+        "opentofu, `properties` only for ansible, `gitops` only for argocd and flux, `script` only "
+        "for script. A custom tool name is never rejected.",
+        "`script` is required when `tool` is `script`.",
+        "A provisioner cannot depend on itself.",
+    )
+
     name: PlatformName = Field(description="Unique provisioner name")
     description: str | None = Field(None, description="Optional description for documentation purposes")
     tool: PlatformName = Field(
-        description="Tool this provisioner runs (e.g. terraform, ansible, helm, compose, argocd, flux, bicep, "
-        "or a custom provisioner plugin name)"
+        description="Tool this provisioner runs: terraform, opentofu, ansible, bicep, script, "
+        "helm, compose, argocd or flux, or a custom provisioner plugin name.\n\n"
+        "Design notes: Tool this provisioner runs (e.g. terraform, ansible, helm, "
+        "compose, argocd, flux, bicep, or a custom provisioner plugin name)"
     )
     source: SourceModel | None = Field(
         None,
@@ -191,25 +227,42 @@ class ProvisionerModel(PlatformBaseModel):
     )
     integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         None,
-        description="Name of an Integration document this provisioner binds to, for the tool's expected "
-        "version, transport and authentication (ADR-0021 D4). If unset, resolution auto-binds to the sole "
-        "compatible registered Integration and errors — rather than guessing — when more than one candidate "
-        "exists. Valid for any 'tool' (unlike v1, which only allowed this for terraform/ansible/bicep): every "
-        "tool eventually needs a binding, not just the ones v1 happened to build CLI checks for.",
+        description="Name of an Integration document this provisioner binds to, supplying the "
+        "tool's expected version, transport and authentication. When unset, strata "
+        "binds the single compatible registered Integration and reports an error, "
+        "rather than guessing, when several match. Valid for any tool.\n\n"
+        "Design notes: Name of an Integration document this provisioner binds to, for "
+        "the tool's expected version, transport and authentication (ADR-0021 D4). If "
+        "unset, resolution auto-binds to the sole compatible registered Integration "
+        "and errors — rather than guessing — when more than one candidate exists. "
+        "Valid for any 'tool' (unlike v1, which only allowed this for "
+        "terraform/ansible/bicep): every tool eventually needs a binding, not just the "
+        "ones v1 happened to build CLI checks for.",
     )
     output: OutputModel | None = Field(
         None,
-        description="Jinja2 full-file-template escape hatch, replacing the default output projection. "
-        "Valid for any 'tool' (ADR-0023 D3) — build run only validates it, see OutputModel.",
+        description="Replace the default output with a rendered Jinja2 template. Valid for any "
+        "tool; `build run` only validates it.\n\n"
+        "Design notes: Jinja2 full-file-template escape hatch, replacing the default "
+        "output projection. Valid for any 'tool' (ADR-0023 D3) — build run only "
+        "validates it, see OutputModel.",
     )
     depends_on: list[PlatformName] | None = Field(
         None,
-        description="Names of other Provisioners in this same workspace whose 'source' must be materialised "
-        "before this one's, independent of 'execution'/'targets' (ADR-0029). A dependency provisioner named "
-        "here does not need its own execution step — it is synced purely to make its files available on disk "
-        "for this provisioner's own source code to compose (e.g. a relative Terraform module path) at build "
-        "time. Never implies an execution order or deploy-time relationship by itself — see "
-        "ProvisioningStepModel.depends_on for that, which names steps, not provisioners.",
+        description="Names of other provisioners in this workspace whose `source` must be "
+        "materialised before this one's, so this provisioner's code can use their "
+        "files (for example a relative Terraform module path). A dependency needs no "
+        "execution step of its own. It does not imply an execution order: use a step's "
+        "`depends_on` for that.\n\n"
+        "Design notes: Names of other Provisioners in this same workspace whose "
+        "'source' must be materialised before this one's, independent of "
+        "'execution'/'targets' (ADR-0029). A dependency provisioner named here does "
+        "not need its own execution step — it is synced purely to make its files "
+        "available on disk for this provisioner's own source code to compose (e.g. a "
+        "relative Terraform module path) at build time. Never implies an execution "
+        "order or deploy-time relationship by itself — see "
+        "ProvisioningStepModel.depends_on for that, which names steps, not "
+        "provisioners.",
     )
 
     @model_validator(mode="after")
@@ -332,7 +385,15 @@ class ProvisionerModel(PlatformBaseModel):
 
 
 class ProvisioningStepModel(PlatformBaseModel):
-    """One recipe entry: run a Provisioner against a set of targets, after other steps.
+    """One step of the execution recipe: run a provisioner against its targets, after the steps in
+    `depends_on`.
+
+    Targets are `resources`, `namespaces`, `topologies` (every resource and namespace the topology
+    groups) and `dns_zones`, `firewalls` and `networks` (to own their `${output:...}` values). `assets`
+    lists input files to materialise before the provisioner runs.
+
+    Design notes:
+    One recipe entry: run a Provisioner against a set of targets, after other steps.
 
     `resources`/`namespaces` name Resources/Namespaces this step acts on
     directly. `topologies` (docs/design/workspace-execution-model.md)
@@ -355,9 +416,17 @@ class ProvisioningStepModel(PlatformBaseModel):
     separate concept from the six fields above, which a step acts *on*.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A name may appear only once in each target list.",
+        "A step needs at least one of `resources`, `namespaces`, `topologies`, `dns_zones`, `firewalls` or `networks`.",
+        "A step cannot depend on itself.",
+    )
+
     name: PlatformName = Field(description="Unique step name")
     provisioner: PlatformName = Field(
-        description="Name reference to a Provisioner (existence checked once Workspace ties these together)"
+        description="Name of a provisioner declared in this workspace's `provisioners`.\n\n"
+        "Design notes: Name reference to a Provisioner (existence checked once "
+        "Workspace ties these together)"
     )
     resources: list[PlatformName] | None = Field(
         None, description="Resource name references this step acts on directly"
@@ -371,33 +440,58 @@ class ProvisioningStepModel(PlatformBaseModel):
         "groups (expanded at the Workspace container level, not declared redundantly here).",
     )
     dns_zones: list[PlatformName] | None = Field(
-        None, description="DNS document name references — direct escape hatch for ${output:...} claiming"
+        None,
+        description="Names of DNS documents this step owns, which allows `${output:STEP.KEY}` "
+        "tokens in them. Use it when none of the step's resources references the "
+        "document.\n\n"
+        "Design notes: DNS document name references — direct escape hatch for "
+        "${output:...} claiming",
     )
     firewalls: list[PlatformName] | None = Field(
-        None, description="Firewall document name references — direct escape hatch for ${output:...} claiming"
+        None,
+        description="Names of firewall documents this step owns, which allows `${output:STEP.KEY}` "
+        "tokens in them. Use it when none of the step's resources references the "
+        "document.\n\n"
+        "Design notes: Firewall document name references — direct escape hatch for "
+        "${output:...} claiming",
     )
     networks: list[PlatformName] | None = Field(
-        None, description="Network document name references — direct escape hatch for ${output:...} claiming"
+        None,
+        description="Names of network documents this step owns, which allows `${output:STEP.KEY}` "
+        "tokens in them. Use it when none of the step's resources references the "
+        "document.\n\n"
+        "Design notes: Network document name references — direct escape hatch for "
+        "${output:...} claiming",
     )
     assets: list[PlatformName] | None = Field(
         None,
-        description="Asset names (from this workspace's spec.assets pool, docs/design/asset-management.md) "
-        "this step needs materialised into the build output before its provisioner runs. Existence checked "
-        "against spec.assets once Workspace ties these together (WorkspaceSpecModel.validate_execution()) "
-        "— deliberately a second, independent set from the fields above, not folded into them: an asset is "
-        "materialised input a step consumes, not a provisioning target a step acts on.",
+        description="Asset slot names (from the workspace's `assets`) whose files are materialised "
+        "into the build output before the provisioner runs. An asset is input the step "
+        "consumes, not a target it acts on.\n\n"
+        "Design notes: Asset names (from this workspace's spec.assets pool, "
+        "docs/design/asset-management.md) this step needs materialised into the build "
+        "output before its provisioner runs. Existence checked against spec.assets "
+        "once Workspace ties these together (WorkspaceSpecModel.validate_execution()) "
+        "— deliberately a second, independent set from the fields above, not folded "
+        "into them: an asset is materialised input a step consumes, not a provisioning "
+        "target a step acts on.",
     )
     depends_on: list[PlatformName] | None = Field(
         None, description="Names of other ProvisioningSteps that must complete before this one runs"
     )
     scope: str | None = Field(
         None,
-        description="Free-form label for CLI-level step filtering (`strata deploy run --scope <label>`) — "
-        "e.g. 'infra'/'apps'. Not a fixed vocabulary (matches v1's real, identically-documented field). "
-        "Lives here, not on DeploymentStageModel: whether a step is 'infra' or 'apps' is a fact about what "
-        "the step does, not about which environment/deployment runs it (docs/design/deploy-command.md) — "
-        "same reasoning as this model's own 'topology is a derived fact, not declared' rule above. Multiple "
-        "steps may share a scope label by design; uniqueness is deliberately not enforced.",
+        description="Free-form label for filtering steps on the command line (`strata deploy run "
+        "--scope <label>`), for example `infra` or `apps`. Several steps may share a "
+        "label.\n\n"
+        "Design notes: Free-form label for CLI-level step filtering (`strata deploy "
+        "run --scope <label>`) — e.g. 'infra'/'apps'. Not a fixed vocabulary (matches "
+        "v1's real, identically-documented field). Lives here, not on "
+        "DeploymentStageModel: whether a step is 'infra' or 'apps' is a fact about "
+        "what the step does, not about which environment/deployment runs it "
+        "(docs/design/deploy-command.md) — same reasoning as this model's own "
+        "'topology is a derived fact, not declared' rule above. Multiple steps may "
+        "share a scope label by design; uniqueness is deliberately not enforced.",
     )
 
     @model_validator(mode="after")

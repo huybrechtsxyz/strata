@@ -2,7 +2,7 @@
 """Pydantic model for DNS zone configuration validation."""
 
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -32,7 +32,16 @@ class DnsRecordType(str, Enum):
 
 
 class DnsRecordModel(PlatformBaseModel):
-    """Model for a single DNS record within a zone.
+    """One DNS record in a zone. `value` is a literal, or contains value tokens such as `${var:KEY}`,
+    `${secret:KEY}`, `${feature:KEY}`, `${output:STEP.KEY}` or `${value:kind.name.path}`, resolved at
+    build or deploy time.
+
+    `${output:STEP.KEY}` uses the output of an earlier execution step, for example to point an `A`
+    record at the public IP Terraform produced. It is only accepted when this DNS document is a target
+    of a provisioning step.
+
+    Design notes:
+    Model for a single DNS record within a zone.
 
     ``value`` is a Value binding (ADR-0002): a plain string that is either a
     literal (``"1.2.3.4"``) or contains embedded ``${var:KEY}``/
@@ -49,25 +58,40 @@ class DnsRecordModel(PlatformBaseModel):
     in Phase 2.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = ("`priority` is only allowed on `MX` and `SRV` records.",)
+
     name: str = Field(..., min_length=1, description="Record name, e.g. '@', 'www', '_dmarc'")
     type: DnsRecordType = Field(..., description="Record type: A, AAAA, CNAME, MX, TXT, SRV, NS, PTR, CAA")
     value: str = Field(
         ...,
         min_length=1,
-        description="Literal value, or a string containing "
-        "'${var:KEY}'/'${secret:KEY}'/'${feature:KEY}'/'${output:STEP.KEY}'/'${value:kind.name.path}' tokens.",
+        description="Record value: a literal, or a string containing value tokens (`${var:KEY}`, "
+        "`${secret:KEY}`, `${feature:KEY}`, `${output:STEP.KEY}`, "
+        "`${value:kind.name.path}`).\n\n"
+        "Design notes: Literal value, or a string containing "
+        "'${var:KEY}'/'${secret:KEY}'/'${feature:KEY}'/'${output:STEP.KEY}'/'${value:kind.name.path}' "
+        "tokens.",
     )
     ttl: int | None = Field(None, ge=1, description="Record-level TTL override in seconds (>=1 if set)")
-    priority: int | None = Field(None, ge=1, le=65535, description="Priority for MX/SRV records (1-65535 if set)")
+    priority: int | None = Field(
+        None,
+        ge=1,
+        le=65535,
+        description="Priority, 1-65535. Only valid for MX and SRV records.\n\n"
+        "Design notes: Priority for MX/SRV records (1-65535 if set)",
+    )
     description: str | None = Field(
         None, min_length=1, description="Description of the DNS record, optionally for provider"
     )
     notes: str | None = Field(None, min_length=1, description="Additional notes for the DNS record, not for provider")
     custom: dict[str, Any] | None = Field(
         None,
-        description="Custom user-defined data for scripts or extensions. Rides inside this record's entry "
-        "in the `dns` category payload, delivered as part of one shared `TF_VAR_dns_zones` env var — not "
-        "its own env var.",
+        description="Free-form values for your own scripts and Terraform code, passed with this "
+        "record as `strata.dns.<name>.zones.<zone>.records[].custom`. Strata does not "
+        "interpret them.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside this record's entry in the `dns` category payload, delivered as part "
+        "of one shared `TF_VAR_dns_zones` env var — not its own env var.",
     )
 
     @field_validator("value")
@@ -91,36 +115,59 @@ class DnsRecordModel(PlatformBaseModel):
 
 
 class DnsZoneModel(PlatformBaseModel):
-    """Model for a DNS zone containing one or more records.
+    """One DNS zone (a domain) and its records. Each zone is its own cloud resource, so its configuration,
+    custom values and tags are set here; one document can hold several zones.
+
+    Design notes:
+    Model for a DNS zone containing one or more records.
 
     Each zone is a real, independently-tagged cloud resource (e.g. an Azure
     DNS Zone or Route53 Hosted Zone) — configuration/custom/tags live here,
     not on `DnsSpecModel`, since a single file can declare multiple zones.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A record is a duplicate when its name, type and value are all the same. Records whose "
+        "value contains a token are skipped in this comparison.",
+        "A `CNAME` record's name cannot be shared with any other record in the zone, including another `CNAME`.",
+    )
+
     name: str = Field(..., min_length=1, description="Domain name for this zone, e.g. 'huybrechts.xyz'")
     ttl: int | None = Field(3600, ge=1, description="Default TTL in seconds for all records in this zone")
     records: list[DnsRecordModel] | None = Field(None, description="List of DNS records in this zone")
     configuration: dict[str, Any] | None = Field(
         None,
-        description="Raw provisioner-specific passthrough configuration for this zone. Not validated by "
-        "strata, passed through as-is to the provisioner.",
+        description="Free-form provisioner settings for this zone, passed to Terraform as "
+        "`strata.dns.<name>.zones.<zone>.configuration`. Strata does not validate "
+        "them.\n\n"
+        "Design notes: Raw provisioner-specific passthrough configuration for this "
+        "zone. Not validated by strata, passed through as-is to the provisioner.",
     )
     custom: dict[str, Any] | None = Field(
         None,
-        description="Custom user-defined data for scripts or extensions. Rides inside this zone's entry "
-        "in the `dns` category payload, delivered as part of one shared `TF_VAR_dns_zones` env var — not "
-        "its own env var.",
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.dns.<name>.zones.<zone>.custom`. Strata does not interpret them.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside this zone's entry in the `dns` category payload, delivered as part of "
+        "one shared `TF_VAR_dns_zones` env var — not its own env var.",
     )
     default_tags: dict[str, str] | None = Field(
         None,
-        description="Baseline cloud provider tags for this zone (e.g. cost-center, environment, "
-        "owner). Deliberately distinct from meta.tags (a free-form list used for strata-internal "
-        "categorization/documentation, not cloud tags). Optional (v1-derived documents commonly carry no "
-        "cloud tags at all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum tag count.",
+        description="Baseline cloud tags for this zone (for example `cost-center`, `environment`, "
+        "`owner`), passed to Terraform as "
+        "`strata.dns.<name>.zones.<zone>.default_tags`. Not the same as `meta.tags`, "
+        "which is a free-form list for documentation. Strata does not limit the number "
+        "of tags, so stay within your cloud provider's limit.\n\n"
+        "Design notes: Baseline cloud provider tags for this zone (e.g. cost-center, "
+        "environment, owner). Deliberately distinct from meta.tags (a free-form list "
+        "used for strata-internal categorization/documentation, not cloud tags). "
+        "Optional (v1-derived documents commonly carry no cloud tags at all — gap #4, "
+        "docs/design/gap_fit_v1.md). Strata does not enforce a maximum tag count.",
     )
     custom_tags: dict[str, str] | None = Field(
-        None, description="Optional additional cloud provider tags beyond default_tags."
+        None,
+        description="Additional cloud tags on top of `default_tags`, for one-off needs.\n\n"
+        "Design notes: Optional additional cloud provider tags beyond default_tags.",
     )
 
     @model_validator(mode="after")
@@ -170,12 +217,17 @@ class DnsZoneModel(PlatformBaseModel):
 
 
 class DnsSpecModel(PlatformBaseModel):
-    """DNS specification: provider and zones.
+    """The DNS provider and the zones it manages.
+
+    Design notes:
+    DNS specification: provider and zones.
 
     No ``references`` field (ADR-0002): Value bindings (``${var:}``/``${secret:}``
     tokens in a record's ``value``) are checked against a real Environment in
     Phase 2, not an internal declared-keys list.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = ("Zone names must be unique within the document.",)
 
     provider: str | None = Field(None, description="DNS provider name, e.g. 'inwx', 'cloudflare', 'route53'")
     zones: list[DnsZoneModel] = Field(..., min_length=1, description="List of DNS zones (at least one required)")
@@ -202,7 +254,16 @@ class DnsMetaModel(PlatformBaseModel):
 
 
 class DnsModel(PlatformBaseModel):
-    """Root model for a DNS zone configuration file."""
+    """DNS zones and their records, managed through a DNS provider such as `inwx`, `cloudflare` or
+    `route53`. A workspace uses it by listing the document in `dns_zones`.
+
+    Design notes:
+    Root model for a DNS zone configuration file.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A zone domain should be declared in only one DNS document; declaring it twice gives a warning.",
+    )
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

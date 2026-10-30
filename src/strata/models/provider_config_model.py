@@ -19,7 +19,7 @@ obvious to a general audience over the more precise but less familiar
 Kubernetes "Class" convention, e.g. `StorageClass`).
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -39,15 +39,22 @@ class ProviderConfigRegionModel(PlatformBaseModel):
     name: PlatformName = Field(description="Region identifier (e.g. eu-west-1, westeurope)")
     geography: str | None = Field(
         None,
-        description="Optional compliance/deployment boundary group this region belongs to (e.g. 'europe', "
-        "'us') — mirrors Azure's 'geography' concept (a market grouping several regions). Declared once here, "
-        "per region, rather than duplicated on individual Provider documents; a future boundary check (e.g. "
-        "'don't span >1 geography') derives a Provider's geography by looking its region up here.",
+        description="Optional compliance boundary this region belongs to (for example `europe` or "
+        "`us`), declared once here per region. A Tenant lists the geographies it "
+        "allows, and a deployment's provider region must be inside one of them.\n\n"
+        "Design notes: Optional compliance/deployment boundary group this region "
+        "belongs to (e.g. 'europe', 'us') — mirrors Azure's 'geography' concept (a "
+        "market grouping several regions). Declared once here, per region, rather than "
+        "duplicated on individual Provider documents; a future boundary check (e.g. "
+        "'don't span >1 geography') derives a Provider's geography by looking its "
+        "region up here.",
     )
     description: str | None = Field(None, description="Optional description of the region")
     custom: dict[str, str] | None = Field(
         None,
-        description="Optional key-value configuration for the region",
+        description="Free-form key/value pairs stored with the region; strata itself does not read "
+        "them.\n\n"
+        "Design notes: Optional key-value configuration for the region",
     )
 
 
@@ -65,6 +72,12 @@ class ProviderConfigResourceModel(PlatformBaseModel):
 
 class ProviderConfigSpecModel(PlatformBaseModel):
     """A provider type's registry entry: valid regions and resource types."""
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`regions` is required and must be non-empty unless `additional_regions` is true.",
+        "`resources` is required and must be non-empty unless `additional_resources` is true.",
+        "Region names must be unique, and resource names must be unique.",
+    )
 
     description: str = Field(description="Description of the provider type")
     additional_regions: bool = Field(
@@ -122,7 +135,14 @@ class ProviderConfigMetaModel(PlatformBaseModel):
 
 
 class ProviderConfigModel(PlatformBaseModel):
-    """Root model for a provider type registry entry."""
+    """Registry entry for one provider type (for example `azure`): the regions and resource types that
+    `provider` and `resource` documents of that type may use. Create one per provider type and list its
+    name in the Configuration's `spec.providers`. `meta.name` is matched against a Provider's
+    `spec.type`.
+
+    Design notes:
+    Root model for a provider type registry entry.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

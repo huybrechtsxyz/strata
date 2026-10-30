@@ -59,5 +59,11 @@ spec:
   are placed by CI before strata runs, so there is no `pins.tools` category — the version a recipe
   expects lives on the [`provisioner`](workspace.md)'s `integration` binding instead, as an
   assertion strata checks, not an install instruction.
-- `strata validate` checks pin existence/applicability today; actually applying a pin onto a
-  rendered artifact isn't wired yet (no build layer consumes it).
+- `strata validate` checks pin existence/applicability: a pin naming no module service, chart
+  module, remote, artifact or asset is a `stale_pin` warning. `images`, `charts`, `remotes` and
+  `assets` pins are applied by `build run`; `artifacts` pins are applied wherever the artifact is
+  resolved (`store: artifact`, build and deploy). `--pin NAME` on `build run`/`deploy run`
+  overrides a deployment's `spec.version` for that run only.
+- A target with no current value of its own (a module service with no `image`, an artifact with a
+  blank `image_tag`) is never seeded by `version new --from` or offered by `version update`: a pin
+  must have a non-empty value.

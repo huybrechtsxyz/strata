@@ -16,7 +16,7 @@ hard non-retrieving-registry `$ref` security requirement; doing it here would
 mean validating untrusted schema content without that safeguard in place.
 """
 
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -70,21 +70,49 @@ _EFFECTIVE_VIEW_BLOCKS: frozenset[str] = frozenset({"properties", "custom", "var
 
 
 class AttributeConfigTargetModel(PlatformBaseModel):
-    """What this schema validates: which kind, which block, and (optionally)
-    which documents of that kind, via a selector."""
+    """What an attribute schema applies to: a `kind`, one free-form `block` of it, optionally narrowed by a
+    `selector`, evaluated in a `view`.
+
+    Design notes:
+    What this schema validates: which kind, which block, and (optionally)
+    which documents of that kind, via a selector.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`block: composite` requires `view: effective`.",
+        "With `view: document`, the block must exist on the targeted kind. Blocks per kind: "
+        + "; ".join(
+            f"{k.value}: {', '.join(sorted(v))}" for k, v in sorted(BLOCKS_BY_KIND.items(), key=lambda i: i[0].value)
+        )
+        + ".",
+        "`view: effective` is only valid with `kind: deployment` and a block of "
+        + ", ".join(sorted(_EFFECTIVE_VIEW_BLOCKS))
+        + ".",
+    )
 
     kind: PlatformKind = Field(description="The kind of document this schema targets (e.g. 'environment').")
     block: Literal["properties", "custom", "configuration", "variables", "features", "composite"] = Field(
-        description="Which passthrough blob field on the targeted kind this schema validates. 'composite' (view: "
-        "effective only) evaluates one object holding the merged properties/custom/variables/features together, "
-        "for rules that span blocks. 'secrets' is "
-        "deliberately never a valid value — a failing schema's message can echo the offending value verbatim, "
-        "and a `store: constant` secret's value IS the literal secret (docs/archive/environment-value-metadata.md)."
+        description="Which free-form block of the targeted kind to validate. `composite` (only "
+        "with `view: effective`) validates one object holding the merged `properties`, "
+        "`custom`, `variables` and `features` together, for rules that span blocks. "
+        "`secrets` is deliberately not allowed, because a failure message could echo "
+        "the secret value.\n\n"
+        "Design notes: Which passthrough blob field on the targeted kind this schema "
+        "validates. 'composite' (view: effective only) evaluates one object holding "
+        "the merged properties/custom/variables/features together, for rules that span "
+        "blocks. 'secrets' is deliberately never a valid value — a failing schema's "
+        "message can echo the offending value verbatim, and a `store: constant` "
+        "secret's value IS the literal secret "
+        "(docs/archive/environment-value-metadata.md)."
     )
     selector: dict[str, str] | None = Field(
         None,
-        description="Optional field-path -> required-value equality constraints. Omitted means every "
-        "document of `kind` matches. Equality only — no wildcards or regex.",
+        description="Optional field-path to required-value constraints, for example "
+        "`{spec.provider_type: azure}`. Omit to match every document of `kind`. "
+        "Equality only: no wildcards or regex.\n\n"
+        "Design notes: Optional field-path -> required-value equality constraints. "
+        "Omitted means every document of `kind` matches. Equality only — no wildcards "
+        "or regex.",
     )
     view: Literal["document", "effective"] = Field(
         description="Required, no default: the two views check different data. 'document': evaluate each "
@@ -148,8 +176,12 @@ class AttributeConfigSpecModel(PlatformBaseModel):
     # still loads from (and dumps to) a real `schema:` key in YAML.
     schema_: dict[str, Any] = Field(
         alias="schema",
-        description="Verbatim JSON Schema (2020-12 assumed) fragment, authored directly — no "
-        "strata-invented vocabulary. Evaluated by the shared evaluator, not here.",
+        description="The JSON Schema (2020-12) the block must satisfy, written as ordinary JSON "
+        "Schema without any strata-specific keywords. A `$ref` to a remote document is "
+        "not fetched.\n\n"
+        "Design notes: Verbatim JSON Schema (2020-12 assumed) fragment, authored "
+        "directly — no strata-invented vocabulary. Evaluated by the shared evaluator, "
+        "not here.",
     )
 
 
@@ -167,7 +199,14 @@ class AttributeConfigMetaModel(PlatformBaseModel):
 
 
 class AttributeConfigModel(PlatformBaseModel):
-    """Root model for an attribute schema document."""
+    """A JSON Schema that validates a free-form block (`properties`, `custom`, `configuration`, `variables`
+    or `features`) of every document of a kind, optionally filtered by a selector. Use it to type-check
+    otherwise free-form values, for example requiring `account_tier` on every Azure storage account
+    resource.
+
+    Design notes:
+    Root model for an attribute schema document.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

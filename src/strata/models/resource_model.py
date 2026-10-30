@@ -3,7 +3,7 @@
 
 import re
 from pathlib import PurePosixPath
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from pydantic import (
     Field,
@@ -24,7 +24,11 @@ from strata.utils.names import check_unique_names
 
 
 class ResourceDependencyModel(PlatformBaseModel):
-    """
+    """A capability a resource needs, described by category (and optionally subcategory and resource type)
+    rather than by name, for example category `networking` with subcategory `virtual_network`.
+    Documentation only for now: strata does not yet resolve or enforce dependencies.
+
+    Design notes:
     Capability-based resource dependency model.
 
     Resources declare what TYPE/CATEGORY of resource they need,
@@ -75,13 +79,18 @@ class ResourceDiskModel(PlatformBaseModel):
     Validates label format and mount path.
     """
 
-    name: PlatformName | None = None
+    name: PlatformName | None = Field(None, description="Optional disk name, unique within the resource.")
     size: Annotated[int, Field(gt=0, description="Disk size must be greater than 0 GB")]
     label: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Disk label for identification"
+        description="Disk label: letters, digits, hyphens and underscores, starting with a letter "
+        "or digit. `${.name}` is replaced by the resource name and is the only "
+        "substitution allowed.\n\n"
+        "Design notes: Disk label for identification"
     )
     mount: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Mount path for the disk"
+        description="Absolute mount path, without `..`. The root `/` and system directories such "
+        "as `/etc`, `/usr` and `/var/run` are not allowed.\n\n"
+        "Design notes: Mount path for the disk"
     )
 
     @field_validator("label")
@@ -150,6 +159,12 @@ class ResourceStorageModel(PlatformBaseModel):
     Applies to VMs, containers, databases, etc.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Disk names, disk labels and disk mount points must each be unique.",
+        "Volume names must be unique.",
+        "When disks are declared, every volume `path` must be under one of the disk mount points.",
+    )
+
     install_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
         None, description="Installation directory inside the VM"
     )
@@ -196,19 +211,38 @@ class ResourceStorageModel(PlatformBaseModel):
 
 
 class ResourceSpecModel(PlatformBaseModel):
-    """Resource specification containing its core identity fields and lifecycle configuration."""
+    """What a resource is: its `provider_type` and `resource_type`, optional category and storage,
+    free-form settings and tags. A workspace instantiates it under a role and can override
+    `configuration`, `custom` and the tags.
+
+    Design notes:
+    Resource specification containing its core identity fields and lifecycle configuration.
+    """
 
     lifecycle: CommonLifecycleModel | None = Field(
         None,
-        description="IaC workflow lifecycle phases, keyed by phase name",
+        description="Hook scripts per phase name. Accepted and validated, but strata does not run "
+        "lifecycle hooks yet.\n\n"
+        "Design notes: IaC workflow lifecycle phases, keyed by phase name",
     )
     provider_type: PlatformName = Field(
-        description="Cloud/infrastructure provider. Must be a known provider string matching PlatformName pattern."
+        description="Provider type this resource belongs to, for example `azure`. Must be the name "
+        "of a ProviderConfig document.\n\n"
+        "Design notes: Cloud/infrastructure provider. Must be a known provider string "
+        "matching PlatformName pattern."
     )
     resource_type: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Type of the resource"
+        description="Type of the resource within its provider type, for example `storage_account`. "
+        "Must be listed in that ProviderConfig's `resources`, unless it allows "
+        "additional resources.\n\n"
+        "Design notes: Type of the resource"
     )
-    unit_cost: float | None = Field(default=0.0, description="Unit cost for the resource")
+    unit_cost: float | None = Field(
+        default=0.0,
+        description="Cost of one unit of this resource, passed to Terraform as `unit_cost`. Strata "
+        "does not interpret it.\n\n"
+        "Design notes: Unit cost for the resource",
+    )
     category: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
         None,
         description="Resource category for organization (e.g., networking, compute, database, storage)",
@@ -217,29 +251,64 @@ class ResourceSpecModel(PlatformBaseModel):
         None,
         description="Resource subcategory for finer classification (e.g., vnet, nosql, blob)",
     )
-    dependencies: list[ResourceDependencyModel] | None = Field(None, description="List of resource dependencies")
-    storage: ResourceStorageModel | None = Field(None, description="Virtual machine specific configuration")
+    dependencies: list[ResourceDependencyModel] | None = Field(
+        None,
+        description="Capabilities this resource needs. Documentation only for now: strata does not "
+        "resolve or enforce them.\n\n"
+        "Design notes: List of resource dependencies",
+    )
+    storage: ResourceStorageModel | None = Field(
+        None,
+        description="Disks and volumes, for resources that need persistent storage such as virtual "
+        "machines, containers and databases.\n\n"
+        "Design notes: Virtual machine specific configuration",
+    )
     configuration: dict[str, Any] | None = Field(
         None,
-        description="Raw provisioner/resource-specific passthrough configuration, cross-checked in Phase 2 "
-        "against the schema declared in the referenced ProviderConfig document's "
-        "spec.resources[resource_type].configuration (see provider_config_model.py, ADR-0014).",
+        description="Free-form settings for this resource type, passed to Terraform as "
+        "`strata.resources.<name>.configuration`. A workspace's own `configuration` "
+        "for the resource overrides keys. Strata does not validate the keys itself: "
+        "add an `attributeconfig` with `target.kind: resource` and `target.block: "
+        "configuration` to do so (selector example: `spec.resource_type: "
+        "storage_account`).\n\n"
+        "Design notes: Raw provisioner/resource-specific passthrough configuration, "
+        "cross-checked in Phase 2 against the schema declared in the referenced "
+        "ProviderConfig document's spec.resources[resource_type].configuration (see "
+        "provider_config_model.py, ADR-0014).",
     )
-    custom: dict[str, Any] | None = Field(None, description="Custom user-defined data for scripts or extensions")
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.resources.<name>.custom`; a workspace's own `custom` overrides "
+        "keys. Strata does not interpret them. Validate them with an `attributeconfig` "
+        "targeting `resource` and `custom`.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions",
+    )
     default_tags: dict[str, str] | None = Field(
         None,
-        description="Baseline cloud provider tags for this resource (e.g. cost-center, environment, "
-        "owner — key-value, applied to the actual provisioned infrastructure). Deliberately distinct from "
-        "meta.tags (a free-form list used for strata-internal categorization/documentation, not cloud tags). "
-        "Optional (v1-derived documents commonly carry no cloud tags at all — gap #4, docs/design/gap_fit_v1.md). "
-        "Strata does not enforce a maximum tag count — cloud provider/resource-type tag limits vary too much "
-        "to bake into the schema; keeping default_tags + custom_tags within your target provider's limit is "
-        "the resource author's responsibility.",
+        description="Baseline cloud tags for this resource (for example `cost-center`, "
+        "`environment`, `owner`), passed to Terraform as "
+        "`strata.resources.<name>.default_tags`. Not the same as `meta.tags`, which is "
+        "a free-form list for documentation. Strata does not limit the number of tags, "
+        "so stay within your cloud provider's limit. A workspace can add to or "
+        "override them.\n\n"
+        "Design notes: Baseline cloud provider tags for this resource (e.g. "
+        "cost-center, environment, owner — key-value, applied to the actual "
+        "provisioned infrastructure). Deliberately distinct from meta.tags (a "
+        "free-form list used for strata-internal categorization/documentation, not "
+        "cloud tags). Optional (v1-derived documents commonly carry no cloud tags at "
+        "all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum "
+        "tag count — cloud provider/resource-type tag limits vary too much to bake "
+        "into the schema; keeping default_tags + custom_tags within your target "
+        "provider's limit is the resource author's responsibility.",
     )
     custom_tags: dict[str, str] | None = Field(
         None,
-        description="Optional additional cloud provider tags beyond default_tags, for ad-hoc/one-off tagging "
-        "needs that don't belong in the required baseline set.",
+        description="Additional cloud tags on top of `default_tags`, for one-off needs. A "
+        "workspace can add to or override them.\n\n"
+        "Design notes: Optional additional cloud provider tags beyond default_tags, "
+        "for ad-hoc/one-off tagging needs that don't belong in the required baseline "
+        "set.",
     )
 
     @field_validator("provider_type")
@@ -276,7 +345,11 @@ class ResourceMetaModel(PlatformBaseModel):
 
 
 class ResourceModel(PlatformBaseModel):
-    """
+    """A deployable infrastructure building block, for example a virtual machine, storage account or key
+    vault: its provider type, resource type, optional storage and default settings. A workspace
+    instantiates it by name under a role.
+
+    Design notes:
     Top-level model for a resource definition.
     Includes metadata, specification, and validation for provider configuration requirements.
     """

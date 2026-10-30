@@ -33,7 +33,7 @@ Deliberately not ported from v1's real `models/audit_config_model.py`:
   deferred alongside the `integration` arm's dispatch itself.
 """
 
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from pydantic import Field, model_validator
 
@@ -54,7 +54,11 @@ EVENT_DEFAULTS: dict[str, bool] = {
 
 
 class AuditGitSinkTargetModel(PlatformBaseModel):
-    """Git push destination — routing only. Transport (url, auth) lives on `remote`.
+    """Where a git sink pushes: a `remote` declared in the solution manifest (which owns the URL and
+    credentials), the `branch` to push to and a `path` prefix inside the repository.
+
+    Design notes:
+    Git push destination — routing only. Transport (url, auth) lives on `remote`.
 
     Distinct from `SourceModel.remote`'s read-oriented usage: `branch` is a
     mutable tip refreshed before every write, not a pinned `reference`. See
@@ -74,23 +78,38 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
     )
     path: str = Field(
         min_length=1,
-        description="Root prefix under the repository. The shared per-execution relative path (see "
-        "docs/design/audit-trail.md's 'Path resolution') is appended under this.",
+        description="Folder inside the repository under which each run's audit files are written.\n\n"
+        "Design notes: Root prefix under the repository. The shared per-execution "
+        "relative path (see docs/design/audit-trail.md's 'Path resolution') is "
+        "appended under this.",
     )
 
 
 class AuditSinkModel(PlatformBaseModel):
-    """A configured audit event destination — exactly one of two structurally
+    """One destination for audit events. Set exactly one target: `integration` (an Integration document) or
+    `git` (a push to a git remote). `events` limits which event types the sink receives.
+
+    Design notes:
+    A configured audit event destination — exactly one of two structurally
     different arms (docs/design/audit-trail.md's "The endpoints").
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Exactly one of `integration` or `git` must be set, never both and never neither.",
+        "`events` may only list known event types (`deployment.completed`, `deployment.destroyed`, "
+        "`deployment.measured`).",
+    )
 
     name: PlatformName = Field(description="Unique sink name")
     enabled: bool = Field(default=True, description="Whether this sink is active")
     required: bool = Field(
         default=False,
-        description="Same name/default as Integration.required. False (default): a dispatch failure "
-        "warns but never fails the run. True: a dispatch failure escalates to a hard failure (deploy run "
-        "exit code 3). See 'Dispatch failure — a required flag, not a binary silent-vs-fail choice'.",
+        description="False (default): a delivery failure only warns. True: a delivery failure "
+        "fails the run (exit code 3).\n\n"
+        "Design notes: Same name/default as Integration.required. False (default): a "
+        "dispatch failure warns but never fails the run. True: a dispatch failure "
+        "escalates to a hard failure (deploy run exit code 3). See 'Dispatch failure — "
+        "a required flag, not a binary silent-vs-fail choice'.",
     )
     events: list[str] | None = Field(
         default=None, description="Event filter — None means every gate-admitted event type"
@@ -98,12 +117,18 @@ class AuditSinkModel(PlatformBaseModel):
 
     integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         default=None,
-        description="Arm 1 — references an Integration document (siem/webhook/syslog). Dispatch through "
-        "this arm is not implemented yet (docs/design/audit-trail.md's Layer 2 Implementation Plan, "
-        "Phase 5) — a configured integration sink produces an explicit info-level finding instead of "
-        "silently doing nothing.",
+        description="Name of an Integration document to send events through (SIEM, webhook or "
+        "syslog). Not delivered yet: a sink that uses it only produces an "
+        "informational finding.\n\n"
+        "Design notes: Arm 1 — references an Integration document "
+        "(siem/webhook/syslog). Dispatch through this arm is not implemented yet "
+        "(docs/design/audit-trail.md's Layer 2 Implementation Plan, Phase 5) — a "
+        "configured integration sink produces an explicit info-level finding instead "
+        "of silently doing nothing.",
     )
-    git: AuditGitSinkTargetModel | None = Field(default=None, description="Arm 2 — durable git push")
+    git: AuditGitSinkTargetModel | None = Field(
+        default=None, description="Push events to a git repository instead; see `remote`, `branch` and `path`."
+    )
 
     @model_validator(mode="after")
     def validate_exactly_one_target(self) -> "AuditSinkModel":
@@ -126,14 +151,27 @@ class AuditSinkModel(PlatformBaseModel):
 
 
 class AuditConfigModel(PlatformBaseModel):
-    """`spec.audit` — fully optional; every field either derives a default or is dropped
+    """Deployment audit trail settings. Everything is optional: `event_overrides` switches event types on
+    or off and `sinks` sends events to a git repository or an Integration.
+
+    Design notes:
+    `spec.audit` — fully optional; every field either derives a default or is dropped
     (docs/design/audit-trail.md's "Streamlining the configuration surface").
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`event_overrides` keys must be known event types.",
+        "Sink names must be unique.",
+        "A sink may not filter on an event type that `event_overrides` has switched off.",
+    )
+
     event_overrides: dict[str, bool] | None = Field(
         default=None,
-        description="Overrides over EVENT_DEFAULTS, e.g. {'deployment.measured': false}. Keys must "
-        "already be in the closed event-type set.",
+        description="Switch event types on or off. Keys must be known event types: "
+        "`deployment.completed`, `deployment.destroyed` and `deployment.measured`, all "
+        "on by default. Example: `{deployment.measured: false}`.\n\n"
+        "Design notes: Overrides over EVENT_DEFAULTS, e.g. {'deployment.measured': "
+        "false}. Keys must already be in the closed event-type set.",
     )
     sinks: list[AuditSinkModel] | None = Field(default=None, description="Configured audit event destinations")
 

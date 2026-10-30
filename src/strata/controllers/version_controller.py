@@ -102,13 +102,20 @@ def _asset_targets(index: DocumentIndex) -> dict[str, str | None]:
 
 
 def _inventory(index: DocumentIndex, solution: SolutionModel | None) -> dict[str, dict[str, str | None]]:
-    """Every real pinnable target, by category, with its own current value."""
-    return {
+    """Every real pinnable target, by category, with its own current value.
+
+    A blank value is reported as `None`: `VersionPinModel.version` must be non-empty, so a
+    blank current value is nothing a new pin could be seeded with.
+    """
+    categories = {
         "images": _image_targets(index),
         "charts": _chart_targets(index),
         "remotes": _remote_targets(solution),
         "artifacts": _artifact_targets(index),
         "assets": _asset_targets(index),
+    }
+    return {
+        category: {name: value or None for name, value in targets.items()} for category, targets in categories.items()
     }
 
 

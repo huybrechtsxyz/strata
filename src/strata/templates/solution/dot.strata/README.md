@@ -14,6 +14,11 @@ customize afterwards) points VS Code's YAML extension at `strata.json`, so
 every `.yaml`/`.yml` file in this solution gets real-time schema validation
 and autocomplete out of the box.
 
+The schemas are written to be read as well: each one's root `description` says what the kind is for and its
+`examples` are working documents to start from, a `Rules:` section lists the cross-field rules that
+`strata validate` enforces, and hovering a field in the editor shows its description and those rules. The
+`strata` agent skill (`.claude/skills/strata/`) draws on them to answer "how do I model this?".
+
 Anything you *do* want to customize belongs outside `.strata/` — for
 example, `.github/pull_request_template.md` and
 `.github/ISSUE_TEMPLATE/deployment-change-request.yml` (scaffolded by

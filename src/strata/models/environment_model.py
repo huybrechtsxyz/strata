@@ -52,7 +52,7 @@ No cloud tags (ADR-0017): an Environment is a value source, not a
 provisioned resource.
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -72,18 +72,40 @@ from strata.utils.names import check_unique_names
 
 
 class EnvironmentSpecModel(PlatformBaseModel):
-    """Environment specification: the values this environment supplies."""
+    """The values an environment supplies: the `variables`, `secrets` and `features` that `${var:KEY}`,
+    `${secret:KEY}` and `${feature:KEY}` resolve against, plus shared `properties` and `custom` data.
+
+    Terraform receives resolved `constant` and `environment` variables as `strata.variables` and
+    features as `strata.flags`. Secrets are never written to disk; they are delivered at deploy time.
+
+    Design notes:
+    Environment specification: the values this environment supplies.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Keys must be unique within each of `variables`, `secrets` and `features`. The same key "
+        "may appear in different stores, because `${var:X}` and `${secret:X}` are different "
+        "tokens.",
+    )
 
     properties: dict[str, Any] | None = Field(
         None,
-        description="Environment-wide properties, merged as a layer into deployments that use this "
-        "environment. Tenant properties merge in first, then this, then the deployment's own.",
+        description="Environment-wide properties, merged as a layer into the deployments that use "
+        "this environment. Tenant properties merge first, then this environment's, "
+        "then the deployment's own. The merged result is passed to Terraform as "
+        "`strata.properties`.\n\n"
+        "Design notes: Environment-wide properties, merged as a layer into deployments "
+        "that use this environment. Tenant properties merge in first, then this, then "
+        "the deployment's own.",
     )
     custom: dict[str, Any] | None = Field(
         None,
-        description="Custom user-defined data for scripts or extensions. Merges across the Tenant/"
-        "Environment/Deployment chain like `properties`, delivered as one JSON-encoded `TF_VAR_custom` "
-        "env var for the whole merged dict — not split into a separate env var per key.",
+        description="Free-form values merged like `properties` across the tenant, environment and "
+        "deployment, passed to Terraform as `strata.custom`.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Merges "
+        "across the Tenant/Environment/Deployment chain like `properties`, delivered "
+        "as one JSON-encoded `TF_VAR_custom` env var for the whole merged dict — not "
+        "split into a separate env var per key.",
     )
     variables: list[VariableStoreModel] | None = Field(
         None, description="Variable declarations — what '${var:KEY}' tokens resolve against"
@@ -125,7 +147,13 @@ class EnvironmentMetaModel(PlatformBaseModel):
 
 
 class EnvironmentModel(PlatformBaseModel):
-    """Root model for an environment configuration file."""
+    """A source of values for value tokens: variables, secrets and feature flags, plus shared properties. A
+    deployment lists environments in `environments`, merged in order with later ones winning; a tenant
+    can contribute environments that merge first.
+
+    Design notes:
+    Root model for an environment configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,

@@ -2,6 +2,7 @@
 """Tests for ScaffoldController (docs/design/solution-scaffolding.md)."""
 
 import json
+import re
 import shutil
 from pathlib import Path
 from urllib.parse import urlparse
@@ -13,9 +14,16 @@ import yaml
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-from strata.controllers.scaffold_controller import AGENT_SKILL_PATH, GENERATED_MARKER, ScaffoldController
+from strata.controllers.scaffold_controller import (
+    AGENT_SKILL_PATH,
+    GENERATED_MARKER,
+    ScaffoldController,
+    first_sentence,
+)
 from strata.controllers.solution_controller import SERVICE_BY_KIND
+from strata.models.schema_export import export_schema
 from strata.utils.errors import UsageError
+from strata.utils.value_tokens import VALUE_TOKEN_KINDS
 from strata.utils.version import get_version
 
 
@@ -142,7 +150,55 @@ def test_strata_skill_is_stamped_with_version_and_every_kind(tmp_path):
     assert f"{GENERATED_MARKER}{get_version()}." in text
     assert "{{" not in text
     for kind in SERVICE_BY_KIND:
-        assert f"`{kind.value}`" in text
+        assert f"| `{kind.value}` |" in text
+
+
+def test_skill_kind_table_summarises_each_kind_from_its_root_description(tmp_path):
+    ScaffoldController(tmp_path).init("acme-platform")
+
+    text = (tmp_path / AGENT_SKILL_PATH).read_text(encoding="utf-8")
+    for kind, service_cls in SERVICE_BY_KIND.items():
+        description = export_schema(service_cls(data={})._get_model_class(), kind)["description"]
+        assert f"| `{kind.value}` | {first_sentence(description)} |" in text
+
+
+def test_first_sentence_stops_at_a_full_stop_outside_backticks():
+    assert (
+        first_sentence("The manifest, `strata.yaml`, at the root. More text.")
+        == "The manifest, `strata.yaml`, at the root."
+    )
+    assert first_sentence("One sentence only") == "One sentence only"
+    assert first_sentence("First paragraph.\n\nSecond paragraph.") == "First paragraph."
+    assert first_sentence("Wrapped across\nlines. Next.") == "Wrapped across lines."
+
+
+def test_skill_where_does_it_go_table_names_only_real_kinds_and_spec_fields(tmp_path):
+    """Every `kind.spec.field` in the skill must exist, so the map cannot drift from the models."""
+    ScaffoldController(tmp_path).init("acme-platform")
+
+    text = (tmp_path / AGENT_SKILL_PATH).read_text(encoding="utf-8")
+    paths = set(re.findall(r"`([a-z]+)\.spec\.([a-z_]+)`", text))
+    assert len(paths) > 15, "the where-does-it-go table lost its field paths"
+    by_name = {kind.value: (kind, service_cls) for kind, service_cls in SERVICE_BY_KIND.items()}
+    missing = []
+    for kind_name, field in sorted(paths):
+        if kind_name not in by_name:
+            missing.append(f"{kind_name}.spec.{field} (no such kind)")
+            continue
+        kind, service_cls = by_name[kind_name]
+        schema = export_schema(service_cls(data={})._get_model_class(), kind)
+        spec = schema["$defs"][schema["properties"]["spec"]["$ref"].rsplit("/", 1)[-1]]
+        if field not in spec["properties"]:
+            missing.append(f"{kind_name}.spec.{field}")
+    assert not missing, f"the skill names fields that do not exist: {missing}"
+
+
+def test_skill_explains_every_value_token_kind(tmp_path):
+    ScaffoldController(tmp_path).init("acme-platform")
+
+    text = (tmp_path / AGENT_SKILL_PATH).read_text(encoding="utf-8")
+    for token_kind in VALUE_TOKEN_KINDS:
+        assert f"| `${{{token_kind}:" in text, f"the skill's value-token table lacks {token_kind}"
 
 
 def test_update_rewrites_the_strata_skill_while_the_marker_is_present(tmp_path):
@@ -207,6 +263,25 @@ def test_init_exports_an_umbrella_schema_dispatching_on_kind(tmp_path):
     assert len(branches) == len(SERVICE_BY_KIND)
     environment_branch = next(b for b in branches if b["if"]["properties"]["kind"]["const"] == "environment")
     assert environment_branch["then"] == {"$ref": "environment.json"}
+
+
+def test_no_exported_schema_carries_a_title(tmp_path):
+    """The YAML editor heads every hover with the nearest title, so a stray one shows on every field."""
+    ScaffoldController(tmp_path).init("acme-platform")
+
+    def titles(node):
+        if isinstance(node, dict):
+            if isinstance(node.get("title"), str):
+                yield node["title"]
+            for value in node.values():
+                yield from titles(value)
+        elif isinstance(node, list):
+            for item in node:
+                yield from titles(item)
+
+    for schema_file in (tmp_path / ".strata" / "schemas").glob("*.json"):
+        found = list(titles(json.loads(schema_file.read_text(encoding="utf-8"))))
+        assert not found, f"{schema_file.name} has titles: {found[:3]}"
 
 
 def test_update_regenerates_schemas_even_if_hand_edited(tmp_path):
