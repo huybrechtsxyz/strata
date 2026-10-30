@@ -851,3 +851,6 @@ valuable, lower urgency.
   computed data across two separate CLI invocations was the deliberate
   Phase 6 tradeoff, and duplicate log lines are its one visible cost.
   Full check suite clean, 2050 tests (1 new).
+- 2026-10-30: `strata version update` is advisory by default. Candidates are findings (a stale pin is a warning, a
+  target with no pin yet is informational) and the exit code stays 0; `--check` makes every candidate an error and
+  exits 3 for a CI gate. Before, any candidate exited 3, and the footer read "FAILED ... no problems found".

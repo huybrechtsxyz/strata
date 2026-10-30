@@ -67,3 +67,7 @@ spec:
 - A target with no current value of its own (a module service with no `image`, an artifact with a
   blank `image_tag`) is never seeded by `version new --from` or offered by `version update`: a pin
   must have a non-empty value.
+- `strata version update NAME` lists the pins you could add (each target with no pin yet, seeded with
+  its current value) and the pins to remove (stale ones). It never edits the file and exits 0, since
+  a target with no pin is normal. Add `--check` to exit 3 when anything is left to add or remove, for a
+  CI gate.

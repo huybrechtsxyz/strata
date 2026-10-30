@@ -206,3 +206,85 @@ def test_quiet_suppresses_chrome_on_success():
     """Nothing to say when there is nothing wrong."""
     _, text = _capture(quiet=True)(lambda run: run.step("working"))
     assert text.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# A failed run always says why
+# ---------------------------------------------------------------------------
+
+
+def _fail_with(*findings):
+    """A body that reports `findings` (possibly none) and then fails."""
+
+    def body(run):
+        if findings:
+            diagnostics = Diagnostics()
+            for severity, message, code in findings:
+                getattr(diagnostics, severity)(message, code=code)
+            run.report(diagnostics)
+        run.ok = False
+
+    return body
+
+
+def test_a_failure_with_no_finding_gets_one_and_the_footer_says_so():
+    code, text = _capture()(_fail_with())
+    assert code == EXIT_VALIDATION
+    assert "unexplained_failure" in text
+    assert "1 error" in text
+    assert "no problems found" not in text
+
+
+def test_a_failure_after_an_empty_report_gets_one_too():
+    def body(run):
+        run.report(Diagnostics())
+        run.ok = False
+
+    _, text = _capture()(body)
+    assert "unexplained_failure" in text
+    assert "no problems found" not in text
+
+
+def test_the_json_envelope_of_an_unexplained_failure_carries_the_finding():
+    code, text = _capture(output="json")(_fail_with())
+    envelope = json.loads(text)
+    assert code == EXIT_VALIDATION
+    assert envelope["ok"] is False
+    assert [d["code"] for d in envelope["diagnostics"]] == ["unexplained_failure"]
+    assert envelope["summary"]["errors"] == 1
+
+
+def test_earlier_findings_are_kept_and_counted_beside_the_added_one():
+    body = _fail_with(("info", "could be pinned", "pin_candidate"))
+
+    _, text = _capture()(body)
+    assert text.count("could be pinned") == 1  # not printed a second time
+    assert "unexplained_failure" in text
+    assert "1 error, 1 info" in text
+
+    _, json_text = _capture(output="json")(body)
+    codes = [d["code"] for d in json.loads(json_text)["diagnostics"]]
+    assert codes == ["pin_candidate", "unexplained_failure"]
+
+
+def test_a_failure_that_has_an_error_is_left_alone():
+    _, text = _capture()(_fail_with(("error", "the real reason", "real")))
+    assert "the real reason" in text
+    assert "unexplained_failure" not in text
+
+
+def test_a_failure_explained_by_a_warning_is_left_alone():
+    """`validate --strict` fails on warnings, and the warning says why."""
+    _, text = _capture()(_fail_with(("warning", "stale pin", "stale_pin")))
+    assert "unexplained_failure" not in text
+
+
+def test_a_passing_run_is_never_given_a_finding():
+    def body(run):
+        diagnostics = Diagnostics()
+        diagnostics.info("fyi", code="note")
+        run.report(diagnostics)
+
+    code, text = _capture()(body)
+    assert code == EXIT_SUCCESS
+    assert "unexplained_failure" not in text

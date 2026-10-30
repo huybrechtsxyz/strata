@@ -107,10 +107,17 @@ def version_new(
 @version_command.command("update")
 @click.argument("name")
 @click.option("--path", "start_path", type=click.Path(file_okay=False, path_type=Path), default=None, help=_PATH_HELP)
+@click.option(
+    "--check",
+    is_flag=True,
+    default=False,
+    help="Exit 3 when there is anything to add or remove, for a CI gate. Without it the candidates are "
+    "reported and the exit code stays 0: a target with no pin is normal, not every target needs one.",
+)
 @output_option
 @quiet_option
 @verbose_option
-def version_update(name: str, start_path: Path | None, output: str, quiet: bool, verbose: bool) -> None:
+def version_update(name: str, start_path: Path | None, check: bool, output: str, quiet: bool, verbose: bool) -> None:
     """Report pin-key reconciliation candidates for the kind: version document named NAME.
 
     Read-only — a proposal, never an auto-apply. Compares NAME's declared
@@ -119,12 +126,16 @@ def version_update(name: str, start_path: Path | None, output: str, quiet: bool,
     current value, never invented); a pin naming a target that no longer
     exists is a candidate to remove. The operator reviews and edits by hand.
 
+    Candidates are findings: a stale pin is a warning (as in `strata validate`), a
+    target with no pin yet is informational. With --check every candidate is an
+    error and the command fails, so a pipeline can require a complete document.
+
     \b
     Exit codes:
-      0  fully reconciled — nothing to add or remove
+      0  reported; with --check, fully reconciled — nothing to add or remove
       2  bad arguments, NAME is not an indexed version document, or not
          inside a solution
-      3  one or more add/remove candidates found
+      3  with --check only: one or more add/remove candidates found
       1  system failure
     """
     with command_run("version update", output=output, quiet=quiet, verbose=verbose) as run:
@@ -142,10 +153,31 @@ def version_update(name: str, start_path: Path | None, output: str, quiet: bool,
         if output == "console":
             _print_rows(rows)
 
-        run.report(Diagnostics(), root=context.root)
+        run.report(_candidate_findings(rows, source=str(entry.source), check=check), root=context.root)
         if isinstance(run.reporter, JsonReporter):
             run.reporter.data = {"name": name, "candidates": [asdict(row) for row in rows]}
-        run.ok = not rows
+        run.ok = not (check and rows)
+
+
+def _candidate_findings(rows: list[ReconcileRow], *, source: str, check: bool) -> Diagnostics:
+    """One summary finding per kind of candidate, so the footer says what the command found.
+
+    A stale pin is a warning and a missing pin informational; under `--check` both are errors.
+    """
+    diagnostics = Diagnostics()
+    stale = sum(row.action == "remove" for row in rows)
+    missing = sum(row.action == "add" for row in rows)
+    if stale:
+        record = diagnostics.error if check else diagnostics.warning
+        record(
+            f"{stale} stale pin{'s' if stale != 1 else ''}: the target no longer exists",
+            source=source,
+            code="stale_pin",
+        )
+    if missing:
+        record = diagnostics.error if check else diagnostics.info
+        record(f"{missing} target{'s' if missing != 1 else ''} with no pin yet", source=source, code="pin_candidate")
+    return diagnostics
 
 
 def _print_rows(rows: list[ReconcileRow]) -> None:

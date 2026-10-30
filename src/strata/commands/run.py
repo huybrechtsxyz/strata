@@ -34,11 +34,11 @@ import click
 
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_VALIDATION, exit_code_for
 from strata.commands.options import make_reporter
-from strata.commands.output import Reporter
+from strata.commands.output import Reporter, format_summary
 from strata.logging.config import configure_logging
 from strata.logging.context import bind_run
 from strata.utils.argv import command_line
-from strata.utils.diagnostics import Diagnostics
+from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.errors import StrataError
 
 
@@ -65,6 +65,9 @@ class CommandRun:
 
         self._facts: dict[str, str] = {}
         self._summary = ""
+        self._reported = Diagnostics()
+        self._root: Path | None = None
+        self._document_count: int | None = None
         self._header_written = False
 
     # -- description ------------------------------------------------------
@@ -105,6 +108,9 @@ class CommandRun:
     ) -> None:
         """Report findings. Does not decide the outcome — the command does."""
         self._ensure_header()
+        self._reported = diagnostics
+        self._root = root
+        self._document_count = document_count
         self._summary = self.reporter.diagnostics(diagnostics, root=root, document_count=document_count)
 
     # -- completion -------------------------------------------------------
@@ -112,8 +118,35 @@ class CommandRun:
     def _finish(self) -> int:
         """Write the footer and return the exit code."""
         self._ensure_header()
+        if not self.ok:
+            self._explain_unexplained_failure()
         self.reporter.footer(self.ok, self._summary)
         return EXIT_SUCCESS if self.ok else self.failure_code
+
+    def _explain_unexplained_failure(self) -> None:
+        """A failed run must say why, or the footer reads "FAILED - no problems found".
+
+        An error explains a failure, and so does a warning (`validate --strict` fails on
+        warnings). With neither, a command set `ok` to False without recording a finding:
+        add one, so the console and the JSON envelope both say the run failed for no stated
+        reason. That is a strata bug, and the finding says so.
+        """
+        reported = self._reported
+        if reported.of(Severity.ERROR) or reported.of(Severity.WARNING):
+            return
+        finding = Diagnostics()
+        finding.error(
+            "The run failed but recorded no finding saying why. This is a strata bug; please report it.",
+            code="unexplained_failure",
+        )
+        merged = Diagnostics(items=[*reported.items, *finding.items])
+        if self.output == "json":
+            # JSON holds one document: replace what it has with everything.
+            self.reporter.diagnostics(merged, root=self._root, document_count=self._document_count)
+        else:
+            # The console already printed the earlier findings; print only the new one.
+            self.reporter.diagnostics(finding, root=self._root)
+            self._summary = format_summary(merged, self._document_count)
 
     def _fail(self, error: StrataError) -> int:
         """Render a failure that stopped the command, and return its code.

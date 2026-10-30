@@ -153,13 +153,57 @@ def test_new_from_seeds_pins_with_current_values(runner, solution):
 # ---------------------------------------------------------------------------
 
 
-def test_update_reports_add_candidate_and_exits_validation_failure(runner, solution):
+def test_update_reports_an_add_candidate_and_exits_zero(runner, solution):
     (solution / "versions").mkdir()
     (solution / "versions" / "prd.yaml").write_text(VERSION, encoding="utf-8")
 
     result = _update(runner, "prd", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS
+    assert "images.web" in result.output
+    assert "PASSED" in result.output
+    assert "no problems found" not in result.output
+    assert "1 info" in result.output
+
+
+def test_update_check_fails_on_an_add_candidate_and_says_why(runner, solution):
+    (solution / "versions").mkdir()
+    (solution / "versions" / "prd.yaml").write_text(VERSION, encoding="utf-8")
+
+    result = _update(runner, "prd", "--path", solution, "--check")
     assert result.exit_code == EXIT_VALIDATION
     assert "images.web" in result.output
+    assert "FAILED" in result.output
+    assert "1 error" in result.output
+    assert "no problems found" not in result.output
+
+
+STALE_VERSION = (
+    "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+    "  pins:\n    images:\n      web: nginx:1.27-alpine\n      ghost: nothing:1\n"
+)
+
+
+def test_update_reports_a_stale_pin_as_a_warning_and_exits_zero(runner, solution):
+    (solution / "versions").mkdir()
+    (solution / "versions" / "prd.yaml").write_text(STALE_VERSION, encoding="utf-8")
+
+    result = _update(runner, "prd", "--path", solution, "--output", "json")
+
+    assert result.exit_code == EXIT_SUCCESS
+    envelope = json.loads(result.output)
+    assert envelope["ok"] is True
+    assert [(d["severity"], d["code"]) for d in envelope["diagnostics"]] == [("warning", "stale_pin")]
+    assert any(c["name"] == "ghost" and c["action"] == "remove" for c in envelope["data"]["candidates"])
+
+
+def test_update_check_fails_on_a_stale_pin(runner, solution):
+    (solution / "versions").mkdir()
+    (solution / "versions" / "prd.yaml").write_text(STALE_VERSION, encoding="utf-8")
+
+    result = _update(runner, "prd", "--path", solution, "--check")
+
+    assert result.exit_code == EXIT_VALIDATION
+    assert "1 stale pin" in result.output
 
 
 def test_update_on_a_fully_reconciled_document_exits_zero(runner, solution):
@@ -170,9 +214,11 @@ def test_update_on_a_fully_reconciled_document_exits_zero(runner, solution):
         encoding="utf-8",
     )
 
-    result = _update(runner, "prd", "--path", solution)
-    assert result.exit_code == EXIT_SUCCESS
-    assert "fully reconciled" in result.output
+    for flags in ((), ("--check",)):
+        result = _update(runner, "prd", "--path", solution, *flags)
+        assert result.exit_code == EXIT_SUCCESS
+        assert "fully reconciled" in result.output
+        assert "no problems found" in result.output
 
 
 def test_update_unknown_name_exits_usage_failure(runner, solution):
@@ -185,11 +231,23 @@ def test_update_json_output_carries_every_candidate(runner, solution):
     (solution / "versions" / "prd.yaml").write_text(VERSION, encoding="utf-8")
 
     result = _update(runner, "prd", "--path", solution, "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS
+    envelope = json.loads(result.output)
+    assert envelope["ok"] is True
+    assert [(d["severity"], d["code"]) for d in envelope["diagnostics"]] == [("info", "pin_candidate")]
+    candidates = envelope["data"]["candidates"]
+    assert any(c["category"] == "images" and c["name"] == "web" and c["action"] == "add" for c in candidates)
+
+
+def test_update_check_json_output_is_not_ok_and_carries_an_error(runner, solution):
+    (solution / "versions").mkdir()
+    (solution / "versions" / "prd.yaml").write_text(VERSION, encoding="utf-8")
+
+    result = _update(runner, "prd", "--path", solution, "--output", "json", "--check")
     assert result.exit_code == EXIT_VALIDATION
     envelope = json.loads(result.output)
     assert envelope["ok"] is False
-    candidates = envelope["data"]["candidates"]
-    assert any(c["category"] == "images" and c["name"] == "web" and c["action"] == "add" for c in candidates)
+    assert [(d["severity"], d["code"]) for d in envelope["diagnostics"]] == [("error", "pin_candidate")]
 
 
 # ---------------------------------------------------------------------------
