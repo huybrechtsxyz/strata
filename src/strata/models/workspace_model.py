@@ -5,8 +5,8 @@ The workspace is the "image" (ADR-0011): a static, versioned declaration of
 everything that could exist in a solution — providers, resources, topologies
 (pure groupings), namespaces, firewalls/dns/networks, and the provisioning
 recipe (`ProvisionerModel`/`ProvisioningStepModel`) that builds/deploys them.
-A `Deployment` (not yet built, the "container instance") executes that
-recipe against a specific `Environment` — it does not invent new tool
+A `Deployment` (the "container instance") executes that
+recipe against its `Environment` documents (and `Tenant`) — it does not invent new tool
 bindings, only supplies runtime parameters.
 
 **References are names, not paths.** `spec.namespaces`/

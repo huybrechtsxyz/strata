@@ -1,0 +1,14 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: c0062-env
+  annotations:
+    description: "Tenant-wide defaults for customer c0062, merged before each deployment's own environments"
+  tags: ["example", "customer"]
+spec:
+  # '${value:kind.name.path}' reads a field of another document, so the tenant code is typed once, on the tenant.
+  variables:
+    - key: CUSTOMER_CODE
+      store: constant
+      value: "${value:tenant.c0062.meta.name}"
+      description: "The tenant's own code, read from the tenant document"

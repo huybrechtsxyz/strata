@@ -21,10 +21,8 @@ spec:
 
   # Environment document *names*, not file paths (ADR-0015). Merged before
   # a deployment's own environments, so deployment values win.
-  # NOTE: the 'environment' kind is not built yet, so this name currently
-  # resolves to nothing — it is here to show the intended shape.
-  # environments:
-  #   - c0062-env
+  environments:
+    - c0062-env
 
   properties:
     deploy_tier: standard

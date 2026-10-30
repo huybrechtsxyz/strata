@@ -427,6 +427,22 @@ def test_shipped_example_binds_the_asset_slot_per_customer_without_a_manifest_re
     assert not remote_names & {"c0062-api", "c0063-api"}
 
 
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_merges_the_tenant_environment_before_the_deployments_own():
+    """Tenant c0062 names `c0062-env`, whose `CUSTOMER_CODE` reads the tenant's own name through `${value:}`."""
+    from strata.controllers.value_controller import resolve_values
+
+    context = open_solution(_repo_config_dir()).require_valid()
+    resolved, diagnostics = resolve_deployment_chains(context.controller.index)
+    assert diagnostics.ok, diagnostics.messages()
+
+    assert resolved["prd-c0062-deployment"].spec.environments == ["c0062-env", "prd"]
+    assert resolved["prd-c0063-deployment"].spec.environments == ["prd"]  # no tenant, no tenant environment
+    result = resolve_values(context, "prd-c0062-deployment", ["CUSTOMER_CODE"])
+    assert result.diagnostics.ok, result.diagnostics.messages()
+    assert result.values["CUSTOMER_CODE"] == "c0062"
+
+
 @pytest.fixture
 def terraform_on_path(monkeypatch):
     """The example requires terraform >= 1.7 at build preflight; CI runners do not have it."""
