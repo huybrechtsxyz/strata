@@ -16,7 +16,7 @@ def _write(root: Path, relative: str, kind: str, name: str, spec: str) -> None:
     (root / relative).write_text(_HEADER.format(kind=kind, name=name) + spec, encoding="utf-8")
 
 
-def _solution(tmp_path: Path, *, with_tag: bool = True) -> Path:
+def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "") -> Path:
     """Deployment `app` (version `prd`, pinning `datahub` to 2.0.0) and `other` (no version)."""
     root = tmp_path / "sln"
     root.mkdir()
@@ -28,7 +28,7 @@ def _solution(tmp_path: Path, *, with_tag: bool = True) -> Path:
         "workspace",
         "main",
         "  providers:\n    - p1\n  namespaces:\n    - apps\n"
-        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n",
+        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n" + policy,
     )
     _write(
         root,
@@ -140,3 +140,55 @@ def test_it_needs_no_build_and_writes_nothing(tmp_path):
     before = {path.name for path in root.iterdir()}
     _data(_invoke(root, "app", "-o", "json"))
     assert {path.name for path in root.iterdir()} == before
+
+
+# ---------------------------------------------------------------------------
+# image_tag_policy (docs/design/image-tag-policy.md)
+# ---------------------------------------------------------------------------
+
+_DENY = "  image_tag_policy: {}\n"
+_WARN = "  image_tag_policy:\n    enforcement: warn\n"
+
+
+def test_a_deny_policy_fails_a_row_with_no_tag_with_the_validation_exit_code(tmp_path):
+    root = _solution(tmp_path, with_tag=False, policy=_DENY)
+    result = _invoke(root, "other", "-o", "json")
+    assert result.exit_code == EXIT_VALIDATION, result.output
+    envelope = json.loads(result.output)
+    assert [(d["severity"], d["code"]) for d in envelope["diagnostics"]] == [("error", "image_without_tag")]
+    assert {row["name"] for row in envelope["data"]["images"]} == {"datahub", "redis"}
+
+
+def test_a_warn_policy_reports_but_exits_zero(tmp_path):
+    root = _solution(tmp_path, with_tag=False, policy=_WARN)
+    result = _invoke(root, "other", "-o", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert [(d["severity"], d["code"]) for d in json.loads(result.output)["diagnostics"]] == [
+        ("warning", "image_without_tag")
+    ]
+
+
+def test_a_policy_reports_a_floating_tag_the_plain_command_ignores(tmp_path):
+    root = _solution(tmp_path, policy=_DENY)
+    (root / "module.yaml").write_text(
+        (root / "module.yaml").read_text(encoding="utf-8").replace("redis:7", "redis:latest"), encoding="utf-8"
+    )
+    assert _invoke(root, "app").exit_code == EXIT_VALIDATION
+    (tmp_path / "plain").mkdir()
+    plain = _solution(tmp_path / "plain")
+    (plain / "module.yaml").write_text(
+        (plain / "module.yaml").read_text(encoding="utf-8").replace("redis:7", "redis:latest"), encoding="utf-8"
+    )
+    assert _invoke(plain, "app").exit_code == EXIT_SUCCESS
+
+
+def test_a_policy_that_is_satisfied_exits_zero_with_no_findings(tmp_path):
+    result = _invoke(_solution(tmp_path, policy=_DENY), "app", "-o", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert json.loads(result.output)["diagnostics"] == []
+
+
+def test_the_policy_judges_the_deployment_under_pin(tmp_path):
+    root = _solution(tmp_path, with_tag=False, policy=_DENY)
+    assert _invoke(root, "other").exit_code == EXIT_VALIDATION
+    assert _invoke(root, "other", "--pin", "prd").exit_code == EXIT_SUCCESS

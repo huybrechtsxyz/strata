@@ -127,7 +127,8 @@ class ReconcileRow:
     category: str
     name: str
     action: str
-    """`"add"` or `"remove"`."""
+    """`"add"`, `"remove"`, or `"needs_value"`: an artifact with no `image_tag` and no pin, which has
+    nothing to seed a pin with but resolves to no tag at all until someone gives it one."""
     seed_value: str | None = None
     """For `"add"` only: the target's current real value, to seed the new
     pin with so adding the key changes nothing by itself."""
@@ -143,7 +144,8 @@ def reconcile_version(
     target with no current value of its own (e.g. a module service that
     declares no `image`) is never offered as an "add" candidate — there is
     nothing honest to seed it with, same rule `scaffold_version()`'s own
-    `--from` cloning follows.
+    `--from` cloning follows. The one exception is an artifact with no
+    `image_tag`: it is reported as `needs_value`, with no seed.
     """
     inventory = _inventory(index, solution)
     declared: dict[str, set[str]] = {category: set() for category in PIN_CATEGORIES}
@@ -159,6 +161,9 @@ def reconcile_version(
             seed_value = real_targets[name]
             if seed_value is not None:
                 rows.append(ReconcileRow(category=category, name=name, action="add", seed_value=seed_value))
+            elif category == "artifacts":
+                # No honest seed, but without a pin the artifact has no tag in this document's ring.
+                rows.append(ReconcileRow(category=category, name=name, action="needs_value"))
     return rows
 
 

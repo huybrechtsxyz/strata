@@ -73,3 +73,6 @@ spec:
         - resource: edge-waf
   default_tags:
     managed-by: strata
+  # Guard rail on the tag of every image a deployment runs: each needs a tag, and `latest`, `main` and the
+  # other mutable aliases are rejected. `build run`, `deploy run` and `deploy images` judge it, offline.
+  image_tag_policy: {}

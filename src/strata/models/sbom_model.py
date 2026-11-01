@@ -14,7 +14,7 @@ from typing import ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from strata.models.common_models import PlatformBaseModel
+from strata.models.common_models import PlatformBaseModel, expires_date_text
 
 #: Shared with `strata.integrations.cve_scanner` and
 #: `strata.controllers.sbom_controller` — one source of truth for severity
@@ -115,6 +115,11 @@ class CveAllowedEntryModel(PlatformBaseModel):
     reason: str = Field(description="Justification for accepting this CVE")
     package: str | None = Field(None, description="Scope to a specific package name (optional)")
     expires: str | None = Field(None, description="ISO date after which this entry is ignored (e.g. '2026-12-31')")
+
+    @field_validator("expires", mode="before")
+    @classmethod
+    def accept_an_unquoted_yaml_date(cls, value: object) -> object:
+        return expires_date_text(value)
 
     @field_validator("expires")
     @classmethod

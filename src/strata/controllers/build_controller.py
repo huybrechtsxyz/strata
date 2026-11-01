@@ -40,10 +40,12 @@ import yaml
 
 from strata.controllers.checkov_controller import evaluate_checkov_policy
 from strata.controllers.effective_images import effective_images
+from strata.controllers.image_tag_policy import check_image_tag_policy
 from strata.controllers.integration_readiness import integration_preflight
 from strata.controllers.integration_resolution import find_provisioner, resolve_integration
 from strata.controllers.policy_results import checkov_policy_result as build_checkov_policy_result
 from strata.controllers.policy_results import cve_policy_result as build_cve_policy_result
+from strata.controllers.policy_results import image_tag_policy_result as build_image_tag_policy_result
 from strata.controllers.policy_results import write_policy_results
 from strata.controllers.remote_credentials import RemoteCredentialResolver
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
@@ -586,6 +588,15 @@ def build_run(
     diagnostics.extend(preflight)
     if not preflight.ok:
         return diagnostics
+
+    # Image tag policy (docs/design/image-tag-policy.md): offline, so it also runs under `dry_run`, and before
+    # anything is cleaned or rendered so a `deny` breach leaves nothing behind. A no-op when the field is unset.
+    images = effective_images(context, deployment, pinned_by_flag=pin is not None)
+    image_tag_diagnostics = check_image_tag_policy(context, deployment, workspace, images=images)
+    diagnostics.extend(image_tag_diagnostics)
+    if not image_tag_diagnostics.ok:
+        return diagnostics
+    image_tag_result = build_image_tag_policy_result(workspace, image_tag_diagnostics)
     resolved = ValueResolution(deployment=deployment_name)
     if resolve:
         variables, secrets, features = merge_environment_models(environments)
@@ -614,7 +625,7 @@ def build_run(
         tenant=tenant,
         deployment=deployment,
         version=version,
-        images=effective_images(context, deployment, pinned_by_flag=pin is not None),
+        images=images,
     )
     if dry_run:
         _step(f"would write {build_path / 'resolved.yaml'}")
@@ -835,7 +846,7 @@ def build_run(
         # second, independent call here would have silently discarded
         # whichever policy's result was written first the moment a second
         # build-phase policy was ever configured at once.
-        policy_results = [r for r in (cve_policy_result, checkov_policy_result) if r is not None]
+        policy_results = [r for r in (image_tag_result, cve_policy_result, checkov_policy_result) if r is not None]
         if policy_results:
             write_policy_results(build_path, policy_results)
     else:

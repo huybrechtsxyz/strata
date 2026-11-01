@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Tests for the CVE scanner models (docs/archive/cve-scanner-integration.md)."""
 
+from datetime import date, datetime
+
 import pytest
 from pydantic import ValidationError
 
@@ -58,6 +60,16 @@ def test_cve_allowed_entry_minimal():
 def test_cve_allowed_entry_accepts_a_valid_iso_expires_date():
     entry = CveAllowedEntryModel(id="CVE-2024-1234", reason="tracked", expires="2026-12-31")
     assert entry.expires == "2026-12-31"
+
+
+def test_cve_allowed_entry_accepts_an_unquoted_yaml_date_as_expires():
+    entry = CveAllowedEntryModel(id="CVE-2024-1234", reason="tracked", expires=date(2026, 12, 31))
+    assert entry.expires == "2026-12-31"
+
+
+def test_cve_allowed_entry_refuses_an_unquoted_yaml_datetime_by_naming_the_time_of_day():
+    with pytest.raises(ValidationError, match="has a time of day; give a date only"):
+        CveAllowedEntryModel(id="CVE-2024-1234", reason="tracked", expires=datetime(2026, 12, 31, 10, 0))
 
 
 def test_cve_allowed_entry_rejects_a_non_iso_expires_date():

@@ -36,13 +36,14 @@ from strata.controllers.deployment_output_store import (
     OutputRecordNotFoundError,
     OutputRecordStaleError,
 )
+from strata.controllers.image_tag_policy import check_image_tag_policy
 from strata.controllers.integration_readiness import IntegrationReadiness, assess_integration, integration_preflight
 from strata.controllers.integration_resolution import (
     find_provisioner,
     resolve_integration,
     resolve_output_store_integration,
 )
-from strata.controllers.policy_results import append_policy_result
+from strata.controllers.policy_results import append_policy_result, image_tag_policy_result
 from strata.controllers.security_gate_controller import evaluate_security_gates
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
@@ -528,6 +529,19 @@ def deploy_run(
     )
 
     diagnostics = Diagnostics()
+
+    # Image tag policy (docs/design/image-tag-policy.md): offline, so it runs first, ahead of any store access. The
+    # tag in effect here can differ from the build's (`--pin` given only to `deploy run`), so the deploy result
+    # replaces the build's entry for the same policy. It runs under `smoke_test` too (nothing is contacted), but
+    # a smoke test records nothing.
+    if workspace.spec.image_tag_policy is not None:
+        tag_diagnostics = check_image_tag_policy(context, deployment, workspace, pinned_by_flag=pin is not None)
+        diagnostics.extend(tag_diagnostics)
+        result = image_tag_policy_result(workspace, tag_diagnostics, "deploy")
+        if result is not None and build_path.is_dir() and not smoke_test:
+            append_policy_result(build_path, result)
+        if not tag_diagnostics.ok:
+            return diagnostics
 
     environments = reachable_environments(context, deployment)
     variables, secrets, features = merge_environment_models(environments)

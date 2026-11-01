@@ -141,9 +141,10 @@ This is a new command, so steps 1 to 4 target 2.0.x or 2.1. Step 5 is a bugfix a
 
 ### Related follow-ups, not part of this work
 
-- Guard rails (fail on no pin and no tag, reject floating tags): opt-in, design needed. Strata now
-  resolves a tag-less artifact to `""` and relies on the root module to reject it; `deploy images` only
-  warns. The row's `tag_source` and `is_mutable_alias_tag()` are the pieces to build on.
+- Guard rails (fail on no pin and no tag, reject floating tags): built as the opt-in workspace policy
+  `image_tag_policy`, see [image-tag-policy.md](../design/image-tag-policy.md). Without it a tag-less artifact still
+  resolves to `""` and relies on the root module to reject it, and `deploy images` only warns; with it
+  `build run`, `deploy run` and `deploy images` judge every row.
 - A version document shared across workspaces (`spec.workspace` as a list): needs an ADR.
 - `spec.mirror` on the artifact, and a capability check on `spec.integration`: defer until strata
   consumes either field.

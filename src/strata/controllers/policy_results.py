@@ -48,13 +48,27 @@ def checkov_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -
     return _build_phase_result("checkov_policy", "checkov", policy.enforcement, diagnostics)
 
 
+def image_tag_policy_result(
+    workspace: WorkspaceModel, diagnostics: Diagnostics, phase: str = "build"
+) -> ManifestPolicyResultModel | None:
+    """The `image_tag_policy` entry for `policy_results.json`, or `None` when unset (as `cve_policy_result()`).
+
+    `phase` is `build` when `build run` evaluated it and `deploy` when the `deploy run` preflight did; the
+    deploy entry replaces the build one through `append_policy_result()`.
+    """
+    policy = workspace.spec.image_tag_policy
+    if policy is None:
+        return None
+    return _build_phase_result("image_tag_policy", "image_tag", policy.enforcement, diagnostics, phase)
+
+
 def _build_phase_result(
-    name: str, policy_type: str, enforcement: str, diagnostics: Diagnostics
+    name: str, policy_type: str, enforcement: str, diagnostics: Diagnostics, phase: str = "build"
 ) -> ManifestPolicyResultModel:
     return ManifestPolicyResultModel(
         policy_name=name,
         policy_type=policy_type,
-        phase="build",
+        phase=phase,
         enforcement=enforcement,
         passed=diagnostics.ok,
         violations=diagnostics.messages(Severity.ERROR) + diagnostics.messages(Severity.WARNING),

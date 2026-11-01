@@ -15,6 +15,7 @@ from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.effective_images import effective_images
+from strata.controllers.image_tag_policy import check_image_tag_policy
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import resolve_deployment_workspace
 from strata.integrations.resolved_context import EffectiveImage
@@ -48,7 +49,9 @@ def deploy_images_command(
     Covers artifacts (a `store: artifact` variable or a module service's `artifact`) and module
     services' literal images. For each: the image name, the effective tag, where the tag came
     from (a version document, `--pin`, the artifact's own `image_tag`, or nowhere) and what uses it.
-    Artifacts nothing references are not listed. A row with no tag is a warning, not a failure.
+    Artifacts nothing references are not listed. A row with no tag is a warning, not a failure, unless
+    the workspace sets `image_tag_policy`: then the policy judges every row (no tag, a floating tag such as
+    `latest`, a tag pattern) and, with `enforcement: deny`, a breach exits 3.
 
     Nothing is built, resolved against a store or sent anywhere, so it is safe to run before
     `build run`: a pipeline can use it to copy the images to a registry first. With -o json,
@@ -59,29 +62,35 @@ def deploy_images_command(
     Exit codes:
       0  listed
       2  bad arguments, an unknown DEPLOYMENT or --pin, or not inside a solution
-      3  the solution is invalid
+      3  the solution is invalid, or image_tag_policy denies an image
       1  system failure
     """
     with command_run("deploy images", output=output, quiet=quiet, verbose=verbose) as run:
         context = open_solution(resolve_work_path(start_path)).require_valid()
         solution = context.controller.solution
         run.describe(solution=solution.meta.name if solution else "(unnamed)", root=context.root, deployment=deployment)
-        resolved, _workspace = resolve_deployment_workspace(context, deployment, version_pin=pin)
+        resolved, workspace = resolve_deployment_workspace(context, deployment, version_pin=pin)
         rows = effective_images(context, resolved, pinned_by_flag=pin is not None)
         run.step(f"{len(rows)} image(s)")
 
+        # With an image_tag_policy the policy judges the rows, and a `deny` breach fails the command so the
+        # image copy at the start of a pipeline stops first. Without one a missing tag is only a warning.
         diagnostics = Diagnostics()
-        for row in rows:
-            if row.image_tag is None:
-                diagnostics.warning(
-                    f"'{row.name}' has no tag: neither a version pin nor the declaration supplies one.",
-                    location=row.name,
-                    code="image_without_tag",
-                )
+        if workspace.spec.image_tag_policy is not None:
+            diagnostics = check_image_tag_policy(context, resolved, workspace, images=rows)
+        else:
+            for row in rows:
+                if row.image_tag is None:
+                    diagnostics.warning(
+                        f"'{row.name}' has no tag: neither a version pin nor the declaration supplies one.",
+                        location=row.name,
+                        code="image_without_tag",
+                    )
 
         if output == "console":
             _print_rows(rows)
         run.report(diagnostics, root=context.root)
+        run.ok = diagnostics.ok
         if isinstance(run.reporter, JsonReporter):
             run.reporter.data = {
                 "deployment": deployment,

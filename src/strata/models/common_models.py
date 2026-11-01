@@ -3,6 +3,7 @@
 
 import warnings
 from collections.abc import Callable
+from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, ClassVar
@@ -68,6 +69,20 @@ def scalar_shorthand_schema(scalar_type: Any) -> Callable[[dict[str, Any]], None
         schema["anyOf"] = [TypeAdapter(scalar_type).json_schema(), object_form]
 
     return extend
+
+
+def expires_date_text(value: object) -> object:
+    """For a `mode="before"` validator on an `expires` field that holds an ISO date as text.
+
+    YAML loads an unquoted `expires: 2026-12-31` as a date, not a string, so it is turned back into
+    `"2026-12-31"`. A date with a time of day is refused by name: the entry is honoured through a whole day.
+    """
+    if isinstance(value, datetime):
+        raise ValueError(
+            f"expires '{value.isoformat(sep=' ')}' has a time of day; give a date only (e.g. '2026-12-31'), "
+            "the entry is honoured through that whole day"
+        )
+    return value.isoformat() if isinstance(value, date) else value
 
 
 # Enumeration of supported platform kinds

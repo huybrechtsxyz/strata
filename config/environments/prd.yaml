@@ -18,6 +18,11 @@ spec:
     - key: REGION
       store: constant
       value: westeurope
+    - key: API_IMAGE_TAG
+      store: artifact
+      value: example-api
+      field: image_tag
+      description: "Tag of the example-api image, with any version pin applied (versions/prd.yaml)"
 
   # '${secret:KEY}'. Built-in stores (constant/environment/github) resolve
   # directly; anything else names an integration-backed store.

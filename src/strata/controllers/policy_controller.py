@@ -19,10 +19,12 @@ from strata.controllers.checkov_controller import (
     declared_checkov,
     evaluate_checkov_policy,
 )
+from strata.controllers.image_tag_policy import check_image_tag_policy
 from strata.controllers.policy_results import (
     append_policy_result,
     checkov_policy_result,
     cve_policy_result,
+    image_tag_policy_result,
     read_policy_results,
 )
 from strata.controllers.sbom_controller import (
@@ -42,6 +44,7 @@ from strata.controllers.value_controller import resolve_deployment_workspace
 from strata.models.audit_manifest_model import ManifestPolicyResultModel
 from strata.models.checkov_model import CheckovPolicyModel
 from strata.models.common_models import PlatformKind
+from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.integration_model import IntegrationModel
 from strata.models.sbom_model import CveMaxSeverityPolicyModel
 from strata.models.security_gate_model import ImageGatePolicyModel, ReleaseGatePolicyModel
@@ -52,7 +55,9 @@ from strata.utils.errors import UsageError
 #: Fallback threshold for `policy findings` when no `image_gate_policy` names one.
 DEFAULT_FINDINGS_SEVERITY = "HIGH"
 
-_Policy = CveMaxSeverityPolicyModel | CheckovPolicyModel | ReleaseGatePolicyModel | ImageGatePolicyModel
+_Policy = (
+    CveMaxSeverityPolicyModel | CheckovPolicyModel | ReleaseGatePolicyModel | ImageGatePolicyModel | ImageTagPolicyModel
+)
 
 
 @dataclass(frozen=True)
@@ -155,6 +160,18 @@ def _image_findings(request: _FindingsRequest) -> PolicyFindingsReport:
     )
 
 
+def _image_tag_check(request: _CheckRequest) -> tuple[Diagnostics, list[ManifestPolicyResultModel]]:
+    """The tag rules over the deployment's effective images; offline, honours `--pin`."""
+    deployment, _ = resolve_deployment_workspace(
+        request.context, request.deployment_name, version_pin=request.version_pin
+    )
+    diagnostics = check_image_tag_policy(
+        request.context, deployment, request.workspace, pinned_by_flag=request.version_pin is not None
+    )
+    result = image_tag_policy_result(request.workspace, diagnostics)
+    return diagnostics, [result] if result is not None else []
+
+
 def _gate_check(gate: Gate) -> _CheckFunction:
     def _check(request: _CheckRequest) -> tuple[Diagnostics, list[ManifestPolicyResultModel]]:
         evaluation = evaluate_security_gates(
@@ -187,6 +204,7 @@ _POLICIES: tuple[_PolicyRow, ...] = (
     _PolicyRow("checkov_policy", "build", check=_checkov_check, findings=_checkov_findings),
     _PolicyRow("release_gate_policy", "deploy", check=_gate_check("release"), findings=None),
     _PolicyRow("image_gate_policy", "deploy", check=_gate_check("images"), findings=_image_findings),
+    _PolicyRow("image_tag_policy", "build", check=_image_tag_check, findings=None),
 )
 _ROWS = {row.name: row for row in _POLICIES}
 
@@ -336,6 +354,8 @@ def _backing(context: SolutionContext, name: str, policy: _Policy) -> str:
     if name == "checkov_policy":
         checkov = declared_checkov(context.controller.index)
         return f"checkov '{checkov.name}'" if checkov is not None else "checkov (PATH)"
+    if name == "image_tag_policy":
+        return "strata (offline)"
     integration_name = cast(ReleaseGatePolicyModel | ImageGatePolicyModel, policy).integration
     entry = context.controller.index.get(PlatformKind.INTEGRATION, integration_name)
     integration_type = cast(IntegrationModel, entry.model).spec.type if entry is not None else "unknown"

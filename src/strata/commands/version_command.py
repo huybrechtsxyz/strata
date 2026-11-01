@@ -127,7 +127,9 @@ def version_update(name: str, start_path: Path | None, check: bool, output: str,
     exists is a candidate to remove. The operator reviews and edits by hand.
 
     Candidates are findings: a stale pin is a warning (as in `strata validate`), a
-    target with no pin yet is informational. With --check every candidate is an
+    target with no pin yet is informational, and an artifact with no `image_tag` and no
+    pin is a warning (it has no tag at all; give it one with `strata version set`).
+    With --check every candidate is an
     error and the command fails, so a pipeline can require a complete document.
 
     \b
@@ -163,10 +165,12 @@ def _candidate_findings(rows: list[ReconcileRow], *, source: str, check: bool) -
     """One summary finding per kind of candidate, so the footer says what the command found.
 
     A stale pin is a warning and a missing pin informational; under `--check` both are errors.
+    An artifact with no tag and no pin is a warning, and an error under `--check`.
     """
     diagnostics = Diagnostics()
     stale = sum(row.action == "remove" for row in rows)
     missing = sum(row.action == "add" for row in rows)
+    needed = sum(row.action == "needs_value" for row in rows)
     if stale:
         record = diagnostics.error if check else diagnostics.warning
         record(
@@ -177,6 +181,13 @@ def _candidate_findings(rows: list[ReconcileRow], *, source: str, check: bool) -
     if missing:
         record = diagnostics.error if check else diagnostics.info
         record(f"{missing} target{'s' if missing != 1 else ''} with no pin yet", source=source, code="pin_candidate")
+    if needed:
+        record = diagnostics.error if check else diagnostics.warning
+        record(
+            f"{needed} artifact{'s' if needed != 1 else ''} with no image_tag and no pin, so no tag at all",
+            source=source,
+            code="pin_needed",
+        )
     return diagnostics
 
 
@@ -189,6 +200,8 @@ def _print_rows(rows: list[ReconcileRow]) -> None:
     for row in rows:
         if row.action == "add":
             click.echo(f"  +  {row.category}.{row.name}  (seed: {row.seed_value})")
+        elif row.action == "needs_value":
+            click.echo(f"  ?  {row.category}.{row.name}  (no image_tag and no pin \u2014 needs a version)")
         else:
             click.echo(f"  -  {row.category}.{row.name}  (stale \u2014 target no longer exists)")
 

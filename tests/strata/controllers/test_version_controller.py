@@ -342,14 +342,14 @@ def test_scaffold_from_drops_an_artifact_pin_whose_artifact_has_a_blank_tag(tmp_
 
 
 @pytest.mark.parametrize("artifact_yaml", BLANK_TAG_ARTIFACTS.values(), ids=BLANK_TAG_ARTIFACTS.keys())
-def test_reconcile_offers_no_add_for_an_artifact_with_a_blank_tag(tmp_path, artifact_yaml):
+def test_reconcile_offers_no_seeded_add_for_an_artifact_with_a_blank_tag(tmp_path, artifact_yaml):
     root = _solution(tmp_path, extra={"artifact.yaml": artifact_yaml, "version.yaml": _version_doc()})
     context = open_solution(root)
     entry = context.controller.index.get(PlatformKind.VERSION, "prd")
 
     rows = reconcile_version(context.controller.index, context.controller.solution, entry.model)
 
-    assert not any(r.category == "artifacts" for r in rows)
+    assert [(r.action, r.seed_value) for r in rows if r.category == "artifacts"] == [("needs_value", None)]
 
 
 def test_reconcile_does_not_report_a_pin_on_a_blank_tag_artifact_as_stale(tmp_path):
@@ -527,3 +527,35 @@ def test_set_upgrades_shorthand_to_structured_when_available_given(tmp_path):
     assert pin.available == "2.2-alpine"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert data["spec"]["pins"]["images"]["caddy"] == {"version": "caddy:2-alpine", "available": "2.2-alpine"}
+
+
+UNTAGGED_ARTIFACT = """apiVersion: strata.huybrechts.xyz/v2
+kind: artifact
+meta:
+  name: untagged
+spec:
+  image_name: int-docker-test/src/untagged
+"""
+
+
+def _rows(root):
+    context = open_solution(root)
+    entry = context.controller.index.get(PlatformKind.VERSION, "prd")
+    return reconcile_version(context.controller.index, context.controller.solution, entry.model)
+
+
+def test_reconcile_reports_an_artifact_with_no_tag_as_needing_a_value(tmp_path):
+    root = _solution(tmp_path, extra={"version.yaml": _version_doc(), "untagged.yaml": UNTAGGED_ARTIFACT})
+    row = next(r for r in _rows(root) if r.name == "untagged")
+    assert (row.category, row.action, row.seed_value) == ("artifacts", "needs_value", None)
+
+
+def test_reconcile_does_not_report_an_untagged_artifact_that_is_already_pinned(tmp_path):
+    pins = "  pins:\n    artifacts:\n      untagged: 2.0.0\n"
+    root = _solution(tmp_path, extra={"version.yaml": _version_doc(pins=pins), "untagged.yaml": UNTAGGED_ARTIFACT})
+    assert not any(r.name == "untagged" for r in _rows(root))
+
+
+def test_reconcile_still_offers_no_value_row_for_an_imageless_service(tmp_path):
+    root = _solution(tmp_path, extra={"version.yaml": _version_doc()})
+    assert not any(r.action == "needs_value" for r in _rows(root))

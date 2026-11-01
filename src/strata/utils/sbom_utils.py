@@ -12,7 +12,7 @@ import re
 from urllib.parse import quote
 
 #: Tags that indicate a floating (mutable) image reference.
-_FLOATING_TAGS: frozenset[str] = frozenset(
+MUTABLE_ALIAS_TAGS: frozenset[str] = frozenset(
     {"latest", "main", "master", "dev", "develop", "staging", "edge", "nightly", "canary"}
 )
 
@@ -33,7 +33,7 @@ def is_floating_tag(tag: str | None) -> bool:
         return True
     if tag.startswith("sha256:"):
         return False
-    if tag.lower() in _FLOATING_TAGS:
+    if tag.lower() in MUTABLE_ALIAS_TAGS:
         return True
     if _SEMVER_RE.match(tag):
         return False
@@ -46,7 +46,7 @@ def is_mutable_alias_tag(tag: str | None) -> bool:
     Unlike `is_floating_tag()`, a tag that merely is not semver-shaped (a build number such as
     `env_sbx_20260907.11`) is not mutable: used for a tag a `kind: version` pin chose on purpose.
     """
-    return tag is not None and tag.lower() in _FLOATING_TAGS
+    return tag is not None and tag.lower() in MUTABLE_ALIAS_TAGS
 
 
 def parse_image_ref(image: str) -> tuple[str, str | None, str | None]:

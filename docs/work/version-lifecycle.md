@@ -854,3 +854,4 @@ valuable, lower urgency.
 - 2026-10-30: `strata version update` is advisory by default. Candidates are findings (a stale pin is a warning, a
   target with no pin yet is informational) and the exit code stays 0; `--check` makes every candidate an error and
   exits 3 for a CI gate. Before, any candidate exited 3, and the footer read "FAILED ... no problems found".
+- 2026-11-01: `strata version update` reports an artifact with no `image_tag` and no pin as `needs_value` (finding `pin_needed`, a warning, an error under `--check`), still without a seed. This reverses the 2026-10-06 rule for artifacts only: such an artifact has no tag at all in the ring until it is pinned, and `image_tag_policy` rejects it ([image-tag-policy.md](../design/image-tag-policy.md)). A module service with no `image`, a chart with no version and the other categories are still not offered.

@@ -26,7 +26,7 @@ exits 2 instead of returning an empty list.
 | `strata policy check D` | Evaluates the workspace's policies now and records the results. Optional (see below).                           | Scanners, and gate credentials if a gate policy is set. |
 | `strata deploy run D`   | Executes the rendered output: `terraform plan` and `apply`, or the Helm and Compose equivalent.                 | The tools on `PATH`, and every store credential.        |
 
-Three things worth knowing:
+Four things worth knowing:
 
 - **`build run` does not resolve secrets** unless you pass `--resolve`. It only reads `constant` and
   `environment` values, so a build job needs almost no credentials. `--resolve` is a full pre-deploy
@@ -37,8 +37,13 @@ Three things worth knowing:
 - **`deploy run` already runs `release_gate_policy` and `image_gate_policy`**, after values resolve and
   before any provisioner. A separate `policy check` step is only worth having when you want the
   gate as its own step or job, for example before an approval, or in a pull request check that never
-  installs Terraform. It exits 2 when the workspace configures none of the four policies, so leave
+  installs Terraform. It exits 2 when the workspace configures none of its policies, so leave
   the step out if there are none. See [security-gates.md](security-gates.md).
+- **`build run` and `deploy run` also judge image tags** when the workspace sets `image_tag_policy`: an image
+  with no tag, a floating tag such as `latest`, or a tag that does not match the shape you require fails the
+  step (`enforcement: deny`) or warns (`warn`). It is offline and needs no credentials. `build run` judges it
+  before it writes anything, and `deploy run` again before any value is resolved, so pass the same `--pin` to
+  both. See "Image tag policy" in [the workspace reference](../config/workspace.md).
 
 `strata deploy run --force` is accepted for compatibility with v1 pipelines and currently does
 nothing. `--dry-run` runs init, validate and plan and stops before any change; the security gates
@@ -171,7 +176,8 @@ Notes on the workflow:
   registry the apps pull from), list them with `strata deploy images "$DEPLOYMENT" -o json`. Each entry in
   `data.images[]` has `image_name`, `image_tag`, `image_ref` and `registry`, with any version pin applied.
   It needs no build and reads no secret, and takes `--pin` like the other commands. An image with no tag
-  is reported as a warning.
+  is reported as a warning. When the workspace sets `image_tag_policy`, the policy judges every image instead
+  and a `deny` breach exits 3, so the copy step fails before it moves an unpinned or floating image.
 
 ## 5. Plan in one job, apply in another
 

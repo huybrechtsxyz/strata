@@ -395,6 +395,12 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
                     },
                 ],
                 "cve_policy": {"max_severity": "HIGH"},
+                "image_tag_policy": {
+                    "enforcement": "deny",
+                    "tag_pattern": r"^\d+\.\d+\.\d+$",
+                    "rings": ["acc", "prd"],
+                    "allow": [{"name": "redis", "reason": "third-party image, covered by cve_policy"}],
+                },
             },
         },
     ],

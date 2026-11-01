@@ -38,7 +38,8 @@ meta:
 spec:
   pins:
     images:
-      caddy: caddy:2-alpine
+      # Shorthand: nothing is held back. Keyed by the module service's name.
+      portainer: portainer/portainer-ce:2.39.3-alpine
       db:
         version: docker.io/library/postgres:16-alpine
         status: held
@@ -46,12 +47,22 @@ spec:
         reason: "postgres majors need pg_upgrade/dump-restore; plan as its own migration task"
         reviewed: 2026-09-08
     charts:
-      immich: 0.13.1
+      # Keyed by the chart module's document name.
+      authentik:
+        version: 2026.5.2
+        status: unverified
+        reason: "chart version could not be confirmed upstream; re-verify before bumping"
+        reviewed: 2026-09-08
+    artifacts:
+      # Overrides `image_tag` of the artifact named example-api.
+      example-api: 1.4.2
     remotes:
       infra: v1.0.0
     assets:
       c0062-api: v1.5.0
 ```
+
+This is `config/versions/prd.yaml`, the working example in this repository.
 
 ## Notes
 
@@ -64,10 +75,11 @@ spec:
   `assets` pins are applied by `build run`; `artifacts` pins are applied wherever the artifact is
   resolved (`store: artifact`, build and deploy). `--pin NAME` on `build run`/`deploy run`
   overrides a deployment's `spec.version` for that run only.
-- A target with no current value of its own (a module service with no `image`, an artifact with a
-  blank `image_tag`) is never seeded by `version new --from` or offered by `version update`: a pin
-  must have a non-empty value.
+- A target with no current value of its own (a module service with no `image`) is never seeded by
+  `version new --from` or offered as a pin to add by `version update`: a pin must have a non-empty
+  value. An artifact with a blank `image_tag` is the exception for `version update`: with no pin it
+  has no tag at all, so it is reported as needing a version (`pin_needed`), though still never seeded.
 - `strata version update NAME` lists the pins you could add (each target with no pin yet, seeded with
   its current value) and the pins to remove (stale ones). It never edits the file and exits 0, since
   a target with no pin is normal. Add `--check` to exit 3 when anything is left to add or remove, for a
-  CI gate.
+  CI gate. An artifact with no tag and no pin is a warning even without `--check`, and an error with it.

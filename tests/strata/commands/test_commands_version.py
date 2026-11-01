@@ -381,3 +381,48 @@ def test_bare_version_still_prints_the_cli_version(runner):
     result = runner.invoke(cli, ["version"])
     assert result.exit_code == EXIT_SUCCESS
     assert result.output.strip() == get_version()
+
+
+UNTAGGED_ARTIFACT = (
+    "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: untagged\nspec:\n"
+    "  image_name: int-docker-test/src/untagged\n"
+)
+PINNED_WEB = (
+    "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+    "  pins:\n    images:\n      web: nginx:1.27-alpine\n"
+)
+
+
+def _untagged_solution(solution: Path, version: str = PINNED_WEB) -> None:
+    (solution / "versions").mkdir()
+    (solution / "versions" / "prd.yaml").write_text(version, encoding="utf-8")
+    (solution / "untagged.yaml").write_text(UNTAGGED_ARTIFACT, encoding="utf-8")
+
+
+def test_update_warns_about_an_artifact_with_no_tag_and_no_pin_and_exits_zero(runner, solution):
+    _untagged_solution(solution)
+
+    result = _update(runner, "prd", "--path", solution, "--output", "json")
+
+    assert result.exit_code == EXIT_SUCCESS
+    envelope = json.loads(result.output)
+    assert [(d["severity"], d["code"]) for d in envelope["diagnostics"]] == [("warning", "pin_needed")]
+    assert any(c["name"] == "untagged" and c["action"] == "needs_value" for c in envelope["data"]["candidates"])
+
+
+def test_update_check_fails_on_an_artifact_with_no_tag_and_no_pin(runner, solution):
+    _untagged_solution(solution)
+
+    result = _update(runner, "prd", "--path", solution, "--check")
+
+    assert result.exit_code == EXIT_VALIDATION
+    assert "artifacts.untagged" in result.output
+    assert "1 artifact with no image_tag and no pin" in result.output
+
+
+def test_update_is_quiet_once_the_untagged_artifact_is_pinned(runner, solution):
+    _untagged_solution(solution, PINNED_WEB + "    artifacts:\n      untagged: 1.0.0\n")
+
+    result = _update(runner, "prd", "--path", solution, "--check")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output

@@ -490,3 +490,23 @@ def test_shipped_example_builds_offline_and_projects_the_default_asset(tmp_path,
         "path_from_step": "../../assets/api",
         "files": ["openapi.json"],
     }
+    assert tfvars["strata"]["variables"]["API_IMAGE_TAG"] == "1.4.2"
+    results = json.loads((tmp_path / "build" / "policy_results.json").read_text())["policy_results"]
+    assert [(r["policy_name"], r["passed"]) for r in results] == [("image_tag_policy", True)]
+
+
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_takes_the_artifact_tag_from_the_version_pin_or_its_own_declaration():
+    """`example-api` declares 1.0.0; the `prd` version document pins 1.4.2, and the policy accepts both sources."""
+    from strata.controllers.effective_images import effective_images
+    from strata.controllers.image_tag_policy import check_image_tag_policy
+    from strata.controllers.value_controller import resolve_deployment_workspace
+
+    context = open_solution(_repo_config_dir()).require_valid()
+    tags = {}
+    for name in ("prd-deployment", "prd-c0063-deployment"):
+        deployment, workspace = resolve_deployment_workspace(context, name)
+        row = next(r for r in effective_images(context, deployment) if r.name == "example-api")
+        tags[name] = (row.image_tag, row.tag_source)
+        assert check_image_tag_policy(context, deployment, workspace).ok
+    assert tags == {"prd-deployment": ("1.4.2", "pin"), "prd-c0063-deployment": ("1.0.0", "declared")}

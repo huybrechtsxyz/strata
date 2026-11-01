@@ -39,6 +39,7 @@ from strata.models.common_models import (
     scalar_shorthand_schema,
     validate_kind_matches,
 )
+from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
 from strata.models.reference_fields import References
 from strata.models.sbom_model import CveMaxSeverityPolicyModel
@@ -732,6 +733,15 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "Design notes: Gates 'deploy run' on a security platform's open issues for the "
         "container images in sbom.json (docs/design/security-gates.md). Runs at deploy "
         "preflight, like release_gate_policy.",
+    )
+    image_tag_policy: ImageTagPolicyModel | None = Field(
+        None,
+        description="Fails `build run` and `deploy run` when an image the deployment runs has no tag, a "
+        "floating tag such as `latest`, or a tag that does not match the shape you require. Omit it to "
+        "accept any tag.\n\n"
+        "Design notes: Opt-in guard rail over `effective_images()` (docs/design/image-tag-policy.md). "
+        "Offline, so it runs in `build run --dry-run` too, and again at deploy preflight because the "
+        "tag in effect at deploy can differ from the build's.",
     )
 
     @model_validator(mode="after")

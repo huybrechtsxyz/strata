@@ -31,7 +31,7 @@ Exit codes: 0 success, 1 system failure, 2 usage error, 3 validation failure (th
 | `strata graph [PATH]` | Every cross-document reference, resolved or not. |
 | `strata path get KIND NAME` / `strata path list KIND` | Find a document's real file. |
 | `strata deploy list` | Every deployment with its workspace, tenant, version document, ring and environments (through `extends`); partial bases are marked. Filter with `--workspace`, `--tenant`, `--version`, `--ring`, `--deployable`. |
-| `strata deploy images DEPLOYMENT` | The container images a deployment runs, with the tag after any version pin and where the tag came from (`--pin`, a version document, the artifact, nowhere). Offline; no build needed. |
+| `strata deploy images DEPLOYMENT` | The container images a deployment runs, with the tag after any version pin and where the tag came from (`--pin`, a version document, the artifact, nowhere). Offline; no build needed. With `workspace.spec.image_tag_policy` set it also judges them and exits 3 on `deny`. |
 | `strata build run DEPLOYMENT` | Render a deployment into `build/` (never executes anything). `--dry-run` reports only. |
 | `strata deploy setup / check / plan / apply / run DEPLOYMENT` | init, validate, plan, apply a saved plan, or all of it. |
 | `strata values list / resolve / status DEPLOYMENT` | Inspect variables, secrets and features without revealing values. |
@@ -40,7 +40,7 @@ Exit codes: 0 success, 1 system failure, 2 usage error, 3 validation failure (th
 | `strata version new / set / update NAME` | Manage `kind: version` pin documents. |
 | `strata promote status / view / apply WORKSPACE` | Ring/order/wave rollout of version documents. |
 | `strata audit status / changes [DEPLOYMENT]` | Read back the deployment audit trail. |
-| `strata policy list / check / findings DEPLOYMENT` | List the workspace's policies, evaluate them now (`cve_policy`, `checkov_policy`, the deploy gates), or list a policy's findings (all but `release_gate_policy`). |
+| `strata policy list / check / findings DEPLOYMENT` | List the workspace's policies, evaluate them now (`cve_policy`, `checkov_policy`, `image_tag_policy`, the deploy gates), or list a policy's findings (`cve_policy`, `checkov_policy`, `image_gate_policy`). |
 | `strata integration check NAME` | Is an integration ready: enabled, tool on PATH, right version, and (where supported) credentials accepted. NAME is a document or a type; `--deployment` resolves credentials. |
 | `strata integration list [--deployment D]` | Every integration's local readiness; with `--deployment`, what it is used for, failing when a used one is not ready. Offline. |
 | `strata sln init NAME` / `strata sln update` | Create or refresh the scaffold files, including this skill. |
@@ -69,6 +69,7 @@ Every document has `apiVersion`, `kind`, `meta.name` and `spec`. Documents refer
 | Structure shared between deployments | a base with `deployment.spec.partial` set to true, used through `deployment.spec.extends` |
 | Rebinding a provider or asset for one deployment | `deployment.spec.providers`, `deployment.spec.assets` |
 | Pinning an image, chart, remote ref, artifact tag or asset ref | `version.spec.pins`, selected by `deployment.spec.version` |
+| Refusing an image with no tag, a floating tag such as `latest`, or the wrong tag shape | `workspace.spec.image_tag_policy` |
 | Credentials or a connection to a tool or service | an `integration` document, named from a provisioner, a remote, a store, an audit sink or a gate policy |
 | A git, OCI or Helm source | `solution.spec.remotes` in `strata.yaml`, used as `@<name>/<path>` |
 | A container image strata does not deploy itself | an `artifact` document |
