@@ -583,10 +583,10 @@ def test_asset_location_is_cloned_at_its_reference_under_the_asset_checkout_root
     root = tmp_path / "sln"
     root.mkdir()
 
-    destination = sync_asset(root, tmp_path / "build", _located_asset("c0062-api", url, "v1"), {}, {}, slot="api")
+    destination = sync_asset(root, tmp_path / "build", _located_asset("contoso-api", url, "v1"), {}, {}, slot="api")
 
     assert sorted(p.name for p in destination.iterdir()) == ["a.json"]
-    assert layout.asset_checkout_path(root, "c0062-api", "v1").is_dir()
+    assert layout.asset_checkout_path(root, "contoso-api", "v1").is_dir()
     assert not layout.remotes_dir(root).exists()
 
 
@@ -609,20 +609,20 @@ def test_two_slots_bound_to_one_location_asset_share_one_checkout(tmp_path: Path
     url = _git_repo(tmp_path / "customer", {"v1": {"api/a.json": "one"}})
     root = tmp_path / "sln"
     root.mkdir()
-    asset = _located_asset("c0062-api", url, "v1")
+    asset = _located_asset("contoso-api", url, "v1")
 
     first = sync_asset(root, tmp_path / "build", asset, {}, {}, slot="api")
     second = sync_asset(root, tmp_path / "build", asset, {}, {}, slot="api-copy")
 
     assert [p.name for p in first.iterdir()] == [p.name for p in second.iterdir()] == ["a.json"]
-    assert [p.name for p in (layout.strata_dir(root) / "assets" / "c0062-api").iterdir()] == ["v1"]
+    assert [p.name for p in (layout.strata_dir(root) / "assets" / "contoso-api").iterdir()] == ["v1"]
 
 
 def test_asset_location_fetch_external_uses_the_checkout_placed_by_ci(tmp_path: Path):
     root = tmp_path / "sln"
-    placed = layout.asset_checkout_path(root, "c0062-api", "v1")
+    placed = layout.asset_checkout_path(root, "contoso-api", "v1")
     _write(placed / "api" / "a.json", "from CI")
-    asset = _located_asset("c0062-api", "https://example.invalid/never-cloned.git", "v1", fetch="external")
+    asset = _located_asset("contoso-api", "https://example.invalid/never-cloned.git", "v1", fetch="external")
 
     destination = sync_asset(root, tmp_path / "build", asset, {}, {})
 
@@ -632,12 +632,12 @@ def test_asset_location_fetch_external_uses_the_checkout_placed_by_ci(tmp_path: 
 def test_asset_location_fetch_external_without_a_checkout_names_the_expected_path(tmp_path: Path):
     root = tmp_path / "sln"
     root.mkdir()
-    asset = _located_asset("c0062-api", "https://example.invalid/x.git", "v1", fetch="external")
+    asset = _located_asset("contoso-api", "https://example.invalid/x.git", "v1", fetch="external")
 
     with pytest.raises(RemoteResolutionError) as raised:
         sync_asset(root, tmp_path / "build", asset, {}, {})
 
-    assert str(layout.asset_checkout_path(root, "c0062-api", "v1")) in str(raised.value)
+    assert str(layout.asset_checkout_path(root, "contoso-api", "v1")) in str(raised.value)
 
 
 def test_module_source_missing_path_raises_clear_error(tmp_path: Path):

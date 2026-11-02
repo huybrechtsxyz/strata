@@ -212,7 +212,7 @@ spec:
         """apiVersion: strata.huybrechts.xyz/v2
 kind: tenant
 meta:
-  name: c0062
+  name: contoso
 spec:
   display_name: Acme
   geographies: [europe]
@@ -227,7 +227,7 @@ meta:
   name: prd-deployment
 spec:
   workspace: main
-  tenant: c0062
+  tenant: contoso
   environments: [prd]
   stages:
     - step: provision-infra
@@ -307,7 +307,7 @@ def test_deployment_provider_geography_mismatch_is_caught(tmp_path):
     context = _resolve(root)
     assert not context.ok
     messages = context.diagnostics.messages()
-    assert any("eastus2" in m and "geography 'us'" in m and "c0062" in m for m in messages)
+    assert any("eastus2" in m and "geography 'us'" in m and "contoso" in m for m in messages)
 
 
 def _us_tenant_with_us_provider(root: Path) -> None:
@@ -335,7 +335,7 @@ def test_geography_check_uses_workspace_default_without_binding(tmp_path):
     _us_tenant_with_us_provider(root)
 
     context = _resolve(root)
-    assert any("westeurope" in m and "c0062" in m for m in context.diagnostics.messages())
+    assert any("westeurope" in m and "contoso" in m for m in context.diagnostics.messages())
 
 
 def test_geography_check_uses_deployment_provider_binding(tmp_path):
@@ -391,7 +391,7 @@ def _bind_in_deployment(root: Path, *bindings: tuple[str, str]) -> None:
     lines = "".join(f"    - slot: {slot}\n      provider: {provider}\n" for slot, provider in bindings)
     path = root / "deployment.yaml"
     path.write_text(
-        path.read_text(encoding="utf-8").replace("  tenant: c0062\n", f"  tenant: c0062\n  providers:\n{lines}", 1),
+        path.read_text(encoding="utf-8").replace("  tenant: contoso\n", f"  tenant: contoso\n  providers:\n{lines}", 1),
         encoding="utf-8",
     )
 
@@ -528,7 +528,7 @@ def _bind_assets(root: Path, *bindings: tuple[str, str]) -> None:
     lines = "".join(f"    - slot: {slot}\n      asset: {asset}\n" for slot, asset in bindings)
     path = root / "deployment.yaml"
     path.write_text(
-        path.read_text(encoding="utf-8").replace("  tenant: c0062\n", f"  tenant: c0062\n  assets:\n{lines}", 1),
+        path.read_text(encoding="utf-8").replace("  tenant: contoso\n", f"  tenant: contoso\n  assets:\n{lines}", 1),
         encoding="utf-8",
     )
 
@@ -712,9 +712,9 @@ def _location_asset(root: Path, *, integration: str | None, fetch: str = "strata
     integration_line = f"    integration: {integration}\n" if integration else ""
     _write(
         root,
-        "asset-c0062-api.yaml",
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: c0062-api\nspec:\n  source_path: api\n"
-        f"  location:\n    url: https://example.com/c0062.git\n    reference: v1\n    fetch: {fetch}\n{integration_line}",
+        "asset-contoso-api.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: contoso-api\nspec:\n  source_path: api\n"
+        f"  location:\n    url: https://example.com/contoso.git\n    reference: v1\n    fetch: {fetch}\n{integration_line}",
     )
 
 
@@ -769,7 +769,7 @@ def test_asset_location_integration_with_fetch_external_is_a_warning(tmp_path):
 def test_asset_location_url_with_a_password_fails_loading_without_printing_it(tmp_path):
     root = _base_solution(tmp_path)
     _location_asset(root, integration=None)
-    path = root / "asset-c0062-api.yaml"
+    path = root / "asset-contoso-api.yaml"
     path.write_text(
         path.read_text(encoding="utf-8").replace("https://example.com", "https://bot:s3cr3tpw@example.com"),
         encoding="utf-8",
@@ -796,11 +796,11 @@ def _fetch_integration(root: Path, *, auth: str = _TOKEN_AUTH, enabled: bool = T
 
 
 def _select_asset_in_step(root: Path) -> None:
-    """The workspace declares slot `api` (default `c0062-api`) and its execution step selects it."""
+    """The workspace declares slot `api` (default `contoso-api`) and its execution step selects it."""
     path = root / "workspace.yaml"
     path.write_text(
         path.read_text(encoding="utf-8")
-        .replace("providers: [azure-main]", "providers: [azure-main]\n  assets:\n    - {slot: api, asset: c0062-api}")
+        .replace("providers: [azure-main]", "providers: [azure-main]\n  assets:\n    - {slot: api, asset: contoso-api}")
         .replace(
             "      provisioner: tf\n      resources: [storage-account]\n",
             "      provisioner: tf\n      resources: [storage-account]\n      assets: [api]\n",
@@ -854,7 +854,7 @@ def test_a_cloned_assets_undeclared_credential_key_is_reported_per_deployment(tm
     assert _credential_findings(context) == {"fetch_credential_key_undeclared": "error"}
     finding = next(d for d in context.diagnostics.errors if d.code == "fetch_credential_key_undeclared")
     assert "CUSTOMER_GIT_TOKEN" in finding.message
-    assert "'prd-deployment'" in finding.message and "'c0062-api'" in finding.message
+    assert "'prd-deployment'" in finding.message and "'contoso-api'" in finding.message
     assert finding.location == "spec.environments"
 
 
@@ -864,8 +864,8 @@ def test_an_undeclared_credential_key_is_reported_for_an_asset_cloned_through_a_
     _remote_with_integration(root, "customer-git")
     _write(
         root,
-        "asset-c0062-api.yaml",
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: c0062-api\nspec:\n"
+        "asset-contoso-api.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: contoso-api\nspec:\n"
         "  remote: infra\n  source_path: api\n",
     )
     _select_asset_in_step(root)
@@ -1092,7 +1092,7 @@ def test_deployment_with_no_tenant_skips_geography_check(tmp_path):
     )
     deployment_path = root / "deployment.yaml"
     deployment_path.write_text(
-        deployment_path.read_text(encoding="utf-8").replace("  tenant: c0062\n", ""), encoding="utf-8"
+        deployment_path.read_text(encoding="utf-8").replace("  tenant: contoso\n", ""), encoding="utf-8"
     )
 
     # No tenant on the deployment — the mismatch above has nothing to check against.
@@ -1672,7 +1672,7 @@ def test_topology_is_reachable_as_part_of_the_workspace_document(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Environment -> Configuration.spec.security (docs/design/gap_fit_v1.md gap #7 —
-# real usage: config-deploy's config/stores.yaml)
+# real usage: config-repo's config/stores.yaml)
 # ---------------------------------------------------------------------------
 
 
@@ -2176,7 +2176,7 @@ def test_security_gate_integration_of_an_unregistered_type_is_not_this_checks_fi
 
 # ---------------------------------------------------------------------------
 # Configuration.spec.paths (docs/design/path-conventions.md, docs/design/gap_fit_v1.md
-# gap #7 — real usage: config-deploy's config/paths.yaml)
+# gap #7 — real usage: config-repo's config/paths.yaml)
 # ---------------------------------------------------------------------------
 
 TENANT_PATH_CONVENTION = """  paths:
@@ -2188,24 +2188,24 @@ TENANT_PATH_CONVENTION = """  paths:
 """
 
 
-def _relocate_tenant_under_customers(root: Path, *, dir_code: str = "c0062", tenant_name: str | None = None) -> None:
+def _relocate_tenant_under_customers(root: Path, *, dir_code: str = "contoso", tenant_name: str | None = None) -> None:
     """Move _base_solution()'s root-level tenant.yaml into
     customers/{dir_code}/tenant.yaml, optionally overriding its meta.name
     to set up a deliberate code-vs-content mismatch."""
     tenant_path = root / "tenant.yaml"
     content = tenant_path.read_text(encoding="utf-8")
     if tenant_name is not None:
-        content = content.replace("name: c0062", f"name: {tenant_name}")
+        content = content.replace("name: contoso", f"name: {tenant_name}")
     tenant_path.unlink()
     _write(root, f"customers/{dir_code}/tenant.yaml", content)
 
 
 def _repoint_deployment_tenant(root: Path, tenant_name: str) -> None:
-    """Keep deployment.yaml's 'tenant: c0062' reference valid after
+    """Keep deployment.yaml's 'tenant: contoso' reference valid after
     _relocate_tenant_under_customers() renames the tenant."""
     path = root / "deployment.yaml"
     path.write_text(
-        path.read_text(encoding="utf-8").replace("tenant: c0062", f"tenant: {tenant_name}"), encoding="utf-8"
+        path.read_text(encoding="utf-8").replace("tenant: contoso", f"tenant: {tenant_name}"), encoding="utf-8"
     )
 
 
@@ -2226,21 +2226,21 @@ def test_tenant_matching_path_convention_passes_cleanly(tmp_path):
 
 def test_tenant_mismatched_code_warns_by_default_and_does_not_fail_validate(tmp_path):
     root = _base_solution(tmp_path)
-    _relocate_tenant_under_customers(root, tenant_name="c0099")
-    _repoint_deployment_tenant(root, "c0099")
+    _relocate_tenant_under_customers(root, tenant_name="acme")
+    _repoint_deployment_tenant(root, "acme")
     _append_paths_config(root, TENANT_PATH_CONVENTION)
 
     context = _resolve(root)
     assert context.ok  # enforcement: warn (default) — reported, but does not fail validate
     messages = [d.message for d in context.diagnostics.warnings]
-    assert any("c0099" in m and "c0062" in m for m in messages)
+    assert any("acme" in m and "contoso" in m for m in messages)
     assert any(d.code == "path_convention_tenant_mismatch" for d in context.diagnostics.warnings)
 
 
 def test_tenant_mismatched_code_fails_when_enforcement_is_deny(tmp_path):
     root = _base_solution(tmp_path)
-    _relocate_tenant_under_customers(root, tenant_name="c0099")
-    _repoint_deployment_tenant(root, "c0099")
+    _relocate_tenant_under_customers(root, tenant_name="acme")
+    _repoint_deployment_tenant(root, "acme")
     _append_paths_config(
         root,
         """  paths:
@@ -2263,7 +2263,7 @@ def test_structural_shape_mismatch_is_caught(tmp_path):
     empirically-found v1 bug class) — caught even with no 'resolves' logic
     involved, since the pattern itself simply doesn't match."""
     root = _base_solution(tmp_path)
-    _relocate_tenant_under_customers(root, dir_code="c0062/nested")
+    _relocate_tenant_under_customers(root, dir_code="contoso/nested")
     _append_paths_config(root, TENANT_PATH_CONVENTION)
 
     context = _resolve(root)
@@ -2514,7 +2514,7 @@ spec:
 # ---------------------------------------------------------------------------
 
 
-def _solution_with_artifact_reference(tmp_path: Path, *, artifact_value: str = "dspapi_container") -> Path:
+def _solution_with_artifact_reference(tmp_path: Path, *, artifact_value: str = "api_container") -> Path:
     root = _base_solution(tmp_path)
     _write(
         root,
@@ -2522,9 +2522,9 @@ def _solution_with_artifact_reference(tmp_path: Path, *, artifact_value: str = "
         """apiVersion: strata.huybrechts.xyz/v2
 kind: artifact
 meta:
-  name: dspapi_container
+  name: api_container
 spec:
-  image_name: int-docker-test/src/acme.dispatcher.api
+  image_name: example/scheduler-api
   image_tag: "1.0.0"
 """,
     )
@@ -2710,8 +2710,8 @@ def _solution_with_tenant_and_probe(tmp_path: Path, token: str) -> Path:
     _write(root, "strata.yaml", MANIFEST)
     _write(
         root,
-        "c0062.yaml",
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: c0062\nspec:\n"
+        "contoso.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: contoso\nspec:\n"
         '  display_name: "GSK"\n  geographies:\n    - europe\n',
     )
     _write(
@@ -2724,7 +2724,7 @@ def _solution_with_tenant_and_probe(tmp_path: Path, token: str) -> Path:
 
 
 def test_value_reference_that_resolves_passes_validate(tmp_path):
-    root = _solution_with_tenant_and_probe(tmp_path, "${value:tenant.c0062.meta.name}")
+    root = _solution_with_tenant_and_probe(tmp_path, "${value:tenant.contoso.meta.name}")
     context = _resolve(root)
     assert context.ok, context.diagnostics.messages()
 
@@ -2741,7 +2741,7 @@ def test_value_reference_no_longer_reported_as_unsupported_token_kind(tmp_path):
     by `unresolved_value_tokens()` (the exact interim behaviour Phase 2's own
     changelog entry documented and tested) — confirm that code never appears
     now, for either a resolving or a failing reference."""
-    for token in ("${value:tenant.c0062.meta.name}", "${value:tenant.doesnotexist.meta.name}"):
+    for token in ("${value:tenant.contoso.meta.name}", "${value:tenant.doesnotexist.meta.name}"):
         context = _resolve(_solution_with_tenant_and_probe(tmp_path, token))
         assert not any(e.code == "unsupported_value_token_kind" for e in context.diagnostics.errors)
 
@@ -3259,7 +3259,7 @@ def _write_tenant_with_properties_owner(root: Path) -> None:
         """apiVersion: strata.huybrechts.xyz/v2
 kind: tenant
 meta:
-  name: c0062
+  name: contoso
 spec:
   display_name: Acme
   geographies: [europe]
@@ -3385,7 +3385,7 @@ meta:
   name: prd-deployment
 spec:
   partial: true
-  tenant: c0062
+  tenant: contoso
   environments: [prd]
 """,
     )
@@ -3562,7 +3562,7 @@ meta:
   name: prd-deployment
 spec:
   workspace: main
-  tenant: c0062
+  tenant: contoso
   environments: [base, prd]
   stages:
     - step: provision-infra
@@ -3685,7 +3685,7 @@ def _write_ring_chain(
     root: Path, *, base_features: str, base_variables: str, leaf_features: str = "", leaf_variables: str = ""
 ) -> None:
     """A base `ring` environment plus the `prd` leaf, merged in that order (leaf wins) — the
-    `stacks/ring` base + `c0224/dev` leaf shape the recorded cfg-int cases come from."""
+    `stacks/ring` base + `fabrikam/dev` leaf shape the recorded config-repo cases come from."""
     leaf_features_block = f"  features:\n{leaf_features}" if leaf_features else ""
     _write(
         root,
@@ -3722,7 +3722,7 @@ meta:
   name: prd-deployment
 spec:
   workspace: main
-  tenant: c0062
+  tenant: contoso
   environments: [ring, prd]
   stages:
     - step: provision-infra

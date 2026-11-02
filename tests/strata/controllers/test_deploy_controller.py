@@ -1294,20 +1294,20 @@ def _artifact_pin_solution(tmp_path: Path, *, reference_version_from_deployment:
     _write(
         root,
         "artifact.yaml",
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: dspapi_container\nspec:\n"
-        "  image_name: int-docker-test/src/acme.dispatcher.api\n  image_tag: '1.0.0'\n",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: api_container\nspec:\n"
+        "  image_name: example/scheduler-api\n  image_tag: '1.0.0'\n",
     )
     _write(
         root,
         "version.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
-        "  pins:\n    artifacts:\n      dspapi_container: '2.0.0'\n",
+        "  pins:\n    artifacts:\n      api_container: '2.0.0'\n",
     )
     _write(
         root,
         "environment.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: image_tag\n      store: artifact\n      value: dspapi_container\n"
+        "  variables:\n    - key: image_tag\n      store: artifact\n      value: api_container\n"
         "      field: image_tag\n",
     )
     version_line = "  version: prd\n" if reference_version_from_deployment else ""

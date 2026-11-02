@@ -172,7 +172,7 @@ def test_apply_version_pins_ignores_image_pin_when_service_has_no_image_of_its_o
         spec=ModuleSpecModel(
             source=SourceModel(source_path="services/app"),
             type="compose",
-            services=[ModuleServiceModel(name="app", artifact="dspapi_container")],
+            services=[ModuleServiceModel(name="app", artifact="api_container")],
             default_labels={},
         ),
     )
@@ -228,12 +228,12 @@ def _module_with_artifact(name: str, artifact_name: str) -> ModuleModel:
 
 
 def test_resolve_artifact_services_is_a_no_op_when_context_is_none():
-    module = _module_with_artifact("app", "dspapi_container")
+    module = _module_with_artifact("app", "api_container")
     assert resolve_artifact_services(module, None, _deployment()) is module
 
 
 def test_resolve_artifact_services_is_a_no_op_when_deployment_is_none(tmp_path: Path):
-    module = _module_with_artifact("app", "dspapi_container")
+    module = _module_with_artifact("app", "api_container")
     context = _context(tmp_path, _index())
     assert resolve_artifact_services(module, context, None) is module
 
@@ -245,20 +245,18 @@ def test_resolve_artifact_services_is_a_no_op_when_no_service_has_artifact(tmp_p
 
 
 def test_resolve_artifact_services_overrides_image_and_clears_artifact(tmp_path: Path):
-    module = _module_with_artifact("dispatcher", "dspapi_container")
+    module = _module_with_artifact("scheduler", "api_container")
     index = DocumentIndex()
     index.add(
         IndexEntry(
-            ref=DocumentRef(kind=PlatformKind.MODULE, name="dispatcher"), model=module, source=Path("dispatcher.yaml")
+            ref=DocumentRef(kind=PlatformKind.MODULE, name="scheduler"), model=module, source=Path("scheduler.yaml")
         )
     )
     index.add(
         IndexEntry(
-            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="dspapi_container"),
-            model=_artifact(
-                "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.2.3"
-            ),
-            source=Path("dspapi_container.yaml"),
+            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="api_container"),
+            model=_artifact("api_container", image_name="example/scheduler-api", image_tag="1.2.3"),
+            source=Path("api_container.yaml"),
         )
     )
     context = _context(tmp_path, index)
@@ -266,7 +264,7 @@ def test_resolve_artifact_services_overrides_image_and_clears_artifact(tmp_path:
     resolved = resolve_artifact_services(module, context, _deployment())
 
     service = resolved.spec.services[0]
-    assert service.image == "int-docker-test/src/acme.dispatcher.api:1.2.3"
+    assert service.image == "example/scheduler-api:1.2.3"
     assert service.artifact is None
 
 
@@ -280,7 +278,7 @@ def test_resolve_artifact_services_leaves_other_services_untouched(tmp_path: Pat
             source=SourceModel(source_path="services/app"),
             type="compose",
             services=[
-                ModuleServiceModel(name="web", artifact="dspapi_container"),
+                ModuleServiceModel(name="web", artifact="api_container"),
                 ModuleServiceModel(name="sidecar", image="redis:7"),
             ],
             default_labels={},
@@ -290,11 +288,9 @@ def test_resolve_artifact_services_leaves_other_services_untouched(tmp_path: Pat
     index.add(IndexEntry(ref=DocumentRef(kind=PlatformKind.MODULE, name="app"), model=module, source=Path("app.yaml")))
     index.add(
         IndexEntry(
-            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="dspapi_container"),
-            model=_artifact(
-                "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.2.3"
-            ),
-            source=Path("dspapi_container.yaml"),
+            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="api_container"),
+            model=_artifact("api_container", image_name="example/scheduler-api", image_tag="1.2.3"),
+            source=Path("api_container.yaml"),
         )
     )
     context = _context(tmp_path, index)
@@ -302,7 +298,7 @@ def test_resolve_artifact_services_leaves_other_services_untouched(tmp_path: Pat
     resolved = resolve_artifact_services(module, context, _deployment())
 
     services_by_name = {s.name: s for s in resolved.spec.services}
-    assert services_by_name["web"].image == "int-docker-test/src/acme.dispatcher.api:1.2.3"
+    assert services_by_name["web"].image == "example/scheduler-api:1.2.3"
     assert services_by_name["web"].artifact is None
     assert services_by_name["sidecar"].image == "redis:7"
 
@@ -311,7 +307,7 @@ def test_resolve_artifact_services_raises_when_artifact_reference_does_not_resol
     """Unreachable in a `require_valid()`-passed solution — exercised here by
     bypassing `validate_references()` on purpose, to prove the defensive
     backstop fires rather than silently skipping."""
-    module = _module_with_artifact("dispatcher", "ghost")
+    module = _module_with_artifact("scheduler", "ghost")
     context = _context(tmp_path, _index())  # empty index — "ghost" never resolves
 
     with pytest.raises(UsageError, match="ghost"):
@@ -630,27 +626,25 @@ def test_build_workload_modules_resolves_artifact_reference_end_to_end(tmp_path:
     `docker-compose.yml` as a resolved `.image` string (docs/work/
     artifact-references.md Path 1)."""
     root = tmp_path / "sln"
-    _write(root / "services" / "dispatcher" / "docker-compose.yml", "# stand-in\n")
+    _write(root / "services" / "scheduler" / "docker-compose.yml", "# stand-in\n")
     module = ModuleModel(
-        meta=ModuleMetaModel(name="dispatcher"),
+        meta=ModuleMetaModel(name="scheduler"),
         spec=ModuleSpecModel(
-            source=SourceModel(source_path="services/dispatcher"),
+            source=SourceModel(source_path="services/scheduler"),
             type="compose",
-            services=[ModuleServiceModel(name="dispatcher", artifact="dspapi_container")],
+            services=[ModuleServiceModel(name="scheduler", artifact="api_container")],
             default_labels={},
         ),
     )
     index = _index(module)
     index.add(
         IndexEntry(
-            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="dspapi_container"),
-            model=_artifact(
-                "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.2.3"
-            ),
-            source=Path("dspapi_container.yaml"),
+            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="api_container"),
+            model=_artifact("api_container", image_name="example/scheduler-api", image_tag="1.2.3"),
+            source=Path("api_container.yaml"),
         )
     )
-    namespace = _namespace(ModuleReferenceModel(name="dispatcher", module="dispatcher"))
+    namespace = _namespace(ModuleReferenceModel(name="scheduler", module="scheduler"))
     build_path = tmp_path / "build"
     context = _context(root, index)
 
@@ -666,7 +660,7 @@ def test_build_workload_modules_resolves_artifact_reference_end_to_end(tmp_path:
     )
 
     merged = yaml.safe_load((build_path / "apps" / "docker-compose.yml").read_text())
-    assert merged["services"]["dispatcher"]["image"] == "int-docker-test/src/acme.dispatcher.api:1.2.3"
+    assert merged["services"]["scheduler"]["image"] == "example/scheduler-api:1.2.3"
 
 
 def test_build_workload_modules_keys_directories_by_reference_name_not_module_name(tmp_path: Path):

@@ -16,7 +16,7 @@ from strata.models.audit_metrics_model import (
 def _minimal_metrics(**overrides) -> dict:
     data = {
         "execution_id": "11111111-1111-1111-1111-111111111111",
-        "deployment": "c0224-prod",
+        "deployment": "fabrikam-prod",
         "workspace": "main",
         "timestamp": "2026-09-30T14:30:00Z",
         "dimensions": {"outcome": "success", "action": "deploy"},

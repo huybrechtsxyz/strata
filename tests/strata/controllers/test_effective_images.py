@@ -19,14 +19,14 @@ def _write(root: Path, relative: str, kind: str, name: str, spec: str) -> None:
 def _solution(
     tmp_path: Path,
     *,
-    artifact_spec: str = "  image_name: int-docker-test/src/datahub.api\n  image_tag: '1.0.0'\n",
-    variable_artifacts: tuple[str, ...] = ("datahub",),
+    artifact_spec: str = "  image_name: example/catalog-api\n  image_tag: '1.0.0'\n",
+    variable_artifacts: tuple[str, ...] = ("catalog",),
     services: str = "    - name: redis\n      image: redis:7\n",
     pins: str = "",
     module_enabled: bool = True,
     deployment_version: bool = True,
 ) -> Path:
-    """One workspace reaching one compose module, one artifact `datahub`, one unreferenced artifact `orphan`."""
+    """One workspace reaching one compose module, one artifact `catalog`, one unreferenced artifact `orphan`."""
     root = tmp_path / "sln"
     root.mkdir()
     (root / "strata.yaml").write_text(_HEADER.format(kind="solution", name="s") + "  {}\n", encoding="utf-8")
@@ -55,8 +55,8 @@ def _solution(
         "apps",
         f"  default_labels:\n    app: apps\n  modules:\n    - name: stack\n      module: stack\n{enabled}",
     )
-    _write(root, "artifact.yaml", "artifact", "datahub", artifact_spec)
-    _write(root, "orphan.yaml", "artifact", "orphan", "  image_name: int-docker-test/src/orphan\n")
+    _write(root, "artifact.yaml", "artifact", "catalog", artifact_spec)
+    _write(root, "orphan.yaml", "artifact", "orphan", "  image_name: example/orphan\n")
     variables = "".join(
         f"    - key: {name.upper()}_TAG\n      store: artifact\n      value: {name}\n      field: image_tag\n"
         for name in variable_artifacts
@@ -76,44 +76,44 @@ def _images(root: Path, *, pin: str | None = None):
 
 
 def test_a_store_artifact_variable_yields_an_artifact_row(tmp_path):
-    row = _images(_solution(tmp_path))["datahub"]
-    assert (row.origin, row.artifact, row.module) == ("artifact", "datahub", None)
+    row = _images(_solution(tmp_path))["catalog"]
+    assert (row.origin, row.artifact, row.module) == ("artifact", "catalog", None)
     assert (row.image_name, row.image_tag, row.image_ref) == (
-        "int-docker-test/src/datahub.api",
+        "example/catalog-api",
         "1.0.0",
-        "int-docker-test/src/datahub.api:1.0.0",
+        "example/catalog-api:1.0.0",
     )
     assert (row.tag_source, row.pin_version, row.pin_flag) == ("declared", None, False)
-    assert row.via == ("variable:DATAHUB_TAG",)
+    assert row.via == ("variable:CATALOG_TAG",)
 
 
 def test_a_version_pin_overrides_the_declared_tag_and_names_its_document(tmp_path):
-    row = _images(_solution(tmp_path, pins="    artifacts:\n      datahub: '2.0.0'\n"))["datahub"]
+    row = _images(_solution(tmp_path, pins="    artifacts:\n      catalog: '2.0.0'\n"))["catalog"]
     assert (row.image_tag, row.tag_source, row.pin_version, row.pin_flag) == ("2.0.0", "pin", "prd", False)
 
 
 def test_a_pin_flag_is_reported_for_a_pin_given_with_dash_dash_pin(tmp_path):
-    root = _solution(tmp_path, pins="    artifacts:\n      datahub: '2.0.0'\n", deployment_version=False)
-    row = _images(root, pin="prd")["datahub"]
+    root = _solution(tmp_path, pins="    artifacts:\n      catalog: '2.0.0'\n", deployment_version=False)
+    row = _images(root, pin="prd")["catalog"]
     assert (row.image_tag, row.tag_source, row.pin_flag) == ("2.0.0", "pin", True)
 
 
 def test_an_artifact_with_no_tag_and_no_pin_has_none_and_a_bare_ref(tmp_path):
-    row = _images(_solution(tmp_path, artifact_spec="  image_name: int-docker-test/src/datahub.api\n"))["datahub"]
+    row = _images(_solution(tmp_path, artifact_spec="  image_name: example/catalog-api\n"))["catalog"]
     assert (row.image_tag, row.tag_source) == (None, "none")
-    assert row.image_ref == "int-docker-test/src/datahub.api"
+    assert row.image_ref == "example/catalog-api"
 
 
 def test_a_digest_tag_makes_an_at_reference(tmp_path):
     spec = "  image_name: int/api\n  image_tag: 'sha256:abc123'\n"
-    assert _images(_solution(tmp_path, artifact_spec=spec))["datahub"].image_ref == "int/api@sha256:abc123"
+    assert _images(_solution(tmp_path, artifact_spec=spec))["catalog"].image_ref == "int/api@sha256:abc123"
 
 
 def test_registry_and_configuration_are_carried_on_the_row(tmp_path):
-    spec = "  image_name: int/api\n  registry: cdn.example.com\n  configuration:\n    acr_image_name: datahub/api\n"
-    row = _images(_solution(tmp_path, artifact_spec=spec))["datahub"]
+    spec = "  image_name: int/api\n  registry: cdn.example.com\n  configuration:\n    acr_image_name: catalog/api\n"
+    row = _images(_solution(tmp_path, artifact_spec=spec))["catalog"]
     assert row.registry == "cdn.example.com"
-    assert row.configuration == {"acr_image_name": "datahub/api"}
+    assert row.configuration == {"acr_image_name": "catalog/api"}
 
 
 def test_an_artifact_nothing_references_is_not_listed(tmp_path):
@@ -138,16 +138,16 @@ def test_a_literal_image_without_a_tag_has_source_none(tmp_path):
 
 
 def test_a_module_service_artifact_shares_the_row_with_a_variable_using_it(tmp_path):
-    services = "    - name: api\n      artifact: datahub\n"
+    services = "    - name: api\n      artifact: catalog\n"
     rows = _images(_solution(tmp_path, services=services))
     assert "api" not in rows
-    assert rows["datahub"].via == ("variable:DATAHUB_TAG", "service:stack/api")
+    assert rows["catalog"].via == ("variable:CATALOG_TAG", "service:stack/api")
 
 
 def test_a_module_service_artifact_is_listed_without_any_variable(tmp_path):
-    services = "    - name: api\n      artifact: datahub\n"
+    services = "    - name: api\n      artifact: catalog\n"
     rows = _images(_solution(tmp_path, services=services, variable_artifacts=()))
-    assert rows["datahub"].via == ("service:stack/api",)
+    assert rows["catalog"].via == ("service:stack/api",)
 
 
 def test_a_disabled_module_reference_contributes_nothing(tmp_path):

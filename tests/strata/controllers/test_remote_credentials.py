@@ -24,7 +24,7 @@ SSH_AUTH = (
     "  authentication:\n    method: ssh_key\n    ssh_key:\n      private_key: GIT_SSH_KEY\n"
     "      passphrase: GIT_SSH_PASSPHRASE\n      known_hosts: GIT_KNOWN_HOSTS\n"
 )
-OWNER = "asset 'c0062-api'"
+OWNER = "asset 'contoso-api'"
 TOKEN = "ghp_exampletoken123"
 
 

@@ -259,7 +259,7 @@ def _write(root: Path, relative: str, kind: str, name: str, spec: str) -> None:
 def _solution(
     tmp_path: Path, *, policy: str = "  image_tag_policy: {}\n", artifact_tag: str = "", pins: str = "", ring: str = ""
 ) -> Path:
-    """One workspace, one artifact `datahub` reached by a `store: artifact` variable, optional version document."""
+    """One workspace, one artifact `catalog` reached by a `store: artifact` variable, optional version document."""
     root = tmp_path / "sln"
     root.mkdir()
     (root / "strata.yaml").write_text(_HEADER.format(kind="solution", name="s") + "  {}\n", encoding="utf-8")
@@ -272,13 +272,13 @@ def _solution(
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n" + policy,
     )
-    _write(root, "artifact.yaml", "artifact", "datahub", f"  image_name: registry/datahub\n{artifact_tag}")
+    _write(root, "artifact.yaml", "artifact", "catalog", f"  image_name: registry/catalog\n{artifact_tag}")
     _write(
         root,
         "environment.yaml",
         "environment",
         "prd",
-        "  variables:\n    - key: DATAHUB_TAG\n      store: artifact\n      value: datahub\n      field: image_tag\n",
+        "  variables:\n    - key: CATALOG_TAG\n      store: artifact\n      value: catalog\n      field: image_tag\n",
     )
     if pins or ring:
         promotion = f"  promotion:\n    ring: {ring}\n    order: 1\n" if ring else ""
@@ -298,11 +298,11 @@ def _check(root: Path):
 def test_an_untagged_unpinned_artifact_fails_the_policy_for_a_real_solution(tmp_path):
     diagnostics = _check(_solution(tmp_path))
     assert _codes(diagnostics) == ["image_without_tag"]
-    assert "variable:DATAHUB_TAG" in diagnostics.errors[0].message
+    assert "variable:CATALOG_TAG" in diagnostics.errors[0].message
 
 
 def test_a_version_pin_satisfies_it(tmp_path):
-    pins = "    artifacts:\n      datahub:\n        version: '1.4.0'\n"
+    pins = "    artifacts:\n      catalog:\n        version: '1.4.0'\n"
     assert _check(_solution(tmp_path, pins=pins)).items == []
 
 
@@ -337,7 +337,7 @@ def test_policy_check_evaluates_and_records_the_result(tmp_path):
 
 
 def test_policy_check_honours_a_pin_flag(tmp_path):
-    root = _solution(tmp_path, pins="    artifacts:\n      datahub:\n        version: '1.4.0'\n")
+    root = _solution(tmp_path, pins="    artifacts:\n      catalog:\n        version: '1.4.0'\n")
     context = open_solution(root)
     build_path = tmp_path / "build"
     build_path.mkdir()

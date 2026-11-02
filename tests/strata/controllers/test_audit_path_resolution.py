@@ -16,7 +16,7 @@ _STARTED_AT = "2026-09-30T14:30:00Z"
 
 def _deployment(**spec_overrides) -> DeploymentModel:
     spec = {"partial": True, "workspace": "main", **spec_overrides}
-    return DeploymentModel.model_validate({"meta": {"name": "c0224-prod"}, "spec": spec})
+    return DeploymentModel.model_validate({"meta": {"name": "fabrikam-prod"}, "spec": spec})
 
 
 def _configuration_with_hub_path_convention() -> ConfigurationModel:
@@ -46,47 +46,47 @@ def test_derives_path_from_layers_segments_in_convention_order():
     deployment = _deployment(
         layers={
             "follows": "hub-path",
-            "segments": {"ring": "prod", "hub": "z00", "customer": "c0224", "spoke": "s01"},
+            "segments": {"ring": "prod", "hub": "hub1", "customer": "fabrikam", "spoke": "spoke1"},
         }
     )
     configuration = _configuration_with_hub_path_convention()
     relative = resolve_audit_relative_path(deployment, configuration, _STARTED_AT)
-    assert relative == Path("z00", "s01", "c0224", "prod", "20260930-143000")
+    assert relative == Path("hub1", "spoke1", "fabrikam", "prod", "20260930-143000")
 
 
 def test_falls_back_to_workspace_deployment_when_no_layers_block():
     deployment = _deployment()
     relative = resolve_audit_relative_path(deployment, None, _STARTED_AT)
-    assert relative == Path("main", "c0224-prod", "20260930-143000")
+    assert relative == Path("main", "fabrikam-prod", "20260930-143000")
 
 
 def test_falls_back_when_layers_follows_but_no_configuration_given():
-    deployment = _deployment(layers={"follows": "hub-path", "segments": {"hub": "z00"}})
+    deployment = _deployment(layers={"follows": "hub-path", "segments": {"hub": "hub1"}})
     relative = resolve_audit_relative_path(deployment, None, _STARTED_AT)
-    assert relative == Path("main", "c0224-prod", "20260930-143000")
+    assert relative == Path("main", "fabrikam-prod", "20260930-143000")
 
 
 def test_falls_back_when_convention_name_unknown():
-    deployment = _deployment(layers={"follows": "no-such-convention", "segments": {"hub": "z00"}})
+    deployment = _deployment(layers={"follows": "no-such-convention", "segments": {"hub": "hub1"}})
     configuration = _configuration_with_hub_path_convention()
     relative = resolve_audit_relative_path(deployment, configuration, _STARTED_AT)
-    assert relative == Path("main", "c0224-prod", "20260930-143000")
+    assert relative == Path("main", "fabrikam-prod", "20260930-143000")
 
 
 def test_falls_back_when_segments_incomplete():
     """A convention segment with no matching value in layers.segments — never raises,
     falls back instead (semantic_checks.py's job to report the mismatch, not this one's)."""
-    deployment = _deployment(layers={"follows": "hub-path", "segments": {"hub": "z00"}})
+    deployment = _deployment(layers={"follows": "hub-path", "segments": {"hub": "hub1"}})
     configuration = _configuration_with_hub_path_convention()
     relative = resolve_audit_relative_path(deployment, configuration, _STARTED_AT)
-    assert relative == Path("main", "c0224-prod", "20260930-143000")
+    assert relative == Path("main", "fabrikam-prod", "20260930-143000")
 
 
 def test_falls_back_when_layers_segments_absent():
     deployment = _deployment(layers={"follows": "hub-path"})
     configuration = _configuration_with_hub_path_convention()
     relative = resolve_audit_relative_path(deployment, configuration, _STARTED_AT)
-    assert relative == Path("main", "c0224-prod", "20260930-143000")
+    assert relative == Path("main", "fabrikam-prod", "20260930-143000")
 
 
 def test_timestamp_leaf_is_windows_safe_no_colons():

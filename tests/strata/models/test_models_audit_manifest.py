@@ -22,7 +22,7 @@ def _minimal_manifest(**overrides) -> dict:
     data = {
         "execution_id": "11111111-1111-1111-1111-111111111111",
         "action": "deploy",
-        "deployment": "c0224-prod",
+        "deployment": "fabrikam-prod",
         "workspace": "main",
         "started_at": "2026-09-30T14:30:00Z",
         "status": "success",

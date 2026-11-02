@@ -132,7 +132,7 @@ def test_all_categories_are_supported():
                 "images": {"server": "ghcr.io/goauthentik/server:2026.5.6"},
                 "charts": {"cert-manager": "v1.16.2"},
                 "remotes": {"infra": "abc64feae2da19a61b76460269941399b04acb7b"},
-                "artifacts": {"dspapi_container": "env_sbx11006400201_20260907.11"},
+                "artifacts": {"api_container": "env_sbx11006400201_20260907.11"},
             }
         )
     )
@@ -182,13 +182,13 @@ def test_artifacts_pin_is_a_separate_category_from_images():
     model = VersionModel.model_validate(
         _version(
             {
-                "images": {"dspapi_container": "ghcr.io/other:1.0"},
-                "artifacts": {"dspapi_container": "env_sbx11006400201_20260907.11"},
+                "images": {"api_container": "ghcr.io/other:1.0"},
+                "artifacts": {"api_container": "env_sbx11006400201_20260907.11"},
             }
         )
     )
-    assert model.spec.pins.images["dspapi_container"].version == "ghcr.io/other:1.0"
-    assert model.spec.pins.artifacts["dspapi_container"].version == "env_sbx11006400201_20260907.11"
+    assert model.spec.pins.images["api_container"].version == "ghcr.io/other:1.0"
+    assert model.spec.pins.artifacts["api_container"].version == "env_sbx11006400201_20260907.11"
 
 
 def test_artifacts_pin_shorthand_and_held_status():
@@ -197,7 +197,7 @@ def test_artifacts_pin_shorthand_and_held_status():
         _version(
             {
                 "artifacts": {
-                    "dspapi_container": {
+                    "api_container": {
                         "version": "env_sbx11006400201_20260907.10",
                         "status": "held",
                         "reason": "pending product team confirmation",
@@ -206,7 +206,7 @@ def test_artifacts_pin_shorthand_and_held_status():
             }
         )
     )
-    pin = model.spec.pins.artifacts["dspapi_container"]
+    pin = model.spec.pins.artifacts["api_container"]
     assert pin.status is VersionPinStatus.HELD
     assert pin.reason == "pending product team confirmation"
 

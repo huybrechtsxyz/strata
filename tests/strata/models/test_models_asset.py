@@ -11,12 +11,12 @@ from strata.services.base_service import diagnostics_from_validation_error
 
 
 def _location() -> dict:
-    return {"type": "git", "url": "https://example.com/c0062.git", "reference": "v1.4.0"}
+    return {"type": "git", "url": "https://example.com/contoso.git", "reference": "v1.4.0"}
 
 
 def _located_asset(**location_overrides) -> dict:
     return {
-        "meta": {"name": "c0062-api"},
+        "meta": {"name": "contoso-api"},
         "spec": {"source_path": "openapi", "location": {**_location(), **location_overrides}},
     }
 
@@ -25,7 +25,7 @@ def test_asset_accepts_a_location():
     model = AssetModel.model_validate(_located_asset())
     location = model.spec.location
     assert (location.url, location.reference, location.fetch.value) == (
-        "https://example.com/c0062.git",
+        "https://example.com/contoso.git",
         "v1.4.0",
         "strata",
     )

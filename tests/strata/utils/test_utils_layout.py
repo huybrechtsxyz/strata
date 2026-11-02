@@ -67,11 +67,11 @@ def test_remote_checkouts_are_separated_by_name():
 
 
 def test_asset_checkout_is_keyed_by_asset_and_reference():
-    a = asset_checkout_path(Path("/s"), "c0062-api", "v1.0.0")
-    assert a == strata_dir(Path("/s")) / "assets" / "c0062-api" / "v1.0.0"
-    assert a != asset_checkout_path(Path("/s"), "c0062-api", "v2.0.0")
-    assert a != asset_checkout_path(Path("/s"), "c0063-api", "v1.0.0")
-    assert asset_checkout_path(Path("/s"), "c0062-api", None).name == "_unpinned"
+    a = asset_checkout_path(Path("/s"), "contoso-api", "v1.0.0")
+    assert a == strata_dir(Path("/s")) / "assets" / "contoso-api" / "v1.0.0"
+    assert a != asset_checkout_path(Path("/s"), "contoso-api", "v2.0.0")
+    assert a != asset_checkout_path(Path("/s"), "acme-api", "v1.0.0")
+    assert asset_checkout_path(Path("/s"), "contoso-api", None).name == "_unpinned"
 
 
 def test_asset_checkout_never_collides_with_a_manifest_remote_of_the_same_name():

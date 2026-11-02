@@ -17,7 +17,7 @@ def _manifest(**overrides) -> DeploymentManifestModel:
     data = {
         "execution_id": "11111111-1111-1111-1111-111111111111",
         "action": "deploy",
-        "deployment": "c0224-prod",
+        "deployment": "fabrikam-prod",
         "workspace": "main",
         "environment": "prod",
         "started_at": "2026-09-30T14:30:00Z",
@@ -34,7 +34,7 @@ def _manifest(**overrides) -> DeploymentManifestModel:
 def _metrics(**overrides) -> DeploymentMetricsModel:
     data = {
         "execution_id": "11111111-1111-1111-1111-111111111111",
-        "deployment": "c0224-prod",
+        "deployment": "fabrikam-prod",
         "workspace": "main",
         "timestamp": "2026-09-30T14:32:03Z",
         "dimensions": {"outcome": "success", "action": "deploy", "environment": "prod", "actor": "ci-runner"},
@@ -46,12 +46,14 @@ def _metrics(**overrides) -> DeploymentMetricsModel:
 
 def test_render_manifest_event_shape():
     event = render_manifest_event(
-        _manifest(), relative_path="z00/s01/c0224/prod/20260930-143000/_manifest.json", file_sha256="sha256:manifest"
+        _manifest(),
+        relative_path="hub1/spoke1/fabrikam/prod/20260930-143000/_manifest.json",
+        file_sha256="sha256:manifest",
     )
     assert event["specversion"] == "1.0"
     assert event["type"] == "xyz.huybrechts.strata.deployment.completed"
-    assert event["source"] == "/strata/main/c0224-prod"
-    assert event["subject"] == "c0224-prod"
+    assert event["source"] == "/strata/main/fabrikam-prod"
+    assert event["subject"] == "fabrikam-prod"
     assert event["time"] == "2026-09-30T14:32:03Z"
     assert event["data"]["event"]["outcome"] == "success"
     assert event["data"]["event"]["action"] == "deployment-completed"
@@ -61,10 +63,10 @@ def test_render_manifest_event_shape():
         "execution_id": "11111111-1111-1111-1111-111111111111",
         "workspace": "main",
         "environment": "prod",
-        "deployment": "c0224-prod",
+        "deployment": "fabrikam-prod",
     }
     assert event["data"]["manifest"] == {
-        "path": "z00/s01/c0224/prod/20260930-143000/_manifest.json",
+        "path": "hub1/spoke1/fabrikam/prod/20260930-143000/_manifest.json",
         "sha256": "sha256:manifest",
     }
 

@@ -421,18 +421,18 @@ def _add_artifact_image(root: Path, *, pin: str | None) -> None:
     _write(
         root,
         "artifact.yaml",
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: datahub\nspec:\n"
-        "  image_name: int-docker-test/src/datahub.api\n",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: catalog\nspec:\n"
+        "  image_name: example/catalog-api\n",
     )
     _write(
         root,
         "environment.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: DATAHUB_TAG\n      store: artifact\n      value: datahub\n      field: image_tag\n",
+        "  variables:\n    - key: CATALOG_TAG\n      store: artifact\n      value: catalog\n      field: image_tag\n",
     )
     if pin is not None:
         version = root / "version.yaml"
-        version.write_text(version.read_text() + f"    artifacts:\n      datahub: '{pin}'\n")
+        version.write_text(version.read_text() + f"    artifacts:\n      catalog: '{pin}'\n")
 
 
 def test_manifest_records_an_artifact_image_with_its_pinned_tag(tmp_path: Path, _terraform_stub):
@@ -447,7 +447,7 @@ def test_manifest_records_an_artifact_image_with_its_pinned_tag(tmp_path: Path, 
 
     manifest = _json.loads(next(layout.audit_dir(root).rglob("_manifest.json")).read_text())
     images = manifest["artifacts"]["images"]
-    assert {"name": "datahub", "image": "int-docker-test/src/datahub.api:1.2.3"} in images
+    assert {"name": "catalog", "image": "example/catalog-api:1.2.3"} in images
     assert {"name": "redis", "image": "redis:7.2"} in images
 
 
@@ -463,8 +463,8 @@ def test_sbom_lists_the_pinned_module_image_and_the_artifact_image(tmp_path: Pat
     containers = {c["name"]: c for c in components if c["type"] == "container"}
 
     assert containers["redis"]["version"] == "7.2"
-    assert containers["datahub"]["version"] == "1.2.3"
-    assert not any(p["name"] == "strata:tag-stability" for p in containers["datahub"].get("properties", []))
+    assert containers["catalog"]["version"] == "1.2.3"
+    assert not any(p["name"] == "strata:tag-stability" for p in containers["catalog"].get("properties", []))
 
 
 def test_sbom_applies_the_chart_pin_too(tmp_path: Path, _terraform_stub):
@@ -486,9 +486,9 @@ def test_sbom_flags_an_artifact_image_with_no_tag_as_floating(tmp_path: Path, _t
     build_path = _run_deploy_and_build(root, tmp_path)
 
     components = _json.loads((build_path / "sbom.json").read_text())["components"]
-    datahub = next(c for c in components if c["name"] == "datahub")
+    catalog = next(c for c in components if c["name"] == "catalog")
 
-    assert {"name": "strata:tag-stability", "value": "floating"} in datahub["properties"]
+    assert {"name": "strata:tag-stability", "value": "floating"} in catalog["properties"]
 
 
 def test_manifest_artifacts_bom_absent_when_workspace_reaches_nothing(tmp_path: Path, _terraform_stub):

@@ -104,7 +104,7 @@ def test_value_token_is_skipped_entirely_not_judged_here():
     genuinely has no opinion on it either way, unlike `${output:}` above,
     which this function does still judge (with an explicit
     'not supported' rejection by default)."""
-    result = _environment().validate_document_tokens(_dns("${value:tenant.c0062.meta.name}"))
+    result = _environment().validate_document_tokens(_dns("${value:tenant.contoso.meta.name}"))
     assert result.ok, result.messages()
 
     result = _environment().validate_document_tokens(_dns("${value:tenant.doesnotexist.meta.name}"))
@@ -397,7 +397,7 @@ def _environment_with_artifact_variable() -> EnvironmentService:
             "meta": {"name": "prd"},
             "spec": {
                 "variables": [
-                    {"key": "IMAGE_TAG", "store": "artifact", "value": "dspapi_container", "field": "image_tag"}
+                    {"key": "IMAGE_TAG", "store": "artifact", "value": "api_container", "field": "image_tag"}
                 ],
             },
         }
@@ -407,7 +407,7 @@ def _environment_with_artifact_variable() -> EnvironmentService:
 
 
 def test_artifact_reference_to_a_real_artifact_passes():
-    result = _environment_with_artifact_variable().validate_artifact_references({"dspapi_container"})
+    result = _environment_with_artifact_variable().validate_artifact_references({"api_container"})
     assert result.ok
     assert result.messages() == []
 
@@ -415,7 +415,7 @@ def test_artifact_reference_to_a_real_artifact_passes():
 def test_artifact_reference_to_an_unknown_artifact_is_rejected():
     result = _environment_with_artifact_variable().validate_artifact_references({"some-other-artifact"})
     assert not result.ok
-    assert "dspapi_container" in result.messages()[0]
+    assert "api_container" in result.messages()[0]
     assert "undefined_artifact" in [d.code for d in result.errors]
 
 
@@ -492,7 +492,7 @@ def test_a_literal_store_value_is_allowed(value):
 
 # ---------------------------------------------------------------------------
 # validate_allowed_stores() (docs/design/gap_fit_v1.md gap #7 — Configuration's
-# spec.security allow-lists, real usage: config-deploy's
+# spec.security allow-lists, real usage: config-repo's
 # config/stores.yaml)
 # ---------------------------------------------------------------------------
 

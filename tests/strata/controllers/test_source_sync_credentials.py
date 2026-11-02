@@ -85,7 +85,7 @@ def _asset(remote: str | None = None) -> AssetModel:
     spec: dict = {"source_path": "infra"}
     if remote is not None:
         spec["remote"] = remote
-    return AssetModel.model_validate({"meta": {"name": "c0062-api"}, "spec": spec})
+    return AssetModel.model_validate({"meta": {"name": "contoso-api"}, "spec": spec})
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ def test_sync_asset_through_a_declared_remote_uses_the_resolved_credentials(tmp_
         _root(tmp_path), tmp_path / "build", _asset("infra"), {}, {"infra": _remote()}, slot="api", credentials=resolver
     )
 
-    assert resolver.calls == [("customer-git", "asset 'c0062-api'")]
+    assert resolver.calls == [("customer-git", "asset 'contoso-api'")]
     assert calls[0]["env"]["STRATA_GIT_ASKPASS_TOKEN"] == TOKEN
 
 
@@ -133,7 +133,7 @@ def test_sync_asset_location_uses_the_resolved_credentials(tmp_path, monkeypatch
     resolver = _StubResolver()
     asset = AssetModel.model_validate(
         {
-            "meta": {"name": "c0062-api"},
+            "meta": {"name": "contoso-api"},
             "spec": {
                 "source_path": "infra",
                 "location": {
@@ -147,7 +147,7 @@ def test_sync_asset_location_uses_the_resolved_credentials(tmp_path, monkeypatch
 
     sync_asset(_root(tmp_path), tmp_path / "build", asset, {}, {}, slot="api", credentials=resolver)
 
-    assert resolver.calls == [("customer-git", "asset 'c0062-api'")]
+    assert resolver.calls == [("customer-git", "asset 'contoso-api'")]
     assert calls[0]["env"]["STRATA_GIT_ASKPASS_TOKEN"] == TOKEN
 
 

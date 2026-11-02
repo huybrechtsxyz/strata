@@ -23,9 +23,9 @@ def _write(root: Path, relative: str, kind: str, name: str, spec: str) -> None:
 def _solution(
     tmp_path: Path, *, policy: str = "  image_tag_policy: {}\n", artifact_tag: str = "", version_pins: bool = False
 ) -> Path:
-    """One Terraform step and artifact `datahub`, reached by a `store: artifact` variable.
+    """One Terraform step and artifact `catalog`, reached by a `store: artifact` variable.
 
-    With `version_pins`, a `prd` version document pins `datahub` to 1.4.0 but the deployment does not name it,
+    With `version_pins`, a `prd` version document pins `catalog` to 1.4.0 but the deployment does not name it,
     so only `--pin prd` applies it.
     """
     root = tmp_path / "sln"
@@ -51,16 +51,16 @@ def _solution(
         "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
         "  resources:\n    - name: r1\n      resource: r1\n" + policy,
     )
-    _write(root, "artifact.yaml", "artifact", "datahub", f"  image_name: registry/datahub\n{artifact_tag}")
+    _write(root, "artifact.yaml", "artifact", "catalog", f"  image_name: registry/catalog\n{artifact_tag}")
     _write(
         root,
         "environment.yaml",
         "environment",
         "prd",
-        "  variables:\n    - key: DATAHUB_TAG\n      store: artifact\n      value: datahub\n      field: image_tag\n",
+        "  variables:\n    - key: CATALOG_TAG\n      store: artifact\n      value: catalog\n      field: image_tag\n",
     )
     if version_pins:
-        _write(root, "version.yaml", "version", "prd", "  pins:\n    artifacts:\n      datahub: '1.4.0'\n")
+        _write(root, "version.yaml", "version", "prd", "  pins:\n    artifacts:\n      catalog: '1.4.0'\n")
     _write(root, "deployment.yaml", "deployment", "app", "  workspace: main\n  environments:\n    - prd\n")
     return root
 
@@ -189,7 +189,7 @@ def _built(tmp_path: Path, **solution) -> tuple[Path, Path]:
 def test_deploy_run_denies_an_image_whose_tag_was_removed_after_the_build_and_runs_no_step(tmp_path, terraform):
     root, build_path = _built(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
     (root / "artifact.yaml").write_text(
-        _HEADER.format(kind="artifact", name="datahub") + "  image_name: registry/datahub\n", encoding="utf-8"
+        _HEADER.format(kind="artifact", name="catalog") + "  image_name: registry/catalog\n", encoding="utf-8"
     )
 
     diagnostics = deploy_run(_context(root), "app", build_path, force=True)
@@ -223,7 +223,7 @@ def test_deploy_run_without_a_policy_records_nothing_and_does_not_judge_the_imag
 def test_deploy_run_evaluates_the_policy_in_a_smoke_test_too(tmp_path, terraform):
     root, build_path = _built(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
     (root / "artifact.yaml").write_text(
-        _HEADER.format(kind="artifact", name="datahub") + "  image_name: registry/datahub\n", encoding="utf-8"
+        _HEADER.format(kind="artifact", name="catalog") + "  image_name: registry/catalog\n", encoding="utf-8"
     )
     diagnostics = deploy_run(_context(root), "app", build_path, smoke_test=True)
     assert _codes(diagnostics) == ["image_without_tag"]

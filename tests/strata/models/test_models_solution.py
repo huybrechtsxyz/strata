@@ -86,9 +86,9 @@ def test_solution_remote_accepts_external_fetch():
     data = _minimal_solution()
     data["spec"]["remotes"] = [
         {
-            "name": "env-int",
+            "name": "env-repo",
             "type": "git",
-            "url": "https://host/env-int.git",
+            "url": "https://host/env-repo.git",
             "reference": "main",
             "fetch": "external",
         }

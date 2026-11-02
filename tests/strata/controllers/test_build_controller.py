@@ -700,11 +700,11 @@ def _git_repo(path: Path, versions: dict[str, dict[str, str]]) -> str:
 
 def _located_asset_solution(tmp_path: Path) -> Path:
     """Two customers, each with a repository of their own and an asset document pointing at it, bound
-    to the workspace slot `api` by `app-c0062`/`app-c0063`; `app-pinned` is `app-c0062` plus a Version
+    to the workspace slot `api` by `app-contoso`/`app-acme`; `app-pinned` is `app-contoso` plus a Version
     pinning that asset to the tag `v2`. No remote is declared in strata.yaml for any of them."""
     root = _asset_slot_solution(tmp_path)
-    c0062 = _git_repo(tmp_path / "c0062", {"v1": {"api/one.json": "1"}, "v2": {"api/two.json": "2"}})
-    c0063 = _git_repo(tmp_path / "c0063", {"v1": {"api/other.json": "3"}})
+    contoso = _git_repo(tmp_path / "contoso", {"v1": {"api/one.json": "1"}, "v2": {"api/two.json": "2"}})
+    acme = _git_repo(tmp_path / "acme", {"v1": {"api/other.json": "3"}})
     asset = "apiVersion: strata.huybrechts.xyz/v2\nkind: asset\nmeta:\n  name: {name}\nspec:\n  source_path: api\n"
     location = "  location:\n    type: git\n    url: '{url}'\n    reference: v1\n"
     deployment = (
@@ -712,20 +712,20 @@ def _located_asset_solution(tmp_path: Path) -> Path:
         "  workspace: main\n  environments:\n    - prd\n{version}"
         "  assets:\n    - slot: api\n      asset: {asset}\n"
     )
-    for name, url in (("c0062-api", c0062), ("c0063-api", c0063)):
+    for name, url in (("contoso-api", contoso), ("acme-api", acme)):
         _write(root, f"asset-{name}.yaml", asset.format(name=name) + location.format(url=url.replace("\\", "/")))
-    _write(root, "dep-c0062.yaml", deployment.format(name="app-c0062", asset="c0062-api", version=""))
-    _write(root, "dep-c0063.yaml", deployment.format(name="app-c0063", asset="c0063-api", version=""))
+    _write(root, "dep-contoso.yaml", deployment.format(name="app-contoso", asset="contoso-api", version=""))
+    _write(root, "dep-acme.yaml", deployment.format(name="app-acme", asset="acme-api", version=""))
     _write(
         root,
         "dep-pinned.yaml",
-        deployment.format(name="app-pinned", asset="c0062-api", version="  version: ring\n"),
+        deployment.format(name="app-pinned", asset="contoso-api", version="  version: ring\n"),
     )
     _write(
         root,
         "version-ring.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: ring\nspec:\n"
-        "  workspace: main\n  pins:\n    assets:\n      c0062-api: v2\n",
+        "  workspace: main\n  pins:\n    assets:\n      contoso-api: v2\n",
     )
     return root
 
@@ -737,14 +737,14 @@ _NEEDS_GIT = pytest.mark.skipif(shutil.which("git") is None, reason="git not on 
 def test_customers_with_their_own_repositories_need_no_manifest_remote(tmp_path: Path):
     root = _located_asset_solution(tmp_path)
 
-    assert build_run(_context(root), "app-c0062", tmp_path / "b1").ok
-    assert build_run(_context(root), "app-c0063", tmp_path / "b2").ok
+    assert build_run(_context(root), "app-contoso", tmp_path / "b1").ok
+    assert build_run(_context(root), "app-acme", tmp_path / "b2").ok
 
     first, second = _built_assets(tmp_path / "b1")["api"], _built_assets(tmp_path / "b2")["api"]
     assert first["path"] == second["path"] == "assets/api"
-    assert (first["asset"], first["files"]) == ("c0062-api", ["one.json"])
-    assert (second["asset"], second["files"]) == ("c0063-api", ["other.json"])
-    assert (root / ".strata" / "assets" / "c0062-api" / "v1").is_dir()
+    assert (first["asset"], first["files"]) == ("contoso-api", ["one.json"])
+    assert (second["asset"], second["files"]) == ("acme-api", ["other.json"])
+    assert (root / ".strata" / "assets" / "contoso-api" / "v1").is_dir()
 
 
 @_NEEDS_GIT
@@ -754,14 +754,14 @@ def test_a_version_pin_moves_one_customers_asset_to_another_reference(tmp_path: 
     assert build_run(_context(root), "app-pinned", tmp_path / "build").ok
 
     assert _built_assets(tmp_path / "build")["api"]["files"] == ["two.json"]
-    assert (root / ".strata" / "assets" / "c0062-api" / "v2").is_dir()
+    assert (root / ".strata" / "assets" / "contoso-api" / "v2").is_dir()
 
 
 def _located_asset_model(reference: str = "v1", *, with_location: bool = True) -> AssetModel:
     spec: dict = {"source_path": "api"}
     if with_location:
         spec["location"] = {"url": "https://example.com/c.git", "reference": reference}
-    return AssetModel.model_validate({"meta": {"name": "c0062-api"}, "spec": spec})
+    return AssetModel.model_validate({"meta": {"name": "contoso-api"}, "spec": spec})
 
 
 def _ring_version(pins: str) -> VersionModel:
@@ -775,7 +775,7 @@ def _ring_version(pins: str) -> VersionModel:
 def test_apply_asset_version_pin_overrides_the_location_reference_only():
     asset = _located_asset_model()
 
-    pinned = apply_asset_version_pin(asset, _ring_version("  pins:\n    assets:\n      c0062-api: v2\n"))
+    pinned = apply_asset_version_pin(asset, _ring_version("  pins:\n    assets:\n      contoso-api: v2\n"))
 
     assert pinned.spec.location.reference == "v2"
     assert pinned.spec.location.url == asset.spec.location.url
@@ -788,7 +788,7 @@ def test_apply_asset_version_pin_is_a_no_op_without_a_version_a_pin_or_a_locatio
     assert apply_asset_version_pin(asset, _ring_version("  pins: {}\n")) is asset
     no_location = _located_asset_model(with_location=False)
     assert (
-        apply_asset_version_pin(no_location, _ring_version("  pins:\n    assets:\n      c0062-api: v2\n"))
+        apply_asset_version_pin(no_location, _ring_version("  pins:\n    assets:\n      contoso-api: v2\n"))
         is no_location
     )
 

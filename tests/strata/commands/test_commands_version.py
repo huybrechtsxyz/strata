@@ -385,7 +385,7 @@ def test_bare_version_still_prints_the_cli_version(runner):
 
 UNTAGGED_ARTIFACT = (
     "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: untagged\nspec:\n"
-    "  image_name: int-docker-test/src/untagged\n"
+    "  image_name: example/untagged\n"
 )
 PINNED_WEB = (
     "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"

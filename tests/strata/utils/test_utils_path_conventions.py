@@ -20,7 +20,7 @@ from strata.utils.path_conventions import (
 
 
 def test_path_under_scope_prefix_is_in_scope():
-    assert in_scope("customers/c0062/tenant.yaml", "customers/**") is True
+    assert in_scope("customers/contoso/tenant.yaml", "customers/**") is True
 
 
 def test_path_outside_scope_prefix_is_not_in_scope():
@@ -28,14 +28,14 @@ def test_path_outside_scope_prefix_is_not_in_scope():
 
 
 def test_multi_segment_scope_prefix_is_respected():
-    assert in_scope("deploy/hubs/z00/s01/c0224/dev/deployment.yaml", "deploy/hubs/**") is True
+    assert in_scope("deploy/hubs/hub1/spoke1/fabrikam/dev/deployment.yaml", "deploy/hubs/**") is True
     assert in_scope("deploy/control/dev/deployment.yaml", "deploy/hubs/**") is False
 
 
 def test_scope_prefix_is_not_a_substring_match_of_a_different_directory():
     """'deploy/hub/**' must not match 'deploy/hubs/...' — startswith on the
     real prefix, not a loose substring check."""
-    assert in_scope("deploy/hubs/z00/s01/deployment.yaml", "deploy/hub/**") is False
+    assert in_scope("deploy/hubs/hub1/spoke1/deployment.yaml", "deploy/hub/**") is False
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +44,7 @@ def test_scope_prefix_is_not_a_substring_match_of_a_different_directory():
 
 
 def test_split_separates_directory_from_filename():
-    assert split_directory_and_filename("customers/c0062/tenant.yaml") == ("customers/c0062", "tenant.yaml")
+    assert split_directory_and_filename("customers/contoso/tenant.yaml") == ("customers/contoso", "tenant.yaml")
 
 
 def test_split_with_no_slash_has_no_directory_component():
@@ -60,15 +60,15 @@ def test_split_with_no_slash_has_no_directory_component():
 
 
 def test_directory_pattern_matches_and_extracts_the_segment():
-    match = match_directory("customers/c0062/tenant.yaml", "customers/{code}")
+    match = match_directory("customers/contoso/tenant.yaml", "customers/{code}")
     assert match is not None
-    assert match.group("code") == "c0062"
+    assert match.group("code") == "contoso"
 
 
 def test_directory_pattern_with_extra_depth_does_not_match():
     """The real, empirically-found v1 bug class: a file one directory too
     deep for its convention must be caught, not silently accepted."""
-    match = match_directory("customers/c0062/nested/tenant.yaml", "customers/{code}")
+    match = match_directory("customers/contoso/nested/tenant.yaml", "customers/{code}")
     assert match is None
 
 
@@ -90,16 +90,16 @@ def test_directory_pattern_ignores_the_filename_entirely():
 
 def test_multiple_directory_captures_are_each_extracted():
     match = match_directory(
-        "deploy/hubs/z00/s01/c0224/dev/deployment.yaml",
+        "deploy/hubs/hub1/spoke1/fabrikam/dev/deployment.yaml",
         "deploy/hubs/{hub}/{spoke}/{customer}/{ring}",
     )
     assert match is not None
-    assert match.groupdict() == {"hub": "z00", "spoke": "s01", "customer": "c0224", "ring": "dev"}
+    assert match.groupdict() == {"hub": "hub1", "spoke": "spoke1", "customer": "fabrikam", "ring": "dev"}
 
 
 def test_a_directory_capture_never_matches_across_a_slash():
     """{code} is [^/]+ — it cannot absorb an extra path segment."""
-    match = match_directory("customers/c0062/extra/tenant.yaml", "customers/{code}")
+    match = match_directory("customers/contoso/extra/tenant.yaml", "customers/{code}")
     assert match is None
 
 
@@ -117,14 +117,14 @@ def test_directory_pattern_can_be_a_pure_literal_with_no_capture():
 
 
 def test_filename_pattern_matches_a_literal():
-    assert match_filename("customers/c0062/tenant.yaml", "tenant.yaml") is not None
-    assert match_filename("customers/c0062/config.yaml", "tenant.yaml") is None
+    assert match_filename("customers/contoso/tenant.yaml", "tenant.yaml") is not None
+    assert match_filename("customers/contoso/config.yaml", "tenant.yaml") is None
 
 
 def test_literal_dot_in_filename_pattern_is_escaped_not_treated_as_regex_wildcard():
     """'tenant.yaml' must not match 'tenantXyaml' — the '.' is literal."""
-    assert match_filename("customers/c0062/tenantXyaml", "tenant.yaml") is None
-    assert match_filename("customers/c0062/tenant.yaml", "tenant.yaml") is not None
+    assert match_filename("customers/contoso/tenantXyaml", "tenant.yaml") is None
+    assert match_filename("customers/contoso/tenant.yaml", "tenant.yaml") is not None
 
 
 def test_filename_pattern_can_capture_with_no_directory_capture():

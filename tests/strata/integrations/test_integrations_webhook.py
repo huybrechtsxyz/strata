@@ -79,9 +79,9 @@ def test_posts_the_event_as_json(_captured):
 
 
 def test_static_headers_are_sent(_captured):
-    WebhookIntegration(_config(headers={"X-Tenant": "c0224"})).send(_EVENT)
+    WebhookIntegration(_config(headers={"X-Tenant": "fabrikam"})).send(_EVENT)
 
-    assert _captured["headers"]["X-Tenant"] == "c0224"
+    assert _captured["headers"]["X-Tenant"] == "fabrikam"
 
 
 def test_token_env_var_becomes_a_bearer_authorization_header(_captured, monkeypatch):

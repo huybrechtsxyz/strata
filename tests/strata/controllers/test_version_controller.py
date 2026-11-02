@@ -77,9 +77,9 @@ spec:
 ARTIFACT = """apiVersion: strata.huybrechts.xyz/v2
 kind: artifact
 meta:
-  name: dspapi_container
+  name: api_container
 spec:
-  image_name: int-docker-test/src/acme.dispatcher.api
+  image_name: example/scheduler-api
   image_tag: "1.0.0"
 """
 
@@ -122,8 +122,8 @@ def test_reconcile_reports_add_candidates_for_unpinned_real_targets(tmp_path):
     assert by_key[("images", "web")].seed_value == "nginx:1.27-alpine"
     assert by_key[("charts", "authentik")].action == "add"
     assert by_key[("charts", "authentik")].seed_value == "2026.5.2"
-    assert by_key[("artifacts", "dspapi_container")].action == "add"
-    assert by_key[("artifacts", "dspapi_container")].seed_value == "1.0.0"
+    assert by_key[("artifacts", "api_container")].action == "add"
+    assert by_key[("artifacts", "api_container")].seed_value == "1.0.0"
 
 
 def test_reconcile_offers_assets_with_a_fetch_strata_location_only(tmp_path):
@@ -208,7 +208,7 @@ def test_fully_reconciled_document_has_no_candidates(tmp_path):
         "    remotes:\n"
         "      charts: v1.2.3\n"
         "    artifacts:\n"
-        "      dspapi_container: '1.0.0'\n"
+        "      api_container: '1.0.0'\n"
     )
     root = _solution(tmp_path, extra={"version.yaml": _version_doc(pins=pins)})
     context = open_solution(root)
@@ -326,7 +326,7 @@ BLANK_TAG_ARTIFACTS = {
 
 @pytest.mark.parametrize("artifact_yaml", BLANK_TAG_ARTIFACTS.values(), ids=BLANK_TAG_ARTIFACTS.keys())
 def test_scaffold_from_drops_an_artifact_pin_whose_artifact_has_a_blank_tag(tmp_path, artifact_yaml):
-    pins = "  pins:\n    artifacts:\n      dspapi_container: '2.0.0'\n"
+    pins = "  pins:\n    artifacts:\n      api_container: '2.0.0'\n"
     root = _solution(
         tmp_path,
         extra={"artifact.yaml": artifact_yaml, "version.yaml": _version_doc(workspace="main", pins=pins)},
@@ -338,7 +338,7 @@ def test_scaffold_from_drops_an_artifact_pin_whose_artifact_has_a_blank_tag(tmp_
     )
 
     data = yaml.safe_load(destination.read_text(encoding="utf-8"))
-    assert "dspapi_container" not in data["spec"]["pins"].get("artifacts", {})
+    assert "api_container" not in data["spec"]["pins"].get("artifacts", {})
 
 
 @pytest.mark.parametrize("artifact_yaml", BLANK_TAG_ARTIFACTS.values(), ids=BLANK_TAG_ARTIFACTS.keys())
@@ -353,7 +353,7 @@ def test_reconcile_offers_no_seeded_add_for_an_artifact_with_a_blank_tag(tmp_pat
 
 
 def test_reconcile_does_not_report_a_pin_on_a_blank_tag_artifact_as_stale(tmp_path):
-    pins = "  pins:\n    artifacts:\n      dspapi_container: '2.0.0'\n"
+    pins = "  pins:\n    artifacts:\n      api_container: '2.0.0'\n"
     root = _solution(
         tmp_path,
         extra={
@@ -534,7 +534,7 @@ kind: artifact
 meta:
   name: untagged
 spec:
-  image_name: int-docker-test/src/untagged
+  image_name: example/untagged
 """
 
 

@@ -205,16 +205,16 @@ def test_module_rejects_compose_file_and_services_together():
 def test_module_service_accepts_artifact_reference():
     """A service may source its image from a named Artifact document."""
     data = _minimal_module()
-    data["spec"]["services"] = [{"name": "server", "artifact": "dspapi_container"}]
+    data["spec"]["services"] = [{"name": "server", "artifact": "api_container"}]
     model = ModuleModel.model_validate(data)
-    assert model.spec.services[0].artifact == "dspapi_container"
+    assert model.spec.services[0].artifact == "api_container"
     assert model.spec.services[0].image is None
 
 
 def test_module_service_rejects_image_and_artifact_together():
     """`image` and `artifact` are mutually exclusive on one service."""
     data = _minimal_module()
-    data["spec"]["services"] = [{"name": "server", "image": "postgres:16-alpine", "artifact": "dspapi_container"}]
+    data["spec"]["services"] = [{"name": "server", "image": "postgres:16-alpine", "artifact": "api_container"}]
     with pytest.raises(ValidationError, match="mutually exclusive"):
         ModuleModel.model_validate(data)
 

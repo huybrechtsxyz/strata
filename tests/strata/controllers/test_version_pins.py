@@ -211,25 +211,25 @@ def _with_artifact(root: Path) -> Path:
     _write(
         root,
         "artifact.yaml",
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: datahub\n"
-        "spec:\n  image_name: int-docker-test/src/datahub.api\n",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: catalog\n"
+        "spec:\n  image_name: example/catalog-api\n",
     )
     return root
 
 
 def test_artifact_pin_against_a_real_artifact_is_clean(tmp_path):
-    root = _with_artifact(_solution(tmp_path, "  pins:\n    artifacts:\n      datahub: '1.2.3'\n"))
+    root = _with_artifact(_solution(tmp_path, "  pins:\n    artifacts:\n      catalog: '1.2.3'\n"))
     assert _resolve(root).diagnostics.messages() == []
 
 
 def test_artifact_pin_matching_no_artifact_is_a_warning(tmp_path):
-    root = _with_artifact(_solution(tmp_path, "  pins:\n    artifacts:\n      datahub-api: '1.2.3'\n"))
+    root = _with_artifact(_solution(tmp_path, "  pins:\n    artifacts:\n      catalog-api: '1.2.3'\n"))
     context = _resolve(root)
     assert context.ok
     warning = context.diagnostics.warnings[0]
     assert warning.code == "stale_pin"
-    assert warning.location == "spec.pins.artifacts.datahub-api"
-    assert "datahub-api" in warning.message
+    assert warning.location == "spec.pins.artifacts.catalog-api"
+    assert "catalog-api" in warning.message
 
 
 # ---------------------------------------------------------------------------

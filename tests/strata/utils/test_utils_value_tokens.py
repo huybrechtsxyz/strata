@@ -57,7 +57,7 @@ def test_resolve_value_tokens_matches_extract_value_tokens_keys():
 
 
 def test_resolve_value_tokens_in_mapping_resolves_flat_string_values():
-    """Real shape: provisioner.backend.configuration's real values (config-deploy)."""
+    """Real shape: provisioner.backend.configuration's real values (config-repo)."""
     data = {
         "resource_group_name": "${var:tf_state_resource_group}",
         "storage_account_name": "${var:tf_state_storage_account}",
@@ -175,17 +175,17 @@ def test_resolve_value_tokens_resolves_a_real_token_alongside_an_escaped_one():
 
 
 def test_extract_value_tokens_recognizes_a_value_kind_token():
-    assert extract_value_tokens("${value:tenant.c0062.meta.name}") == [("value", "tenant.c0062.meta.name")]
+    assert extract_value_tokens("${value:tenant.contoso.meta.name}") == [("value", "tenant.contoso.meta.name")]
 
 
 def test_find_malformed_value_tokens_accepts_a_well_formed_value_token():
-    assert find_malformed_value_tokens("${value:tenant.c0062.meta.name}") == []
+    assert find_malformed_value_tokens("${value:tenant.contoso.meta.name}") == []
 
 
 def test_validate_value_tokens_accepts_a_well_formed_value_token():
     """Doesn't raise — '${value:...}' is syntactically well-formed like any
     other kind, even though nothing resolves it yet."""
-    validate_value_tokens("${value:tenant.c0062.meta.name}")
+    validate_value_tokens("${value:tenant.contoso.meta.name}")
 
 
 def test_extract_value_tokens_accepts_a_bare_single_segment_value_token():
@@ -229,7 +229,7 @@ def test_referenced_output_keys_ignores_non_output_token_kinds():
         "a": "${var:REGION}",
         "b": "${secret:DB_PASSWORD}",
         "c": "${feature:ENABLE_X}",
-        "d": "${value:tenant.c0062.meta.name}",
+        "d": "${value:tenant.contoso.meta.name}",
         "e": "${output:provision_infra.vm_ip}",
     }
     assert referenced_output_keys(payload) == {"provision_infra.vm_ip"}
@@ -258,7 +258,7 @@ def test_resolve_value_tokens_raises_on_an_unresolved_value_token():
     would — this function's own raw contract is unaffected by Phase 3/4,
     only `resolve_values()`'s wrapping of it changed."""
     with pytest.raises(ValueError, match="did not resolve to a value"):
-        resolve_value_tokens("${value:tenant.c0062.meta.name}", {})
+        resolve_value_tokens("${value:tenant.contoso.meta.name}", {})
 
 
 def test_resolve_value_tokens_substitutes_a_value_token_once_its_key_is_populated():
@@ -267,8 +267,8 @@ def test_resolve_value_tokens_substitutes_a_value_token_once_its_key_is_populate
     `"kind.name.path"` key, this function substitutes a `${value:...}`
     token exactly like any other kind — no special-casing needed, matching
     `kind` only ever mattering to the token's author."""
-    result = resolve_value_tokens("code=${value:tenant.c0062.meta.name}", {"tenant.c0062.meta.name": "c0062"})
-    assert result == "code=c0062"
+    result = resolve_value_tokens("code=${value:tenant.contoso.meta.name}", {"tenant.contoso.meta.name": "contoso"})
+    assert result == "code=contoso"
 
 
 def test_resolve_value_tokens_in_mapping_unescapes_nested_escaped_literals():

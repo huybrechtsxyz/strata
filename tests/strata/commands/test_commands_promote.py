@@ -31,7 +31,7 @@ spec:
 WORKSPACE = """apiVersion: strata.huybrechts.xyz/v2
 kind: workspace
 meta:
-  name: dspapi
+  name: api
 spec:
   providers: [azure-main]
   provisioners:
@@ -61,7 +61,7 @@ def solution(tmp_path):
     return root
 
 
-def _version(name: str, *, workspace: str = "dspapi", promotion: str | None = None, pins: str = "  pins: {}\n") -> str:
+def _version(name: str, *, workspace: str = "api", promotion: str | None = None, pins: str = "  pins: {}\n") -> str:
     promotion_yaml = f"  promotion:\n{promotion}\n" if promotion else ""
     return f"""apiVersion: strata.huybrechts.xyz/v2
 kind: version
@@ -72,7 +72,7 @@ spec:
 {promotion_yaml}{pins}"""
 
 
-def _deployment(name: str, *, version: str, workspace: str = "dspapi") -> str:
+def _deployment(name: str, *, version: str, workspace: str = "api") -> str:
     return f"""apiVersion: strata.huybrechts.xyz/v2
 kind: deployment
 meta:
@@ -94,16 +94,16 @@ def _status(runner, workspace, solution, *extra):
 
 
 def test_untagged_workspace_prints_empty_table_not_an_error(runner, solution):
-    _write(solution, "version.yaml", _version("dspapi-prd"))
-    _write(solution, "deployment.yaml", _deployment("dep", version="dspapi-prd"))
+    _write(solution, "version.yaml", _version("api-prd"))
+    _write(solution, "deployment.yaml", _deployment("dep", version="api-prd"))
 
-    result = _status(runner, "dspapi", solution)
+    result = _status(runner, "api", solution)
     assert result.exit_code == EXIT_SUCCESS
     assert "no tagged version documents" in result.output
 
 
 def test_workspace_with_no_version_documents_at_all_prints_empty_table(runner, solution):
-    result = _status(runner, "dspapi", solution)
+    result = _status(runner, "api", solution)
     assert result.exit_code == EXIT_SUCCESS
     assert "no tagged version documents" in result.output
 
@@ -118,48 +118,48 @@ def _worked_example_b(solution) -> None:
         solution,
         "version-dev.yaml",
         _version(
-            "dspapi-dev",
+            "api-dev",
             promotion="    ring: dev\n    order: 1",
-            pins='  pins:\n    images:\n      dspapi: "1.3.0-rc2"\n',
+            pins='  pins:\n    images:\n      api: "1.3.0-rc2"\n',
         ),
     )
     _write(
         solution,
         "version-qas.yaml",
         _version(
-            "dspapi-qas",
+            "api-qas",
             promotion="    ring: qas\n    order: 2",
-            pins='  pins:\n    images:\n      dspapi: "1.2.0"\n',
+            pins='  pins:\n    images:\n      api: "1.2.0"\n',
         ),
     )
     _write(
         solution,
         "version-prd-canary.yaml",
         _version(
-            "dspapi-prd-canary",
+            "api-prd-canary",
             promotion="    ring: prd\n    order: 3\n    wave: canary",
-            pins='  pins:\n    images:\n      dspapi: "1.1.0"\n',
+            pins='  pins:\n    images:\n      api: "1.1.0"\n',
         ),
     )
     _write(
         solution,
         "version-prd-general.yaml",
         _version(
-            "dspapi-prd",
+            "api-prd",
             promotion="    ring: prd\n    order: 3\n    wave: general",
-            pins='  pins:\n    images:\n      dspapi: "1.0.0"\n',
+            pins='  pins:\n    images:\n      api: "1.0.0"\n',
         ),
     )
-    _write(solution, "deployment-dev.yaml", _deployment("dev-dep", version="dspapi-dev"))
-    _write(solution, "deployment-qas.yaml", _deployment("qas-dep", version="dspapi-qas"))
-    _write(solution, "deployment-canary.yaml", _deployment("canary-dep", version="dspapi-prd-canary"))
-    _write(solution, "deployment-general.yaml", _deployment("general-dep", version="dspapi-prd"))
+    _write(solution, "deployment-dev.yaml", _deployment("dev-dep", version="api-dev"))
+    _write(solution, "deployment-qas.yaml", _deployment("qas-dep", version="api-qas"))
+    _write(solution, "deployment-canary.yaml", _deployment("canary-dep", version="api-prd-canary"))
+    _write(solution, "deployment-general.yaml", _deployment("general-dep", version="api-prd"))
 
 
 def test_multi_ring_wave_divergence_renders_every_row_and_marks_the_behind_one(runner, solution):
     _worked_example_b(solution)
 
-    result = _status(runner, "dspapi", solution)
+    result = _status(runner, "api", solution)
     assert result.exit_code == EXIT_SUCCESS
     output = result.output
     assert "1.3.0-rc2" in output
@@ -176,10 +176,10 @@ def test_multi_ring_wave_divergence_renders_every_row_and_marks_the_behind_one(r
 def test_multi_ring_json_output_carries_every_row(runner, solution):
     _worked_example_b(solution)
 
-    result = _status(runner, "dspapi", solution, "--output", "json")
+    result = _status(runner, "api", solution, "--output", "json")
     assert result.exit_code == EXIT_SUCCESS
     envelope = json.loads(result.output)
-    assert envelope["data"]["workspace"] == "dspapi"
+    assert envelope["data"]["workspace"] == "api"
     rows = envelope["data"]["rows"]
     assert len(rows) == 4
 
@@ -189,7 +189,7 @@ def test_multi_ring_json_output_carries_every_row(runner, solution):
         "order": 3,
         "wave": "general",
         "category": "images",
-        "target": "dspapi",
+        "target": "api",
         "value": "1.0.0",
         "status": "current",
         "behind": True,
@@ -205,10 +205,10 @@ def test_multi_ring_json_output_carries_every_row(runner, solution):
 
 
 def test_tagged_ring_with_no_pins_still_produces_a_row(runner, solution):
-    _write(solution, "version.yaml", _version("dspapi-prd", promotion="    ring: prd\n    order: 3"))
-    _write(solution, "deployment.yaml", _deployment("dep", version="dspapi-prd"))
+    _write(solution, "version.yaml", _version("api-prd", promotion="    ring: prd\n    order: 3"))
+    _write(solution, "deployment.yaml", _deployment("dep", version="api-prd"))
 
-    result = _status(runner, "dspapi", solution)
+    result = _status(runner, "api", solution)
     assert result.exit_code == EXIT_SUCCESS
     assert "prd" in result.output
     assert "no tagged version documents" not in result.output
@@ -220,18 +220,18 @@ def test_tagged_ring_with_no_pins_still_produces_a_row(runner, solution):
 
 
 def test_promotion_violation_is_shown_but_does_not_fail_the_command(runner, solution):
-    _write(solution, "version-a.yaml", _version("dspapi-a", promotion="    ring: prd\n    order: 3"))
-    _write(solution, "version-b.yaml", _version("dspapi-b", promotion="    ring: prod\n    order: 3"))
-    _write(solution, "deployment-a.yaml", _deployment("dep-a", version="dspapi-a"))
-    _write(solution, "deployment-b.yaml", _deployment("dep-b", version="dspapi-b"))
+    _write(solution, "version-a.yaml", _version("api-a", promotion="    ring: prd\n    order: 3"))
+    _write(solution, "version-b.yaml", _version("api-b", promotion="    ring: prod\n    order: 3"))
+    _write(solution, "deployment-a.yaml", _deployment("dep-a", version="api-a"))
+    _write(solution, "deployment-b.yaml", _deployment("dep-b", version="api-b"))
 
-    result = _status(runner, "dspapi", solution)
+    result = _status(runner, "api", solution)
     assert result.exit_code == EXIT_SUCCESS  # read-only: never fails on a finding
     assert "promotion_ring_order_not_bijective" in result.output or "biject" in result.output
 
 
 def test_outside_a_solution_exits_usage_failure(runner, tmp_path):
-    result = _status(runner, "dspapi", tmp_path)
+    result = _status(runner, "api", tmp_path)
     assert result.exit_code == EXIT_USAGE
 
 
@@ -247,11 +247,11 @@ def _apply(runner, workspace, ring, solution, *extra):
 def test_apply_copies_the_preceding_orders_common_pin_into_the_target(runner, solution):
     _worked_example_b(solution)
 
-    result = _apply(runner, "dspapi", "prd", solution, "--wave", "general")
+    result = _apply(runner, "api", "prd", solution, "--wave", "general")
 
     assert result.exit_code == EXIT_SUCCESS
-    assert "'dspapi-qas'" in result.output
-    assert "images.dspapi = 1.2.0" in result.output
+    assert "'api-qas'" in result.output
+    assert "images.api = 1.2.0" in result.output
 
     written = (solution / "version-prd-general.yaml").read_text(encoding="utf-8")
     assert "version: 1.2.0" in written
@@ -261,22 +261,22 @@ def test_apply_copies_the_preceding_orders_common_pin_into_the_target(runner, so
 def test_apply_json_output_reports_every_copied_pin(runner, solution):
     _worked_example_b(solution)
 
-    result = _apply(runner, "dspapi", "prd", solution, "--wave", "general", "--output", "json")
+    result = _apply(runner, "api", "prd", solution, "--wave", "general", "--output", "json")
 
     assert result.exit_code == EXIT_SUCCESS
     envelope = json.loads(result.output)
-    assert envelope["data"]["workspace"] == "dspapi"
+    assert envelope["data"]["workspace"] == "api"
     assert envelope["data"]["ring"] == "prd"
     assert envelope["data"]["wave"] == "general"
-    assert envelope["data"]["source_version"] == "dspapi-qas"
-    assert envelope["data"]["target_version"] == "dspapi-prd"
-    assert envelope["data"]["copied"] == [{"category": "images", "target": "dspapi", "value": "1.2.0"}]
+    assert envelope["data"]["source_version"] == "api-qas"
+    assert envelope["data"]["target_version"] == "api-prd"
+    assert envelope["data"]["copied"] == [{"category": "images", "target": "api", "value": "1.2.0"}]
 
 
 def test_apply_requires_wave_for_a_multi_wave_ring(runner, solution):
     _worked_example_b(solution)
 
-    result = _apply(runner, "dspapi", "prd", solution)
+    result = _apply(runner, "api", "prd", solution)
 
     assert result.exit_code == EXIT_USAGE
     assert "more than one wave" in result.output
@@ -285,16 +285,16 @@ def test_apply_requires_wave_for_a_multi_wave_ring(runner, solution):
 def test_apply_single_wave_ring_needs_no_wave_flag(runner, solution):
     _worked_example_b(solution)
 
-    result = _apply(runner, "dspapi", "qas", solution)
+    result = _apply(runner, "api", "qas", solution)
 
     assert result.exit_code == EXIT_SUCCESS
-    assert "'dspapi-dev'" in result.output
+    assert "'api-dev'" in result.output
 
 
 def test_apply_unknown_ring_exits_usage_failure(runner, solution):
     _worked_example_b(solution)
 
-    result = _apply(runner, "dspapi", "ghost", solution)
+    result = _apply(runner, "api", "ghost", solution)
 
     assert result.exit_code == EXIT_USAGE
     assert "No ring named 'ghost'" in result.output
@@ -303,44 +303,42 @@ def test_apply_unknown_ring_exits_usage_failure(runner, solution):
 def test_apply_with_no_preceding_order_exits_usage_failure(runner, solution):
     _worked_example_b(solution)
 
-    result = _apply(runner, "dspapi", "dev", solution)
+    result = _apply(runner, "api", "dev", solution)
 
     assert result.exit_code == EXIT_USAGE
     assert "no preceding order" in result.output
 
 
 def test_apply_zero_common_keys_reports_nothing_copied_without_failing(runner, solution):
-    _write(solution, "version-a.yaml", _version("dspapi-a", promotion="    ring: dev\n    order: 1"))
+    _write(solution, "version-a.yaml", _version("api-a", promotion="    ring: dev\n    order: 1"))
     _write(
         solution,
         "version-b.yaml",
-        _version(
-            "dspapi-b", promotion="    ring: qas\n    order: 2", pins='  pins:\n    charts:\n      other: "1.0.0"\n'
-        ),
+        _version("api-b", promotion="    ring: qas\n    order: 2", pins='  pins:\n    charts:\n      other: "1.0.0"\n'),
     )
-    _write(solution, "deployment-a.yaml", _deployment("dep-a", version="dspapi-a"))
-    _write(solution, "deployment-b.yaml", _deployment("dep-b", version="dspapi-b"))
+    _write(solution, "deployment-a.yaml", _deployment("dep-a", version="api-a"))
+    _write(solution, "deployment-b.yaml", _deployment("dep-b", version="api-b"))
 
-    result = _apply(runner, "dspapi", "qas", solution)
+    result = _apply(runner, "api", "qas", solution)
 
     assert result.exit_code == EXIT_SUCCESS
     assert "nothing copied" in result.output
 
 
 def test_apply_refuses_when_workspace_has_an_unresolved_promotion_error(runner, solution):
-    _write(solution, "version-a.yaml", _version("dspapi-a", promotion="    ring: prd\n    order: 3"))
-    _write(solution, "version-b.yaml", _version("dspapi-b", promotion="    ring: prod\n    order: 3"))
-    _write(solution, "deployment-a.yaml", _deployment("dep-a", version="dspapi-a"))
-    _write(solution, "deployment-b.yaml", _deployment("dep-b", version="dspapi-b"))
+    _write(solution, "version-a.yaml", _version("api-a", promotion="    ring: prd\n    order: 3"))
+    _write(solution, "version-b.yaml", _version("api-b", promotion="    ring: prod\n    order: 3"))
+    _write(solution, "deployment-a.yaml", _deployment("dep-a", version="api-a"))
+    _write(solution, "deployment-b.yaml", _deployment("dep-b", version="api-b"))
 
-    result = _apply(runner, "dspapi", "prd", solution)
+    result = _apply(runner, "api", "prd", solution)
 
     assert result.exit_code == EXIT_USAGE
     assert "unresolved promotion inconsistencies" in result.output
 
 
 def test_apply_outside_a_solution_exits_usage_failure(runner, tmp_path):
-    result = _apply(runner, "dspapi", "prd", tmp_path)
+    result = _apply(runner, "api", "prd", tmp_path)
     assert result.exit_code == EXIT_USAGE
 
 
@@ -358,15 +356,15 @@ def test_view_console_output_round_trips_into_a_promotion_view(runner, solution)
 
     _worked_example_b(solution)
 
-    result = _view(runner, "dspapi", solution, "--quiet")
+    result = _view(runner, "api", solution, "--quiet")
 
     assert result.exit_code == EXIT_SUCCESS
     # --quiet suppresses the header/footer chrome but never the result itself.
     payload = yaml.safe_load(result.output)
     view = PromotionView.model_validate(payload)
-    assert view.workspace == "dspapi"
+    assert view.workspace == "api"
     assert [r.ring for r in view.rings] == ["dev", "qas", "prd"]
-    assert view.rings[2].waves[0].version.meta.name == "dspapi-prd-canary"
+    assert view.rings[2].waves[0].version.meta.name == "api-prd-canary"
 
 
 def test_view_json_output_round_trips_into_a_promotion_view(runner, solution):
@@ -374,24 +372,24 @@ def test_view_json_output_round_trips_into_a_promotion_view(runner, solution):
 
     _worked_example_b(solution)
 
-    result = _view(runner, "dspapi", solution, "--output", "json")
+    result = _view(runner, "api", solution, "--output", "json")
 
     assert result.exit_code == EXIT_SUCCESS
     envelope = json.loads(result.output)
     view = PromotionView.model_validate(envelope["data"])
-    assert view.workspace == "dspapi"
+    assert view.workspace == "api"
     assert len(view.rings) == 3
 
 
 def test_view_untagged_workspace_is_an_empty_view_not_an_error(runner, solution):
-    _write(solution, "version.yaml", _version("dspapi-prd"))
-    _write(solution, "deployment.yaml", _deployment("dep", version="dspapi-prd"))
+    _write(solution, "version.yaml", _version("api-prd"))
+    _write(solution, "deployment.yaml", _deployment("dep", version="api-prd"))
 
-    result = _view(runner, "dspapi", solution, "--quiet")
+    result = _view(runner, "api", solution, "--quiet")
 
     assert result.exit_code == EXIT_SUCCESS
     payload = yaml.safe_load(result.output)
-    assert payload == {"workspace": "dspapi", "rings": []}
+    assert payload == {"workspace": "api", "rings": []}
 
 
 def test_view_output_path_writes_the_bare_view_to_a_file(runner, solution, tmp_path):
@@ -400,7 +398,7 @@ def test_view_output_path_writes_the_bare_view_to_a_file(runner, solution, tmp_p
     _worked_example_b(solution)
     destination = tmp_path / "promotion-view.yaml"
 
-    result = _view(runner, "dspapi", solution, "--output-path", str(destination))
+    result = _view(runner, "api", solution, "--output-path", str(destination))
 
     assert result.exit_code == EXIT_SUCCESS
     assert destination.exists()
@@ -416,7 +414,7 @@ def test_view_output_path_with_json_format_writes_valid_json(runner, solution, t
     _worked_example_b(solution)
     destination = tmp_path / "promotion-view.json"
 
-    result = _view(runner, "dspapi", solution, "--output-path", str(destination), "--output", "json")
+    result = _view(runner, "api", solution, "--output-path", str(destination), "--output", "json")
 
     assert result.exit_code == EXIT_SUCCESS
     envelope = json.loads(result.output)
@@ -426,19 +424,19 @@ def test_view_output_path_with_json_format_writes_valid_json(runner, solution, t
 
 
 def test_view_promotion_violation_is_shown_but_does_not_fail_the_command(runner, solution):
-    _write(solution, "version-a.yaml", _version("dspapi-a", promotion="    ring: prd\n    order: 3"))
-    _write(solution, "version-b.yaml", _version("dspapi-b", promotion="    ring: prod\n    order: 3"))
-    _write(solution, "deployment-a.yaml", _deployment("dep-a", version="dspapi-a"))
-    _write(solution, "deployment-b.yaml", _deployment("dep-b", version="dspapi-b"))
+    _write(solution, "version-a.yaml", _version("api-a", promotion="    ring: prd\n    order: 3"))
+    _write(solution, "version-b.yaml", _version("api-b", promotion="    ring: prod\n    order: 3"))
+    _write(solution, "deployment-a.yaml", _deployment("dep-a", version="api-a"))
+    _write(solution, "deployment-b.yaml", _deployment("dep-b", version="api-b"))
 
-    result = _view(runner, "dspapi", solution)
+    result = _view(runner, "api", solution)
 
     assert result.exit_code == EXIT_SUCCESS  # read-only: never fails on a finding
     assert "biject" in result.output
 
 
 def test_view_outside_a_solution_exits_usage_failure(runner, tmp_path):
-    result = _view(runner, "dspapi", tmp_path)
+    result = _view(runner, "api", tmp_path)
     assert result.exit_code == EXIT_USAGE
 
 

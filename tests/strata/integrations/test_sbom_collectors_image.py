@@ -65,7 +65,7 @@ def test_collect_flags_a_floating_tag_as_a_warning():
 
 
 def test_collect_skips_a_service_using_artifact_instead_of_image():
-    module = _module("app", ModuleServiceModel(name="app", artifact="dspapi_container"))
+    module = _module("app", ModuleServiceModel(name="app", artifact="api_container"))
     result = ImageCollector().collect(_graph(), [module], Path("/does/not/matter"))
     assert result.components == []
 

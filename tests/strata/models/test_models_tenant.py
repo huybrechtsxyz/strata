@@ -9,7 +9,7 @@ from strata.models.tenant_model import TenantModel
 
 def _minimal_tenant() -> dict:
     return {
-        "meta": {"name": "c0062"},
+        "meta": {"name": "contoso"},
         "spec": {
             "display_name": "GSK",
             "geographies": ["europe"],
@@ -20,7 +20,7 @@ def _minimal_tenant() -> dict:
 def test_tenant_minimal_is_valid():
     """A minimal tenant (identifier, display name, one zone) validates."""
     model = TenantModel.model_validate(_minimal_tenant())
-    assert model.meta.name == "c0062"
+    assert model.meta.name == "contoso"
     assert model.spec.display_name == "GSK"
     assert model.spec.geographies == ["europe"]
     assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
@@ -79,7 +79,7 @@ def test_tenant_requires_display_name():
 def test_tenant_rejects_v1_code_field():
     """v1's spec.code duplicated meta.name and is not ported (extra='forbid')."""
     data = _minimal_tenant()
-    data["spec"]["code"] = "c0062"
+    data["spec"]["code"] = "contoso"
     with pytest.raises(ValidationError):
         TenantModel.model_validate(data)
 
@@ -87,15 +87,15 @@ def test_tenant_rejects_v1_code_field():
 def test_tenant_accepts_environment_names():
     """spec.environments names Environment documents, not file paths."""
     data = _minimal_tenant()
-    data["spec"]["environments"] = ["c0062-env"]
+    data["spec"]["environments"] = ["contoso-env"]
     model = TenantModel.model_validate(data)
-    assert model.spec.environments == ["c0062-env"]
+    assert model.spec.environments == ["contoso-env"]
 
 
 def test_tenant_rejects_environment_file_path():
     """A v1-style path fails PlatformName — documents are referenced by name (ADR-0015)."""
     data = _minimal_tenant()
-    data["spec"]["environments"] = ["customers/c0062/tenant.env.yaml"]
+    data["spec"]["environments"] = ["customers/contoso/tenant.env.yaml"]
     with pytest.raises(ValidationError):
         TenantModel.model_validate(data)
 

@@ -84,7 +84,7 @@ def test_git_remote_fetch_strata_clones_and_checks_out(tmp_path: Path, monkeypat
 def test_checkout_path_override_is_where_a_strata_fetch_clones(tmp_path: Path, monkeypatch):
     captured = _capture(monkeypatch)
     remote = _remote()
-    elsewhere = layout.asset_checkout_path(tmp_path, "c0062-api", "main")
+    elsewhere = layout.asset_checkout_path(tmp_path, "contoso-api", "main")
 
     result = resolve_remote(tmp_path, remote, checkout_path=elsewhere)
 
@@ -95,7 +95,7 @@ def test_checkout_path_override_is_where_a_strata_fetch_clones(tmp_path: Path, m
 
 def test_checkout_path_override_is_reused_when_already_there(tmp_path: Path, monkeypatch):
     captured = _capture(monkeypatch)
-    elsewhere = layout.asset_checkout_path(tmp_path, "c0062-api", "main")
+    elsewhere = layout.asset_checkout_path(tmp_path, "contoso-api", "main")
     elsewhere.mkdir(parents=True)
 
     assert resolve_remote(tmp_path, _remote(), checkout_path=elsewhere) == elsewhere
@@ -103,8 +103,8 @@ def test_checkout_path_override_is_reused_when_already_there(tmp_path: Path, mon
 
 
 def test_fetch_external_error_names_the_override_path(tmp_path: Path):
-    elsewhere = layout.asset_checkout_path(tmp_path, "c0062-api", "main")
-    with pytest.raises(RemoteResolutionError, match="c0062-api"):
+    elsewhere = layout.asset_checkout_path(tmp_path, "contoso-api", "main")
+    with pytest.raises(RemoteResolutionError, match="contoso-api"):
         resolve_remote(tmp_path, _remote(fetch=RemoteFetch.EXTERNAL), checkout_path=elsewhere)
 
 

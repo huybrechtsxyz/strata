@@ -123,7 +123,7 @@ def test_variable_store_default_accepted_on_integration_backed_store():
 def test_variable_store_artifact_is_valid():
     """A `store: artifact` variable with a `field` selector validates."""
     model = VariableStoreModel.model_validate(
-        {"key": "dspapi_container_image_tag", "store": "artifact", "value": "dspapi_container", "field": "image_tag"}
+        {"key": "api_container_image_tag", "store": "artifact", "value": "api_container", "field": "image_tag"}
     )
     assert model.store.value == "artifact"
     assert model.field == "image_tag"
@@ -133,7 +133,7 @@ def test_variable_store_artifact_field_accepts_image_name_image_tag_and_image_re
     """All three real field selectors are accepted."""
     for field in ("image_name", "image_tag", "image_ref"):
         model = VariableStoreModel.model_validate(
-            {"key": "k", "store": "artifact", "value": "dspapi_container", "field": field}
+            {"key": "k", "store": "artifact", "value": "api_container", "field": field}
         )
         assert model.field == field
 
@@ -151,7 +151,7 @@ def test_variable_store_default_rejected_on_artifact_store():
     integration-backed store with something to seed."""
     with pytest.raises(ValidationError, match="not valid on built-in store"):
         VariableStoreModel.model_validate(
-            {"key": "k", "store": "artifact", "value": "dspapi_container", "default": "fallback"}
+            {"key": "k", "store": "artifact", "value": "api_container", "default": "fallback"}
         )
 
 

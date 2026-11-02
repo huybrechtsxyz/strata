@@ -12,7 +12,7 @@ def _tenant(**spec_overrides) -> dict:
         "properties": {"tier": "standard"},
     }
     spec.update(spec_overrides)
-    return {"meta": {"name": "c0062"}, "spec": spec}
+    return {"meta": {"name": "contoso"}, "spec": spec}
 
 
 def _provider_config(*regions) -> ProviderConfigModel:

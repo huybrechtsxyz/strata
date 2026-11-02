@@ -63,14 +63,14 @@ def test_effective_assets_overlays_deployment_binding():
             "spec": {
                 "workspace": "apim",
                 "environments": ["prd"],
-                "assets": [{"slot": "api", "asset": "c0062-api"}, {"slot": "ghost", "asset": "x"}],
+                "assets": [{"slot": "api", "asset": "contoso-api"}, {"slot": "ghost", "asset": "x"}],
             },
         }
     )
 
     assert effective_assets(workspace, None) == {"openapi": "openapi", "api": "api-x"}
     # an unknown slot is ignored here; validation reports it
-    assert effective_assets(workspace, deployment) == {"openapi": "openapi", "api": "c0062-api"}
+    assert effective_assets(workspace, deployment) == {"openapi": "openapi", "api": "contoso-api"}
 
 
 def test_workspace_service_validates_from_data():

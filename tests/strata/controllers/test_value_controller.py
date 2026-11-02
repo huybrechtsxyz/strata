@@ -346,13 +346,13 @@ def test_resolve_values_version_pin_affects_store_artifact_resolution(tmp_path):
     `--resolve` validation (and `deploy run --pin`) would silently see the
     deployment's on-disk version instead of the pin."""
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
-    _version_doc(root, "prd", artifact_pins={"dspapi_container": "2.0.0"})
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
+    _version_doc(root, "prd", artifact_pins={"api_container": "2.0.0"})
     _environment(
         root,
         "prd",
         variables=[
-            {"key": "IMAGE_TAG", "store": "artifact", "value": "dspapi_container"},
+            {"key": "IMAGE_TAG", "store": "artifact", "value": "api_container"},
         ],
     )
     # field: image_tag must be set on the variable for the artifact store —
@@ -398,13 +398,13 @@ def _version_doc(root: Path, name: str, *, artifact_pins: dict[str, str] | None 
 
 def test_resolve_artifact_returns_model_when_it_exists(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api")
+    _artifact(root, "api_container", image_name="example/scheduler-api")
 
     context = _context(root)
-    artifact = resolve_artifact(context, "dspapi_container")
+    artifact = resolve_artifact(context, "api_container")
 
     assert artifact is not None
-    assert artifact.spec.image_name == "int-docker-test/src/acme.dispatcher.api"
+    assert artifact.spec.image_name == "example/scheduler-api"
 
 
 def test_resolve_artifact_returns_none_when_missing(tmp_path):
@@ -416,42 +416,39 @@ def test_resolve_artifact_returns_none_when_missing(tmp_path):
 
 def test_resolve_artifact_field_image_name_is_never_pin_overlaid(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api")
+    _artifact(root, "api_container", image_name="example/scheduler-api")
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", environments=["prd"])
 
     context = _context(root)
     deployment = resolve_deployment(context, "app")
 
-    assert (
-        resolve_artifact_field(context, deployment, "dspapi_container", "image_name")
-        == "int-docker-test/src/acme.dispatcher.api"
-    )
+    assert resolve_artifact_field(context, deployment, "api_container", "image_name") == "example/scheduler-api"
 
 
 def test_resolve_artifact_field_image_tag_falls_back_to_declared_value(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", environments=["prd"])
 
     context = _context(root)
     deployment = resolve_deployment(context, "app")
 
-    assert resolve_artifact_field(context, deployment, "dspapi_container", "image_tag") == "1.0.0"
+    assert resolve_artifact_field(context, deployment, "api_container", "image_tag") == "1.0.0"
 
 
 def test_resolve_artifact_field_image_tag_uses_version_pin_when_present(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
-    _version_doc(root, "prd", artifact_pins={"dspapi_container": "2.0.0"})
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
+    _version_doc(root, "prd", artifact_pins={"api_container": "2.0.0"})
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", version="prd", environments=["prd"])
 
     context = _context(root)
     deployment = resolve_deployment(context, "app")
 
-    assert resolve_artifact_field(context, deployment, "dspapi_container", "image_tag") == "2.0.0"
+    assert resolve_artifact_field(context, deployment, "api_container", "image_tag") == "2.0.0"
 
 
 def test_resolve_artifact_field_image_tag_pin_application_is_logged(tmp_path):
@@ -463,8 +460,8 @@ def test_resolve_artifact_field_image_tag_pin_application_is_logged(tmp_path):
     from strata.logging.config import configure_logging, shutdown_logging
 
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
-    _version_doc(root, "prd", artifact_pins={"dspapi_container": "2.0.0"})
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
+    _version_doc(root, "prd", artifact_pins={"api_container": "2.0.0"})
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", version="prd", environments=["prd"])
 
@@ -474,7 +471,7 @@ def test_resolve_artifact_field_image_tag_pin_application_is_logged(tmp_path):
     stream = io.StringIO()
     try:
         configure_logging(level="INFO", json_output=True, stream=stream)
-        result = resolve_artifact_field(context, deployment, "dspapi_container", "image_tag")
+        result = resolve_artifact_field(context, deployment, "api_container", "image_tag")
     finally:
         shutdown_logging()
 
@@ -483,7 +480,7 @@ def test_resolve_artifact_field_image_tag_pin_application_is_logged(tmp_path):
     payload = json.loads(line)
     assert payload["event"] == "version pin applied"
     assert payload["category"] == "artifacts"
-    assert payload["name"] == "dspapi_container"
+    assert payload["name"] == "api_container"
     assert payload["declared"] == "1.0.0"
     assert payload["pinned"] == "2.0.0"
     assert payload["version"] == "prd"
@@ -491,32 +488,26 @@ def test_resolve_artifact_field_image_tag_pin_application_is_logged(tmp_path):
 
 def test_resolve_artifact_field_image_ref_synthesises_name_and_tag(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", environments=["prd"])
 
     context = _context(root)
     deployment = resolve_deployment(context, "app")
 
-    assert (
-        resolve_artifact_field(context, deployment, "dspapi_container", "image_ref")
-        == "int-docker-test/src/acme.dispatcher.api:1.0.0"
-    )
+    assert resolve_artifact_field(context, deployment, "api_container", "image_ref") == "example/scheduler-api:1.0.0"
 
 
 def test_resolve_artifact_field_image_ref_is_bare_name_when_tag_blank(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api")
+    _artifact(root, "api_container", image_name="example/scheduler-api")
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", environments=["prd"])
 
     context = _context(root)
     deployment = resolve_deployment(context, "app")
 
-    assert (
-        resolve_artifact_field(context, deployment, "dspapi_container", "image_ref")
-        == "int-docker-test/src/acme.dispatcher.api"
-    )
+    assert resolve_artifact_field(context, deployment, "api_container", "image_ref") == "example/scheduler-api"
 
 
 def test_resolve_artifact_field_returns_none_when_artifact_missing(tmp_path):
@@ -532,7 +523,7 @@ def test_resolve_artifact_field_returns_none_when_artifact_missing(tmp_path):
 
 def _tag_context(tmp_path, *, image_tag=None, pins=None, version=False):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int/api", image_tag=image_tag)
+    _artifact(root, "api_container", image_name="int/api", image_tag=image_tag)
     if pins:
         _version_doc(root, "prd", artifact_pins=pins)
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
@@ -542,21 +533,21 @@ def _tag_context(tmp_path, *, image_tag=None, pins=None, version=False):
 
 
 def test_resolve_artifact_tag_reports_a_pin_and_its_version_document(tmp_path):
-    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"dspapi_container": "2.0.0"}, version=True)
-    tag = resolve_artifact_tag(context, deployment, "dspapi_container")
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"}, version=True)
+    tag = resolve_artifact_tag(context, deployment, "api_container")
     assert (tag.value, tag.source, tag.version) == ("2.0.0", "pin", "prd")
 
 
 def test_resolve_artifact_tag_reports_a_declared_tag(tmp_path):
     context, deployment = _tag_context(tmp_path, image_tag="1.0.0")
-    tag = resolve_artifact_tag(context, deployment, "dspapi_container")
+    tag = resolve_artifact_tag(context, deployment, "api_container")
     assert (tag.value, tag.source, tag.version) == ("1.0.0", "declared", None)
 
 
 @pytest.mark.parametrize("declared", [None, ""])
 def test_resolve_artifact_tag_with_no_tag_and_no_pin_is_none_not_a_missing_artifact(tmp_path, declared):
     context, deployment = _tag_context(tmp_path, image_tag=declared)
-    tag = resolve_artifact_tag(context, deployment, "dspapi_container")
+    tag = resolve_artifact_tag(context, deployment, "api_container")
     assert tag is not None
     assert (tag.value, tag.source) == (None, "none")
 
@@ -570,18 +561,18 @@ def test_resolve_artifact_tag_is_none_for_an_unknown_artifact(tmp_path):
 def test_resolve_artifact_field_image_tag_is_an_empty_string_when_blank(tmp_path, declared):
     """A blank tag is `""`, never `None`: `None` means the artifact does not exist."""
     context, deployment = _tag_context(tmp_path, image_tag=declared)
-    assert resolve_artifact_field(context, deployment, "dspapi_container", "image_tag") == ""
+    assert resolve_artifact_field(context, deployment, "api_container", "image_tag") == ""
 
 
 def test_a_store_artifact_variable_with_no_tag_resolves_to_empty_not_unknown_artifact(tmp_path):
     """Used to report "not a known artifact" for an artifact that exists but has no tag."""
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int/api")
+    _artifact(root, "api_container", image_name="int/api")
     _write(
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: API_TAG\n      store: artifact\n      value: dspapi_container\n"
+        "  variables:\n    - key: API_TAG\n      store: artifact\n      value: api_container\n"
         "      field: image_tag\n",
     )
     _deployment(root, "app", environments=["prd"])
@@ -618,13 +609,13 @@ def test_compose_image_ref(tag, expected):
 
 def test_build_value_references_artifact_store_resolves_with_context_and_deployment(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
-        "      value: dspapi_container\n      field: image_tag\n",
+        "  variables:\n    - key: api_container_image_tag\n      store: artifact\n"
+        "      value: api_container\n      field: image_tag\n",
     )
     _deployment(root, "app", environments=["prd"])
 
@@ -634,19 +625,19 @@ def test_build_value_references_artifact_store_resolves_with_context_and_deploym
 
     variable_refs, _features, _secrets = build_value_references(environments, context=context, deployment=deployment)
 
-    assert variable_refs[0].key == "dspapi_container_image_tag"
+    assert variable_refs[0].key == "api_container_image_tag"
     assert variable_refs[0].value == "1.0.0"
 
 
 def test_build_value_references_artifact_store_is_none_without_context(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
-        "      value: dspapi_container\n      field: image_tag\n",
+        "  variables:\n    - key: api_container_image_tag\n      store: artifact\n"
+        "      value: api_container\n      field: image_tag\n",
     )
     _deployment(root, "app", environments=["prd"])
 
@@ -678,20 +669,20 @@ def test_resolve_values_resolves_artifact_store_directly_not_via_a_store_integra
     directly against the real ArtifactModel + kind: version pins, same
     mechanism `build_value_references()` already uses at build time."""
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
-        "      value: dspapi_container\n      field: image_tag\n",
+        "  variables:\n    - key: api_container_image_tag\n      store: artifact\n"
+        "      value: api_container\n      field: image_tag\n",
     )
     _deployment(root, "app", environments=["prd"])
 
-    result = resolve_values(_context(root), "app", ["dspapi_container_image_tag"])
+    result = resolve_values(_context(root), "app", ["api_container_image_tag"])
 
     assert result.diagnostics.ok, result.diagnostics.messages()
-    assert result.values == {"dspapi_container_image_tag": "1.0.0"}
+    assert result.values == {"api_container_image_tag": "1.0.0"}
 
 
 def test_resolve_values_artifact_store_reports_a_missing_artifact(tmp_path):
@@ -700,15 +691,15 @@ def test_resolve_values_artifact_store_reports_a_missing_artifact(tmp_path):
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
+        "  variables:\n    - key: api_container_image_tag\n      store: artifact\n"
         "      value: ghost_artifact\n      field: image_tag\n",
     )
     _deployment(root, "app", environments=["prd"])
 
-    result = resolve_values(_context(root), "app", ["dspapi_container_image_tag"])
+    result = resolve_values(_context(root), "app", ["api_container_image_tag"])
 
     assert not result.diagnostics.ok
-    assert "dspapi_container_image_tag" not in result.values
+    assert "api_container_image_tag" not in result.values
     assert "ghost_artifact" in result.diagnostics.messages()[0]
 
 
@@ -832,29 +823,29 @@ def _probe(root: Path, token: str, *, name: str = "probe") -> None:
 
 
 def test_resolve_document_value_references_happy_path_matches_design_example(tmp_path):
-    """The exact `tenant.c0062.meta.name` example from this design's own
+    """The exact `tenant.contoso.meta.name` example from this design's own
     "Problem" section."""
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062")
-    _probe(root, "${value:tenant.c0062.meta.name}")
+    _tenant_doc(root, "contoso")
+    _probe(root, "${value:tenant.contoso.meta.name}")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
 
     assert diagnostics.ok, diagnostics.messages()
-    assert values == {"tenant.c0062.meta.name": "c0062"}
+    assert values == {"tenant.contoso.meta.name": "contoso"}
 
 
 def test_resolve_document_value_references_resolves_a_nested_spec_field(tmp_path):
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062", display_name="GSK plc")
-    _probe(root, "${value:tenant.c0062.spec.display_name}")
+    _tenant_doc(root, "contoso", display_name="GSK plc")
+    _probe(root, "${value:tenant.contoso.spec.display_name}")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
 
     assert diagnostics.ok, diagnostics.messages()
-    assert values == {"tenant.c0062.spec.display_name": "GSK plc"}
+    assert values == {"tenant.contoso.spec.display_name": "GSK plc"}
 
 
 _PINNABLE_MODULE = """apiVersion: strata.huybrechts.xyz/v2
@@ -948,7 +939,7 @@ def test_resolve_document_value_references_still_resolves_unpinned_artifact_and_
 
 def test_resolve_document_value_references_rejects_unknown_kind(tmp_path):
     root = _solution(tmp_path)
-    _probe(root, "${value:bogus.c0062.meta.name}")
+    _probe(root, "${value:bogus.contoso.meta.name}")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
@@ -1021,8 +1012,8 @@ def test_resolve_document_value_references_kind_solution_is_always_unknown_docum
 
 def test_resolve_document_value_references_rejects_a_nonexistent_field_path(tmp_path):
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062")
-    _probe(root, "${value:tenant.c0062.spec.nonexistent_field}")
+    _tenant_doc(root, "contoso")
+    _probe(root, "${value:tenant.contoso.spec.nonexistent_field}")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
@@ -1033,12 +1024,12 @@ def test_resolve_document_value_references_rejects_a_nonexistent_field_path(tmp_
 
 
 def test_resolve_document_value_references_rejects_a_whole_sub_object(tmp_path):
-    """`${value:tenant.c0062.spec}` — a real path, but it resolves to the
+    """`${value:tenant.contoso.spec}` — a real path, but it resolves to the
     whole `spec` dict, not a scalar. "Referencing a whole sub-object is
     out of scope" (this design's own "Deliberately out of scope" section)."""
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062")
-    _probe(root, "${value:tenant.c0062.spec}")
+    _tenant_doc(root, "contoso")
+    _probe(root, "${value:tenant.contoso.spec}")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
@@ -1049,14 +1040,14 @@ def test_resolve_document_value_references_rejects_a_whole_sub_object(tmp_path):
 
 
 def test_resolve_document_value_references_empty_path_is_also_not_scalar(tmp_path):
-    """`${value:tenant.c0062}` — no path segments at all (unlike the bare
+    """`${value:tenant.contoso}` — no path segments at all (unlike the bare
     `${value:tenant}` case above, this one DOES have a name). Resolves to
     the whole document dict via a zero-length path walk, which then fails
     the same scalar check as any other whole-sub-object reference — no
     dedicated empty-path special case exists, by design."""
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062")
-    _probe(root, "${value:tenant.c0062}")
+    _tenant_doc(root, "contoso")
+    _probe(root, "${value:tenant.contoso}")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
@@ -1072,8 +1063,8 @@ def test_resolve_document_value_references_rejects_a_non_literal_target(tmp_path
     resolution and cycles both impossible by construction (this design's
     own "cycles are impossible by construction" section)."""
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062", display_name="${var:tenant_display_name}")
-    _probe(root, "${value:tenant.c0062.spec.display_name}")
+    _tenant_doc(root, "contoso", display_name="${var:tenant_display_name}")
+    _probe(root, "${value:tenant.contoso.spec.display_name}")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
@@ -1089,9 +1080,9 @@ def test_resolve_document_value_references_rejects_chaining_through_another_valu
     transitive/chained resolution" rule holds for this kind referencing
     itself, not just for a mix of kinds."""
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062", display_name="${value:tenant.other.meta.name}")
+    _tenant_doc(root, "contoso", display_name="${value:tenant.other.meta.name}")
     _tenant_doc(root, "other", display_name="Other Co")
-    _probe(root, "${value:tenant.c0062.spec.display_name}")
+    _probe(root, "${value:tenant.contoso.spec.display_name}")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
@@ -1120,7 +1111,7 @@ def test_resolve_document_value_references_ignores_documents_with_no_value_token
     anywhere resolves cleanly to an empty map — confirms the walk doesn't
     misfire on ordinary `${var:}`/plain-literal content."""
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062")
+    _tenant_doc(root, "contoso")
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     context = _context(root)
 
@@ -1137,16 +1128,16 @@ def test_resolve_document_value_references_does_not_scan_meta_as_a_source(tmp_pa
     documentation) must not be treated as a reference to resolve, even
     when it happens to name a real, existing document. The TARGET side is
     unaffected — `test_resolve_document_value_references_happy_path_
-    matches_design_example` above already proves `${value:tenant.c0062.
+    matches_design_example` above already proves `${value:tenant.contoso.
     meta.name}` still resolves correctly when used as a real reference."""
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062")
+    _tenant_doc(root, "contoso")
     _write(
         root,
         "probe.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n"
         "  name: probe\n"
-        '  annotations:\n    description: "see ${value:tenant.c0062.meta.name} for an example"\n'
+        '  annotations:\n    description: "see ${value:tenant.contoso.meta.name} for an example"\n'
         "spec: {}\n",
     )
     context = _context(root)
@@ -1293,28 +1284,28 @@ spec:
 
 def test_resolve_values_merges_value_references_into_values(tmp_path):
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062")
-    _probe(root, "${value:tenant.c0062.meta.name}", name="prd")
+    _tenant_doc(root, "contoso")
+    _probe(root, "${value:tenant.contoso.meta.name}", name="prd")
     _deployment(root, "app", environments=["prd"])
     context = _context(root)
 
     result = resolve_values(context, "app", [])
 
     assert result.diagnostics.ok, result.diagnostics.messages()
-    assert result.values["tenant.c0062.meta.name"] == "c0062"
+    assert result.values["tenant.contoso.meta.name"] == "contoso"
 
 
 def test_resolve_values_still_resolves_declared_keys_alongside_value_references(tmp_path):
     """The merge is additive, not a replacement — a real declared `keys`
     entry still resolves exactly as before."""
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062")
+    _tenant_doc(root, "contoso")
     _write(
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
         "  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
-        '  properties:\n    probe: "${value:tenant.c0062.meta.name}"\n',
+        '  properties:\n    probe: "${value:tenant.contoso.meta.name}"\n',
     )
     _deployment(root, "app", environments=["prd"])
     context = _context(root)
@@ -1323,7 +1314,7 @@ def test_resolve_values_still_resolves_declared_keys_alongside_value_references(
 
     assert result.diagnostics.ok, result.diagnostics.messages()
     assert result.values["REGION"] == "westeurope"
-    assert result.values["tenant.c0062.meta.name"] == "c0062"
+    assert result.values["tenant.contoso.meta.name"] == "contoso"
 
 
 def test_resolve_values_reports_an_unresolvable_value_reference_without_raising(tmp_path):
@@ -1352,13 +1343,13 @@ def test_resolve_values_resolves_value_reference_token_inside_a_constant_store(t
     that doc's own worked example (`.v2-cfg`'s real duplication) could not
     yet fix."""
     root = _solution(tmp_path)
-    _tenant_doc(root, "c0062")
+    _tenant_doc(root, "contoso")
     _write(
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
         "  variables:\n    - key: CUSTOMER_CODE\n      store: constant\n"
-        '      value: "${value:tenant.c0062.meta.name}"\n',
+        '      value: "${value:tenant.contoso.meta.name}"\n',
     )
     _deployment(root, "app", environments=["prd"])
     context = _context(root)
@@ -1366,7 +1357,7 @@ def test_resolve_values_resolves_value_reference_token_inside_a_constant_store(t
     result = resolve_values(context, "app", ["CUSTOMER_CODE"])
 
     assert result.diagnostics.ok, result.diagnostics.messages()
-    assert result.values["CUSTOMER_CODE"] == "c0062"
+    assert result.values["CUSTOMER_CODE"] == "contoso"
 
 
 def test_resolve_values_constant_store_literal_with_no_tokens_is_unaffected(tmp_path):
@@ -1845,13 +1836,13 @@ def test_resolve_diagnostic_never_reveals_a_value(tmp_path, monkeypatch):
 
 def test_resolve_diagnostic_artifact_store_found_is_ok(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
-        "      value: dspapi_container\n      field: image_tag\n",
+        "  variables:\n    - key: api_container_image_tag\n      store: artifact\n"
+        "      value: api_container\n      field: image_tag\n",
     )
     _deployment(root, "app", environments=["prd"])
 
@@ -1868,7 +1859,7 @@ def test_resolve_diagnostic_artifact_store_missing_is_not_ok(tmp_path):
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
+        "  variables:\n    - key: api_container_image_tag\n      store: artifact\n"
         "      value: ghost_artifact\n      field: image_tag\n",
     )
     _deployment(root, "app", environments=["prd"])
@@ -2234,18 +2225,18 @@ def test_set_value_rejects_a_github_secret_store(tmp_path):
 
 def test_set_value_rejects_an_artifact_store(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "api_container", image_name="example/scheduler-api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
-        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
-        "      value: dspapi_container\n      field: image_tag\n",
+        "  variables:\n    - key: api_container_image_tag\n      store: artifact\n"
+        "      value: api_container\n      field: image_tag\n",
     )
     _deployment(root, "app", environments=["prd"])
 
     with pytest.raises(UsageError, match="in-solution artifact reference"):
-        set_value(_context(root), "app", "dspapi_container_image_tag", value="2.0.0")
+        set_value(_context(root), "app", "api_container_image_tag", value="2.0.0")
 
 
 def test_set_value_unknown_key_raises_usage_error(tmp_path):
