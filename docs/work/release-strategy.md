@@ -246,6 +246,26 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-02: **Built RC3** - bumped `VERSION.txt` from `2.0.0-RC2` to `2.0.0-RC3` (normalizes to `2.0.0rc3`;
+  confirmed via `packaging.version.Version` first; no trailing newline). Still cut from `v2-beta`; RC1's note on the
+  skipped Stage 2/4 gates applies unchanged. Contents since RC2 (`5c9def9`): the opt-in `image_tag_policy` workspace
+  guard rail (no tag, floating tag such as `latest`, tag pattern, required pin, per-ring `rings`, `allow` with
+  `expires`), judged by `build run`, `deploy run`, `deploy images` and `strata policy check`; `strata deploy images`;
+  `strata deploy list`; the exported schemas and a quality bar for them (`schema_rules`, examples); the `config/`
+  example gained an artifact, a `store: artifact` variable and an artifact pin; a guard that makes a failed run always
+  say why. **Breaking for its notes:** `strata deployment list` is gone, use `strata deploy list` (the VS Code
+  extension follows); `strata version update` now exits 0 by default and lists candidates as findings, `--check`
+  restores exit 3, and an artifact with no `image_tag` and no pin is a `pin_needed` warning (an error under
+  `--check`); with `image_tag_policy` set, `deploy images` fails (exit 3) on a `deny` breach instead of only warning on
+  a missing tag; `cve_allowed[].expires` now accepts an unquoted YAML date. **Known limit:** the policy judges the
+  declared image of a Helm module, which strata does not write into the chart values, and cannot see an image only
+  the chart knows; Helm images are deferred (`docs/work/helm-image-delivery.md`). Full check suite green
+  (`scripts/Check.ps1`): ruff, mypy, import-linter, pytest (3922 passed), smoke test, Sphinx. `uv sync --all-extras
+  --all-groups --reinstall-package xyz-strata` refreshed the dev install (`strata version` -> `2.0.0rc3`). `uv build`
+  produced `xyz_strata-2.0.0rc3-py3-none-any.whl`/`.tar.gz`; a fresh isolated venv confirmed `strata version` ->
+  `2.0.0rc3`, the command list (`deploy` and `policy` present, `deployment` gone), `strata validate` and
+  `strata deploy images` on `config/`, and that the agent-skill template ships in the wheel. Verification venv
+  removed after. The commit and the `v2.0.0-rc3` tag are left to the maintainer.
 - 2026-10-28: **Built RC2** - bumped `VERSION.txt` from `2.0.0-RC1` to `2.0.0-RC2` (normalizes to `2.0.0rc2`;
   confirmed via `packaging.version.Version` first; no trailing newline). Still cut from `v2-beta`; RC1's note on the
   skipped Stage 2/4 gates applies unchanged. Contents since RC1 (`8941d70`): security gates (`release_gate_policy`,
