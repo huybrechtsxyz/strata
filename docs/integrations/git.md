@@ -79,7 +79,7 @@ spec:
 # an asset
 spec:
   location:
-    url: https://git.example.com/customers/c0062-api.git
+    url: https://git.example.com/customers/contoso-api.git
     reference: v1.4.0
     integration: git-customers
 ```

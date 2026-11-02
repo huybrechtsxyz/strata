@@ -262,7 +262,7 @@ unhelpful output redaction.
   against a real v1.12.2 binary, floor cleared by a wide margin.
 - The `resx_<type>` per-resource-type file split and the `modules`
   exclusion were both re-checked against both real consumers
-  (`cfg-int-deployment`, `haven`) before being changed: neither consumer
+  (`config-repo`, `haven`) before being changed: neither consumer
   depended on the resource-type split (one has zero `Resource`
   documents; the other already undoes the split itself with a `for ...
   if` expression), and adding `modules` costs nothing in a single-object

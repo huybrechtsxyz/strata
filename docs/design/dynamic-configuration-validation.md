@@ -386,7 +386,7 @@ Out of scope, no evidence of need yet: naming the layer (environment, workspace,
   environment, since `properties`/`custom` deep-merge `workspace ->
   environments -> deployment` (and a tenant's own base layer, ADR-0024)
   and a per-document schema only ever sees one fragment of that chain. A
-  real cfg-int defect motivated it: a blank `vnet_private_endpoints_subnet_name`
+  real config-repo defect motivated it: a blank `vnet_private_endpoints_subnet_name`
   silently disabled private endpoints because nothing checked that a
   required value was actually present once every layer was applied. Scoped
   deliberately narrow — only `target.kind: deployment` +

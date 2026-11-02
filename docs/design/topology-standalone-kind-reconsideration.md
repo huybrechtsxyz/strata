@@ -16,7 +16,7 @@ grouping from provisioning tooling (a single topology can be built/configured
 by several provisioners), and (2) promoting topology to a reusable,
 cross-workspace document. This doc records a from-evidence reassessment of
 justification (2) specifically — triggered by reading a second, independent
-real-world v2 migration (`cfg-int-deployment`'s `control` stack) alongside the
+real-world v2 migration (`config-repo`'s `control` stack) alongside the
 existing `.v2-cfg`/`.v2-haven` fixtures — and lays out the full cost of
 reverting Topology to an inline field on `WorkspaceSpecModel`.
 
@@ -62,7 +62,7 @@ is using it.
 | Source                                                                                                   | Shape found                                                                                                                                                                                                                                                                                            |
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `.v2-cfg` (`spoke` stack, hand-migrated)                                                                 | Separate `topologies/spoke-cluster.yaml`; trivial 1:1 with its one workspace                                                                                                                                                                                                                           |
-| `E:\cfg-int-deployment-v2\...\stacks\control` (independent real migration, not authored by this session) | Same separate-file shape; same trivial 1:1 — reinforces this is the *common* case, not an outlier                                                                                                                                                                                                      |
+| `E:\config-repo-v2\...\stacks\control` (independent real migration, not authored by this session) | Same separate-file shape; same trivial 1:1 — reinforces this is the *common* case, not an outlier                                                                                                                                                                                                      |
 | `.v2-haven` (`hetzner_hearth` topology)                                                                  | Trivial 1:1 with `haven-platform` workspace                                                                                                                                                                                                                                                            |
 | `.v2-haven` (`hetzner_forge` topology)                                                                   | The **one** genuine multi-provisioner case found: terraform owns the VM resource, helm owns 7 namespaces, as separate dependent execution steps — but the author's own comment on this fixture questions whether this granularity was organically necessary or just preserved "for the coverage check" |
 | `config/` (this repo's shipped example solution)                                                         | Separate `workspaces/topology.yaml` + `templates/topology.template.yaml` — also a trivial 1:1                                                                                                                                                                                                          |
@@ -153,7 +153,7 @@ Edit: `test_services_workspace.py`, `test_solution_controller.py` (9+
   `config/templates/topology.template.yaml`) and `.v2-cfg`/`.v2-haven`'s
   topology files all merge back into their respective `workspace.yaml` —
   ours to fix, mechanical.
-- **Not ours to fix**: `E:\cfg-int-deployment-v2\...\stacks\control` already
+- **Not ours to fix**: `E:\config-repo-v2\...\stacks\control` already
   uses the standalone shape. A full reversion invalidates that real,
   independently-authored migration work the moment it's ported back into
   this repo's fixtures — the one concrete cost that doesn't shrink no matter
@@ -188,7 +188,7 @@ Edit: `test_services_workspace.py`, `test_solution_controller.py` (9+
   the automated suite, so the old standalone-reference shape there has no
   effect on this repo's correctness; they'd need manual migration before
   next use.
-- `cfg-int-deployment-v2`'s `control` stack had already independently
+- `config-repo-v2`'s `control` stack had already independently
   adopted the standalone-kind shape before this reversal — reverting
   invalidates that real migration work. Accepted as a one-time cost that
   doesn't shrink regardless of how the code-level work is sequenced.

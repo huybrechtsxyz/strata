@@ -61,7 +61,7 @@ meta: { name: prd-north-deployment }
 spec:
   extends: region-north
   environments: [prd]
-  tenant: c0062
+  tenant: contoso
 ```
 
 `DeploymentProviderBindingModel {slot, provider}` / `DeploymentSpecModel.providers`
@@ -159,7 +159,7 @@ and `prd-north-deployment` extending it. `strata build run` renders `strata.prov
 
 - **v1 had this, unused.** v1's ADR-0036 added `environment.spec.overrides.providers`: swap a
   provider *file* per environment and patch its properties. It shipped but none of the tracked
-  consumers (`haven`, `cfg-int`/`iac-int`/`env-int-deployment`) ever used it. v2 rebuilt the
+  consumers (`haven`, `config-repo`/`iac-repo`/`env-repo`) ever used it. v2 rebuilt the
   capability only once there was a real need (the same workspace in another Azure region), and
   not in v1's shape.
 - **Deployment, not environment.** v2 already splits the two: environments supply *values*,

@@ -26,7 +26,7 @@ in one block — that is not really a manageable solution."*
 
 **The real Terraform shape, confirmed directly** (`iac_aks_core`'s
 `src/modules/az-platform-core/_components/agw/agw.tf`, vendored again into
-`iac-int-deployment/core/terraform/components/agw/agw.tf`): one
+`iac-repo/core/terraform/components/agw/agw.tf`): one
 `resource "azurerm_application_gateway" "main"`, built entirely from
 `dynamic "http_listener"`/`dynamic "request_routing_rule"`/
 `dynamic "backend_address_pool"`/`dynamic "url_path_map"`/
@@ -38,7 +38,7 @@ to declare a listener/path-rule/backend-pool as its own independent
 resource — they only exist as repeated sub-blocks of one gateway resource.
 
 **The real consumer config, confirmed directly**
-(`cfg-int-deployment/deploy/hubs/z00/s01/environment.yaml`): that entire
+(`config-repo/deploy/hubs/hub1/spoke1/environment.yaml`): that entire
 nested structure is today authored as the literal `value:` of *one*
 `store: constant` variable, in *one* `environment.yaml` file:
 
@@ -46,19 +46,19 @@ nested structure is today authored as the literal `value:` of *one*
 - key: appgateway_config
   store: constant
   value:
-    unisonplanning:
-      domain: "unisonplanning.com"
+    contoso:
+      domain: "contoso.example"
       backend_hostnames: {...}
       hosts:
-        c0224:
-          domain_name: "c0224-agw-dev.westeurope.cloudapp.azure.com"
-          backend_pools: ["apim", "dispatcher-dev", "datahub-admin-dev"]
+        ring1:
+          domain_name: "contoso-agw-dev.westeurope.cloudapp.azure.com"
+          backend_pools: ["apim", "scheduler-dev", "catalog-admin-dev"]
           request_routing_rule: {...}
 ```
 
 A comment at this exact site dates it: *"WAF/AGW first real test
 (2026-09-30)"* — this is live with exactly **one** customer
-(`unisonplanning`) today. Adding a second customer means a second top-level
+(`contoso`) today. Adding a second customer means a second top-level
 key, added by hand, in this same shared file — there is no way for a
 different team/customer to contribute their own path/listener config from
 their own file without editing this one shared blob. That is the real,
@@ -198,10 +198,10 @@ What's left to decide is the actual merge **granularity** — and the real
 answer sketched in the first pass of this doc. Re-reading it closely:
 
 ```yaml
-unisonplanning:              # customer — the outer key
-  domain: "unisonplanning.com"
+contoso:                    # customer — the outer key
+  domain: "contoso.example"
   hosts:
-    c0224:                   # looks like one ring/leaf under that customer
+    ring1:                  # looks like one ring/leaf under that customer
       domain_name: "..."
       backend_pools: [...]
       request_routing_rule: {...}
@@ -251,7 +251,7 @@ the right machinery:
 `spec.properties` instead of `spec.variables`/`store: constant`, this
 might already work today** — one Environment document per customer (or
 per ring), each contributing only its own nested fragment
-(`spec.properties.appgateway_config.unisonplanning.hosts.c0224: {...}`),
+(`spec.properties.appgateway_config.contoso.hosts.ring1: {...}`),
 merging automatically through code that already ships, delivered via a
 file Terraform already auto-loads. No new document kind, no new merge
 function, no new delivery path.
@@ -271,10 +271,10 @@ Terraform-only. See updated Open Question 1.
 three real `EnvironmentModel` documents through the real
 `merge_workspace_environment_deployment_properties()` and real
 `planned_files()` — one per customer, plus a *second* document adding a new
-ring (`c0225`) to an already-declared customer (`unisonplanning`), each
+ring (`ring2`) to an already-declared customer (`contoso`), each
 contributing only its own fragment under `spec.properties.appgateway_config`.
-Result: both rings survived under `unisonplanning` (correctly combined from
-two separate documents), `unisonplanning`'s own top-level fields
+Result: both rings survived under `contoso` (correctly combined from
+two separate documents), `contoso`'s own top-level fields
 (`domain`) survived alongside the ring added later, and the second customer
 (`acmecorp`) landed alongside the first untouched — the exact
 `properties.auto.tfvars.json` content Terraform would auto-load, fully
@@ -302,7 +302,7 @@ Resolving each Open Question against the evidence gathered:
    handles both without modification.
 3. **Resolved: yes, a second real case exists**, found directly in the same
    real repo, same file:
-   `cfg-int-deployment/deploy/hubs/z00/s01/environment.yaml`'s
+   `config-repo/deploy/hubs/hub1/spoke1/environment.yaml`'s
    `ring_subnet_cidrs` — `store: constant`, `type: object`, `value:` keyed
    by ring name (`dev`/`qa`/`acc`), each a nested object of per-purpose
    subnet CIDRs. Identical "nested-by-key" shape to `appgateway_config`

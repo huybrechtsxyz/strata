@@ -29,26 +29,26 @@ auto-loads with no `-var-file` flag needed.
 
 Three separate files, three separate owners, one combined `appgateway_config`.
 
-**`customers/unisonplanning/environment.yaml`** — owned by the `unisonplanning` team, declares
+**`customers/contoso/environment.yaml`** — owned by the `contoso` team, declares
 their own domain and their first ring:
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v2
 kind: environment
 meta:
-  name: unisonplanning-agw
+  name: contoso-agw
 spec:
   properties:
     appgateway_config:
-      unisonplanning:
-        domain: "unisonplanning.com"
+      contoso:
+        domain: "contoso.example"
         hosts:
-          c0224:
-            domain_name: "c0224-agw-dev.westeurope.cloudapp.azure.com"
-            backend_pools: ["apim", "dispatcher-dev", "datahub-admin-dev"]
+          ring1:
+            domain_name: "contoso-agw-dev.westeurope.cloudapp.azure.com"
+            backend_pools: ["apim", "scheduler-dev", "catalog-admin-dev"]
 ```
 
-**`customers/unisonplanning/ring-c0225.yaml`** — a *later* onboarding, adding a second ring to
+**`customers/contoso/ring2.yaml`** — a *later* onboarding, adding a second ring to
 the *same* customer, from its own file — this is the real scaling case ("add a new ring to a
 customer" shouldn't mean editing someone else's file):
 
@@ -56,15 +56,15 @@ customer" shouldn't mean editing someone else's file):
 apiVersion: strata.huybrechts.xyz/v2
 kind: environment
 meta:
-  name: unisonplanning-agw-ring2
+  name: contoso-agw-ring2
 spec:
   properties:
     appgateway_config:
-      unisonplanning:
+      contoso:
         hosts:
-          c0225:
-            domain_name: "c0225-agw-stage.westeurope.cloudapp.azure.com"
-            backend_pools: ["apim", "dispatcher-stage"]
+          ring2:
+            domain_name: "contoso-agw-stage.westeurope.cloudapp.azure.com"
+            backend_pools: ["apim", "scheduler-stage"]
 ```
 
 **`customers/acmecorp/environment.yaml`** — a different customer entirely, owned by a different
@@ -81,8 +81,8 @@ spec:
       acmecorp:
         domain: "acmecorp.com"
         hosts:
-          c0300:
-            domain_name: "c0300-agw-dev.westeurope.cloudapp.azure.com"
+          ring1:
+            domain_name: "acmecorp-agw-dev.westeurope.cloudapp.azure.com"
             backend_pools: ["apim"]
 ```
 
@@ -97,8 +97,8 @@ meta:
 spec:
   workspace: hub-agw-workspace
   environments:
-    - unisonplanning-agw
-    - unisonplanning-agw-ring2
+    - contoso-agw
+    - contoso-agw-ring2
     - acmecorp-agw
 ```
 
@@ -108,24 +108,24 @@ spec:
 ```json
 {
   "appgateway_config": {
-    "unisonplanning": {
-      "domain": "unisonplanning.com",
+    "contoso": {
+      "domain": "contoso.example",
       "hosts": {
-        "c0224": { "domain_name": "c0224-agw-dev.westeurope.cloudapp.azure.com", "backend_pools": ["apim", "dispatcher-dev", "datahub-admin-dev"] },
-        "c0225": { "domain_name": "c0225-agw-stage.westeurope.cloudapp.azure.com", "backend_pools": ["apim", "dispatcher-stage"] }
+        "ring1": { "domain_name": "contoso-agw-dev.westeurope.cloudapp.azure.com", "backend_pools": ["apim", "scheduler-dev", "catalog-admin-dev"] },
+        "ring2": { "domain_name": "contoso-agw-stage.westeurope.cloudapp.azure.com", "backend_pools": ["apim", "scheduler-stage"] }
       }
     },
     "acmecorp": {
       "domain": "acmecorp.com",
       "hosts": {
-        "c0300": { "domain_name": "c0300-agw-dev.westeurope.cloudapp.azure.com", "backend_pools": ["apim"] }
+        "ring1": { "domain_name": "acmecorp-agw-dev.westeurope.cloudapp.azure.com", "backend_pools": ["apim"] }
       }
     }
   }
 }
 ```
 
-Nothing was dropped — both rings under `unisonplanning`, both customers side by side — because
+Nothing was dropped — both rings under `contoso`, both customers side by side — because
 every fragment nests at a *different* path. Onboarding a fourth customer, or a third ring, means
 adding one more small file and one more line in `spec.environments` — never touching the other
 owners' files.

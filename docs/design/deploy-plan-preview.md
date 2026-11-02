@@ -299,7 +299,7 @@ dry_run or smoke_test`.
 
 ## History
 
-- Filed from a real CI pipeline finding (`cfg-int-deployment`, xyz-strata
+- Filed from a real CI pipeline finding (`config-repo`, xyz-strata
   2.0.0a6): a `mode: plan` CI stage mapped to `deploy run --dry-run`
   produced zero Terraform output, since `--dry-run` short-circuited the
   whole step loop before `init`/`validate`/`plan` were ever called.

@@ -12,7 +12,7 @@
   merges into `ValueResolution.values` for deploy-time delivery, and backs
   a `strata validate` check (`semantic_checks.py`'s
   `_check_value_references()`) so both share one implementation — live-
-  migrated into `.v2-cfg`'s real `environments/c0062-env.yaml` as proof);
+  migrated into `.v2-cfg`'s real `environments/contoso-env.yaml` as proof);
   **a real resolution-reach gap found 2026-09-29** (Provider's
   `configuration`/`custom` never projected into any Terraform artifact at
   all, despite passing validation) motivated a new requirement —
@@ -139,7 +139,7 @@ only real ones (`stacks/spoke/dns.yaml`/`network.yaml`) use **zero**
 placeholder (`"10.0.0.0/22"`, `"TODO-agw-public-fqdn.placeholder.azure.com"`).
 But the file's own comments make clear this is a workaround, not a lack of
 need: *"The actual values the deploy reads still live in
-`deploy/hubs/z01/s01/environment.yaml`'s `variables`
+`deploy/hubs/hub2/spoke1/environment.yaml`'s `variables`
 (`ring_subnet_cidrs`, `apim_subnet_cidr`)... keep this file's CIDRs in sync
 with that environment file by hand; nothing wires the two together
 automatically."* Someone wants `cidr: "${var:ring_subnet_cidrs}"` but can't
@@ -944,7 +944,7 @@ Phase 6 added documentation, a full implementation review — which found
 and fixed two stale docstrings and one real, pre-existing, non-`value:`-
 specific limitation (a Value token embedded in a `store: constant`
 field's own value is never resolved) — and a live migration proof in
-`.v2-cfg`'s real `environments/c0062-env.yaml`). `${value:...}` now
+`.v2-cfg`'s real `environments/contoso-env.yaml`). `${value:...}` now
 resolves correctly at deploy time AND is checked at validate time, with a
 real, working, live example in the repo's own coverage-check fixture.
 

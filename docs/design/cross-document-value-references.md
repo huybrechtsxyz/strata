@@ -5,9 +5,9 @@
   resolved against the loaded `DocumentIndex` (`value_references.py`),
   merged into deploy-time delivery (`resolve_values()`), and checked at
   `strata validate` time (`semantic_checks.py`'s `_check_value_references()`).
-  Live-migrated into `.v2-cfg`'s real `environments/c0062-env.yaml` as
+  Live-migrated into `.v2-cfg`'s real `environments/contoso-env.yaml` as
   proof (see Phase 6 below) — `strata validate .v2-cfg` passes clean,
-  12/12, with a real `${value:tenant.c0062.meta.name}` reference in place.
+  12/12, with a real `${value:tenant.contoso.meta.name}` reference in place.
   **2026-10-01: the one real limitation Phase 6 found and documented — a
   `${value:...}` token inside a `store: constant` variable/secret/feature's
   own `value` field was never resolved — is now fixed** (see the new
@@ -26,28 +26,28 @@
 ## Problem — real, concrete duplication found in `.v2-cfg`
 
 Building `.v2-cfg` (docs/work/gap_fit_v1.md's coverage-check fixture) surfaced a
-real authoring problem: the literal string `c0062` appears independently,
+real authoring problem: the literal string `contoso` appears independently,
 by hand, in two separate documents that both already agree it's the same
 tenant:
 
 ```yaml
-# tenants/c0062.yaml
+# tenants/contoso.yaml
 meta:
-  name: c0062          # <-- the canonical name
+  name: contoso          # <-- the canonical name
 spec:
   display_name: "GSK"
 ```
 
 ```yaml
-# environments/c0062-env.yaml
+# environments/contoso-env.yaml
 spec:
   properties:
     environment_info:
-      customer_code: "c0062"   # <-- duplicated by hand
+      customer_code: "contoso"   # <-- duplicated by hand
   variables:
     - key: customer_code
       store: constant
-      value: "c0062"           # <-- duplicated again, same file
+      value: "contoso"           # <-- duplicated again, same file
 ```
 
 Nothing keeps these in sync. Rename the tenant, or fix a typo in one, and
@@ -74,15 +74,15 @@ consistent token grammar, not a second one. Worked example from the
 problem above:
 
 ```yaml
-# environments/c0062-env.yaml — after
+# environments/contoso-env.yaml — after
 spec:
   properties:
     environment_info:
-      customer_code: "${value:tenant.c0062.meta.name}"
+      customer_code: "${value:tenant.contoso.meta.name}"
   variables:
     - key: customer_code
       store: constant
-      value: "${value:tenant.c0062.meta.name}"
+      value: "${value:tenant.contoso.meta.name}"
 ```
 
 - `kind` — one of `PlatformKind`'s values (`common_models.py`) —
@@ -110,10 +110,10 @@ resolve.
 name)` exist" for a field whose *entire value* is a name (e.g.
 `workspace.spec.providers[]`). It cannot answer this design's question —
 "copy some other document's field value in here, possibly as part of a
-larger string" (`"${value:tenant.c0062.meta.name}-prd"` interpolated
+larger string" (`"${value:tenant.contoso.meta.name}-prd"` interpolated
 alongside a literal suffix, matching exactly how `${var:}`/`${secret:}`
 already compose inside one string) — because a `References()`-marked
-field's runtime value stays the typed name itself (`"c0062"`), never gets
+field's runtime value stays the typed name itself (`"contoso"`), never gets
 *replaced* by something else. Extending `References()` to also carry a
 resolved value would conflate two different jobs (existence-checking a
 field the schema itself defines vs. arbitrary embedded string
@@ -216,7 +216,7 @@ and `deploy_run()` (both already call `resolve_values()`), though only
   literal" rule above rejects this outright. Revisit only if a real
   document needs to reference a field whose own value depends on
   something not yet known at validate time.
-- **Referencing a whole sub-object/list** (`${value:tenant.c0062.spec}`
+- **Referencing a whole sub-object/list** (`${value:tenant.contoso.spec}`
   as a whole, not one scalar field) — no real use identified yet, and
   "embed a token that expands to a whole YAML mapping inline in a string
   field" is a different, bigger problem (would need its own non-string
@@ -355,8 +355,8 @@ Organized by how much changes, smallest first.
 ## History
 
 - Motivated by a real, concrete duplication found while building `.v2-cfg`:
-  the same literal `"c0062"` typed independently in both `tenants/c0062.yaml`
-  and `environments/c0062-env.yaml`.
+  the same literal `"contoso"` typed independently in both `tenants/contoso.yaml`
+  and `environments/contoso-env.yaml`.
 - Scoping "universal resolution reach" (this design must work anywhere in
   `root.spec.*`, not just specific model fields) surfaced a real
   prerequisite gap: `ProviderSpecModel.configuration`/`.custom` passed

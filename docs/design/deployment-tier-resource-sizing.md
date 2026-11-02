@@ -36,7 +36,7 @@ Already proven working, not hypothetical — this repo's own `config/`
 dogfooding solution declares it today:
 
 ```yaml
-# config/customers/c0062.yaml
+# config/customers/contoso.yaml
 spec:
   properties:
     deploy_tier: standard

@@ -471,7 +471,7 @@ deploy-time-only" (ADR-0022 D4).
   around a shared GitOps push checkout for concurrent `deploy run`s
   (inherited from `audit_push.py`'s own pre-existing pattern).
 - **No real consumer evidence yet** — haven's real `workspace.yaml` only
-  declares `terraform`/`helm` provisioners; a v2 of `cfg-int-deployment`
+  declares `terraform`/`helm` provisioners; a v2 of `config-repo`
   was reportedly in progress but had no GitOps-related commits/branches as
   of the last check. This design is validated only against local
   bare-git-repo tests, not yet exercised by a real GitOps consumer —

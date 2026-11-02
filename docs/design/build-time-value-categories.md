@@ -176,30 +176,30 @@ spec:
 ```
 
 ```yaml
-# customers/c0062/environment.yaml — declares only its OWN entry
+# customers/contoso/environment.yaml — declares only its OWN entry
 apiVersion: strata.huybrechts.xyz/v2
 kind: environment
 meta:
-  name: c0062-env
+  name: contoso-env
 spec:
   properties:
     tenant_gateway:
-      c0062:
-        hostname: c0062.apps.example.com
+      contoso:
+        hostname: contoso.apps.example.com
         ip_addresses: ["203.0.113.10/32", "203.0.113.11/32"]
 ```
 
 ```yaml
-# customers/c0091/environment.yaml — same shape, different key
+# customers/acme/environment.yaml — same shape, different key
 apiVersion: strata.huybrechts.xyz/v2
 kind: environment
 meta:
-  name: c0091-env
+  name: acme-env
 spec:
   properties:
     tenant_gateway:
-      c0091:
-        hostname: c0091.apps.example.com
+      acme:
+        hostname: acme.apps.example.com
         ip_addresses: ["198.51.100.20/32"]
 ```
 
@@ -214,12 +214,12 @@ meta:
 spec:
   workspace: waf-platform
   environments:
-    - c0062-env
-    - c0091-env
+    - contoso-env
+    - acme-env
 ```
 
 `merge_workspace_environment_deployment_properties()` walks Workspace →
-`c0062-env` → `c0091-env` → Deployment, deep-merging at each step. Since
+`contoso-env` → `acme-env` → Deployment, deep-merging at each step. Since
 every tenant contributes a *different key* under `tenant_gateway`, there is
 nothing to overwrite — they accumulate:
 
@@ -227,8 +227,8 @@ nothing to overwrite — they accumulate:
 {
   "omp_gateway": { "ip_addresses": ["20.50.10.5/32", "20.50.10.6/32"] },
   "tenant_gateway": {
-    "c0062": { "hostname": "c0062.apps.example.com", "ip_addresses": ["203.0.113.10/32", "203.0.113.11/32"] },
-    "c0091": { "hostname": "c0091.apps.example.com", "ip_addresses": ["198.51.100.20/32"] }
+    "contoso": { "hostname": "contoso.apps.example.com", "ip_addresses": ["203.0.113.10/32", "203.0.113.11/32"] },
+    "acme": { "hostname": "acme.apps.example.com", "ip_addresses": ["198.51.100.20/32"] }
   }
 }
 ```

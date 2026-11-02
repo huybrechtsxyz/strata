@@ -34,14 +34,14 @@ Two consumers depend on this that v2 has zero equivalent for:
    (`follows`/`segments`) because "10 of 15 real deployments declare it,"
    but its own docstring says outright: **"Inert in v2 ... nothing resolves
    or validates it yet."** A real leaf deployment
-   (`deploy/hubs/z00/s01/c0224/dev/deployment.yaml`) declares:
+   (`deploy/hubs/hub1/spoke1/fabrikam/dev/deployment.yaml`) declares:
    ```yaml
    layers:
      follows: hub-path
      segments:
-       hub: z00
-       spoke: s01
-       customer: c0224
+       hub: hub1
+       spoke: spoke1
+       customer: fabrikam
        ring: dev
        environment: na
    ```
@@ -70,7 +70,7 @@ geographies`, not a gap to port 1:1):
   "customers/{customer}/tenant.yaml"` — the captured customer code must
   name a real tenant file) — **already covered** by ordinary reference
   validation, provided the deployment declares `spec.tenant` (the real
-  leaf does: `tenant: c0224`): `DeploymentSpecModel.tenant`'s
+  leaf does: `tenant: fabrikam`): `DeploymentSpecModel.tenant`'s
   `References(PlatformKind.TENANT)` annotation already makes this a
   Phase 1 existence check, keyed on identity (ADR-0015), not a
   file-existence probe.
@@ -213,19 +213,19 @@ if an author genuinely varied it):
 ```
 
 ```yaml
-# customers/c0062/tenant.yaml — passes: {code} captures "c0062",
+# customers/contoso/tenant.yaml — passes: {code} captures "contoso",
 # which must equal this file's own meta.name.
 apiVersion: strata.huybrechts.xyz/v2
 kind: tenant
 meta:
-  name: c0062
+  name: contoso
 spec:
   display_name: Acme
   geographies: [europe]
 ```
 
-A `meta.name: c0099` at that same path would be caught — the folder says
-`c0062`, the document disagrees.
+A `meta.name: acme` at that same path would be caught — the folder says
+`contoso`, the document disagrees.
 
 **`resolves: layers`** — multiple directory captures, each independently
 validated against its own declared `segments[].pattern`, and (Phase 3)
@@ -254,31 +254,31 @@ this convention. No `filename_pattern` — matches v1's own real
 ```
 
 ```yaml
-# deploy/hubs/z00/s01/c0224/dev/deployment.yaml — path captures
-# {hub: z00, spoke: s01, customer: c0224, ring: dev, environment: dev}
+# deploy/hubs/hub1/spoke1/fabrikam/dev/deployment.yaml — path captures
+# {hub: hub1, spoke: spoke1, customer: fabrikam, ring: dev, environment: dev}
 # (or whatever the real leaf's final directory segment is), each checked
 # against its own segment pattern above.
 apiVersion: strata.huybrechts.xyz/v2
 kind: deployment
 meta:
-  name: deploy-hub-z00-spoke-s01-customer-c0224-ring-dev
+  name: deploy-hub-hub1-spoke-spoke1-customer-fabrikam-ring-dev
 spec:
   layers:
     follows: hub-path
     segments:
-      hub: z00
-      spoke: s01
-      customer: c0224
+      hub: hub1
+      spoke: spoke1
+      customer: fabrikam
       ring: dev
       environment: na   # must still match ^[a-z0-9]{1,4}$ — it does
-  tenant: c0224
+  tenant: fabrikam
 ```
 
 A hand-typed `segments: {ring: development, ...}` (7 chars, fails
 `^[a-z]{3}$`) would be caught at the model's own Pydantic level — the
 schema, independent of path matching. Where the *path* check adds value:
-`ring: dev` declared but the real directory is actually `deploy/hubs/z00/
-s01/c0224/tst/deployment.yaml` — schema-valid on its own, only the
+`ring: dev` declared but the real directory is actually `deploy/hubs/hub1/
+spoke1/fabrikam/tst/deployment.yaml` — schema-valid on its own, only the
 path-vs-declared-`segments` cross-check (Phase 3) catches the drift.
 
 **`resolves: None`** — pure structural shape check, no further meaning.

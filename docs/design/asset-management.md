@@ -222,7 +222,7 @@ relative path. Each entry is keyed by slot:
 
 ```json
 "api": {
-  "asset": "c0062-api",                   // the document bound to the slot for this deployment
+  "asset": "contoso-api",                   // the document bound to the slot for this deployment
   "path": "assets/api",                   // relative to the build root, for tooling
   "path_from_step": "../../assets/api",   // the same directory, relative to the step's Terraform root
   "files": ["openapi.json", "nested/deep.json"]
@@ -287,12 +287,12 @@ a document selection like `workspace:` or `version:`.
 
 ```yaml
 kind: deployment
-meta: { name: prd-c0062-deployment }
+meta: { name: prd-contoso-deployment }
 spec:
   extends: deploy-base
   assets:
     - slot: api
-      asset: c0062-api
+      asset: contoso-api
 ```
 
 `merge_deployment_specs()` merges `assets` by `slot` through the same merge-key table
@@ -321,11 +321,11 @@ repository) plus one deployment:
 
 ```yaml
 kind: asset
-meta: { name: c0062-api }
+meta: { name: contoso-api }
 spec:
   location:
     type: git
-    url: https://git.example.com/customers/c0062-api.git
+    url: https://git.example.com/customers/contoso-api.git
     reference: v1.4.0
   source_path: openapi
 ```

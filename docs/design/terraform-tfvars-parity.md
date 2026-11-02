@@ -28,7 +28,7 @@ output and diffed it against **real**, committed v1 output for the exact
 same repository:
 
 1. `.v2-cfg` (this workspace's own hand-migrated slice of
-   `config-deploy`) has no local checkout of `iac-int-deployment`
+   `config-deploy`) has no local checkout of `iac-repo`
    (the real Terraform source repo, `fetch: external`, a private GHE
    remote). Created a minimal placeholder checkout at the exact path
    `layout.remote_checkout_path()` expects (`spoke/terraform/main.tf`,
@@ -39,7 +39,7 @@ same repository:
    .v2-cfg --build-path .v2-cfg\build\deploy-spoke`. Succeeded, produced 8
    real `*.auto.tfvars.json` files.
 3. Diffed those files' actual JSON content against
-   `e:\sources\config-deploy\build\deploy-hub-z00-spoke-s01-customer-c0224-1.0.0\core\terraform\*.auto.tfvars.json`
+   `e:\sources\config-deploy\build\deploy-hub-hub1-spoke-spoke1-customer-fabrikam-1.0.0\core\terraform\*.auto.tfvars.json`
    — v1's real, committed output for a real deployment in the same repo
    (a different deployment level — customer-scoped vs. `.v2-cfg`'s
    spoke-scoped — so exact values differ, but every *category's shape
@@ -262,4 +262,4 @@ categories, not just the eight the build-time file fix covered.
 - `workspace`'s full v1 field set needed deployment identity threaded in - `ResolvedWorkspaceGraph` gained a `deployment: DeploymentModel | None` field (mirrors its existing `tenant` field), passed through both real call sites (`build_controller.py`, `deploy_controller.py`).
 - `modules` has no v2 equivalent and needs none - `terraform_projection.py`'s own docstring already confirms it was checked and deliberately dropped (zero real usage across every real workspace checked).
 - Several suspected v1/v2 differences turned out to be deliberate, already-documented v2 architecture choices (Topology's `provider`/`provisioner` removal, ADR-0011; DNS's secret/output-record split removal, ADR-0006) rather than new gaps.
-- Not independently verified against a real standalone Terraform root (`iac-int-deployment`) - v1's builder source plus the real committed build output were sufficient and mutually consistent everywhere checked, but this would remove any remaining doubt if that repo ever becomes available.
+- Not independently verified against a real standalone Terraform root (`iac-repo`) - v1's builder source plus the real committed build output were sufficient and mutually consistent everywhere checked, but this would remove any remaining doubt if that repo ever becomes available.
