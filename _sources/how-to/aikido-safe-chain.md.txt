@@ -37,4 +37,4 @@ strata is installed from the private Python feed, which Safe Chain must know abo
   README (2026-10-26).
 - Untested: how Safe Chain combines with uv's `--index-strategy unsafe-best-match`, which an
   install from the private feed may need.
-- Background: [docs/work/aikido-integration.md](../work/aikido-integration.md), "Gotchas found".
+- Background: [docs/archive/aikido-integration.md](../archive/aikido-integration.md), "Gotchas found".

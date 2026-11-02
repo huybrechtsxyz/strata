@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Version (kind: version) &mdash; strata 2.0.0-RC2 documentation</title>
+  <title>Version (kind: version) &mdash; strata 2.0.0-RC3 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=ff08b871"></script>
+      <script src="../_static/documentation_options.js?v=5b703c68"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -56,6 +56,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
@@ -165,7 +166,8 @@ asset using a manifest remote is pinned under <code class="docutils literal notr
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">pins</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">images</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">caddy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">caddy:2-alpine</span>
+<span class="w">      </span><span class="c1"># Shorthand: nothing is held back. Keyed by the module service's name.</span>
+<span class="w">      </span><span class="nt">portainer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">portainer/portainer-ce:2.39.3-alpine</span>
 <span class="w">      </span><span class="nt">db</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker.io/library/postgres:16-alpine</span>
 <span class="w">        </span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">held</span>
@@ -173,13 +175,22 @@ asset using a manifest remote is pinned under <code class="docutils literal notr
 <span class="w">        </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"postgres</span><span class="nv"> </span><span class="s">majors</span><span class="nv"> </span><span class="s">need</span><span class="nv"> </span><span class="s">pg_upgrade/dump-restore;</span><span class="nv"> </span><span class="s">plan</span><span class="nv"> </span><span class="s">as</span><span class="nv"> </span><span class="s">its</span><span class="nv"> </span><span class="s">own</span><span class="nv"> </span><span class="s">migration</span><span class="nv"> </span><span class="s">task"</span>
 <span class="w">        </span><span class="nt">reviewed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-09-08</span>
 <span class="w">    </span><span class="nt">charts</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">immich</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.13.1</span>
+<span class="w">      </span><span class="c1"># Keyed by the chart module's document name.</span>
+<span class="w">      </span><span class="nt">authentik</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026.5.2</span>
+<span class="w">        </span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unverified</span>
+<span class="w">        </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"chart</span><span class="nv"> </span><span class="s">version</span><span class="nv"> </span><span class="s">could</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">be</span><span class="nv"> </span><span class="s">confirmed</span><span class="nv"> </span><span class="s">upstream;</span><span class="nv"> </span><span class="s">re-verify</span><span class="nv"> </span><span class="s">before</span><span class="nv"> </span><span class="s">bumping"</span>
+<span class="w">        </span><span class="nt">reviewed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-09-08</span>
+<span class="w">    </span><span class="nt">artifacts</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># Overrides `image_tag` of the artifact named example-api.</span>
+<span class="w">      </span><span class="nt">example-api</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.4.2</span>
 <span class="w">    </span><span class="nt">remotes</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">infra</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.0.0</span>
 <span class="w">    </span><span class="nt">assets</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">c0062-api</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.5.0</span>
 </pre></div>
 </div>
+<p>This is <code class="docutils literal notranslate"><span class="pre">config/versions/prd.yaml</span></code>, the working example in this repository.</p>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
@@ -188,8 +199,19 @@ asset using a manifest remote is pinned under <code class="docutils literal notr
 are placed by CI before strata runs, so there is no <code class="docutils literal notranslate"><span class="pre">pins.tools</span></code> category — the version a recipe
 expects lives on the <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code></span></a>’s <code class="docutils literal notranslate"><span class="pre">integration</span></code> binding instead, as an
 assertion strata checks, not an install instruction.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks pin existence/applicability today; actually applying a pin onto a
-rendered artifact isn’t wired yet (no build layer consumes it).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks pin existence/applicability: a pin naming no module service, chart
+module, remote, artifact or asset is a <code class="docutils literal notranslate"><span class="pre">stale_pin</span></code> warning. <code class="docutils literal notranslate"><span class="pre">images</span></code>, <code class="docutils literal notranslate"><span class="pre">charts</span></code>, <code class="docutils literal notranslate"><span class="pre">remotes</span></code> and
+<code class="docutils literal notranslate"><span class="pre">assets</span></code> pins are applied by <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code>; <code class="docutils literal notranslate"><span class="pre">artifacts</span></code> pins are applied wherever the artifact is
+resolved (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code>, build and deploy). <code class="docutils literal notranslate"><span class="pre">--pin</span> <span class="pre">NAME</span></code> on <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code>/<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>
+overrides a deployment’s <code class="docutils literal notranslate"><span class="pre">spec.version</span></code> for that run only.</p></li>
+<li><p>A target with no current value of its own (a module service with no <code class="docutils literal notranslate"><span class="pre">image</span></code>) is never seeded by
+<code class="docutils literal notranslate"><span class="pre">version</span> <span class="pre">new</span> <span class="pre">--from</span></code> or offered as a pin to add by <code class="docutils literal notranslate"><span class="pre">version</span> <span class="pre">update</span></code>: a pin must have a non-empty
+value. An artifact with a blank <code class="docutils literal notranslate"><span class="pre">image_tag</span></code> is the exception for <code class="docutils literal notranslate"><span class="pre">version</span> <span class="pre">update</span></code>: with no pin it
+has no tag at all, so it is reported as needing a version (<code class="docutils literal notranslate"><span class="pre">pin_needed</span></code>), though still never seeded.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">update</span> <span class="pre">NAME</span></code> lists the pins you could add (each target with no pin yet, seeded with
+its current value) and the pins to remove (stale ones). It never edits the file and exits 0, since
+a target with no pin is normal. Add <code class="docutils literal notranslate"><span class="pre">--check</span></code> to exit 3 when anything is left to add or remove, for a
+CI gate. An artifact with no tag and no pin is a warning even without <code class="docutils literal notranslate"><span class="pre">--check</span></code>, and an error with it.</p></li>
 </ul>
 </section>
 </section>

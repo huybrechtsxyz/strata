@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Environment (kind: environment) &mdash; strata 2.0.0-RC2 documentation</title>
+  <title>Environment (kind: environment) &mdash; strata 2.0.0-RC3 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=ff08b871"></script>
+      <script src="../_static/documentation_options.js?v=5b703c68"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -56,6 +56,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
@@ -151,7 +152,10 @@ name (<code class="docutils literal notranslate"><span class="pre">environment</
 A <code class="docutils literal notranslate"><span class="pre">value</span></code> cannot contain a <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${output:}</span></code> token — a key
 cannot be defined through another key, and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> rejects it
 (<code class="docutils literal notranslate"><span class="pre">store_value_token_unsupported</span></code>). <code class="docutils literal notranslate"><span class="pre">${value:kind.name.path}</span></code> (a field of another document)
-is allowed in a <code class="docutils literal notranslate"><span class="pre">constant</span></code>’s value.</p></li>
+is allowed in a <code class="docutils literal notranslate"><span class="pre">constant</span></code>’s value, except a field a <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin overrides
+(an artifact’s <code class="docutils literal notranslate"><span class="pre">image_tag</span></code>, a module service’s <code class="docutils literal notranslate"><span class="pre">image</span></code>, a module’s <code class="docutils literal notranslate"><span class="pre">source.chart_version</span></code>, an
+asset’s <code class="docutils literal notranslate"><span class="pre">location.reference</span></code>): <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> rejects it (<code class="docutils literal notranslate"><span class="pre">value_reference_pinnable_field</span></code>),
+since it would read the unpinned value. Use a <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code> variable for an image tag.</p></li>
 <li><p>Secrets additionally support <code class="docutils literal notranslate"><span class="pre">generate:</span> <span class="pre">{type,</span> <span class="pre">length}</span></code> (auto-generate when the key is missing)
 and <code class="docutils literal notranslate"><span class="pre">rotate</span></code> (age-based or automatic rotation policy) — integration-backed stores only</p></li>
 </ul>

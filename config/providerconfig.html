@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ProviderConfig (kind: providerconfig) &mdash; strata 2.0.0-RC2 documentation</title>
+  <title>ProviderConfig (kind: providerconfig) &mdash; strata 2.0.0-RC3 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=ff08b871"></script>
+      <script src="../_static/documentation_options.js?v=5b703c68"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -56,6 +56,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
@@ -138,7 +139,6 @@ its own file, own PR, own reviewer.</p>
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.description</span></code> — description of the provider type</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.version</span></code> — optional provisioner version constraint (e.g. <code class="docutils literal notranslate"><span class="pre">~&gt;3.0</span></code>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.regions[]</span></code> — supported regions, each <code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">geography,</span> <span class="pre">description,</span> <span class="pre">custom}</span></code>.
 <code class="docutils literal notranslate"><span class="pre">geography</span></code> is an optional compliance/deployment boundary tag grouping several regions
 (mirrors Azure’s own “geography” concept) — referenced by <a class="reference internal" href="tenant.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">tenant.md</span></code></span></a>’s
@@ -160,7 +160,6 @@ Schema types, nesting, cross-field checks) and not duplicated here.</p>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Microsoft</span><span class="nv"> </span><span class="s">Azure</span><span class="nv"> </span><span class="s">provider</span><span class="nv"> </span><span class="s">type</span><span class="nv"> </span><span class="s">registry"</span>
-<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"~&gt;3.0"</span>
 <span class="w">  </span><span class="nt">additional_regions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">  </span><span class="nt">regions</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">westeurope</span>

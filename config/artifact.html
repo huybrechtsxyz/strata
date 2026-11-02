@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Artifact (kind: artifact) &mdash; strata 2.0.0-RC2 documentation</title>
+  <title>Artifact (kind: artifact) &mdash; strata 2.0.0-RC3 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=ff08b871"></script>
+      <script src="../_static/documentation_options.js?v=5b703c68"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -56,6 +56,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
@@ -131,19 +132,23 @@
 <p>A pinnable, named reference to something external strata doesn’t fetch or deploy itself — a
 container image today, possibly other identifiers later. Referenced by identity from anywhere in
 the solution: a <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code> variable (an external provisioner’s own input) or a module
-service’s image (once that binding is wired up).</p>
+service’s <code class="docutils literal notranslate"><span class="pre">artifact</span></code> field (see <a class="reference internal" href="module.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">module</span></code></span></a>).</p>
 <section id="schema">
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.image_name</span></code> — the container image path (e.g. <code class="docutils literal notranslate"><span class="pre">int-docker-test/src/acme.dispatcher.api</span></code>) —
 identity, never overridden by a <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.image_tag</span></code> — the tag/digest to deploy; may be blank until a real image exists. Overridden
-by <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>’s <code class="docutils literal notranslate"><span class="pre">spec.pins.artifacts[name]</span></code> when set</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.image_tag</span></code> — the tag/digest to deploy; optional, omit it when a <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin
+always supplies it. Overridden by <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>’s <code class="docutils literal notranslate"><span class="pre">spec.pins.artifacts[name]</span></code> when set; with
+neither, the tag is blank</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.registry</span></code> — free-text registry host, documentation only — <strong>not</strong> a remote reference
 (strata never fetches an image; the runtime pulls it at deploy time)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.integration</span></code> — optional <a class="reference internal" href="integration.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">integration</span></code></span></a> (capability: <code class="docutils literal notranslate"><span class="pre">sources</span></code>) providing
-registry credentials</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> / <code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> / <code class="docutils literal notranslate"><span class="pre">spec.custom</span></code> — free-form/passthrough data, never merged</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.integration</span></code> — reserved. Must name an existing <a class="reference internal" href="integration.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">integration</span></code></span></a>, but
+nothing reads it: no registry credentials are resolved from it. Supply registry credentials to
+whatever pulls or copies the image (your pipeline, the runtime)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> / <code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> / <code class="docutils literal notranslate"><span class="pre">spec.custom</span></code> — free-form/passthrough data, never
+merged and never read by strata. Reach a literal field from another document’s string with
+<code class="docutils literal notranslate"><span class="pre">${value:artifact.&lt;name&gt;.spec.configuration.&lt;key&gt;}</span></code></p></li>
 </ul>
 </section>
 <section id="example">
@@ -158,13 +163,23 @@ registry credentials</p></li>
 <span class="w">  </span><span class="nt">registry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cdn-feeds.acme.com</span>
 </pre></div>
 </div>
-<p>Referenced from an environment’s <code class="docutils literal notranslate"><span class="pre">variables</span></code>:</p>
+<p>Referenced from an environment’s <code class="docutils literal notranslate"><span class="pre">variables</span></code>. <code class="docutils literal notranslate"><span class="pre">field</span></code> is required: <code class="docutils literal notranslate"><span class="pre">image_name</span></code>, <code class="docutils literal notranslate"><span class="pre">image_tag</span></code> (with
+any <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin applied; <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when there is no tag) or <code class="docutils literal notranslate"><span class="pre">image_ref</span></code> (<code class="docutils literal notranslate"><span class="pre">image_name:image_tag</span></code>,
+<code class="docutils literal notranslate"><span class="pre">image_name&#64;sha256:...</span></code> for a digest, or just <code class="docutils literal notranslate"><span class="pre">image_name</span></code> when the tag is blank):</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">variables</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DISPATCHER_API_IMAGE_TAG</span>
 <span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifact</span>
 <span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dispatcher-api</span>
+<span class="w">    </span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">image_tag</span>
 </pre></div>
 </div>
+<p>The pinned tag is also what a build writes to <code class="docutils literal notranslate"><span class="pre">strata.variables</span></code>. Read it with a <code class="docutils literal notranslate"><span class="pre">${var:KEY}</span></code> token
+in <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> and it resolves at deploy. <code class="docutils literal notranslate"><span class="pre">${value:artifact.&lt;name&gt;.spec.image_tag}</span></code> is
+rejected, as it would read the unpinned tag.</p>
+<p>To see which images a deployment runs, with the tag after the pin and where it came from, run
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span> <span class="pre">DEPLOYMENT</span> <span class="pre">[--pin</span> <span class="pre">NAME]</span> <span class="pre">-o</span> <span class="pre">json</span></code>. It reads the solution only (no build, no
+store, no secret), so a pipeline can use it to copy the images to a registry before <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>. The
+same list feeds the SBOM and the audit manifest.</p>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>

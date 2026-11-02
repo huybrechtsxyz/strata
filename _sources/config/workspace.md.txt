@@ -49,10 +49,14 @@ parameters.
   verdict on `repository` at the deployed commit
 - `spec.image_gate_policy` — at deploy, count an `image_findings` integration's open issues for every
   image in `sbom.json` against `max_severity`/`max_count`
+- `spec.image_tag_policy` — fail `build run` and `deploy run` when an image the deployment runs has no
+  tag, a floating tag such as `latest`, or a tag that does not match the shape you require (see "Image
+  tag policy" below)
 
-  Every policy has `enforcement` (`deny` | `warn`) and `on_missing_data` (`skip` | `warn` |
-  `block`, default `block`). `strata policy list` shows what a deployment's workspace configures;
-  `strata policy check` evaluates the two deploy gates on demand. See
+  Every policy has `enforcement` (`deny` | `warn`). The CVE, Checkov and gate policies also have
+  `on_missing_data` (`skip` | `warn` | `block`, default `block`); `image_tag_policy` has none, because it
+  reads only the solution. `strata policy list` shows what a deployment's workspace configures;
+  `strata policy check` evaluates them on demand. See
   [how-to/security-gates.md](../how-to/security-gates.md).
 
 ## Example
@@ -101,6 +105,69 @@ spec:
   default_tags:
     managed-by: strata
 ```
+
+## Image tag policy
+
+`spec.image_tag_policy` is an opt-in guard rail over the images `strata deploy images` lists: the artifacts a
+deployment reaches and the literal images of its enabled module services, each with the tag after any
+[`version`](version.md) pin. Leave the field out and any tag is accepted, including none. `image_tag_policy: {}`
+is already a useful policy: every image needs a tag, and the mutable aliases are rejected.
+
+```yaml
+spec:
+  image_tag_policy:
+    enforcement: deny              # deny (default) | warn
+    origins: [artifact]            # artifact | module-service; default: both
+    require_tag: true              # default true
+    reject_tags: [latest, main]    # default: latest, main, master, dev, develop, staging, edge, nightly, canary
+    tag_pattern: '^\d+\.\d+\.\d+$'  # a tag must match it (searched, so anchor it); a digest is not checked
+    require_pin: false             # the tag must come from a kind: version pin (or --pin)
+    rings: [acc, prd]              # only deployments whose version document is in these rings; default all
+    allow:
+      - name: redis                # the image's name as `strata deploy images` lists it
+        reason: third-party image, covered by cve_policy
+        expires: 2026-12-31        # optional ISO date, honoured through that day
+```
+
+| Rule          | An image fails when                           | Finding code         |
+| ------------- | --------------------------------------------- | -------------------- |
+| `require_tag` | it has no tag and no pin supplies one         | `image_without_tag`  |
+| `reject_tags` | its tag is in the list, ignoring case         | `image_floating_tag` |
+| `tag_pattern` | its tag does not match the regular expression | `image_tag_pattern`  |
+| `require_pin` | its tag does not come from a version pin      | `image_not_pinned`   |
+
+- A digest (`sha256:...`) is immutable, so it passes `reject_tags` and `tag_pattern`. It still has to satisfy
+  `require_tag` and `require_pin`.
+- A tag that merely is not a semantic version, such as a build number (`env_sbx_20260907.11`), is not floating.
+  `reject_tags` is an explicit list; use `tag_pattern` to be stricter. Set `reject_tags: []` to reject none.
+- An image with no tag gets one finding, not also `image_not_pinned`, unless `require_tag` is `false`.
+- Each finding names the image, its origin and what uses it, and says where to put the tag:
+  `spec.pins.artifacts.<name>` of a version document, or `spec.pins.images.<name>` for a module service.
+- `deny` makes a finding an error and stops the run; `warn` makes it a warning.
+- An `allow` entry exempts one image from every rule. The `reason` is required. Once `expires` has passed, the
+  entry no longer exempts the image and the finding says so.
+- A deployment whose version document has a ring outside `rings` is not judged, and reports one info finding. A
+  deployment with no ring is always judged. A workspace is shared by every ring of a product, so `rings` is how
+  acc and prd can be strict while dev floats.
+
+Where it runs:
+
+| Command                | Behavior                                                                                                                                                    |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata build run`     | Judged first, before anything is cleaned or written, so a `deny` breach leaves the build path as it was. Also under `--dry-run`.                            |
+| `strata deploy run`    | Judged again before any value is resolved, because `--pin` given only to `deploy run` can change the tag. Also under `--smoke-test`, which records nothing. |
+| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first.                        |
+| `strata policy check`  | Evaluates it offline and records the result. `strata policy list` shows it.                                                                                 |
+| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                  |
+
+The result is recorded in `policy_results.json` as `image_tag_policy` and ends up in the audit manifest. The
+`deploy run` entry replaces the one `build run` wrote.
+
+The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
+module, strata does not write a service's `image` into the chart's values, so the chart decides what runs: the
+policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
+the module's `configuration`, in the chart's own key shape. See
+[helm-image-delivery.md](../work/helm-image-delivery.md).
 
 ## Provider slots
 
