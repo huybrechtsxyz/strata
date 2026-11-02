@@ -23,7 +23,7 @@ doc). `time` is the event's own occurrence time (`completed_at`/
 same manifest describe the same moment.
 
 The `type`'s reverse-domain prefix tracks the *deployment document's own*
-`apiVersion` (`PlatformVersion`), not a single hardcoded constant — an OMP
+`apiVersion` (`PlatformVersion`), not a single hardcoded constant — an
 deployment (`strata.omp.com/v2`) must never emit a `huybrechts.xyz`-branded
 event type, and vice versa. Callers (the future `integration` sink
 dispatch) pass the deployment's `apiVersion` straight through; it defaults
@@ -40,7 +40,7 @@ from strata.models.common_models import CANONICAL_API_VERSION, PlatformVersion
 _EVENT_SOURCE_PREFIX = "/strata"
 
 # Reverse-domain CloudEvents `type` prefix, keyed by the deployment document's
-# own `apiVersion` — an OMP deployment must emit `com.omp.strata.*` types, a
+# own `apiVersion` — an deployment must emit `com.omp.strata.*` types, a
 # huybrechts.xyz one `xyz.huybrechts.strata.*`. Kept exhaustive over
 # `PlatformVersion` on purpose: a future third api version would fail this
 # lookup loudly (KeyError) rather than silently mislabeling its events.

@@ -160,7 +160,7 @@ A concrete case for the `properties` deep-merge chain above (Q3) —
 accumulating a *map* across every reachable Environment, not just letting a
 later one win. Shared Azure Application Gateway WAF policy in front of
 several tenants, each contributing its own IP allow-list, plus one
-OMP-wide list that applies regardless of tenant:
+organization-wide list that applies regardless of tenant:
 
 ```yaml
 # workspace.yaml — the one shared recipe, never varies per tenant
@@ -170,8 +170,8 @@ meta:
   name: waf-platform
 spec:
   properties:
-    omp_gateway:
-      ip_addresses: ["20.50.10.5/32", "20.50.10.6/32"]
+    a_gateway:
+      ip_addresses: ["1.1.1.5/32", "1.1.1.6/32"]
   # providers/provisioners/execution/resources omitted for brevity
 ```
 
@@ -186,7 +186,7 @@ spec:
     tenant_gateway:
       contoso:
         hostname: contoso.apps.example.com
-        ip_addresses: ["203.0.113.10/32", "203.0.113.11/32"]
+        ip_addresses: ["1.1.1.5/32", "1.1.1.6/32"]
 ```
 
 ```yaml

@@ -1283,7 +1283,6 @@ durable, reviewable record.
 
 ### 21. ~~Real external v2 consumer broke against same-day ADR-0037/ADR-0039 schema changes~~ — RESOLVED (fixture updated, not a v2 gap)
 
-- **Found in:** `.v2-cfg` (2026-10-13) — a full copy of `e:\config-repo-v2\config-repo`'s real strata documents (`strata.yaml`, `config/`, `customers/`, `providers/`, `stacks/`, `deploy/hubs/`), a genuine external, already-on-v2 consumer (`apiVersion: strata.omp.com/v2`, a recognized `PlatformVersion` value — not a v1 migration). First `strata validate` run: 37 errors across 12 documents.
 - **Root cause:** not a gap at all — both breaking changes were accepted the **same day** as this discovery: [ADR-0037](../decisions/0037-flatten-provider-resource-module-properties.md) (`Provider.spec.properties.{type,region,display_name}` → flat `spec.type`/`spec.region`/`spec.display_name`) and [ADR-0039](../decisions/0039-provisioning-step-target-fields-by-kind.md) (`ProvisioningStepModel.targets` → `resources`/`namespaces`/`topologies`/`dns_zones`/`firewalls`/`networks`, split by kind). `.v2-cfg`'s real documents were written against the pre-ADR shape (all 8 `providers/*.yaml` used the nested wrapper; all 4 `stacks/*/workspace.yaml` used `targets:`) and simply hadn't been touched since. This is the first real, independently-authored (not `strata-v2`-repo-internal) document set either ADR has been checked against.
 - **Fixed:** flattened all 8 provider docs; renamed `targets:` → `resources:` on all 13 execution steps across `stacks/{contract,core,customer,ring,spoke}/workspace.yaml` (every real `targets:` entry in this repo names a `managed_by: provisioner` Resource, never a namespace/topology/dns/firewall/network — a single mechanical rename sufficed, no per-step kind analysis needed). `strata validate` clean afterward (80 documents, 0 errors).
 - **Not logged as a new gap** — both ADRs already fully document their own rationale; this entry exists only to record the first real-world confirmation that the old shape genuinely appears in production-authored documents (not just hypothesized), and the exact mechanical fix a real consumer needs to apply.
@@ -1318,42 +1317,6 @@ and the provider/providerconfig/topologyconfig registry split.
 
 ## Related
 
-- `.v2-cfg/` at the workspace root — **regenerated from scratch 2026-10-13**,
-  replacing the small, stale (ADR-0028-broken) hand-migrated slice
-  described below. Now a full copy of every real strata document from
-  `E:\config-repo-v2\config-repo` (`strata.yaml`, `config/`,
-  `customers/` x6, `providers/` x8, `stacks/{contract,core,customer,ring,
-  spoke}/`, `deploy/hubs/**`) — a genuine external, already-on-v2 consumer
-  (`apiVersion: strata.omp.com/v2`), not a v1 migration; only non-strata
-  content (`.azure/`, `.strata/`, `assets/`, `build/`, `docs/`, `scripts/`,
-  `.archive/`, `.github/`, every `*.md`) was deliberately excluded per
-  request ("only convert the configuration... just strata"). Required 2
-  mechanical fixes to validate clean against current schema — see gap #21
-  (ADR-0037/ADR-0039 same-day schema changes this external repo predated).
-  **`strata validate` passes with 0 errors (80/80 documents, 22
-  pre-existing `path_convention_mismatch` warnings — see gap #22) as of
-  2026-10-13.** Superseded history: the original 2026-09-28/29 fixture was
-  a deliberately small, hand-picked slice of a *different* real repo path
-  (`e:\sources\config-repo`) — one tenant (`contoso`), one provider
-  (`westeurope`), the spoke stack only — chosen then because it was v1's
-  real, most concrete example of gap #5's structural change; that slice
-  passed clean as of 2026-09-29 (gaps #14/#15 found/logged while building
-  it) but went stale 2026-10-01 (ADR-0028's inline-topology reversal) and
-  was never updated before being fully replaced today.
-- `.v2-haven/` at the workspace root — a full 52-document hand-migration of
-  every real document in `e:\SourcesXYZ\haven\config`, kept as a live
-  fixture. **Regenerated from scratch 2026-10-13** to match haven's real
-  directory layout as it exists today (`hearth/`, `forge/`, `providers/`,
-  `stack/` — replacing the flat layout the original 2026-09-28 pass was
-  based on). The 44-error state logged below (gap #8's Phase 1 malformed-
-  token detection) is resolved as part of this regeneration — every
-  module's literal Helm-native `${TOKEN}` placeholder is now escaped as
-  `$${TOKEN}`, and every real `references.secrets` entry is a proper
-  `services[].environment[].value: "${secret:KEY}"` token (gap #1).
-  **`strata validate` passes clean (52/52 documents, 0 errors) as of
-  2026-10-13.** Re-run validate after any model change touching provider/
-  resource/firewall/module/namespace/workspace/topology/deployment/
-  environment.
 - [docs/decisions/0011-topology-and-provisioning-decoupling.md](../decisions/0011-topology-and-provisioning-decoupling.md)
 - [docs/decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)
 - [docs/decisions/0015-solution-manifest-and-document-discovery.md](../decisions/0015-solution-manifest-and-document-discovery.md)

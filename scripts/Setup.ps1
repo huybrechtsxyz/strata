@@ -6,7 +6,9 @@
     (including dev extras) via `uv sync`.
 .PARAMETER UseProGet
     Register the internal ProGet package index in uv's config. Use this on work machines.
-    Omit on home machines to resolve packages directly from PyPI.
+    The index URL comes from STRATA_PACKAGE_INDEX_URL, set in the environment or in
+    scripts\setup.env (git-ignored, KEY=VALUE lines). Omit on home machines to resolve
+    packages directly from PyPI.
 .EXAMPLE
     .\scripts\Setup.ps1
     .\scripts\Setup.ps1 -UseProGet
@@ -80,6 +82,23 @@ Write-Host ""
 # Run Setup.ps1 -UseProGet on work machines to register the internal index.
 if ($UseProGet) {
     Write-Host "[*] Configuring uv package index (ProGet)..." -ForegroundColor Blue
+
+    # An already-set environment variable wins over setup.env.
+    $envFile = Join-Path $PSScriptRoot "setup.env"
+    if (Test-Path $envFile) {
+        foreach ($line in Get-Content $envFile) {
+            if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$' -and -not $line.TrimStart().StartsWith('#')) {
+                if (-not [Environment]::GetEnvironmentVariable($Matches[1])) {
+                    [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim('"'), "Process")
+                }
+            }
+        }
+    }
+    if (-not $env:STRATA_PACKAGE_INDEX_URL) {
+        Write-Host "[!] STRATA_PACKAGE_INDEX_URL is not set. Export it or add it to $envFile." -ForegroundColor Red
+        exit 1
+    }
+
     $uvConfigDir = "$env:APPDATA\uv"
     $uvConfigFile = "$uvConfigDir\uv.toml"
     if (-not (Test-Path $uvConfigDir)) {
@@ -88,7 +107,7 @@ if ($UseProGet) {
     if (-not (Test-Path $uvConfigFile)) {
         @"
 [[index]]
-url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple"
+url = "$env:STRATA_PACKAGE_INDEX_URL"
 "@ | Set-Content -Path $uvConfigFile -Encoding UTF8
         Write-Host "[+] uv config created at $uvConfigFile" -ForegroundColor Green
     }

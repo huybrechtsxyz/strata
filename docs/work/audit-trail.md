@@ -2151,7 +2151,7 @@ resolution, but better than the current silence.
 
 ### Addendum — formalizing approval via an ADO gate (2026-10-04)
 
-Prompted by a direct proposal: OMP has a Change Advisory Board; could an
+Prompted by a direct proposal: a Change Advisory Board; could an
 Azure DevOps Environment approval gate stand in for it, with a script
 turning the approval event into a document pushed to the repo/manifest/
 SIEM? Investigated rather than assumed, including "did v1 already have a
@@ -2712,7 +2712,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   full OIDC/cloud-CLI identity). No code changed in this pass — analysis
   only, recorded ahead of implementation.
 - 2026-10-04: Added "Addendum — formalizing approval via an ADO gate",
-  prompted by a direct proposal to "fake" OMP's Change Advisory Board
+  prompted by a direct proposal to "fake" Change Advisory Board
   using an Azure DevOps Environment approval gate, with a script turning
   the approval event into a document pushed to repo/manifest/SIEM, plus
   a direct question ("strata v1 had a workflow type system?"). Confirmed

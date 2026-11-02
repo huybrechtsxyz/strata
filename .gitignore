@@ -16,3 +16,6 @@ src/vscode/*.vsix
 
 # Temporary until uv.lock is cleaned of internal ProGet URLs (dev-machine only)
 uv.lock
+
+# Local machine settings (internal package index URL)
+scripts/setup.env

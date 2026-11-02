@@ -330,7 +330,7 @@ options in `commands/options.py`. `--commit` overrides D7 steps 1–4.
 ### 5.1 Integration document
 
 ```yaml
-apiVersion: strata.huybrechts.xyz/v2      # or strata.omp.com/v2
+apiVersion: strata.huybrechts.xyz/v2 
 kind: integration
 meta:
   name: aikido
