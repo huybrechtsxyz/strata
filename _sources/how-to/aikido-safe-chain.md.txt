@@ -33,7 +33,7 @@ strata is installed from the private Python feed, which Safe Chain must know abo
 
 ## Notes
 
-- Not yet confirmed in a real pipeline (haven, cfg-int). The settings come from Safe Chain's own
+- Not yet confirmed in a real pipeline (haven, config-repo). The settings come from Safe Chain's own
   README (2026-10-26).
 - Untested: how Safe Chain combines with uv's `--index-strategy unsafe-best-match`, which an
   install from the private feed may need.

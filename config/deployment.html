@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deployment (kind: deployment) &mdash; strata 2.0.0-RC3 documentation</title>
+  <title>Deployment (kind: deployment) &mdash; strata 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=5b703c68"></script>
+      <script src="../_static/documentation_options.js?v=51b770b3"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -194,7 +194,7 @@ instead of the slot’s default — see “Rebinding an asset” below</p></li>
 <span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy-base</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd</span>
-<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">c0062</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso</span>
 </pre></div>
 </div>
 </section>
@@ -221,7 +221,7 @@ region just extends it:</p>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">region-north</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prd</span><span class="p p-Indicator">]</span>
-<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">c0062</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso</span>
 </pre></div>
 </div>
 <ul class="simple">
@@ -246,14 +246,14 @@ another <a class="reference internal" href="asset.html"><span class="std std-doc
 files in their own repository, while the Terraform code keeps reading <code class="docutils literal notranslate"><span class="pre">local.strata_assets.&lt;slot&gt;</span></code>:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
 <span class="nt">meta</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd-c0062-deployment</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd-contoso-deployment</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy-base</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prd</span><span class="p p-Indicator">]</span>
-<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">c0062</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso</span>
 <span class="w">  </span><span class="nt">assets</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">slot</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">api</span>
-<span class="w">      </span><span class="nt">asset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">c0062-api</span><span class="w">       </span><span class="c1"># an asset document that carries its own git `location`</span>
+<span class="w">      </span><span class="nt">asset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso-api</span><span class="w">       </span><span class="c1"># an asset document that carries its own git `location`</span>
 </pre></div>
 </div>
 <p>A customer is therefore one small asset document plus this deployment; <code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code> does not

@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Artifact (kind: artifact) &mdash; strata 2.0.0-RC3 documentation</title>
+  <title>Artifact (kind: artifact) &mdash; strata 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=5b703c68"></script>
+      <script src="../_static/documentation_options.js?v=51b770b3"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -136,7 +136,7 @@ service’s <code class="docutils literal notranslate"><span class="pre">artifac
 <section id="schema">
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.image_name</span></code> — the container image path (e.g. <code class="docutils literal notranslate"><span class="pre">int-docker-test/src/acme.dispatcher.api</span></code>) —
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.image_name</span></code> — the container image path (e.g. <code class="docutils literal notranslate"><span class="pre">example/scheduler-api</span></code>) —
 identity, never overridden by a <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.image_tag</span></code> — the tag/digest to deploy; optional, omit it when a <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin
 always supplies it. Overridden by <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>’s <code class="docutils literal notranslate"><span class="pre">spec.pins.artifacts[name]</span></code> when set; with
@@ -156,9 +156,9 @@ merged and never read by strata. Reach a literal field from another document’s
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifact</span>
 <span class="nt">meta</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dispatcher-api</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scheduler-api</span>
 <span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">image_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">int-docker-test/src/acme.dispatcher.api</span>
+<span class="w">  </span><span class="nt">image_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example/scheduler-api</span>
 <span class="w">  </span><span class="nt">image_tag</span><span class="p">:</span><span class="w"> </span><span class="s">"1.4.2"</span>
 <span class="w">  </span><span class="nt">registry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cdn-feeds.acme.com</span>
 </pre></div>
@@ -167,9 +167,9 @@ merged and never read by strata. Reach a literal field from another document’s
 any <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin applied; <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when there is no tag) or <code class="docutils literal notranslate"><span class="pre">image_ref</span></code> (<code class="docutils literal notranslate"><span class="pre">image_name:image_tag</span></code>,
 <code class="docutils literal notranslate"><span class="pre">image_name&#64;sha256:...</span></code> for a digest, or just <code class="docutils literal notranslate"><span class="pre">image_name</span></code> when the tag is blank):</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DISPATCHER_API_IMAGE_TAG</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SCHEDULER_API_IMAGE_TAG</span>
 <span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifact</span>
-<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dispatcher-api</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scheduler-api</span>
 <span class="w">    </span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">image_tag</span>
 </pre></div>
 </div>

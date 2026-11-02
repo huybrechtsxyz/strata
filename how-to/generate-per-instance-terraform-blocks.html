@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value &mdash; strata 2.0.0-RC3 documentation</title>
+  <title>How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value &mdash; strata 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=5b703c68"></script>
+      <script src="../_static/documentation_options.js?v=51b770b3"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -171,9 +171,9 @@ customer, each contributing its own fragment under <code class="docutils literal
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">agw_customers</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">unisonplanning</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">contoso</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="s">"11111111-1111-1111-1111-111111111111"</span>
-<span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"unisonplanning.com"</span>
+<span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"contoso.example"</span>
 <span class="w">      </span><span class="nt">acmecorp</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="s">"22222222-2222-2222-2222-222222222222"</span>
 <span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"acmecorp.com"</span>
@@ -232,7 +232,7 @@ template emits — the template’s author owns the HCL shape completely; strata
 substitutes values into it.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">properties</span></code>/<code class="docutils literal notranslate"><span class="pre">custom</span></code> are intentionally “unchecked, arbitrary-shape” roots</strong> in
 <code class="docutils literal notranslate"><span class="pre">validate_template_references()</span></code> — only the top-level name (<code class="docutils literal notranslate"><span class="pre">properties</span></code>) is checked to exist,
-never its nested keys (<code class="docutils literal notranslate"><span class="pre">properties.agw_customers.unisonplanning...</span></code>). A typo inside a fragment,
+never its nested keys (<code class="docutils literal notranslate"><span class="pre">properties.agw_customers.contoso...</span></code>). A typo inside a fragment,
 or inside the loop body, is invisible until the real <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> render — same opacity
 tradeoff as everywhere else <code class="docutils literal notranslate"><span class="pre">properties</span></code> is used.</p></li>
 <li><p><strong>One <code class="docutils literal notranslate"><span class="pre">output.template</span></code> per provisioner.</strong> If a provisioner needs both the default

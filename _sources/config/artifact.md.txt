@@ -7,7 +7,7 @@ service's `artifact` field (see [`module`](module.md)).
 
 ## Schema
 
-- `spec.image_name` — the container image path (e.g. `int-docker-test/src/acme.dispatcher.api`) —
+- `spec.image_name` — the container image path (e.g. `example/scheduler-api`) —
   identity, never overridden by a [`version`](version.md) pin
 - `spec.image_tag` — the tag/digest to deploy; optional, omit it when a [`version`](version.md) pin
   always supplies it. Overridden by `kind: version`'s `spec.pins.artifacts[name]` when set; with
@@ -27,9 +27,9 @@ service's `artifact` field (see [`module`](module.md)).
 apiVersion: strata.huybrechts.xyz/v2
 kind: artifact
 meta:
-  name: dispatcher-api
+  name: scheduler-api
 spec:
-  image_name: int-docker-test/src/acme.dispatcher.api
+  image_name: example/scheduler-api
   image_tag: "1.4.2"
   registry: cdn-feeds.acme.com
 ```
@@ -40,9 +40,9 @@ any [`version`](version.md) pin applied; `""` when there is no tag) or `image_re
 
 ```yaml
 variables:
-  - key: DISPATCHER_API_IMAGE_TAG
+  - key: SCHEDULER_API_IMAGE_TAG
     store: artifact
-    value: dispatcher-api
+    value: scheduler-api
     field: image_tag
 ```
 

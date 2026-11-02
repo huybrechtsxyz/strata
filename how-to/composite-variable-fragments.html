@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments) &mdash; strata 2.0.0-RC3 documentation</title>
+  <title>How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments) &mdash; strata 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=5b703c68"></script>
+      <script src="../_static/documentation_options.js?v=51b770b3"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -157,38 +157,38 @@ auto-loads with no <code class="docutils literal notranslate"><span class="pre">
 <section id="worked-example">
 <h2>Worked example<a class="headerlink" href="#worked-example" title="Link to this heading"></a></h2>
 <p>Three separate files, three separate owners, one combined <code class="docutils literal notranslate"><span class="pre">appgateway_config</span></code>.</p>
-<p><strong><code class="docutils literal notranslate"><span class="pre">customers/unisonplanning/environment.yaml</span></code></strong> — owned by the <code class="docutils literal notranslate"><span class="pre">unisonplanning</span></code> team, declares
+<p><strong><code class="docutils literal notranslate"><span class="pre">customers/contoso/environment.yaml</span></code></strong> — owned by the <code class="docutils literal notranslate"><span class="pre">contoso</span></code> team, declares
 their own domain and their first ring:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
 <span class="nt">meta</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unisonplanning-agw</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso-agw</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">appgateway_config</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">unisonplanning</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"unisonplanning.com"</span>
+<span class="w">      </span><span class="nt">contoso</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"contoso.example"</span>
 <span class="w">        </span><span class="nt">hosts</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">c0224</span><span class="p">:</span>
-<span class="w">            </span><span class="nt">domain_name</span><span class="p">:</span><span class="w"> </span><span class="s">"c0224-agw-dev.westeurope.cloudapp.azure.com"</span>
-<span class="w">            </span><span class="nt">backend_pools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"apim"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"dispatcher-dev"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"datahub-admin-dev"</span><span class="p p-Indicator">]</span>
+<span class="w">          </span><span class="nt">ring1</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">domain_name</span><span class="p">:</span><span class="w"> </span><span class="s">"contoso-agw-dev.westeurope.cloudapp.azure.com"</span>
+<span class="w">            </span><span class="nt">backend_pools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"apim"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"scheduler-dev"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"catalog-admin-dev"</span><span class="p p-Indicator">]</span>
 </pre></div>
 </div>
-<p><strong><code class="docutils literal notranslate"><span class="pre">customers/unisonplanning/ring-c0225.yaml</span></code></strong> — a <em>later</em> onboarding, adding a second ring to
+<p><strong><code class="docutils literal notranslate"><span class="pre">customers/contoso/ring2.yaml</span></code></strong> — a <em>later</em> onboarding, adding a second ring to
 the <em>same</em> customer, from its own file — this is the real scaling case (“add a new ring to a
 customer” shouldn’t mean editing someone else’s file):</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
 <span class="nt">meta</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unisonplanning-agw-ring2</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso-agw-ring2</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">appgateway_config</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">unisonplanning</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">contoso</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">hosts</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">c0225</span><span class="p">:</span>
-<span class="w">            </span><span class="nt">domain_name</span><span class="p">:</span><span class="w"> </span><span class="s">"c0225-agw-stage.westeurope.cloudapp.azure.com"</span>
-<span class="w">            </span><span class="nt">backend_pools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"apim"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"dispatcher-stage"</span><span class="p p-Indicator">]</span>
+<span class="w">          </span><span class="nt">ring2</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">domain_name</span><span class="p">:</span><span class="w"> </span><span class="s">"contoso-agw-stage.westeurope.cloudapp.azure.com"</span>
+<span class="w">            </span><span class="nt">backend_pools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"apim"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"scheduler-stage"</span><span class="p p-Indicator">]</span>
 </pre></div>
 </div>
 <p><strong><code class="docutils literal notranslate"><span class="pre">customers/acmecorp/environment.yaml</span></code></strong> — a different customer entirely, owned by a different
@@ -203,8 +203,8 @@ team, contributing their own top-level key:</p>
 <span class="w">      </span><span class="nt">acmecorp</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"acmecorp.com"</span>
 <span class="w">        </span><span class="nt">hosts</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">c0300</span><span class="p">:</span>
-<span class="w">            </span><span class="nt">domain_name</span><span class="p">:</span><span class="w"> </span><span class="s">"c0300-agw-dev.westeurope.cloudapp.azure.com"</span>
+<span class="w">          </span><span class="nt">ring1</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">domain_name</span><span class="p">:</span><span class="w"> </span><span class="s">"acmecorp-agw-dev.westeurope.cloudapp.azure.com"</span>
 <span class="w">            </span><span class="nt">backend_pools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"apim"</span><span class="p p-Indicator">]</span>
 </pre></div>
 </div>
@@ -217,8 +217,8 @@ fragments collide on the same leaf key):</p>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-agw-workspace</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unisonplanning-agw</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unisonplanning-agw-ring2</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso-agw</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso-agw-ring2</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acmecorp-agw</span>
 </pre></div>
 </div>
@@ -226,24 +226,24 @@ fragments collide on the same leaf key):</p>
 <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">plan</span></code> sees as <code class="docutils literal notranslate"><span class="pre">var.appgateway_config</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"appgateway_config"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"unisonplanning"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">"domain"</span><span class="p">:</span><span class="w"> </span><span class="s2">"unisonplanning.com"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"contoso"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"domain"</span><span class="p">:</span><span class="w"> </span><span class="s2">"contoso.example"</span><span class="p">,</span>
 <span class="w">      </span><span class="nt">"hosts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"c0224"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"domain_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"c0224-agw-dev.westeurope.cloudapp.azure.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"backend_pools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"apim"</span><span class="p">,</span><span class="w"> </span><span class="s2">"dispatcher-dev"</span><span class="p">,</span><span class="w"> </span><span class="s2">"datahub-admin-dev"</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
-<span class="w">        </span><span class="nt">"c0225"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"domain_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"c0225-agw-stage.westeurope.cloudapp.azure.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"backend_pools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"apim"</span><span class="p">,</span><span class="w"> </span><span class="s2">"dispatcher-stage"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="w">        </span><span class="nt">"ring1"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"domain_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"contoso-agw-dev.westeurope.cloudapp.azure.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"backend_pools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"apim"</span><span class="p">,</span><span class="w"> </span><span class="s2">"scheduler-dev"</span><span class="p">,</span><span class="w"> </span><span class="s2">"catalog-admin-dev"</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"ring2"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"domain_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"contoso-agw-stage.westeurope.cloudapp.azure.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"backend_pools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"apim"</span><span class="p">,</span><span class="w"> </span><span class="s2">"scheduler-stage"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="nt">"acmecorp"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">      </span><span class="nt">"domain"</span><span class="p">:</span><span class="w"> </span><span class="s2">"acmecorp.com"</span><span class="p">,</span>
 <span class="w">      </span><span class="nt">"hosts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"c0300"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"domain_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"c0300-agw-dev.westeurope.cloudapp.azure.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"backend_pools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"apim"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="w">        </span><span class="nt">"ring1"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"domain_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"acmecorp-agw-dev.westeurope.cloudapp.azure.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"backend_pools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"apim"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
-<p>Nothing was dropped — both rings under <code class="docutils literal notranslate"><span class="pre">unisonplanning</span></code>, both customers side by side — because
+<p>Nothing was dropped — both rings under <code class="docutils literal notranslate"><span class="pre">contoso</span></code>, both customers side by side — because
 every fragment nests at a <em>different</em> path. Onboarding a fourth customer, or a third ring, means
 adding one more small file and one more line in <code class="docutils literal notranslate"><span class="pre">spec.environments</span></code> — never touching the other
 owners’ files.</p>

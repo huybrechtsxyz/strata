@@ -45,9 +45,9 @@ customer, each contributing its own fragment under `spec.properties`:
 spec:
   properties:
     agw_customers:
-      unisonplanning:
+      contoso:
         subscription_id: "11111111-1111-1111-1111-111111111111"
-        domain: "unisonplanning.com"
+        domain: "contoso.example"
       acmecorp:
         subscription_id: "22222222-2222-2222-2222-222222222222"
         domain: "acmecorp.com"
@@ -109,7 +109,7 @@ provisioner declaration never change.
   substitutes values into it.
 - **`properties`/`custom` are intentionally "unchecked, arbitrary-shape" roots** in
   `validate_template_references()` — only the top-level name (`properties`) is checked to exist,
-  never its nested keys (`properties.agw_customers.unisonplanning...`). A typo inside a fragment,
+  never its nested keys (`properties.agw_customers.contoso...`). A typo inside a fragment,
   or inside the loop body, is invisible until the real `deploy run` render — same opacity
   tradeoff as everywhere else `properties` is used.
 - **One `output.template` per provisioner.** If a provisioner needs both the default
