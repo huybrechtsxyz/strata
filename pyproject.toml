@@ -78,7 +78,7 @@ dev = [
     "import-linter",
     "nox",
     "pytest",
-    "pytest-asyncio==1.4.0",
+    "pytest-asyncio==1.4.1",
     "pytest-cov",
     "yamllint",
     "pyyaml > 3.13",
