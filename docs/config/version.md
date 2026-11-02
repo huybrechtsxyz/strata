@@ -59,7 +59,7 @@ spec:
     remotes:
       infra: v1.0.0
     assets:
-      c0062-api: v1.5.0
+      contoso-api: v1.5.0
 ```
 
 This is `config/versions/prd.yaml`, the working example in this repository.

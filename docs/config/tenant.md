@@ -2,11 +2,11 @@
 
 A customer/organization identity: who they are, which data-residency geographies they may deploy
 into, and the defaults every deployment on their behalf inherits. Typically one per customer
-directory (e.g. `customers/c0062.yaml`).
+directory (e.g. `customers/contoso.yaml`).
 
 ## Schema
 
-- `meta.name` — the tenant code itself (e.g. `c0062`) — there is no separate `spec.code`
+- `meta.name` — the tenant code itself (e.g. `contoso`) — there is no separate `spec.code`
 - `spec.display_name` — human-readable name (e.g. "Example Corporation")
 - `spec.geographies[]` — data residency boundaries this tenant may deploy into; each must appear
   as a `geography` on some region in a [providerconfig.md](providerconfig.md) document
@@ -24,7 +24,7 @@ directory (e.g. `customers/c0062.yaml`).
 apiVersion: strata.huybrechts.xyz/v2
 kind: tenant
 meta:
-  name: c0062
+  name: contoso
   annotations:
     description: "Example customer tenant"
 spec:

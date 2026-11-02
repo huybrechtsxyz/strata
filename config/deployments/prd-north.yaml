@@ -11,4 +11,4 @@ spec:
   environments:
     - prd
 
-  tenant: c0062
+  tenant: contoso

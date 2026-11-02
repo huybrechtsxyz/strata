@@ -429,27 +429,27 @@ def test_shipped_example_binds_the_asset_slot_per_customer_without_a_manifest_re
     assert isinstance(workspace, WorkspaceModel)
 
     assert effective_assets(workspace, resolved["prd-deployment"]) == {"api": "api-default"}
-    assert effective_assets(workspace, resolved["prd-c0062-deployment"]) == {"api": "c0062-api"}
-    assert effective_assets(workspace, resolved["prd-c0063-deployment"]) == {"api": "c0063-api"}
+    assert effective_assets(workspace, resolved["prd-contoso-deployment"]) == {"api": "contoso-api"}
+    assert effective_assets(workspace, resolved["prd-acme-deployment"]) == {"api": "acme-api"}
     assert controller.solution is not None
     remote_names = {remote.name for remote in controller.solution.spec.remotes or []}
-    assert not remote_names & {"c0062-api", "c0063-api"}
+    assert not remote_names & {"contoso-api", "acme-api"}
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
 def test_shipped_example_merges_the_tenant_environment_before_the_deployments_own():
-    """Tenant c0062 names `c0062-env`, whose `CUSTOMER_CODE` reads the tenant's own name through `${value:}`."""
+    """Tenant contoso names `contoso-env`, whose `CUSTOMER_CODE` reads the tenant's own name through `${value:}`."""
     from strata.controllers.value_controller import resolve_values
 
     context = open_solution(_repo_config_dir()).require_valid()
     resolved, diagnostics = resolve_deployment_chains(context.controller.index)
     assert diagnostics.ok, diagnostics.messages()
 
-    assert resolved["prd-c0062-deployment"].spec.environments == ["c0062-env", "prd"]
-    assert resolved["prd-c0063-deployment"].spec.environments == ["prd"]  # no tenant, no tenant environment
-    result = resolve_values(context, "prd-c0062-deployment", ["CUSTOMER_CODE"])
+    assert resolved["prd-contoso-deployment"].spec.environments == ["contoso-env", "prd"]
+    assert resolved["prd-acme-deployment"].spec.environments == ["prd"]  # no tenant, no tenant environment
+    result = resolve_values(context, "prd-contoso-deployment", ["CUSTOMER_CODE"])
     assert result.diagnostics.ok, result.diagnostics.messages()
-    assert result.values["CUSTOMER_CODE"] == "c0062"
+    assert result.values["CUSTOMER_CODE"] == "contoso"
 
 
 @pytest.fixture
@@ -504,9 +504,9 @@ def test_shipped_example_takes_the_artifact_tag_from_the_version_pin_or_its_own_
 
     context = open_solution(_repo_config_dir()).require_valid()
     tags = {}
-    for name in ("prd-deployment", "prd-c0063-deployment"):
+    for name in ("prd-deployment", "prd-acme-deployment"):
         deployment, workspace = resolve_deployment_workspace(context, name)
         row = next(r for r in effective_images(context, deployment) if r.name == "example-api")
         tags[name] = (row.image_tag, row.tag_source)
         assert check_image_tag_policy(context, deployment, workspace).ok
-    assert tags == {"prd-deployment": ("1.4.2", "pin"), "prd-c0063-deployment": ("1.0.0", "declared")}
+    assert tags == {"prd-deployment": ("1.4.2", "pin"), "prd-acme-deployment": ("1.0.0", "declared")}

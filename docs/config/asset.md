@@ -51,11 +51,11 @@ files in the customer's:
 apiVersion: strata.huybrechts.xyz/v2
 kind: asset
 meta:
-  name: c0062-api
+  name: contoso-api
 spec:
   location:
     type: git
-    url: https://git.example.com/customers/c0062-api.git
+    url: https://git.example.com/customers/contoso-api.git
     reference: v1.4.0
     integration: git-customers   # optional: credentials for a private repository
   source_path: openapi
@@ -83,7 +83,7 @@ spec:
   extends: deploy-base
   assets:
     - slot: api
-      asset: c0062-api
+      asset: contoso-api
 ```
 
 The files are copied to `build_path/assets/<slot>/` — keyed by the slot, so the path is the same
@@ -115,7 +115,7 @@ git reference without editing the asset document:
 spec:
   pins:
     assets:
-      c0062-api: v1.5.0
+      contoso-api: v1.5.0
 ```
 
 A pin only applies to an asset with a `location` and `fetch: strata`. An asset that uses a manifest

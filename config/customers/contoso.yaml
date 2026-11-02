@@ -1,7 +1,7 @@
 apiVersion: strata.huybrechts.xyz/v2
 kind: tenant
 meta:
-  name: c0062
+  name: contoso
   annotations:
     description: "Example customer tenant"
   labels:
@@ -22,7 +22,7 @@ spec:
   # Environment document *names*, not file paths (ADR-0015). Merged before
   # a deployment's own environments, so deployment values win.
   environments:
-    - c0062-env
+    - contoso-env
 
   properties:
     deploy_tier: standard

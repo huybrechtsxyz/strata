@@ -1,12 +1,12 @@
 apiVersion: strata.huybrechts.xyz/v2
 kind: asset
 meta:
-  name: c0063-api
+  name: acme-api
 spec:
-  description: "Customer c0063's own API definitions"
+  description: "Customer acme's own API definitions"
   location:
     type: git
-    url: https://git.example.com/customers/c0063-api.git
+    url: https://git.example.com/customers/acme-api.git
     reference: v2.0.1
     fetch: strata
   source_path: openapi

@@ -61,7 +61,7 @@ spec:
   extends: deploy-base
   environments:
     - prd
-  tenant: c0062
+  tenant: contoso
 ```
 
 ## Rebinding a provider
@@ -89,7 +89,7 @@ meta:
 spec:
   extends: region-north
   environments: [prd]
-  tenant: c0062
+  tenant: contoso
 ```
 
 - **Rebind only** — the bound document is used as-is; there is no field patching. Per-deployment
@@ -114,14 +114,14 @@ files in their own repository, while the Terraform code keeps reading `local.str
 ```yaml
 kind: deployment
 meta:
-  name: prd-c0062-deployment
+  name: prd-contoso-deployment
 spec:
   extends: deploy-base
   environments: [prd]
-  tenant: c0062
+  tenant: contoso
   assets:
     - slot: api
-      asset: c0062-api       # an asset document that carries its own git `location`
+      asset: contoso-api       # an asset document that carries its own git `location`
 ```
 
 A customer is therefore one small asset document plus this deployment; `strata.yaml` does not

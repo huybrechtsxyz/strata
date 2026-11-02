@@ -1,9 +1,9 @@
 apiVersion: strata.huybrechts.xyz/v2
 kind: deployment
 meta:
-  name: prd-c0063-deployment
+  name: prd-acme-deployment
   annotations:
-    description: "Production instance serving customer c0063's own API definitions"
+    description: "Production instance serving customer acme's own API definitions"
   tags: ["production"]
 spec:
   extends: deploy-base
@@ -13,4 +13,4 @@ spec:
 
   assets:
     - slot: api
-      asset: c0063-api
+      asset: acme-api

@@ -15,7 +15,7 @@ spec:
   environments:
     - prd
 
-  tenant: c0062
+  tenant: contoso
 
   # Pins for this rollout. Where a pinned target is declared elsewhere
   # (module image, chart version, remote ref, tool version), the pin wins.
