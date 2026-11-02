@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Provider type registry, as a standalone kind.
+
+Promoted out of `ConfigurationSpecModel` (was a bare embedded list,
+`config_provider_model.py`) into its own kind — same reasoning as
+`Integration`'s promotion: a platform with many provider types (azure, aws,
+kamatera, gcp...) shouldn't have to grow one shared file for every new type;
+each gets its own file, own PR, own reviewer, referenced from
+`Configuration` by name+file (mirrors every other kind Workspace already
+references this way).
+
+Kind name `providerconfig` (not `provider-config`/`config-provider`) matches
+the existing no-separator convention every `PlatformKind` value already
+follows, and reads as "the config for this provider [type]" rather than
+being mistaken for Crossplane's `ProviderConfig` (which means an *instance's*
+credentials — closer to this codebase's existing `Provider` kind — not a
+type-level policy registry; naming collision accepted, "Config" judged most
+obvious to a general audience over the more precise but less familiar
+Kubernetes "Class" convention, e.g. `StorageClass`).
+"""
+
+from typing import Any, ClassVar
+
+from pydantic import Field, field_validator, model_validator
+
+from strata.models.common_models import (
+    PlatformBaseModel,
+    PlatformKind,
+    PlatformName,
+    PlatformVersion,
+    validate_kind_matches,
+)
+from strata.utils.names import check_unique_names
+
+
+class ProviderConfigRegionModel(PlatformBaseModel):
+    """A provider type's supported region, with an optional geography tag."""
+
+    name: PlatformName = Field(description="Region identifier (e.g. eu-west-1, westeurope)")
+    geography: str | None = Field(
+        None,
+        description="Optional compliance boundary this region belongs to (for example `europe` or "
+        "`us`), declared once here per region. A Tenant lists the geographies it "
+        "allows, and a deployment's provider region must be inside one of them.\n\n"
+        "Design notes: Optional compliance/deployment boundary group this region "
+        "belongs to (e.g. 'europe', 'us') — mirrors Azure's 'geography' concept (a "
+        "market grouping several regions). Declared once here, per region, rather than "
+        "duplicated on individual Provider documents; a future boundary check (e.g. "
+        "'don't span >1 geography') derives a Provider's geography by looking its "
+        "region up here.",
+    )
+    description: str | None = Field(None, description="Optional description of the region")
+    custom: dict[str, str] | None = Field(
+        None,
+        description="Free-form key/value pairs stored with the region; strata itself does not read "
+        "them.\n\n"
+        "Design notes: Optional key-value configuration for the region",
+    )
+
+
+class ProviderConfigResourceModel(PlatformBaseModel):
+    """A provider type's supported resource type configuration."""
+
+    name: PlatformName = Field(description="Unique name for the configuration resource.")
+    category: str | None = Field(None, description="Resource category (e.g., compute, storage, networking)")
+    subcategory: str | None = Field(
+        None,
+        description="Resource subcategory (e.g., virtualmachine, blob, api_gateway)",
+    )
+    description: str | None = Field(None, description="Description of the resource type")
+
+
+class ProviderConfigSpecModel(PlatformBaseModel):
+    """A provider type's registry entry: valid regions and resource types."""
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`regions` is required and must be non-empty unless `additional_regions` is true.",
+        "`resources` is required and must be non-empty unless `additional_resources` is true.",
+        "Region names must be unique, and resource names must be unique.",
+    )
+
+    description: str = Field(description="Description of the provider type")
+    additional_regions: bool = Field(
+        False,
+        description="Allow regions not listed in the configuration for this provider",
+    )
+    regions: list[ProviderConfigRegionModel] | None = Field(
+        None,
+        description="List of supported regions for this provider, each a {name, geography, description, custom} "
+        "entry. 'geography' is an optional tag grouping several regions under a shared compliance/deployment "
+        "boundary (e.g. Azure's 'geography' concept: {name: eu-west-1, geography: europe}). Geography "
+        "membership is declared once here, per region, not duplicated on individual Provider documents.",
+    )
+    additional_resources: bool = Field(
+        False,
+        description="Allow resource types not listed in the configuration for this provider",
+    )
+    resources: list[ProviderConfigResourceModel] | None = Field(
+        None, description="List of supported resource types for this provider"
+    )
+
+    @model_validator(mode="after")
+    def validate_provider_configuration(self) -> "ProviderConfigSpecModel":
+        """Validate provider configuration requirements and uniqueness."""
+        if not self.additional_regions and (self.regions is None or len(self.regions) == 0):
+            raise ValueError("If additional_regions is False, regions must be provided and non-empty")
+        if not self.additional_resources and (self.resources is None or len(self.resources) == 0):
+            raise ValueError("If additional_resources is False, resources must be provided and non-empty")
+
+        if self.regions:
+            region_names = [region.name for region in self.regions]
+            check_unique_names(region_names, "regions in provider config")
+
+        if self.resources:
+            check_unique_names([res.name for res in self.resources], "resources in provider config")
+
+        return self
+
+
+class ProviderConfigMetaModel(PlatformBaseModel):
+    """Provider config metadata (name, annotations, labels, tags).
+
+    `name` is the provider type key (e.g. 'kamatera', 'azure') — matched
+    against a real `Provider` document's `spec.type`.
+    """
+
+    name: PlatformName = Field(description="Provider type name (e.g. kamatera, azure)")
+    annotations: dict[str, Any] | None = Field(
+        None, description="Optional annotations (key-value pairs for documentation)"
+    )
+    labels: dict[str, Any] | None = Field(
+        None, description="Optional labels (key-value pairs for classification/filtering)"
+    )
+    tags: list[Any] | None = Field(None, description="Optional list of tags")
+
+
+class ProviderConfigModel(PlatformBaseModel):
+    """Registry entry for one provider type (for example `azure`): the regions and resource types that
+    `provider` and `resource` documents of that type may use. Create one per provider type and list its
+    name in the Configuration's `spec.providers`. `meta.name` is matched against a Provider's
+    `spec.type`.
+
+    Design notes:
+    Root model for a provider type registry entry.
+    """
+
+    apiVersion: PlatformVersion = Field(
+        default=PlatformVersion.v2,
+        frozen=True,
+        description="API version for provider config",
+    )
+    kind: PlatformKind = Field(
+        default=PlatformKind.PROVIDERCONFIG,
+        frozen=True,
+        description="Platform kind (always 'providerconfig')",
+    )
+    meta: ProviderConfigMetaModel = Field(description="Provider config metadata (name, annotations, labels, tags)")
+    spec: ProviderConfigSpecModel = Field(description="Provider config specification (regions, resources)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.PROVIDERCONFIG)

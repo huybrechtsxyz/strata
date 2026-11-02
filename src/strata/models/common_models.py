@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Common models, enums, and reusable types for Strata."""
+"""Common models, enums, and reusable types for Strata v2."""
 
-import re
 import warnings
+from collections.abc import Callable
+from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Dict, List, Optional, Sequence
+from typing import Annotated, Any, ClassVar
 
 from pydantic import (
     BaseModel,
@@ -13,14 +14,31 @@ from pydantic import (
     Field,
     RootModel,
     StringConstraints,
+    TypeAdapter,
     field_validator,
     model_validator,
 )
 
-from strata.utils.config import SCRIPT_EXTENSIONS
+from strata.models.reference_fields import References, RemoteReference
+from strata.utils.path_safety import validate_relative_path
+
+# Allowed script file extensions for lifecycle phase scripts.
+SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1", ".js", ".mjs", ".go"}
+
+
+# Base model configuration for all Strata models
+class PlatformBaseModel(BaseModel):
+    """Base model for all Strata platform models with standard configuration."""
+
+    model_config = ConfigDict(
+        extra="forbid",  # Reject unknown fields
+        validate_assignment=True,
+        str_strip_whitespace=True,
+    )
+
 
 # Reusable resource name type with validation.
-# Must start with lowercase letter, contain only lowercase letters, numbers, and underscores.
+# Must start with lowercase letter, contain only lowercase letters, numbers, dashes, and underscores.
 # Compatible with Terraform, Ansible, shell scripts, and other IaC tools.
 PlatformName = Annotated[
     str,
@@ -35,111 +53,405 @@ PlatformName = Annotated[
 # Variable key type for dictionary keys (environment variables, configurations)
 VariableKey = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 
-# VariableRefs, SecretRefs, and FeatureRefs are lists of variable keys for referencing in modules and resources
-VariableRefs = Optional[List[VariableKey]]
-SecretRefs = Optional[List[VariableKey]]
-FeatureRefs = Optional[List[VariableKey]]
+
+def scalar_shorthand_schema(scalar_type: Any) -> Callable[[dict[str, Any]], None]:
+    """`json_schema_extra` for a model that also accepts a bare scalar.
+
+    A `model_validator(mode="before")` that coerces `"x"` into the object form is
+    invisible to `model_json_schema()`, so the exported editor schema
+    (`.strata/schemas/`) would flag every use of the shorthand. This rewrites the
+    model's schema to `anyOf: [<scalar_type>, <object form>]`.
+    """
+
+    def extend(schema: dict[str, Any]) -> None:
+        object_form = dict(schema)
+        schema.clear()
+        schema["anyOf"] = [TypeAdapter(scalar_type).json_schema(), object_form]
+
+    return extend
 
 
-# Enumeration of supported platform kinds.
+def expires_date_text(value: object) -> object:
+    """For a `mode="before"` validator on an `expires` field that holds an ISO date as text.
+
+    YAML loads an unquoted `expires: 2026-12-31` as a date, not a string, so it is turned back into
+    `"2026-12-31"`. A date with a time of day is refused by name: the entry is honoured through a whole day.
+    """
+    if isinstance(value, datetime):
+        raise ValueError(
+            f"expires '{value.isoformat(sep=' ')}' has a time of day; give a date only (e.g. '2026-12-31'), "
+            "the entry is honoured through that whole day"
+        )
+    return value.isoformat() if isinstance(value, date) else value
+
+
+# Enumeration of supported platform kinds
 class PlatformKind(str, Enum):
     """Enumeration of supported platform kinds."""
 
+    SOLUTION = "solution"
     CONFIGURATION = "configuration"
-    TENANT = "tenant"
-    DEPLOYMENT = "deployment"
-    DIAGRAM = "diagram"
-    DNS = "dns"
-    ENVIRONMENT = "environment"
-    FIREWALL = "firewall"
-    MODULE = "module"
-    NETWORK = "network"
-    NAMESPACE = "namespace"
-    PLATFORM_MODEL = "platform_model"
-    DEPLOYMENT_MANIFEST = "deployment-manifest"
+    PROVIDERCONFIG = "providerconfig"
+    TOPOLOGYCONFIG = "topologyconfig"
+    ATTRIBUTECONFIG = "attributeconfig"
     PROVIDER = "provider"
     RESOURCE = "resource"
+    DNS = "dns"
+    NETWORK = "network"
+    FIREWALL = "firewall"
+    MODULE = "module"
+    NAMESPACE = "namespace"
     WORKSPACE = "workspace"
-    VERSION_LOCK = "version-lock"
-    VERSION_MANIFEST = "version"
-    PROMOTION_RECORD = "promotion-record"
+    INTEGRATION = "integration"
+    TENANT = "tenant"
+    ENVIRONMENT = "environment"
+    DEPLOYMENT = "deployment"
+    VERSION = "version"
+    ARTIFACT = "artifact"
+    ASSET = "asset"
 
 
-# Enumeration of supported workspace versions.
+def validate_kind_matches(value: "PlatformKind", expected: "PlatformKind") -> "PlatformKind":
+    """Reject a document whose `kind:` doesn't match the model it's being validated as.
+
+    `kind` fields are declared `frozen=True` with a fixed `default=`, but that
+    only blocks *reassignment after construction* — Pydantic still accepts any
+    valid `PlatformKind` value supplied at parse time (e.g. a YAML file with
+    `kind: firewall` validates fine against `NetworkModel`, silently taking on
+    the wrong kind). Every root model's `kind` field must call this from a
+    `field_validator` with its own expected kind.
+    """
+    if value != expected:
+        raise ValueError(f"Expected kind '{expected.value}', got '{value.value}'")
+    return value
+
+
+# Enumeration of supported workspace versions
 class PlatformVersion(str, Enum):
     """Enumeration of supported platform versions."""
 
-    v1 = "strata.huybrechts.xyz/v1"
-    v1_omp = "strata.omp.com/v1"  # Hidden alias — accepted in validation, not advertised
+    v2 = "strata.huybrechts.xyz/v2"
+    v2_omp = "strata.omp.com/v2"
 
 
-# The canonical apiVersion for all new YAML documents.
-CANONICAL_API_VERSION = PlatformVersion.v1
-
-# Kinds that are internal build/deploy artifacts, not user-authored YAML documents.
-INTERNAL_KINDS: frozenset = frozenset(
-    {
-        PlatformKind.PLATFORM_MODEL,
-        PlatformKind.DEPLOYMENT_MANIFEST,
-        PlatformKind.VERSION_LOCK,
-        PlatformKind.VERSION_MANIFEST,
-        PlatformKind.PROMOTION_RECORD,
-    }
-)
-
-# Kinds users actually author as YAML documents — everything in PlatformKind except
-# the internal, machine-generated-only kinds above. Single source of truth for any
-# doc/script that needs to print a "valid kinds" list — derive from this, don't
-# hand-copy the values (see scripts/Check.ps1's kind docs coverage check).
-USER_AUTHORABLE_KINDS: frozenset = frozenset(PlatformKind) - INTERNAL_KINDS
+# Canonical API version for all new YAML documents
+CANONICAL_API_VERSION = PlatformVersion.v2
 
 
-# Enumeration of supported provisioner names.
-class ProvisionerType(str, Enum):
-    """Enumeration of supported provisioner names."""
-
-    TERRAFORM = "terraform"
-    ANSIBLE = "ansible"
-    SCRIPT = "script"
-    COMPOSE = "compose"
-    HELM = "helm"
-    ARGOCD = "argocd"
-    FLUX = "flux"
-    BICEP = "bicep"
+# Value binding token syntax (ADR-0002), CIDR/path-safety validation helpers,
+# and `check_unique_names` all moved to `strata.utils` (`value_tokens.py`,
+# `path_safety.py`, `names.py`) — pure functions with no Pydantic dependency,
+# reused across many model files. See those modules for the full history/
+# reasoning previously carried in this file's comments.
 
 
-# Provisioner types that do not require an IaC source directory — they render
-# from the platform artifact at build time and commit to a git remote at deploy time.
-_SYNC_PROVISIONER_TYPES = frozenset({ProvisionerType.ARGOCD, ProvisionerType.FLUX})
+class SourceModel(PlatformBaseModel):
+    """Where the code of a module or provisioner comes from. Pick one mode:
 
+    - Git-based: `source_path`, optionally with `remote`. Omit `remote` for this solution's own
+      repository. Used for Terraform modules, local charts and similar.
+    - Chart-based: `chart_name` with exactly one of `remote` (a remote from the solution manifest) or
+      `chart_repository` (an inline URL). Used for Helm and Argo CD charts.
 
-# Enumeration of supported service deployer types (for module-level service deployment).
-class ServiceDeployerType(str, Enum):
-    """Enumeration of supported service deployer types for module deployment."""
+    Design notes:
+    Reusable model for source configuration.
 
-    HELM = "helm"
-    COMPOSE = "compose"
-    ARGOCD = "argocd"
-    SCRIPT = "script"
+    One field names *which remote* (`remote`); the selection field that
+    accompanies it decides the mode:
 
+      1. Git-based: ``remote`` + ``source_path`` — Terraform modules, local charts, etc.
+         ``remote`` may be omitted to mean "this solution's own repository".
+      2. Chart-based: ``remote`` + ``chart_name``, OR ``chart_repository`` +
+         ``chart_name`` — Helm/ArgoCD chart registry pulls. Exactly one of
+         ``remote``/``chart_repository`` is required; a chart always comes
+         from a registry, named one way or the other.
 
-class PlatformBaseModel(BaseModel):
-    """Base for all user-authored YAML document models.
+    v1 (and v2's own earlier pass) had two fields that both answered "which
+    remote" — `repository` for git and `chart_repository` for charts —
+    differing only in what you selected afterwards. Collapsed for the same
+    reason `ModuleReferenceModel` was: one shape, not two near-duplicates.
+    `chart_repository` additionally held a raw URL, so chart sources were the
+    last place in the schema that could not be redirected to an internal
+    mirror by editing one declaration. Mirrors Flux's single `sourceRef`,
+    which spans Git/OCI/Helm repositories alike.
 
-    Forbids extra fields at parse time — typos and wrong-model fields are
-    caught immediately instead of silently dropped.
+    **`chart_repository` reintroduced 2026-09-28 (docs/design/gap_fit_v1.md gap #2),
+    as an *alternative* to `remote`, not a full revert.** Real haven usage
+    checked directly: every one of its 6 chart-based modules references a
+    distinct registry with zero sharing — the `remote` indirection's whole
+    payoff ("one remote, one ref, so two modules can't silently drift to
+    different versions of the same source") never materialises in a
+    strict 1:1 mapping, so it was pure friction for that real, common case.
+    `remote` remains required (not deprecated) once a registry is either
+    shared across modules or needs credentials (`SolutionRemoteModel
+    .integration`) — this field only removes the friction for the
+    single-consumer, unauthenticated case, mirroring the existing
+    `ModuleServiceModel.image`/`.artifact` mutual-exclusivity shape (either
+    inline or by-reference, never both, never neither).
+
+    Example — git-based::
+
+        source:
+          remote: my-infra-repo
+          source_path: terraform/modules/vpc
+          target_path: build/vpc
+
+    Example — Helm chart registry, shared/authenticated (`remote`)::
+
+        source:
+          remote: goauthentik
+          chart_name: authentik
+          chart_version: "2024.12.0"
+
+    Example — Helm chart registry, single-consumer, inline (`chart_repository`)::
+
+        source:
+          chart_repository: https://charts.goauthentik.io
+          chart_name: authentik
+          chart_version: "2024.12.0"
     """
 
-    model_config = ConfigDict(extra="forbid")
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Exactly one mode is used: git-based (`source_path`) or chart-based (`chart_name`), never "
+        "both and never neither.",
+        "A chart-based source needs exactly one of `remote` or `chart_repository`.",
+        "`chart_repository` and `chart_version` are only valid for chart-based sources.",
+        "`source_path` and `target_path` must be relative paths without `..`.",
+    )
+
+    remote: Annotated[PlatformName, RemoteReference()] | None = Field(
+        None,
+        description="Name of a remote declared in the solution manifest's spec.remotes (strata.yaml). The "
+        "remote owns the URL, the git/OCI ref and the credentials; this only selects which one to take "
+        "from. Required for a git-based source with credentials/a pinned ref; for a chart-based source, "
+        "either this or `chart_repository` is required (mutually exclusive) — use `remote` when the "
+        "registry is shared across modules or needs credentials, `chart_repository` otherwise. Omitting "
+        "both on a git-based source means this solution's own repository.",
+    )
+    source_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
+        None,
+        description="Path to the source artifacts within the repository (relative path)",
+    )
+    target_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
+        None,
+        description="Target path where artifacts should be built/deployed (relative to build/deploy directory)",
+    )
+    description: str | None = Field(None, description="Optional description for documentation purposes")
+
+    # No `reference` field: a git/OCI ref is declared once, on the remote
+    # (`SolutionRemoteModel.reference`), and never overridden per use
+    # site. Allowing an override here would let two modules silently pull
+    # different trees of the same repository, and makes "what version is
+    # deployed?" answerable only by scanning every source in the solution.
+    # Same call Flux/Bazel/Nix make (ref lives on the source declaration);
+    # Helm's per-chart `chart_version` below is NOT an exception — a chart
+    # repo index legitimately serves many versions, so picking one is
+    # selection, not remote identity.
+
+    # Helm / ArgoCD chart registry fields
+    chart_name: str | None = Field(
+        None,
+        description="Helm chart name (e.g. 'authentik'). Selects chart-based mode; requires exactly one "
+        "of `remote`/`chart_repository`.",
+    )
+    chart_version: str | None = Field(
+        None,
+        description="Helm chart version (e.g. '2024.12.0'). Omit to use latest. Only valid in chart-based "
+        "mode. Unlike a git ref, this is NOT remote identity — a chart index legitimately serves many "
+        "versions, so picking one is selection and belongs here rather than on the remote.",
+    )
+    chart_repository: str | None = Field(
+        None,
+        description="Inline Helm chart repository URL or OCI reference (for example "
+        "`https://charts.goauthentik.io` or `oci://ghcr.io/org/charts`), for a chart "
+        "used by exactly one module that needs no credentials. Only valid in "
+        "chart-based mode and mutually exclusive with `remote`. Use `remote` once the "
+        "registry is shared by several modules or needs credentials. The URL is not "
+        "checked against the solution manifest, so a typo only shows up when Helm "
+        "fails to add the repository.\n\n"
+        "Design notes: Inline Helm chart repository URL or OCI reference (e.g. "
+        "'https://charts.goauthentik.io' or 'oci://ghcr.io/org/charts'), for the "
+        "common case where this chart source is used by exactly one module and needs "
+        "no registry credentials. Only valid in chart-based mode; mutually exclusive "
+        "with `remote` — use `remote` instead once the registry is shared across "
+        "modules (so they can't silently drift to different underlying URLs) or needs "
+        "credentials (`SolutionRemoteModel.integration`). Unlike `remote`, this is a "
+        "raw string strata never validates against the solution manifest — a typo here "
+        "is caught only when `helm repo add` itself fails, not at schema time.",
+    )
+
+    @model_validator(mode="after")
+    def validate_source_mode(self) -> "SourceModel":
+        """Ensure exactly one source mode is selected, with the fields that mode needs.
+
+        The mode comes from the *selection* field (`source_path` vs
+        `chart_name`), not from `remote` — `remote` is mode-agnostic, so one
+        OCI registry can serve charts in one source and plain artifacts in
+        another. Whether the named remote's `type` actually matches the mode
+        needs the loaded solution manifest, so it is a Phase 2 check (ADR-0003).
+        """
+        has_git = self.source_path is not None
+        has_chart = self.chart_name is not None
+
+        if not has_git and not has_chart:
+            raise ValueError(
+                "SourceModel requires either a git-based source (source_path) or a chart-based source (chart_name)."
+            )
+        if has_git and has_chart:
+            raise ValueError(
+                "SourceModel cannot mix git-based (source_path) and chart-based (chart_name) "
+                "selection. Use one mode only."
+            )
+        if has_git and self.chart_repository is not None:
+            raise ValueError("chart_repository is only valid for chart-based sources.")
+        if has_chart:
+            has_remote = self.remote is not None
+            has_inline_repo = self.chart_repository is not None
+            if not has_remote and not has_inline_repo:
+                raise ValueError(
+                    "A chart-based source requires exactly one of `remote` or `chart_repository` "
+                    "(a chart always comes from a registry, named one way or the other)."
+                )
+            if has_remote and has_inline_repo:
+                raise ValueError(
+                    "SourceModel cannot mix `remote` and `chart_repository` — use `remote` for a shared "
+                    "or credentialed registry, `chart_repository` for an inline, single-consumer one."
+                )
+        if has_git and self.chart_version is not None:
+            raise ValueError("chart_version is only valid for chart-based sources.")
+        return self
+
+    @field_validator("source_path", "target_path")
+    @classmethod
+    def validate_source_target_path(cls, v: str | None) -> str | None:
+        """Validate that paths are relative and secure (see `validate_relative_path`)."""
+        if v is None:
+            return v
+        return validate_relative_path(v)
 
 
-# Model for individual script with scope and execution metadata
+# Standard slot types for module deployments. Any PlatformName-compliant value
+# is accepted; non-standard values just get a warning, not a rejection.
+STANDARD_SLOT_TYPES = {"main", "staging", "canary", "sidecar", "init"}
+
+
+def validate_slot_type(value: str | None) -> str | None:
+    """Validate a `slot_type` field, warning (not rejecting) on non-standard values.
+
+    Accepts any `PlatformName`-compliant value. Standard slot types:
+    main (primary/production), staging, canary (gradual rollout), sidecar
+    (Kubernetes sidecar container), init (Kubernetes init container). Custom
+    values are allowed (may not be supported by every provisioner).
+    """
+    if value is not None and value not in STANDARD_SLOT_TYPES:
+        warnings.warn(
+            f"slot_type '{value}' is not a standard value. "
+            f"Standard values are: {', '.join(sorted(STANDARD_SLOT_TYPES))}. "
+            "Custom slot types are allowed but may not be supported by all provisioners.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return value
+
+
+class ModuleReferenceModel(PlatformBaseModel):
+    """A reference to a Module document with placement options. Used in a namespace's `modules` and in a
+    topology component's `modules`.
+
+    `name` is the reference's own name and `module` the Module document it points at, so one module can
+    be referenced several times under different names.
+
+    Design notes:
+    A pointer to a `Module` document, plus placement/override metadata.
+
+    Shared by `namespace_model.py` (`NamespaceSpecModel.modules` — modules
+    grouped under a container-orchestration namespace) and
+    `workspace_model.py` (`TopologyComponentModel.modules` — a module attached
+    directly to one resource, e.g. Function App code onto its Function App,
+    no orchestration namespace involved). Both are ultimately "a pointer to a
+    Module document plus placement metadata" — one shared shape rather than
+    two independently-drifting near-duplicates.
+
+    `name` is the reference's own name within its parent; `module` names the
+    Module document it points at (resolved by discovery). Same instance/class
+    split as `WorkspaceResourceModel.name`/`.resource` — one Module can be
+    attached several times under different reference names.
+    """
+
+    name: PlatformName = Field(description="Unique module reference name within its parent")
+    module: Annotated[PlatformName, References(PlatformKind.MODULE)] = Field(
+        description="Name of the Module document this reference points at (its meta.name, resolved by discovery)"
+    )
+    description: str | None = Field(None, description="Optional description of what this module provides")
+    slot_type: str | None = Field(
+        "main",
+        description="Deployment slot type: `main` (default), `staging`, `canary`, `sidecar` or "
+        "`init`. Other values are allowed but give a warning. Strata only uses it for "
+        "the rule that exactly one of several enabled modules on a resource must be "
+        "`main`.\n\n"
+        "Design notes: Deployment slot type: 'main' (primary/production), 'staging', "
+        "'canary', 'sidecar', 'init'. Defaults to 'main'. Custom values allowed but "
+        "may generate warnings.",
+    )
+    enabled: bool = Field(default=True, description="Whether this module is enabled/deployed")
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Settings for this reference only. Accepted and validated, but strata does not "
+        "apply them yet; put settings on the Module document instead.\n\n"
+        "Design notes: Module-specific configuration overrides in this context",
+    )
+
+    @field_validator("slot_type")
+    @classmethod
+    def validate_slot_type_value(cls, v: str | None) -> str | None:
+        """Validate slot_type using the common validator."""
+        return validate_slot_type(v)
+
+
+def validate_script_file(value: str, *, allowed: frozenset[str] = frozenset(SCRIPT_EXTENSIONS)) -> str:
+    """Validate one script path: solution-relative, with a runnable extension.
+
+    The single place both `ScriptPathModel.file` and bare `ScriptsModel.scripts`
+    entries are checked, so the two cannot drift apart.
+
+    Scripts are *executed*, so they get the same containment rule as every
+    other declared path (`validate_relative_path`) rather than a weaker one.
+    An absolute path or a `..` escape here would run code from outside the
+    solution.
+
+    Filesystem existence is deferred to a later service-layer phase: the file
+    may live in a remote not yet materialised on disk.
+
+    Args:
+        value: The declared script path.
+        allowed: Extensions accepted for this call site. Defaults to every
+            script extension strata recognises (`SCRIPT_EXTENSIONS`); a
+            caller with no interpreter dispatch for some of those yet (e.g.
+            `IntegrationLifecyclePhaseModel`, ADR-0021 D11 — only `.py` has
+            an executor) passes a narrower set so an unrunnable hook fails at
+            authoring time instead of at run time.
+
+    Returns:
+        The validated path unchanged.
+
+    Raises:
+        ValueError: If the path escapes the solution or has no allowed
+            extension.
+    """
+    validate_relative_path(value)
+    suffix = Path(value).suffix
+    if suffix not in allowed:
+        raise ValueError(f"Script must have a valid extension ({', '.join(sorted(allowed))}), got: {suffix}")
+    return value
+
+
 class ScriptPathModel(PlatformBaseModel):
     """Individual script with scope and execution metadata."""
 
     file: str = Field(description="Path to script file")
     scope: PlatformKind = Field(
-        description="Execution scope - determines how many times script runs (deployment, environment, workspace, provider, resource, module, namespace)"
+        description="Execution scope - determines how many times the script runs "
+        "(e.g. deployment, environment, workspace, provider, resource, module, namespace)"
     )
     priority: int = Field(
         default=100,
@@ -147,279 +459,60 @@ class ScriptPathModel(PlatformBaseModel):
         le=9999,
         description="Execution order within scope (lower runs first)",
     )
-    target: Optional[str] = Field(
+    target: str | None = Field(
         None,
         description="Optional target filter (e.g., 'vm-*', 'azure-*', 'production')",
     )
-    description: Optional[str] = Field(None, description="Optional description for documentation purposes")
+    description: str | None = Field(None, description="Optional description for documentation purposes")
 
     @field_validator("file")
     @classmethod
-    def validate_script_path(cls, v):
-        """Validate script file has a valid extension.
-
-        Filesystem existence checks are deferred to Phase 2 (service layer)
-        because the file may live in a remote repo not yet synced to disk.
-        """
-        path = Path(v)
-        if path.suffix not in SCRIPT_EXTENSIONS:
-            raise ValueError(
-                f"Script must have a valid extension (.sh, .bash, .py, .ps1, .js, .mjs, .go), got: {path.suffix}"
-            )
-        return v
+    def validate_script_path(cls, v: str) -> str:
+        """Validate the script path (see `validate_script_file`)."""
+        return validate_script_file(v)
 
 
-# Model for validating script paths with scope support
 class ScriptsModel(PlatformBaseModel):
     """Model for validating script paths with scope-aware execution."""
 
-    description: Optional[str] = Field(None, description="Optional description for documentation purposes")
-    scripts: Optional[List[str | ScriptPathModel]] = None
+    description: str | None = Field(None, description="Optional description for documentation purposes")
+    scripts: list[str | ScriptPathModel] | None = Field(
+        None,
+        description="Scripts to run. Each entry is a path relative to the solution root, with one of the "
+        "extensions " + ", ".join(sorted(e[1:] for e in SCRIPT_EXTENSIONS)) + ", or an object with `file`, "
+        "`scope`, `priority` and `target`.",
+    )
 
     @field_validator("scripts")
     @classmethod
-    def validate_and_normalize_scripts(cls, v):
-        """Validate scripts have valid extensions and normalize simple paths.
+    def validate_and_normalize_scripts(
+        cls, v: list[str | ScriptPathModel] | None
+    ) -> list[str | ScriptPathModel] | None:
+        """Validate bare script paths (see `validate_script_file`).
 
-        Filesystem existence checks are deferred to Phase 2 (service layer)
-        because files may live in remote repos not yet synced to disk.
+        `ScriptPathModel` entries already validated their own `file` field.
         """
         if v is None:
             return v
-        normalized = []
         for item in v:
-            if isinstance(item, (str, Path)):
-                # Simple path - validate extension only (existence checked in Phase 2)
-                path = Path(item)
-                if path.suffix not in SCRIPT_EXTENSIONS:
-                    raise ValueError(
-                        f"Script must have a valid extension (.sh, .bash, .py, .ps1, .js, .mjs, .go), got: {path.suffix}"
-                    )
-                # Will be converted to ScriptModel with scope inferred from context during build
-                normalized.append(item)
-            else:
-                # Already a ScriptModel, path validation done by ScriptModel validator
-                normalized.append(item)
-        return normalized
+            if isinstance(item, str):
+                validate_script_file(item)
+        return v
 
 
-# Model for lifecycle phase with optional scripts and description
 class CommonLifecyclePhaseModel(ScriptsModel):
-    """Model for common lifecycle phase with script validation."""
+    """Lifecycle phase configuration: a description plus its scripts."""
 
 
-# Model for lifecycle phases mapping phase names to configurations
-class CommonLifecycleModel(RootModel):
+class CommonLifecycleModel(RootModel[dict[str, CommonLifecyclePhaseModel]]):
     """
     Lifecycle phases for common models.
-    Maps phase names to phase configurations.
-    Phase names follow pattern: {command}_{action}_{suffix}
-    Examples: config_clear, config_fetch, deploy_plan_before, deploy_apply_after
+
+    Maps phase names to phase configurations. Phase names follow the pattern
+    ``{command}_{action}_{suffix}``, e.g. ``deploy_plan_before``,
+    ``deploy_provision``, ``deploy_destroy_after``, ``config_clear``. This is an
+    open map (any phase name is allowed) rather than a fixed set of fields, since
+    each kind and provisioner type defines its own set of supported phases.
     """
 
-    root: Dict[str, CommonLifecyclePhaseModel] = {}
-
-
-# Model for source configuration referencing a repository or Helm chart registry
-class SourceModel(PlatformBaseModel):
-    """
-    Reusable model for source configuration.
-
-    Two modes (mutually exclusive, validated):
-      1. Git-based: repository + source_path  — used for Terraform modules, local charts, etc.
-      2. Chart-based: chart_repository + chart_name  — used for Helm/ArgoCD chart registry pulls.
-
-    Example — git-based:
-        source:
-          repository: my-infra-repo
-          source_path: terraform/modules/vpc
-          target_path: build/vpc
-
-    Example — Helm chart registry:
-        source:
-          chart_name: authentik
-          chart_version: "2024.12.0"
-          chart_repository: https://charts.goauthentik.io
-    """
-
-    repository: Optional[PlatformName] = Field(
-        None, description="Name of the repository from solution registered repositories (via strata repo add)"
-    )
-    source_path: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
-        None,
-        description="Path to the source artifacts within the repository (relative path)",
-    )
-    target_path: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
-        None,
-        description="Target path where artifacts should be built/deployed (relative to build/deploy directory)",
-    )
-    description: Optional[str] = Field(None, description="Optional description for documentation purposes")
-
-    # Git ref pinning (overrides the workspace-level remote default)
-    reference: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
-        None,
-        description=(
-            "Git ref override (branch, tag, or commit SHA) for this specific source. "
-            "Takes precedence over the remote's default reference and any environment "
-            "remote override. Only valid for git-based sources (repository + source_path)."
-        ),
-    )
-
-    # Helm / ArgoCD chart registry fields
-    chart_name: Optional[str] = Field(
-        None,
-        description="Helm chart name (e.g. 'authentik'). Required when using chart_repository.",
-    )
-    chart_version: Optional[str] = Field(
-        None,
-        description="Helm chart version (e.g. '2024.12.0'). Omit to use latest.",
-    )
-    chart_repository: Optional[str] = Field(
-        None,
-        description="Helm chart repository URL or OCI reference (e.g. 'https://charts.goauthentik.io' or 'oci://ghcr.io/org/charts').",
-    )
-
-    @model_validator(mode="after")
-    def validate_source_mode(self) -> "SourceModel":
-        """Ensure exactly one source mode is specified: git-based or chart-based."""
-        has_git = self.repository is not None or self.source_path is not None
-        has_chart = self.chart_repository is not None or self.chart_name is not None
-
-        if not has_git and not has_chart:
-            raise ValueError(
-                "SourceModel requires either a git-based source (repository + source_path) "
-                "or a chart-based source (chart_repository + chart_name)."
-            )
-        if has_git and has_chart:
-            raise ValueError(
-                "SourceModel cannot mix git-based (repository/source_path) and "
-                "chart-based (chart_repository/chart_name) fields. Use one mode only."
-            )
-        if has_git and self.source_path is None:
-            raise ValueError("source_path is required when repository is specified.")
-        if has_chart and self.chart_name is None:
-            raise ValueError("chart_name is required when chart_repository is specified.")
-        if self.reference is not None and has_chart:
-            raise ValueError(
-                "SourceModel.reference is only valid for git-based sources, "
-                "not chart-based sources (use chart_version instead)."
-            )
-        return self
-
-    @field_validator("source_path", "target_path")
-    @classmethod
-    def validate_relative_path(cls, v):
-        """
-        Validate that paths are relative and secure.
-
-        Ensures paths:
-        - Do not contain absolute path markers (/, \\, drive letters)
-        - Do not contain parent directory references (..)
-        - Do not start with / or \\
-        - Use forward slashes only
-        """
-        if v is None:
-            return v
-
-        # Convert to string if Path
-        path_str = str(v)
-
-        # Check for absolute paths
-        if path_str.startswith("/") or path_str.startswith("\\"):
-            raise ValueError(f"Path must be relative, not absolute. Got: {path_str}")
-
-        # Check for drive letters (Windows)
-        if len(path_str) >= 2 and path_str[1] == ":":
-            raise ValueError(f"Path must be relative, not absolute. Got: {path_str}")
-
-        # Check for parent directory references
-        if ".." in path_str:
-            raise ValueError(f"Path cannot contain parent directory references (..). Got: {path_str}")
-
-        # Normalize to forward slashes
-        normalized = path_str.replace("\\", "/")
-
-        # Remove leading/trailing slashes
-        normalized = normalized.strip("/")
-
-        return normalized
-
-
-# Standard slot types for module deployments
-STANDARD_SLOT_TYPES = {"main", "staging", "canary", "sidecar", "init"}
-
-
-def check_unique_names(items: Sequence[str], label: str) -> None:
-    """Raise ``ValueError`` if *items* contains duplicate values.
-
-    Uses O(n) set-based detection instead of the O(n²) ``.count()`` pattern.
-    The error message lists duplicates in sorted order for deterministic output.
-    """
-    seen: set[str] = set()
-    dupes: set[str] = set()
-    for item in items:
-        if item in seen:
-            dupes.add(item)
-        seen.add(item)
-    if dupes:
-        raise ValueError(f"Duplicate {label}: {', '.join(sorted(dupes))}")
-
-
-# Resource name validator function
-def validate_platform_name(value: str) -> str:
-    """
-    Validate resource names to be lowercase alphanumeric with underscores and hyphens.
-    Must start with a letter. Matches the PlatformName regex: ``^[a-z][a-z0-9_-]*$``.
-    """
-    if not re.match(r"^[a-z][a-z0-9_-]*$", value):
-        raise ValueError(
-            f"Name '{value}' must contain only lowercase letters, numbers, "
-            f"underscores, and hyphens, and must start with a letter"
-        )
-    return value
-
-
-# Validator for slot_type field with warning for non-standard values
-def validate_slot_type(value: Optional[str]) -> Optional[str]:
-    """
-    Validate slot_type field.
-
-    Accepts any PlatformName-compliant value (lowercase alphanumeric + underscores, starts with letter).
-    Issues a warning if the value is not one of the standard slot types.
-
-    Standard slot types:
-    - main: Primary/production deployment
-    - staging: Staging/pre-production deployment
-    - canary: Canary deployment for gradual rollout
-    - sidecar: Sidecar container in Kubernetes
-    - init: Init container in Kubernetes
-
-    Args:
-        value: The slot_type value to validate
-
-    Returns:
-        The validated slot_type value
-
-    Raises:
-        ValueError: If value doesn't match PlatformName pattern
-    """
-    if value is None:
-        return value
-
-    # Validate against PlatformName pattern
-    try:
-        validate_platform_name(value)
-    except ValueError as e:
-        raise ValueError(f"slot_type must follow PlatformName rules: {e}") from e
-
-    # Warn if not a standard slot type
-    if value not in STANDARD_SLOT_TYPES:
-        warnings.warn(
-            f"slot_type '{value}' is not a standard value. "
-            f"Standard values are: {', '.join(sorted(STANDARD_SLOT_TYPES))}. "
-            f"Custom slot types are allowed but may not be supported by all provisioners.",
-            UserWarning,
-            stacklevel=3,
-        )
-
-    return value
+    root: dict[str, CommonLifecyclePhaseModel] = Field(default_factory=dict)

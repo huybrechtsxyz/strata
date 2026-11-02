@@ -1,454 +1,345 @@
-"""Business logic for version-manifest and version-lock file operations."""
+#!/usr/bin/env python3
+"""`strata version new`/`update`/`set` — docs/work/version-lifecycle.md
+Phases 3-4: scaffolding a new `kind: version` document, reconciling an
+existing one's pin *keys* against the solution's real inventory of
+pinnable targets, and surgically mutating one pin's `version`/`available`.
 
-from __future__ import annotations
+Shares the same four categories `check_version_pins()` (`version_pins.py`)
+already checks, but answers the inverse question: that module asks "does
+this *already-declared* pin's target exist"; this asks "what targets exist
+with **no** pin yet (candidates to add), and what pins name a target that
+no longer exists (candidates to remove)". A deliberately separate,
+small inventory walk here, rather than threading a second return shape
+through the existing Phase 2 check — the two questions read more clearly
+kept apart.
 
-import hashlib
-import json
-from datetime import datetime, timezone
+Both `new --from` and `update` share one rule, ADR-0019's own: a newly
+added pin key is seeded with its target's CURRENT real value (so adding it
+changes nothing by itself), and this module never invents a value for a
+target that declares none of its own — such a target is simply not
+offered as an add candidate (`VersionPinModel.version` is non-empty by
+schema; there is nothing honest to seed it with).
+
+`set_version_pin()` (Phase 4) is the one function here that writes to an
+*existing* file rather than a brand-new one, and does it with `ruamel.yaml`'s
+round-trip mode, not `yaml.safe_dump` — the whole reason this doc settled
+on that library: a hand-edited `kind: version` document's comments,
+ordering and quote style must survive a single targeted pin edit
+untouched, which a parse-and-re-dump through plain PyYAML cannot do.
+"""
+
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, cast
 
 import yaml
+from pydantic import ValidationError as PydanticValidationError
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 
-from strata.controllers.base_controller import BaseController
-from strata.models.common_models import PlatformKind
-
-_API_VERSION = "strata.huybrechts.xyz/v1"
-
-# Flat pin representation: type_key (str) → {name: version}
-TargetMap = dict[str, dict[str, str]]
-
-# Round-trip YAML loader/dumper — preserves comments, key order, and blank lines
-# on any read-modify-write cycle over an *existing* file (as opposed to
-# `yaml.dump()`, used elsewhere in this module only to write brand-new files
-# that have no prior content to preserve). `lock_manifest()`/`refresh_manifest()`
-# rewrite a hand-authored version-manifest in place — without this, every
-# `strata versions lock`/`refresh` silently deleted any comments the file had.
-_ROUND_TRIP_YAML = YAML()
-_ROUND_TRIP_YAML.preserve_quotes = True
-_ROUND_TRIP_YAML.width = 4096  # avoid re-wrapping long scalar values (e.g. image digests)
+from strata.controllers.solution_controller import DocumentIndex
+from strata.models.artifact_model import ArtifactModel
+from strata.models.asset_model import AssetModel
+from strata.models.common_models import PlatformKind, PlatformVersion
+from strata.models.module_model import ModuleModel
+from strata.models.solution_model import RemoteFetch, SolutionModel
+from strata.models.version_model import PIN_CATEGORIES, VersionModel
+from strata.utils.errors import UsageError
 
 
-class VersionController(BaseController):
-    """Operations on version-manifest and version-lock YAML files.
+def _image_targets(index: DocumentIndex) -> dict[str, str | None]:
+    """`ModuleServiceModel.name` -> its own `.image`, across every Module."""
+    targets: dict[str, str | None] = {}
+    for entry in index.all_of(PlatformKind.MODULE):
+        module = cast(ModuleModel, entry.model)
+        for service in module.spec.services or []:
+            targets[service.name] = service.image
+    return targets
 
-    All public methods accumulate errors via ``_add_error()`` and return an
-    empty dict on failure so callers can check ``has_errors()``.
+
+def _chart_targets(index: DocumentIndex) -> dict[str, str | None]:
+    """Module document name -> its source's `chart_version`, chart-based
+    modules only — a chart pin only ever applies to one
+    (`check_version_pins()`'s own `pin_not_applicable` rule)."""
+    targets: dict[str, str | None] = {}
+    for entry in index.all_of(PlatformKind.MODULE):
+        module = cast(ModuleModel, entry.model)
+        if module.spec.source.chart_name is not None:
+            targets[entry.ref.name] = module.spec.source.chart_version
+    return targets
+
+
+def _remote_targets(solution: SolutionModel | None) -> dict[str, str | None]:
+    """`SolutionRemoteModel.name` -> `.reference`, `fetch: strata` only — a
+    `fetch: external` remote is placed before strata runs, so a pin can
+    never take effect against it (same rule `check_version_pins()` already
+    enforces as an error, not silently skipped here)."""
+    if solution is None:
+        return {}
+    return {
+        remote.name: remote.reference for remote in (solution.spec.remotes or []) if remote.fetch is RemoteFetch.STRATA
+    }
+
+
+def _artifact_targets(index: DocumentIndex) -> dict[str, str | None]:
+    """`ArtifactModel.meta.name` -> `spec.image_tag`."""
+    targets: dict[str, str | None] = {}
+    for entry in index.all_of(PlatformKind.ARTIFACT):
+        artifact = cast(ArtifactModel, entry.model)
+        targets[entry.ref.name] = artifact.spec.image_tag
+    return targets
+
+
+def _asset_targets(index: DocumentIndex) -> dict[str, str | None]:
+    """`AssetModel.meta.name` -> `spec.location.reference`, `fetch: strata` locations only — a
+    `fetch: external` location is placed before strata runs, so a pin can never take effect."""
+    targets: dict[str, str | None] = {}
+    for entry in index.all_of(PlatformKind.ASSET):
+        location = cast(AssetModel, entry.model).spec.location
+        if location is not None and location.fetch is RemoteFetch.STRATA:
+            targets[entry.ref.name] = location.reference
+    return targets
+
+
+def _inventory(index: DocumentIndex, solution: SolutionModel | None) -> dict[str, dict[str, str | None]]:
+    """Every real pinnable target, by category, with its own current value.
+
+    A blank value is reported as `None`: `VersionPinModel.version` must be non-empty, so a
+    blank current value is nothing a new pin could be seeded with.
     """
+    categories = {
+        "images": _image_targets(index),
+        "charts": _chart_targets(index),
+        "remotes": _remote_targets(solution),
+        "artifacts": _artifact_targets(index),
+        "assets": _asset_targets(index),
+    }
+    return {
+        category: {name: value or None for name, value in targets.items()} for category, targets in categories.items()
+    }
 
-    # ── init ─────────────────────────────────────────────────────────────────
 
-    def init_manifest(self, dest: Path, ring: str, force: bool = False) -> dict:
-        """Scaffold a starter version-manifest file at *dest*.
+@dataclass(frozen=True)
+class ReconcileRow:
+    """One pin-key reconciliation candidate. Never applied automatically —
+    `version update` only ever reports these; the operator edits by hand."""
 
-        Returns ``{"file": str, "ring": str}`` on success, ``{}`` on failure.
-        """
-        if dest.exists() and not force:
-            self._add_error(f"File already exists: {dest}. Use --force to overwrite.")
-            return {}
+    category: str
+    name: str
+    action: str
+    """`"add"`, `"remove"`, or `"needs_value"`: an artifact with no `image_tag` and no pin, which has
+    nothing to seed a pin with but resolves to no tag at all until someone gives it one."""
+    seed_value: str | None = None
+    """For `"add"` only: the target's current real value, to seed the new
+    pin with so adding the key changes nothing by itself."""
 
-        doc = {
-            "apiVersion": _API_VERSION,
-            "kind": PlatformKind.VERSION_MANIFEST.value,
-            "meta": {
-                "name": ring,
-                "annotations": {"description": f"Version manifest for the {ring} ring"},
-            },
-            "spec": {
-                "ring": ring,
-                "pins": {
-                    "images": {},
-                    "charts": {},
-                    "remotes": {},
-                },
-            },
-        }
 
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        self._write_yaml(dest, doc)
-        return {"file": str(dest), "ring": ring}
+def reconcile_version(
+    index: DocumentIndex, solution: SolutionModel | None, version: VersionModel
+) -> list[ReconcileRow]:
+    """Compare `version.spec.pins` against the solution's real inventory.
 
-    # ── export ────────────────────────────────────────────────────────────────
+    Read-only: never mutates `version` or any file. Returns every add/remove
+    candidate, sorted by category (declaration order) then name. A real
+    target with no current value of its own (e.g. a module service that
+    declares no `image`) is never offered as an "add" candidate — there is
+    nothing honest to seed it with, same rule `scaffold_version()`'s own
+    `--from` cloning follows. The one exception is an artifact with no
+    `image_tag`: it is reported as `needs_value`, with no seed.
+    """
+    inventory = _inventory(index, solution)
+    declared: dict[str, set[str]] = {category: set() for category in PIN_CATEGORIES}
+    for category, name, _pin in version.spec.pins.iter_pins():
+        declared[category].add(name)
 
-    def export_pins(self, file_path: Path) -> dict:
-        """Load a version file and return the resolved flat pin dict.
+    rows: list[ReconcileRow] = []
+    for category in PIN_CATEGORIES:
+        real_targets = inventory[category]
+        for name in sorted(declared[category] - real_targets.keys()):
+            rows.append(ReconcileRow(category=category, name=name, action="remove"))
+        for name in sorted(real_targets.keys() - declared[category]):
+            seed_value = real_targets[name]
+            if seed_value is not None:
+                rows.append(ReconcileRow(category=category, name=name, action="add", seed_value=seed_value))
+            elif category == "artifacts":
+                # No honest seed, but without a pin the artifact has no tag in this document's ring.
+                rows.append(ReconcileRow(category=category, name=name, action="needs_value"))
+    return rows
 
-        Returns ``{"pins": {type: {name: version}}}`` on success, ``{}`` on failure.
-        """
-        if not file_path.exists():
-            self._add_error(f"File not found: {file_path}")
-            return {}
 
-        from strata.services.version_service import VersionService
+def scaffold_version(
+    root: Path,
+    index: DocumentIndex,
+    solution: SolutionModel | None,
+    name: str,
+    *,
+    workspace: str,
+    from_name: str | None,
+) -> Path:
+    """Create `versions/<name>.yaml` — a new, minimal `kind: version` document.
 
-        try:
-            model = VersionService.load(str(file_path))
-        except Exception as exc:
-            self._add_error(str(exc))
-            return {}
+    `--from` (`from_name`) clones an existing version document's pin *keys*
+    only: each cloned key is reseeded with its target's CURRENT real
+    effective value, never the source document's own value/status/reason/
+    reviewed — a starting-point skeleton, not a copy of history. A cloned
+    key whose target currently declares no value of its own is dropped
+    rather than invented (same rule `reconcile_version()`'s "add" rows
+    already follow).
 
-        pins = VersionService.resolve_pins([model])
-        flat: dict[str, dict[str, str]] = {pt.value: entries for pt, entries in pins.items() if entries}
-        return {"pins": flat}
+    Raises:
+        UsageError: `name` already names an indexed version document or an
+            on-disk file at the target path; `workspace` names no indexed
+            Workspace document; `from_name` names no indexed version
+            document; or `name` would not produce a schema-valid `kind:
+            version` document (e.g. doesn't match `PlatformName`'s
+            pattern) — caught before writing, not left for the next
+            `strata validate` to discover.
+    """
+    if index.get(PlatformKind.VERSION, name) is not None:
+        raise UsageError(f"A version document named '{name}' already exists.")
+    if index.get(PlatformKind.WORKSPACE, workspace) is None:
+        raise UsageError(f"--workspace names an unknown workspace: '{workspace}'.")
 
-    # ── apply ─────────────────────────────────────────────────────────────────
+    destination = root / "versions" / f"{name}.yaml"
+    if destination.exists():
+        raise UsageError(f"'{destination.relative_to(root)}' already exists.")
 
-    def apply_manifest(
-        self,
-        file_path: Path,
-        lock_path: Path,
-        force: bool = False,
-    ) -> dict:
-        """Convert a version-manifest (kind: version) into a version-lock file.
+    pins: dict[str, dict[str, str]] = {}
+    if from_name is not None:
+        source_entry = index.get(PlatformKind.VERSION, from_name)
+        if source_entry is None:
+            raise UsageError(f"--from names an unknown version document: '{from_name}'.")
+        source = cast(VersionModel, source_entry.model)
+        inventory = _inventory(index, solution)
+        for category, target_name, _pin in source.spec.pins.iter_pins():
+            seed = inventory.get(category, {}).get(target_name)
+            if seed is not None:
+                pins.setdefault(category, {})[target_name] = seed
 
-        Returns ``{"lock_file": str, "ring": str, "pins_count": int}`` on success,
-        ``{}`` on failure.
-        """
-        if not file_path.exists():
-            self._add_error(f"File not found: {file_path}")
-            return {}
+    document: dict[str, Any] = {
+        "apiVersion": PlatformVersion.v2.value,
+        "kind": PlatformKind.VERSION.value,
+        "meta": {"name": name},
+        "spec": {"workspace": workspace, "pins": pins},
+    }
+    try:
+        VersionModel.model_validate(document)
+    except PydanticValidationError as exc:
+        raise UsageError(f"'{name}' would not be a valid version document: {exc}") from exc
 
-        if lock_path.exists() and not force:
-            self._add_error(f"Lock file already exists: {lock_path}. Use --force to overwrite.")
-            return {}
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    return destination
 
-        from strata.models.version_lock_model import VersionPinTargetType
-        from strata.models.version_manifest_model import VersionManifestModel
-        from strata.services.version_service import VersionService
 
-        try:
-            model = VersionService.load(str(file_path))
-        except Exception as exc:
-            self._add_error(str(exc))
-            return {}
+#: Statuses that refuse a `version` change without `--force` (`VersionPinStatus`'s
+#: own `held`/`unverified` values, as plain strings — the raw ruamel node may
+#: be a bare string's implicit `current`, never one of these, so comparing
+#: against the literal values here avoids importing the enum just to re-wrap
+#: a value already read off the document).
+_PROTECTED_STATUSES = ("held", "unverified")
 
-        if not isinstance(model, VersionManifestModel):
-            self._add_error(
-                f"Expected kind: {PlatformKind.VERSION_MANIFEST.value}, "
-                f"got '{model.kind}'. Provide a version-manifest file."
+
+def _round_trip_yaml() -> YAML:
+    """One `ruamel.yaml` instance per call, configured for a surgical edit:
+    quotes preserved verbatim, no forced line-wrapping of a long value
+    (image refs/chart versions routinely exceed the default ~80-column
+    wrap width), and otherwise untouched defaults — round-trip mode's own
+    job is to keep whatever formatting was already there, not re-derive it.
+    """
+    rt = YAML()
+    rt.preserve_quotes = True
+    rt.width = 4096
+    return rt
+
+
+def set_version_pin(
+    path: Path,
+    category: str,
+    target: str,
+    value: str | None,
+    *,
+    available: str | None,
+    force: bool,
+) -> VersionModel:
+    """Surgically set `spec.pins.<category>.<target>`'s `version` and/or
+    `available` in `path`, preserving every other byte of the file —
+    comments, key ordering, quote style, unrelated pins.
+
+    Creates the pin if `target` is not yet declared (requires `value`: there
+    is nothing honest to create an entry with otherwise). Never touches
+    `status`/`reason`/`reviewed` — resolving a hold is a separate, deliberate
+    edit. Refuses to change an existing `held`/`unverified` pin's `version`
+    without `force`; `available`-only changes are always allowed regardless
+    of status.
+
+    Args:
+        path: The version document's real file path (e.g. from
+            `path_controller.get_path()`).
+        category: One of `PIN_CATEGORIES`.
+        target: The pin's own key (service/module/remote/artifact name).
+        value: New `version` value, or `None` to leave it unchanged.
+        available: New `available` value, or `None` to leave it unchanged.
+        force: Override the held/unverified refusal.
+
+    Returns:
+        The written document, re-parsed through `VersionModel` — a
+        guarantee the write produced a still-valid document, not a second
+        read the caller has to remember to do.
+
+    Raises:
+        UsageError: `category` is not a real pin category; neither `value`
+            nor `available` given; `value`/`available` given as an empty
+            string; `target` does not exist yet and `value` is `None`; or
+            `target` exists, is `held`/`unverified`, `value` is given, and
+            `force` is not set.
+    """
+    if category not in PIN_CATEGORIES:
+        raise UsageError(f"Unknown pin category '{category}'. Expected one of: {', '.join(PIN_CATEGORIES)}.")
+    if value is None and available is None:
+        raise UsageError("Provide <value> and/or --available — nothing to set.")
+    if value is not None and not value.strip():
+        raise UsageError("<value> must not be empty.")
+    if available is not None and not available.strip():
+        raise UsageError("--available must not be empty.")
+
+    rt = _round_trip_yaml()
+    data = rt.load(path.read_text(encoding="utf-8"))
+
+    pins = data.setdefault("spec", CommentedMap()).setdefault("pins", CommentedMap())
+    category_map = pins.setdefault(category, CommentedMap())
+    existing = category_map.get(target)
+
+    if existing is None:
+        if value is None:
+            raise UsageError(
+                f"Pin '{target}' does not exist yet in category '{category}' — provide <value> to create it."
             )
-            return {}
+        status = None
+    elif isinstance(existing, str):
+        status = None  # shorthand always means status: current (VersionPinModel's own default)
+    else:
+        status = existing.get("status")
 
-        pins_raw = model.spec.pins
-        lock_pins: list[dict] = []
+    if value is not None and status in _PROTECTED_STATUSES and not force:
+        raise UsageError(f"Pin '{target}' is '{status}' — refusing to change its version without --force.")
 
-        if pins_raw.images:
-            for name, version in pins_raw.images.items():
-                lock_pins.append(
-                    {"target": {"type": VersionPinTargetType.IMAGE.value, "name": name}, "version": version}
-                )
-        if pins_raw.charts:
-            for name, version in pins_raw.charts.items():
-                lock_pins.append(
-                    {"target": {"type": VersionPinTargetType.HELM_CHART.value, "name": name}, "version": version}
-                )
-        if pins_raw.remotes:
-            for name, version in pins_raw.remotes.items():
-                lock_pins.append(
-                    {"target": {"type": VersionPinTargetType.REMOTE.value, "name": name}, "version": version}
-                )
-
-        now_ts = datetime.now(timezone.utc).isoformat()
-        lock_doc = {
-            "apiVersion": _API_VERSION,
-            "kind": PlatformKind.VERSION_LOCK.value,
-            "meta": {
-                "name": model.meta.name,
-                "annotations": {
-                    "generated_at": now_ts,
-                    "generated_by": "strata versions apply",
-                },
-            },
-            "spec": {
-                "ring": model.spec.ring,
-                "pins": lock_pins,
-            },
-        }
-
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        self._write_yaml(lock_path, lock_doc)
-        return {"lock_file": str(lock_path), "ring": model.spec.ring, "pins_count": len(lock_pins)}
-
-    # ── refresh ───────────────────────────────────────────────────────────────
-
-    def refresh_manifest(
-        self,
-        file_path: Path,
-        scan_dir: Path,
-        remove_stale: bool = False,
-        dry_run: bool = False,
-    ) -> dict:
-        """Sync *file_path* against targets discovered under *scan_dir*.
-
-        Returns a dict with keys ``added``, ``stale``, ``stale_removed``,
-        ``dry_run``, ``file``.  Returns ``{}`` on failure.
-        """
-        if not file_path.exists():
-            self._add_error(f"File not found: {file_path}")
-            return {}
-
-        raw_doc = self._read_yaml_preserving_comments(file_path)
-
-        if not isinstance(raw_doc, dict) or raw_doc.get("kind") != PlatformKind.VERSION_MANIFEST.value:
-            self._add_error(
-                f"Expected kind: {PlatformKind.VERSION_MANIFEST.value} — "
-                f"got '{raw_doc.get('kind') if isinstance(raw_doc, dict) else '<invalid>'}'."
-            )
-            return {}
-
-        discovered = self.scan_for_targets(scan_dir)
-
-        spec = raw_doc.setdefault("spec", {})
-        current_pins: dict = spec.setdefault("pins", {})
-
-        added: dict[str, list[str]] = {"images": [], "charts": [], "remotes": []}
-        stale: dict[str, list[str]] = {"images": [], "charts": [], "remotes": []}
-
-        for type_key in ("images", "charts", "remotes"):
-            current = current_pins.setdefault(type_key, {}) or {}
-            found = discovered.get(type_key, {})
-
-            for name, seed in found.items():
-                if name not in current:
-                    current[name] = seed
-                    added[type_key].append(name)
-
-            for name in list(current.keys()):
-                if name not in found:
-                    stale[type_key].append(name)
-                    if remove_stale:
-                        del current[name]
-
-            current_pins[type_key] = current
-
-        result = {
-            "added": added,
-            "stale": stale,
-            "stale_removed": remove_stale,
-            "dry_run": dry_run,
-            "file": str(file_path),
-        }
-
-        if not dry_run:
-            self._write_yaml_preserving_comments(file_path, raw_doc)
-
-        return result
-
-    # ── scanner ───────────────────────────────────────────────────────────────
-
-    def scan_for_targets(self, scan_dir: Path) -> TargetMap:
-        """Walk *scan_dir* and extract versionable targets from YAML files.
-
-        Returns a dict with keys ``images``, ``charts``, ``remotes``, each
-        mapping target name → seed version string.
-
-        Sources scanned:
-        - ``kind: module``        — ``spec.source.chart_name``/``chart_version``
-                                    and ``spec.services[].image``
-        - ``kind: workspace``     — ``spec.provisioners[].source.repository``
-                                    and ``spec.provisioners[].source.chart_name``/``chart_version``
-        - ``kind: configuration`` — ``spec.remotes[].name``  (seed: ``reference``)
-        - ``kind: environment``   — ``spec.overrides.remotes[].remote``/``reference``,
-                                    ``spec.overrides.modules[].chart_version``,
-                                    ``spec.overrides.modules[].services[].image``
-
-        Unreadable or non-YAML files are silently skipped.
-        """
-        discovered: TargetMap = {"images": {}, "charts": {}, "remotes": {}}
-
-        kind_extractors = {
-            PlatformKind.MODULE.value: self._extract_module_targets,
-            PlatformKind.WORKSPACE.value: self._extract_workspace_targets,
-            PlatformKind.CONFIGURATION.value: self._extract_configuration_targets,
-            PlatformKind.ENVIRONMENT.value: self._extract_environment_targets,
-        }
-
-        for yaml_path in sorted(scan_dir.rglob("*.yaml")):
-            try:
-                with yaml_path.open("r", encoding="utf-8") as fh:
-                    raw = yaml.safe_load(fh)
-                if not isinstance(raw, dict):
-                    continue
-                extractor = kind_extractors.get(raw.get("kind") or "")  # type: ignore[arg-type]
-                if extractor:
-                    extractor(raw, discovered)
-            except Exception:
-                continue
-
-        return discovered
-
-    # ── private extractors ────────────────────────────────────────────────────
-
-    def _extract_module_targets(self, raw: dict, discovered: TargetMap) -> None:
-        spec = raw.get("spec") or {}
-        meta = raw.get("meta") or {}
-        module_name: str = meta.get("name") or ""
-        source = spec.get("source") or {}
-
-        chart_name: Optional[str] = source.get("chart_name")
-        if chart_name:
-            key = module_name or chart_name
-            discovered["charts"].setdefault(key, source.get("chart_version") or "")
-
-        for svc in spec.get("services") or []:
-            image: Optional[str] = svc.get("image")
-            svc_name: str = svc.get("name") or ""
-            if image and svc_name:
-                discovered["images"].setdefault(svc_name, image)
-
-    def _extract_workspace_targets(self, raw: dict, discovered: TargetMap) -> None:
-        spec = raw.get("spec") or {}
-        for prov in spec.get("provisioners") or []:
-            source = prov.get("source") or {}
-            repo: Optional[str] = source.get("repository")
-            if repo:
-                discovered["remotes"].setdefault(repo, "")
-            chart_name: Optional[str] = source.get("chart_name")
-            if chart_name:
-                key = prov.get("name") or chart_name
-                discovered["charts"].setdefault(key, source.get("chart_version") or "")
-
-    def _extract_configuration_targets(self, raw: dict, discovered: TargetMap) -> None:
-        spec = raw.get("spec") or {}
-        for remote in spec.get("remotes") or []:
-            name: Optional[str] = remote.get("name")
-            if name:
-                discovered["remotes"].setdefault(name, remote.get("reference") or "")
-
-    def _extract_environment_targets(self, raw: dict, discovered: TargetMap) -> None:
-        overrides = (raw.get("spec") or {}).get("overrides") or {}
-
-        for remote_ov in overrides.get("remotes") or []:
-            name: Optional[str] = remote_ov.get("remote")
-            if name:
-                discovered["remotes"].setdefault(name, remote_ov.get("reference") or "")
-
-        for mod_ov in overrides.get("modules") or []:
-            mod_name: Optional[str] = mod_ov.get("module")
-            chart_version: Optional[str] = mod_ov.get("chart_version")
-            if mod_name and chart_version:
-                discovered["charts"].setdefault(mod_name, chart_version)
-            for svc_ov in mod_ov.get("services") or []:
-                svc_name: Optional[str] = svc_ov.get("name")
-                image: Optional[str] = svc_ov.get("image")
-                if svc_name and image:
-                    discovered["images"].setdefault(svc_name, image)
-
-    # ── lock ──────────────────────────────────────────────────────────────────
-
-    def lock_manifest(self, file_path: Path) -> dict:
-        """Compute spec.hash for a version-manifest file and write it back in place.
-
-        The hash is a SHA-256 over the canonical JSON serialisation of spec.pins
-        (sorted keys, no extra whitespace).  Any existing spec.hash value is replaced.
-
-        Returns ``{"file": str, "hash": str}`` on success, ``{}`` on failure.
-        """
-        if not file_path.exists():
-            self._add_error(f"File not found: {file_path}")
-            return {}
-
-        raw_doc = self._read_yaml_preserving_comments(file_path)
-
-        if not isinstance(raw_doc, dict) or raw_doc.get("kind") != PlatformKind.VERSION_MANIFEST.value:
-            self._add_error(
-                f"Expected kind: {PlatformKind.VERSION_MANIFEST.value} — "
-                f"got '{raw_doc.get('kind') if isinstance(raw_doc, dict) else '<invalid>'}'."
-            )
-            return {}
-
-        pins = raw_doc.get("spec", {}).get("pins", {})
-        canonical = json.dumps(pins, sort_keys=True, separators=(",", ":"))
-        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-        raw_doc.setdefault("spec", {})["hash"] = digest
-        self._write_yaml_preserving_comments(file_path, raw_doc)
-
-        return {"file": str(file_path), "hash": digest}
-
-    # ── add ───────────────────────────────────────────────────────────────────
-
-    def add_manifest(
-        self,
-        dest: Path,
-        ring: str,
-        from_file: Optional[Path] = None,
-        force: bool = False,
-    ) -> dict:
-        """Create a new version-manifest snapshot file.
-
-        When *from_file* is provided the pins are copied from that file.
-        Otherwise an empty scaffold is written (like ``init_manifest``).
-
-        Returns ``{"file": str, "ring": str, "from": str | None}`` on success, ``{}`` on failure.
-        """
-        if dest.exists() and not force:
-            self._add_error(f"File already exists: {dest}. Use --force to overwrite.")
-            return {}
-
-        if from_file is not None:
-            if not from_file.exists():
-                self._add_error(f"Source file not found: {from_file}")
-                return {}
-
-            with from_file.open("r", encoding="utf-8") as fh:
-                src = yaml.safe_load(fh)
-
-            if not isinstance(src, dict) or src.get("kind") != PlatformKind.VERSION_MANIFEST.value:
-                self._add_error(
-                    f"--from must be a kind: {PlatformKind.VERSION_MANIFEST.value} file, "
-                    f"got '{src.get('kind') if isinstance(src, dict) else '<invalid>'}'."
-                )
-                return {}
-
-            pins = src.get("spec", {}).get("pins", {})
+    if existing is None or isinstance(existing, str):
+        current_version = value if value is not None else existing
+        if available is None:
+            category_map[target] = current_version  # stays/becomes shorthand — minimal diff
         else:
-            pins = {"images": {}, "charts": {}, "remotes": {}}
+            new_entry = CommentedMap()
+            new_entry["version"] = current_version
+            new_entry["available"] = available
+            category_map[target] = new_entry
+    else:
+        if value is not None:
+            existing["version"] = value
+        if available is not None:
+            existing["available"] = available
 
-        doc = {
-            "apiVersion": _API_VERSION,
-            "kind": PlatformKind.VERSION_MANIFEST.value,
-            "meta": {
-                "name": dest.stem,
-                "annotations": {"description": f"Version snapshot for the {ring} ring"},
-            },
-            "spec": {
-                "ring": ring,
-                "pins": pins,
-            },
-        }
+    with path.open("w", encoding="utf-8") as handle:
+        rt.dump(data, handle)
 
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        self._write_yaml(dest, doc)
-        return {"file": str(dest), "ring": ring, "from": str(from_file) if from_file else None}
-
-    # ── helpers ───────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def _write_yaml(path: Path, doc: dict) -> None:
-        with path.open("w", encoding="utf-8") as fh:
-            yaml.dump(doc, fh, default_flow_style=False, sort_keys=False, allow_unicode=True)
-
-    @staticmethod
-    def _read_yaml_preserving_comments(path: Path) -> Any:
-        """Load *path* via the round-trip loader — the returned mapping carries
-        comment/order metadata that survives a subsequent
-        ``_write_yaml_preserving_comments()`` call. Use for any read-modify-write
-        cycle over a file a user may have hand-authored; use ``yaml.safe_load()``
-        (via plain ``open()``) for read-only inspection instead, since the
-        round-trip loader is unnecessary overhead when nothing gets written back.
-        """
-        with path.open("r", encoding="utf-8") as fh:
-            return _ROUND_TRIP_YAML.load(fh)
-
-    @staticmethod
-    def _write_yaml_preserving_comments(path: Path, doc: Any) -> None:
-        """Write back a mapping previously loaded by ``_read_yaml_preserving_comments()``.
-
-        Only meaningful when *doc* is still the same (mutated) round-trip object —
-        passing a plain ``dict`` here writes it without comments, same as
-        ``_write_yaml()``.
-        """
-        with path.open("w", encoding="utf-8") as fh:
-            _ROUND_TRIP_YAML.dump(doc, fh)
+    return VersionModel.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))

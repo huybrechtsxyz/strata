@@ -1,1 +1,0 @@
-"""Schema commands package."""

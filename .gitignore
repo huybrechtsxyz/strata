@@ -1,75 +1,21 @@
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
-ehthumbs.db
-
-# Editor
-.idea/
-*.swp
-*.swo
-*~
-*.orig
-
-# Secrets — must never be committed
-.env
-.env.*
-*.pem
-*.key
-*.secret.yaml
-*.secrets.yaml
-
-# SQLite databases (state service, cache)
-*.sqlite3
-secrets/
-
-# Logs
-logs/
-*.log
-
-# Python (scripts, tooling)
 .venv/
-venv/
 __pycache__/
 *.pyc
-*.pyo
-
-# Terraform state & local overrides
-**/.terraform/
-*.tfstate
-*.tfstate.backup
-*.tfvars
-!*.tfvars.example
-.terraformrc
-terraform.rc
-
-# Build output
-build/
-dist/
 *.egg-info/
-src/strata/data/help/
-src/vscode/resources/help/
-
-# Python runtime artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
-.coverage.*
-htmlcov/
-
-# Docs build
 docs/_build/
 
-# Node (if tooling is ever added)
-node_modules/
-
-# VS Code extension compiled output
+# VS Code extension (src/vscode) — self-contained npm project
+src/vscode/node_modules/
 src/vscode/out/
-*.vsix
+src/vscode/.vscode-test/
+src/vscode/*.vsix
 
 # Temporary until uv.lock is cleaned of internal ProGet URLs (dev-machine only)
 uv.lock
 
-# Runtime-written workspace state — never commit
-**/.strata/cli.yaml
-**/.strata/audit.log
-**/.strata/solution.json
-**/.strata/console-history
+# Local machine settings (internal package index URL)
+scripts/setup.env

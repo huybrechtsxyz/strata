@@ -84,25 +84,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.find-run.outputs.run_id }}
 
-      # Download the SBOM artifact stored by ci-build and place in dist/ so
-      # softprops/action-gh-release picks it up via files: dist/*
-      - name: Download SBOM artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: sbom
-          path: dist/
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ steps.find-run.outputs.run_id }}
-
-      # Download the VS Code extension .vsix so it is included in the release
-      - name: Download vsix artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: vsix
-          path: dist/
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ steps.find-run.outputs.run_id }}
-
       - name: List dist contents
         run: ls -lh dist/
 
@@ -114,6 +95,11 @@ jobs:
           name: "Release ${{ github.ref_name }}"
           generate_release_notes: true
           files: dist/*
+          # A pre-release tag (v2.0.0-alpha1, -beta1, -rc1, ...) contains a
+          # '-' per SemVer; a stable tag (v2.0.0) does not. Auto-detected so
+          # cutting an alpha/beta/rc tag never marks it "Latest" alongside
+          # v1's existing stable releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -142,12 +128,22 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Job 3: Publish VS Code extension to the Marketplace
+  #
+  # Ported from v1 (e:\SourcesXYZ\strata's ci-release.yml), with one
+  # deliberate addition: v1 has NO version-format gating at all — it
+  # publishes to the Marketplace's stable Release channel on any tag
+  # matching 'v*.*.*', including pre-release-suffixed ones (confirmed by
+  # direct read, 2026-10-02). The `if:` below is new here: only an exact
+  # 'vX.Y.Z' tag (no '-alpha'/'-beta'/'-rc' suffix) ever runs this job, so
+  # an alpha/beta tag (like v2.0.0-alpha5) publishes to PyPI (above) but
+  # never touches the VS Code Marketplace.
   # ---------------------------------------------------------------------------
   publish-vscode:
     name: Publish VS Code Extension
     runs-on: ubuntu-latest
     needs: release
     timeout-minutes: 20
+    if: ${{ !contains(github.ref_name, '-') }}
 
     steps:
       - name: Set up Node.js
@@ -165,7 +161,7 @@ jobs:
 
       # The Marketplace gallery API (/_apis/gallery) intermittently fails to
       # respond, and vsce gives up after a 180s request timeout — which
-      # previously failed the whole release job for a transient blip.
+      # would otherwise fail the whole release job for a transient blip.
       #
       # A timeout means the CLIENT gave up, not that the server rejected the
       # request: the publish may well have succeeded server-side. So a retry
@@ -239,7 +235,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Generate OCI-compliant tags and labels from the git tag
+      # Generate OCI-compliant tags and labels from the git tag. 'latest' is
+      # gated to stable (non-pre-release) tags only — a '-' in the tag name
+      # (v2.0.0-alpha1, -beta1, -rc1, ...) means pre-release, per SemVer, and
+      # must never overwrite the 'latest' image real consumers pull.
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -248,7 +247,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       # Build multi-stage CLI image and push; pass the tag as VERSION build arg
       - name: Build and push image
@@ -263,49 +262,7 @@ jobs:
             VERSION=${{ github.ref_name }}
 
   # ---------------------------------------------------------------------------
-  # Job: Build and push the state-service server Docker image to GHCR (ADR-0065)
-  # ---------------------------------------------------------------------------
-  publish-server:
-    name: Build and push server image (GHCR)
-    runs-on: ubuntu-latest
-    needs: release # only publish if the GitHub Release succeeded
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Generate OCI-compliant tags and labels from the git tag
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/strata-server
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-
-      # Build multi-stage server image and push; pass the tag as VERSION build arg
-      - name: Build and push server image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Dockerfile.server
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ github.ref_name }}
-
-  # ---------------------------------------------------------------------------
-  # Job 3: Build and push CLI Docker image to Docker Hub
+  # Job 5: Build and push CLI Docker image to Docker Hub (only if registry secrets are set)
   # ---------------------------------------------------------------------------
   publish-hub-cli:
     name: Publish CLI image to Docker Hub
@@ -335,99 +292,13 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build and push CLI image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.cli
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ github.ref_name }}
-
-  # ---------------------------------------------------------------------------
-  # Job 4: Build and push docs static site image to Docker Hub
-  # ---------------------------------------------------------------------------
-  publish-hub-docs:
-    name: Publish docs image to Docker Hub
-    runs-on: ubuntu-latest
-    needs: release
-    if: vars.REGISTRY_URL != ''
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ vars.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME }}/strata-docs
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-
-      - name: Build and push docs image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Dockerfile.docs
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-  # ---------------------------------------------------------------------------
-  # Job: Build and push server image to Docker Hub (ADR-0065)
-  # ---------------------------------------------------------------------------
-  publish-hub-server:
-    name: Publish server image to Docker Hub
-    runs-on: ubuntu-latest
-    needs: release
-    if: vars.REGISTRY_URL != ''
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ vars.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME }}/strata-server
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-
-      - name: Build and push server image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Dockerfile.server
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

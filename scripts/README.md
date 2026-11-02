@@ -1,24 +1,24 @@
 # scripts/
 
-PowerShell helper scripts for local development.
+PowerShell helper scripts for local development. Ported from strata v1's
+`scripts/` folder, trimmed to what applies to v2 (no state-service/dashboard,
+no ADR-0030-style migration guards). The VS Code extension (`src/vscode/`)
+is a separate, self-contained npm project with its own build/test commands
+(see [src/vscode/DEVELOPMENT.md](../src/vscode/DEVELOPMENT.md)) — none of
+these scripts touch it.
 
-| Script        | Purpose                                                                                                                                                                                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Setup.ps1`   | One-time setup — creates the virtual environment and installs dependencies via `uv`.                                                                                                                                                                          |
-| `Build.ps1`   | Builds the wheel and installs `strata` as a global `uv` tool. Use this (not `uv tool install .`) whenever package-data files such as templates are added or moved — `uv` caches wheels from local source paths and will silently reuse a stale one otherwise. |
-| `Check.ps1`   | Code quality gate — runs Ruff lint, Ruff format check, and Mypy type check. Equivalent to a build step.                                                                                                                                                       |
-| `Tests.ps1`   | Manual test reference — end-to-end CLI workflow examples and per-command variations for exploratory testing.                                                                                                                                                  |
-| `Clean.ps1`   | Removes `__pycache__`, `.pyc` files, and other build artefacts.                                                                                                                                                                                               |
-| `Docs.ps1`    | Builds the Sphinx documentation site.                                                                                                                                                                                                                         |
-| `Run.ps1`     | Thin wrapper that forwards all arguments to `uv run strata`.                                                                                                                                                                                                  |
-| `Start.ps1`   | Starts the strata state-service server (ADR-0065) and the read-only React dashboard dev server (`src/webapp`), each in its own window. Installs the `server` extra / dashboard `node_modules` on first run.                                                   |
-| `Release.ps1` | Bumps `VERSION.txt`, commits, and creates an annotated git tag. Run `git push origin main --tags` after.                                                                                                                                                      |
-| `server.http` | Manual test fixture for the `strata serve` state-service server (ADR-0065) — healthz, token, and event-ingest requests. Run with the VS Code "REST Client" extension.                                                                                         |
+| Script      | Purpose                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| `Setup.ps1` | One-time setup — creates the virtual environment and installs dependencies via `uv`.             |
+| `Check.ps1` | Code quality gate — ruff lint, ruff format check, mypy, import-linter, pytest, smoke test, docs. |
+| `Clean.ps1` | Removes `__pycache__`, `.pyc` files, and other build artefacts.                                  |
+| `Docs.ps1`  | Builds the Sphinx documentation site into `docs/_build/html`.                                    |
+| `Run.ps1`   | Thin wrapper that forwards all arguments to `uv run strata`.                                     |
 
 Run any script from the repository root:
 
 ```powershell
 .\scripts\Setup.ps1
 .\scripts\Check.ps1
-.\scripts\Tests.ps1
+.\scripts\Run.ps1 version
 ```

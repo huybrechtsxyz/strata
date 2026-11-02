@@ -1,825 +1,248 @@
-# Workspace Configuration
+# Workspace (`kind: workspace`)
 
-Top-level configuration files defining complete infrastructure deployments. YAML files orchestrate providers, resources, topology, namespaces, and lifecycle management for platform environments.
+The composed "image" (ADR-0011): a static, versioned declaration of everything a solution could
+deploy — providers, resources, topologies, namespaces, and the provisioning recipe that builds/
+deploys them. A [`deployment`](deployment.md) (the "container instance") executes that recipe
+against a specific environment; it never invents new tool bindings, only supplies runtime
+parameters.
 
 ## Schema
 
+- `spec.providers[]` — provider **slots**: each is a [`provider`](provider.md) document name, or
+  `{slot, provider}` to give the slot a stable name distinct from its default document. IaC code
+  addresses the slot (`strata.providers.<slot>`); a [`deployment`](deployment.md) can rebind it to
+  another provider document of the same type — see "Provider slots" below
+- `spec.assets[]` — asset **slots**: each is an [`asset`](asset.md) document name, or `{slot, asset}`
+  to give the slot a stable name distinct from its default document. A step selects slots through
+  its own `assets`, and a [`deployment`](deployment.md) can rebind a slot — see "Asset slots" below
+- `spec.resources[]` — workspace-local resource instances, each:
+  - `name` — the workspace-local instance name
+  - `resource` — the [`resource`](resource.md) document it's built from (or `managed_by: provisioner`
+    if fully externally managed)
+  - `role` — matched against the topology type's expected component roles
+  - `count` — number of instances (default 1)
+  - `depends_on[]`, `firewalls[]`, `subnet` — workspace-specific gluing
+  - `enabled` — whether this instance is included in the built artifact (default `true`)
+- `spec.namespaces[]` — names of [`namespace`](namespace.md) documents
+- `spec.topology[]` — inline topology groupings (type/components/namespaces/volumes) — see
+  "Topology grouping" below. Inline since ADR-0028 (reverted from a standalone `kind: topology`
+  document, ADR-0011) — not a list of names.
+- `spec.provisioners[]` — tool definitions (`ProvisionerModel`): `name`, `tool` (terraform, ansible,
+  helm, compose, ...), `source`, `backend` (terraform only), `properties` (ansible only),
+  `integration` (which [`integration`](integration.md) document supplies version/auth), `output`
+  (Jinja2 template escape hatch)
+- `spec.execution[]` — the ordered recipe (`ProvisioningStepModel`): `name`, `provisioner`,
+  `resources[]`/`namespaces[]` (direct references this step acts on), `topologies[]` (expands to
+  that topology's own resources/namespaces), `dns_zones[]`/`firewalls[]`/`networks[]` (direct
+  escape hatch for claiming one of those documents' `${output:...}` ownership without a
+  resource/topology link), `depends_on[]` for step ordering. At least one of the six target-ish
+  fields is required. A resource's own `firewalls`/`dns_zones`/`subnet.network` are claimed
+  automatically once that resource is effectively in scope (direct or via `topologies[]`) — no
+  need to also list them directly on the step.
+  `assets[]` selects the asset slots this step needs (see "Asset slots").
+- `spec.default_tags` — default cloud tags for resources created by this workspace
+- `spec.cve_policy` — fail `build run` when the SBOM's CVE findings at or above `max_severity`
+  exceed `max_count` (scanned with Trivy or Grype)
+- `spec.checkov_policy` — fail `build run` on Checkov findings at or above `severity_gate`; a
+  finding with no severity (open-source Checkov reports none) always counts
+- `spec.release_gate_policy` — at deploy, ask a `release_gate` [integration](integration.md) for its
+  verdict on `repository` at the deployed commit
+- `spec.image_gate_policy` — at deploy, count an `image_findings` integration's open issues for every
+  image in `sbom.json` against `max_severity`/`max_count`
+- `spec.image_tag_policy` — fail `build run` and `deploy run` when an image the deployment runs has no
+  tag, a floating tag such as `latest`, or a tag that does not match the shape you require (see "Image
+  tag policy" below)
+
+  Every policy has `enforcement` (`deny` | `warn`). The CVE, Checkov and gate policies also have
+  `on_missing_data` (`skip` | `warn` | `block`, default `block`); `image_tag_policy` has none, because it
+  reads only the solution. `strata policy list` shows what a deployment's workspace configures;
+  `strata policy check` evaluates them on demand. See
+  [how-to/security-gates.md](../how-to/security-gates.md).
+
+## Example
+
 ```yaml
-apiVersion: strata.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v2
 kind: workspace
 meta:
-  name: <workspace_name> # Required: ^[a-z][a-z0-9_]*$
-  annotations:
-    description: <description>
-  labels:
-    version: "<version>"
-spec:
-  lifecycle: {} # Optional: workflow phases
-  properties: # Tool-specific configs
-    terraform:
-      organization: <org>
-      cloudspace: <workspace>
-  custom: {} # Custom metadata
-  providers: [] # Cloud providers
-  provisioners: [] # IaC tools
-  topology: [] # Infrastructure clusters
-  namespaces: [] # Application deployments
-  variables: [] # Non-sensitive data
-  secrets: [] # Sensitive credentials
-```
-
-## Lifecycle Phases
-
-| Phase                | Description                  | When Executed        |
-| -------------------- | ---------------------------- | -------------------- |
-| `clean`              | Clean build artifacts        | Before operations    |
-| `check` / `validate` | Validate configuration       | Before planning      |
-| `build`              | Build artifacts              | Before provisioning  |
-| `plan`               | Preview changes (dry-run)    | Before applying      |
-| `provision`          | Create/update infrastructure | During deployment    |
-| `initialize`         | Initialize resources         | After provisioning   |
-| `configure`          | Configure infrastructure     | After initialization |
-| `output`             | Export resource metadata     | After configuration  |
-| `health`             | Health checks                | After deployment     |
-| `protect`            | Backup operations            | Before destruction   |
-| `destroy`            | Teardown infrastructure      | During teardown      |
-
-**Lifecycle structure:**
-
-```yaml
-lifecycle:
-  <phase_name>:
-    scripts:
-      - file: <script_path>
-        description: <description>
-```
-
-## Providers
-
-```yaml
-providers:
-  - name: <provider_name> # Unique name
-    file: <provider_path> # Path to provider config
-```
-
-## Provisioners
-
-```yaml
-provisioners:
-  - name: <provisioner_name>
-    provisioner: terraform | ansible | bicep   # IaC tool
-    integration: <name>                # optional, terraform only — see Integration Binding below
-    source:
-      repository: <repository_name>    # optional — omit for single-repo workspaces
-      source_path: <path>              # path within the repo (or workspace root when repository is absent)
-      reference: <git_ref>             # optional: override workspace remote default (branch, tag, commit SHA)
-      target_path: <path>              # optional: path in the build output
-    inputs_from: []                    # optional: output passing from upstream provisioners (see Output Dependencies)
-    backend:                           # Terraform only — state storage
-      type: terraform_cloud | azurerm | s3 | ...
-      configuration: {}
-    configuration:                     # tool-specific options (see below)
-      playbook: site.yml               # Ansible: main playbook (default: site.yml)
-      inventory: inventory/hosts.yml   # Ansible: inventory file (auto-discovered if omitted)
-      ssh_private_key_secret: <name>   # Ansible: secret key name in resolved_values.secrets
-      extra_vars:                      # Ansible: extra -e variables
-        key: value
-      scope: resourceGroup             # Bicep: resourceGroup (default) | subscription | managementGroup | tenant
-      resource_group: <rg>             # Bicep: required when scope=resourceGroup
-      location: <location>             # Bicep: required for subscription/managementGroup/tenant
-      management_group_id: <mg-id>     # Bicep: required when scope=managementGroup
-      deployment_name: strata-infra    # Bicep: ARM deployment name (default: strata-{stage})
-      parameters_file: params.json     # Bicep: parameters file relative to source_path
-      mode: Incremental                # Bicep: Incremental (default) | Complete
-    output:                            # Terraform only — controls build output files
-      format: strata | custom | script | none   # default: strata
-      emits: []                        # categories to emit (omit = format defaults)
-      files: []                        # custom file definitions (see Build Output Profile)
-```
-
-### Integration Binding (ADR-0079 / ADR-0080)
-
-A `terraform`/`ansible`/`bicep` provisioner needs a `configuration.spec.integrations[]`
-entry (auth, endpoints, tool-version validation) to run against. It is bound as
-follows — the provisioner's own `name` is **never** used to look up an integration:
-
-1. **`integration: <name>` set** — exact match against
-   `configuration.spec.integrations[].name`. Errors if missing, or if the matched
-   entry isn't compatible (`type: terraform`/`opentofu` for a terraform provisioner,
-   `type: ansible` for ansible, `type: azure_cli` for bicep).
-2. **`integration` unset** — auto-binds to the sole registered compatible
-   integration. Errors (never guesses) if more than one exists — in that case,
-   set `integration:` explicitly on each provisioner that needs a specific one.
-   For **terraform**, zero registered is also an error. For **ansible**/**bicep**,
-   zero registered falls back to a default (`ansible-playbook`/`az` on `PATH`
-   with no extra config) — declaring nothing keeps working exactly as before
-   ADR-0080.
-
-`integration:` is only accepted on `terraform`/`ansible`/`bicep` provisioners —
-schema validation rejects it on any other type (no binding exists to consume it).
-`compose`/`helm` deployments auto-bind the same way but have **no** `integration:`
-field to target, since they aren't tied to a single named provisioner (a stage can
-deploy many namespaces/charts) — see
-[docs/platform/integrations.md](../platform/integrations.md#provisioner--integration-binding-adr-0079--adr-0080)
-for that distinction.
-
-```yaml
-# One shared integration, several provisioners — zero-config, no `integration:` needed
-spec:
-  provisioners:
-    - name: control_infra
-      provisioner: terraform
-      source: { repository: haven, source_path: terraform/control }
-    - name: core_iac
-      provisioner: terraform
-      source: { repository: haven, source_path: terraform/core }
-```
-
-```yaml
-# Two integrations (e.g. different Terraform versions/auth) — explicit disambiguation required
-spec:
-  provisioners:
-    - name: env_iac
-      provisioner: terraform
-      integration: terraform_legacy
-      source: { repository: haven, source_path: terraform/legacy-stack }
-    - name: core_iac
-      provisioner: terraform
-      integration: terraform_current
-      source: { repository: haven, source_path: terraform/core }
-```
-
-```yaml
-# Ansible/Bicep: same field, same algorithm — usually zero-config
-spec:
-  provisioners:
-    - name: config_mgmt
-      provisioner: ansible
-      source: { repository: haven, source_path: ansible }
-      # integration: unset — auto-binds if one type:ansible integration is
-      # registered, else falls back to a bare `ansible-playbook` on PATH
-    - name: infra_bicep
-      provisioner: bicep
-      integration: azure_main   # explicit — e.g. two type:azure_cli integrations exist
-      source: { repository: haven, source_path: bicep }
-```
-
-`strata validate --deep` resolves every terraform/ansible/bicep provisioner's
-binding ahead of time and reports a failure here as a validation error, so a
-missing/ambiguous binding surfaces before `deploy run`, not partway through it.
-See [ADR-0079](../decisions/0079-terraform-integration-resolution-fallback-by-type.md)
-and [ADR-0080](../decisions/0080-unified-provisioner-integration-contract.md)
-for the full design rationale.
-
-### Build Output Profile (Terraform only)
-
-The `output` block on a Terraform provisioner controls what `.auto.tfvars.json` files
-`strata build run` produces. When absent, `format: strata` is assumed (current behaviour).
-
-**`output.format` modes:**
-
-| Mode     | Behaviour                                                                                            |
-| -------- | ---------------------------------------------------------------------------------------------------- |
-| `strata` | Default. Emit all built-in files (`workspace.auto.tfvars.json`, `providers.auto.tfvars.json`, etc.). |
-| `custom` | Emit only what `emits[]` and `files[]` specify.                                                      |
-| `script` | One user-provided Python/shell script owns all output files.                                         |
-| `none`   | Copy source files only — no tfvars output generated.                                                 |
-
-**`output.emits[]` categories:**
-
-| Category     | File produced                                          | Tier           |
-| ------------ | ------------------------------------------------------ | -------------- |
-| `features`   | `flags.auto.tfvars.json` — flat `{key: bool}` map      | Build + Deploy |
-| `variables`  | `variables.auto.tfvars.json` — flat `{key: value}` map | Build + Deploy |
-| `properties` | `properties.auto.tfvars.json` — all merged properties  | Build          |
-| `custom`     | `custom.auto.tfvars.json` — all merged custom fields   | Build          |
-| `workspace`  | `workspace.auto.tfvars.json`                           | Build          |
-| `providers`  | `providers.auto.tfvars.json`                           | Build          |
-| `topologies` | `topologies.auto.tfvars.json`                          | Build          |
-| `modules`    | `modules.auto.tfvars.json`                             | Build          |
-| `namespaces` | `namespaces.auto.tfvars.json`                          | Build          |
-| `firewalls`  | `firewalls.auto.tfvars.json`                           | Build          |
-| `dns`        | `dns.auto.tfvars.json`                                 | Build          |
-| `networks`   | `networks.auto.tfvars.json`                            | Build          |
-| `resources`  | `resx_<type>.auto.tfvars.json`                         | Build          |
-| `tenant`     | `tenant.auto.tfvars.json`                              | Build          |
-
-`features` and `variables` are two-tier: `constant`/`environment` store entries are
-written at build time; integration-backed entries (Flagsmith, Azure App Config, Vault)
-are written by the deployer immediately before `terraform init`. Secrets are **never**
-written to any file — they are always injected as `TF_VAR_*` environment variables.
-
-**`output.files[]` — custom file definitions:**
-
-Each entry produces one `.auto.tfvars.json` file. Two modes, mutually exclusive:
-
-*Source mode* — pass through a key from the merged properties/custom dict:
-
-```yaml
-files:
-  - name: aks_config.auto.tfvars.json
-    variable: aks_config        # wraps output as { "aks_config": { ... } }
-    type: object                # object (default) | map | list | flat
-    source: properties          # properties | custom
-    key: aks_config             # key to extract from the merged dict
-
-  # Multiple variables in one file
-  - name: platform.auto.tfvars.json
-    sources:
-      - variable: aks_config
-        source: properties
-        key: aks_config
-      - variable: dns_config
-        source: properties
-        key: dns_config
-```
-
-*Script mode* — run a Python/shell script that reads `platform.json` and writes the file:
-
-```yaml
-files:
-  - name: environment_info.auto.tfvars.json
-    type: script
-    script: "@my_repo/scripts/build_env_info.py"   # supports @repo_name/path
-```
-
-The script receives these environment variables: `STRATA_PLATFORM_PATH`,
-`STRATA_BUILD_PATH`, `STRATA_OUTPUT_PATH`, `STRATA_OUTPUT_FILE`,
-`STRATA_WORKSPACE_PATH`, `STRATA_DRY_RUN`.
-
-**`format: script`** — one script produces all output files:
-
-```yaml
-output:
-  format: script
-  script: scripts/build_tfvars.py   # script receives STRATA_PROVISIONER too
-```
-
-**Git reference pinning** — override the workspace remote's default reference per provisioner:
-
-```yaml
-provisioners:
-  - name: platform_baseline
-    provisioner: terraform
-    source:
-      repository: platform-modules
-      source_path: terraform
-      reference: v1.4.0        # pins this provisioner to v1.4.0 (overrides remote default)
-```
-
-**Single-repo form** — when IaC lives inside the workspace itself, omit `repository` and
-use `source_path` alone. strata resolves the path relative to the workspace root:
-
-```yaml
-provisioners:
-  - name: platform_iac
-    provisioner: terraform
-    source:
-      source_path: terraform   # resolved as <workspace_root>/terraform
-```
-
-**Multi-repo form** — when IaC lives in a separate registered repository:
-
-```yaml
-provisioners:
-  - name: platform_iac
-    provisioner: terraform
-    source:
-      repository: platform-iac   # must match a repo registered via `strata repo add`
-      source_path: deploy/terraform
-```
-
-### Output Dependencies
-
-Team-owned provisioners can declare dependencies on outputs from upstream provisioners.
-This enables multi-team deployments where the platform baseline outputs are passed to team modules.
-
-```yaml
-provisioners:
-  - name: platform_baseline
-    provisioner: terraform
-    source:
-      repository: platform-modules
-      source_path: terraform/baseline
-      reference: v1.4.0
-
-  - name: team_module
-    provisioner: terraform
-    source:
-      repository: team-modules
-      source_path: terraform/team-features
-      reference: main
-    inputs_from:
-      - provisioner: platform_baseline  # explicit dependency
-        mode: prefix                     # prefix all outputs: "baseline_subnet_id", etc.
-```
-
-**`inputs_from` modes:**
-
-| Mode      | Behavior                                                                      |
-| --------- | ----------------------------------------------------------------------------- |
-| `mapping` | Rename specific outputs: `{ vpc_id: baseline_vpc_id, subnet_id: subnet }`     |
-| `prefix`  | Add prefix to all outputs: `baseline_` → `baseline_vpc_id`, `baseline_subnet` |
-| `select`  | Allowlist specific keys: `["vpc_id", "subnet_id"]` (others discarded)         |
-
-**Outputs are injected at deploy time** — the downstream provisioner receives them as Terraform variables.
-Cycles are detected at build time and cause an error.
-
-### Provisioner types
-
-| Type        | Tool             | Deployer            | Stage types that activate it         |
-| ----------- | ---------------- | ------------------- | ------------------------------------ |
-| `terraform` | Terraform CLI    | `TerraformDeployer` | `infrastructure`, `terraform`        |
-| `ansible`   | ansible-playbook | `AnsibleDeployer`   | `configure`, `initialize`, `ansible` |
-
-## Resources
-
-Workspace-level resource references that participate in topology wiring. Each resource either points to a resource configuration file or is marked as provisioner-managed (resource details defined entirely in Terraform/Ansible).
-
-```yaml
-resources:
-  # Traditional: strata loads and validates a resource spec file
-  - name: <resource_name>
-    file: <resource_path>              # Path to resource configuration YAML
-    description: "Optional documentation"
-    enabled: true                      # Optional: default true — false excludes it from the build
-    role: manager                      # Optional: role name (e.g. manager, worker, api)
-    count: 1                           # Optional: number of instances (1-100, default 1)
-    depends_on: []                     # Optional: resource names this depends on
-    firewalls: []                      # Optional: firewall names to attach
-    subnet: network_name/subnet_name   # Optional: subnet reference
-    configuration: {}                  # Optional: workspace-specific config overrides
-    custom: {}                         # Optional: custom key-value data
-    modules: []                        # Optional: code/app references
-    labels: {}                         # Optional: classification key-value pairs
-    tags: []                           # Optional: categorization tags
-
-  # New: provisioner-managed resource (no file required)
-  - name: <resource_name>
-    managed_by: provisioner            # Indicates provisioner fully manages this resource
-    description: "Optional documentation"
-    enabled: true                      # Optional: default true
-    role: manager                      # Optional: role name
-    count: 1                           # Optional: number of instances
-```
-
-**`managed_by` values:**
-
-| Value         | Meaning                                                                              |
-| ------------- | ------------------------------------------------------------------------------------ |
-| (not set)     | Resource definition must be in `file:`; strata loads and validates the resource spec |
-| `provisioner` | Provisioner (Terraform/Ansible) fully defines the resource; no resource file needed  |
-
-### `enabled` — excluding a resource or module from the build
-
-`enabled: false` keeps a resource (or one of its `modules[]`) out of the built platform artifact, and therefore out of every provisioner that consumes it. It defaults to `true`.
-
-```yaml
-resources:
-  - name: db_replica
-    file: config/resources/db-replica.yaml
-    enabled: false                     # declared, but not built or deployed
-    modules:
-      - name: monitoring_agent
-        file: config/modules/agent.yaml
-        enabled: false                 # this resource does not get the agent
-```
-
-The flag is a **build** concern, not a loading one: a disabled resource's YAML is still loaded and validated, so mistakes in it surface before someone switches it back on.
-
-Module enablement is per *reference*, not per module — the same module can be enabled on one resource and disabled on another.
-
-To vary inclusion by environment, override it rather than writing a condition:
-
-```yaml
-# environment file
-resources:
-  - resource: db_replica
-    enabled: true                      # on in this environment only
-```
-
-`enabled` is the same keyword strata uses for conditional inclusion on every schema. `condition:` was removed in favour of it (it was never evaluated by anything) — `condition`/`when`/`if` are not accepted.
-
-**Validation rules:**
-
-- **XOR constraint:** A resource must have either a `file` reference OR `managed_by` set, but never both.
-- **Constraint violation examples:**
-  - ❌ No file and no `managed_by` → validation error: "must either specify a 'file' path or set 'managed_by: provisioner'"
-  - ❌ Both `file` and `managed_by` → validation error: "cannot both specify a 'file' and 'managed_by'"
-  - ✅ `file: @config/resources/vm.yaml` → valid (traditional approach)
-  - ✅ `managed_by: provisioner` → valid (provisioner-managed)
-
-**Use cases:**
-
-- **Provisioner-managed resources** are ideal for multi-tenant IaC deployments where infrastructure details (VMs, databases, networks) are entirely defined in Terraform/Ansible modules. The workspace YAML only needs to declare the resource name for topology participation, without duplicating resource specs.
-- **File-based resources** are useful when strata needs to validate resource properties, count cross-references, or when resources are portable across multiple provisioners.
-
-## Topology
-
-Defines infrastructure clusters and components:
-
-```yaml
-topology:
-  - name: <topology_name>
-    provider: <provider_name>   # Must reference defined provider
-    provisioner: terraform
-    type: <topology_type>       # docker-swarm, kubernetes, etc.
-    volumes: []                 # Optional: shared volumes
-      - name: <volume_name>
-        type: <volume_type>     # local, replicated, distributed
-    components: []              # VMs, nodes
-      - name: <component_name>  # Unique across workspace
-        role: <role>            # manager, worker, control-plane, etc.
-        resource:
-          file: <resource_path>
-          count: <count>        # 1-100
-        module:                 # Optional
-          name: <module_name>
-          file: <module_path>
-        labels: {}
-        tags: []
-```
-
-**Component roles by topology:**
-
-- **docker-swarm:** `manager` (1, 3, 5, 7 - odd for quorum), `worker` (1+)
-- **kubernetes:** `control-plane`/`master` (1, 3, 5 - odd), `worker` (1+)
-- **custom:** Any role name
-
-## Namespaces
-
-```yaml
-namespaces:
-  - name: <namespace_name>
-    file: <namespace_path>
-```
-
-## Variables & Secrets
-
-**Variables** (non-sensitive):
-
-```yaml
-variables:
-  - key: WORKSPACE # UPPER_SNAKE_CASE
-    source: constant # constant, env, file, computed
-    value: platform
-```
-
-**Secrets** (sensitive):
-
-```yaml
-secrets:
-  - key: TERRAFORM_API_TOKEN
-    source: bitwarden # bitwarden, vault, env, file
-    value: <secret_id> # ID or reference
-```
-
-## Examples
-
-**Minimal:**
-
-```yaml
-meta:
-  name: minimal
+  name: main
 spec:
   providers:
-    - name: local
-      file: config/providers/local.yaml
-  provisioners:
-    - name: infra
-      provisioner: terraform
-      source:
-        type: local
-        repository: /
-        reference: /
-        source_path: deploy/terraform
-        deploy_path: terraform
-  topology:
-    - name: cluster
-      provider: local
-      provisioner: terraform
-      type: docker-swarm
-      components:
-        - name: node
-          role: manager
-          resource:
-            file: config/resources/vm-basic.yaml
-            count: 1
-```
-
-**Single Topology (Terraform only):**
-
-```yaml
-meta:
-  name: platform
-  labels:
-    version: "1.0.0"
-spec:
-  properties:
-    terraform:
-      organization: myorg
-      cloudspace: platform-workspace
-  providers:
-    - name: kamatera_europe
-      file: config/providers/kamatera-eu-fr.yaml
-  provisioners:
-    - name: platform_infrastructure
-      provisioner: terraform
-      source:
-        type: local
-        repository: /
-        reference: /
-        source_path: deploy/terraform
-        deploy_path: terraform
-  topology:
-    - name: platform_swarm
-      provider: kamatera_europe
-      provisioner: terraform
-      type: docker-swarm
-      volumes:
-        - name: config
-          type: replicated
-        - name: data
-          type: local
-      components:
-        - name: manager
-          role: manager
-          resource:
-            file: config/resources/vm-manager.yaml
-            count: 1
-        - name: worker
-          role: worker
-          resource:
-            file: config/resources/vm-worker.yaml
-            count: 3
+    - slot: azure
+      provider: azure-main
   namespaces:
-    - name: infra
-      file: config/namespaces/platform-infra.yaml
-  variables:
-    - key: WORKSPACE
-      source: constant
-      value: platform
-  secrets:
-    - key: TERRAFORM_API_TOKEN
-      source: bitwarden
-      value: d47e736b-2db8-47d5-b46b-b2c8016ece73
-```
-
-**Terraform + Ansible (infrastructure then configuration):**
-
-```yaml
-meta:
-  name: haven
-  labels:
-    version: "1.0.0"
-spec:
-  providers:
-    - name: kamatera_europe
-      file: config/providers/kamatera-eu-fr.yaml
+    - hearth
   provisioners:
-    - name: haven_infrastructure
-      provisioner: terraform
+    - name: terraform-main
+      tool: terraform
       source:
-        repository: haven
-        source_path: terraform
-      backend:
-        type: terraform_cloud
-        configuration:
-          organization: myorg
-          workspace: haven-prd
-    - name: haven_init
-      provisioner: ansible
-      source:
-        repository: haven
-        source_path: ansible
-      configuration:
-        playbook: site.yml
-        inventory: inventory/hosts.yml
-        ssh_private_key_secret: haven_ssh_key   # resolved from the secret store at deploy time
-        extra_vars:
-          env: production
-  topology:
-    - name: haven_swarm
-      provider: kamatera_europe
-      provisioner: terraform
-      type: docker-swarm
-      components:
-        - name: manager
-          role: manager
-          resource:
-            file: config/resources/vm-manager.yaml
-            count: 1
-        - name: worker
-          role: worker
-          resource:
-            file: config/resources/vm-worker.yaml
-            count: 3
-  secrets:
-    - key: haven_ssh_key
-      source: bitwarden
-      value: b2f90a12-3c4d-5678-abcd-ef1234567890   # Bitwarden item ID holding the PEM key
-    - key: TERRAFORM_API_TOKEN
-      source: bitwarden
-      value: d47e736b-2db8-47d5-b46b-b2c8016ece73
-```
-
-```yaml
-meta:
-  name: multi_region
-  labels:
-    version: "2.0.0"
-spec:
-  properties:
-    terraform:
-      organization: myorg
-      cloudspace: multi-region
-  custom:
-    owner: "DevOps Team"
-    project: "Global Platform"
-  providers:
-    - name: azure_westeurope
-      file: config/providers/azure-westeurope.yaml
-    - name: azure_eastus
-      file: config/providers/azure-eastus.yaml
-  provisioners:
-    - name: infra
-      provisioner: terraform
-      source:
-        type: local
-        repository: /
-        reference: /
-        source_path: deploy/terraform
-        deploy_path: terraform
-  topology:
-    - name: europe_cluster
-      provider: azure_westeurope
-      provisioner: terraform
-      type: kubernetes
-      components:
-        - name: eu_control_plane
-          role: control-plane
-          resource:
-            file: config/resources/vm-k8s-master.yaml
-            count: 3
-        - name: eu_worker
-          role: worker
-          resource:
-            file: config/resources/vm-k8s-worker.yaml
-            count: 5
-    - name: us_cluster
-      provider: azure_eastus
-      provisioner: terraform
-      type: kubernetes
-      components:
-        - name: us_control_plane
-          role: control-plane
-          resource:
-            file: config/resources/vm-k8s-master.yaml
-            count: 3
-        - name: us_worker
-          role: worker
-          resource:
-            file: config/resources/vm-k8s-worker.yaml
-            count: 5
-  namespaces:
-    - name: infrastructure
-      file: config/namespaces/infra.yaml
-    - name: applications
-      file: config/namespaces/apps.yaml
-```
-
-**Custom build output — wrapping an existing Terraform repo:**
-
-```yaml
-meta:
-  name: aks_core
-spec:
-  properties:
-    git_repo_name: iac_aks_core
-    kubernetes_version: "1.31"
-  providers:
-    - name: azure_westeurope
-      file: "@iac_aks_core/stack/provider.yaml"
-  provisioners:
-    - name: terraform
-      provisioner: terraform
-      source:
-        repository: iac_aks_core
-        source_path: .
+        remote: infra
+        source_path: terraform/main
       backend:
         type: azurerm
         configuration:
-          resource_group_name: ${var:TF_RG}
-          storage_account_name: ${var:TF_SA}
-          container_name: tfstate
-          key: ${var:TF_STATE_KEY}
-      output:
-        format: custom
-        emits:
-          - features        # → flags.auto.tfvars.json  (enable_* booleans)
-          - variables       # → variables.auto.tfvars.json
-        files:
-          # Script produces environment_info.auto.tfvars.json from platform.json
-          - name: environment_info.auto.tfvars.json
-            type: script
-            script: "@iac_aks_core/scripts/build_env_info.py"
-          # Pass through aks_config/dns_config from environment properties
-          - name: aks.auto.tfvars.json
-            variable: aks_config
-            type: object
-            source: properties
-            key: aks_config
-          - name: dns.auto.tfvars.json
-            variable: dns_config
-            type: object
-            source: properties
-            key: dns_config
+          resource_group_name: tfstate-rg
+  resources:
+    - name: web-storage
+      resource: storage-account
+      role: control-plane
+    - name: web-vm
+      resource: linux-vm
+      role: worker
+      count: 2
+  execution:
+    - name: provision-infra
+      provisioner: terraform-main
+      resources:
+        - web-storage
+        - web-vm
   topology:
-    - name: aks_platform
-      provider: azure_westeurope
-      provisioner: terraform
+    - name: main-topology
       type: kubernetes
       components:
-        - resource: aks_cluster
-  resources:
-    - name: aks_cluster
-      file: "@iac_aks_core/stack/aks.yaml"
+        - resource: web-storage
+        - resource: web-vm
+  default_tags:
+    managed-by: strata
 ```
 
-**Full-control script output:**
+## Image tag policy
+
+`spec.image_tag_policy` is an opt-in guard rail over the images `strata deploy images` lists: the artifacts a
+deployment reaches and the literal images of its enabled module services, each with the tag after any
+[`version`](version.md) pin. Leave the field out and any tag is accepted, including none. `image_tag_policy: {}`
+is already a useful policy: every image needs a tag, and the mutable aliases are rejected.
 
 ```yaml
-provisioners:
-  - name: terraform
-    provisioner: terraform
-    source:
-      repository: my_tf_repo
-      source_path: .
-    output:
-      format: script
-      script: scripts/build_tfvars.py   # writes all .auto.tfvars.json files itself
+spec:
+  image_tag_policy:
+    enforcement: deny              # deny (default) | warn
+    origins: [artifact]            # artifact | module-service; default: both
+    require_tag: true              # default true
+    reject_tags: [latest, main]    # default: latest, main, master, dev, develop, staging, edge, nightly, canary
+    tag_pattern: '^\d+\.\d+\.\d+$'  # a tag must match it (searched, so anchor it); a digest is not checked
+    require_pin: false             # the tag must come from a kind: version pin (or --pin)
+    rings: [acc, prd]              # only deployments whose version document is in these rings; default all
+    allow:
+      - name: redis                # the image's name as `strata deploy images` lists it
+        reason: third-party image, covered by cve_policy
+        expires: 2026-12-31        # optional ISO date, honoured through that day
 ```
 
-## Execution Flow
+| Rule          | An image fails when                           | Finding code         |
+| ------------- | --------------------------------------------- | -------------------- |
+| `require_tag` | it has no tag and no pin supplies one         | `image_without_tag`  |
+| `reject_tags` | its tag is in the list, ignoring case         | `image_floating_tag` |
+| `tag_pattern` | its tag does not match the regular expression | `image_tag_pattern`  |
+| `require_pin` | its tag does not come from a version pin      | `image_not_pinned`   |
 
-1. Load configuration → Parse and validate workspace YAML
-2. Register providers → Load provider configurations
-3. Lifecycle: clean → Clean build artifacts
-4. Lifecycle: check → Validate configuration
-5. Lifecycle: build → Build deployment artifacts
-6. Lifecycle: plan → Preview infrastructure changes
-7. Provision infrastructure → Execute provisioners for each topology
-8. Lifecycle: provision → Post-provisioning hooks
-9. Lifecycle: initialize → Initialize resources
-10. Lifecycle: configure → Configure infrastructure
-11. Deploy namespaces → Deploy application namespaces
-12. Lifecycle: output → Export resource metadata
-13. Lifecycle: health → Verify deployment health
+- A digest (`sha256:...`) is immutable, so it passes `reject_tags` and `tag_pattern`. It still has to satisfy
+  `require_tag` and `require_pin`.
+- A tag that merely is not a semantic version, such as a build number (`env_sbx_20260907.11`), is not floating.
+  `reject_tags` is an explicit list; use `tag_pattern` to be stricter. Set `reject_tags: []` to reject none.
+- An image with no tag gets one finding, not also `image_not_pinned`, unless `require_tag` is `false`.
+- Each finding names the image, its origin and what uses it, and says where to put the tag:
+  `spec.pins.artifacts.<name>` of a version document, or `spec.pins.images.<name>` for a module service.
+- `deny` makes a finding an error and stops the run; `warn` makes it a warning.
+- An `allow` entry exempts one image from every rule. The `reason` is required. Once `expires` has passed, the
+  entry no longer exempts the image and the finding says so.
+- A deployment whose version document has a ring outside `rings` is not judged, and reports one info finding. A
+  deployment with no ring is always judged. A workspace is shared by every ring of a product, so `rings` is how
+  acc and prd can be strict while dev floats.
 
-## Best Practices
+Where it runs:
 
-- **Naming:** Descriptive names (`platform`, `production`, `development`)
-- **Versions:** Track versions through labels
-- **Provider organization:** Group by region or purpose
-- **Component names:** Unique across entire workspace
-- **Secret management:** Always use secret managers (Bitwarden, Vault)
-- **Variable naming:** UPPER_SNAKE_CASE for keys
-- **Idempotent scripts:** Lifecycle scripts safe to run multiple times
-- **Manager/control-plane counts:** Odd numbers (1, 3, 5, 7) for quorum
-- **Documentation:** Clear annotations for purpose
+| Command                | Behavior                                                                                                                                                    |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata build run`     | Judged first, before anything is cleaned or written, so a `deny` breach leaves the build path as it was. Also under `--dry-run`.                            |
+| `strata deploy run`    | Judged again before any value is resolved, because `--pin` given only to `deploy run` can change the tag. Also under `--smoke-test`, which records nothing. |
+| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first.                        |
+| `strata policy check`  | Evaluates it offline and records the result. `strata policy list` shows it.                                                                                 |
+| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                  |
 
-## Multi-Topology
+The result is recorded in `policy_results.json` as `image_tag_policy` and ends up in the audit manifest. The
+`deploy run` entry replaces the one `build run` wrote.
 
-When using multiple topologies:
+The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
+module, strata does not write a service's `image` into the chart's values, so the chart decides what runs: the
+policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
+the module's `configuration`, in the chart's own key shape. See
+[helm-image-delivery.md](../work/helm-image-delivery.md).
 
-- **Shared backend:** All topologies share Terraform backend (atomic operations)
-- **Execution order:** Processes in defined order
-- **Component names:** Must be unique across entire workspace
-- **Provider references:** Each topology can use different providers
+## Provider slots
 
-## Validation
+A `spec.providers[]` entry is a named **slot** with a default provider document:
 
-Platform validates:
+```yaml
+providers:
+  - slot: azure              # stable key — IaC code addresses strata.providers.azure
+    provider: azure-main     # default Provider document (westeurope)
+  - azure-shared             # bare name = slot and document share the name
+```
 
-- Valid workspace name (lowercase, alphanumeric, underscores)
-- Required fields (providers, provisioners, topology)
-- Unique names (providers, provisioners, topologies, components, namespaces, variables, secrets)
-- Provider/provisioner references exist
-- Component counts within limits (1-100)
-- File references exist
+- `slot` is unique within the workspace; two slots may point at the same document.
+- A bare string is shorthand for `{slot: <name>, provider: <name>}`, so a workspace that never
+  rebinds anything reads exactly as before and keeps its `strata.providers.<name>` keys.
+- The same workspace can target another region or account without its IaC code changing: a
+  [`deployment`](deployment.md) rebinds the slot (`spec.providers[]` there). Prefer an explicit
+  slot name (`azure`) over one named after a specific region's document (`azure-main`) when you
+  expect to rebind — otherwise `strata.providers.azure-main` would silently point at another
+  region.
 
-## Troubleshooting
+## Asset slots
 
-**Validation failed:** Check required fields, verify file references, ensure unique names, validate naming patterns  
-**Provider not found:** Verify provider name matches definition, check file path, ensure valid configuration  
-**Component conflicts:** Check for duplicate names, verify uniqueness across workspace  
-**Topology validation failed:** Use odd numbers for manager/control-plane, verify provider/provisioner references  
-**Variable/Secret conflicts:** Ensure unique keys, verify valid sources  
-**Lifecycle script failed:** Check executable permissions, verify path, review logs, ensure dependencies installed
+A `spec.assets[]` entry is a named **slot** with a default [`asset`](asset.md) document, and an
+execution step selects the slots it needs:
 
-## Advanced
+```yaml
+assets:
+  - slot: api                # stable key — steps select it, IaC code reads local.strata_assets.api
+    asset: api-default       # default Asset document
+  - openapi                  # bare name = slot and document share the name
+execution:
+  - name: publish_api
+    provisioner: terraform_apim
+    resources: [apim]
+    assets: [api]            # selects the slot
+```
 
-**Cost tracking:** Use custom properties (`owner`, `costcenter`, `project`, `budget_monthly`)  
-**Environment separation:** Separate workspace files (`production.yaml`, `staging.yaml`, `development.yaml`)  
-**Multi-region:** Multiple topologies with different providers  
-**Disaster recovery:** Protection lifecycle phase with backup scripts
+- `slot` is unique within the workspace; two slots may point at the same document. A step
+  selects a **slot**, never a document name directly.
+- A bare string is shorthand for `{slot: <name>, asset: <name>}`, so a workspace that never
+  rebinds anything reads exactly as before.
+- Only slots a step selects are materialised and projected, so an unused slot costs nothing.
+- A [`deployment`](deployment.md) rebinds the slot to another asset document, so one workspace can
+  serve many customers whose files live in different repositories.
+
+## Topology grouping
+
+Each `spec.topology[]` entry is a named grouping of resources and namespaces that conceptually
+belong together (e.g. "the AKS cluster + its blob store + its key vault") — for documentation,
+diagramming, and workload placement. It deliberately carries no provider/provisioner binding —
+which tool builds/deploys these resources is a separate concern (`spec.execution`/`provisioners`
+above): a single provisioner can span several groupings, and a single grouping can be built by
+several different provisioners acting on different subsets of it (ADR-0011).
+
+- `name` — unique grouping name within this workspace
+- `type` — the topology type (must match a [topologyconfig.md](topologyconfig.md) document's
+  `meta.name`)
+- `components[]` — each `{resource, modules}`: a reference to this workspace's own
+  `spec.resources[].name` (checked at Phase 1 — only possible because the grouping is inline now,
+  ADR-0028), optionally with application code (`modules[]`, same shape as
+  [namespace.md](namespace.md)'s module references) attached directly to that resource (e.g. an
+  Azure Function App's code onto its Function App resource)
+- `namespaces[]` — each `{namespace}`: a reference to this workspace's own `spec.namespaces[]`
+- `volumes[]` — topology-level storage volumes
+
+When multiple modules are attached to one component and more than one is enabled, exactly one
+must be marked as the `main` slot.
+
+## Notes
+
+- Three sibling keys answer three different questions: `providers` (where — which account, as
+  rebindable slots), `provisioners` (with what — tool definitions), `execution` (what runs, in
+  what order).
+- `execution` names steps ordered by `depends_on`, not a numeric `priority` (ADR-0011) — `strata
+  deploy run` executes steps in that dependency order.
+- A [`deployment`](deployment.md)'s `stages[]` reference `execution[].name` for runtime parameters
+  (timeouts, health checks, enabled/disabled) — they never redefine what runs.

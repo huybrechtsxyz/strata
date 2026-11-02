@@ -1,228 +1,213 @@
-"""CVE scanner integration — auto-detects Trivy or Grype for vulnerability scanning."""
+#!/usr/bin/env python3
+"""CVE scanner integration (docs/archive/cve-scanner-integration.md) — scans
+the SBOM `build run` just generated for known vulnerabilities, via either
+of the two real, evidenced v1 backends (Trivy or Grype).
+
+Both backends take an already-written SBOM file, not a container image or
+filesystem path — matches v1's real `_scan_trivy()`/`_scan_grype()` CLI
+invocations exactly:
+
+    trivy sbom <path> --format json --severity <CSV> --exit-code 0
+    grype sbom:<path> --output json
+
+Trivy filters severities via its own `--severity` flag; Grype has none —
+filtering happens here in Python instead, including the `NEGLIGIBLE` ->
+`LOW` remap Trivy's own vocabulary never needs (v1 evidence, docs/work/
+cve-scanner-integration.md).
+
+Doesn't fit `Integration.command`'s normal one-executable-per-class
+resolution (ADR-0021 D6): with no Integration document, this integration
+picks between two entirely different CLIs at runtime (detected once per
+instance) - so `command` is overridden below rather than relying on
+`COMMAND`. Since docs/work/integration-readiness.md Phases 6-7 a solution
+can also declare `type: trivy` or `type: grype` (`TrivyIntegration`,
+`GrypeIntegration` below): the backend is then fixed by the document, and
+`spec.command`/`spec.version`/`spec.required` apply like any local tool.
+"""
 
 import json
 import re
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
 
-from strata.integrations.base_integration import BaseIntegration
-from strata.logger import get_logger
-from strata.models.capabilities import ICveScanner
-from strata.models.integration_model import IntegrationModel
-from strata.models.sbom_model import CveAuditResultModel, CveFindingModel
-from strata.utils.system import CommandResult
+from strata.integrations.capabilities import ScannerIntegration
+from strata.integrations.errors import IntegrationError
+from strata.models.integration_model import Capability, IntegrationModel
+from strata.models.sbom_model import CVE_SEVERITY_ORDER, CveAuditResultModel, CveFindingModel
+from strata.utils.transport import CommandResult
 
-logger = get_logger(__name__)
-
-_SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+#: Grype reports this; Trivy's own vocabulary never produces it (v1 evidence).
+_NEGLIGIBLE_TO_LOW = {"NEGLIGIBLE": "LOW"}
 
 
-def _detect_backend() -> Optional[str]:
-    """Detect which CVE scanner is available. Trivy preferred over Grype."""
-    if shutil.which("trivy"):
-        return "trivy"
-    if shutil.which("grype"):
-        return "grype"
-    return None
-
-
-class CveScannerIntegration(BaseIntegration):
-    """CVE vulnerability scanner integration.
-
-    Auto-detects Trivy or Grype in PATH.  Scans CycloneDX SBOM files and
-    returns structured vulnerability findings.
+class CveScannerIntegration(ScannerIntegration):
+    """Detects and runs whichever of Trivy/Grype is on `PATH` (Trivy
+    preferred when both are present — matches v1's own backend preference
+    order), scanning an already-written SBOM file for known
+    vulnerabilities.
     """
 
-    COMMAND = "trivy"  # default; overridden at init if grype is detected instead
-    CAPABILITIES: list = [ICveScanner]
+    TYPE = "cve_scanner"
+    CAPABILITIES = frozenset({Capability.SCANNER})
+    TRANSPORTS = frozenset({"cli"})
 
-    @classmethod
-    def _get_instance_key_static(cls, class_ref, *args, **kwargs) -> str:
-        return "default"
+    #: Preference order when both are on PATH.
+    _BACKENDS = ("trivy", "grype")
 
-    def __init__(self, config: IntegrationModel):
-        # Detect backend before super().__init__ resolves command
-        backend = _detect_backend()
-        super().__init__(config)
-        self._backend: Optional[str] = backend
-        # Override the command resolved by base class with the detected backend
-        if backend:
-            self.command = backend
-        logger.debug("CVE scanner initialized", backend=self._backend)
+    def __init__(self, config: IntegrationModel | None = None, *, backend: str | None = None) -> None:
+        super().__init__(config=config)
+        if backend is None:
+            backend = next((b for b in self._BACKENDS if shutil.which(b) is not None), None)
+        self._backend = backend
 
     @property
-    def backend(self) -> Optional[str]:
-        """Return 'trivy', 'grype', or None if unavailable."""
+    def command(self) -> str | None:
+        """`spec.command` when a document sets it, else the backend executable (`None`: none on PATH).
+
+        Overrides `Integration.command`: without a document this integration picks between two
+        entirely different CLIs at runtime instead of one fixed executable per class.
+        """
+        if self.config is not None and self.config.spec.command:
+            return self.config.spec.command
         return self._backend
 
-    def get_version_command(self) -> List[str]:
-        if self._backend == "grype":
-            return [self.command, "version"]
-        return [self.command, "--version"]
+    def get_version(self) -> str | None:
+        """Overrides the base implementation: `VERSION_ARGS` differs per
+        backend (Trivy: `--version`; Grype: `version`), so it can't be a
+        single `ClassVar` shared by both."""
+        if self._backend is None or not self.is_available():
+            return None
+        args = ("--version",) if self._backend == "trivy" else ("version",)
+        result = self.run(*args, timeout=10)
+        if not result.is_successful:
+            return None
+        return self.parse_version(result.payload)
 
-    def parse_version(self, version_output: str) -> str:
-        """Extract version from trivy/grype output."""
-        # trivy: "Version: 0.52.0" or "trivy version 0.52.0"
-        # grype: "grype 0.74.0" or "Application: grype\nVersion: 0.74.0"
-        m = re.search(r"(\d+\.\d+\.\d+)", version_output)
-        return m.group(1) if m else version_output.strip()
+    def parse_version(self, raw: str) -> str:
+        match = re.search(r"(\d+\.\d+\.\d+)", raw)
+        return match.group(1) if match else raw.strip()
 
-    def ensure_available(self) -> Tuple[bool, str]:
-        """Check if a CVE scanner backend is available."""
-        if not self._backend:
-            return False, (
-                "No CVE scanner found. Install trivy (https://trivy.dev) or grype (https://github.com/anchore/grype)."
-            )
-        if not self.is_available():
-            return False, f"{self._backend} is not available in PATH."
-        self._info = f"{self._backend} {self.get_version()} is available"
-        return True, ""
-
-    def get_setup_info(self) -> Dict[str, Any]:
-        return {
-            "name": "cve_scanner",
-            "command": self._backend or "trivy",
-            "install_url": "https://trivy.dev/latest/getting-started/installation/",
-            "env_vars": [],
-            "auth_methods": [],
-            "yaml_example": None,
-        }
-
-    def scan_sbom(
-        self,
-        sbom_path: Path,
-        severity_threshold: str = "MEDIUM",
-        timeout: int = 300,
-    ) -> CveAuditResultModel:
-        """Run vulnerability scan against a CycloneDX SBOM file.
-
-        Args:
-            sbom_path: Path to the sbom.json file.
-            severity_threshold: Minimum severity to include (CRITICAL|HIGH|MEDIUM|LOW|UNKNOWN).
-            timeout: Command timeout in seconds.
-
-        Returns:
-            CveAuditResultModel with findings and severity counts.
+    def ensure_available(self) -> None:
+        """Raise when neither Trivy nor Grype is on `PATH`.
 
         Raises:
-            RuntimeError: If scanner is not available or scan fails fatally.
+            IntegrationError: Neither backend is installed, or the declared one is not on PATH.
         """
-        available, error = self.ensure_available()
-        if not available:
-            raise RuntimeError(error)
+        if self._backend is None:
+            raise IntegrationError(
+                "no CVE scanner found on PATH — install Trivy (https://trivy.dev) or "
+                "Grype (https://github.com/anchore/grype) to enable CVE scanning."
+            )
+        if not self.is_available():
+            raise IntegrationError(f"{self.name}: '{self.command}' is not available on PATH.")
 
-        if self._backend == "grype":
-            return self._scan_grype(sbom_path, severity_threshold, timeout)
-        return self._scan_trivy(sbom_path, severity_threshold, timeout)
+    def scan_sbom(self, sbom_path: Path, *, severity_threshold: str = "MEDIUM") -> CveAuditResultModel:
+        """Scan `sbom_path` (a CycloneDX JSON file) with the detected backend.
 
-    def _scan_trivy(self, sbom_path: Path, severity_threshold: str, timeout: int) -> CveAuditResultModel:
-        """Run trivy sbom scan."""
-        severities = self._severities_at_or_above(severity_threshold)
+        Args:
+            sbom_path: Path to the already-written `sbom.json`.
+            severity_threshold: Minimum severity to report — forwarded to
+                Trivy's own `--severity` flag; applied here in Python for
+                Grype, which has no equivalent flag (v1 evidence).
 
-        args = [
-            "sbom",
-            str(sbom_path),
-            "--format",
-            "json",
-            "--severity",
-            ",".join(severities),
-            "--exit-code",
-            "0",  # don't fail on findings — we handle exit codes ourselves
-        ]
+        Raises:
+            IntegrationError: Neither backend is available, or the scan
+                process itself failed (non-zero exit).
+        """
+        self.ensure_available()
+        backend = self._backend
+        assert backend is not None  # ensure_available() just confirmed this
 
-        result: CommandResult = self._run_integration(args, timeout=timeout)
-        if result.returncode != 0 and not result.stdout:
-            raise RuntimeError(f"Trivy scan failed: {result.stderr}")
+        if backend == "trivy":
+            result, findings = self._scan_trivy(sbom_path, severity_threshold)
+        else:
+            result, findings = self._scan_grype(sbom_path, severity_threshold)
 
-        return self._parse_trivy_output(result.stdout, sbom_path)
+        if not result.is_successful:
+            raise IntegrationError(f"{backend} scan of '{sbom_path}' failed: {result.stderr.strip()}")
 
-    def _scan_grype(self, sbom_path: Path, severity_threshold: str, timeout: int) -> CveAuditResultModel:
-        """Run grype sbom scan."""
-        args = [
-            f"sbom:{sbom_path}",
-            "--output",
-            "json",
-        ]
+        return self._summarize(findings, sbom_path)
 
-        result: CommandResult = self._run_integration(args, timeout=timeout)
-        if result.returncode != 0 and not result.stdout:
-            raise RuntimeError(f"Grype scan failed: {result.stderr}")
+    def _scan_trivy(self, sbom_path: Path, severity_threshold: str) -> tuple[CommandResult, list[CveFindingModel]]:
+        severities = CVE_SEVERITY_ORDER[: CVE_SEVERITY_ORDER.index(severity_threshold) + 1]
+        result = self.run(
+            "sbom", str(sbom_path), "--format", "json", "--severity", ",".join(severities), "--exit-code", "0"
+        )
+        if not result.is_successful:
+            return result, []
+        return result, self._safe_parse("trivy", sbom_path, self._parse_trivy, result.payload)
 
-        return self._parse_grype_output(result.stdout, sbom_path, severity_threshold)
+    def _scan_grype(self, sbom_path: Path, severity_threshold: str) -> tuple[CommandResult, list[CveFindingModel]]:
+        result = self.run("sbom:" + str(sbom_path), "--output", "json")
+        if not result.is_successful:
+            return result, []
+        findings = self._safe_parse("grype", sbom_path, self._parse_grype, result.payload)
+        allowed = set(CVE_SEVERITY_ORDER[: CVE_SEVERITY_ORDER.index(severity_threshold) + 1])
+        return result, [f for f in findings if f.severity in allowed]
 
-    def _parse_trivy_output(self, raw: str, sbom_path: Path) -> CveAuditResultModel:
-        """Parse Trivy JSON output into structured model."""
-        findings: List[CveFindingModel] = []
-
+    @staticmethod
+    def _safe_parse(
+        backend: str, sbom_path: Path, parser: Callable[[str], list[CveFindingModel]], raw: str
+    ) -> list[CveFindingModel]:
+        """Run `parser(raw)`, turning a malformed/unexpected-shape response
+        into a clean `IntegrationError` instead of letting
+        `json.JSONDecodeError`/`KeyError` escape `scan_sbom()` uncaught —
+        `evaluate_cve_policy()` only catches `IntegrationError`, and a raw
+        parser exception would crash `build run` entirely rather than
+        degrading through `on_missing_data`, same as a real scan failure.
+        """
         try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse trivy JSON output")
-            return self._empty_result(sbom_path)
+            return parser(raw)
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise IntegrationError(f"{backend} scan of '{sbom_path}' produced unparseable output: {exc}") from exc
 
-        for target in data.get("Results") or []:
-            for vuln in target.get("Vulnerabilities") or []:
+    @staticmethod
+    def _parse_trivy(raw: str) -> list[CveFindingModel]:
+        data = json.loads(raw)
+        findings: list[CveFindingModel] = []
+        for scan_result in data.get("Results") or []:
+            for vuln in scan_result.get("Vulnerabilities") or []:
                 findings.append(
                     CveFindingModel(
-                        vulnerability_id=vuln.get("VulnerabilityID", "UNKNOWN"),
-                        severity=(vuln.get("Severity") or "UNKNOWN").upper(),
+                        vulnerability_id=vuln["VulnerabilityID"],
+                        severity=vuln.get("Severity", "UNKNOWN"),
                         package_name=vuln.get("PkgName", ""),
                         installed_version=vuln.get("InstalledVersion", ""),
-                        fixed_version=vuln.get("FixedVersion") or None,
-                        title=vuln.get("Title") or vuln.get("Description", "")[:120] or None,
-                        purl=vuln.get("PkgIdentifier", {}).get("PURL") or None,
+                        fixed_version=vuln.get("FixedVersion"),
+                        title=vuln.get("Title"),
+                        purl=(vuln.get("PkgIdentifier") or {}).get("PURL"),
                     )
                 )
+        return findings
 
-        return self._build_result(findings, sbom_path)
-
-    def _parse_grype_output(self, raw: str, sbom_path: Path, severity_threshold: str) -> CveAuditResultModel:
-        """Parse Grype JSON output into structured model."""
-        findings: List[CveFindingModel] = []
-        threshold_idx = _SEVERITY_ORDER.index(severity_threshold) if severity_threshold in _SEVERITY_ORDER else 4
-
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse grype JSON output")
-            return self._empty_result(sbom_path)
-
+    @staticmethod
+    def _parse_grype(raw: str) -> list[CveFindingModel]:
+        data = json.loads(raw)
+        findings: list[CveFindingModel] = []
         for match in data.get("matches") or []:
-            vuln = match.get("vulnerability") or {}
-            severity = (vuln.get("severity") or "Unknown").upper()
-            if severity == "NEGLIGIBLE":
-                severity = "LOW"
-
-            # Filter by threshold
-            sev_idx = _SEVERITY_ORDER.index(severity) if severity in _SEVERITY_ORDER else 4
-            if sev_idx > threshold_idx:
-                continue
-
+            vulnerability = match.get("vulnerability") or {}
             artifact = match.get("artifact") or {}
-            fix_versions = vuln.get("fix", {}).get("versions") or []
-
+            severity = (vulnerability.get("severity") or "UNKNOWN").upper()
+            severity = _NEGLIGIBLE_TO_LOW.get(severity, severity)
+            fixed_versions = (vulnerability.get("fix") or {}).get("versions") or []
             findings.append(
                 CveFindingModel(
-                    vulnerability_id=vuln.get("id", "UNKNOWN"),
+                    vulnerability_id=vulnerability.get("id", ""),
                     severity=severity,
                     package_name=artifact.get("name", ""),
                     installed_version=artifact.get("version", ""),
-                    fixed_version=fix_versions[0] if fix_versions else None,
-                    title=(vuln.get("description") or "")[:120] or None,
-                    purl=artifact.get("purl") or None,
+                    fixed_version=fixed_versions[0] if fixed_versions else None,
+                    title=vulnerability.get("description"),
+                    purl=artifact.get("purl"),
                 )
             )
+        return findings
 
-        return self._build_result(findings, sbom_path)
-
-    def _build_result(self, findings: List[CveFindingModel], sbom_path: Path) -> CveAuditResultModel:
-        """Build result model with severity counts."""
-        counts = {s: 0 for s in _SEVERITY_ORDER}
-        for f in findings:
-            if f.severity in counts:
-                counts[f.severity] += 1
-
+    def _summarize(self, findings: list[CveFindingModel], sbom_path: Path) -> CveAuditResultModel:
+        counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
+        for finding in findings:
+            counts[finding.severity if finding.severity in counts else "UNKNOWN"] += 1
         return CveAuditResultModel(
             scanner=self._backend or "unknown",
             scanner_version=self.get_version() or "unknown",
@@ -236,25 +221,22 @@ class CveScannerIntegration(BaseIntegration):
             findings=findings,
         )
 
-    def _empty_result(self, sbom_path: Path) -> CveAuditResultModel:
-        """Return an empty result when parsing fails."""
-        return CveAuditResultModel(
-            scanner=self._backend or "unknown",
-            scanner_version=self.get_version() or "unknown",
-            sbom_path=str(sbom_path),
-            total_findings=0,
-            critical=0,
-            high=0,
-            medium=0,
-            low=0,
-            unknown=0,
-            findings=[],
-        )
 
-    @staticmethod
-    def _severities_at_or_above(threshold: str) -> List[str]:
-        """Return list of severity strings at or above the threshold."""
-        if threshold not in _SEVERITY_ORDER:
-            return _SEVERITY_ORDER
-        idx = _SEVERITY_ORDER.index(threshold)
-        return _SEVERITY_ORDER[: idx + 1]
+class TrivyIntegration(CveScannerIntegration):
+    """`type: trivy` - the CVE scanner fixed to Trivy (docs/work/integration-readiness.md Phase 6)."""
+
+    TYPE = "trivy"
+    COMMAND = "trivy"
+
+    def __init__(self, config: IntegrationModel | None = None) -> None:
+        super().__init__(config, backend="trivy")
+
+
+class GrypeIntegration(CveScannerIntegration):
+    """`type: grype` - the CVE scanner fixed to Grype (docs/work/integration-readiness.md Phase 7)."""
+
+    TYPE = "grype"
+    COMMAND = "grype"
+
+    def __init__(self, config: IntegrationModel | None = None) -> None:
+        super().__init__(config, backend="grype")

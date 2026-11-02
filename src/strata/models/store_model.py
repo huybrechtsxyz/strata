@@ -1,0 +1,448 @@
+#!/usr/bin/env python3
+"""Store models for variables, secrets, and feature flags (Environment building block).
+
+`FeatureStoreModel`/`VariableStoreModel`/`SecretStoreModel` share one shape
+(`key`/`store`/`value`/`version`/`description` + a "not valid on a built-in
+store" gate on any integration-only field) plus their own extras: `Variable`
+adds `type` (declared HCL type + value-consistency check), `Secret` adds
+`generate`/`rotate`. Ported from v1's real `store_models.py`.
+
+`store` values map to integration types in v1 (`IntegrationFactory`). The
+`Integration` **kind** now exists in v2 (`integration_model.py`) and can
+declare a `variables`/`secrets`/`features` capability, so a non-built-in
+`store` is expected to name one. The runtime resolution layer for these
+also now exists (`strata.controllers.value_controller`, auto-binding a
+real `Integration` document by type per
+docs/design/store-integration-configuration.md): `infisical`
+(variables + secrets), `azure-keyvault` (secrets), and `azure-appconfig`
+(variables + features) resolve against a real backend today — either the
+bound `Integration` document's `spec.endpoints`/`.configuration`, or the
+resolver's own env-var fallback if none is bound. `consul`/`vault`/`etcd`
+(variables), `bitwarden` (secrets), and `flagsmith` (features) remain
+recognized values with no resolver behind them yet (same discipline as
+`Provisioner.tool`, ADR-0011) — `constant`/`environment` (+ `github` for
+secrets, `artifact` for variables) are still the only *built-in* stores,
+needing no integration at all.
+"""
+
+from enum import Enum
+from typing import Any, ClassVar, Literal
+
+from pydantic import Field, model_validator
+
+from strata.models.common_models import PlatformBaseModel, VariableKey
+
+#: Store types resolvable without any integration — a literal value
+#: (`constant`) or an environment variable read directly (`environment`),
+#: or an in-solution `kind: artifact` document lookup (`artifact` — no
+#: external system involved, same bar as constant/environment).
+BUILTIN_FEATURE_STORE_TYPES = frozenset({"constant", "environment"})
+BUILTIN_VARIABLE_STORE_TYPES = frozenset({"constant", "environment", "artifact"})
+#: Secrets additionally treat `github` as built-in — env vars injected by the
+#: GitHub Actions runner, resolved the same way as `environment`, no
+#: integration lookup involved.
+BUILTIN_SECRET_STORE_TYPES = frozenset({"constant", "environment", "github"})
+
+
+def _validate_field_not_on_builtin(
+    *, kind_noun: str, key: str, field_name: str, field_value: Any, store_value: str, builtin_types: frozenset[str]
+) -> None:
+    """Raise if *field_value* is set while *store_value* is one of *builtin_types*.
+
+    Shared by `FeatureStoreModel`/`VariableStoreModel`/`SecretStoreModel`'s
+    `default`/`generate`/`rotate` validators — same check, same message
+    shape, only the model/field/builtin-set differ per call site (matches
+    v1's shared `_validate_field_not_on_builtin`).
+    """
+    if field_value is not None and store_value in builtin_types:
+        raise ValueError(
+            f"{kind_noun} '{key}': '{field_name}' is not valid on built-in store type '{store_value}'. "
+            "Use an integration-backed store."
+        )
+
+
+class FeatureStoreType(str, Enum):
+    """Where a feature flag is read from: `constant` and `environment` are built in, `azure-appconfig` is
+    resolved through an Integration. `flagsmith` is recognised but has no resolver yet.
+
+    Design notes:
+    Feature flag store backend type.
+
+    `CONSTANT`/`ENVIRONMENT` are built-in resolvers (no integration needed).
+    `AZURE_APPCONFIG` resolves against a real `Integration` document today
+    (see module docstring); `FLAGSMITH` is still a recognized value
+    (matching v1's real vocabulary) with no runtime resolver behind it yet.
+    """
+
+    CONSTANT = "constant"
+    ENVIRONMENT = "environment"
+    AZURE_APPCONFIG = "azure-appconfig"
+    FLAGSMITH = "flagsmith"
+
+
+class FeatureStoreModel(PlatformBaseModel):
+    """A feature flag. `key` is what `${feature:KEY}` refers to; `store` and `value` say where it comes
+    from. `value` is a literal for `constant`, an environment variable name for `environment`, and a
+    flag name for an integration-backed store.
+
+    Design notes:
+    A single feature flag definition.
+
+    `value` is the flag's identifier: a literal for `constant`, an
+    environment variable name for `environment`, or a flag name/key for an
+    integration-backed store. `default` seeds the store with a value when
+    the key is missing — only meaningful for integration-backed stores,
+    since `constant`/`environment` have no store to seed (v1 precedent).
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`default` is only valid for an integration-backed store, not for `constant` or `environment`.",
+    )
+
+    key: VariableKey = Field(description="Feature flag key name for referencing in configurations")
+    store: FeatureStoreType = Field(
+        description="Where the flag comes from: `constant`, `environment` or `azure-appconfig`. "
+        "`flagsmith` is recognised but cannot be resolved yet. The Configuration's "
+        "`spec.security.allowed_feature_stores` can restrict the allowed types.\n\n"
+        "Design notes: Feature store type: constant, environment, azure-appconfig, or "
+        "flagsmith"
+    )
+    value: Any = Field(
+        description="Feature flag identifier: literal for constant, env var name for environment, "
+        "flag name/key for integration-backed stores"
+    )
+    version: str | None = Field(None, description="Optional version for store-based feature flags")
+    description: str | None = Field(None, description="Optional description for documentation purposes")
+    default: str | None = Field(
+        None,
+        description="Seed the store with this state ('true'/'false') when the flag is missing "
+        "(integration-backed stores only)",
+    )
+
+    @model_validator(mode="after")
+    def validate_default_not_on_builtin(self) -> "FeatureStoreModel":
+        """`default` only makes sense for an integration-backed store — there is no store to seed
+        for `constant`/`environment`."""
+        _validate_field_not_on_builtin(
+            kind_noun="Feature",
+            key=self.key,
+            field_name="default",
+            field_value=self.default,
+            store_value=self.store.value,
+            builtin_types=BUILTIN_FEATURE_STORE_TYPES,
+        )
+        return self
+
+
+class VariableValueType(str, Enum):
+    """Declared Terraform type used when a variable is emitted: `string` (the default), `number`, `bool`,
+    `object`, `list` or `map`. Only checked against the value for `constant` stores.
+
+    Design notes:
+    Declared HCL type for Terraform variable emission.
+
+    When set on a `VariableStoreModel`, controls how the value is serialized
+    for provisioner consumption (e.g. `.auto.tfvars.json`): `STRING` (default
+    when omitted, backward compatible), `NUMBER`, `BOOL`, `OBJECT`, `LIST`,
+    `MAP`.
+    """
+
+    STRING = "string"
+    NUMBER = "number"
+    BOOL = "bool"
+    OBJECT = "object"
+    LIST = "list"
+    MAP = "map"
+
+
+class VariableStoreType(str, Enum):
+    """Where a variable is read from: `constant`, `environment` and `artifact` (an Artifact document) are
+    built in; `azure-appconfig` and `infisical` are resolved through an Integration. `consul`, `vault`
+    and `etcd` are recognised but have no resolver yet.
+
+    Design notes:
+    Variable store backend type.
+
+    `CONSTANT`/`ENVIRONMENT`/`ARTIFACT` are built-in resolvers (no
+    integration needed) — `ARTIFACT` resolves against an in-solution
+    `kind: artifact` document, not an external system
+    (docs/work/artifact-references.md). `AZURE_APPCONFIG`/`INFISICAL`
+    resolve against a real `Integration` document today (see module
+    docstring); `HASHICORP_CONSUL`/`HASHICORP_VAULT`/`ETCD` are still
+    recognized values with no runtime resolver behind them yet.
+    """
+
+    CONSTANT = "constant"
+    ENVIRONMENT = "environment"
+    ARTIFACT = "artifact"
+    AZURE_APPCONFIG = "azure-appconfig"
+    HASHICORP_CONSUL = "consul"
+    HASHICORP_VAULT = "vault"
+    INFISICAL = "infisical"
+    ETCD = "etcd"
+
+
+class VariableStoreModel(PlatformBaseModel):
+    """A variable. `key` is what `${var:KEY}` refers to; `store` and `value` say where it comes from.
+    `value` is a literal for `constant`, an environment variable name for `environment`, an Artifact
+    document name for `artifact`, and a path or key for an integration-backed store.
+
+    Design notes:
+    A single variable definition.
+
+    `value` is the variable's identifier: a literal for `constant`, an
+    environment variable name for `environment`, or a config path/key for an
+    integration-backed store. `type` only affects emission for `constant`
+    values today — other store types resolve their actual value at deploy
+    time, so there is nothing yet to check the declared type against.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "On a `constant` store, `type` must match the value: `object` and `map` need a mapping, "
+        "`list` a sequence, `number` a number and `bool` a boolean.",
+        "`default` is only valid for an integration-backed store, not for `constant`, `environment` or `artifact`.",
+        "`store: artifact` requires `field`, and `field` is only valid with `store: artifact`.",
+    )
+
+    key: VariableKey = Field(description="Variable key name for referencing in configurations")
+    store: VariableStoreType = Field(
+        description="Where the value comes from: `constant`, `environment`, `artifact`, "
+        "`azure-appconfig` or `infisical`. `consul`, `vault` and `etcd` are recognised "
+        "but cannot be resolved yet. The Configuration's "
+        "`spec.security.allowed_variable_stores` can restrict the allowed types.\n\n"
+        "Design notes: Variable store type: constant, environment, artifact, "
+        "azure-appconfig, consul, vault, infisical, or etcd"
+    )
+    value: Any = Field(
+        description="Literal for `constant`, environment variable name for `environment`, Artifact "
+        "document name for `artifact`, path or key for an integration-backed store.\n\n"
+        "Design notes: Variable identifier: literal for constant, env var name for "
+        "environment, ArtifactModel.meta.name for artifact, config path/key for "
+        "integration-backed stores"
+    )
+    type: VariableValueType | None = Field(
+        None,
+        description="Declared HCL type for Terraform emission. Omitted means emitted as a string "
+        "(backward compatible).",
+    )
+    version: str | None = Field(None, description="Optional version for store-based variables")
+    description: str | None = Field(None, description="Optional description for documentation purposes")
+    default: str | None = Field(
+        None, description="Seed the store with this value when the key is missing (integration-backed stores only)"
+    )
+    field: Literal["image_name", "image_tag", "image_ref"] | None = Field(
+        None,
+        description="Which field of the `store: artifact` target to read: image_name, image_tag (kind: "
+        "version's pins.artifacts-overlaid), or the synthesised image_ref ('{image_name}:{image_tag}'). "
+        "Only valid on 'store: artifact'.",
+    )
+
+    @model_validator(mode="after")
+    def validate_type_value_consistency(self) -> "VariableStoreModel":
+        """When `type` is set on a `constant` store, `value` must match it.
+
+        Only checked for `constant` — every other store type resolves its
+        real value at deploy time, so there's nothing here yet to compare
+        against.
+        """
+        if self.type is None or self.store != VariableStoreType.CONSTANT:
+            return self
+        if self.type == VariableValueType.OBJECT and not isinstance(self.value, dict):
+            raise ValueError(f"Variable '{self.key}': type=object requires a mapping value")
+        if self.type == VariableValueType.LIST and not isinstance(self.value, list):
+            raise ValueError(f"Variable '{self.key}': type=list requires a sequence value")
+        if self.type == VariableValueType.MAP and not isinstance(self.value, dict):
+            raise ValueError(f"Variable '{self.key}': type=map requires a mapping value")
+        if self.type == VariableValueType.NUMBER and not isinstance(self.value, int | float):
+            raise ValueError(f"Variable '{self.key}': type=number requires a numeric value")
+        if self.type == VariableValueType.BOOL and not isinstance(self.value, bool):
+            raise ValueError(f"Variable '{self.key}': type=bool requires a boolean value")
+        return self
+
+    @model_validator(mode="after")
+    def validate_default_not_on_builtin(self) -> "VariableStoreModel":
+        """`default` only makes sense for an integration-backed store."""
+        _validate_field_not_on_builtin(
+            kind_noun="Variable",
+            key=self.key,
+            field_name="default",
+            field_value=self.default,
+            store_value=self.store.value,
+            builtin_types=BUILTIN_VARIABLE_STORE_TYPES,
+        )
+        return self
+
+    @model_validator(mode="after")
+    def validate_field_only_on_artifact_store(self) -> "VariableStoreModel":
+        """`field` only makes sense for `store: artifact` — every other
+        store's `value` is already the whole resolved identifier (a
+        literal, an env var name, a config path/key), with nothing further
+        to select. Conversely, `store: artifact` *requires* `field` —
+        without it, which of the artifact's fields this variable's value
+        should be is ambiguous.
+        """
+        if self.store == VariableStoreType.ARTIFACT and self.field is None:
+            raise ValueError(f"Variable '{self.key}': 'store: artifact' requires 'field' to be set.")
+        if self.field is not None and self.store != VariableStoreType.ARTIFACT:
+            raise ValueError(
+                f"Variable '{self.key}': 'field' is only valid on 'store: artifact' (got store '{self.store.value}')."
+            )
+        return self
+
+
+class SecretGenerateType(str, Enum):
+    """Supported cryptographic secret generator types."""
+
+    URLSAFE = "urlsafe"
+    HEX = "hex"
+    PASSWORD = "password"
+    ALPHANUMERIC = "alphanumeric"
+    NUMERIC = "numeric"
+    BASE64 = "base64"
+    UUID4 = "uuid4"
+    UUID7 = "uuid7"
+
+
+class SecretGenerateSpec(PlatformBaseModel):
+    """Spec for generating a cryptographically secure secret when the store key does not exist."""
+
+    type: SecretGenerateType = Field(
+        description="Generator type (urlsafe, hex, password, alphanumeric, numeric, base64, uuid4, uuid7)"
+    )
+    length: int = Field(
+        default=32,
+        ge=8,
+        le=1024,
+        description="Length in bytes (urlsafe/hex/base64) or characters (alphanumeric/password/numeric). "
+        "Ignored for uuid4/uuid7.",
+    )
+
+
+class SecretRotatePolicy(str, Enum):
+    """Rotation policy: warn (advisory only) or rotate (auto-regenerate)."""
+
+    WARN = "warn"
+    ROTATE = "rotate"
+
+
+class SecretRotateSpec(PlatformBaseModel):
+    """Rotation policy for a secret — advisory warning or automatic regeneration."""
+
+    max_age: int = Field(ge=1, description="Maximum secret age in days before the policy triggers")
+    policy: SecretRotatePolicy = Field(
+        default=SecretRotatePolicy.WARN,
+        description="'warn' emits an advisory, 'rotate' auto-regenerates (requires a 'generate' spec)",
+    )
+
+
+class SecretStoreType(str, Enum):
+    """Where a secret is read from: `constant`, `environment` and `github` are built in; `azure-keyvault`
+    and `infisical` are resolved through an Integration. `vault` and `bitwarden` are recognised but have
+    no resolver yet.
+
+    Design notes:
+    Secret store backend type.
+
+    `CONSTANT`/`ENVIRONMENT`/`GITHUB` are built-in resolvers (no integration
+    needed). `AZURE_KEYVAULT`/`INFISICAL` resolve against a real
+    `Integration` document today (see module docstring); `BITWARDEN` is
+    still a recognized value with no runtime resolver behind it yet.
+    """
+
+    CONSTANT = "constant"
+    ENVIRONMENT = "environment"
+    GITHUB = "github"
+    AZURE_KEYVAULT = "azure-keyvault"
+    BITWARDEN = "bitwarden"
+    HASHICORP_VAULT = "vault"
+    INFISICAL = "infisical"
+
+
+class SecretStoreModel(PlatformBaseModel):
+    """A secret. `key` is what `${secret:KEY}` refers to; `store` and `value` say where it comes from.
+    `value` is a literal for `constant`, an environment variable name for `environment`, a GitHub
+    Actions secret name for `github`, and a path or ID for an integration-backed store.
+
+    Design notes:
+    A single secret definition.
+
+    `value` is the secret's identifier: a literal for `constant`, an
+    environment variable name for `environment`, a GitHub Actions secret
+    name (env var injected by the runner) for `github`, or a secret path/ID
+    for an integration-backed store.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`generate` and `rotate` are only valid for an integration-backed store, not for "
+        "`constant`, `environment` or `github`.",
+        "A `rotate` policy of `rotate` needs a `generate` spec, because strata cannot regenerate a "
+        "secret it did not create. Use policy `warn` otherwise.",
+        "`version` is not supported for the `github` store.",
+    )
+
+    key: VariableKey = Field(description="Secret key name for referencing in configurations")
+    store: SecretStoreType = Field(
+        description="Where the secret comes from: `constant`, `environment`, `github`, "
+        "`azure-keyvault` or `infisical`. `vault` and `bitwarden` are recognised but "
+        "cannot be resolved yet. The Configuration's "
+        "`spec.security.allowed_secret_stores` can restrict the allowed types.\n\n"
+        "Design notes: Secret store type: constant, environment, github, "
+        "azure-keyvault, bitwarden, vault, or infisical"
+    )
+    value: Any = Field(
+        description="Secret identifier: literal for constant, env var name for environment, GitHub Actions "
+        "secret name for github, secret path/ID for integration-backed stores"
+    )
+    version: str | None = Field(None, description="Optional version for store-based secrets")
+    description: str | None = Field(None, description="Optional description for documentation purposes")
+    generate: SecretGenerateSpec | None = Field(
+        None, description="Auto-generate the secret when the store key is missing (integration-backed stores only)"
+    )
+    rotate: SecretRotateSpec | None = Field(
+        None,
+        description="Rotation policy: age-based advisory or automatic regeneration (integration-backed stores only)",
+    )
+
+    @model_validator(mode="after")
+    def validate_generate_not_on_builtin(self) -> "SecretStoreModel":
+        """`generate` only makes sense for an integration-backed store."""
+        _validate_field_not_on_builtin(
+            kind_noun="Secret",
+            key=self.key,
+            field_name="generate",
+            field_value=self.generate,
+            store_value=self.store.value,
+            builtin_types=BUILTIN_SECRET_STORE_TYPES,
+        )
+        return self
+
+    @model_validator(mode="after")
+    def validate_rotate_not_on_builtin(self) -> "SecretStoreModel":
+        """`rotate` only makes sense for an integration-backed store."""
+        _validate_field_not_on_builtin(
+            kind_noun="Secret",
+            key=self.key,
+            field_name="rotate",
+            field_value=self.rotate,
+            store_value=self.store.value,
+            builtin_types=BUILTIN_SECRET_STORE_TYPES,
+        )
+        return self
+
+    @model_validator(mode="after")
+    def validate_rotate_policy_requires_generate(self) -> "SecretStoreModel":
+        """A 'rotate' policy of 'rotate' needs a 'generate' spec — strata cannot auto-regenerate
+        a manually-placed secret."""
+        if self.rotate is not None and self.rotate.policy == SecretRotatePolicy.ROTATE and self.generate is None:
+            raise ValueError(
+                f"Secret '{self.key}': rotate policy 'rotate' requires a 'generate' spec — "
+                "strata cannot auto-regenerate a manually-placed secret. Use policy 'warn' instead."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_version_not_set_for_github(self) -> "SecretStoreModel":
+        """GitHub Secrets are not versioned."""
+        if self.store == SecretStoreType.GITHUB and self.version is not None:
+            raise ValueError(f"Secret '{self.key}': 'version' is not supported for store type 'github'.")
+        return self

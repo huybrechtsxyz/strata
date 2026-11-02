@@ -1,0 +1,32 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: providerconfig
+meta:
+  name: azure
+spec:
+  description: "Microsoft Azure provider type registry"
+  additional_regions: false
+  regions:
+    - name: westeurope
+      geography: europe
+      description: "West Europe (Netherlands)"
+    - name: northeurope
+      geography: europe
+      description: "North Europe (Ireland)"
+  additional_resources: false
+  resources:
+    - name: storage_account
+      category: storage
+      subcategory: blob
+      description: "Azure Storage Account"
+    - name: virtual_machine
+      category: compute
+      subcategory: virtualmachine
+      description: "Azure Virtual Machine"
+    - name: key_vault
+      category: security
+      subcategory: secrets
+      description: "Azure Key Vault"
+    - name: application_gateway
+      category: networking
+      subcategory: waf
+      description: "Azure Application Gateway v2 / WAF"

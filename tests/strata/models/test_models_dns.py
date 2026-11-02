@@ -1,284 +1,205 @@
 #!/usr/bin/env python3
-"""
-===============================================================================
-Script Name   : test_models_dns.py
-Author        : Vincent Huybrechts
-Version       : 1.0.0
-Python Version: 3.13+
-Description   : Tests for DNS models in strata.
-===============================================================================
-"""
-
-import os
+"""Tests for DnsModel YAML validation."""
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from strata.models.dns_model import DnsModel
 
 
-@pytest.fixture(autouse=True)
-def set_pythonpath_env(monkeypatch):
-    monkeypatch.setenv("PYTHONPATH", "src")
-
-
-DNS_FOLDER = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "data",
-    "dns",
-)
-
-DNS_VALID_FILES = [
-    os.path.join(DNS_FOLDER, "dns-standard.yaml"),
-]
-
-DNS_INVALID_FILES = [
-    os.path.join(DNS_FOLDER, "dns-invalid.yaml"),
-]
-
-
-@pytest.mark.parametrize("yaml_path", DNS_VALID_FILES)
-def test_valid_dns_model_standard(yaml_path):
-    """Test that a DNS YAML file is a valid DnsModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    model = DnsModel.model_validate(data)
-    assert model is not None
-
-
-@pytest.mark.parametrize("yaml_path", DNS_INVALID_FILES)
-def test_invalid_dns_model(yaml_path):
-    """Test that an invalid DNS YAML file raises ValidationError."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    with pytest.raises(ValidationError):
-        DnsModel.model_validate(data)
-    model = None
-    assert model is None
-
-
-def test_dns_record_priority_mx_valid():
-    """MX record with priority is valid."""
-    data = {
-        "apiVersion": "strata.huybrechts.xyz/v1",
-        "kind": "dns",
-        "meta": {"name": "dns_test"},
+def _minimal_dns() -> dict:
+    return {
+        "meta": {"name": "public-dns"},
         "spec": {
             "zones": [
                 {
                     "name": "example.com",
-                    "records": [{"name": "@", "type": "MX", "value": "mail.example.com.", "priority": 10}],
+                    "records": [
+                        {"name": "@", "type": "A", "value": "1.2.3.4"},
+                    ],
+                    "default_tags": {"environment": "test"},
                 }
             ]
         },
+    }
+
+
+def test_dns_minimal_is_valid():
+    """A minimal DNS document (only required fields) validates successfully."""
+    model = DnsModel.model_validate(_minimal_dns())
+    assert model.meta.name == "public-dns"
+    assert model.spec.zones[0].name == "example.com"
+    assert model.spec.zones[0].records[0].value == "1.2.3.4"
+    assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
+    assert model.kind.value == "dns"
+
+
+def test_dns_record_custom_is_optional():
+    model = DnsModel.model_validate(_minimal_dns())
+    assert model.spec.zones[0].records[0].custom is None
+
+
+def test_dns_record_accepts_custom_when_set():
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0]["custom"] = {"proxied": True}
+    model = DnsModel.model_validate(data)
+    assert model.spec.zones[0].records[0].custom == {"proxied": True}
+
+
+def test_dns_record_accepts_value_tokens():
+    """A record value may embed '${var:}'/'${secret:}' tokens instead of a literal."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0]["value"] = "${var:public_ip}"
+    model = DnsModel.model_validate(data)
+    assert model.spec.zones[0].records[0].value == "${var:public_ip}"
+
+
+def test_dns_record_accepts_composite_value_tokens():
+    """A record value may mix a literal and multiple tokens (concatenation case)."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0]["value"] = "prefix-${var:region}-${secret:suffix_key}"
+    model = DnsModel.model_validate(data)
+    assert model.spec.zones[0].records[0].value == "prefix-${var:region}-${secret:suffix_key}"
+
+
+def test_dns_record_rejects_malformed_value_token():
+    """An unknown token kind is rejected at Phase 1, without needing an Environment."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0]["value"] = "${vars:region}"
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_record_rejects_empty_token_key():
+    """A token with a missing key is rejected at Phase 1."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0]["value"] = "${var:}"
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_record_rejects_output_key_field():
+    """output_key is not ported yet (deferred to ADR-0006's Context concept) — rejected as unknown."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0] = {"name": "vm", "type": "A", "output_key": "vm_public_ip"}
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_record_rejects_missing_value():
+    """A record with no value set is rejected (value is required)."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0] = {"name": "@", "type": "A"}
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_record_priority_allowed_for_mx():
+    """priority is accepted for MX records."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0] = {
+        "name": "@",
+        "type": "MX",
+        "value": "mail.example.com",
+        "priority": 10,
     }
     model = DnsModel.model_validate(data)
     assert model.spec.zones[0].records[0].priority == 10
 
 
-def test_dns_record_priority_on_a_invalid():
-    """A record with priority set raises ValidationError."""
-    data = {
-        "apiVersion": "strata.huybrechts.xyz/v1",
-        "kind": "dns",
-        "meta": {"name": "dns_test"},
-        "spec": {
-            "zones": [
-                {
-                    "name": "example.com",
-                    "records": [{"name": "@", "type": "A", "value": "1.2.3.4", "priority": 10}],
-                }
-            ]
-        },
-    }
+def test_dns_record_rejects_priority_for_non_mx_srv():
+    """priority is rejected for record types other than MX/SRV."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0]["priority"] = 10
     with pytest.raises(ValidationError):
         DnsModel.model_validate(data)
 
 
-def test_dns_zone_requires_at_least_one():
-    """spec with empty zones list raises ValidationError."""
-    data = {
-        "apiVersion": "strata.huybrechts.xyz/v1",
-        "kind": "dns",
-        "meta": {"name": "dns_test"},
-        "spec": {"zones": []},
-    }
+def test_dns_rejects_duplicate_zone_names():
+    """Duplicate zone names within spec.zones are rejected."""
+    data = _minimal_dns()
+    data["spec"]["zones"].append(dict(data["spec"]["zones"][0]))
     with pytest.raises(ValidationError):
         DnsModel.model_validate(data)
 
 
-def test_dns_ttl_must_be_positive():
-    """Record-level ttl=0 raises ValidationError."""
-    data = {
-        "apiVersion": "strata.huybrechts.xyz/v1",
-        "kind": "dns",
-        "meta": {"name": "dns_test"},
-        "spec": {
-            "zones": [
-                {
-                    "name": "example.com",
-                    "records": [{"name": "@", "type": "A", "value": "1.2.3.4", "ttl": 0}],
-                }
-            ]
-        },
-    }
+def test_dns_rejects_empty_zones_list():
+    """An empty spec.zones list is rejected (min_length=1)."""
+    data = _minimal_dns()
+    data["spec"]["zones"] = []
     with pytest.raises(ValidationError):
         DnsModel.model_validate(data)
 
 
-def test_dns_unique_zone_names():
-    """Duplicate zone names in the same DnsModel raises ValidationError."""
-    data = {
-        "apiVersion": "strata.huybrechts.xyz/v1",
-        "kind": "dns",
-        "meta": {"name": "dns_test"},
-        "spec": {
-            "zones": [
-                {"name": "example.com", "records": [{"name": "@", "type": "A", "value": "1.2.3.4"}]},
-                {"name": "example.com", "records": [{"name": "www", "type": "A", "value": "5.6.7.8"}]},
-            ]
-        },
-    }
+def test_dns_rejects_references_field():
+    """spec.references is rejected (Requirement was removed as a schema concept — ADR-0002)."""
+    data = _minimal_dns()
+    data["spec"]["references"] = {"variables": ["public_ip"]}
     with pytest.raises(ValidationError):
         DnsModel.model_validate(data)
 
 
-def test_dns_kind_must_match():
-    """kind='firewall' in a DNS YAML payload raises ValidationError."""
-    data = {
-        "apiVersion": "strata.huybrechts.xyz/v1",
-        "kind": "firewall",
-        "meta": {"name": "dns_test"},
-        "spec": {"zones": [{"name": "example.com", "records": [{"name": "@", "type": "A", "value": "1.2.3.4"}]}]},
-    }
+def test_dns_rejects_unknown_fields():
+    """Extra/unknown fields are rejected (extra='forbid')."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["unknown_field"] = "oops"
     with pytest.raises(ValidationError):
         DnsModel.model_validate(data)
 
 
-# ---------------------------------------------------------------------------
-# Record value union tests (value / var / secret)
-# ---------------------------------------------------------------------------
+def test_dns_rejects_exact_duplicate_record():
+    """Same (name, type, value) twice in one zone is rejected."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"].append(dict(data["spec"]["zones"][0]["records"][0]))
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
 
 
-def _dns_data(records: list, references: dict | None = None) -> dict:
-    """Build a minimal DnsModel payload with the given records and optional references."""
-    spec: dict = {"zones": [{"name": "example.com", "records": records}]}
-    if references is not None:
-        spec["references"] = references
-    return {
-        "apiVersion": "strata.huybrechts.xyz/v1",
-        "kind": "dns",
-        "meta": {"name": "dns_test"},
-        "spec": spec,
-    }
-
-
-def test_dns_record_value_literal():
-    """value: 'literal' is valid — the common case is still supported."""
-    data = _dns_data([{"name": "@", "type": "A", "value": "1.2.3.4"}])
+def test_dns_allows_same_name_and_type_with_different_values():
+    """Round-robin A records (same name+type, different value) are legitimate, not a conflict."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"].append({"name": "@", "type": "A", "value": "5.6.7.8"})
     model = DnsModel.model_validate(data)
-    record = model.spec.zones[0].records[0]
-    assert record.value == "1.2.3.4"
+    assert len(model.spec.zones[0].records) == 2
 
 
-def test_dns_record_var_valid():
-    """var: 'spf_key' with matching references.variables entry is valid."""
-    data = _dns_data(
-        records=[{"name": "@", "type": "TXT", "var": "spf_key"}],
-        references={"variables": ["spf_key"]},
-    )
+def test_dns_allows_multiple_mx_records_at_same_name():
+    """Multiple MX records (different priority/value) at the same name are legitimate."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"] = [
+        {"name": "@", "type": "MX", "value": "mail1.example.com", "priority": 10},
+        {"name": "@", "type": "MX", "value": "mail2.example.com", "priority": 20},
+    ]
     model = DnsModel.model_validate(data)
-    record = model.spec.zones[0].records[0]
-    assert record.var == "spf_key"
+    assert len(model.spec.zones[0].records) == 2
 
 
-def test_dns_record_secret_valid():
-    """secret: 'verify_token' with matching references.secrets entry is valid."""
-    data = _dns_data(
-        records=[{"name": "_verify", "type": "TXT", "secret": "verify_token"}],
-        references={"secrets": ["verify_token"]},
-    )
+def test_dns_rejects_two_cnames_at_same_name():
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"] = [
+        {"name": "www", "type": "CNAME", "value": "a.example.com"},
+        {"name": "www", "type": "CNAME", "value": "b.example.com"},
+    ]
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_rejects_cname_sharing_name_with_other_type():
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"] = [
+        {"name": "www", "type": "CNAME", "value": "a.example.com"},
+        {"name": "www", "type": "TXT", "value": "v=spf1 -all"},
+    ]
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_duplicate_check_skips_records_with_unresolved_value_tokens():
+    """A record whose value is still a Value token can't be compared literally — skipped, not flagged."""
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"] = [
+        {"name": "@", "type": "A", "value": "${var:public_ip}"},
+        {"name": "@", "type": "A", "value": "${var:public_ip}"},
+    ]
     model = DnsModel.model_validate(data)
-    record = model.spec.zones[0].records[0]
-    assert record.secret == "verify_token"
-
-
-def test_dns_record_no_source_invalid():
-    """Record with none of value/var/secret raises ValidationError."""
-    data = _dns_data([{"name": "@", "type": "A"}])
-    with pytest.raises(ValidationError):
-        DnsModel.model_validate(data)
-
-
-def test_dns_record_two_sources_invalid():
-    """Record with both value and var set raises ValidationError."""
-    data = _dns_data(
-        records=[{"name": "@", "type": "TXT", "value": "some text", "var": "spf_key"}],
-        references={"variables": ["spf_key"]},
-    )
-    with pytest.raises(ValidationError):
-        DnsModel.model_validate(data)
-
-
-def test_dns_var_undeclared_in_references_invalid():
-    """Record uses var: 'spf_key' but key not in spec.references.variables — raises ValidationError."""
-    data = _dns_data(
-        records=[{"name": "@", "type": "TXT", "var": "spf_key"}],
-        references={"variables": ["other_key"]},
-    )
-    with pytest.raises(ValidationError):
-        DnsModel.model_validate(data)
-
-
-def test_dns_secret_undeclared_in_references_invalid():
-    """Record uses secret: 'verify_token' but key not in spec.references.secrets — raises ValidationError."""
-    data = _dns_data(
-        records=[{"name": "_verify", "type": "TXT", "secret": "verify_token"}],
-        references={"secrets": ["other_secret"]},
-    )
-    with pytest.raises(ValidationError):
-        DnsModel.model_validate(data)
-
-
-def test_dns_var_without_references_block_invalid():
-    """Record uses var: 'spf_key' but spec.references is None — raises ValidationError."""
-    data = _dns_data(records=[{"name": "@", "type": "TXT", "var": "spf_key"}])
-    with pytest.raises(ValidationError):
-        DnsModel.model_validate(data)
-
-
-def test_dns_secret_without_references_block_invalid():
-    """Record uses secret: 'verify_token' but spec.references is None — raises ValidationError."""
-    data = _dns_data(records=[{"name": "_verify", "type": "TXT", "secret": "verify_token"}])
-    with pytest.raises(ValidationError):
-        DnsModel.model_validate(data)
-
-
-def test_dns_record_output_key_valid():
-    """output_key: 'hearth_public_ip' is valid without any spec.references entry —
-    unlike var:/secret:, output_key names a cross-stage provisioner output, not an
-    environment-declared value, so it is never subject to the references check."""
-    data = _dns_data(records=[{"name": "@", "type": "A", "output_key": "hearth_public_ip"}])
-    model = DnsModel.model_validate(data)
-    record = model.spec.zones[0].records[0]
-    assert record.output_key == "hearth_public_ip"
-
-
-def test_dns_record_output_key_and_value_invalid():
-    """Record with both value and output_key set raises ValidationError."""
-    data = _dns_data(records=[{"name": "@", "type": "A", "value": "1.2.3.4", "output_key": "hearth_public_ip"}])
-    with pytest.raises(ValidationError):
-        DnsModel.model_validate(data)
-
-
-def test_dns_record_output_key_and_secret_invalid():
-    """Record with both secret and output_key set raises ValidationError."""
-    data = _dns_data(
-        records=[{"name": "@", "type": "TXT", "secret": "tok", "output_key": "hearth_public_ip"}],
-        references={"secrets": ["tok"]},
-    )
-    with pytest.raises(ValidationError):
-        DnsModel.model_validate(data)
+    assert len(model.spec.zones[0].records) == 2

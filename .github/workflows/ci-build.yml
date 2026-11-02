@@ -5,9 +5,14 @@
 # Python Version: 3.13+
 # Description   : GitHub Actions workflow for CI build: lint, format-check,
 #                 type-check, pytest, and Sphinx docs validation. Triggered on
-#                 push to main and on pull requests targeting main. Builds the
-#                 Python package with uv and uploads dist/ as a GitHub artifact
-#                 for ci-release.
+#                 push to main/v2/v2-beta and on pull requests targeting them
+#                 (v2/v2-beta added so alpha/beta releases can be tagged/
+#                 published from the v2 development branches without touching
+#                 main, which remains the real v1 production release line).
+#                 Builds the Python package with uv and uploads dist/ as a
+#                 GitHub artifact for ci-release. Also builds the VS Code
+#                 extension .vsix (same artifact-as-store pattern) for
+#                 ci-release's publish-vscode job.
 # ===============================================================================
 
 name: "CI Build"
@@ -31,21 +36,17 @@ defaults:
 env:
   PYTHON_VERSION: "3.13"
 
-# Trigger on push to main and on pull requests targeting main
+# Trigger on push to main/v2/v2-beta and on pull requests targeting them
 on:
   push:
-    branches: [main]
+    branches: [main, v2, v2-beta]
   pull_request:
-    branches: [main]
+    branches: [main, v2, v2-beta]
 
 jobs:
   build:
-    name: Build and Test (Python ${{ matrix.python-version }})
+    name: Build and Test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.13"]
 
     steps:
       # Checkout the code
@@ -56,19 +57,11 @@ jobs:
       - name: Setup Python
         uses: ./.github/actions/setup-python
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
 
       # Lint, type-check, and test
       - name: Test Python
         uses: ./.github/actions/test-python
-
-      # Sync help files from docs/help (single source) to src/strata/data/help
-      # (required before uv build to include in wheel package)
-      - name: Sync help files for build
-        run: |
-          mkdir -p src/strata/data/help
-          cp docs/help/*.md src/strata/data/help/
-          echo "Synced $(ls src/strata/data/help/*.md | wc -l) help files"
 
       # Build the Python package (wheel + sdist)
       - name: Build package
@@ -98,335 +91,22 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # Add the doc dependency group on top of the dev install
+      # Add the docs optional-dependency extra on top of the dev install
       - name: Install doc dependencies
-        run: uv sync --frozen --group doc
+        run: uv sync --frozen --extra docs
 
       # Treat warnings as errors (-W) so broken refs / missing modules fail fast
       - name: Build Sphinx docs
         run: uv run sphinx-build -b html docs/ /tmp/html_out -W --keep-going
 
   # ---------------------------------------------------------------------------
-  # Job 3: Generate SBOM — runs after vscode-extension so the Node.js lockfile
-  # from src/vscode is guaranteed to be present for npm dependency scanning.
-  # The --scan mode walks the source tree; package-lock.json is picked up
-  # automatically so vsix deps are included without downloading the artifact.
-  # ---------------------------------------------------------------------------
-  sbom:
-    name: Generate SBOM
-    runs-on: ubuntu-latest
-    needs: [vscode-extension]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Python
-        uses: ./.github/actions/setup-python
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      # Install Trivy for CVE vulnerability scanning
-      - name: Install Trivy
-        run: |
-          sudo apt-get install -y wget apt-transport-https gnupg
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install -y trivy
-
-      # Run strata against its own source tree (dogfood) with CVE audit
-      # TODO: Re-enable --fail-on HIGH once existing vulnerabilities are resolved
-      - name: Generate SBOM and audit for vulnerabilities
-        run: uv run strata build sbom --scan . --report cyclonedx --output-file sbom.json --audit
-        # run: uv run strata build sbom --scan . --report cyclonedx --output-file sbom.json --audit --fail-on HIGH
-
-      - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: sbom
-          path: sbom.json
-          retention-days: 30
-
-  # ---------------------------------------------------------------------------
-  # Job 4: Push CLI edge image to GHCR (main branch only)
-  # ---------------------------------------------------------------------------
-  edge-ghcr-cli:
-    name: Publish CLI edge image to GHCR
-    runs-on: ubuntu-latest
-    needs: [build, docs, sbom]
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/strata
-          tags: |
-            type=raw,value=edge
-            type=sha,prefix=sha-,format=short
-
-      - name: Build and push CLI edge image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.cli
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=edge
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ---------------------------------------------------------------------------
-  # Job 5: Push docs edge image to GHCR (main branch only)
-  # ---------------------------------------------------------------------------
-  edge-ghcr-docs:
-    name: Publish docs edge image to GHCR
-    runs-on: ubuntu-latest
-    needs: [build, docs, sbom]
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/strata-docs
-          tags: |
-            type=raw,value=edge
-            type=sha,prefix=sha-,format=short
-
-      - name: Build and push docs edge image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.docs
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ---------------------------------------------------------------------------
-  # Job: Push server edge image to GHCR (main branch only, ADR-0065)
-  # ---------------------------------------------------------------------------
-  edge-ghcr-server:
-    name: Publish server edge image to GHCR
-    runs-on: ubuntu-latest
-    needs: [build, docs, sbom]
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/strata-server
-          tags: |
-            type=raw,value=edge
-            type=sha,prefix=sha-,format=short
-
-      - name: Build and push server edge image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.server
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=edge
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ---------------------------------------------------------------------------
-  # Job 6: Push CLI edge image to Docker Hub (only if registry secrets are set)
-  # ---------------------------------------------------------------------------
-  edge-hub-cli:
-    name: Publish CLI edge image to Docker Hub
-    runs-on: ubuntu-latest
-    needs: [build, docs, sbom]
-    if: github.ref == 'refs/heads/main' && vars.REGISTRY_URL != ''
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ vars.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME }}/strata
-          tags: |
-            type=raw,value=edge
-            type=sha,prefix=sha-,format=short
-
-      - name: Build and push CLI edge image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.cli
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=edge
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ---------------------------------------------------------------------------
-  # Job 7: Push docs edge image to Docker Hub (only if registry secrets are set)
-  # ---------------------------------------------------------------------------
-  edge-hub-docs:
-    name: Publish docs edge image to Docker Hub
-    runs-on: ubuntu-latest
-    needs: [build, docs, sbom]
-    if: github.ref == 'refs/heads/main' && vars.REGISTRY_URL != ''
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ vars.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME
-            }}/strata-docs
-          tags: |
-            type=raw,value=edge
-            type=sha,prefix=sha-,format=short
-
-      - name: Build and push docs edge image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.docs
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ---------------------------------------------------------------------------
-  # Job: Push server edge image to Docker Hub (only if registry secrets are set)
-  # ---------------------------------------------------------------------------
-  edge-hub-server:
-    name: Publish server edge image to Docker Hub
-    runs-on: ubuntu-latest
-    needs: [build, docs, sbom]
-    if: github.ref == 'refs/heads/main' && vars.REGISTRY_URL != ''
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ vars.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME
-            }}/strata-server
-          tags: |
-            type=raw,value=edge
-            type=sha,prefix=sha-,format=short
-
-      - name: Build and push server edge image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.server
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=edge
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ---------------------------------------------------------------------------
-  # Job 8: Build VS Code extension .vsix (runs in parallel with build/docs/sbom)
+  # Job 3: Build VS Code extension .vsix (runs in parallel with build/docs)
+  #
+  # Ported from v1 (e:\SourcesXYZ\strata's ci-build.yml) with one deliberate
+  # drop: v1's "Sync help files for extension" step (copies docs/help/*.md
+  # into resources/help/) has no v2 equivalent to sync from yet (v2 has no
+  # docs/help/ directory) — omitted rather than left as a step that would
+  # fail on every run; re-add once v2 has that content.
   # ---------------------------------------------------------------------------
   vscode-extension:
     name: Build VS Code Extension
@@ -447,18 +127,17 @@ jobs:
         working-directory: src/vscode
         run: npm ci
 
-      - name: Sync help files for extension
-        run: |
-          mkdir -p src/vscode/resources/help
-          cp docs/help/*.md src/vscode/resources/help/
-          echo "Synced $(ls src/vscode/resources/help/*.md | wc -l) help files"
-
       - name: Compile TypeScript
         working-directory: src/vscode
         run: npx tsc -p tsconfig.json --noEmit false
 
       - name: Copy LICENSE into extension directory
         run: cp LICENSE src/vscode/LICENSE
+
+      # The Marketplace has no semver pre-releases, so 2.0.0-Alpha27 packages as 2.0.0.
+      - name: Stamp extension version from VERSION.txt
+        working-directory: src/vscode
+        run: npm version "$(sed -E 's/-.*//' ../../VERSION.txt | tr -d '[:space:]')" --no-git-tag-version --allow-same-version
 
       - name: Package extension (.vsix)
         working-directory: src/vscode

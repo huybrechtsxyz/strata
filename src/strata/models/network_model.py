@@ -2,55 +2,67 @@
 """Pydantic models for network topology configuration validation."""
 
 import ipaddress
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    SecretRefs,
-    VariableRefs,
-    check_unique_names,
+    validate_kind_matches,
 )
-
-
-class CidrSourceModel(PlatformBaseModel):
-    """CIDR value with value/var/secret union — exactly one must be set."""
-
-    value: Optional[str] = Field(None, description="Literal CIDR notation, e.g. '10.0.0.0/24'")
-    var: Optional[str] = Field(None, description="Variable key — resolved at build time")
-    secret: Optional[str] = Field(None, description="Secret key — resolved at deploy time via TF_VAR_*")
-
-    @model_validator(mode="after")
-    def validate_exactly_one_source(self) -> "CidrSourceModel":
-        """Exactly one of value / var / secret must be set."""
-        sources = [f for f in (self.value, self.var, self.secret) if f is not None]
-        if len(sources) == 0:
-            raise ValueError("Exactly one of value, var, or secret must be set for CIDR source.")
-        if len(sources) > 1:
-            raise ValueError("Multiple sources set. Use exactly one of: value, var, secret.")
-        return self
-
-    @model_validator(mode="after")
-    def validate_cidr_format(self) -> "CidrSourceModel":
-        """Validate that literal CIDR values are valid IP networks."""
-        if self.value is not None:
-            try:
-                ipaddress.ip_network(self.value, strict=False)
-            except ValueError as e:
-                raise ValueError(f"Invalid CIDR: {self.value}") from e
-        return self
+from strata.utils.names import check_unique_names
+from strata.utils.value_tokens import has_value_tokens, validate_cidr_or_token
 
 
 class SubnetModel(PlatformBaseModel):
-    """Model for a subnet within a network definition."""
+    """A subnet of a network: a `name` and a `cidr`, either a literal CIDR such as `10.0.1.0/24` or a
+    string with value tokens such as `${var:KEY}`.
+
+    Design notes:
+    Model for a subnet within a network definition.
+
+    ``cidr`` is a Value binding (ADR-0002): a literal CIDR (e.g.
+    ``"10.0.1.0/24"``) or a string containing ``${var:KEY}``/``${secret:KEY}``/
+    ``${feature:KEY}`` tokens, resolved once the build/deploy layer exists.
+    """
 
     name: PlatformName = Field(..., description="Unique subnet name within the network")
-    description: Optional[str] = Field(None, description="Optional description of the subnet")
-    cidr: CidrSourceModel = Field(..., description="CIDR for this subnet (value/var/secret)")
+    description: str | None = Field(None, description="Optional description of the subnet")
+    cidr: str = Field(
+        ...,
+        min_length=1,
+        description="Literal CIDR (e.g. '10.0.1.0/24'), or a string containing "
+        "'${var:KEY}'/'${secret:KEY}'/'${feature:KEY}' tokens.",
+    )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Free-form provisioner settings for this subnet (for example delegations, "
+        "service endpoints or a security group association), passed to Terraform as "
+        "`strata.networks.<name>.networks.<network>.subnets.<subnet>.configuration`. "
+        "Strata does not validate them.\n\n"
+        "Design notes: Raw provisioner-specific passthrough configuration for this "
+        "subnet (e.g. delegations, service endpoints, NSG association). Not validated "
+        "by strata, passed through as-is to the provisioner.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.networks.<name>.networks.<network>.subnets.<subnet>.custom`. "
+        "Strata does not interpret them.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside this subnet's entry in the `networks` category payload, delivered as "
+        "part of one shared `TF_VAR_networks` env var — not its own env var.",
+    )
+
+    @field_validator("cidr")
+    @classmethod
+    def validate_cidr(cls, v: str) -> str:
+        """Validate CIDR syntax (literal) or token syntax (Value binding)."""
+        validate_cidr_or_token(v)
+        return v
 
 
 class PeeringReferenceModel(PlatformBaseModel):
@@ -61,17 +73,81 @@ class PeeringReferenceModel(PlatformBaseModel):
 
 
 class NetworkDefinitionModel(PlatformBaseModel):
-    """Model for a single network definition with subnets and peerings."""
+    """One virtual network: its address space, subnets and optional peerings. Each network is its own cloud
+    resource, so its configuration, custom values and tags are set here; one document can hold several
+    networks.
+
+    Design notes:
+    Model for a single network definition with subnets and peerings.
+
+    Each network is a real, independently-tagged cloud resource (e.g. an
+    Azure VNet) — configuration/custom/tags live here, not on
+    `NetworkSpecModel`, since a single file can declare multiple networks.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Subnet names must be unique within the network.",
+        "Peering names must be unique within the network, and a network cannot peer with itself.",
+        "Subnets must not overlap each other and must fit inside the network's address space. This "
+        "is only checked when all the CIDRs involved are literals rather than tokens.",
+    )
 
     name: PlatformName = Field(..., description="Unique network name within the spec")
-    description: Optional[str] = Field(None, description="Optional description of the network")
-    address_space: List[CidrSourceModel] = Field(
-        ..., min_length=1, description="One or more CIDRs for this network's address space"
+    description: str | None = Field(None, description="Optional description of the network")
+    address_space: list[str] = Field(
+        ...,
+        min_length=1,
+        description="One or more CIDRs for this network's address space (literal or "
+        "'${var:KEY}'/'${secret:KEY}'/'${feature:KEY}' Value bindings)",
     )
-    subnets: List[SubnetModel] = Field(..., min_length=1, description="At least one subnet required per network")
-    peerings: Optional[List[PeeringReferenceModel]] = Field(
+    subnets: list[SubnetModel] = Field(..., min_length=1, description="At least one subnet required per network")
+    peerings: list[PeeringReferenceModel] | None = Field(
         None, description="Optional peering references to other networks"
     )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Free-form provisioner settings for this network, passed to Terraform as "
+        "`strata.networks.<name>.networks.<network>.configuration`. Strata does not "
+        "validate them.\n\n"
+        "Design notes: Raw provisioner-specific passthrough configuration for this "
+        "network. Not validated by strata, passed through as-is to the provisioner.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.networks.<name>.networks.<network>.custom`. Strata does not "
+        "interpret them.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside this network's entry in the `networks` category payload, delivered as "
+        "part of one shared `TF_VAR_networks` env var — not its own env var.",
+    )
+    default_tags: dict[str, str] | None = Field(
+        None,
+        description="Baseline cloud tags for this network (for example `cost-center`, "
+        "`environment`, `owner`), passed to Terraform as "
+        "`strata.networks.<name>.networks.<network>.default_tags`. Not the same as "
+        "`meta.tags`, which is a free-form list for documentation. Strata does not "
+        "limit the number of tags, so stay within your cloud provider's limit.\n\n"
+        "Design notes: Baseline cloud provider tags for this network (e.g. "
+        "cost-center, environment, owner). Deliberately distinct from meta.tags (a "
+        "free-form list used for strata-internal categorization/documentation, not "
+        "cloud tags). Optional (v1-derived documents commonly carry no cloud tags at "
+        "all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum "
+        "tag count.",
+    )
+    custom_tags: dict[str, str] | None = Field(
+        None,
+        description="Additional cloud tags on top of `default_tags`, for one-off needs.\n\n"
+        "Design notes: Optional additional cloud provider tags beyond default_tags.",
+    )
+
+    @field_validator("address_space")
+    @classmethod
+    def validate_address_space(cls, v: list[str]) -> list[str]:
+        """Validate each address_space entry's CIDR/token syntax."""
+        for cidr in v:
+            validate_cidr_or_token(cidr)
+        return v
 
     @model_validator(mode="after")
     def validate_unique_subnet_names(self) -> "NetworkDefinitionModel":
@@ -98,7 +174,7 @@ class NetworkDefinitionModel(PlatformBaseModel):
     @model_validator(mode="after")
     def validate_subnet_cidr_overlap(self) -> "NetworkDefinitionModel":
         """Validate that subnet CIDRs do not overlap (only when all are literals)."""
-        literal_subnets = [(s.name, s.cidr.value) for s in self.subnets if s.cidr.value is not None]
+        literal_subnets = [(s.name, s.cidr) for s in self.subnets if not has_value_tokens(s.cidr)]
         if len(literal_subnets) != len(self.subnets):
             return self  # Skip — not all CIDRs are literals
 
@@ -116,15 +192,14 @@ class NetworkDefinitionModel(PlatformBaseModel):
     @model_validator(mode="after")
     def validate_subnets_fit_address_space(self) -> "NetworkDefinitionModel":
         """Validate that all subnet CIDRs fit within the network address space (literals only)."""
-        literal_address_spaces = [a.value for a in self.address_space if a.value is not None]
-        if len(literal_address_spaces) != len(self.address_space):
+        if any(has_value_tokens(a) for a in self.address_space):
             return self  # Skip — not all address spaces are literals
 
-        literal_subnets = [(s.name, s.cidr.value) for s in self.subnets if s.cidr.value is not None]
+        literal_subnets = [(s.name, s.cidr) for s in self.subnets if not has_value_tokens(s.cidr)]
         if len(literal_subnets) != len(self.subnets):
             return self  # Skip — not all subnet CIDRs are literals
 
-        supernets = [ipaddress.ip_network(a, strict=False) for a in literal_address_spaces]
+        supernets = [ipaddress.ip_network(a, strict=False) for a in self.address_space]
         for subnet_name, subnet_cidr in literal_subnets:
             sub = ipaddress.ip_network(subnet_cidr, strict=False)
             fits = any(
@@ -134,26 +209,29 @@ class NetworkDefinitionModel(PlatformBaseModel):
             if not fits:
                 raise ValueError(
                     f"Subnet '{subnet_name}' ({subnet_cidr}) in network '{self.name}' "
-                    f"does not fit within any address space: {literal_address_spaces}"
+                    f"does not fit within any address space: {self.address_space}"
                 )
         return self
 
 
-class NetworkReferencesModel(PlatformBaseModel):
-    """References to variables and secrets required by this network configuration."""
-
-    variables: VariableRefs = Field(None, description="Variable keys required from environment")
-    secrets: SecretRefs = Field(None, description="Secret keys required from environment")
-
-
 class NetworkSpecModel(PlatformBaseModel):
-    """Model for a network configuration specification."""
+    """The networks declared by this document.
 
-    references: Optional[NetworkReferencesModel] = Field(
-        None,
-        description="Variable and secret keys required by CIDRs in this network configuration",
+    Design notes:
+    Network specification: a list of network definitions.
+
+    No ``references`` field (ADR-0002): Value bindings (``${var:}``/``${secret:}``
+    tokens in `address_space`/subnet `cidr`) are checked against a real
+    Environment in Phase 2, not an internal declared-keys list.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Network names must be unique within the document.",
+        "Every peering `target` must name a network in the same document.",
+        "Peered networks must not have overlapping address spaces. This is only checked for literal CIDRs.",
     )
-    networks: List[NetworkDefinitionModel] = Field(
+
+    networks: list[NetworkDefinitionModel] = Field(
         ..., min_length=1, description="List of network definitions (at least one required)"
     )
 
@@ -181,70 +259,24 @@ class NetworkSpecModel(PlatformBaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_references_declared(self) -> "NetworkSpecModel":
-        """Validate that all var/secret keys used in CIDRs are declared in references."""
-        used_vars: set = set()
-        used_secrets: set = set()
-
-        for network in self.networks:
-            for addr in network.address_space:
-                if addr.var is not None:
-                    used_vars.add(addr.var)
-                if addr.secret is not None:
-                    used_secrets.add(addr.secret)
-            for subnet in network.subnets:
-                if subnet.cidr.var is not None:
-                    used_vars.add(subnet.cidr.var)
-                if subnet.cidr.secret is not None:
-                    used_secrets.add(subnet.cidr.secret)
-
-        if not used_vars and not used_secrets:
-            return self
-
-        if self.references is None:
-            keys = sorted(used_vars | used_secrets)
-            raise ValueError(
-                "spec.references block is required when CIDRs use var/secret sources. "
-                f"Undeclared keys: {', '.join(keys)}"
-            )
-
-        declared_vars: set = set(self.references.variables or [])
-        declared_secrets: set = set(self.references.secrets or [])
-
-        undeclared_vars = used_vars - declared_vars
-        undeclared_secrets = used_secrets - declared_secrets
-
-        errors = []
-        if undeclared_vars:
-            errors.append(f"var keys not declared in references.variables: {', '.join(sorted(undeclared_vars))}")
-        if undeclared_secrets:
-            errors.append(f"secret keys not declared in references.secrets: {', '.join(sorted(undeclared_secrets))}")
-
-        if errors:
-            raise ValueError("; ".join(errors))
-
-        return self
-
-    @model_validator(mode="after")
     def validate_cross_network_cidr_overlap(self) -> "NetworkSpecModel":
         """Error for peered networks with overlapping address spaces (literals only)."""
         # Build peering set (bidirectional pairs)
-        peered_pairs: set = set()
+        peered_pairs: set[tuple[str, str]] = set()
         for network in self.networks:
             if network.peerings:
                 for peering in network.peerings:
-                    pair = tuple(sorted([network.name, peering.target]))
-                    peered_pairs.add(pair)
+                    a, b = sorted([network.name, peering.target])
+                    peered_pairs.add((a, b))
 
         if not peered_pairs:
             return self
 
         # Collect literal address spaces per network
-        network_cidrs: dict = {}
+        network_cidrs: dict[str, list[str]] = {}
         for network in self.networks:
-            literals = [a.value for a in network.address_space if a.value is not None]
-            if len(literals) == len(network.address_space):
-                network_cidrs[network.name] = literals
+            if not any(has_value_tokens(a) for a in network.address_space):
+                network_cidrs[network.name] = network.address_space
 
         # Check peered pairs for overlap
         errors = []
@@ -268,37 +300,41 @@ class NetworkSpecModel(PlatformBaseModel):
 
 
 class NetworkMetaModel(PlatformBaseModel):
-    """Model for network resource metadata (name, annotations, labels, tags)."""
+    """Network metadata including name, annotations, labels, and tags."""
 
-    name: PlatformName = Field(..., description="Unique name for the network resource.")
-    annotations: Optional[Dict[str, Any]] = Field(
+    name: PlatformName = Field(..., description="Unique name for the network resource")
+    annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
-    labels: Optional[Dict[str, Any]] = Field(
+    labels: dict[str, Any] | None = Field(
         None, description="Optional labels (key-value pairs for classification/filtering)"
     )
-    tags: Optional[List[Any]] = Field(None, description="Optional list of tags for the network resource.")
+    tags: list[Any] | None = Field(None, description="Optional list of tags for the network resource")
 
 
 class NetworkModel(PlatformBaseModel):
-    """Top-level model for a network topology configuration resource."""
+    """Virtual networks with their address spaces, subnets and peerings. A workspace uses it by listing the
+    document in `networks`, and a workspace resource can be placed on one of its subnets.
+
+    Design notes:
+    Root model for a network topology configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
-        default=PlatformVersion.v1,
+        default=PlatformVersion.v2,
         frozen=True,
-        description="API version of the network resource model.",
+        description="API version for network configuration",
     )
     kind: PlatformKind = Field(
         default=PlatformKind.NETWORK,
         frozen=True,
-        description="Resource kind: always 'network'.",
+        description="Platform kind (always 'network')",
     )
-    meta: NetworkMetaModel = Field(..., description="Metadata for the network resource.")
-    spec: NetworkSpecModel = Field(..., description="Specification for the network topology configuration.")
+    meta: NetworkMetaModel = Field(description="Network metadata (name, annotations, labels, tags)")
+    spec: NetworkSpecModel = Field(description="Network specification (network definitions)")
 
-    @model_validator(mode="after")
-    def validate_kind_is_network(self) -> "NetworkModel":
-        """Validate that kind is always 'network'."""
-        if self.kind != PlatformKind.NETWORK:
-            raise ValueError(f"Expected kind 'network', got '{self.kind}'")
-        return self
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.NETWORK)

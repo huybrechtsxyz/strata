@@ -1,261 +1,137 @@
 #!/usr/bin/env python3
-"""
-===============================================================================
-Script Name   : test_models_tenant.py
-Author        : Vincent Huybrechts
-Version       : 1.0.0
-Python Version: 3.13+
-Description   : Tests for TenantModel YAML validation in strata.
-===============================================================================
-"""
-
-import os
+"""Tests for TenantModel YAML validation."""
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
-from strata.models.platform_artifact_model import PlatformTenantModel
-from strata.models.tenant_model import TenantModel, TenantReferencesModel
+from strata.models.tenant_model import TenantModel
 
 
-@pytest.fixture(autouse=True)
-def set_pythonpath_env(monkeypatch):
-    monkeypatch.setenv("PYTHONPATH", "src")
+def _minimal_tenant() -> dict:
+    return {
+        "meta": {"name": "contoso"},
+        "spec": {
+            "display_name": "GSK",
+            "geographies": ["europe"],
+        },
+    }
 
 
-TENANT_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "tenants")
+def test_tenant_minimal_is_valid():
+    """A minimal tenant (identifier, display name, one zone) validates."""
+    model = TenantModel.model_validate(_minimal_tenant())
+    assert model.meta.name == "contoso"
+    assert model.spec.display_name == "GSK"
+    assert model.spec.geographies == ["europe"]
+    assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
+    assert model.kind.value == "tenant"
 
-TENANT_VALID_FILES = [
-    os.path.join(TENANT_FOLDER, "tenant-standard.yaml"),
-]
 
-TENANT_INVALID_FILES = [
-    os.path.join(TENANT_FOLDER, "tenant-invalid.yaml"),
-]
+def test_tenant_rejects_mismatched_kind():
+    """A document declaring another kind is rejected (ADR-0016)."""
+    data = _minimal_tenant()
+    data["kind"] = "workspace"
+    with pytest.raises(ValidationError, match="Expected kind 'tenant'"):
+        TenantModel.model_validate(data)
 
 
-@pytest.mark.parametrize("yaml_path", TENANT_VALID_FILES)
-def test_tenant_yaml_valid(yaml_path):
-    """Test that a tenant YAML file is a valid TenantModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def test_tenant_geographies_is_optional():
+    """A tenant with no data-residency constraint at all omits geographies entirely
+    (the real, common case — no production tenant checked has this populated yet)."""
+    data = _minimal_tenant()
+    data["spec"].pop("geographies", None)
     model = TenantModel.model_validate(data)
-    assert model is not None
+    assert model.spec.geographies is None
 
 
-@pytest.mark.parametrize("yaml_path", TENANT_INVALID_FILES)
-def test_tenant_yaml_invalid(yaml_path):
-    """Test that a tenant YAML file is NOT a valid TenantModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def test_tenant_accepts_empty_geography_list():
+    """An explicit empty list is equivalent to omitting the field — no constraint."""
+    data = _minimal_tenant()
+    data["spec"]["geographies"] = []
+    model = TenantModel.model_validate(data)
+    assert model.spec.geographies == []
+
+
+def test_tenant_rejects_duplicate_geographies():
+    """Duplicate geography entries are rejected."""
+    data = _minimal_tenant()
+    data["spec"]["geographies"] = ["europe", "europe"]
+    with pytest.raises(ValidationError, match="Duplicate"):
+        TenantModel.model_validate(data)
+
+
+def test_tenant_rejects_v1_zones_field():
+    """v1's spec.zones is now spec.geographies (extra='forbid' catches the old name)."""
+    data = _minimal_tenant()
+    data["spec"]["zones"] = ["europe"]
     with pytest.raises(ValidationError):
         TenantModel.model_validate(data)
 
 
-class TestTenantModel:
-    """Unit tests for TenantModel validation."""
-
-    def _valid_data(self, **spec_overrides):
-        spec = {
-            "code": "acme",
-            "name": "ACME Corporation",
-            "zones": ["eu-west"],
-        }
-        spec.update(spec_overrides)
-        return {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "tenant",
-            "meta": {"name": "acme"},
-            "spec": spec,
-        }
-
-    def test_minimal_valid_model(self):
-        """TenantModel validates with only required fields."""
-        model = TenantModel.model_validate(self._valid_data())
-        assert model is not None
-        assert model.kind == "tenant"
-        assert model.meta.name == "acme"
-        assert model.spec.code == "acme"
-        assert model.spec.name == "ACME Corporation"
-        assert model.spec.zones == ["eu-west"]
-
-    def test_kind_is_fixed(self):
-        """kind must be 'tenant' — other values are rejected."""
-        data = self._valid_data()
-        data["kind"] = "workspace"
-        with pytest.raises(ValidationError):
-            TenantModel.model_validate(data)
-
-    def test_api_version_is_fixed(self):
-        """apiVersion must be the platform version — other values are rejected."""
-        data = self._valid_data()
-        data["apiVersion"] = "strata.huybrechts.xyz/v99"
-        with pytest.raises(ValidationError):
-            TenantModel.model_validate(data)
-
-    def test_optional_fields_absent(self):
-        """TenantModel loads cleanly when all optional fields are absent."""
-        model = TenantModel.model_validate(self._valid_data())
-        assert model.spec.onboarded is None
-        assert model.spec.environments is None
-        assert model.spec.properties is None
-        assert model.spec.custom is None
-        assert model.spec.configuration is None
-        assert model.spec.references is None
-
-    def test_optional_fields_present(self):
-        """All optional fields populate correctly."""
-        data = self._valid_data(
-            onboarded="2025-06-01",
-            environments=["environments/tiers/enterprise.yaml"],
-            properties={"tier": "enterprise", "billing": "monthly"},
-            custom={"owner": "Platform Team"},
-            configuration={"crm_id": "1001", "support_level": "premium"},
-            references={
-                "variables": ["company_domain"],
-                "secrets": ["api_key"],
-                "features": ["sso_enabled"],
-            },
-        )
-        model = TenantModel.model_validate(data)
-        assert model.spec.onboarded is not None
-        assert model.spec.environments == ["environments/tiers/enterprise.yaml"]
-        assert model.spec.properties == {"tier": "enterprise", "billing": "monthly"}
-        assert model.spec.custom == {"owner": "Platform Team"}
-        assert model.spec.configuration == {"crm_id": "1001", "support_level": "premium"}
-        assert model.spec.references is not None
-        assert model.spec.references.variables == ["company_domain"]
-        assert model.spec.references.secrets == ["api_key"]
-        assert model.spec.references.features == ["sso_enabled"]
-
-    def test_properties_arbitrary_dict(self):
-        """properties block accepts arbitrary key/value pairs."""
-        props = {"tier": "enterprise", "billing": "monthly", "max_users": 1000}
-        model = TenantModel.model_validate(self._valid_data(properties=props))
-        assert model.spec.properties == props
-
-    def test_custom_arbitrary_dict(self):
-        """custom block accepts arbitrary key/value pairs."""
-        custom = {"owner": "Platform Team", "costcenter": "INFRA-001"}
-        model = TenantModel.model_validate(self._valid_data(custom=custom))
-        assert model.spec.custom == custom
-
-    def test_zones_required_non_empty(self):
-        """zones must contain at least one entry."""
-        data = self._valid_data(zones=[])
-        with pytest.raises(ValidationError):
-            TenantModel.model_validate(data)
-
-    def test_zones_duplicate_rejected(self):
-        """Duplicate zone entries in a single tenant are rejected."""
-        data = self._valid_data(zones=["eu-west", "eu-west"])
-        with pytest.raises(ValidationError, match="Duplicate zone entries"):
-            TenantModel.model_validate(data)
-
-    def test_zones_multiple_distinct(self):
-        """Multiple distinct zones are accepted."""
-        model = TenantModel.model_validate(self._valid_data(zones=["eu-west", "us-east"]))
-        assert model.spec.zones == ["eu-west", "us-east"]
-
-    def test_meta_name_must_be_platform_name(self):
-        """meta.name must match PlatformName pattern (lowercase, no spaces)."""
-        data = self._valid_data()
-        data["meta"]["name"] = "ACME Corp"  # uppercase + space
-        with pytest.raises(ValidationError):
-            TenantModel.model_validate(data)
-
-    def test_code_must_be_platform_name(self):
-        """spec.code must match PlatformName pattern."""
-        data = self._valid_data(code="ACME-Corp")  # uppercase
-        with pytest.raises(ValidationError):
-            TenantModel.model_validate(data)
-
-    def test_extra_fields_rejected(self):
-        """Extra fields in spec are rejected (extra='forbid')."""
-        data = self._valid_data()
-        data["spec"]["unknown_field"] = "should-fail"
-        with pytest.raises(ValidationError):
-            TenantModel.model_validate(data)
-
-    def test_configuration_arbitrary_dict(self):
-        """configuration block accepts arbitrary key/value pairs."""
-        cfg = {"crm_id": "42", "tier": "gold", "max_users": 500, "enabled": True}
-        model = TenantModel.model_validate(self._valid_data(configuration=cfg))
-        assert model.spec.configuration == cfg
-
-    def test_references_all_optional(self):
-        """TenantReferencesModel fields are all optional."""
-        ref = TenantReferencesModel.model_validate({})
-        assert ref.variables is None
-        assert ref.secrets is None
-        assert ref.features is None
-
-    def test_references_partial(self):
-        """TenantReferencesModel accepts a subset of reference types."""
-        ref = TenantReferencesModel.model_validate({"variables": ["domain"]})
-        assert ref.variables == ["domain"]
-        assert ref.secrets is None
-        assert ref.features is None
+def test_tenant_requires_display_name():
+    """display_name is required — meta.name is the code, not the label."""
+    data = _minimal_tenant()
+    del data["spec"]["display_name"]
+    with pytest.raises(ValidationError):
+        TenantModel.model_validate(data)
 
 
-class TestPlatformTenantModel:
-    """Unit tests for PlatformTenantModel.from_tenant_model()."""
+def test_tenant_rejects_v1_code_field():
+    """v1's spec.code duplicated meta.name and is not ported (extra='forbid')."""
+    data = _minimal_tenant()
+    data["spec"]["code"] = "contoso"
+    with pytest.raises(ValidationError):
+        TenantModel.model_validate(data)
 
-    def _tenant_model(self, **spec_overrides):
-        spec = {"code": "acme", "name": "ACME Corporation", "zones": ["eu-west"]}
-        spec.update(spec_overrides)
-        return TenantModel.model_validate(
-            {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "tenant",
-                "meta": {"name": "acme"},
-                "spec": spec,
-            }
-        )
 
-    def test_from_tenant_model_basic_fields(self):
-        """from_tenant_model copies code, name, zones, onboarded, configuration."""
-        model = self._tenant_model(onboarded="2025-01-01", configuration={"crm_id": "42"})
-        pt = PlatformTenantModel.from_tenant_model(model)
-        assert pt.code == "acme"
-        assert pt.name == "ACME Corporation"
-        assert pt.zones == ["eu-west"]
-        assert str(pt.onboarded) == "2025-01-01"
-        assert pt.configuration == {"crm_id": "42"}
+def test_tenant_accepts_environment_names():
+    """spec.environments names Environment documents, not file paths."""
+    data = _minimal_tenant()
+    data["spec"]["environments"] = ["contoso-env"]
+    model = TenantModel.model_validate(data)
+    assert model.spec.environments == ["contoso-env"]
 
-    def test_from_tenant_model_environments_propagated(self):
-        """from_tenant_model copies spec.environments into the platform artifact."""
-        model = self._tenant_model(environments=["environments/tiers/enterprise.yaml"])
-        pt = PlatformTenantModel.from_tenant_model(model)
-        assert pt.environments == ["environments/tiers/enterprise.yaml"]
 
-    def test_from_tenant_model_environments_none_when_absent(self):
-        """from_tenant_model sets environments=None when spec.environments is absent."""
-        model = self._tenant_model()
-        pt = PlatformTenantModel.from_tenant_model(model)
-        assert pt.environments is None
+def test_tenant_rejects_environment_file_path():
+    """A v1-style path fails PlatformName — documents are referenced by name (ADR-0015)."""
+    data = _minimal_tenant()
+    data["spec"]["environments"] = ["customers/contoso/tenant.env.yaml"]
+    with pytest.raises(ValidationError):
+        TenantModel.model_validate(data)
 
-    def test_from_tenant_model_properties_propagated(self):
-        """from_tenant_model copies spec.properties into the platform artifact."""
-        model = self._tenant_model(properties={"tier": "enterprise"})
-        pt = PlatformTenantModel.from_tenant_model(model)
-        assert pt.properties == {"tier": "enterprise"}
 
-    def test_from_tenant_model_custom_propagated(self):
-        """from_tenant_model copies spec.custom into the platform artifact."""
-        model = self._tenant_model(custom={"feature_x": True})
-        pt = PlatformTenantModel.from_tenant_model(model)
-        assert pt.custom == {"feature_x": True}
+def test_tenant_rejects_duplicate_environments():
+    """A repeated environment reference would merge twice."""
+    data = _minimal_tenant()
+    data["spec"]["environments"] = ["shared-env", "shared-env"]
+    with pytest.raises(ValidationError, match="Duplicate"):
+        TenantModel.model_validate(data)
 
-    def test_from_tenant_model_properties_none_when_absent(self):
-        """from_tenant_model sets properties=None when spec.properties is absent."""
-        model = self._tenant_model()
-        pt = PlatformTenantModel.from_tenant_model(model)
-        assert pt.properties is None
 
-    def test_from_tenant_model_custom_none_when_absent(self):
-        """from_tenant_model sets custom=None when spec.custom is absent."""
-        model = self._tenant_model()
-        pt = PlatformTenantModel.from_tenant_model(model)
-        assert pt.custom is None
+def test_tenant_accepts_onboarded_date():
+    """onboarded parses as a real date."""
+    data = _minimal_tenant()
+    data["spec"]["onboarded"] = "2026-03-15"
+    model = TenantModel.model_validate(data)
+    assert model.spec.onboarded is not None
+    assert model.spec.onboarded.year == 2026
+
+
+def test_tenant_accepts_merge_layers():
+    """properties/configuration/custom are free-form merge layers."""
+    data = _minimal_tenant()
+    data["spec"]["properties"] = {"tier": "enterprise"}
+    data["spec"]["configuration"] = {"crm_id": "42"}
+    data["spec"]["custom"] = {"owner": "platform-team"}
+    model = TenantModel.model_validate(data)
+    assert model.spec.properties == {"tier": "enterprise"}
+    assert model.spec.configuration == {"crm_id": "42"}
+    assert model.spec.custom == {"owner": "platform-team"}
+
+
+def test_tenant_rejects_unknown_fields():
+    """Extra/unknown fields are rejected (extra='forbid')."""
+    data = _minimal_tenant()
+    data["spec"]["unknown_field"] = "oops"
+    with pytest.raises(ValidationError):
+        TenantModel.model_validate(data)

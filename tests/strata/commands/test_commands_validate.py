@@ -1,146 +1,293 @@
-"""Tests for the `validate` command."""
+#!/usr/bin/env python3
+"""Tests for `strata validate`."""
 
 import json
-from unittest.mock import patch
+import shutil
+from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
-from strata.commands.cli_validate import validate_command
+from strata.commands.cli import cli
+from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE, EXIT_VALIDATION
+
+MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
+kind: solution
+meta:
+  name: test-solution
+spec: {}
+"""
+
+NAMESPACE_DOC = """apiVersion: strata.huybrechts.xyz/v2
+kind: namespace
+meta:
+  name: main-ns
+spec:
+  lifecycle: {}
+"""
+
+BROKEN = """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: broken
+spec:
+  providers: [azure]
+"""
 
 
-class TestValidateCommand:
-    def test_missing_file_arg_returns_exit_2(self):
-        runner = CliRunner()
-        result = runner.invoke(validate_command, [])
-        assert result.exit_code == 2
-
-    def test_valid_file_mocked_success(self, tmp_path):
-        target = tmp_path / "workspace.yaml"
-        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\n")
-        runner = CliRunner()
-        with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=True):
-            result = runner.invoke(validate_command, ["-f", str(target), "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_deep_flag_accepted(self, tmp_path):
-        target = tmp_path / "workspace.yaml"
-        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\n")
-        runner = CliRunner()
-        with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=True):
-            result = runner.invoke(validate_command, ["-f", str(target), "--deep", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_execute_false_returns_nonzero(self, tmp_path):
-        target = tmp_path / "bad.yaml"
-        target.write_text("not: valid: yaml: content")
-        runner = CliRunner()
-        with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=False):
-            result = runner.invoke(validate_command, ["-f", str(target), "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
-
-    def test_validation_errors_produce_exit_3(self, tmp_path):
-        target = tmp_path / "bad.yaml"
-        target.write_text("not: valid: yaml: content")
-        runner = CliRunner()
-        with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=False):
-            with patch(
-                "strata.commands.validate.run_validate_command.ValidateCommand.has_validation_errors",
-                return_value=True,
-            ):
-                result = runner.invoke(validate_command, ["-f", str(target), "--work-path", str(tmp_path)])
-        assert result.exit_code == 3
+@pytest.fixture
+def runner():
+    return CliRunner()
 
 
-class TestValidateStructuredErrors:
-    """Verify that --output json returns structured error objects in data.errors."""
+@pytest.fixture
+def solution(tmp_path):
+    root = tmp_path / "sln"
+    root.mkdir()
+    (root / "strata.yaml").write_text(MANIFEST, encoding="utf-8")
+    (root / "namespace.yaml").write_text(NAMESPACE_DOC, encoding="utf-8")
+    return root
 
-    def test_yaml_parse_error_produces_structured_error(self, tmp_path):
-        """A syntactically invalid YAML file should produce a YAML_PARSE_ERROR structured error."""
-        target = tmp_path / "bad.yaml"
-        target.write_text(": this is not valid yaml:::")
-        runner = CliRunner()
-        result = runner.invoke(
-            validate_command,
-            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
-        )
-        data = json.loads(result.output)
-        errors = data["data"]["errors"]
-        assert len(errors) > 0
-        err = errors[0]
-        assert err["code"] == "YAML_PARSE_ERROR"
-        assert "message" in err
-        assert "phase" in err
 
-    def test_unknown_kind_produces_structured_error(self, tmp_path):
-        target = tmp_path / "bad.yaml"
-        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: unknownkind\n")
-        runner = CliRunner()
-        result = runner.invoke(
-            validate_command,
-            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
-        )
-        data = json.loads(result.output)
-        errors = data["data"]["errors"]
-        assert len(errors) > 0
-        err = errors[0]
-        assert err["code"] == "UNKNOWN_KIND"
-        assert err["field"] == "kind"
-        assert err["value"] == "unknownkind"
+def _run(runner, *args):
+    return runner.invoke(cli, ["validate", *[str(a) for a in args]])
 
-    def test_missing_kind_field_produces_structured_error(self, tmp_path):
-        target = tmp_path / "nokind.yaml"
-        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nspec:\n  name: test\n")
-        runner = CliRunner()
-        result = runner.invoke(
-            validate_command,
-            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
-        )
-        data = json.loads(result.output)
-        errors = data["data"]["errors"]
-        assert any(e["code"] == "MISSING_KIND_FIELD" for e in errors)
 
-    def test_structured_errors_have_required_fields(self, tmp_path):
-        """Every structured error must contain code, message, and phase."""
-        target = tmp_path / "bad.yaml"
-        target.write_text(": this is not valid yaml:::")
-        runner = CliRunner()
-        result = runner.invoke(
-            validate_command,
-            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
-        )
-        data = json.loads(result.output)
-        for err in data["data"]["errors"]:
-            assert "code" in err
-            assert "message" in err
-            assert "phase" in err
+# ---------------------------------------------------------------------------
+# Exit codes — what pipelines branch on
+# ---------------------------------------------------------------------------
 
-    def test_valid_file_has_empty_errors_list(self, tmp_path):
-        target = tmp_path / "workspace.yaml"
-        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nspec:\n  name: test\n")
-        runner = CliRunner()
-        with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=True):
-            result = runner.invoke(
-                validate_command,
-                ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
-            )
-        # When execute is mocked to True the command succeeds with no errors recorded
-        assert result.exit_code == 0
 
-    def test_pydantic_error_has_field_path(self, tmp_path):
-        """A Pydantic validation failure should include the field path in the structured error."""
-        target = tmp_path / "bad_env.yaml"
-        # meta.name must match PlatformName: ^[a-z][a-z0-9_-]*$ — uppercase breaks it
-        target.write_text(
-            "apiVersion: strata.huybrechts.xyz/v1\nkind: environment\nmeta:\n  name: UPPERCASE_NAME\nspec: {}\n"
-        )
-        runner = CliRunner()
-        result = runner.invoke(
-            validate_command,
-            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
-        )
-        data = json.loads(result.output)
-        errors = data["data"]["errors"]
-        assert len(errors) > 0
-        pydantic_errs = [e for e in errors if e["code"] == "PYDANTIC_FIELD_ERROR"]
-        assert len(pydantic_errs) > 0, f"Expected PYDANTIC_FIELD_ERROR, got: {errors}"
-        assert pydantic_errs[0]["field"] is not None
+def test_valid_solution_exits_zero(runner, solution):
+    """The signal a pipeline checks first."""
+    assert _run(runner, solution).exit_code == EXIT_SUCCESS
+
+
+def test_invalid_document_exits_three(runner, solution):
+    """Validation failure is distinct from a crash or a usage mistake."""
+    (solution / "broken.yaml").write_text(BROKEN, encoding="utf-8")
+    assert _run(runner, solution).exit_code == EXIT_VALIDATION
+
+
+def test_outside_a_solution_exits_two(runner, tmp_path):
+    """'Wrong directory' is a usage error, not broken configuration."""
+    assert _run(runner, tmp_path).exit_code == EXIT_USAGE
+
+
+def test_nonexistent_path_exits_two(runner, tmp_path):
+    """A mistyped path is an invocation mistake."""
+    assert _run(runner, tmp_path / "nope").exit_code == EXIT_USAGE
+
+
+def test_runs_from_inside_the_solution(runner, solution, monkeypatch):
+    """PATH is optional — the common case is 'validate where I am'."""
+    monkeypatch.chdir(solution)
+    assert runner.invoke(cli, ["validate"]).exit_code == EXIT_SUCCESS
+
+
+def test_runs_from_a_subdirectory(runner, solution, monkeypatch):
+    """Discovery walks upwards, so any nested directory works."""
+    nested = solution / "a" / "b"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+    assert runner.invoke(cli, ["validate"]).exit_code == EXIT_SUCCESS
+
+
+# ---------------------------------------------------------------------------
+# Console report
+# ---------------------------------------------------------------------------
+
+
+def test_console_reports_what_ran(runner, solution, monkeypatch):
+    """The header is the record a bug report needs.
+
+    argv is pinned because `command_line()` reads the real process argv —
+    correct for a CLI run, but under CliRunner the callback is invoked
+    directly and argv still belongs to pytest.
+    """
+    monkeypatch.setattr("sys.argv", ["strata", "validate", str(solution)])
+    output = _run(runner, solution).output
+    assert "test-solution" in output
+    assert "strata validate" in output
+    assert "UTC" in output
+
+
+def test_console_redacts_secrets_in_the_invocation(runner, solution, monkeypatch):
+    """Echoing the command line must never leak a secret into CI logs."""
+    monkeypatch.setattr("sys.argv", ["strata", "validate", str(solution), "--token", "hunter2"])
+    output = _run(runner, solution).output
+    assert "hunter2" not in output
+    assert "redacted" in output
+
+
+def test_console_reports_the_verdict(runner, solution):
+    """Pass/fail must be unmissable."""
+    assert "PASSED" in _run(runner, solution).output
+
+
+def test_console_reports_findings_with_location(runner, solution):
+    """The structured fields are what make a finding actionable."""
+    (solution / "broken.yaml").write_text(BROKEN, encoding="utf-8")
+    output = _run(runner, solution).output
+    assert "broken.yaml" in output
+    assert "spec.provisioners" in output
+    assert "FAILED" in output
+
+
+def test_quiet_drops_chrome_but_keeps_findings(runner, solution):
+    """--quiet must not become a way to hide problems."""
+    (solution / "broken.yaml").write_text(BROKEN, encoding="utf-8")
+    result = runner.invoke(cli, ["validate", str(solution), "--quiet"])
+    assert "solution" not in result.output.split("broken.yaml")[0]
+    assert "spec.provisioners" in result.output
+    assert result.exit_code == EXIT_VALIDATION
+
+
+def test_quiet_is_silent_on_success(runner, solution):
+    """Nothing to say when there is nothing wrong."""
+    assert runner.invoke(cli, ["validate", str(solution), "--quiet"]).output.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# JSON
+# ---------------------------------------------------------------------------
+
+
+def test_json_emits_one_parseable_document(runner, solution):
+    """Pipelines capture stdout and pipe it straight to jq."""
+    payload = json.loads(_run(runner, solution, "--output", "json").output)
+    assert payload["ok"] is True
+    assert payload["command"] == "validate"
+    assert payload["summary"]["documents"] == 1
+
+
+def test_json_is_parseable_on_validation_failure(runner, solution):
+    """haven parses stdout *after* a non-zero exit."""
+    (solution / "broken.yaml").write_text(BROKEN, encoding="utf-8")
+    result = _run(runner, solution, "--output", "json")
+    payload = json.loads(result.output)
+    assert result.exit_code == EXIT_VALIDATION
+    assert payload["ok"] is False
+    assert payload["diagnostics"][0]["location"] == "spec.provisioners"
+
+
+def test_strata_output_env_var_defaults_the_output_format(runner, solution):
+    """Real CI sets STRATA_OUTPUT: json once in the job's env: block rather
+    than passing --output json on every invocation (ADR-0020's Tier 1
+    finding) — no --output flag here at all."""
+    result = runner.invoke(cli, ["validate", str(solution)], env={"STRATA_OUTPUT": "json"})
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["command"] == "validate"
+
+
+def test_explicit_output_flag_overrides_strata_output_env_var(runner, solution):
+    result = runner.invoke(cli, ["validate", str(solution), "--output", "console"], env={"STRATA_OUTPUT": "json"})
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(result.output)
+
+
+def test_strata_work_path_env_var_locates_the_solution_without_a_path_argument(runner, solution):
+    """Real CI sets STRATA_WORK_PATH once, in the job's env: block, rather
+    than passing a path argument to every single invocation (ADR-0020's
+    Tier 1 finding) — no positional path here at all."""
+    result = runner.invoke(cli, ["validate", "--output", "json"], env={"STRATA_WORK_PATH": str(solution)})
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+
+
+def test_explicit_path_argument_overrides_strata_work_path_env_var(runner, solution, tmp_path):
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    result = runner.invoke(cli, ["validate", str(solution), "--output", "json"], env={"STRATA_WORK_PATH": str(other)})
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+
+
+def test_json_is_parseable_on_usage_error(runner, tmp_path):
+    """The path v1 could not manage, which forced a jq fallback in workflows."""
+    result = _run(runner, tmp_path, "--output", "json")
+    payload = json.loads(result.output)
+    assert result.exit_code == EXIT_USAGE
+    assert payload["ok"] is False
+    assert payload["diagnostics"][0]["code"] == "UsageError"
+
+
+def test_json_sources_are_relative(runner, solution):
+    """Stable between a laptop and CI."""
+    (solution / "broken.yaml").write_text(BROKEN, encoding="utf-8")
+    payload = json.loads(_run(runner, solution, "--output", "json").output)
+    assert payload["diagnostics"][0]["source"] == "broken.yaml"
+
+
+# ---------------------------------------------------------------------------
+# --strict
+# ---------------------------------------------------------------------------
+
+
+def test_warnings_do_not_fail_by_default(runner, solution, monkeypatch):
+    """A warning is reportable without breaking the build."""
+    from strata.controllers import solution_context as module
+
+    original = module.open_solution
+
+    def with_warning(path=None):
+        context = original(path)
+        context.diagnostics.warning("stale pin", source="versions/prd.yaml")
+        return context
+
+    monkeypatch.setattr("strata.commands.validate_command.open_solution", with_warning)
+    result = _run(runner, solution)
+    assert result.exit_code == EXIT_SUCCESS
+    assert "stale pin" in result.output
+
+
+def test_strict_promotes_warnings_to_failure(runner, solution, monkeypatch):
+    """A release pipeline should be able to refuse a stale pin."""
+    from strata.controllers import solution_context as module
+
+    original = module.open_solution
+
+    def with_warning(path=None):
+        context = original(path)
+        context.diagnostics.warning("stale pin", source="versions/prd.yaml")
+        return context
+
+    monkeypatch.setattr("strata.commands.validate_command.open_solution", with_warning)
+    result = runner.invoke(cli, ["validate", str(solution), "--strict"])
+    assert result.exit_code == EXIT_VALIDATION
+    assert "FAILED" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Surface
+# ---------------------------------------------------------------------------
+
+
+def test_validate_is_registered(runner):
+    """It appears in the top-level help."""
+    assert "validate" in runner.invoke(cli, ["--help"]).output
+
+
+def test_no_file_option(runner):
+    """v2 validates a solution, not a file — `-f` has nothing to refer to."""
+    assert "-f" not in runner.invoke(cli, ["validate", "--help"]).output
+
+
+def test_no_deep_flag(runner):
+    """Full validation is the default; the weak mode is not the one you get."""
+    assert "--deep" not in runner.invoke(cli, ["validate", "--help"]).output
+
+
+def test_help_documents_exit_codes(runner):
+    """Pipelines branch on them, so they belong in the help."""
+    output = runner.invoke(cli, ["validate", "--help"]).output
+    assert "Exit codes" in output
+
+
+@pytest.mark.skipif(not Path("config").exists(), reason="example config not present")
+def test_shipped_example_solution_validates(runner, tmp_path):
+    """The example ships valid, and must stay that way."""
+    root = tmp_path / "config"
+    shutil.copytree("config", root)
+    assert _run(runner, root).exit_code == EXIT_SUCCESS

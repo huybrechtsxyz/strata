@@ -1,232 +1,269 @@
-"""Unit tests for deployment model — DeploymentStageTimeoutsModel."""
+#!/usr/bin/env python3
+"""Tests for DeploymentModel YAML validation."""
 
 import pytest
 from pydantic import ValidationError
 
-from strata.models.deployment_model import (
-    DeploymentLockingModel,
-    DeploymentModel,
-    DeploymentStageModel,
-    DeploymentStageTimeoutsModel,
-)
+from strata.models.deployment_model import DeploymentModel
 
 
-class TestDeploymentStageTimeoutsModel:
-    def test_all_fields_optional(self):
-        t = DeploymentStageTimeoutsModel()
-        assert t.setup is None
-        assert t.check is None
-        assert t.plan is None
-        assert t.apply is None
-        assert t.destroy is None
-
-    def test_partial_override(self):
-        t = DeploymentStageTimeoutsModel(plan=300, apply=1200)
-        assert t.setup is None
-        assert t.check is None
-        assert t.plan == 300
-        assert t.apply == 1200
-        assert t.destroy is None
-
-    def test_all_fields_set(self):
-        t = DeploymentStageTimeoutsModel(setup=60, check=30, plan=300, apply=900, destroy=900)
-        assert t.setup == 60
-        assert t.check == 30
-        assert t.plan == 300
-        assert t.apply == 900
-        assert t.destroy == 900
-
-    def test_invalid_type_rejected(self):
-        with pytest.raises(ValidationError):
-            DeploymentStageTimeoutsModel(plan="fast")
-
-    def test_old_field_names_not_accepted(self):
-        """init and validate were renamed to setup and check — extra='forbid' now rejects them."""
-        with pytest.raises(ValidationError):
-            DeploymentStageTimeoutsModel(init=999, validate=999)  # type: ignore[call-arg]
+def _minimal_deployment() -> dict:
+    return {
+        "meta": {"name": "control-dev"},
+        "spec": {
+            "workspace": "control-workspace",
+            "environments": ["core-env", "control-dev-env"],
+        },
+    }
 
 
-class TestDeploymentStageModelTimeoutsField:
-    def test_timeouts_optional(self):
-        stage = DeploymentStageModel(name="prod")
-        assert stage.timeouts is None
-
-    def test_timeouts_parsed_from_dict(self):
-        stage = DeploymentStageModel(
-            name="prod",
-            timeouts={"setup": 120, "apply": 1200},
-        )
-        assert stage.timeouts is not None
-        assert stage.timeouts.setup == 120
-        assert stage.timeouts.apply == 1200
-        assert stage.timeouts.plan is None
-
-    def test_timeouts_model_instance_accepted(self):
-        t = DeploymentStageTimeoutsModel(plan=600)
-        stage = DeploymentStageModel(name="prod", timeouts=t)
-        assert stage.timeouts is not None
-        assert stage.timeouts.plan == 600
+def test_deployment_minimal_is_valid():
+    """A deployable document needs a workspace and at least one environment."""
+    model = DeploymentModel.model_validate(_minimal_deployment())
+    assert model.meta.name == "control-dev"
+    assert model.spec.workspace == "control-workspace"
+    assert model.spec.environments == ["core-env", "control-dev-env"]
+    assert model.spec.partial is False
+    assert model.kind.value == "deployment"
 
 
-class TestDeploymentStageModelSecretsField:
-    def test_secrets_optional_defaults_none(self):
-        stage = DeploymentStageModel(name="prod")
-        assert stage.secrets is None
-
-    def test_secrets_empty_list(self):
-        stage = DeploymentStageModel(name="prod", secrets=[])
-        assert stage.secrets == []
-
-    def test_secrets_specific_keys(self):
-        stage = DeploymentStageModel(name="prod", secrets=["db_pass", "api_key"])
-        assert stage.secrets == ["db_pass", "api_key"]
-
-    def test_secrets_wildcard(self):
-        stage = DeploymentStageModel(name="prod", secrets=["*"])
-        assert stage.secrets == ["*"]
-
-    def test_secrets_roundtrip_with_other_fields(self):
-        stage = DeploymentStageModel(
-            name="infra",
-            provisioner="my_tf",
-            secrets=["hetzner_api_token"],
-            timeouts={"apply": 1200},
-        )
-        assert stage.secrets == ["hetzner_api_token"]
-        assert stage.timeouts is not None
-        assert stage.timeouts.apply == 1200
+def test_deployment_accepts_provider_bindings():
+    data = _minimal_deployment()
+    data["spec"]["providers"] = [{"slot": "azure", "provider": "azure-americas"}]
+    model = DeploymentModel.model_validate(data)
+    assert model.spec.providers[0].slot == "azure"
+    assert model.spec.providers[0].provider == "azure-americas"
 
 
-class TestDeploymentStageModelHelmNamespacesField:
-    """helm_namespaces (plural) is unrelated to namespace (singular) — the latter
-    is sync-provisioner-only (argocd/flux); the former is helm-only."""
-
-    def test_helm_namespaces_optional_defaults_none(self):
-        stage = DeploymentStageModel(name="apps")
-        assert stage.helm_namespaces is None
-
-    def test_helm_namespaces_empty_list(self):
-        stage = DeploymentStageModel(name="apps", helm_namespaces=[])
-        assert stage.helm_namespaces == []
-
-    def test_helm_namespaces_specific_names(self):
-        stage = DeploymentStageModel(name="apps", provisioner="helm", helm_namespaces=["immich", "media"])
-        assert stage.helm_namespaces == ["immich", "media"]
-
-    def test_namespace_and_helm_namespaces_coexist_independently(self):
-        """The singular sync field and the plural helm field don't interfere with each other."""
-        stage = DeploymentStageModel(name="mixed", namespace="argocd", helm_namespaces=["immich"])
-        assert stage.namespace == "argocd"
-        assert stage.helm_namespaces == ["immich"]
+def test_deployment_rejects_duplicate_provider_slot_bindings():
+    data = _minimal_deployment()
+    data["spec"]["providers"] = [
+        {"slot": "azure", "provider": "azure-americas"},
+        {"slot": "azure", "provider": "azure-brazil"},
+    ]
+    with pytest.raises(ValidationError, match="provider slot bindings"):
+        DeploymentModel.model_validate(data)
 
 
-class TestDeploymentTenantField:
-    """Tests for the optional tenant field on DeploymentSpecModel."""
+def test_deployment_provider_binding_has_no_bare_string_shorthand():
+    data = _minimal_deployment()
+    data["spec"]["providers"] = ["azure-americas"]
+    with pytest.raises(ValidationError):
+        DeploymentModel.model_validate(data)
 
-    def _spec(self, **overrides):
-        base = {
-            "workspace": {"name": "ws", "file": "workspace.yaml"},
-            "environments": ["env.yaml"],
+
+def test_deployment_accepts_asset_bindings():
+    data = _minimal_deployment()
+    data["spec"]["assets"] = [{"slot": "api", "asset": "contoso-api"}]
+    model = DeploymentModel.model_validate(data)
+    assert (model.spec.assets[0].slot, model.spec.assets[0].asset) == ("api", "contoso-api")
+
+
+def test_deployment_rejects_duplicate_asset_slot_bindings():
+    data = _minimal_deployment()
+    data["spec"]["assets"] = [{"slot": "api", "asset": "a"}, {"slot": "api", "asset": "b"}]
+    with pytest.raises(ValidationError, match="asset slot bindings"):
+        DeploymentModel.model_validate(data)
+
+
+def test_deployment_asset_binding_has_no_bare_string_shorthand():
+    data = _minimal_deployment()
+    data["spec"]["assets"] = ["contoso-api"]
+    with pytest.raises(ValidationError):
+        DeploymentModel.model_validate(data)
+
+
+def test_deployment_rejects_mismatched_kind():
+    """A document declaring another kind is rejected (ADR-0016)."""
+    data = _minimal_deployment()
+    data["kind"] = "workspace"
+    with pytest.raises(ValidationError, match="Expected kind 'deployment'"):
+        DeploymentModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# partial / extends
+# ---------------------------------------------------------------------------
+
+
+def test_deployment_requires_workspace_and_environments():
+    """A non-partial deployment missing required fields is rejected."""
+    with pytest.raises(ValidationError, match="partial"):
+        DeploymentModel.model_validate({"meta": {"name": "incomplete"}, "spec": {}})
+
+
+def test_partial_deployment_may_omit_required_fields():
+    """partial: true marks a reusable base that is not deployable alone."""
+    model = DeploymentModel.model_validate(
+        {"meta": {"name": "deploy-base-customer"}, "spec": {"partial": True, "locking": {"enabled": True}}}
+    )
+    assert model.spec.partial is True
+    assert model.spec.workspace is None
+
+
+def test_deployment_rejects_self_extension():
+    """The trivial cycle is caught at the model; longer chains need the index."""
+    data = _minimal_deployment()
+    data["spec"]["extends"] = "control-dev"
+    with pytest.raises(ValidationError, match="cannot extend itself"):
+        DeploymentModel.model_validate(data)
+
+
+def test_deployment_accepts_extends_by_name():
+    """extends names a base document, not a path (ADR-0015)."""
+    data = _minimal_deployment()
+    data["spec"]["extends"] = "deploy-base-customer"
+    model = DeploymentModel.model_validate(data)
+    assert model.spec.extends == "deploy-base-customer"
+
+
+def test_extending_deployment_may_omit_required_fields():
+    """A child is incomplete until merged — the base supplies the rest."""
+    model = DeploymentModel.model_validate(
+        {"meta": {"name": "leaf"}, "spec": {"extends": "deploy-base", "environments": ["prd"]}}
+    )
+    assert model.spec.workspace is None
+    assert model.spec.partial is False
+
+
+def test_deployment_rejects_extends_file_path():
+    """A v1-style '@config/...' path fails PlatformName."""
+    data = _minimal_deployment()
+    data["spec"]["extends"] = "@config/stacks/customer/deployment.yaml"
+    with pytest.raises(ValidationError):
+        DeploymentModel.model_validate(data)
+
+
+def test_deployment_rejects_duplicate_environments():
+    """A repeated environment reference would merge twice."""
+    data = _minimal_deployment()
+    data["spec"]["environments"] = ["core-env", "core-env"]
+    with pytest.raises(ValidationError, match="Duplicate"):
+        DeploymentModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# Stages
+# ---------------------------------------------------------------------------
+
+
+def test_stage_references_a_provisioning_step():
+    """A stage names a workspace provisioning step and carries runtime knobs."""
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "control_infra", "on_failure": "stop"}]
+    model = DeploymentModel.model_validate(data)
+    assert model.spec.stages[0].step == "control_infra"
+    assert model.spec.stages[0].enabled is True
+
+
+def test_stage_rejects_v1_provisioner_binding():
+    """v1 bound provisioner/topology on the stage; that now lives in the workspace."""
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "control_infra", "provisioner": "terraform-main"}]
+    with pytest.raises(ValidationError):
+        DeploymentModel.model_validate(data)
+
+
+def test_deployment_rejects_duplicate_stage_steps():
+    """Each step may have parameters declared only once."""
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "infra"}, {"step": "infra"}]
+    with pytest.raises(ValidationError, match="Duplicate"):
+        DeploymentModel.model_validate(data)
+
+
+def test_stage_rejects_unknown_on_failure():
+    """on_failure is a closed vocabulary."""
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "infra", "on_failure": "explode"}]
+    with pytest.raises(ValidationError, match="on_failure"):
+        DeploymentModel.model_validate(data)
+
+
+def test_stage_enabled_accepts_bool_or_expression():
+    """enabled is bool | str; a string is a conditional expression (engine not built)."""
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "a", "enabled": False}, {"step": "b", "enabled": "${var:DEPLOY_B}"}]
+    model = DeploymentModel.model_validate(data)
+    assert model.spec.stages[0].enabled is False
+    assert model.spec.stages[1].enabled == "${var:DEPLOY_B}"
+
+
+def test_stage_rejects_empty_expression():
+    """An empty conditional expression is meaningless."""
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "a", "enabled": "   "}]
+    with pytest.raises(ValidationError, match="must not be empty"):
+        DeploymentModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# Health checks, timeouts, locking
+# ---------------------------------------------------------------------------
+
+
+def test_http_health_check_requires_url():
+    """An http probe without a url cannot run."""
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "a", "health_checks": [{"name": "api", "type": "http"}]}]
+    with pytest.raises(ValidationError, match="'url' is required"):
+        DeploymentModel.model_validate(data)
+
+
+def test_tcp_health_check_requires_host_and_port():
+    """A tcp probe needs both host and port."""
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "a", "health_checks": [{"name": "db", "type": "tcp", "host": "db"}]}]
+    with pytest.raises(ValidationError, match="'host' and 'port' are required"):
+        DeploymentModel.model_validate(data)
+
+
+def test_valid_health_checks_are_accepted():
+    """Well-formed http and tcp probes validate."""
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [
+        {
+            "step": "a",
+            "health_checks": [
+                {"name": "api", "type": "http", "url": "https://example.com/health", "expect_status": 204},
+                {"name": "db", "type": "tcp", "host": "db.internal", "port": 5432},
+            ],
+            "timeouts": {"apply": 1800},
         }
-        base.update(overrides)
-        return base
+    ]
+    model = DeploymentModel.model_validate(data)
+    assert model.spec.stages[0].health_checks[0].expect_status == 204
+    assert model.spec.stages[0].timeouts.apply == 1800
 
-    def _model(self, **spec_overrides):
-        return DeploymentModel.model_validate(
-            {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "deployment",
-                "meta": {"name": "test_deploy"},
-                "spec": self._spec(**spec_overrides),
-            }
-        )
 
-    def test_tenant_absent_defaults_none(self):
-        """tenant is None when not specified."""
-        model = self._model()
-        assert model.spec.tenant is None
+def test_locking_rejects_unknown_strategy():
+    """Locking strategy is a closed vocabulary."""
+    data = _minimal_deployment()
+    data["spec"]["locking"] = {"enabled": True, "strategy": "yolo"}
+    with pytest.raises(ValidationError, match="strategy"):
+        DeploymentModel.model_validate(data)
 
-    def test_tenant_valid_platform_name(self):
-        """A valid PlatformName is accepted."""
-        model = self._model(tenant="acme")
-        assert model.spec.tenant == "acme"
 
-    def test_tenant_invalid_platform_name_rejected(self):
-        """Uppercase / spaces are rejected by PlatformName constraint."""
+def test_locking_defaults_to_delegate():
+    """Default is to leave locking to the provisioner's own backend."""
+    data = _minimal_deployment()
+    data["spec"]["locking"] = {"enabled": True}
+    model = DeploymentModel.model_validate(data)
+    assert model.spec.locking.strategy == "delegate"
+
+
+def test_deployment_accepts_layers_block():
+    """layers is modelled (10 of 15 real documents use it) though inert in v2."""
+    data = _minimal_deployment()
+    data["spec"]["layers"] = {"follows": "control-path", "segments": {"control": "dev"}}
+    model = DeploymentModel.model_validate(data)
+    assert model.spec.layers.segments == {"control": "dev"}
+
+
+def test_deployment_rejects_unported_v1_fields():
+    """versions/promotion/gates had zero real usage and are not ported."""
+    for field in ("versions", "promotion", "gates"):
+        data = _minimal_deployment()
+        data["spec"][field] = []
         with pytest.raises(ValidationError):
-            self._model(tenant="ACME Corp")
-
-
-class TestDeploymentLockingModel:
-    """Tests for DeploymentLockingModel and its wiring into DeploymentSpecModel."""
-
-    def _model(self, locking=None):
-        spec = {
-            "workspace": {"name": "ws", "file": "workspace.yaml"},
-            "environments": ["env.yaml"],
-        }
-        if locking is not None:
-            spec["locking"] = locking
-        return DeploymentModel.model_validate(
-            {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "deployment",
-                "meta": {"name": "test_deploy"},
-                "spec": spec,
-            }
-        )
-
-    def test_locking_absent_defaults_none(self):
-        """spec.locking is None when not declared."""
-        model = self._model()
-        assert model.spec.locking is None
-
-    def test_locking_enabled_false_by_default(self):
-        """enabled defaults to False when locking block is present but empty."""
-        model = self._model(locking={})
-        assert model.spec.locking is not None
-        assert model.spec.locking.enabled is False
-
-    def test_locking_defaults(self):
-        """All defaults apply when only enabled: true is set."""
-        model = self._model(locking={"enabled": True})
-        lock = model.spec.locking
-        assert lock.enabled is True
-        assert lock.strategy == "wrap"
-        assert lock.wait_timeout == "30m"
-        assert lock.force_unlock_after == "8h"
-
-    def test_locking_full_config(self):
-        """All fields accepted when explicitly provided."""
-        model = self._model(
-            locking={
-                "enabled": True,
-                "strategy": "delegate",
-                "wait_timeout": "1h",
-                "force_unlock_after": "24h",
-            }
-        )
-        lock = model.spec.locking
-        assert lock.strategy == "delegate"
-        assert lock.wait_timeout == "1h"
-        assert lock.force_unlock_after == "24h"
-
-    def test_strategy_invalid_value_rejected(self):
-        """An unknown strategy value is rejected by Pydantic."""
-        with pytest.raises(ValidationError):
-            self._model(locking={"strategy": "unknown"})
-
-    def test_locking_model_standalone(self):
-        """DeploymentLockingModel can be instantiated directly."""
-        lock = DeploymentLockingModel()
-        assert lock.enabled is False
-        assert lock.strategy == "wrap"
-
-    def test_locking_roundtrip(self):
-        """model_dump preserves all fields."""
-        lock = DeploymentLockingModel(enabled=True, strategy="delegate", wait_timeout="2h", force_unlock_after="12h")
-        data = lock.model_dump()
-        assert data["enabled"] is True
-        assert data["strategy"] == "delegate"
-        assert data["wait_timeout"] == "2h"
-        assert data["force_unlock_after"] == "12h"
+            DeploymentModel.model_validate(data)

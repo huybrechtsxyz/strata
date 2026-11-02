@@ -1,84 +1,259 @@
 #!/usr/bin/env python3
-"""Unit tests for TerraformIntegration."""
+"""Tests for `TerraformIntegration` (ADR-0021 Phase 5)."""
 
-from unittest.mock import MagicMock, patch
+import json
+from pathlib import Path
 
-from strata.integrations.base_integration import BaseIntegration
+import pytest
+
+from strata.integrations.registry import get
+from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
 from strata.integrations.terraform import TerraformIntegration
-from strata.models.capabilities import IInfrastructureTool
-from strata.models.integration_model import IntegrationModel
+from strata.integrations.terraform_projection import build_strata_payload
+from strata.models.common_models import SourceModel
+from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderSpecModel
+from strata.models.provisioning_model import ProvisionerModel
+from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
+from strata.utils.transport import CommandResult
 
 
-def _cfg(name="terraform") -> IntegrationModel:
-    return IntegrationModel(name=name, type="terraform")
+def _capture(monkeypatch):
+    """Stub `run_command` where `Integration.run()` actually looks it up
+    (`strata.integrations.base`), returning the captured argv via a mutable box."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        captured["args"] = args
+        captured["cwd"] = cwd
+        captured["env"] = env
+        captured["timeout"] = timeout
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    return captured
 
 
-class TestTerraformIntegrationInit:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
-
-    def test_command_is_terraform(self):
-        i = TerraformIntegration(_cfg())
-        assert i.command == "terraform"
-
-    def test_capabilities_include_infrastructure(self):
-        assert IInfrastructureTool in TerraformIntegration.CAPABILITIES
-
-    def test_version_command(self):
-        i = TerraformIntegration(_cfg())
-        assert i.get_version_command() == ["terraform", "version"]
+def test_class_declares_its_contract():
+    assert TerraformIntegration.TYPE == "terraform"
+    assert TerraformIntegration.CAPABILITIES == {"infrastructure"}
+    assert TerraformIntegration.TRANSPORTS == {"cli"}
+    assert TerraformIntegration.COMMAND == "terraform"
+    assert TerraformIntegration.ENV_VAR_PREFIX == "TF_VAR_"
 
 
-class TestTerraformParseVersion:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
-
-    def test_parse_standard_output(self):
-        i = TerraformIntegration(_cfg())
-        assert i.parse_version("Terraform v1.5.7") == "1.5.7"
-
-    def test_parse_with_extra_lines(self):
-        i = TerraformIntegration(_cfg())
-        output = "Terraform v1.6.0\non linux_amd64"
-        assert i.parse_version(output) == "1.6.0"
-
-    def test_parse_fallback_returns_stripped(self):
-        i = TerraformIntegration(_cfg())
-        result = i.parse_version("  no-version  ")
-        assert result == "no-version"
+def test_registered_in_the_registry():
+    instance = get("terraform")
+    assert isinstance(instance, TerraformIntegration)
 
 
-class TestTerraformIntegrationSingleton:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
-
-    def test_same_name_same_instance(self):
-        a = TerraformIntegration(_cfg("tf1"))
-        b = TerraformIntegration(_cfg("tf1"))
-        assert a is b
-
-    def test_different_names_different_instances(self):
-        a = TerraformIntegration(_cfg("tf1"))
-        BaseIntegration._instances.clear()
-        b = TerraformIntegration(_cfg("tf2"))
-        assert a is not b
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Terraform v1.7.0\non linux_amd64", "1.7.0"),
+        ("Terraform v1.9.8", "1.9.8"),
+        ("garbage output", "garbage output"),
+    ],
+)
+def test_parse_version(raw, expected):
+    assert TerraformIntegration().parse_version(raw) == expected
 
 
-class TestTerraformIntegrationAvailability:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
+def test_init_argv(monkeypatch):
+    captured = _capture(monkeypatch)
+    tf = TerraformIntegration()
+    tf.init(Path("/work"), backend_config={"bucket": "my-bucket"}, upgrade=True, reconfigure=True)
+    assert captured["args"] == [
+        "terraform",
+        "init",
+        "-backend-config",
+        "bucket=my-bucket",
+        "-upgrade",
+        "-reconfigure",
+    ]
+    assert captured["cwd"] == Path("/work")
 
-    def test_ensure_available_success(self):
-        i = TerraformIntegration(_cfg())
-        i._is_available = True
-        i._version = "1.5.7"
-        ok, msg = i.ensure_available()
-        assert ok
-        assert msg == ""
 
-    def test_ensure_available_not_installed(self):
-        i = TerraformIntegration(_cfg())
-        mock_result = MagicMock(returncode=1, stdout="", stderr="not found")
-        with patch("strata.integrations.base_integration.run_command", return_value=mock_result):
-            ok, msg = i.ensure_available()
-        assert not ok
+def test_validate_argv(monkeypatch):
+    captured = _capture(monkeypatch)
+    TerraformIntegration().validate(Path("/work"), json_output=True)
+    assert captured["args"] == ["terraform", "validate", "-json"]
+
+
+def test_plan_argv_with_var_file_and_out(monkeypatch):
+    captured = _capture(monkeypatch)
+    TerraformIntegration().plan(Path("/work"), var_file="prd.tfvars", out_file="prd.tfplan")
+    assert captured["args"] == ["terraform", "plan", "-var-file", "prd.tfvars", "-out", "prd.tfplan"]
+
+
+def test_plan_argv_with_variables_and_target(monkeypatch):
+    captured = _capture(monkeypatch)
+    TerraformIntegration().plan(Path("/work"), variables={"region": "westeurope"}, target=["module.db"])
+    assert captured["args"] == ["terraform", "plan", "-var", "region=westeurope", "-target", "module.db"]
+
+
+def test_plan_destroy_is_plan_with_destroy_flag(monkeypatch):
+    """v1's 'plan_destroy' deployer step — not a separate method."""
+    captured = _capture(monkeypatch)
+    TerraformIntegration().plan(Path("/work"), destroy=True)
+    assert captured["args"] == ["terraform", "plan", "-destroy"]
+
+
+def test_drift_is_plan_with_detailed_exitcode(monkeypatch):
+    """v1's 'drift' deployer step — not a separate method. Exit code 2 means
+    'changes present', not failure; caller must read returncode directly."""
+    captured = _capture(monkeypatch)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        captured["args"] = args
+        return CommandResult(returncode=2, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+
+    result = TerraformIntegration().plan(Path("/work"), detailed_exitcode=True)
+    assert captured["args"] == ["terraform", "plan", "-detailed-exitcode"]
+    assert result.returncode == 2
+    assert result.is_successful is False  # unchanged — caller reads returncode, not is_successful
+
+
+def test_deploy_with_plan_file_ignores_variables(monkeypatch):
+    captured = _capture(monkeypatch)
+    TerraformIntegration().deploy(
+        Path("/work"), plan_file="prd.tfplan", auto_approve=True, variables={"ignored": "yes"}
+    )
+    assert captured["args"] == ["terraform", "apply", "-auto-approve", "prd.tfplan"]
+
+
+def test_deploy_without_plan_file_uses_variables(monkeypatch):
+    captured = _capture(monkeypatch)
+    TerraformIntegration().deploy(Path("/work"), var_file="prd.tfvars", target=["module.db"])
+    assert captured["args"] == ["terraform", "apply", "-var-file", "prd.tfvars", "-target", "module.db"]
+
+
+def test_destroy_argv(monkeypatch):
+    captured = _capture(monkeypatch)
+    TerraformIntegration().destroy(Path("/work"), auto_approve=True, variables={"region": "westeurope"})
+    assert captured["args"] == ["terraform", "destroy", "-auto-approve", "-var", "region=westeurope"]
+
+
+def test_output_argv(monkeypatch):
+    captured = _capture(monkeypatch)
+    TerraformIntegration().output(Path("/work"), output_name="endpoint", json_format=True, raw=False)
+    assert captured["args"] == ["terraform", "output", "-json", "endpoint"]
+
+
+def test_output_tolerates_extra_kwargs(monkeypatch):
+    """Regression test (docs/design/gitops-integration.md Implementation
+    Plan Phase 5): `output()` must accept arbitrary extra kwargs
+    (`auth`/`resolved_values`, as `deploy_controller.collect_step_outputs()`
+    passes for a GitOps step) without raising `TypeError` — found on review
+    that this method, unlike its own `plan()`/`deploy()` siblings, had no
+    `**kwargs: Any` catch-all at all."""
+    captured = _capture(monkeypatch)
+    TerraformIntegration().output(Path("/work"), json_format=True, auth=None, resolved_values={"k": "v"})
+    assert captured["args"] == ["terraform", "output", "-json"]
+
+
+def test_show_argv_defaults_to_json(monkeypatch):
+    captured = _capture(monkeypatch)
+    TerraformIntegration().show(Path("/work"), plan_file="prd.tfplan")
+    assert captured["args"] == ["terraform", "show", "-json", "prd.tfplan"]
+
+
+def test_env_is_forwarded_not_injected_as_var_flags(monkeypatch):
+    """Secrets travel as TF_VAR_ env vars, never -var argv (ADR-0021 Phase 5 design note)."""
+    captured = _capture(monkeypatch)
+    TerraformIntegration().deploy(Path("/work"), env={"TF_VAR_db_password": "hunter2"}, auto_approve=True)
+    assert "hunter2" not in captured["args"]
+    assert "-var" not in captured["args"]
+    assert captured["env"] == {"TF_VAR_db_password": "hunter2"}
+
+
+# ---------------------------------------------------------------------------
+# default_output()/prepare() — ADR-0023 D1/D5, Phase 1
+# ---------------------------------------------------------------------------
+
+
+def _graph():
+    workspace = WorkspaceModel(
+        meta=WorkspaceMetaModel(name="ws"),
+        spec=WorkspaceSpecModel(
+            providers=["p"],
+            provisioners=[ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))],
+        ),
+    )
+    provider = ProviderModel(
+        meta=ProviderMetaModel(name="p"),
+        spec=ProviderSpecModel(type="local", region="local"),
+    )
+    return ResolvedWorkspaceGraph(workspace=workspace, providers={"p": provider})
+
+
+def _provisioner():
+    return ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))
+
+
+def test_default_output_writes_strata_tfvars_and_variables_file(tmp_path: Path):
+    result = TerraformIntegration().default_output(tmp_path, ValueResolution(deployment="d"), _provisioner(), _graph())
+    assert set(result) == {"strata.auto.tfvars.json", "strata_variables.tf", "strata_locals.tf"}
+
+
+def test_default_output_is_valid_json_matching_the_projection(tmp_path: Path):
+    resolved = ValueResolution(deployment="d")
+    graph = _graph()
+    provisioner = _provisioner()
+    result = TerraformIntegration().default_output(tmp_path, resolved, provisioner, graph)
+    expected = build_strata_payload(graph)
+    assert json.loads(result["strata.auto.tfvars.json"]) == {"strata": expected}
+
+
+def test_default_output_skips_strata_variables_file_when_source_declares_its_own(tmp_path: Path):
+    (tmp_path / "main.tf").write_text('variable "strata" {\n  type = any\n}\n')
+    result = TerraformIntegration().default_output(tmp_path, ValueResolution(deployment="d"), _provisioner(), _graph())
+    assert set(result) == {"strata.auto.tfvars.json"}
+
+
+def test_default_output_strata_locals_is_the_one_line_fallback_with_no_secrets(tmp_path: Path):
+    result = TerraformIntegration().default_output(tmp_path, ValueResolution(deployment="d"), _provisioner(), _graph())
+    assert "locals {\n  strata = var.strata\n}\n" in result["strata_locals.tf"]
+
+
+def test_default_output_strata_locals_merges_a_real_secret_path(tmp_path: Path):
+    """ADR-0035's own decision text: `build run` emits `strata_locals.tf`
+    reassembling resolved secrets into `local.strata.*` — not just
+    `strata_variables.tf`. A secret-bearing provider must produce a real
+    `lookup(var.strata_secrets, ...)` for its own path, not the no-secrets
+    fallback."""
+    workspace = WorkspaceModel(
+        meta=WorkspaceMetaModel(name="ws"),
+        spec=WorkspaceSpecModel(
+            providers=["p"],
+            provisioners=[ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))],
+        ),
+    )
+    provider = ProviderModel(
+        meta=ProviderMetaModel(name="p"),
+        spec=ProviderSpecModel(
+            type="local",
+            region="local",
+            configuration={"api_token": "${secret:API_TOKEN}"},
+        ),
+    )
+    graph = ResolvedWorkspaceGraph(workspace=workspace, providers={"p": provider})
+    result = TerraformIntegration().default_output(tmp_path, ValueResolution(deployment="d"), _provisioner(), graph)
+    assert 'lookup(var.strata_secrets, "providers.p.configuration.api_token"' in result["strata_locals.tf"]
+
+
+def test_prepare_writes_default_output_files_to_disk(tmp_path: Path):
+    TerraformIntegration().prepare(
+        tmp_path, resolved=ValueResolution(deployment="d"), provisioner=_provisioner(), graph=_graph()
+    )
+    assert (tmp_path / "strata.auto.tfvars.json").exists()
+    assert (tmp_path / "strata_variables.tf").exists()
+    assert (tmp_path / "strata_locals.tf").exists()
+    assert not (tmp_path / "workspace.auto.tfvars.json").exists()
+    assert not (tmp_path / "topologies.auto.tfvars.json").exists()
+    assert not (tmp_path / "resx_virtualmachine.auto.tfvars.json").exists()

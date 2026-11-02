@@ -1,1261 +1,186 @@
 /**
  * extension.ts — VS Code extension entry point.
  *
- * activate() is called when VS Code detects a .strata/solution.json file
- * in the open workspace (see activationEvents in package.json).
+ * activate() runs when VS Code detects a `strata.yaml` in the open
+ * workspace (see `activationEvents` in package.json) — v2's own solution
+ * marker (ADR-0015), replacing v1's `.strata/solution.json`.
  *
- * Architecture: deployment-centric.
- *   DeploymentContext holds the active deployment file — all views and commands
- *   default to it rather than "whatever file is open in the editor".
- *
- * Refresh pattern: one getStatus() call distributes to all providers via
- * _refreshAll(). Providers never call the CLI directly (except lazy loaders).
+ * Deliberately small: v2's CLI surface today is `validate`, `graph`,
+ * `values`, `version`, `sln update` (plus `build`/`deploy`, not yet wired
+ * into the extension). Every provider here maps onto a command that actually exists,
+ * rather than scaffolding UI ahead of a backend to call.
  */
 
 import * as vscode from 'vscode';
-import { StrataClient, StrataCLINotFoundError, getCliPath, getWorkPath } from './strataClient';
-import { StatusBarProvider } from './providers/statusBarProvider';
-import { WorkspaceHealthProvider } from './providers/workspaceHealthProvider';
-import { DeploymentExplorerProvider } from './providers/deploymentExplorerProvider';
-import { OperationsViewProvider } from './providers/operationsViewProvider';
-import { DeploymentContext } from './providers/deploymentContext';
+import { findFieldRange } from './fieldLocation';
+import { DeploymentSelector } from './providers/deploymentSelector';
 import { DiagnosticsProvider } from './providers/diagnosticsProvider';
-import { CodeLensProvider } from './providers/codeLensProvider';
-import { GuideViewProvider } from './providers/guideViewProvider';
-import { CrossReferenceProvider } from './providers/crossReferenceProvider';
-import { SnippetProvider } from './providers/snippetProvider';
-import { StrataTaskProvider } from './providers/strataTaskProvider';
-import { FileDecorationProvider } from './providers/fileDecorationProvider';
-import { StrataChatParticipant } from './providers/strataChatParticipant';
-import { AuditViewProvider } from './providers/auditViewProvider';
-import { ValuesViewProvider } from './providers/valuesViewProvider';
-import { BuildPlanProvider } from './providers/buildPlanProvider';
-import { PromotionsViewProvider } from './providers/promotionsViewProvider';
-import { IntegrationHelpProvider } from './providers/integrationHelpProvider';
-import { HelpViewProvider } from './providers/helpViewProvider';
-import { WorkItemsViewProvider } from './providers/workItemsViewProvider';
-import { CacheWarmerProvider } from './providers/cacheWarmerProvider';
-import { StateServiceStatusBarProvider } from './providers/stateServiceStatusBarProvider';
-import { StateServiceTailProvider } from './providers/stateServiceTailProvider';
-import { DiagramPreviewProvider } from './providers/diagramPreviewProvider';
-import { DiagramsViewProvider } from './providers/diagramsViewProvider';
-import { DiagramBuilderProvider } from './providers/diagramBuilderProvider';
-
-// ---------------------------------------------------------------------------
-// Extension state (singleton per VS Code window)
-// ---------------------------------------------------------------------------
+import { GraphViewProvider } from './providers/graphViewProvider';
+import { IntegrationItem, IntegrationsViewProvider } from './providers/integrationsViewProvider';
+import { PoliciesViewProvider, PolicyItem } from './providers/policiesViewProvider';
+import { StatusBarProvider } from './providers/statusBarProvider';
+import { Envelope, StrataClient } from './strataClient';
 
 let _client: StrataClient | undefined;
-let _statusBar: StatusBarProvider | undefined;
-let _workspaceHealth: WorkspaceHealthProvider | undefined;
-let _deploymentExplorer: DeploymentExplorerProvider | undefined;
-let _operationsView: OperationsViewProvider | undefined;
-let _deployCtx: DeploymentContext | undefined;
 let _diagnostics: DiagnosticsProvider | undefined;
-let _codeLens: CodeLensProvider | undefined;
-let _guideView: GuideViewProvider | undefined;
-let _crossRef: CrossReferenceProvider | undefined;
-let _snippets: SnippetProvider | undefined;
-let _taskProvider: StrataTaskProvider | undefined;
-let _fileDecorations: FileDecorationProvider | undefined;
-let _chatParticipant: StrataChatParticipant | undefined;
-let _auditView: AuditViewProvider | undefined;
-let _valuesView: ValuesViewProvider | undefined;
-let _promotionsView: PromotionsViewProvider | undefined;
-let _integrationHelp: IntegrationHelpProvider | undefined;
-let _helpView: HelpViewProvider | undefined;
-let _workItemsView: WorkItemsViewProvider | undefined;
-let _cacheWarmer: CacheWarmerProvider | undefined;
-let _stateServiceStatusBar: StateServiceStatusBarProvider | undefined;
-let _stateServiceTail: StateServiceTailProvider | undefined;
-let _diagramPreview: DiagramPreviewProvider | undefined;
-let _diagramsView: DiagramsViewProvider | undefined;
-let _diagramBuilder: DiagramBuilderProvider | undefined;
-let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
-let _lastDriftTarget: string | undefined;
-let _lastDeployTarget: string | undefined;
+let _graphView: GraphViewProvider | undefined;
+let _statusBar: StatusBarProvider | undefined;
+let _output: vscode.OutputChannel | undefined;
 
-// ---------------------------------------------------------------------------
-// Shared refresh — one CLI call, all providers updated
-// ---------------------------------------------------------------------------
+const UPDATE_CONFIRM =
+    'Refresh the solution files? This rewrites .strata/ (including the editor schemas) and the strata agent ' +
+    'skill (.claude/skills/strata/, unless your team removed its generated marker), and creates any missing ' +
+    '.vscode/, .github/ and .claude/ scaffold files. Other existing files are never overwritten.';
 
-async function _refreshAll(): Promise<void> {
-    if (!_client) return;
-
-    _statusBar?.setLoading();
-    _workspaceHealth?.setLoading();
-    _auditView?.setLoading();
-    _promotionsView?.setLoading();
+async function updateSolution(client: StrataClient, output: vscode.OutputChannel): Promise<void> {
+    const choice = await vscode.window.showInformationMessage(UPDATE_CONFIRM, { modal: true }, 'Update');
+    if (choice !== 'Update') return;
 
     try {
-        const status = await _client.getStatus();
-        _lastStatus = status;
-        _statusBar?.update(status);
-        _workspaceHealth?.update(status);
-        _workspaceHealth?.setActiveDeployment(_deployCtx?.activeFile);
-        _guideView?.update(status);
-        _crossRef?.update(status.repositories ?? []);
-        _fileDecorations?.update(status);
-        _chatParticipant?.update(status);
-        _deploymentExplorer?.update(status);
-        _auditView?.refresh();
-        _promotionsView?.refresh();
-
-        // Auto-select deployment if only one exists and none is selected
-        _deployCtx?.autoSelect(status);
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        _workspaceHealth?.setError(message);
-        _deploymentExplorer?.setError(message);
-        _statusBar?.setError(err);
-        _auditView?.setError(message);
-        _promotionsView?.setError(message);
-        if (err instanceof StrataCLINotFoundError) {
-            void vscode.window.showErrorMessage(err.message);
+        const envelope = await client.slnUpdate();
+        output.appendLine(`strata ${envelope.command} (${envelope.version})`);
+        for (const diagnostic of envelope.diagnostics) {
+            output.appendLine(`  ${diagnostic.severity}: ${diagnostic.message}`);
         }
+        if (!envelope.ok) {
+            const first = envelope.diagnostics.find((d) => d.severity === 'error');
+            void vscode.window.showErrorMessage(`Strata: update failed — ${first?.message ?? 'see the Strata output channel'}`);
+            return;
+        }
+        const changed = envelope.diagnostics.filter((d) => d.severity === 'info').length;
+        const action = await vscode.window.showInformationMessage(`Strata: solution files refreshed (${changed} change(s)).`, 'Show Details');
+        if (action === 'Show Details') output.show();
+    } catch (err) {
+        void vscode.window.showErrorMessage(`Strata: update failed — ${(err as Error).message}`);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Resolve the effective target file (deployment context → active editor fallback)
-// ---------------------------------------------------------------------------
-
-function _resolveTarget(explicit?: string): string | undefined {
-    return explicit
-        ?? _deployCtx?.activeFile
-        ?? vscode.window.activeTextEditor?.document.uri.fsPath;
-}
-
-// ---------------------------------------------------------------------------
-// State service helpers (ADR-0065 Step 2.7) — the admin token is stored in
-// VS Code SecretStorage, never in settings.json.
-// ---------------------------------------------------------------------------
-
-const _STATE_SERVICE_ADMIN_TOKEN_KEY = 'strata.stateService.adminToken';
-
-function _stateServiceUrl(): string | undefined {
-    const url = vscode.workspace.getConfiguration('strata').get<string>('stateService.url', '').trim();
-    return url || undefined;
-}
-
-/** Prompt once and cache in SecretStorage if not already set. Returns undefined if the user cancels. */
-async function _getStateServiceAdminToken(context: vscode.ExtensionContext): Promise<string | undefined> {
-    const existing = await context.secrets.get(_STATE_SERVICE_ADMIN_TOKEN_KEY);
-    if (existing) return existing;
-    const value = await vscode.window.showInputBox({
-        prompt: 'Strata state-service admin token (saved for next time)',
-        password: true,
-        ignoreFocusOut: true,
-    });
-    if (!value) return undefined;
-    await context.secrets.store(_STATE_SERVICE_ADMIN_TOKEN_KEY, value);
-    return value;
-}
-
-/** The tail view accepts either the saved admin token or a one-off ingest token. */
-async function _getStateServiceToken(context: vscode.ExtensionContext): Promise<string | undefined> {
-    const saved = await context.secrets.get(_STATE_SERVICE_ADMIN_TOKEN_KEY);
-    if (saved) return saved;
-    return vscode.window.showInputBox({
-        prompt: 'Strata state-service ingest or admin token (no admin token saved yet)',
-        password: true,
-        ignoreFocusOut: true,
-    });
-}
-
-// ---------------------------------------------------------------------------
-// activate / deactivate
-// ---------------------------------------------------------------------------
-
-export function activate(context: vscode.ExtensionContext): void {
-    const workPath = getWorkPath();
-
-    if (!workPath) {
-        void vscode.window.showWarningMessage('Strata: no workspace folder open — extension inactive.');
-        return;
-    }
-
-    // ── Build providers ────────────────────────────────────────────────────────
-
-    _client = new StrataClient(getCliPath(), workPath);
-
-    // Deployment context — must be created first (others subscribe to it)
-    _deployCtx = new DeploymentContext(context);
-
-    _statusBar = new StatusBarProvider();
-    _statusBar.setClient(_client);
-
-    _workspaceHealth = new WorkspaceHealthProvider();
-    _workspaceHealth.setClient(_client);
-
-    _deploymentExplorer = new DeploymentExplorerProvider();
-    _deploymentExplorer.setClient(_client);
-    _deploymentExplorer.setWorkPath(workPath);
-    _deploymentExplorer.setDeploymentContext(_deployCtx);
-
-    _operationsView = new OperationsViewProvider();
-    _operationsView.setClient(_client);
-    _operationsView.setDeploymentContext(_deployCtx);
-
-    _diagnostics = new DiagnosticsProvider();
-    _diagnostics.setClient(_client);
-
-    _codeLens = new CodeLensProvider();
-
-    _guideView = new GuideViewProvider();
-    _guideView.onRefresh(() => { void _refreshAll(); });
-
-    _crossRef = new CrossReferenceProvider();
-    _snippets = new SnippetProvider();
-    _taskProvider = new StrataTaskProvider(getCliPath(), workPath);
-    _fileDecorations = new FileDecorationProvider();
-    _chatParticipant = new StrataChatParticipant();
-    _auditView = new AuditViewProvider();
-    _auditView.setClient(_client);
-    _valuesView = new ValuesViewProvider();
-    _valuesView.setClient(_client);
-    _promotionsView = new PromotionsViewProvider();
-    _promotionsView.setClient(_client);
-
-    _integrationHelp = new IntegrationHelpProvider();
-    _integrationHelp.setClient(_client);
-    _integrationHelp.setWorkPath(workPath);
-
-    _helpView = new HelpViewProvider();
-    _helpView.setWorkPath(workPath);
-
-    _workItemsView = new WorkItemsViewProvider();
-    _workItemsView.setClient(_client);
-    _workItemsView.setWorkPath(workPath);
-
-    _cacheWarmer = new CacheWarmerProvider();
-    _cacheWarmer.setClient(_client);
-
-    // ADR-0065 Step 2.7 — state-service status bar + tail view
-    _stateServiceStatusBar = new StateServiceStatusBarProvider();
-    _stateServiceStatusBar.setClient(_client);
-    _stateServiceStatusBar.onStatus((url, reachable) => {
-        _workspaceHealth?.setStateServiceStatus(url, reachable);
-    });
-
-    _stateServiceTail = new StateServiceTailProvider();
-    _stateServiceTail.setClient(_client);
-
-    _diagramPreview = new DiagramPreviewProvider();
-    _diagramsView = new DiagramsViewProvider();
-    _diagramsView.setClient(_client);
-    _diagramBuilder = new DiagramBuilderProvider(_diagramPreview);
-
-    // Propagate deployment context changes to status bar
-    context.subscriptions.push(
-        _deployCtx.onDidChange((filePath) => {
-            _statusBar?.updateDeployment(
-                filePath ? require('path').basename(filePath, '.yaml') : undefined,
-            );
-            _operationsView?.refresh();
-            _workspaceHealth?.setActiveDeployment(filePath);
-        }),
-    );
-
-    // ── Register tree views ────────────────────────────────────────────────────
-
-    context.subscriptions.push(
-        vscode.window.createTreeView('strataWorkspace', {
-            treeDataProvider: _workspaceHealth,
-            showCollapseAll: false,
-        }),
-        vscode.window.createTreeView('strataDeployments', {
-            treeDataProvider: _deploymentExplorer,
-            showCollapseAll: false,
-        }),
-        vscode.window.createTreeView('strataOperations', {
-            treeDataProvider: _operationsView,
-            showCollapseAll: false,
-        }),
-        vscode.window.createTreeView('strataAudit', {
-            treeDataProvider: _auditView!,
-            showCollapseAll: true,
-        }),
-        vscode.window.createTreeView('strataValues', {
-            treeDataProvider: _valuesView!,
-            showCollapseAll: false,
-        }),
-        vscode.window.createTreeView('strataPromotions', {
-            treeDataProvider: _promotionsView!,
-            showCollapseAll: true,
-        }),
-        vscode.window.createTreeView('strataHelp', {
-            treeDataProvider: _helpView!,
-            showCollapseAll: false,
-        }),
-        vscode.window.createTreeView('strataDiagrams', {
-            treeDataProvider: _diagramsView!,
-            showCollapseAll: false,
-        }),
-    );
-
-    // Register the work-items view separately to capture the TreeView reference
-    // for badge updates and visibility-triggered refresh.
-    const _workItemsTreeView = vscode.window.createTreeView('strataWorkItems', {
-        treeDataProvider: _workItemsView!,
-        showCollapseAll: false,
-    });
-    context.subscriptions.push(_workItemsTreeView);
-    _workItemsView!.register(_workItemsTreeView);
-
-    // ── Register other providers ───────────────────────────────────────────────
-
-    _diagnostics.register();
-    _codeLens.register(context);
-    _crossRef.register(context);
-    _snippets.register(context);
-    _taskProvider.register(context);
-    _fileDecorations.register();
-    _chatParticipant.setClient(_client);
-    _chatParticipant.setDiagramBuilder(_diagramBuilder!);
-    _chatParticipant.register(context);
-    _helpView.register(context);
-    _statusBar.show();
-    _cacheWarmer.register(context);
-
-    // ── Register commands ──────────────────────────────────────────────────────
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand('strata.showIntegrationHelp', async (nameOrItem?: string | { label?: string }) => {
-            // Accepts either a raw string name or a ToolTreeItem from the context menu
-            const name = typeof nameOrItem === 'string'
-                ? nameOrItem
-                : (nameOrItem as { label?: string })?.label ?? '';
-            if (!name) {
-                void vscode.window.showWarningMessage('Strata: no integration name provided.');
-                return;
-            }
-            await _integrationHelp?.show(name);
-        }),
-
-        vscode.commands.registerCommand('strata.showHelp', () => {
-            void vscode.commands.executeCommand('strataHelp.focus');
-        }),
-
-        // ── Diagrams (ADR-0034 Phase 3) ──────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.refreshDiagrams', () => {
-            void _diagramsView?.refresh();
-        }),
-
-        vscode.commands.registerCommand('strata.filterDiagrams', () => {
-            void _diagramsView?.setFilter();
-        }),
-
-        // ── Diagram Builder (ADR-0034 Phase 4) ───────────────────────────────────
-
-        vscode.commands.registerCommand('strata.openDiagramBuilder', () => {
-            if (!_client) return;
-            void _diagramBuilder?.open(_client);
-        }),
-
-        vscode.commands.registerCommand('strata.editDiagramInBuilder', (nameOrEntry?: string | { entry?: { name: string } }) => {
-            if (!_client) return;
-            const nameOrPath = typeof nameOrEntry === 'string'
-                ? nameOrEntry
-                : nameOrEntry?.entry?.name ?? vscode.window.activeTextEditor?.document.uri.fsPath;
-            if (!nameOrPath) { void vscode.window.showWarningMessage('Strata: no diagram selected.'); return; }
-            void _diagramBuilder?.open(_client, nameOrPath);
-        }),
-
-        // ── Work items ─────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.refreshWorkItems', () => {
-            _workItemsView?.refresh();
-        }),
-
-        vscode.commands.registerCommand('strata.showWorkItem', async (id: string) => {
-            void vscode.commands.executeCommand('strataWorkItems.focus');
-            if (!_client || !id) return;
-            try {
-                const items = await _client.listWorkItems(undefined, undefined);
-                const item = items.find(i => i.id === id || i.id.endsWith(id));
-                if (!item) { void vscode.window.showWarningMessage(`Work item not found: ${id}`); return; }
-                const lines = [
-                    `# Work Item: ${item.id}`,
-                    `Type: ${item.type}  |  Status: ${item.status}`,
-                    `Deployment: ${item.deployment}`,
-                    `Created: ${item.created_at.slice(0, 19).replace('T', ' ')} UTC  by ${item.created_by}`,
-                    item.expires_at ? `Expires: ${item.expires_at.slice(0, 19).replace('T', ' ')} UTC` : '',
-                    item.resolved_by ? `Resolved by: ${item.resolved_by}  at ${(item.resolved_at ?? '').slice(0, 19).replace('T', ' ')} UTC` : '',
-                    item.resolution_note ? `Note: ${item.resolution_note}` : '',
-                    Object.keys(item.context).length ? `\nContext:\n${JSON.stringify(item.context, null, 2)}` : '',
-                ].filter(Boolean).join('\n');
-                const out = vscode.window.createOutputChannel('Strata Work Item');
-                out.clear();
-                out.appendLine(lines);
-                out.show(true);
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Failed to load work item: ${err}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('strata.approveWorkItem', async (item?: import('./providers/workItemsViewProvider').WorkItemTreeItem) => {
-            const id = item?.workItem?.id;
-            if (!id) { void vscode.window.showWarningMessage('No work item selected.'); return; }
-            const note = await vscode.window.showInputBox({ prompt: 'Optional approval note', placeHolder: 'Looks good' });
-            if (note === undefined) return; // cancelled
-            try {
-                await _client?.approveWorkItem(id, note || undefined);
-                _workItemsView?.refresh();
-                void vscode.window.showInformationMessage(`✅ Approved: ${id}`);
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Failed to approve: ${err}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('strata.rejectWorkItem', async (item?: import('./providers/workItemsViewProvider').WorkItemTreeItem) => {
-            const id = item?.workItem?.id;
-            if (!id) { void vscode.window.showWarningMessage('No work item selected.'); return; }
-            const reason = await vscode.window.showInputBox({ prompt: 'Reason for rejection', placeHolder: 'Risk too high' });
-            if (reason === undefined) return; // cancelled
-            try {
-                await _client?.rejectWorkItem(id, reason || undefined);
-                _workItemsView?.refresh();
-                void vscode.window.showInformationMessage(`❌ Rejected: ${id}`);
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Failed to reject: ${err}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('strata.selectDeployment', async () => {
-            if (!_lastStatus) { void vscode.window.showWarningMessage('Strata: workspace not ready yet.'); return; }
-            await _deployCtx?.selectDeployment(_lastStatus);
-        }),
-
-        vscode.commands.registerCommand('strata.setActiveDeployment', (filePath?: string) => {
-            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
-            if (!target) return;
-            _deployCtx?.setFile(target);
-            void vscode.window.showInformationMessage(
-                `Strata: active deployment set to ${require('path').basename(target, '.yaml')}`,
-            );
-        }),
-
-        // ── New File ───────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.newFile', async () => {
-            const kinds = [
-                { label: '$(cloud) deployment', description: 'Orchestrates workspace + environments into a deployable unit' },
-                { label: '$(package) workspace', description: 'Infrastructure blueprint: providers, provisioners, topology' },
-                { label: '$(globe) environment', description: 'Environment-specific overrides and variable values' },
-                { label: '$(settings-gear) configuration', description: 'Shared configuration layer (e.g. per cloud provider)' },
-                { label: '$(layers) namespace', description: 'Application namespace for a workspace' },
-                { label: '$(server) module', description: 'Reusable infrastructure module' },
-                { label: '$(plug) provider', description: 'Cloud provider credentials and location' },
-                { label: '$(shield) resource', description: 'Custom resource definition' },
-                { label: '$(broadcast) network', description: 'Network topology definition' },
-                { label: '$(firewall) firewall', description: 'Firewall ruleset' },
-                { label: '$(globe) dns', description: 'DNS zone configuration' },
-                { label: '$(organization) tenant', description: 'Tenant scoping' },
-            ];
-            const kind = await vscode.window.showQuickPick(kinds, {
-                title: 'Strata: New File — choose kind',
-                matchOnDescription: true,
-            });
-            if (!kind) return;
-            const kindName = kind.label.replace(/\$\([^)]+\)\s*/, '').trim();
-            const name = await vscode.window.showInputBox({
-                prompt: `Name for the new ${kindName}`,
-                placeHolder: `e.g. my_${kindName}`,
-                validateInput: v => /^[a-z][a-z0-9_-]*$/.test(v) ? null : 'Lowercase alphanumeric, underscores and hyphens only',
-            });
-            if (!name) return;
-            _client?.runInTerminal(['new', kindName, '--name', name], `strata new ${kindName}`);
-        }),
-
-        // ── Init ───────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.initWorkspace', () => {
-            const t = vscode.window.createTerminal({ name: 'strata init', cwd: workPath });
-            t.show();
-            t.sendText(`${getCliPath()} sln init`);
-        }),
-
-        // ── Validate ──────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.validateCurrentFile', async () => {
-            const doc = vscode.window.activeTextEditor?.document;
-            if (!doc || !_diagnostics) return;
-            const r = await _diagnostics.validateDocument(doc);
-            if (r.errorCount === 0) {
-                void vscode.window.showInformationMessage('Strata: validation passed ✅');
-            } else {
-                void vscode.window.showWarningMessage(
-                    `Strata: ${r.errorCount} validation error${r.errorCount !== 1 ? 's' : ''} — see Problems panel`,
-                    'Open Problems',
-                ).then((v) => {
-                    if (v === 'Open Problems') {
-                        void vscode.commands.executeCommand('workbench.actions.view.problems');
-                    }
-                });
-            }
-        }),
-
-        vscode.commands.registerCommand('strata.validateAll', async () => {
-            if (!_diagnostics || !_client) return;
-            const yamlUris = await vscode.workspace.findFiles('**/*.yaml', '**/.strata/**');
-            await vscode.window.withProgress(
-                { location: vscode.ProgressLocation.Notification, title: 'Strata: validating workspace files', cancellable: true },
-                async (progress, token) => {
-                    const strataUris: vscode.Uri[] = [];
-                    for (const uri of yamlUris) {
-                        const doc = await vscode.workspace.openTextDocument(uri);
-                        const isStrata = Array.from({ length: Math.min(doc.lineCount, 20) }, (_, i) => doc.lineAt(i).text)
-                            .some((l) => l.trimStart().startsWith('apiVersion: strata.'));
-                        if (isStrata) strataUris.push(uri);
-                    }
-                    if (strataUris.length === 0) {
-                        void vscode.window.showInformationMessage('Strata: no strata YAML files found.');
-                        return;
-                    }
-                    let totalErrors = 0;
-                    for (let idx = 0; idx < strataUris.length; idx++) {
-                        if (token.isCancellationRequested) break;
-                        progress.report({ message: `${idx + 1}/${strataUris.length} — ${vscode.workspace.asRelativePath(strataUris[idx])}` });
-                        const doc = await vscode.workspace.openTextDocument(strataUris[idx]);
-                        const result = await _diagnostics!.validateDocument(doc);
-                        totalErrors += result.errorCount;
-                    }
-                    const label = totalErrors === 0
-                        ? `Strata: all ${strataUris.length} file${strataUris.length !== 1 ? 's' : ''} passed ✅`
-                        : `Strata: ${totalErrors} error${totalErrors !== 1 ? 's' : ''} in ${strataUris.length} files — see Problems panel`;
-                    if (totalErrors === 0) {
-                        void vscode.window.showInformationMessage(label);
-                    } else {
-                        void vscode.window.showWarningMessage(label, 'Open Problems').then(v => {
-                            if (v) void vscode.commands.executeCommand('workbench.actions.view.problems');
-                        });
-                    }
-                },
-            );
-        }),
-
-        // ── Build ─────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.buildDryRun', (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            _client?.runInTerminal(['build', 'run', '-f', target, '--dry-run'], 'strata build (dry run)');
-        }),
-
-        vscode.commands.registerCommand('strata.buildRun', async (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            const confirmed = await vscode.window.showWarningMessage('Run a full strata build? This will execute provisioners.', { modal: true }, 'Build');
-            if (confirmed !== 'Build') return;
-            _client?.runInTerminal(['build', 'run', '-f', target], 'strata build');
-        }),
-
-        vscode.commands.registerCommand('strata.buildPlan', async (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target || !_client) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            await BuildPlanProvider.show(target, _client);
-        }),
-
-        // ── Diagram (ADR-0034) ───────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.showDependencyGraph', async (filePath?: string) => {
-            if (!_client) return;
-            const target = _resolveTarget(filePath);
-            await _diagramPreview?.show(_client, 'refs', target);
-        }),
-
-        vscode.commands.registerCommand('strata.showTopologyDiagram', async (filePath?: string) => {
-            if (!_client) return;
-            const target = _resolveTarget(filePath);
-            await _diagramPreview?.show(_client, 'topology', target);
-        }),
-
-        vscode.commands.registerCommand('strata.previewDiagramFile', async (filePath?: string) => {
-            if (!_client) return;
-            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
-            if (!target) { void vscode.window.showWarningMessage('Strata: no diagram file open.'); return; }
-            await _diagramPreview?.show(_client, target);
-        }),
-
-        // ── Deploy ────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.deployDryRun', (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            _client?.runInTerminal(['deploy', 'run', '-f', target, '--dry-run'], 'strata deploy (dry run)');
-        }),
-
-        vscode.commands.registerCommand('strata.deployRun', async (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-
-            // Policy gate
-            let policyNote = '';
-            let policyBlocked = false;
-            if (_client && _diagnostics) {
-                try {
-                    const result = await vscode.window.withProgress(
-                        { location: vscode.ProgressLocation.Window, title: 'Strata: checking policies…' },
-                        () => _diagnostics!.checkPolicyDiagnostics(vscode.Uri.file(target)),
-                    );
-                    if (result) {
-                        if (result.denied > 0) { policyNote = `⛔ ${result.denied} policy violation(s)`; policyBlocked = true; }
-                        else if (result.failed > 0) { policyNote = `⚠️ ${result.failed} policy warning(s)`; }
-                        else if (result.policies_checked > 0) { policyNote = `✅ ${result.policies_checked} policies passed`; }
-                    }
-                } catch { /* non-fatal */ }
-            }
-
-            if (policyBlocked) {
-                const pick = await vscode.window.showErrorMessage(`Deploy blocked: ${policyNote}`, { modal: true }, 'Deploy Anyway', 'View Violations');
-                if (pick === 'View Violations') { void vscode.commands.executeCommand('workbench.actions.view.problems'); return; }
-                if (pick !== 'Deploy Anyway') return;
-            } else {
-                const msg = policyNote ? `Run a full strata deploy? ${policyNote}. This will apply infrastructure changes.` : 'Run a full strata deploy? This will apply infrastructure changes.';
-                const confirmed = await vscode.window.showWarningMessage(msg, { modal: true }, 'Deploy');
-                if (confirmed !== 'Deploy') return;
-            }
-
-            _lastDeployTarget = target;
-            _client?.runInTerminal(['deploy', 'run', '-f', target, '--force'], 'strata deploy');
-        }),
-
-        vscode.commands.registerCommand('strata.deployStage', async (filePath?: string, stageName?: string, dryRun = false) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            if (!stageName) {
-                stageName = await vscode.window.showInputBox({ prompt: 'Stage name', placeHolder: 'e.g. infrastructure' });
-                if (!stageName) return;
-            }
-            if (!dryRun) {
-                const confirmed = await vscode.window.showWarningMessage(`Deploy stage "${stageName}"? This will apply infrastructure changes.`, { modal: true }, 'Deploy');
-                if (confirmed !== 'Deploy') return;
-            }
-            const args = ['deploy', 'run', '-f', target, '--stage', stageName];
-            if (dryRun) args.push('--dry-run'); else { args.push('--force'); _lastDeployTarget = target; }
-            _client?.runInTerminal(args, `strata deploy ${stageName}${dryRun ? ' (dry run)' : ''}`);
-        }),
-
-        // ── Env commands ───────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.envStatus', (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            _client?.runInTerminal(['deploy', 'status', '-f', target, '--offline'], 'strata deploy status');
-        }),
-
-        vscode.commands.registerCommand('strata.envDrift', (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            _lastDriftTarget = target;
-            _client?.runInTerminal(['deploy', 'drift', 'run', '-f', target], 'strata deploy drift run');
-        }),
-
-        vscode.commands.registerCommand('strata.envDoctor', async () => {
-            if (!_client) return;
-            try {
-                const result = await _client.runEnvDoctor();
-                const { passed, warnings, failed } = result.summary;
-                const total = passed + warnings + failed;
-                if (failed === 0 && warnings === 0) {
-                    void vscode.window.showInformationMessage(`Strata Doctor: all ${total} check${total !== 1 ? 's' : ''} passed ✅`);
-                } else {
-                    const parts: string[] = [];
-                    if (passed > 0) parts.push(`${passed} passed`);
-                    if (warnings > 0) parts.push(`${warnings} warning${warnings !== 1 ? 's' : ''}`);
-                    if (failed > 0) parts.push(`${failed} failed`);
-                    void vscode.window.showWarningMessage(`Strata Doctor: ${parts.join(' · ')}`, ...(failed > 0 ? ['Show Details'] : [])).then(v => {
-                        if (v === 'Show Details') _client?.runInTerminal(['sln', 'doctor'], 'strata sln doctor');
-                    });
-                }
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Strata Doctor failed: ${String(err)}`);
-            }
-        }),
-
-        // ── Audit commands ─────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.auditChanges', (filePath?: string) => {
-            _client?.runInTerminal(['audit', 'changes'], 'strata audit changes');
-        }),
-
-        vscode.commands.registerCommand('strata.auditResend', () => {
-            _client?.runInTerminal(['audit', 'resend'], 'strata audit resend');
-        }),
-
-        vscode.commands.registerCommand('strata.auditExport', async () => {
-            const uri = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file('audit-export.json'), filters: { 'JSON': ['json'], 'NDJSON': ['ndjson'] }, title: 'Export Audit Trail' });
-            if (!uri) return;
-            const formatArgs = uri.fsPath.endsWith('.ndjson') ? ['--format', 'ndjson'] : ['--format', 'json'];
-            _client?.runInTerminal(['audit', 'export', ...formatArgs, '--out', uri.fsPath], 'strata audit export');
-        }),
-
-        vscode.commands.registerCommand('strata.auditFilter', () => { _auditView?.cycleFilter(); }),
-
-        vscode.commands.registerCommand('strata.auditSetLimit', async () => {
-            const input = await vscode.window.showInputBox({ prompt: 'Number of audit entries to show (5–200)', value: '20', validateInput: v => { const n = parseInt(v, 10); return isNaN(n) || n < 5 || n > 200 ? 'Enter a number between 5 and 200' : null; } });
-            if (!input) return;
-            _auditView?.setLimit(parseInt(input, 10));
-        }),
-
-        // ── Guide / profile ────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.showGuide', () => { _guideView?.show(_lastStatus); }),
-
-        vscode.commands.registerCommand('strata.switchProfile', async () => {
-            if (!_client) return;
-            const profiles = _lastStatus?.profiles;
-            if (!profiles?.all.length) { void vscode.window.showWarningMessage('Strata: no profiles found.'); return; }
-            const items = profiles.all.map(p => ({ label: p, description: p === profiles.active ? '(active)' : '' }));
-            const selected = await vscode.window.showQuickPick(items, { title: 'Strata: Switch Profile', placeHolder: `Current: ${profiles.active ?? 'none'}` });
-            if (!selected || selected.label === profiles.active) return;
-            try {
-                await _client.activateProfile(selected.label);
-                void vscode.window.showInformationMessage(`Strata: profile "${selected.label}" activated.`);
-                void _refreshAll();
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Strata: could not activate profile — ${String(err)}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('strata.activateProfile', async (profileName?: string) => {
-            if (!_client) return;
-            const name = profileName ?? await vscode.window.showInputBox({ prompt: 'Profile name to activate' });
-            if (!name) return;
-            try {
-                await _client.activateProfile(name);
-                void vscode.window.showInformationMessage(`Strata: profile "${name}" activated.`);
-                void _refreshAll();
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Strata: could not activate profile — ${String(err)}`);
-            }
-        }),
-
-        // ── Schema ─────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.exportSchemas', async () => {
-            if (!_client) return;
-            try { await _client.wireSchemas(); void vscode.window.showInformationMessage('Strata: schemas exported and wired.'); }
-            catch (err) { void vscode.window.showErrorMessage(`Schema export failed: ${String(err)}`); }
-        }),
-
-        vscode.commands.registerCommand('strata.openSchema', async (args?: { kind?: string }) => {
-            let kind = args?.kind;
-            if (!kind) {
-                const doc = vscode.window.activeTextEditor?.document;
-                if (doc) {
-                    for (let i = 0; i < Math.min(doc.lineCount, 20); i++) {
-                        const m = doc.lineAt(i).text.trim().match(/^kind:\s*(\S+)/);
-                        if (m) { kind = m[1].toLowerCase(); break; }
-                    }
-                }
-            }
-            if (!kind) { void vscode.window.showWarningMessage('Strata: could not determine document kind.'); return; }
-            const schemaUri = vscode.Uri.joinPath(vscode.Uri.file(workPath), '.strata', 'schemas', `${kind}.json`);
-            try {
-                await vscode.window.showTextDocument(schemaUri, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, preview: true });
-            } catch {
-                const pick = await vscode.window.showWarningMessage(`Schema not found for kind "${kind}". Export schemas first.`, 'Export & Wire Schemas');
-                if (pick) void vscode.commands.executeCommand('strata.exportSchemas');
-            }
-        }),
-
-        // ── Lock ───────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.lockStatus', async (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target || !_client) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            try {
-                const lock = await _client.getLockStatus(target);
-                if (lock.locked) {
-                    const pick = await vscode.window.showWarningMessage(`🔒 Locked by "${lock.holder ?? 'unknown'}" since ${lock.acquired_at ?? 'unknown'}`, 'Force Release');
-                    if (pick === 'Force Release') void vscode.commands.executeCommand('strata.releaseLock', target);
-                } else {
-                    void vscode.window.showInformationMessage('🔓 No deployment lock held.');
-                }
-                _operationsView?.refreshLock(target);
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Lock status failed: ${String(err)}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('strata.releaseLock', async (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target || !_client) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            const confirmed = await vscode.window.showWarningMessage('Force-release the deployment lock? Only do this if a deploy crashed.', { modal: true }, 'Release Lock');
-            if (confirmed !== 'Release Lock') return;
-            try {
-                await _client.releaseLock(target);
-                void vscode.window.showInformationMessage('Strata: deployment lock released.');
-                _operationsView?.refreshLock(target);
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Lock release failed: ${String(err)}`);
-            }
-        }),
-
-        // ── Values ─────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.showValues', (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            _valuesView?.loadFile(target);
-            void vscode.commands.executeCommand('strataValues.focus');
-        }),
-
-        vscode.commands.registerCommand('strata.copyValueKey', async (key: string) => {
-            await vscode.env.clipboard.writeText(key);
-            void vscode.window.showInformationMessage(`Copied "${key}" to clipboard.`);
-        }),
-
-        vscode.commands.registerCommand('strata.copyOutputValue', async (key: string, value: string | null) => {
-            if (value === null) { void vscode.window.showWarningMessage(`"${key}" is sensitive — value not available in UI.`); return; }
-            await vscode.env.clipboard.writeText(value);
-            void vscode.window.showInformationMessage(`Copied "${key}" to clipboard.`);
-        }),
-
-        // ── Policy ─────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.checkPolicy', async (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target || !_diagnostics) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            try {
-                const result = await vscode.window.withProgress(
-                    { location: vscode.ProgressLocation.Notification, title: 'Strata: checking policies…', cancellable: false },
-                    () => _diagnostics!.checkPolicyDiagnostics(vscode.Uri.file(target)),
-                );
-                if (!result) { void vscode.window.showInformationMessage('Strata: no policies defined for this deployment.'); return; }
-                if (result.denied > 0) {
-                    void vscode.window.showErrorMessage(`Policy check: ${result.denied} deny violation(s) — see Problems panel`, 'Open Problems').then(v => { if (v) void vscode.commands.executeCommand('workbench.actions.view.problems'); });
-                } else if (result.failed > 0) {
-                    void vscode.window.showWarningMessage(`Policy check: ${result.failed} warning(s) — see Problems panel`, 'Open Problems').then(v => { if (v) void vscode.commands.executeCommand('workbench.actions.view.problems'); });
-                } else {
-                    void vscode.window.showInformationMessage(`Policy check: ${result.policies_checked} policies passed ✅`);
-                }
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Policy check failed: ${String(err)}`);
-            }
-        }),
-
-        // ── SBOM ───────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.buildSbom', async (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            try {
-                void vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Strata: generating SBOM…', cancellable: false }, async () => {
-                    if (!_client) return;
-                    const sbom = await _client.generateSbom(target);
-                    const parts = [`${sbom.component_count} components`];
-                    if (sbom.critical_count > 0) parts.push(`${sbom.critical_count} critical CVEs`);
-                    if (sbom.high_count > 0) parts.push(`${sbom.high_count} high CVEs`);
-                    const label = sbom.vulnerabilities_found ? `⚠️ ${parts.join(' · ')}` : `✅ ${parts.join(' · ')} — no vulnerabilities`;
-                    void vscode.window.showInformationMessage(`Strata SBOM: ${label}`, ...(sbom.output_file ? ['Open SBOM'] : [])).then(v => {
-                        if (v === 'Open SBOM' && sbom.output_file) void vscode.window.showTextDocument(vscode.Uri.file(sbom.output_file));
-                    });
-                });
-            } catch {
-                _client?.runInTerminal(['build', 'sbom', '-f', target], 'strata build sbom');
-            }
-        }),
-
-        // ── Refs ───────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.manageRefs', async () => {
-            if (!_client) return;
-            const profiles = _lastStatus?.profiles;
-            if (!profiles?.all.length) { void vscode.window.showWarningMessage('No profiles found.'); return; }
-            const profilePick = await vscode.window.showQuickPick(profiles.all.map(p => ({ label: p, description: p === profiles.active ? '(active)' : '' })), { title: 'Manage Refs — select profile' });
-            if (!profilePick) return;
-            const typePick = await vscode.window.showQuickPick([{ label: 'env' }, { label: 'config' }, { label: 'data' }, { label: 'secret' }], { title: `Manage Refs — ${profilePick.label} — select type` });
-            if (!typePick) return;
-            const refType = typePick.label as 'env' | 'config' | 'data' | 'secret';
-            let existing: import('./strataClient').RefEntry[] = [];
-            try { existing = await _client.listRefs(profilePick.label, refType); } catch { /* none yet */ }
-            const actions = [...existing.map(r => ({ label: `$(trash) Remove: ${r.name}`, description: r.path, action: 'remove' as const, name: r.name })), { label: '$(add) Add new reference…', description: '', action: 'add' as const, name: '' }];
-            const actionPick = await vscode.window.showQuickPick(actions, { title: `Refs: ${profilePick.label} / ${refType}` });
-            if (!actionPick) return;
-            if (actionPick.action === 'remove') {
-                const confirm = await vscode.window.showWarningMessage(`Remove ref "${actionPick.name}"?`, { modal: true }, 'Remove');
-                if (confirm !== 'Remove') return;
-                try { await _client.removeRef(profilePick.label, refType, actionPick.name); void vscode.window.showInformationMessage(`Removed ref "${actionPick.name}".`); }
-                catch (err) { void vscode.window.showErrorMessage(`Remove ref failed: ${String(err)}`); }
-            } else {
-                const name = await vscode.window.showInputBox({ prompt: 'Reference name' });
-                if (!name) return;
-                const p = await vscode.window.showInputBox({ prompt: 'File path' });
-                if (!p) return;
-                try { await _client.addRef(profilePick.label, refType, name, p); void vscode.window.showInformationMessage(`Added ref "${name}" → ${p}.`); }
-                catch (err) { void vscode.window.showErrorMessage(`Add ref failed: ${String(err)}`); }
-            }
-        }),
-
-        // ── Repos ──────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.syncRepo', async (item?: { payload?: unknown }) => {
-            const name = typeof item?.payload === 'string' ? item.payload : undefined;
-            if (!_workspaceHealth) return;
-            await _workspaceHealth.syncRepo(name);
-            void _refreshAll();
-        }),
-
-        vscode.commands.registerCommand('strata.addRepo', async () => {
-            const name = await vscode.window.showInputBox({ prompt: 'Repository name', placeHolder: 'e.g. my-infra' });
-            if (!name) return;
-            const repoPath = await vscode.window.showInputBox({ prompt: 'Repository path', placeHolder: '/path/to/repo or ../relative/path' });
-            if (!repoPath || !_client) return;
-            try { await _client.addRepo(name, repoPath); void vscode.window.showInformationMessage(`Strata: repository "${name}" added.`); void _refreshAll(); }
-            catch (err) { void vscode.window.showErrorMessage(`Add repository failed: ${String(err)}`); }
-        }),
-
-        vscode.commands.registerCommand('strata.removeRepo', async (item?: { payload?: unknown }) => {
-            const name = typeof item?.payload === 'string'
-                ? item.payload
-                : await vscode.window.showInputBox({ prompt: 'Repository name to remove' });
-            if (!name || !_workspaceHealth) return;
-            await _workspaceHealth.removeRepo(name);
-            void _refreshAll();
-        }),
-
-        // ── Cost ───────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.showCostHistory', (filePath?: string) => {
-            const target = _resolveTarget(filePath);
-            if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            _client?.runInTerminal(['cost', 'history', '-f', target], 'strata cost history');
-        }),
-
-        // ── State service (ADR-0065 Step 2.7) ───────────────────────────────────
-
-        vscode.commands.registerCommand('strata.stateService.checkHealth', async () => {
-            const url = _stateServiceUrl();
-            if (!url) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
-            await _stateServiceStatusBar?.refresh();
-            const reachable = _stateServiceStatusBar?.lastReachable();
-            void vscode.window.showInformationMessage(
-                reachable ? `Strata state service reachable: ${url}` : `Strata state service unreachable: ${url}`,
-            );
-        }),
-
-        vscode.commands.registerCommand('strata.stateService.showTail', async () => {
-            const url = _stateServiceUrl();
-            if (!url) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
-            const token = await _getStateServiceToken(context);
-            if (!token) return;
-            const seconds = vscode.workspace.getConfiguration('strata').get<number>('stateService.pollIntervalSeconds', 60);
-            _stateServiceTail?.show(url, token, Math.max(10, seconds) * 1000);
-        }),
-
-        vscode.commands.registerCommand('strata.stateService.createToken', async () => {
-            const url = _stateServiceUrl();
-            if (!url || !_client) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
-            const adminToken = await _getStateServiceAdminToken(context);
-            if (!adminToken) return;
-            const workspace = await vscode.window.showInputBox({ prompt: 'Workspace name to issue an ingest token for' });
-            if (!workspace) return;
-            try {
-                const created = await _client.createIngestToken(url, adminToken, workspace);
-                const copy = 'Copy Token';
-                void vscode.window.showInformationMessage(
-                    `Token created for "${workspace}" (id ${created.token_id}). Shown once — save it now: ${created.token}`,
-                    copy,
-                ).then((v) => { if (v === copy) void vscode.env.clipboard.writeText(created.token); });
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Create ingest token failed: ${String(err)}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('strata.stateService.listTokens', async () => {
-            const url = _stateServiceUrl();
-            if (!url || !_client) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
-            const adminToken = await _getStateServiceAdminToken(context);
-            if (!adminToken) return;
-            try {
-                const tokens = await _client.listIngestTokens(url, adminToken);
-                if (tokens.length === 0) { void vscode.window.showInformationMessage('No ingest tokens found.'); return; }
-                await vscode.window.showQuickPick(
-                    tokens.map(t => ({
-                        label: t.workspace,
-                        description: t.revoked_at ? 'revoked' : 'active',
-                        detail: `${t.token_id}  \u2014  created ${t.created_at}`,
-                    })),
-                    { title: 'Strata ingest tokens' },
-                );
-            } catch (err) {
-                void vscode.window.showErrorMessage(`List ingest tokens failed: ${String(err)}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('strata.stateService.revokeToken', async () => {
-            const url = _stateServiceUrl();
-            if (!url || !_client) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
-            const adminToken = await _getStateServiceAdminToken(context);
-            if (!adminToken) return;
-            try {
-                const tokens = await _client.listIngestTokens(url, adminToken);
-                const active = tokens.filter(t => !t.revoked_at);
-                if (active.length === 0) { void vscode.window.showInformationMessage('No active ingest tokens to revoke.'); return; }
-                const pick = await vscode.window.showQuickPick(
-                    active.map(t => ({ label: t.workspace, description: t.token_id, token: t })),
-                    { title: 'Revoke which ingest token?' },
-                );
-                if (!pick) return;
-                const confirmed = await vscode.window.showWarningMessage(
-                    `Revoke the ingest token for "${pick.label}"?`, { modal: true }, 'Revoke',
-                );
-                if (confirmed !== 'Revoke') return;
-                await _client.revokeIngestToken(url, adminToken, pick.token.token_id);
-                void vscode.window.showInformationMessage(`Revoked token for "${pick.label}".`);
-            } catch (err) {
-                void vscode.window.showErrorMessage(`Revoke ingest token failed: ${String(err)}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('strata.stateService.setAdminToken', async () => {
-            const value = await vscode.window.showInputBox({
-                prompt: 'Strata state-service admin token',
-                password: true,
-                ignoreFocusOut: true,
-            });
-            if (!value) return;
-            await context.secrets.store(_STATE_SERVICE_ADMIN_TOKEN_KEY, value);
-            void vscode.window.showInformationMessage('Strata state-service admin token saved.');
-        }),
-
-        vscode.commands.registerCommand('strata.stateService.clearAdminToken', async () => {
-            await context.secrets.delete(_STATE_SERVICE_ADMIN_TOKEN_KEY);
-            void vscode.window.showInformationMessage('Strata state-service admin token cleared.');
-        }),
-
-        // ── Misc ───────────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.openConsole', () => {
-            const t = vscode.window.createTerminal({ name: 'strata console', cwd: workPath });
-            t.show();
-            t.sendText(`${getCliPath()} console`);
-        }),
-
-        vscode.commands.registerCommand('strata.refreshTreeView', () => { void _refreshAll(); }),
-
-        vscode.commands.registerCommand('strata.openFile', async (item?: { filePath?: string }) => {
-            if (typeof item?.filePath === 'string') {
-                await vscode.window.showTextDocument(vscode.Uri.file(item.filePath));
-            }
-        }),
-
-        // ── Promotions ─────────────────────────────────────────────────────────
-
-        vscode.commands.registerCommand('strata.promoteStatus', () => { _promotionsView?.refresh(); void vscode.commands.executeCommand('strataPromotions.focus'); }),
-        vscode.commands.registerCommand('strata.promoteMatrix', () => { _promotionsView?.refresh(); void vscode.commands.executeCommand('strataPromotions.focus'); }),
-        vscode.commands.registerCommand('strata.promoteHistory', () => { _promotionsView?.refresh(); void vscode.commands.executeCommand('strataPromotions.focus'); }),
-
-        vscode.commands.registerCommand('strata.promoteStart', async () => {
-            if (!_client) return;
-            const ring = await vscode.window.showInputBox({ prompt: 'Target ring', placeHolder: 'e.g. staging' });
-            if (!ring) return;
-            const target = await vscode.window.showInputBox({ prompt: 'Target name (remote/module)', placeHolder: 'e.g. myapp' });
-            if (!target) return;
-            const confirmed = await vscode.window.showWarningMessage(`Promote "${target}" to ring "${ring}"?`, { modal: true }, 'Promote');
-            if (confirmed !== 'Promote') return;
-            _client.runPromoteStart(ring, target);
-        }),
-
-        vscode.commands.registerCommand('strata.promoteRollback', async () => {
-            if (!_client) return;
-            const ring = await vscode.window.showInputBox({ prompt: 'Ring to rollback', placeHolder: 'e.g. staging' });
-            if (!ring) return;
-            const target = await vscode.window.showInputBox({ prompt: 'Target name', placeHolder: 'e.g. myapp' });
-            if (!target) return;
-            const confirmed = await vscode.window.showWarningMessage(`Rollback "${target}" in ring "${ring}"?`, { modal: true }, 'Rollback');
-            if (confirmed !== 'Rollback') return;
-            _client.runPromoteRollback(ring, target);
-        }),
-
-        vscode.commands.registerCommand('strata.refreshPromotions', () => { _promotionsView?.refresh(); }),
-    );
-
-    // ── Re-create client when CLI path changes ─────────────────────────────────
-
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeConfiguration((e) => {
-            if (e.affectsConfiguration('strata.cliPath')) {
-                _client = new StrataClient(getCliPath(), workPath);
-                _statusBar?.setClient(_client);
-                _diagnostics?.setClient(_client);
-                _workspaceHealth?.setClient(_client);
-                _deploymentExplorer?.setClient(_client);
-                _operationsView?.setClient(_client);
-                _auditView?.setClient(_client);
-                _valuesView?.setClient(_client);
-                _promotionsView?.setClient(_client);
-                _stateServiceStatusBar?.setClient(_client);
-                _stateServiceTail?.setClient(_client);
-                void _refreshAll();
-            }
-            if (
-                e.affectsConfiguration('strata.stateService.url') ||
-                e.affectsConfiguration('strata.stateService.pollIntervalSeconds')
-            ) {
-                _stateServiceStatusBar?.start();
-            }
-        }),
-    );
-
-    // ── Validation notifications ───────────────────────────────────────────────
-
-    if (_diagnostics) {
-        context.subscriptions.push(
-            _diagnostics.onDidChangeValidation((evt) => {
-                if (evt.currentCount > 0 && evt.currentCount > evt.previousCount) {
-                    const delta = evt.currentCount - evt.previousCount;
-                    void vscode.window.showWarningMessage(
-                        `Strata: ${delta} new validation error${delta !== 1 ? 's' : ''} in ${evt.relativePath}`,
-                        'Open Problems',
-                    ).then(v => { if (v === 'Open Problems') void vscode.commands.executeCommand('workbench.actions.view.problems'); });
-                } else if (evt.currentCount === 0 && evt.previousCount > 0) {
-                    void vscode.window.showInformationMessage(`Strata: ${evt.relativePath} — all errors resolved ✅`);
-                }
-            }),
-        );
-    }
-
-    // ── Terminal close: refresh after build/deploy ─────────────────────────────
-
-    context.subscriptions.push(
-        vscode.window.onDidCloseTerminal((terminal) => {
-            const name = terminal.name;
-            if (name.startsWith('strata build') || name.startsWith('strata deploy')) {
-                const exitCode = terminal.exitStatus?.code;
-                const action = name.startsWith('strata build') ? 'Build' : 'Deploy';
-                const deployTarget = _lastDeployTarget;
-                if (action === 'Deploy') _lastDeployTarget = undefined;
-
-                if (exitCode === 0) {
-                    if (action === 'Deploy' && deployTarget) {
-                        void (async () => {
-                            try {
-                                const health = await _client!.getDeployHealth(deployTarget);
-                                _operationsView?.updateHealth(deployTarget, health);
-                                _operationsView?.invalidateDeployment(deployTarget);
-                            } catch { /* health check unavailable */ }
-                        })();
-                        void vscode.window.showInformationMessage('Strata: Deploy completed successfully.', 'View Outputs').then(v => {
-                            if (v === 'View Outputs') _client?.runInTerminal(['deploy', 'output', '-f', deployTarget], 'strata deploy output');
-                        });
-                    } else {
-                        void vscode.window.showInformationMessage(`Strata: ${action} completed successfully.`);
-                    }
-                } else if (exitCode !== undefined) {
-                    void vscode.window.showWarningMessage(`Strata: ${action} exited with code ${exitCode} — check terminal output.`);
-                }
-                void _refreshAll();
-            }
-            if (name === 'strata deploy drift run') {
-                const exitCode = terminal.exitStatus?.code;
-                const target = _lastDriftTarget;
-                _lastDriftTarget = undefined;
-                if (exitCode === 0) {
-                    if (target) _operationsView?.markDrift(target, false);
-                    void vscode.window.showInformationMessage('Strata: no drift detected ✅');
-                } else if (exitCode === 3) {
-                    if (target) _operationsView?.markDrift(target, true);
-                    void vscode.window.showWarningMessage('Strata: drift detected — review the plan above.');
-                }
-            }
-        }),
-    );
-
-    // ── File watcher: auto-refresh when solution.json changes ─────────────────
-
-    const solutionWatcher = vscode.workspace.createFileSystemWatcher('**/.strata/solution.json');
-    solutionWatcher.onDidChange(() => void _refreshAll());
-    solutionWatcher.onDidCreate(() => void _refreshAll());
-    solutionWatcher.onDidDelete(() => void _refreshAll());
-
-    // ── File watcher: live diagram preview on save (ADR-0034 Phase 1) ─────────
-    // Only re-renders when the saved file is the exact definition the open
-    // preview panel was rendered from — see DiagramPreviewProvider.isPreviewing().
-
-    context.subscriptions.push(
-        vscode.workspace.onDidSaveTextDocument((doc) => {
-            if (_diagramPreview?.isOpen && _diagramPreview.isPreviewing(doc.uri.fsPath)) {
-                void _diagramPreview.refresh();
-            }
-        }),
-    );
-
-    // ── File watcher: keep the Diagrams sidebar in sync with .strata/diagrams/ ─
-
-    const diagramsWatcher = vscode.workspace.createFileSystemWatcher('**/.strata/diagrams/**/*.yaml');
-    diagramsWatcher.onDidChange(() => void _diagramsView?.refresh());
-    diagramsWatcher.onDidCreate(() => void _diagramsView?.refresh());
-    diagramsWatcher.onDidDelete(() => void _diagramsView?.refresh());
-    context.subscriptions.push(diagramsWatcher);
-
-    // ── Reverse lookup: cursor in YAML → highlight matching node (ADR-0034) ───
-
-    context.subscriptions.push(
-        vscode.window.onDidChangeTextEditorSelection((e) => {
-            if (!_diagramPreview?.isOpen) return;
-            _diagramPreview.notifyCursor(e.textEditor.document.uri.fsPath, e.selections[0].active.line + 1);
-        }),
-    );
-
-    // ── Subscriptions cleanup ──────────────────────────────────────────────────
-
-    context.subscriptions.push(
-        _statusBar, _workspaceHealth, _deploymentExplorer, _operationsView,
-        _deployCtx, _diagnostics, _codeLens, _guideView, _crossRef, _snippets,
-        _taskProvider, _fileDecorations, _chatParticipant, solutionWatcher,
-        _auditView!, _valuesView!, _cacheWarmer, _stateServiceStatusBar, _stateServiceTail,
-        _diagramPreview, _diagramsView,
-    );
-
-    // ── Context key ────────────────────────────────────────────────────────────
-
-    void vscode.commands.executeCommand('setContext', 'strata.workspaceActive', true);
-
-    // ── Initial data load ──────────────────────────────────────────────────────
-
-    const defaultProfile = vscode.workspace.getConfiguration('strata').get<string>('defaultProfile', '');
-    if (defaultProfile && _client) {
-        void _client.activateProfile(defaultProfile)
-            .then(() => _refreshAll())
-            .catch(() => _refreshAll());
-    } else {
-        void _refreshAll();
-    }
-
-    void _diagramsView?.refresh();
-
-    // ADR-0065 Step 2.7 — start the state-service indicator and detect whether
-    // a deploy-*.yaml already forwards to a state-service-shaped webhook sink
-    // (nudges the guide view to set strata.stateService.url if so).
-    _stateServiceStatusBar?.start();
-    void _detectStateServiceSinkConfigured().then((detected) => {
-        const configured = vscode.workspace.getConfiguration('strata').get<string>('stateService.url', '').trim().length > 0;
-        _guideView?.setStateServiceHint(configured, detected);
-    });
 }
 
 /**
- * Best-effort scan of `deploy*.yaml` files for a webhook sink pointed at a
- * strata state-service `/v1/events` endpoint (ADR-0065 Step 2.5's worked
- * example) — plain text search, not full YAML parsing, matching this
- * integration's deliberately simple scope.
+ * Run one CLI call behind a progress notification, write its diagnostics to
+ * the output channel and report the outcome (docs/work/vscode-integrations-policies-views.md V6).
  */
-async function _detectStateServiceSinkConfigured(): Promise<boolean> {
+async function runReported<T>(
+    output: vscode.OutputChannel,
+    title: string,
+    call: () => Promise<Envelope<T>>,
+): Promise<Envelope<T> | undefined> {
     try {
-        const files = await vscode.workspace.findFiles('**/deploy*.yaml', '**/node_modules/**', 20);
-        for (const file of files) {
-            const bytes = await vscode.workspace.fs.readFile(file);
-            if (Buffer.from(bytes).toString('utf8').includes('/v1/events')) {
-                return true;
-            }
+        const envelope = await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `Strata: ${title}...` },
+            call,
+        );
+        output.appendLine(`strata ${envelope.command} (${envelope.version}): ${envelope.ok ? 'ok' : 'failed'}`);
+        for (const diagnostic of envelope.diagnostics) {
+            output.appendLine(`  ${diagnostic.severity}: ${diagnostic.message}`);
         }
-    } catch {
-        // best-effort only — never block activation on this
+        const first = envelope.diagnostics.find((d) => d.severity === 'error');
+        const message = envelope.ok ? `Strata: ${title} passed.` : `Strata: ${title} failed - ${first?.message ?? 'see output'}`;
+        const show = envelope.ok
+            ? vscode.window.showInformationMessage(message, 'Show Details')
+            : vscode.window.showErrorMessage(message, 'Show Details');
+        void show.then((action) => action && output.show());
+        return envelope;
+    } catch (err) {
+        void vscode.window.showErrorMessage(`Strata: ${title} failed - ${(err as Error).message}`);
+        return undefined;
     }
-    return false;
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return;
+
+    _client = new StrataClient(folder.uri.fsPath);
+
+    _diagnostics = new DiagnosticsProvider();
+    _diagnostics.setClient(_client);
+    _diagnostics.register(context);
+    context.subscriptions.push(_diagnostics);
+
+    _graphView = new GraphViewProvider();
+    _graphView.setClient(_client);
+    context.subscriptions.push(_graphView, vscode.window.registerTreeDataProvider('strataGraph', _graphView));
+
+    _statusBar = new StatusBarProvider();
+    _statusBar.setClient(_client);
+    context.subscriptions.push(_statusBar);
+
+    _output = vscode.window.createOutputChannel('Strata');
+    context.subscriptions.push(_output);
+
+    const client = _client;
+    const output = _output;
+    const selector = new DeploymentSelector(client, context.workspaceState);
+    const integrationsView = new IntegrationsViewProvider(client, () => selector.current);
+    const policiesView = new PoliciesViewProvider(client, () => selector.current);
+    context.subscriptions.push(
+        selector,
+        integrationsView,
+        policiesView,
+        vscode.window.registerTreeDataProvider('strataIntegrations', integrationsView),
+        vscode.window.registerTreeDataProvider('strataPolicies', policiesView),
+        selector.onDidChange(() => {
+            void integrationsView.refresh();
+            void policiesView.refresh();
+        }),
+        vscode.commands.registerCommand('strata.selectDeployment', () => selector.pick()),
+        vscode.commands.registerCommand('strata.refreshIntegrations', () => integrationsView.refresh()),
+        vscode.commands.registerCommand('strata.refreshPolicies', () => policiesView.refresh()),
+        vscode.commands.registerCommand('strata.checkIntegration', async (item: IntegrationItem) => {
+            await runReported(output, `check ${item.row.name}`, () => client.integrationCheck(item.row.name, selector.current));
+            await integrationsView.refresh();
+        }),
+        vscode.commands.registerCommand('strata.checkPolicy', async (item?: PolicyItem) => {
+            const deployment = selector.current;
+            if (!deployment) {
+                await selector.pick();
+                return;
+            }
+            const title = item ? `check ${item.row.name}` : `check policies of ${deployment}`;
+            await runReported(output, title, () => client.policyCheck(deployment, item?.row.name));
+            await policiesView.refresh();
+        }),
+        vscode.commands.registerCommand('strata.showPolicyFindings', async (item: PolicyItem) => {
+            await vscode.window.withProgress(
+                { location: { viewId: 'strataPolicies' }, title: `findings of ${item.row.name}` },
+                () => policiesView.showFindings(item.row.name),
+            );
+        }),
+    );
+    void integrationsView.refresh();
+    void policiesView.refresh();
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('strata.validate', async () => {
+            const result = await _diagnostics!.validateSolution();
+            void vscode.window.showInformationMessage(
+                result.passed ? 'Strata: solution is valid.' : `Strata: ${result.errorCount} validation error(s) — see Problems panel.`,
+            );
+            await _statusBar?.refresh();
+        }),
+
+        vscode.commands.registerCommand('strata.refreshGraph', async () => {
+            await _graphView!.refresh();
+        }),
+
+        vscode.commands.registerCommand('strata.updateSolution', async () => {
+            await updateSolution(_client!, _output!);
+        }),
+
+        vscode.commands.registerCommand('strata.openGraphLocation', async (uri: vscode.Uri, location: string) => {
+            const document = await vscode.workspace.openTextDocument(uri);
+            const editor = await vscode.window.showTextDocument(document);
+            const range = findFieldRange(location, document);
+            editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+            editor.selection = new vscode.Selection(range.start, range.end);
+        }),
+    );
+
+    void _diagnostics.validateSolution();
+    void _graphView.refresh();
+    void _statusBar.refresh();
+}
+
+export function deactivate(): void {
+    _diagnostics?.clearAll();
 }

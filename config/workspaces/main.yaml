@@ -1,0 +1,78 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  # Three sibling keys, three different questions:
+  #   providers    - where: which platform/account
+  #   provisioners - with what: tool definitions
+  #   execution    - what runs, in what order
+  providers:
+    # A named slot with a default Provider document. IaC code addresses the
+    # slot (`strata.providers.azure`), so a deployment can rebind it to another
+    # region without the code changing (deployments/region-north.yaml). A bare
+    # name (`- azure-main`) is shorthand for a slot named after its document.
+    - slot: azure
+      provider: azure-main
+  namespaces:
+    - hearth
+  assets:
+    # A named slot with a default Asset document. The step below selects the slot, and
+    # IaC code reads it as `local.strata_assets.api`. A deployment rebinds it to another
+    # document (deployments/prd-contoso.yaml) without the code changing. A bare name
+    # (`- openapi`) is shorthand for a slot named after its document.
+    - slot: api
+      asset: api-default
+  provisioners:
+    - name: terraform-main
+      tool: terraform
+      source:
+        remote: infra
+        source_path: terraform/main
+      backend:
+        type: azurerm
+        configuration:
+          resource_group_name: tfstate-rg
+  resources:
+    # `name` is the workspace-local instance; `resource` names the Resource
+    # document it is built from (ADR-0015).
+    - name: web-storage
+      resource: storage-account
+      role: control-plane
+    - name: web-vm
+      resource: linux-vm
+      role: worker
+      count: 2
+    - name: security-kv
+      resource: key-vault
+      role: security
+    - name: edge-waf
+      resource: app-gateway-waf
+      role: edge
+      depends_on:
+        - security-kv
+  # The ordered recipe. Deployments supply runtime parameters per step via
+  # `stages[].step`, but never redefine the recipe itself (ADR-0011).
+  execution:
+    - name: provision-infra
+      provisioner: terraform-main
+      resources:
+        - web-storage
+        - web-vm
+        - security-kv
+        - edge-waf
+      assets:
+        - api
+  topology:
+    - name: main-topology
+      type: kubernetes
+      components:
+        - resource: web-storage
+        - resource: web-vm
+        - resource: security-kv
+        - resource: edge-waf
+  default_tags:
+    managed-by: strata
+  # Guard rail on the tag of every image a deployment runs: each needs a tag, and `latest`, `main` and the
+  # other mutable aliases are rejected. `build run`, `deploy run` and `deploy images` judge it, offline.
+  image_tag_policy: {}

@@ -1,289 +1,144 @@
-"""Checkov integration — IaC security scanner for Terraform artifacts.
+#!/usr/bin/env python3
+"""Checkov integration (docs/archive/checkov-integration.md) — wraps the real
+Checkov CLI to scan rendered IaC output (Terraform/Bicep/Ansible/Helm) for
+security misconfigurations. Framework-agnostic itself — resolving *which*
+directory to scan (a provisioner's materialised source, or a Helm module's
+namespace directory) is `strata.controllers.checkov_controller`'s job, not
+this class's.
 
-Wraps the Checkov CLI (``checkov --directory ... --output json``) and parses
-its JSON output into structured ``CheckovScanResult`` / ``CheckovFinding``
-dataclasses.
+Deliberately its own `scan()` signature, not `CveScannerIntegration.
+scan_sbom()`'s shape — `ScannerIntegration`'s own docstring already states
+why: an IaC directory in, a completely different findings model out, is a
+genuinely different input/output shape from an SBOM file in.
 
-Install Checkov: https://www.checkov.io/2.Basics/Installing%20Checkov.html
-
-Example YAML declaration::
-
-    integrations:
-      - name: checkov
-        type: checkov
-        capabilities: [iac_security]
-        required: false
-        validation:
-          command: checkov --version
-          min_version: "2.0.0"
+Built with no document by default (`shutil.which("checkov")` is all strata
+needs). Since docs/work/integration-readiness.md Phase 8 a solution can also
+declare `type: checkov`; `checkov_controller` then binds that document, so
+`spec.command`/`spec.version`/`spec.required` apply like any local tool.
 """
 
 import json
-import re
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from strata.integrations.base_integration import BaseIntegration
-from strata.logger import get_logger
-from strata.utils.system import CommandResult
-
-logger = get_logger(__name__)
-
-_SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+from strata.integrations.capabilities import ScannerIntegration
+from strata.integrations.errors import IntegrationError
+from strata.models.checkov_model import CheckovFindingModel, CheckovScanResultModel
+from strata.models.integration_model import Capability
 
 
-# ---------------------------------------------------------------------------
-# Result dataclasses
-# ---------------------------------------------------------------------------
+class CheckovIntegration(ScannerIntegration):
+    """Detects and runs the real `checkov` CLI, scanning a rendered IaC
+    directory for security misconfigurations."""
 
-
-@dataclass
-class CheckovFinding:
-    """A single Checkov check failure."""
-
-    check_id: str
-    check_name: str
-    resource: str  # e.g. "aws_s3_bucket.example"
-    file_path: str
-    file_line_range: List[int] = field(default_factory=list)
-    severity: str = "UNKNOWN"  # CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN
-    guideline: str = ""  # remediation URL / description from Checkov
-
-
-@dataclass
-class CheckovScanResult:
-    """Aggregated result of a Checkov scan."""
-
-    passed: int
-    failed: int
-    skipped: int
-    findings: List[CheckovFinding]
-    scanner_version: str
-    framework: str
-    scanned_path: str
-
-    @property
-    def total(self) -> int:
-        return self.passed + self.failed + self.skipped
-
-    def findings_at_or_above(self, severity: str) -> List[CheckovFinding]:
-        """Return findings at or above the given severity level."""
-        if severity not in _SEVERITY_ORDER:
-            return self.findings
-        threshold_idx = _SEVERITY_ORDER.index(severity)
-        return [f for f in self.findings if _severity_index(f.severity) <= threshold_idx]
-
-
-def _severity_index(severity: str) -> int:
-    """Return sort index (lower = more severe). Unknown → last."""
-    try:
-        return _SEVERITY_ORDER.index(severity.upper())
-    except ValueError:
-        return len(_SEVERITY_ORDER) - 1
-
-
-# ---------------------------------------------------------------------------
-# Integration class
-# ---------------------------------------------------------------------------
-
-
-class CheckovIntegration(BaseIntegration):
-    """Checkov IaC security scanner integration.
-
-    Invokes ``checkov --directory <terraform_dir> --output json --compact``
-    and parses the structured JSON output into ``CheckovScanResult``.
-
-    Supports the ``--skip-check``, ``--check``, and ``--external-checks-dir``
-    flags for filtering.  Gracefully degrades when Checkov is not installed.
-    """
-
+    TYPE = "checkov"
+    CAPABILITIES = frozenset({Capability.SCANNER})
+    TRANSPORTS = frozenset({"cli"})
     COMMAND = "checkov"
-    CAPABILITIES: list = []  # IaC security — no shared Protocol yet; capability name: iac_security
 
-    def get_version_command(self) -> List[str]:
-        return [self.command, "--version"]
+    def ensure_available(self) -> None:
+        """Raise when `checkov` is not on `PATH`.
 
-    def parse_version(self, version_output: str) -> str:
-        """Extract version from ``checkov --version`` output (e.g. '3.2.123')."""
-        m = re.search(r"(\d+\.\d+\.\d+)", version_output)
-        return m.group(1) if m else version_output.strip()
-
-    def ensure_available(self) -> Tuple[bool, str]:
+        Raises:
+            IntegrationError: `checkov` is not installed.
+        """
         if not self.is_available():
-            return False, (
-                "Checkov CLI is not installed or not in PATH. Install: pip install checkov  or  https://www.checkov.io"
+            raise IntegrationError(
+                "checkov not found on PATH — install it (https://www.checkov.io/) to enable "
+                "static IaC security scanning."
             )
-        self._info = f"checkov {self.get_version()} is available"
-        return True, ""
-
-    def get_setup_info(self) -> Dict[str, Any]:
-        return {
-            "name": "checkov",
-            "command": "checkov",
-            "install_url": "https://www.checkov.io/2.Basics/Installing%20Checkov.html",
-            "env_vars": [],
-            "auth_methods": [],
-            "yaml_example": (
-                "- name: checkov\n"
-                "  type: checkov\n"
-                "  capabilities: [iac_security]\n"
-                "  required: false\n"
-                "  validation:\n"
-                "    command: checkov --version\n"
-                '    min_version: "2.0.0"'
-            ),
-        }
-
-    # ------------------------------------------------------------------
-    # Public scan method
-    # ------------------------------------------------------------------
 
     def scan(
         self,
-        terraform_dir: Path,
+        directory: Path,
+        *,
         framework: str = "terraform",
-        skip_checks: Optional[List[str]] = None,
-        include_checks: Optional[List[str]] = None,
-        external_checks_dir: Optional[str] = None,
+        skip_checks: list[str] | None = None,
+        include_checks: list[str] | None = None,
+        custom_checks_dir: str | None = None,
         timeout: int = 120,
-    ) -> CheckovScanResult:
-        """Run Checkov against a Terraform artifact directory.
+    ) -> CheckovScanResultModel:
+        """Scan `directory` (an already-materialised/rendered IaC output
+        directory) with Checkov.
 
         Args:
-            terraform_dir: Path to the directory containing ``.tf`` files.
-            framework: IaC framework to scan (default ``terraform``).
-            skip_checks: List of CKV IDs to suppress (e.g. ``["CKV_AWS_1"]``).
-            include_checks: If set, only these check IDs are run.
-            external_checks_dir: Path to a directory with custom Checkov checks.
+            directory: The provisioner source directory to scan.
+            framework: Checkov `--framework` value (terraform | bicep | ansible | helm).
+            skip_checks: Check IDs to suppress (`--skip-check`). Ignored when
+                `include_checks` is also set — Checkov's own CLI treats
+                `--check`/`--skip-check` as mutually exclusive.
+            include_checks: When set, run ONLY these check IDs (`--check`).
+            custom_checks_dir: Extra custom-checks directory (`--external-checks-dir`).
             timeout: Subprocess timeout in seconds.
 
-        Returns:
-            ``CheckovScanResult`` with findings and counts.
-
         Raises:
-            RuntimeError: If Checkov is not available.
+            IntegrationError: `checkov` is not available, the scan process
+                itself failed, or it produced unparseable output.
         """
-        available, error = self.ensure_available()
-        if not available:
-            raise RuntimeError(error)
-
+        self.ensure_available()
         args = [
             "--directory",
-            str(terraform_dir),
-            "--framework",
-            framework,
+            str(directory),
             "--output",
             "json",
+            "--framework",
+            framework,
             "--compact",
-            "--quiet",  # suppress progress bars
-            "--exit-code",
-            "0",  # never exit non-zero on findings; we handle it
+            # Never let the subprocess's own exit code drive control flow —
+            # strata applies the real severity gate downstream, matching
+            # CveScannerIntegration's own Trivy `--exit-code 0` precedent.
+            # Without this, checkov's default exit code is 1 whenever it
+            # finds any failed check at all, indistinguishable from a
+            # genuine scan error.
+            "--soft-fail",
         ]
-
-        if skip_checks:
-            args += ["--skip-check", ",".join(skip_checks)]
         if include_checks:
             args += ["--check", ",".join(include_checks)]
-        if external_checks_dir:
-            args += ["--external-checks-dir", external_checks_dir]
+        elif skip_checks:
+            args += ["--skip-check", ",".join(skip_checks)]
+        if custom_checks_dir:
+            args += ["--external-checks-dir", custom_checks_dir]
 
-        result: CommandResult = self._run_integration(args, timeout=timeout)
+        result = self.run(*args, timeout=timeout)
+        if not result.is_successful:
+            raise IntegrationError(f"checkov scan of '{directory}' failed: {result.stderr.strip()}")
+        return self._safe_parse(directory, framework, result.payload)
 
-        # Checkov exits 0 on success, 1 on findings — both are valid for us
-        if result.returncode not in (0, 1) and not result.stdout:
-            raise RuntimeError(f"Checkov scan failed (exit {result.returncode}): {result.stderr[:300]}")
-
-        return self._parse_output(result.stdout, framework=framework, scanned_path=str(terraform_dir))
-
-    # ------------------------------------------------------------------
-    # JSON parsing
-    # ------------------------------------------------------------------
-
-    def _parse_output(self, raw: str, framework: str, scanned_path: str) -> CheckovScanResult:
-        """Parse Checkov JSON output into a ``CheckovScanResult``."""
-        if not raw or not raw.strip():
-            return self._empty_result(framework, scanned_path)
-
+    def _safe_parse(self, directory: Path, framework: str, raw: str) -> CheckovScanResultModel:
+        """Turn a malformed/unexpected-shape response into a clean
+        `IntegrationError` instead of letting `json.JSONDecodeError`/
+        `KeyError` escape `scan()` uncaught — matches
+        `CveScannerIntegration._safe_parse()`'s own established fix for
+        this exact failure class.
+        """
         try:
             data = json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning("checkov: failed to parse JSON output")
-            return self._empty_result(framework, scanned_path)
+            return self._parse(data, directory, framework)
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise IntegrationError(f"checkov scan of '{directory}' produced unparseable output: {exc}") from exc
 
-        # Checkov output can be a single results dict or a list (multi-framework)
-        if isinstance(data, list):
-            return self._merge_results(data, framework, scanned_path)
-
-        return self._parse_results_block(data, framework, scanned_path)
-
-    def _parse_results_block(self, data: Dict[str, Any], framework: str, scanned_path: str) -> CheckovScanResult:
-        """Parse a single Checkov results block."""
-        results = data.get("results") or {}
-        passed_checks = results.get("passed_checks") or []
-        failed_checks = results.get("failed_checks") or []
-        skipped_checks = results.get("skipped_checks") or []
+    def _parse(self, data: dict[str, Any], directory: Path, framework: str) -> CheckovScanResultModel:
         summary = data.get("summary") or {}
-
-        findings: List[CheckovFinding] = []
-        for check in failed_checks:
-            findings.append(self._parse_finding(check))
-
-        scanner_version = self.get_version() or "unknown"
-
-        return CheckovScanResult(
-            passed=summary.get("passed", len(passed_checks)),
-            failed=summary.get("failed", len(failed_checks)),
-            skipped=summary.get("skipped", len(skipped_checks)),
+        findings: list[CheckovFindingModel] = []
+        results = data.get("results") or {}
+        for check in results.get("failed_checks") or []:
+            findings.append(
+                CheckovFindingModel(
+                    check_id=check["check_id"],
+                    check_name=check.get("check_name", ""),
+                    resource=check.get("resource", ""),
+                    file_path=check.get("file_path", ""),
+                    file_line_range=check.get("file_line_range"),
+                    severity=(check.get("severity") or "UNKNOWN").upper(),
+                    guideline=check.get("guideline"),
+                )
+            )
+        return CheckovScanResultModel(
+            passed=summary.get("passed", 0),
+            failed=summary.get("failed", 0),
+            skipped=summary.get("skipped", 0),
             findings=findings,
-            scanner_version=scanner_version,
-            framework=data.get("check_type") or framework,
-            scanned_path=scanned_path,
-        )
-
-    def _merge_results(self, data_list: List[Dict], framework: str, scanned_path: str) -> CheckovScanResult:
-        """Merge multiple results blocks (multi-framework output)."""
-        passed = failed = skipped = 0
-        findings: List[CheckovFinding] = []
-        for block in data_list:
-            r = self._parse_results_block(block, framework, scanned_path)
-            passed += r.passed
-            failed += r.failed
-            skipped += r.skipped
-            findings.extend(r.findings)
-        return CheckovScanResult(
-            passed=passed,
-            failed=failed,
-            skipped=skipped,
-            findings=findings,
-            scanner_version=self.get_version() or "unknown",
+            scanner_version=summary.get("checkov_version") or self.get_version() or "unknown",
             framework=framework,
-            scanned_path=scanned_path,
-        )
-
-    def _parse_finding(self, check: Dict[str, Any]) -> CheckovFinding:
-        """Convert a single failed_check entry to a CheckovFinding."""
-        severity = (check.get("severity") or "UNKNOWN").upper()
-        if severity not in _SEVERITY_ORDER:
-            severity = "UNKNOWN"
-
-        return CheckovFinding(
-            check_id=check.get("check_id", "UNKNOWN"),
-            check_name=check.get("check_name", ""),
-            resource=check.get("resource", ""),
-            file_path=check.get("repo_file_path") or check.get("file_path", ""),
-            file_line_range=check.get("file_line_range") or [],
-            severity=severity,
-            guideline=check.get("guideline") or "",
-        )
-
-    def _empty_result(self, framework: str, scanned_path: str) -> CheckovScanResult:
-        return CheckovScanResult(
-            passed=0,
-            failed=0,
-            skipped=0,
-            findings=[],
-            scanner_version=self.get_version() or "unknown",
-            framework=framework,
-            scanned_path=scanned_path,
+            scanned_path=str(directory),
         )

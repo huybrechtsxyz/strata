@@ -1,290 +1,114 @@
-"""Template processing for files with placeholders using Jinja2."""
+#!/usr/bin/env python3
+"""Jinja2 template handling for `output.template` (docs/design/
+value-token-resolution.md, "Value Supply Mechanisms" option C).
 
-import os
-from pathlib import Path
-from typing import Optional, Set
+Two halves, deliberately separate (docs/design/deploy-command.md's
+Implementation Plan, phases 3/8): `validate_template_references()` is
+build-time-only — never rendering, only checking that a template's
+referenced names exist somewhere in a known schema, since build never has
+every value resolved (secrets, integration-backed variables/features are
+deploy-only). `render_template()` is deploy-time-only — every value is
+fully resolved by then, so an honest render can finally happen; callers are
+expected to have already validated the same template at build time.
 
-from jinja2 import (
-    BaseLoader,
-    DebugUndefined,
-    Environment,
-    StrictUndefined,
-    TemplateSyntaxError,
-    UndefinedError,
-)
+Deliberately has no dependency on `strata.integrations`/`ResolvedWorkspaceGraph`
+— those sit above `strata.utils` in the import-linter layering (ADR-0003).
+Callers build the `known_names`/render context themselves and pass it in as
+plain `dict`/`set` data.
+"""
+
+from typing import Any
+
+from jinja2 import Environment, StrictUndefined, TemplateSyntaxError, nodes
 from jinja2.meta import find_undeclared_variables
 
-from strata.logger import get_logger
-from strata.utils.design_tokens import mermaid_escape, resolve_token
-from strata.utils.graph import slugify_path
-
-logger = get_logger(__name__)
-
-# Strict env — used by process_single_template (env var files).
-# Missing variables raise UndefinedError.
-_STRICT_ENV = Environment(
-    loader=BaseLoader(),
-    undefined=StrictUndefined,
-    keep_trailing_newline=True,
-    autoescape=False,
-)
-
-# Lenient env — used by render() (scaffold templates, builders).
-# Missing variables stay visible as {{ var }} in output.
-_LENIENT_ENV = Environment(
-    loader=BaseLoader(),
-    undefined=DebugUndefined,
-    keep_trailing_newline=True,
-    autoescape=False,
-)
-
-# Filters shared by both environments (ADR-0034). Deliberately few — Jinja's
-# built-ins cover most needs; these are the three things a template cannot do
-# for itself because they depend on strata's own conventions.
-_STRATA_FILTERS = {
-    "slug": slugify_path,
-    "token": resolve_token,
-    "mermaid_escape": mermaid_escape,
-}
-for _env in (_STRICT_ENV, _LENIENT_ENV):
-    _env.filters.update(_STRATA_FILTERS)
+#: `StrictUndefined` so a reference `validate_template_references()` couldn't
+#: check statically (any nested access under a `None`-valued `known_names`
+#: root, e.g. `graph.*`, or a dynamic key) still raises loudly at render
+#: time instead of silently rendering as an empty string — matches
+#: `resolve_value_tokens()`'s own "unknown reference is always an error"
+#: precedent. Has no effect on `validate_template_references()`'s own
+#: `_ENV.parse()` call, which never evaluates Undefined access at all.
+_ENV = Environment(undefined=StrictUndefined)
 
 
-class TemplateProcessor:
-    """Jinja2-based template processing for files with placeholders.
+def validate_template_references(source: str, known_names: dict[str, set[str] | None]) -> list[str]:
+    """Check every name `source` (a Jinja2 template) references against
+    `known_names`.
 
-    This class provides functionality to:
-    - Process ``*.template.*`` files with environment variable substitution
-    - Support custom variable substitution via ``render()``
-    - Clean up template files after processing
+    Args:
+        source: The template's raw text.
+        known_names: `{context_key: known_nested_keys}`. A `None` value
+            means "this context key exists but its nested keys aren't
+            checked" (e.g. an arbitrary-shape dict like `properties`/
+            `custom`) — only the top-level name is validated for it.
 
-    All templates use Jinja2 syntax: ``{{ var }}``, ``{% if %}``, ``{% for %}``.
-    Missing variables raise ``jinja2.UndefinedError`` (StrictUndefined).
-
-    Example::
-
-        # main.template.tf contains:
-        # organization = "{{ organization }}"
-        #
-        # After processing with organization="my-org" in env:
-        # main.tf contains:
-        # organization = "my-org"
+    Returns:
+        One message per problem found; empty means the template is
+        consistent with `known_names` (not a guarantee it renders —
+        filters, control flow, and unchecked roots are not verified).
     """
+    try:
+        ast = _ENV.parse(source)
+    except TemplateSyntaxError as exc:
+        return [f"template syntax error: {exc}"]
 
-    def __init__(self, template_dir: Path, cleanup_templates: bool = True):
-        """Initialize the template processor.
+    errors: list[str] = []
 
-        Args:
-            template_dir: Directory containing template files.
-            cleanup_templates: Whether to remove template files after processing.
-        """
-        self.template_dir = template_dir
-        self.cleanup_templates = cleanup_templates
+    undeclared = find_undeclared_variables(ast)
+    errors.extend(
+        f"'{name}' is not a known template variable — available: {sorted(known_names)}"
+        for name in sorted(undeclared)
+        if name not in known_names
+    )
 
-    def process_all_templates(self) -> bool:
-        """Process all template files in the template directory."""
-        try:
-            logger.debug(
-                "Searching for template files",
-                template_dir=str(self.template_dir),
-            )
+    for root, keys in _referenced_keys(ast).items():
+        allowed = known_names.get(root)
+        if allowed is None:
+            continue  # unknown root (already reported above) or an unchecked, arbitrary-shape root
+        errors.extend(f"'{root}.{key}' is not declared" for key in sorted(keys) if key not in allowed)
 
-            template_files = list(self.template_dir.glob("*.template.*"))
+    return errors
 
-            if not template_files:
-                logger.debug(
-                    "No template files found",
-                    template_dir=str(self.template_dir),
-                )
-                return True
 
-            for template_file in template_files:
-                success = self.process_single_template(template_file)
-                if not success:
-                    logger.warning(
-                        "Skipping further processing due to template error",
-                        failed_template=str(template_file),
-                    )
-                    return False
+def _referenced_keys(ast: nodes.Template) -> dict[str, set[str]]:
+    """`{root_name: {attr_or_item_key, ...}}` for every `root.key`/`root['key']`
+    access found anywhere in `ast` — static-only; a dynamic key
+    (`variables[some_var]`) can't be checked and is skipped.
+    """
+    result: dict[str, set[str]] = {}
+    for node in ast.find_all((nodes.Getattr, nodes.Getitem)):
+        if not isinstance(node, (nodes.Getattr, nodes.Getitem)) or not isinstance(node.node, nodes.Name):
+            continue
+        root = node.node.name
+        if isinstance(node, nodes.Getattr):
+            key = node.attr
+        else:
+            arg = node.arg
+            if not isinstance(arg, nodes.Const) or not isinstance(arg.value, str):
+                continue
+            key = arg.value
+        result.setdefault(root, set()).add(key)
+    return result
 
-            logger.info(
-                "Template processing completed",
-                processed_count=len(template_files),
-                template_dir=str(self.template_dir),
-            )
-            return True
 
-        except Exception as e:
-            logger.error(
-                "Template processing failed",
-                template_dir=str(self.template_dir),
-                error=str(e),
-                exc_info=True,
-            )
-            return False
+def render_template(source: str, context: dict[str, Any]) -> str:
+    """Render `source` (a Jinja2 template) with `context` — the deploy-time
+    counterpart to `validate_template_references()`'s build-time,
+    render-nothing check (docs/design/deploy-command.md's Implementation
+    Plan phase 8). `context`'s keys mirror `validate_template_references()`'s
+    `known_names` exactly (`graph`/`variables`/`flags`/`secrets`/
+    `properties`/`custom`/`provisioner`, `InfraIntegration.render_output_
+    template()`'s own job to assemble) — a template that already passed
+    build-time validation is guaranteed every name it references exists in
+    this same shape.
 
-    def process_single_template(self, template_path: Path) -> bool:
-        """Process a single template file using environment variables as context."""
-        try:
-            if not template_path.exists():
-                logger.error(
-                    "Template file not found",
-                    template_path=str(template_path),
-                )
-                return False
-
-            logger.debug(
-                "Processing template",
-                template_file=template_path.name,
-            )
-
-            content = template_path.read_text(encoding="utf-8")
-
-            # Use environment variables as context
-            processed_content = _STRICT_ENV.from_string(content).render(dict(os.environ))
-
-            # Determine output path
-            output_filename = template_path.name.replace(".template.", ".")
-            output_path = template_path.parent / output_filename
-
-            output_path.write_text(processed_content, encoding="utf-8")
-
-            if self.cleanup_templates:
-                self.cleanup_template_file(template_path)
-
-            logger.debug(
-                "Generated output from template",
-                template_file=template_path.name,
-                output_file=output_path.name,
-            )
-            return True
-
-        except UndefinedError as e:
-            logger.error(
-                "Missing template variable",
-                template_path=str(template_path),
-                error=str(e),
-            )
-            return False
-        except Exception as e:
-            logger.error(
-                "Failed to process template",
-                template_path=str(template_path),
-                error=str(e),
-                exc_info=True,
-            )
-            return False
-
-    def cleanup_template_file(self, template_path: Path) -> bool:
-        """Remove template files after processing."""
-        try:
-            logger.debug(
-                "Cleaning up template file",
-                template_file=template_path.name,
-            )
-            template_path.unlink()
-            return True
-
-        except Exception as e:
-            logger.error(
-                "Failed to cleanup template file",
-                template_path=str(template_path),
-                error=str(e),
-                exc_info=True,
-            )
-            return False
-
-    @staticmethod
-    def render(content: str, context: dict) -> str:
-        """Render a Jinja2 template string with the given context dict.
-
-        Uses lenient undefined handling — variables not in *context* are
-        left visible in the output as ``{{ var }}``.  This is appropriate
-        for scaffold templates where partial context is expected.
-
-        Args:
-            content: Template string using Jinja2 syntax (``{{ var }}``).
-            context: Mapping of variable names to replacement values.
-
-        Returns:
-            The rendered string.
-        """
-        if not content:
-            return content
-        template = _LENIENT_ENV.from_string(content)
-        return template.render(context)
-
-    @staticmethod
-    def render_strict(content: str, context: dict) -> str:
-        """Render a Jinja2 template string, raising on any undefined variable.
-
-        Use this when all variables must be present — e.g. integration
-        endpoint URLs where a missing env var would produce a broken value.
-
-        Args:
-            content: Template string using Jinja2 syntax (``{{ var }}``).
-            context: Mapping of variable names to replacement values.
-
-        Raises:
-            jinja2.UndefinedError: If the template references a variable
-                that is not present in *context*.
-
-        Returns:
-            The rendered string.
-        """
-        if not content:
-            return content
-        template = _STRICT_ENV.from_string(content)
-        return template.render(context)
-
-    @staticmethod
-    def check_syntax(content: str) -> Optional[str]:
-        """Return a human-readable error message if *content* is not a usable template.
-
-        Lets callers surface a template error at validation time rather than at
-        render time. Covers both malformed syntax (an unclosed ``{% for %}``) and
-        references to filters or tests the environment does not provide — the
-        latter because the variable-tracking pass resolves filter and test names,
-        raising ``TemplateAssertionError`` (a ``TemplateSyntaxError`` subclass)
-        for unknown ones.
-
-        Args:
-            content: Template string using Jinja2 syntax.
-
-        Returns:
-            ``None`` when the template is usable, otherwise a message including
-            the offending line number.
-        """
-        if not content:
-            return None
-        try:
-            # Called for its side effect: the tracking pass is what resolves
-            # filter and test names. Parsing alone would not catch them.
-            find_undeclared_variables(_LENIENT_ENV.parse(content))
-        except TemplateSyntaxError as e:
-            location = f" at line {e.lineno}" if e.lineno else ""
-            return f"{e.message}{location}"
-        return None
-
-    @staticmethod
-    def find_variables(content: str) -> Set[str]:
-        """Return the top-level variable names *content* references.
-
-        Only names the template expects from its context are returned — loop
-        variables, ``{% set %}`` assignments, filters, and tests are excluded
-        because Jinja resolves those itself.
-
-        Args:
-            content: Template string using Jinja2 syntax. Must pass
-                :meth:`check_syntax` first.
-
-        Raises:
-            jinja2.TemplateSyntaxError: If *content* does not parse, or references
-                a filter or test the environment does not provide.
-
-        Returns:
-            Set of undeclared variable names.
-        """
-        if not content:
-            return set()
-        return find_undeclared_variables(_LENIENT_ENV.parse(content))
+    Raises:
+        jinja2.TemplateError: `source` is malformed, or a reference that
+            passed static validation still fails at render time (a dynamic
+            key access `validate_template_references()` couldn't check
+            statically, for example) — not caught here; callers decide how
+            to surface it (`deploy_controller.py` converts it to a
+            `Diagnostics.error()`, matching every other per-step failure).
+    """
+    return _ENV.from_string(source).render(**context)

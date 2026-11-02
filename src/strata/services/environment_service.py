@@ -1,654 +1,403 @@
-"""Service for loading and validating environment configurations."""
+#!/usr/bin/env python3
+"""Service for loading and validating environment configuration."""
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from collections.abc import Sequence
+from typing import Any
 
-from strata.models.configuration_model import ConfigurationModel
-from strata.models.environment_model import (
-    EnvironmentIncludeModel,
-    EnvironmentModel,
-    EnvironmentModuleOverrideModel,
-    EnvironmentOverridesModel,
-    EnvironmentProviderOverrideModel,
-    EnvironmentRemoteOverrideModel,
-    EnvironmentResourceOverrideModel,
-)
-from strata.models.store_models import (
-    FeatureStoreModel,
-    FeatureStoreType,
-    SecretStoreModel,
-    SecretStoreType,
-    VariableStoreModel,
-    VariableStoreType,
-    validate_store_security_policy,
-)
-from strata.models.workspace_model import OutputFileModel
+from strata.models.common_models import PlatformBaseModel
+from strata.models.configuration_model import ConfigurationSecurityModel
+from strata.models.deployment_model import DeploymentModel
+from strata.models.environment_model import EnvironmentModel
+from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel, VariableStoreType
+from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.dict_merge import deep_merge
-from strata.utils.merge_provenance import MergeProvenance
+from strata.utils.value_tokens import VALUE_TOKEN_KINDS, extract_value_tokens, find_malformed_value_tokens
+
+#: Maps a Value token's kind to the environment store that declares it.
+_STORE_BY_TOKEN_KIND = {"var": "variables", "secret": "secrets", "feature": "features"}
+
+#: Token kinds a store's own `value` is never resolved against (only `${value:}` is).
+_UNSUPPORTED_STORE_VALUE_TOKEN_KINDS = frozenset({"var", "secret", "feature", "output"})
 
 
-class EnvironmentService(BaseService["EnvironmentModel"]):
+class EnvironmentService(BaseService[EnvironmentModel]):
+    """Service for handling environment configuration.
+
+    Carries the Phase 2 check that ADR-0002 deferred across half the schema.
+    `validate_value_tokens()` (`strata.utils.value_tokens`) checks at Phase 1
+    that a token is *shaped* right; only a real Environment can say whether
+    its **key exists**. Models with token-bearing fields — `dns`
+    (record values), `network` (CIDRs), `firewall` (rule from/to), `module`
+    (service environment values) — have all been waiting for this.
     """
-    Service for handling environment configurations.
 
-    Provides methods for:
-    - Environment validation
-    - Variable access and management
-    - Secret access and management
-    - Feature flag handling
-    - Environment file merging
-    """
-
-    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
-        """Initialize the EnvironmentService."""
-        super().__init__(path=path, data=data)
-        self.model = None
-
-    def on_init(self) -> None:
-        """Lifecycle hook: called after __init__ completes."""
-        pass
-
-    def on_ready(self) -> None:
-        """Lifecycle hook: called after validation succeeds."""
-        pass
-
-    def on_shutdown(self) -> None:
-        """Lifecycle hook: called before cleanup/destruction."""
-        pass
-
-    @classmethod
-    def merge_envfiles(cls, envfiles: List[str], work_path: Path) -> Tuple["EnvironmentModel", "MergeProvenance"]:
-        """
-        Merge multiple environment files into a single EnvironmentModel.
-
-        All spec sections participate in the merge.  Later files override
-        earlier files for conflicting keys (last-wins semantics).  The
-        returned :class:`~strata.utils.merge_provenance.MergeProvenance`
-        records which file contributed each key.
-
-        Merge semantics per section:
-
-        * ``variables``           — last-wins by ``key``
-        * ``secrets``             — last-wins by ``key``
-        * ``features``            — last-wins by ``key``
-        * ``properties``          — deep merge (nested dicts merged recursively; scalars/lists replaced wholesale)
-        * ``custom``              — deep merge (nested dicts merged recursively; scalars/lists replaced wholesale)
-        * ``lifecycle``           — last-wins (wholesale)
-        * ``overrides.resources`` — last-wins by ``resource`` name
-        * ``overrides.modules``   — last-wins by ``(module, resource, namespace, slot_type)``
-        * ``overrides.providers`` — last-wins by ``provider`` name
-        * ``overrides.remotes``   — last-wins by ``remote`` name
-        * ``overrides.properties``— deep merge (nested dicts merged recursively; scalars/lists replaced wholesale)
-        * ``overrides.includes``  — append; deduplicated by ``source`` path
-        * ``overrides.output_files`` — append; deduplicated by ``name``
-
-        ``properties``/``custom``/``overrides.properties`` use the same deep-merge
-        semantics as the workspace → environment → deployment composition performed
-        by ``TerraformBuilder._resolve_merged_properties()`` (both call
-        :func:`strata.utils.dict_merge.deep_merge`), so a nested key declared in an
-        earlier file survives being partially overridden by a later file instead of
-        the whole object being replaced wholesale.
-
-        Args:
-            envfiles: List of environment file paths to merge (relative to work_path).
-            work_path: Base working directory for resolving relative paths.
-
-        Returns:
-            Tuple of (merged EnvironmentModel, MergeProvenance).
-
-        Raises:
-            ValueError: If any environment file fails validation.
-        """
-        from strata.models.environment_model import (
-            EnvironmentMetaModel,
-            EnvironmentSpecModel,
-        )
-
-        provenance = MergeProvenance()
-
-        # Per-type accumulators
-        merged_vars: Dict[str, Any] = {}  # key → VariableStoreModel
-        merged_secrets: Dict[str, Any] = {}  # key → SecretStoreModel
-        merged_features: Dict[str, Any] = {}  # key → FeatureStoreModel
-        merged_lifecycle = None
-        merged_properties: Dict[str, Any] = {}
-        merged_custom: Dict[str, Any] = {}
-        meta = None
-
-        # Override accumulators
-        merged_res_overrides: Dict[str, EnvironmentResourceOverrideModel] = {}
-        merged_mod_overrides: Dict[str, EnvironmentModuleOverrideModel] = {}
-        merged_prov_overrides: Dict[str, EnvironmentProviderOverrideModel] = {}
-        merged_remote_overrides: Dict[str, EnvironmentRemoteOverrideModel] = {}
-        merged_ovr_properties: Dict[str, Any] = {}
-        merged_includes: Dict[str, EnvironmentIncludeModel] = {}
-        merged_output_files: Dict[str, OutputFileModel] = {}
-
-        for envfile_path in envfiles:
-            provenance.merge_order.append(envfile_path)
-            env_service = cls(str(work_path / envfile_path))
-            is_valid, errors = env_service.validate()
-            if not is_valid:
-                raise ValueError(f"Invalid environment file: {envfile_path}\nErrors: {errors}")
-
-            env_model = env_service.get_model()
-            if not env_model or not env_model.spec:
-                continue
-
-            if meta is None and env_model.meta:
-                meta = env_model.meta
-
-            spec = env_model.spec
-
-            # --- Variables: last-wins by key ---
-            if spec.variables:
-                for var in spec.variables:
-                    key = var.key
-                    if key in merged_vars:
-                        provenance.variable_overridden.setdefault(key, []).append(provenance.variable_sources[key])
-                    merged_vars[key] = var
-                    provenance.variable_sources[key] = envfile_path
-
-            # --- Secrets: last-wins by key ---
-            if spec.secrets:
-                for secret in spec.secrets:
-                    key = secret.key
-                    if key in merged_secrets:
-                        provenance.secret_overridden.setdefault(key, []).append(provenance.secret_sources[key])
-                    merged_secrets[key] = secret
-                    provenance.secret_sources[key] = envfile_path
-
-            # --- Features: last-wins by key ---
-            if spec.features:
-                for feat in spec.features:
-                    key = feat.key
-                    if key in merged_features:
-                        provenance.feature_overridden.setdefault(key, []).append(provenance.feature_sources[key])
-                    merged_features[key] = feat
-                    provenance.feature_sources[key] = envfile_path
-
-            # --- Properties / Custom: deep merge ---
-            if spec.properties:
-                merged_properties = deep_merge(merged_properties, spec.properties)
-            if spec.custom:
-                merged_custom = deep_merge(merged_custom, spec.custom)
-
-            # --- Lifecycle: last-wins ---
-            if spec.lifecycle:
-                merged_lifecycle = spec.lifecycle
-
-            # --- Overrides ---
-            if spec.overrides:
-                ovr = spec.overrides
-                if ovr.resources:
-                    for res in ovr.resources:
-                        merged_res_overrides[str(res.resource)] = res
-                if ovr.modules:
-                    for mod in ovr.modules:
-                        mod_key = f"{mod.module}:{mod.resource or ''}:{mod.namespace or ''}:{mod.slot_type or ''}"
-                        merged_mod_overrides[mod_key] = mod
-                if ovr.providers:
-                    for prov in ovr.providers:
-                        merged_prov_overrides[str(prov.provider)] = prov
-                if ovr.remotes:
-                    for rem in ovr.remotes:
-                        merged_remote_overrides[str(rem.remote)] = rem
-                if ovr.properties:
-                    merged_ovr_properties = deep_merge(merged_ovr_properties, ovr.properties)
-                if ovr.includes:
-                    for inc in ovr.includes:
-                        merged_includes[inc.source] = inc
-                if ovr.output_files:
-                    for of in ovr.output_files:
-                        merged_output_files[of.name] = of
-
-        # Build merged EnvironmentOverridesModel (only when at least one override exists)
-        has_overrides = any(
-            [
-                merged_res_overrides,
-                merged_mod_overrides,
-                merged_prov_overrides,
-                merged_remote_overrides,
-                merged_ovr_properties,
-                merged_includes,
-                merged_output_files,
-            ]
-        )
-        merged_overrides: Optional[EnvironmentOverridesModel] = (
-            EnvironmentOverridesModel(
-                resources=list(merged_res_overrides.values()) or None,
-                modules=list(merged_mod_overrides.values()) or None,
-                providers=list(merged_prov_overrides.values()) or None,
-                remotes=list(merged_remote_overrides.values()) or None,
-                properties=merged_ovr_properties or None,
-                includes=list(merged_includes.values()) or None,
-                output_files=list(merged_output_files.values()) or None,
-            )
-            if has_overrides
-            else None
-        )
-
-        spec = EnvironmentSpecModel(
-            variables=list(merged_vars.values()) or None,
-            secrets=list(merged_secrets.values()) or None,
-            features=list(merged_features.values()) or None,
-            lifecycle=merged_lifecycle,
-            properties=merged_properties or None,
-            custom=merged_custom or None,
-            overrides=merged_overrides,
-        )
-
-        if meta is None:
-            meta = EnvironmentMetaModel(name="environment", annotations=None, labels=None, tags=None)
-
-        merged_model = EnvironmentModel(
-            meta=meta,
-            spec=spec,
-        )
-        return merged_model, provenance
-
-    # Internal methods for validation phases
-
-    def _get_model_class(self):
+    def _get_model_class(self) -> type[EnvironmentModel]:
         """Return the EnvironmentModel class for validation."""
         return EnvironmentModel
 
-    def _validate_dynamic(
-        self,
-        configuration_model: Optional["ConfigurationModel"] = None,
-        work_path: Optional[str] = None,
-    ) -> Tuple[bool, List[str]]:
+    def declared_keys(self) -> dict[str, set[str]]:
+        """Return the keys this environment declares, by token kind.
+
+        Keyed by token kind (`var`/`secret`/`feature`) rather than store name,
+        so callers can look up straight from a parsed token.
         """
-        Phase 2: Dynamic validation against configuration.
+        self._ensure_validated()
+        assert self.model is not None
+        spec = self.model.spec
+        return {
+            "var": {v.key for v in spec.variables or []},
+            "secret": {s.key for s in spec.secrets or []},
+            "feature": {f.key for f in spec.features or []},
+        }
 
-        Environment validation checks:
-        - Security policies: Validates secrets/variables/features against allowed store types
-        - Unique keys: Handled by MODEL validators in EnvironmentSpecModel
+    def validate_document_tokens(self, model: PlatformBaseModel) -> Diagnostics:
+        """Check every Value token in `model` resolves to a key this environment declares.
 
-        Variables/secrets ADD to or OVERWRITE workspace values (no cross-references needed).
+        Walks the document's serialized form for strings containing tokens,
+        which keeps this generic — one implementation covers dns, network,
+        firewall, module and anything added later, instead of each model
+        growing its own traversal.
 
         Args:
-            configuration_model: Optional ConfigurationModel for security policy validation
+            model: Any already-validated strata document.
 
         Returns:
-            Tuple[bool, List[str]]: (success, list of error messages)
+            One error per unresolved token, each located at the field path
+            where the token was written.
         """
-        if not self.model:
-            return True, []
+        self._ensure_validated()
+        assert self.model is not None
+        return unresolved_value_tokens(model, self.declared_keys(), self.model.meta.name)
+
+    def validate_artifact_references(self, artifact_names: set[str]) -> Diagnostics:
+        """Check every `store: artifact` variable's `value` names a real
+        `ArtifactModel` (docs/work/artifact-references.md).
+
+        The one `(kind, name)` reference `references.py`'s generic
+        `References()` field walker can't check itself:
+        `VariableStoreModel.value: Any` is only *conditionally* an artifact
+        reference (only when `store == artifact`; for every other store it
+        means something else entirely) — the same reasoning
+        `references.py`'s own docstring gives for why topology components
+        are deliberately excluded there too and checked by a dedicated
+        service method instead (`WorkspaceService.validate_topology_
+        references()`).
+
+        Args:
+            artifact_names: Every declared `ArtifactModel.meta.name` in the
+                solution.
+
+        Returns:
+            One error per `store: artifact` variable whose `value` does not
+            name a real artifact.
+        """
+        diagnostics = Diagnostics()
+        self._ensure_validated()
+        assert self.model is not None
+        for variable in self.model.spec.variables or []:
+            if variable.store != VariableStoreType.ARTIFACT:
+                continue
+            artifact_name = str(variable.value)
+            if artifact_name not in artifact_names:
+                diagnostics.error(
+                    f"Variable '{variable.key}': 'store: artifact' references unknown artifact "
+                    f"'{artifact_name}'. Available: {sorted(artifact_names)}",
+                    location="spec.variables",
+                    code="undefined_artifact",
+                )
+        return diagnostics
+
+    def validate_store_value_tokens(self) -> Diagnostics:
+        """Reject a `${var:}`/`${secret:}`/`${feature:}`/`${output:}` token in a
+        variable/secret/feature's own `value`.
+
+        `resolve_values()` resolves a `store: constant` value only against
+        `${value:}` references, so any other token there is accepted by the
+        generic token walk (the key is declared) but never resolves: it fails
+        `deploy run` with `value_resolution_failed` and reaches Terraform as the
+        literal token text. Chaining one key through another would also need
+        cycle detection, which `${value:}` avoids by requiring a literal target.
+
+        Returns:
+            One error per offending token, located at the store's `value`.
+        """
+        diagnostics = Diagnostics()
+        self._ensure_validated()
+        assert self.model is not None
+        spec = self.model.spec
+        groups: list[tuple[str, str, Sequence[VariableStoreModel | SecretStoreModel | FeatureStoreModel]]] = [
+            ("Variable", "variables", spec.variables or []),
+            ("Secret", "secrets", spec.secrets or []),
+            ("Feature", "features", spec.features or []),
+        ]
+        for noun, section, stores in groups:
+            for position, store in enumerate(stores):
+                for _path, text in _iter_strings(store.value):
+                    for kind, key in extract_value_tokens(text):
+                        if kind not in _UNSUPPORTED_STORE_VALUE_TOKEN_KINDS:
+                            continue
+                        diagnostics.error(
+                            f"{noun} '{store.key}': '${{{kind}:{key}}}' in a store's own value is not "
+                            "supported — it would never resolve. A value is a literal, an environment "
+                            "variable name or a store key; use '${value:kind.name.path}' to reference another "
+                            "document's field, or escape a literal as '$${...}'.",
+                            location=f"spec.{section}[{position}].value",
+                            code="store_value_token_unsupported",
+                        )
+        return diagnostics
+
+    def validate_allowed_stores(self, security: ConfigurationSecurityModel) -> Diagnostics:
+        """Check every variable/secret/feature's `store` against the platform's
+        allow-lists (`docs/design/gap_fit_v1.md` gap #7, real usage: config-repo's
+        `config/stores.yaml`).
+
+        Each of `security`'s three fields is independently optional — `None`
+        means that store kind is unrestricted, matching every other
+        allow-list in this codebase (`ConfigurationSpecModel.providers`/
+        `.topologies`, both `None`-safe the same way). A field that IS set is
+        a closed list: real usage deliberately omits a recognized builtin
+        store type (`environment`) from it, so builtins get no automatic
+        exemption here — same discipline that field's own real-world
+        example was found using.
+
+        Args:
+            security: The single `Configuration` document's `spec.security`
+                (never `None` itself — callers only invoke this when it's
+                set; an absent `Configuration`/absent `spec.security` means
+                no restriction, checked by the caller, not repeated here).
+
+        Returns:
+            One error per variable/secret/feature whose `store` is not in
+            the corresponding allow-list.
+        """
+        diagnostics = Diagnostics()
+        self._ensure_validated()
+        assert self.model is not None
         spec = self.model.spec
 
-        # Validate against security policies if configuration is provided
-        if configuration_model and configuration_model.spec.security:
-            security = configuration_model.spec.security
-            # Convert string store types to enum values
-            allowed_variable_stores = (
-                [VariableStoreType(s) for s in security.allowed_variable_stores]
-                if security.allowed_variable_stores
-                else None
-            )
-            allowed_secret_stores = (
-                [SecretStoreType(s) for s in security.allowed_secret_stores] if security.allowed_secret_stores else None
-            )
-            allowed_feature_stores = (
-                [FeatureStoreType(s) for s in security.allowed_feature_stores]
-                if security.allowed_feature_stores
-                else None
-            )
-            errors = validate_store_security_policy(
-                variables=spec.variables,
-                secrets=spec.secrets,
-                features=spec.features,
-                allowed_variable_stores=allowed_variable_stores,
-                allowed_secret_stores=allowed_secret_stores,
-                allowed_feature_stores=allowed_feature_stores,
-            )
-            if errors:
-                return False, errors
-
-        # Phase 2: cross-check remote overrides against known configuration remotes
-        if configuration_model and spec and spec.overrides and spec.overrides.remotes:
-            known_remote_names = {str(r.name) for r in (configuration_model.spec.remotes or [])}
-            remote_errors = []
-            for remote_override in spec.overrides.remotes:
-                if str(remote_override.remote) not in known_remote_names:
-                    remote_errors.append(
-                        f"Remote override '{remote_override.remote}' does not match any remote "
-                        f"defined in configuration spec.remotes. "
-                        f"Known remotes: {sorted(known_remote_names) or '(none)'}"
+        if security.allowed_variable_stores is not None:
+            for variable in spec.variables or []:
+                if variable.store.value not in security.allowed_variable_stores:
+                    diagnostics.error(
+                        f"Variable '{variable.key}': store '{variable.store.value}' is not in the platform's "
+                        f"allowed_variable_stores. Available: {sorted(security.allowed_variable_stores)}",
+                        location="spec.variables",
+                        code="disallowed_store",
                     )
-            if remote_errors:
-                return False, remote_errors
 
-        # Phase 2: validate spec.promotion strategy and ring references
-        if configuration_model and spec and spec.promotion:
-            promotion_errors = self._validate_promotion_refs(spec.promotion, configuration_model)
-            if promotion_errors:
-                return False, promotion_errors
+        if security.allowed_secret_stores is not None:
+            for secret in spec.secrets or []:
+                if secret.store.value not in security.allowed_secret_stores:
+                    diagnostics.error(
+                        f"Secret '{secret.key}': store '{secret.store.value}' is not in the platform's "
+                        f"allowed_secret_stores. Available: {sorted(security.allowed_secret_stores)}",
+                        location="spec.secrets",
+                        code="disallowed_store",
+                    )
 
-        return True, []
+        if security.allowed_feature_stores is not None:
+            for feature in spec.features or []:
+                if feature.store.value not in security.allowed_feature_stores:
+                    diagnostics.error(
+                        f"Feature '{feature.key}': store '{feature.store.value}' is not in the platform's "
+                        f"allowed_feature_stores. Available: {sorted(security.allowed_feature_stores)}",
+                        location="spec.features",
+                        code="disallowed_store",
+                    )
 
-    def _validate_promotion_refs(
-        self,
-        promotion: Any,
-        configuration_model: "ConfigurationModel",
-    ) -> List[str]:
-        """Validate that spec.promotion.strategy and spec.promotion.ring exist in the configuration.
+        return diagnostics
 
-        Returns a list of error strings (empty = valid).
-        """
-        errors: List[str] = []
-        config_promotions = configuration_model.spec.promotions if configuration_model.spec else None
 
-        if config_promotions is None:
-            # No promotions defined in configuration — strategy reference cannot be validated
-            errors.append(
-                f"Environment '{self.model.meta.name}' declares spec.promotion.strategy "
-                f"'{promotion.strategy}' but configuration.spec.promotions is not defined."
+def unresolved_value_tokens(
+    model: PlatformBaseModel, declared: dict[str, set[str]], owner_name: str, *, output_claimed: bool = False
+) -> Diagnostics:
+    """Check every Value token in `model` against an already-computed declared-keys set.
+
+    The free-function form `EnvironmentService.validate_document_tokens` wraps
+    for the single-environment case. Exists separately because cross-document
+    resolution needs the *merged* version: a Deployment's declared keys are
+    the union of its Tenant's environments and its own (ADR: tenant merges in
+    before deployment), and no single `EnvironmentModel` holds that union.
+    Building a synthetic merged model would be a bigger change than lifting
+    the walk itself out.
+
+    Also carries the generalized Phase 1 malformed-syntax check (design
+    validated 2026-09-28, docs/design/value-token-resolution.md's "Full
+    Solution" section): the four fields with their own `field_validator`
+    (`dns`/`module`/`network`/`firewall`) already reject a malformed token at
+    schema time and can never reach here with one. Every other string in the
+    document — `configuration`/`custom` passthrough dicts included — has no
+    such validator, so this is the only place a malformed candidate there
+    (e.g. gap #8's real `${IMMICH_DB_PASSWORD}`, missing its `kind:` prefix)
+    is ever caught. Reuses the existing generic walk instead of adding a
+    second, Pydantic-level mechanism (a `model_validator` couldn't have
+    walked `configuration`/`custom` either — it's `dict[str, Any]`, which
+    Pydantic never recurses into on its own).
+
+    Args:
+        model: Any already-validated strata document.
+        declared: Keys already declared, by token kind (`var`/`secret`/`feature`).
+        owner_name: What to call the source of `declared` in an error message
+            (an environment's name, or a description of several merged).
+        output_claimed: True when `model` is a document some workspace
+            execution step's own `targets` claims (docs/design/gap_fit_v1.md gap #12,
+            `WorkspaceService.claimed_document_names()`) — an `${output:}`
+            token is then accepted instead of rejected outright. Still
+            cannot validate the referenced step/key actually exists or ever
+            produces that output (ADR-0006: Context "does not solve output
+            validation" — unchanged by this parameter, only the false
+            rejection is fixed). `False` (default) preserves every existing
+            caller's behavior unchanged.
+
+    Returns:
+        One error per malformed or unresolved token, each located at the
+        field path where it was written.
+    """
+    diagnostics = Diagnostics()
+    # `meta` (name/annotations/labels/tags) is documentation/presentation
+    # only — nothing ever resolves a Value token from it (unlike `spec`,
+    # which every real resolver reads), and `meta.name` itself is a
+    # `PlatformName` (schema-constrained to `^[a-z][a-z0-9_-]*$`, so it can
+    # never even contain `${`). A `${...}`-shaped string there is always a
+    # false positive (e.g. an annotation's own description quoting the
+    # token syntax as documentation) — excluded so authors never need to
+    # `$${...}`-escape prose that was never a real token to begin with.
+    dumped = model.model_dump(by_alias=True, mode="json")
+    dumped.pop("meta", None)
+    for path, text in _iter_strings(dumped):
+        for candidate in find_malformed_value_tokens(text):
+            kinds = "|".join(VALUE_TOKEN_KINDS)
+            diagnostics.error(
+                f"Malformed Value token {candidate!r}. Expected '${{{kinds}:KEY}}', e.g. '${{var:region}}'. "
+                "If this isn't meant to be a strata Value token (e.g. a third-party tool's own "
+                "'${...}' syntax), escape it as '$${...}' instead.",
+                location=path,
+                code="malformed_value_token",
             )
-            return errors
+        for kind, key in extract_value_tokens(text):
+            if kind == "value":
+                # Existence/path/scalar/target-is-literal checks for this
+                # kind are a `DocumentIndex` lookup
+                # (`semantic_checks.py`'s `_check_value_references()`,
+                # docs/design/cross-document-value-references.md's Phase
+                # 5, reusing `resolve_document_value_references()` from
+                # Phase 3) — not an Environment-declared-keys question
+                # this function could ever answer. Skip entirely, same
+                # shape as the `output_claimed` early-exit below, not a
+                # `declared[kind]` lookup that would otherwise misreport
+                # it as `unsupported_value_token_kind`.
+                continue
+            if kind == "output" and output_claimed:
+                # Accepted — some execution step's `targets` claims this
+                # document (gap #12), so a real step can legitimately
+                # produce this output at deploy time. Key/step existence is
+                # still unvalidatable here (Phase 2 has no visibility into
+                # what a provisioner will actually output at runtime).
+                continue
+            if kind not in declared:
+                # `output` (and any future token kind) has no declared-keys set to check
+                # against here — an output key isn't declared anywhere, it's produced by a
+                # prior deploy step at runtime, which Phase 2 (schema + cross-document
+                # validation, no execution) has no visibility into. Flag it explicitly
+                # rather than crashing on `declared[kind]` (docs/design/gap_fit_v1.md gap #11) —
+                # unclaimed by any step (or not one of the fields `output_claimed` callers
+                # ever pass True for), `${output:}` remains rejected here, pending Context
+                # (ADR-0006) for the parts of this it still doesn't solve (key validation).
+                diagnostics.error(
+                    f"'${{{kind}:{key}}}' tokens are not supported in this field yet (pending Context, ADR-0006).",
+                    location=path,
+                    code="unsupported_value_token_kind",
+                )
+                continue
+            if key not in declared[kind]:
+                store = _STORE_BY_TOKEN_KIND[kind]
+                known = sorted(declared[kind])
+                diagnostics.error(
+                    f"'${{{kind}:{key}}}' is not declared in environment "
+                    f"'{owner_name}' spec.{store}. Declared: {known}",
+                    location=path,
+                    code="undeclared_value_token",
+                )
+    return diagnostics
 
-        strategies = {s.name: s for s in (config_promotions.strategies or [])}
-        if promotion.strategy not in strategies:
-            known = sorted(strategies.keys()) or "(none)"
-            errors.append(
-                f"Environment '{self.model.meta.name}' references unknown promotion strategy "
-                f"'{promotion.strategy}'. Known strategies: {known}"
-            )
-            return errors
 
-        strategy = strategies[promotion.strategy]
-        progressions = {p.name: p for p in (config_promotions.progressions or [])}
-        progression = progressions.get(strategy.progression)
-        if progression is None:
-            errors.append(
-                f"Environment '{self.model.meta.name}' promotion strategy '{promotion.strategy}' "
-                f"references unknown progression '{strategy.progression}'."
-            )
-            return errors
+def _iter_strings(value: Any, path: str = "") -> list[tuple[str, str]]:
+    """Yield every `(dotted_path, string)` pair inside a nested structure.
 
-        ring_names = progression.ring_names()
-        if promotion.ring not in ring_names:
-            errors.append(
-                f"Environment '{self.model.meta.name}' declares spec.promotion.ring '{promotion.ring}' "
-                f"but that ring does not exist in progression '{strategy.progression}'. "
-                f"Known rings: {sorted(ring_names)}"
-            )
+    Paths are built from the document's own keys, so they read as the field
+    path an author would recognise (`spec.zones[0].records[1].value`).
+    """
+    found: list[tuple[str, str]] = []
+    if isinstance(value, str):
+        found.append((path or "<root>", value))
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            found.extend(_iter_strings(child, f"{path}.{key}" if path else str(key)))
+    elif isinstance(value, list):
+        for position, child in enumerate(value):
+            found.extend(_iter_strings(child, f"{path}[{position}]"))
+    return found
 
-        return errors
 
-    # Service methods for accessing environment details
+def merge_environment_models(
+    environments: list[EnvironmentModel],
+) -> tuple[dict[str, VariableStoreModel], dict[str, SecretStoreModel], dict[str, FeatureStoreModel]]:
+    """Merge several Environments into one set of store definitions, by key.
 
-    def get_variables(self) -> List[VariableStoreModel]:
-        """
-        Get all variables defined in the environment.
+    Later entries in `environments` override earlier ones on a key collision
+    — the actual store definition (not just its presence), since a real
+    resolution needs to know *which* store backs a key, not only that one
+    does. Callers merge a Tenant's `spec.environments` before a Deployment's
+    own (`TenantSpecModel.environments`'s own description: "merged in BEFORE
+    a deployment's own"), so pass them in that order.
 
-        Returns:
-            List[VariableStoreModel]: List of variable store models
-        """
-        self._ensure_validated()
-        if self.model and self.model.spec and self.model.spec.variables:
-            return self.model.spec.variables
-        return []
+    Args:
+        environments: Already-validated Environment models, in merge order.
 
-    def get_secrets(self) -> List[SecretStoreModel]:
-        """
-        Get all secrets defined in the environment.
+    Returns:
+        Three dicts (variables, secrets, features), each keyed by `key`.
+    """
+    variables: dict[str, VariableStoreModel] = {}
+    secrets: dict[str, SecretStoreModel] = {}
+    features: dict[str, FeatureStoreModel] = {}
+    for environment in environments:
+        spec = environment.spec
+        variables.update({v.key: v for v in spec.variables or []})
+        secrets.update({s.key: s for s in spec.secrets or []})
+        features.update({f.key: f for f in spec.features or []})
+    return variables, secrets, features
 
-        Returns:
-            List[SecretStoreModel]: List of secret store models
-        """
-        self._ensure_validated()
-        if self.model and self.model.spec and self.model.spec.secrets:
-            return self.model.spec.secrets
-        return []
 
-    def get_features(self) -> List[FeatureStoreModel]:
-        """
-        Get all feature flags defined in the environment.
+def merge_workspace_environment_deployment_properties(
+    workspace: WorkspaceModel,
+    environments: list[EnvironmentModel],
+    deployment: DeploymentModel,
+    source: str,
+) -> dict[str, Any]:
+    """Deep-merge `{source}` (`"properties"` or `"custom"`):
+    `workspace.spec.{source}` -> each reachable `environment.spec.{source}`
+    in order -> `deployment.spec.{source}` (docs/design/
+    build-time-value-categories.md, Q3 - a deliberate improvement over v1's
+    real, docstring-contradicting behaviour, which never merges the
+    deployment's own value at all).
 
-        Returns:
-            List[FeatureStoreModel]: List of feature store models
-        """
-        self._ensure_validated()
-        if self.model and self.model.spec and self.model.spec.features:
-            return self.model.spec.features
-        return []
+    No `overrides.{source}` step, unlike v1: `EnvironmentSpecModel` has no
+    `overrides` field in v2 at all - confirmed via its own module docstring,
+    deliberately not ported (0 of 26 real environment documents used it,
+    ADR-0003's minimal-slice policy).
 
-    # Helper methods for workspace override application
-
-    def has_overrides(self) -> bool:
-        """Check if environment has any workspace overrides."""
-        self._ensure_validated()
-        if not self.model or not self.model.spec or not self.model.spec.overrides:
-            return False
-
-        overrides = self.model.spec.overrides
-        return bool(
-            overrides.resources or overrides.modules or overrides.providers or overrides.properties or overrides.remotes
-        )
-
-    def get_overridden_remote_names(self) -> Set[str]:
-        """Return the set of remote names that have a reference override in this environment."""
-        self._ensure_validated()
-        if (
-            not self.model
-            or not self.model.spec
-            or not self.model.spec.overrides
-            or not self.model.spec.overrides.remotes
-        ):
-            return set()
-        return {str(r.remote) for r in self.model.spec.overrides.remotes}
-
-    def get_remote_override(self, remote_name: str) -> Optional[EnvironmentRemoteOverrideModel]:
-        """Return the remote override for *remote_name*, or ``None`` if absent."""
-        self._ensure_validated()
-        if (
-            not self.model
-            or not self.model.spec
-            or not self.model.spec.overrides
-            or not self.model.spec.overrides.remotes
-        ):
-            return None
-        return next(
-            (r for r in self.model.spec.overrides.remotes if str(r.remote) == remote_name),
-            None,
-        )
-
-    def get_resource_override(self, resource_name: str) -> Optional[EnvironmentResourceOverrideModel]:
-        """
-        Get resource override by name.
-
-        Args:
-            resource_name: Name of the resource to get override for
-
-        Returns:
-            Optional[EnvironmentResourceOverrideModel]: Resource override if found, None otherwise
-        """
-        self._ensure_validated()
-        if (
-            not self.model
-            or not self.model.spec
-            or not self.model.spec.overrides
-            or not self.model.spec.overrides.resources
-        ):
-            return None
-        return next(
-            (r for r in self.model.spec.overrides.resources if r.resource == resource_name),
-            None,
-        )
-
-    def get_module_override(
-        self,
-        module_name: str,
-        resource_name: Optional[str] = None,
-        namespace_name: Optional[str] = None,
-        slot_type: Optional[str] = None,
-    ) -> Optional[EnvironmentModuleOverrideModel]:
-        """
-        Get module override matching the given context.
-
-        Matching rules (most specific wins):
-        1. Exact match on module + resource/namespace + slot_type
-        2. Match on module + resource/namespace (any slot)
-        3. Match on module only (applies to all instances)
-
-        Args:
-            module_name: Module meta.name to look up
-            resource_name: Resource context (optional)
-            namespace_name: Namespace context (optional)
-            slot_type: Deployment slot type (optional)
-
-        Returns:
-            Optional[EnvironmentModuleOverrideModel]: Best matching override, or None
-        """
-        self._ensure_validated()
-        if (
-            not self.model
-            or not self.model.spec
-            or not self.model.spec.overrides
-            or not self.model.spec.overrides.modules
-        ):
-            return None
-
-        candidates = [m for m in self.model.spec.overrides.modules if m.module == module_name]
-        if not candidates:
-            return None
-
-        # Score candidates by specificity (higher = more specific)
-        best: Optional[EnvironmentModuleOverrideModel] = None
-        best_score = -1
-        for candidate in candidates:
-            score = 0
-            # Check resource match
-            if candidate.resource is not None:
-                if resource_name and candidate.resource == resource_name:
-                    score += 2
-                else:
-                    continue  # resource specified but doesn't match
-            # Check namespace match
-            if candidate.namespace is not None:
-                if namespace_name and candidate.namespace == namespace_name:
-                    score += 2
-                else:
-                    continue  # namespace specified but doesn't match
-            # Check slot_type match
-            if candidate.slot_type is not None:
-                if slot_type and candidate.slot_type == slot_type:
-                    score += 1
-                else:
-                    continue  # slot specified but doesn't match
-            if score > best_score:
-                best_score = score
-                best = candidate
-
-        return best
-
-    def get_provider_override(self, provider_name: str) -> Optional[EnvironmentProviderOverrideModel]:
-        """
-        Get provider override by name.
-
-        Args:
-            provider_name: Name of the provider to get override for
-
-        Returns:
-            Optional[EnvironmentProviderOverrideModel]: Provider override if found, None otherwise
-        """
-        self._ensure_validated()
-        if (
-            not self.model
-            or not self.model.spec
-            or not self.model.spec.overrides
-            or not self.model.spec.overrides.providers
-        ):
-            return None
-        return next(
-            (p for p in self.model.spec.overrides.providers if p.provider == provider_name),
-            None,
-        )
-
-    def get_overridden_resource_names(self) -> Set[str]:
-        """
-        Get set of all resource names that have overrides.
-
-        Returns:
-            Set[str]: Set of resource names with overrides
-        """
-        self._ensure_validated()
-        if (
-            not self.model
-            or not self.model.spec
-            or not self.model.spec.overrides
-            or not self.model.spec.overrides.resources
-        ):
-            return set()
-        return {r.resource for r in self.model.spec.overrides.resources}
-
-    def get_overridden_provider_names(self) -> Set[str]:
-        """
-        Get set of all provider names that have overrides.
-
-        Returns:
-            Set[str]: Set of provider names with overrides
-        """
-        self._ensure_validated()
-        if (
-            not self.model
-            or not self.model.spec
-            or not self.model.spec.overrides
-            or not self.model.spec.overrides.providers
-        ):
-            return set()
-        return {p.provider for p in self.model.spec.overrides.providers}
-
-    def get_overridden_module_keys(self) -> Set[tuple]:
-        """
-        Get set of all module override identifiers.
-
-        Returns:
-            Set[tuple]: Set of (module_name, resource_or_none, namespace_or_none, slot_type_or_none) tuples
-        """
-        self._ensure_validated()
-        if (
-            not self.model
-            or not self.model.spec
-            or not self.model.spec.overrides
-            or not self.model.spec.overrides.modules
-        ):
-            return set()
-        return {(m.module, m.resource, m.namespace, m.slot_type) for m in self.model.spec.overrides.modules}
-
-    def get_merged_properties(self, workspace_properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """
-        Merge environment properties with workspace properties.
-
-        .. deprecated::
-            Dead code — no callers in ``src/`` or ``tests/`` as of this writing.
-            ``TerraformBuilder._resolve_merged_properties()`` is the actual code path used
-            to merge workspace → environment → deployment properties/custom for build output.
-            Kept for backward compatibility with any external callers; fixed to use
-            :func:`~strata.utils.dict_merge.deep_merge` for consistency rather than removed.
-
-        Precedence order (lowest to highest):
-        1. Workspace properties (base layer)
-        2. Environment properties (middle layer)
-        3. Environment override properties (highest precedence)
-
-        Args:
-            workspace_properties: Optional workspace properties to merge with
-
-        Returns:
-            Dict[str, Any]: Merged properties dictionary
-        """
-        self._ensure_validated()
-        result = workspace_properties.copy() if workspace_properties else {}
-
-        # Merge environment properties
-        if self.model and self.model.spec and self.model.spec.properties:
-            result = deep_merge(result, self.model.spec.properties)
-
-        # Apply override properties (highest precedence)
-        if self.model and self.model.spec and self.model.spec.overrides and self.model.spec.overrides.properties:
-            result = deep_merge(result, self.model.spec.overrides.properties)
-
-        return result
+    Moved here from `value_controller.py` (docs/archive/
+    environment-value-metadata.md Phase 3) — pure, no `SolutionContext`
+    dependency, so it belongs in `services`, not `controllers`: callers
+    needing the merged view at validate time (`semantic_checks.py`) would
+    otherwise recreate the cycle `value_references.py` documents
+    (`solution_context` -> `semantic_checks` -> `value_controller` ->
+    `solution_context`).
+    """
+    result: dict[str, Any] = dict(getattr(workspace.spec, source, None) or {})
+    for environment in environments:
+        result = deep_merge(result, getattr(environment.spec, source, None) or {})
+    result = deep_merge(result, getattr(deployment.spec, source, None) or {})
+    return result

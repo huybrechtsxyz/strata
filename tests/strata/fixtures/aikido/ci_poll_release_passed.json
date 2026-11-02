@@ -1,0 +1,49 @@
+{
+  "all_scans_completed": true,
+  "dependency_scan_completed": true,
+  "sast_scan_completed": true,
+  "iac_scan_completed": true,
+  "secrets_scan_completed": true,
+  "malware_scan_completed": true,
+  "open_issues_found": 0,
+  "issue_links": [],
+  "gate_passed": true,
+  "issue_breakdown": {
+    "sast": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "sca": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "iac": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "secrets": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "malware": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "license": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    }
+  }
+}

@@ -1,14 +1,20 @@
 <#
 .SYNOPSIS
-    Documentation build script for strata.
+    Documentation build script for strata-v2.
 .DESCRIPTION
-    Converts README.md to RST with pandoc, then builds the Sphinx HTML
-    documentation into .app/docs/ under the project root.
-    Run Setup.ps1 first to ensure the virtual environment exists.
+    Builds the Sphinx HTML documentation into docs/_build/html. Run Setup.ps1
+    first to ensure the virtual environment exists.
+.PARAMETER Strict
+    Treat Sphinx warnings as errors (-W --keep-going) — matches what a
+    Check.ps1 run does. Omit for a fast, warning-tolerant local preview build.
 .EXAMPLE
-    .\Docs.ps1
+    .\scripts\Docs.ps1
+    .\scripts\Docs.ps1 -Strict
 .NOTES
 #>
+param(
+    [switch]$Strict
+)
 
 function Get-ProjectRoot {
     return Split-Path -Parent $PSScriptRoot
@@ -18,7 +24,7 @@ $projectRoot = Get-ProjectRoot
 Set-Location $projectRoot
 
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
-Write-Host "[*] strata - Build Documentation" -ForegroundColor Cyan
+Write-Host "[*] strata-v2 - Build Documentation" -ForegroundColor Cyan
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -32,43 +38,24 @@ if (-not $env:VIRTUAL_ENV) {
     & "$projectRoot\.venv\Scripts\Activate.ps1"
 }
 
-# ── 1. Sync doc dependencies ────────────────────────────────────────────────
+# ── 1. Ensure doc dependencies are installed ────────────────────────────────
 Write-Host "[*] Installing documentation dependencies..." -ForegroundColor Blue
-uv sync --frozen --extra doc
+uv sync --extra docs
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] Failed to install documentation dependencies." -ForegroundColor Red
     exit 1
 }
 Write-Host ""
 
-# ── 2. Prepare output directory ─────────────────────────────────────────────
-$outDir = Join-Path $projectRoot ".app\docs"
-if (-not (Test-Path $outDir)) {
-    New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-}
-Write-Host "[+] Output directory: $outDir" -ForegroundColor Green
-Write-Host ""
-
-# ── 3. Convert README.md → docs/README.rst ──────────────────────────────────
-Write-Host "[*] Converting README.md to RST..." -ForegroundColor Blue
-if (Get-Command pandoc -ErrorAction SilentlyContinue) {
-    pandoc README.md -o docs/README.rst
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[!] pandoc conversion failed — continuing without README.rst." -ForegroundColor Yellow
-    }
-    else {
-        Write-Host "[+] docs/README.rst generated." -ForegroundColor Green
-    }
+# ── 2. Build Sphinx HTML ─────────────────────────────────────────────────────
+$outDir = Join-Path $projectRoot "docs\_build\html"
+Write-Host "[*] Building Sphinx HTML documentation..." -ForegroundColor Blue
+if ($Strict) {
+    uv run python -m sphinx -b html docs "$outDir" -W --keep-going
 }
 else {
-    Write-Host "[!] pandoc not found — skipping README.rst generation." -ForegroundColor Yellow
-    Write-Host "[!] Install pandoc from https://pandoc.org/installing.html" -ForegroundColor Yellow
+    uv run python -m sphinx -b html docs "$outDir" -q
 }
-Write-Host ""
-
-# ── 4. Build Sphinx HTML ─────────────────────────────────────────────────────
-Write-Host "[*] Building Sphinx HTML documentation..." -ForegroundColor Blue
-uv run python -m sphinx -b html docs/ "$outDir" -W --keep-going
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] Documentation build failed." -ForegroundColor Red
     exit 1

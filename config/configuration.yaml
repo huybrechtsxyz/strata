@@ -1,0 +1,11 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: configuration
+meta:
+  name: example-config
+spec:
+  # Plain document names — resolved by discovery, no file paths (ADR-0015).
+  providers:
+    - azure
+  additional_topologies: false
+  topologies:
+    - kubernetes

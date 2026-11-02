@@ -1,316 +1,879 @@
 #!/usr/bin/env python3
-"""
-===============================================================================
-Script Name   : test_models_workspace.py
-Author        : Vincent Huybrechts
-Version       : 1.0.0
-Python Version: 3.12+
-Description   : Workspace model using Pydantic for data validation and YAML parsing.
-===============================================================================
-"""
+"""Tests for WorkspaceModel YAML validation."""
 
-import os
-
+import jsonschema
 import pytest
-import yaml
 from pydantic import ValidationError
 
-from strata.models.common_models import ProvisionerType, SourceModel
-from strata.models.workspace_model import (
-    OutputProfileModel,
-    ProvisionerReferencesModel,
-    WorkspaceIacBackendModel,
-    WorkspaceIacModel,
-    WorkspaceModel,
-    WorkspaceResourceModel,
-)
+from strata.models.workspace_model import TopologySpecModel, WorkspaceModel
 
 
-@pytest.fixture(autouse=True)
-def set_pythonpath_env(monkeypatch):
-    monkeypatch.setenv("PYTHONPATH", "src")
+def _minimal_workspace() -> dict:
+    return {
+        "meta": {"name": "myapp-workspace"},
+        "spec": {
+            "providers": ["azure-main"],
+            "provisioners": [
+                {
+                    "name": "terraform-main",
+                    "tool": "terraform",
+                    "source": {"remote": "infra-repo", "source_path": "terraform/main"},
+                }
+            ],
+        },
+    }
 
 
-WORKSPACE_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "workspaces")
-
-# List of YAML files to test (extensible)
-WORKSPACE_VALID_FILES = [
-    os.path.join(WORKSPACE_FOLDER, "workspace-standard.yaml"),
-    os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "kamatera-swarm", "stack", "kamatera-ws-platform.yaml"
-    ),
-]
-
-# List of invalid YAML files to test (extensible)
-WORKSPACE_INVALID_FILES = [os.path.join(WORKSPACE_FOLDER, "workspace-invalid.yaml")]
+def test_workspace_minimal_is_valid():
+    """A minimal workspace document (only required fields) validates successfully."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.meta.name == "myapp-workspace"
+    assert model.spec.providers[0].slot == "azure-main"
+    assert model.spec.providers[0].provider == "azure-main"
+    assert model.spec.provisioners[0].tool == "terraform"
+    assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
+    assert model.kind.value == "workspace"
 
 
-@pytest.mark.parametrize("yaml_path", WORKSPACE_VALID_FILES)
-def test_workspace_yaml_valid(yaml_path):
-    """Test that a workspace YAML file is a valid WorkspaceModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    model = WorkspaceModel.model_validate(data)
-    assert model is not None
-
-
-@pytest.mark.parametrize("yaml_path", WORKSPACE_INVALID_FILES)
-def test_workspace_yaml_invalid(yaml_path):
-    """Test that a workspace YAML file is NOT a valid WorkspaceModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def test_workspace_requires_at_least_one_provider():
+    """spec.providers must be non-empty."""
+    data = _minimal_workspace()
+    data["spec"]["providers"] = []
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
-    model = None
-    assert model is None
 
 
-class TestRemovedReferencesField:
-    """ADR-0078: the inert cross-resource 'references' field was removed."""
-
-    def test_references_is_not_a_field(self):
-        assert "references" not in WorkspaceResourceModel.model_fields
-
-    def test_legacy_references_key_is_now_rejected(self):
-        """The deprecation shim served its cycle in v1.10.0 and has been removed.
-
-        A user who upgraded through 1.10.0 was warned; `extra="forbid"` now rejects
-        the key outright, which is the point of a deprecation period ending.
-        """
-        with pytest.raises(ValidationError):
-            WorkspaceResourceModel.model_validate(
-                {"name": "app_tier", "file": "config/app.yaml", "references": {"db": "storage.conn"}}
-            )
-
-    def test_unknown_keys_still_rejected(self):
-        with pytest.raises(ValidationError):
-            WorkspaceResourceModel.model_validate({"name": "app_tier", "file": "config/app.yaml", "bogus": 1})
+def test_workspace_requires_at_least_one_provisioner():
+    """spec.provisioners must be non-empty."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"] = []
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
 
 
-class TestSourceModelSingleRepo:
-    def test_source_path_only_is_valid(self):
-        """Phase 1: source_path without repository must pass SourceModel validation."""
-        model = SourceModel(source_path="terraform")
-        assert model.source_path == "terraform"
-        assert model.repository is None
-
-    def test_repository_plus_source_path_is_valid(self):
-        """Phase 1: explicit repository + source_path must still pass."""
-        model = SourceModel(repository="my_repo", source_path="terraform")
-        assert str(model.repository) == "my_repo"
-        assert model.source_path == "terraform"
-
-    def test_neither_git_nor_chart_raises(self):
-        """Phase 1: completely empty SourceModel must fail validation."""
-        with pytest.raises(ValidationError):
-            SourceModel()
-
-    def test_repository_without_source_path_raises(self):
-        """Phase 1: repository alone (no source_path) must fail — source_path is required."""
-        with pytest.raises(ValidationError):
-            SourceModel(repository="my_repo")
+def test_workspace_topology_is_optional():
+    """spec.topology may be omitted entirely (unlike v1) — Topology is optional grouping."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.topology is None
 
 
-class TestProvisionerReferencesModel:
-    """ADR-0078 Gap 1: WorkspaceIacModel.references opts a provisioner (e.g. script,
-    which has no component document of its own) into scoped injection."""
-
-    def test_all_fields_optional(self):
-        model = ProvisionerReferencesModel.model_validate({})
-        assert model.variables is None
-        assert model.secrets is None
-        assert model.features is None
-
-    def test_fields_validate_independently(self):
-        model = ProvisionerReferencesModel.model_validate(
-            {"variables": ["a", "b"], "secrets": ["c"], "features": ["d"]}
-        )
-        assert model.variables == ["a", "b"]
-        assert model.secrets == ["c"]
-        assert model.features == ["d"]
-
-    def test_workspace_iac_model_references_round_trips(self):
-        model = WorkspaceIacModel(
-            name="bootstrap",
-            provisioner=ProvisionerType.SCRIPT,
-            source=SourceModel(repository="haven", source_path="scripts"),
-            references=ProvisionerReferencesModel(variables=["service_connection_id"]),
-        )
-        assert model.references is not None
-        assert model.references.variables == ["service_connection_id"]
-
-    def test_workspace_iac_model_references_defaults_to_none(self):
-        model = WorkspaceIacModel(
-            name="infra",
-            provisioner=ProvisionerType.TERRAFORM,
-            source=SourceModel(repository="haven", source_path="terraform"),
-        )
-        assert model.references is None
+def test_workspace_output_store_fields_are_optional():
+    """Both output_store/output_store_integration default to None (feature
+    disabled — today's in-memory-only cross-step output behavior)."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.output_store is None
+    assert model.spec.output_store_integration is None
 
 
-class TestWorkspaceIacModelProvisionerFieldValidation:
-    """Tests for WorkspaceIacModel.validate_provisioner_fields() (ADR-0071) — previously
-    had zero direct test coverage. Covers the pre-existing source/properties checks and
-    the new backend/output restrictions added alongside ADR-0071's finding that neither
-    was validator-restricted to terraform the way properties already is to ansible."""
+def test_workspace_accepts_output_store_type():
+    data = _minimal_workspace()
+    data["spec"]["output_store"] = "azure-appconfig"
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.output_store == "azure-appconfig"
 
-    def _source(self) -> SourceModel:
-        return SourceModel(repository="my_repo", source_path="terraform")
 
-    def test_source_required_for_non_sync_provisioner(self):
-        with pytest.raises(ValidationError, match="'source' is required"):
-            WorkspaceIacModel(name="infra", provisioner=ProvisionerType.TERRAFORM, source=None)
+def test_workspace_accepts_output_store_integration_name():
+    data = _minimal_workspace()
+    data["spec"]["output_store_integration"] = "shared-appconfig"
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.output_store_integration == "shared-appconfig"
 
-    def test_source_not_required_for_sync_provisioner(self):
-        model = WorkspaceIacModel(name="sync", provisioner=ProvisionerType.ARGOCD, source=None)
-        assert model.source is None
 
-    def test_properties_allowed_on_ansible(self):
-        model = WorkspaceIacModel(
-            name="config",
-            provisioner=ProvisionerType.ANSIBLE,
-            source=self._source(),
-            properties={"playbook": "site.yml"},
-        )
-        assert model.properties is not None
+def test_workspace_output_store_max_age_defaults_to_none():
+    """No staleness enforcement unless a workspace opts in explicitly."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.output_store_max_age is None
 
-    def test_properties_rejected_on_terraform(self):
-        with pytest.raises(ValidationError, match="'properties' is only supported for ansible"):
-            WorkspaceIacModel(
-                name="infra",
-                provisioner=ProvisionerType.TERRAFORM,
-                source=self._source(),
-                properties={"playbook": "site.yml"},
-            )
 
-    def test_backend_allowed_on_terraform(self):
-        model = WorkspaceIacModel(
-            name="infra",
-            provisioner=ProvisionerType.TERRAFORM,
-            source=self._source(),
-            backend=WorkspaceIacBackendModel(type="local", configuration={}),
-        )
-        assert model.backend is not None
+def test_workspace_accepts_output_store_max_age_in_seconds():
+    data = _minimal_workspace()
+    data["spec"]["output_store_max_age"] = 3600
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.output_store_max_age == 3600
 
-    def test_backend_rejected_on_bicep(self):
-        with pytest.raises(ValidationError, match="'backend' is only supported for terraform"):
-            WorkspaceIacModel(
-                name="infra",
-                provisioner=ProvisionerType.BICEP,
-                source=self._source(),
-                backend=WorkspaceIacBackendModel(type="local", configuration={}),
-            )
 
-    def test_backend_rejected_on_ansible(self):
-        with pytest.raises(ValidationError, match="'backend' is only supported for terraform"):
-            WorkspaceIacModel(
-                name="config",
-                provisioner=ProvisionerType.ANSIBLE,
-                source=self._source(),
-                backend=WorkspaceIacBackendModel(type="local", configuration={}),
-            )
+def test_workspace_rejects_non_positive_output_store_max_age():
+    data = _minimal_workspace()
+    data["spec"]["output_store_max_age"] = 0
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
 
-    def test_output_allowed_on_terraform(self):
-        model = WorkspaceIacModel(
-            name="infra",
-            provisioner=ProvisionerType.TERRAFORM,
-            source=self._source(),
-            output=OutputProfileModel(),
-        )
-        assert model.output is not None
 
-    def test_output_rejected_on_compose(self):
-        with pytest.raises(ValidationError, match="'output' is only supported for terraform"):
-            WorkspaceIacModel(
-                name="app",
-                provisioner=ProvisionerType.COMPOSE,
-                source=self._source(),
-                output=OutputProfileModel(),
-            )
+def test_workspace_accepts_inline_topology():
+    """spec.topology accepts an inline topology block (ADR-0028, reverted from
+    a standalone-document name reference, ADR-0011)."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-cluster-class"}]
+    data["spec"]["topology"] = [
+        {"name": "aks-platform", "type": "kubernetes", "components": [{"resource": "aks_cluster"}]}
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.topology[0].name == "aks-platform"
+    assert model.spec.topology[0].components[0].resource == "aks_cluster"
 
-    def test_output_rejected_on_helm(self):
-        with pytest.raises(ValidationError, match="'output' is only supported for terraform"):
-            WorkspaceIacModel(
-                name="app",
-                provisioner=ProvisionerType.HELM,
-                source=self._source(),
-                output=OutputProfileModel(),
-            )
 
-    def test_integration_allowed_on_terraform(self):
-        model = WorkspaceIacModel(
-            name="infra",
-            provisioner=ProvisionerType.TERRAFORM,
-            source=self._source(),
-            integration="terraform_current",
-        )
-        assert model.integration == "terraform_current"
+def test_workspace_rejects_duplicate_provider_names():
+    """Duplicate provider names are rejected."""
+    data = _minimal_workspace()
+    data["spec"]["providers"].append(data["spec"]["providers"][0])
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
 
-    def test_integration_unset_by_default(self):
-        model = WorkspaceIacModel(
-            name="infra",
-            provisioner=ProvisionerType.TERRAFORM,
-            source=self._source(),
-        )
-        assert model.integration is None
 
-    def test_integration_allowed_on_ansible(self):
-        """ADR-0080: ansible is provisioner-scoped (has _iac_model), wired into
-        IntegrationService.resolve_for_provisioner() same as terraform."""
-        model = WorkspaceIacModel(
-            name="config",
-            provisioner=ProvisionerType.ANSIBLE,
-            source=self._source(),
-            integration="config_mgmt",
-        )
-        assert model.integration == "config_mgmt"
+def test_workspace_provider_slot_object_form():
+    """A slot may name a different default document than itself."""
+    data = _minimal_workspace()
+    data["spec"]["providers"] = [{"slot": "azure", "provider": "azure-westeurope"}]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.providers[0].slot == "azure"
+    assert model.spec.providers[0].provider == "azure-westeurope"
 
-    def test_integration_allowed_on_bicep(self):
-        """ADR-0080: bicep is provisioner-scoped (has _iac_model), wired into
-        IntegrationService.resolve_for_provisioner() (matching AzureCLIIntegration)."""
-        model = WorkspaceIacModel(
-            name="infra",
-            provisioner=ProvisionerType.BICEP,
-            source=self._source(),
-            integration="azure_main",
-        )
-        assert model.integration == "azure_main"
 
-    def test_integration_rejected_on_helm(self):
-        """ADR-0080: helm IS wired into an integration lookup (resolve_by_class), but it isn't
-        provisioner-scoped (no _iac_model — a stage can deploy many charts), so there's no
-        addressable provisioner entry for an explicit 'integration:' override to target."""
-        with pytest.raises(ValidationError, match="'integration' is not supported for provisioner type"):
-            WorkspaceIacModel(
-                name="app",
-                provisioner=ProvisionerType.HELM,
-                source=self._source(),
-                integration="helm_registry",
-            )
+def test_workspace_provider_slots_mix_bare_and_object_forms():
+    data = _minimal_workspace()
+    data["spec"]["providers"] = ["azure-shared", {"slot": "azure", "provider": "azure-westeurope"}]
+    model = WorkspaceModel.model_validate(data)
+    assert [(p.slot, p.provider) for p in model.spec.providers] == [
+        ("azure-shared", "azure-shared"),
+        ("azure", "azure-westeurope"),
+    ]
 
-    def test_integration_rejected_on_compose(self):
-        """ADR-0080: same reasoning as helm above — compose isn't provisioner-scoped either."""
-        with pytest.raises(ValidationError, match="'integration' is not supported for provisioner type"):
-            WorkspaceIacModel(
-                name="app",
-                provisioner=ProvisionerType.COMPOSE,
-                source=self._source(),
-                integration="docker_main",
-            )
 
-    def test_integration_rejected_on_script(self):
-        with pytest.raises(ValidationError, match="'integration' is not supported for provisioner type"):
-            WorkspaceIacModel(
-                name="app",
-                provisioner=ProvisionerType.SCRIPT,
-                source=self._source(),
-                integration="something",
-            )
+def test_workspace_rejects_duplicate_provider_slots_across_forms():
+    """Uniqueness is on the slot, whichever form declares it."""
+    data = _minimal_workspace()
+    data["spec"]["providers"] = ["azure", {"slot": "azure", "provider": "azure-westeurope"}]
+    with pytest.raises(ValidationError, match="provider slots"):
+        WorkspaceModel.model_validate(data)
 
-    def test_integration_rejected_on_argocd(self):
-        with pytest.raises(ValidationError, match="'integration' is not supported for provisioner type"):
-            WorkspaceIacModel(
-                name="app",
-                provisioner=ProvisionerType.ARGOCD,
-                integration="something",
-            )
+
+def test_workspace_allows_two_slots_on_the_same_document():
+    data = _minimal_workspace()
+    data["spec"]["providers"] = [
+        {"slot": "primary", "provider": "azure-main"},
+        {"slot": "secondary", "provider": "azure-main"},
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert len(model.spec.providers) == 2
+
+
+def test_workspace_provider_json_schema_accepts_bare_string():
+    """Exported editor schema must not flag the shorthand every existing workspace uses."""
+    schema = WorkspaceModel.model_json_schema()
+    document = WorkspaceModel.model_validate(_minimal_workspace()).model_dump(mode="json", exclude_none=True)
+    document["spec"]["providers"] = ["azure-main", {"slot": "azure", "provider": "azure-westeurope"}]
+    jsonschema.validate(document, schema)
+
+
+def test_workspace_rejects_duplicate_provisioner_names():
+    """Duplicate provisioner names are rejected."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"].append(dict(data["spec"]["provisioners"][0]))
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# WorkspaceResourceModel
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_resource_requires_resource_or_managed_by():
+    """A resource must name either a Resource document or managed_by."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "web-vm"}]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_resource_rejects_resource_and_managed_by_together():
+    """A resource cannot have both a resource reference and managed_by."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "managed_by": "provisioner"}]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_resource_accepts_managed_by():
+    """A resource with managed_by and no file is accepted."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "web-vm", "managed_by": "provisioner"}]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.resources[0].managed_by == "provisioner"
+
+
+def test_workspace_resource_coerces_single_depends_on_string():
+    """depends_on accepts a single string as shorthand for a one-element list."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [
+        {"name": "db", "resource": "db-class"},
+        {"name": "web-vm", "resource": "web-vm-class", "depends_on": "db"},
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.resources[1].depends_on == ["db"]
+
+
+def test_workspace_resource_firewall_reference_must_exist():
+    """A resource's firewall reference must exist in spec.firewalls."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "firewalls": ["web-fw"]}]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_resource_firewall_reference_valid():
+    """A resource's firewall reference resolving to a real firewall is accepted."""
+    data = _minimal_workspace()
+    data["spec"]["firewalls"] = ["web-fw"]
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "firewalls": ["web-fw"]}]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.resources[0].firewalls == ["web-fw"]
+
+
+def test_workspace_resource_dns_reference_must_exist():
+    """A resource's dns_zones reference must exist in spec.dns_zones (mirrors firewalls)."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "dns_zones": ["web-zone"]}]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_resource_dns_reference_valid():
+    """A resource's dns_zones reference resolving to a real DNS document is accepted."""
+    data = _minimal_workspace()
+    data["spec"]["dns_zones"] = ["web-zone"]
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "dns_zones": ["web-zone"]}]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.resources[0].dns_zones == ["web-zone"]
+
+
+def test_workspace_resource_subnet_network_must_exist():
+    """A resource's subnet.network reference must exist in spec.networks."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [
+        {
+            "name": "web-vm",
+            "resource": "web-vm-class",
+            "subnet": {"network": "vnet-main", "subnet": "web-subnet"},
+        }
+    ]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_resource_subnet_network_valid():
+    """A resource's subnet.network resolving to a real workspace network is accepted."""
+    data = _minimal_workspace()
+    data["spec"]["networks"] = ["vnet-main"]
+    data["spec"]["resources"] = [
+        {
+            "name": "web-vm",
+            "resource": "web-vm-class",
+            "subnet": {"network": "vnet-main", "subnet": "web-subnet"},
+        }
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.resources[0].subnet.network == "vnet-main"
+    assert model.spec.resources[0].subnet.subnet == "web-subnet"
+
+
+# ---------------------------------------------------------------------------
+# Execution recipe cross-references
+# ---------------------------------------------------------------------------
+
+
+def _workspace_with_execution(**step_overrides) -> dict:
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
+    step = {"name": "provision-infra", "provisioner": "terraform-main", "resources": ["aks_cluster"]}
+    step.update(step_overrides)
+    data["spec"]["execution"] = [step]
+    return data
+
+
+def test_workspace_execution_step_accepted_with_valid_references():
+    """An execution step referencing a real provisioner and target is accepted."""
+    model = WorkspaceModel.model_validate(_workspace_with_execution())
+    assert model.spec.execution[0].name == "provision-infra"
+
+
+def test_workspace_execution_step_rejects_unknown_provisioner():
+    """An execution step referencing an undefined provisioner is rejected."""
+    data = _workspace_with_execution(provisioner="nonexistent")
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_execution_step_rejects_unknown_target():
+    """An execution step targeting an undefined resource is rejected."""
+    data = _workspace_with_execution(resources=["nonexistent"])
+    with pytest.raises(ValidationError, match="references undefined resource 'nonexistent'"):
+        WorkspaceModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# Assets pool + per-step selection (docs/design/asset-management.md Phase 2)
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_assets_pool_defaults_to_none():
+    """spec.assets is optional, same as namespaces/firewalls/dns_zones/networks."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.assets is None
+
+
+def test_workspace_rejects_duplicate_asset_names():
+    """Duplicate names within spec.assets are rejected."""
+    data = _minimal_workspace()
+    data["spec"]["assets"] = ["openapi", "openapi"]
+    with pytest.raises(ValidationError, match="asset slots"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_asset_bare_string_is_a_slot_named_after_its_document():
+    data = _minimal_workspace()
+    data["spec"]["assets"] = ["openapi"]
+    model = WorkspaceModel.model_validate(data)
+    assert [(a.slot, a.asset) for a in model.spec.assets] == [("openapi", "openapi")]
+
+
+def test_workspace_asset_slots_mix_bare_and_object_forms():
+    data = _minimal_workspace()
+    data["spec"]["assets"] = ["openapi", {"slot": "api", "asset": "api-default"}]
+    model = WorkspaceModel.model_validate(data)
+    assert [(a.slot, a.asset) for a in model.spec.assets] == [("openapi", "openapi"), ("api", "api-default")]
+
+
+def test_workspace_rejects_duplicate_asset_slots_across_forms():
+    """Uniqueness is on the slot, whichever form declares it."""
+    data = _minimal_workspace()
+    data["spec"]["assets"] = ["api", {"slot": "api", "asset": "api-default"}]
+    with pytest.raises(ValidationError, match="asset slots"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_allows_two_asset_slots_on_the_same_document():
+    data = _minimal_workspace()
+    data["spec"]["assets"] = [{"slot": "a", "asset": "shared"}, {"slot": "b", "asset": "shared"}]
+    assert len(WorkspaceModel.model_validate(data).spec.assets) == 2
+
+
+def test_workspace_step_selects_an_asset_by_slot_not_by_document_name():
+    data = _workspace_with_execution(assets=["api"])
+    data["spec"]["assets"] = [{"slot": "api", "asset": "api-default"}]
+    assert WorkspaceModel.model_validate(data).spec.execution[0].assets == ["api"]
+
+    data = _workspace_with_execution(assets=["api-default"])
+    data["spec"]["assets"] = [{"slot": "api", "asset": "api-default"}]
+    with pytest.raises(ValidationError, match="references undefined asset 'api-default'"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_asset_json_schema_accepts_bare_string():
+    """Exported editor schema must not flag the shorthand every existing workspace uses."""
+    schema = WorkspaceModel.model_json_schema()
+    document = WorkspaceModel.model_validate(_minimal_workspace()).model_dump(mode="json", exclude_none=True)
+    document["spec"]["assets"] = ["openapi", {"slot": "api", "asset": "api-default"}]
+    jsonschema.validate(document, schema)
+
+
+def test_workspace_execution_step_accepts_valid_asset_reference():
+    """A step naming an asset declared in spec.assets is accepted."""
+    data = _workspace_with_execution(assets=["openapi"])
+    data["spec"]["assets"] = ["openapi"]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.execution[0].assets == ["openapi"]
+
+
+def test_workspace_execution_step_rejects_unknown_asset():
+    """A step naming an asset outside spec.assets is rejected (same pattern as
+    an unknown target)."""
+    data = _workspace_with_execution(assets=["openapi"])
+    # spec.assets deliberately left undeclared — "openapi" is not in the pool.
+    with pytest.raises(ValidationError, match="references undefined asset 'openapi'"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_execution_step_rejects_unknown_target_regression():
+    """Regression: the existing resource-reference check is unaffected by the new,
+    independent asset_names check."""
+    data = _workspace_with_execution(resources=["nonexistent"], assets=["openapi"])
+    data["spec"]["assets"] = ["openapi"]
+    with pytest.raises(ValidationError, match="references undefined resource 'nonexistent'"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_rejects_legacy_provisioning_key():
+    """The recipe key is 'execution'; the old 'provisioning' name is not accepted."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
+    data["spec"]["provisioning"] = [
+        {"name": "provision-infra", "provisioner": "terraform-main", "resources": ["aks_cluster"]}
+    ]
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_execution_step_can_target_a_namespace():
+    """An execution step may target a namespace, not just a resource."""
+    data = _minimal_workspace()
+    data["spec"]["namespaces"] = ["myapp"]
+    data["spec"]["execution"] = [{"name": "deploy-app", "provisioner": "terraform-main", "namespaces": ["myapp"]}]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.execution[0].namespaces == ["myapp"]
+
+
+def test_workspace_rejects_ambiguous_execution_order():
+    """Two execution steps sharing a target with no depends_on ordering are rejected."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"].append(
+        {
+            "name": "ansible-init",
+            "tool": "ansible",
+            "source": {"remote": "infra-repo", "source_path": "ansible/init"},
+        }
+    )
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
+    data["spec"]["execution"] = [
+        {"name": "a", "provisioner": "terraform-main", "resources": ["aks_cluster"]},
+        {"name": "b", "provisioner": "ansible-init", "resources": ["aks_cluster"]},
+    ]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_accepts_ordered_execution_steps():
+    """Two execution steps sharing a target with an explicit depends_on are accepted."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"].append(
+        {
+            "name": "ansible-init",
+            "tool": "ansible",
+            "source": {"remote": "infra-repo", "source_path": "ansible/init"},
+        }
+    )
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
+    data["spec"]["execution"] = [
+        {"name": "a", "provisioner": "terraform-main", "resources": ["aks_cluster"]},
+        {"name": "b", "provisioner": "ansible-init", "resources": ["aks_cluster"], "depends_on": ["a"]},
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.execution[1].depends_on == ["a"]
+
+
+def test_workspace_rejects_unknown_fields():
+    """Extra/unknown fields are rejected (extra='forbid')."""
+    data = _minimal_workspace()
+    data["spec"]["unknown_field"] = "oops"
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# Provisioner depends_on (ADR-0029) — materialising a source with no
+# execution step; cross-document (sibling-provisioner) validation.
+# ---------------------------------------------------------------------------
+
+
+def _provisioner(name: str, **overrides) -> dict:
+    data = {"name": name, "tool": "terraform", "source": {"remote": "infra-repo", "source_path": f"terraform/{name}"}}
+    data.update(overrides)
+    return data
+
+
+def test_workspace_accepts_provisioner_depends_on_with_real_siblings():
+    """A provisioner's depends_on resolving to real sibling provisioners is accepted."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"] = [
+        _provisioner("spoke_infra", depends_on=["iac_components", "iac_primitives"]),
+        _provisioner("iac_components"),
+        _provisioner("iac_primitives"),
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.provisioners[0].depends_on == ["iac_components", "iac_primitives"]
+
+
+def test_workspace_accepts_provisioner_with_no_execution_step_but_a_depends_on_consumer():
+    """The actual point of ADR-0029: iac_components/iac_primitives need no
+    execution step at all — they're reachable only via spoke_infra's own
+    depends_on, never as a deployable step, so --scope/--stage filtering has
+    nothing to accidentally include or exclude them from."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"] = [
+        _provisioner("spoke_infra", depends_on=["iac_components", "iac_primitives"]),
+        _provisioner("iac_components"),
+        _provisioner("iac_primitives"),
+    ]
+    data["spec"]["resources"] = [{"name": "spoke_network", "resource": "network-class"}]
+    data["spec"]["execution"] = [
+        {"name": "spoke_infra_step", "provisioner": "spoke_infra", "resources": ["spoke_network"]}
+    ]
+    model = WorkspaceModel.model_validate(data)
+    step_provisioners = {step.provisioner for step in model.spec.execution}
+    assert step_provisioners == {"spoke_infra"}  # iac_components/iac_primitives are not, and need not be, steps
+
+
+def test_workspace_rejects_unknown_provisioner_depends_on():
+    """A provisioner's depends_on referencing an undeclared provisioner is rejected."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"][0]["depends_on"] = ["nonexistent"]
+    with pytest.raises(ValidationError, match="not a declared provisioner"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_rejects_provisioner_depends_on_cycle():
+    """A cycle in provisioner depends_on (independent of any execution step) is rejected."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"] = [
+        _provisioner("a", depends_on=["b"]),
+        _provisioner("b", depends_on=["a"]),
+    ]
+    with pytest.raises(ValidationError, match="Circular dependency in provisioner depends_on"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_accepts_transitive_provisioner_depends_on_chain():
+    """A depends on B depends on C — a transitive chain with no cycle is accepted."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"] = [
+        _provisioner("a", depends_on=["b"]),
+        _provisioner("b", depends_on=["c"]),
+        _provisioner("c"),
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.provisioners[1].depends_on == ["c"]
+
+
+# ---------------------------------------------------------------------------
+# TopologySpecModel (inline on WorkspaceSpecModel.topology, ADR-0028)
+# ---------------------------------------------------------------------------
+
+
+def _minimal_topology() -> dict:
+    return {
+        "name": "aks-platform",
+        "type": "kubernetes",
+        "components": [{"resource": "aks_cluster"}, {"resource": "blobstore"}, {"resource": "keyvault"}],
+    }
+
+
+def test_topology_minimal_is_valid():
+    """A minimal inline topology block (only required fields) validates successfully."""
+    model = TopologySpecModel.model_validate(_minimal_topology())
+    assert model.name == "aks-platform"
+    assert model.type == "kubernetes"
+    assert len(model.components) == 3
+
+
+def test_topology_accepts_namespaces_and_volumes():
+    """A topology may declare namespaces and volumes alongside components."""
+    data = _minimal_topology()
+    data["namespaces"] = [{"namespace": "myapp"}]
+    data["volumes"] = [{"name": "cache", "size": "10Gi"}]
+    model = TopologySpecModel.model_validate(data)
+    assert model.namespaces[0].namespace == "myapp"
+    assert model.volumes[0].name == "cache"
+
+
+def test_topology_rejects_duplicate_component_resources():
+    """Duplicate resource references within a topology are rejected."""
+    data = _minimal_topology()
+    data["components"].append({"resource": "aks_cluster"})
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_component_accepts_attached_module():
+    """A resource may have a module attached directly (e.g. Function App code)."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [{"name": "deployinfo", "module": "deployinfo"}]
+    model = TopologySpecModel.model_validate(data)
+    assert model.components[0].modules[0].name == "deployinfo"
+    assert model.components[0].modules[0].slot_type == "main"
+
+
+def test_topology_component_rejects_duplicate_module_names():
+    """Duplicate module names attached to the same resource are rejected."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "deployinfo", "module": "mod-a"},
+        {"name": "deployinfo", "module": "mod-b"},
+    ]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_component_requires_one_main_slot_among_multiple_enabled_modules():
+    """Multiple enabled modules on one resource with no 'main' slot are rejected."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "a", "module": "mod-a", "slot_type": "canary"},
+        {"name": "b", "module": "mod-b", "slot_type": "canary"},
+    ]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_component_rejects_multiple_main_slots():
+    """Multiple enabled modules both marked 'main' on the same resource are rejected."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "a", "module": "mod-a", "slot_type": "main"},
+        {"name": "b", "module": "mod-b", "slot_type": "main"},
+    ]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_component_allows_multiple_modules_when_one_is_main():
+    """Multiple enabled modules are fine as long as exactly one is 'main'."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "a", "module": "mod-a", "slot_type": "main"},
+        {"name": "b", "module": "mod-b", "slot_type": "canary"},
+    ]
+    model = TopologySpecModel.model_validate(data)
+    assert len(model.components[0].modules) == 2
+
+
+def test_topology_component_ignores_disabled_modules_for_main_slot_rule():
+    """A disabled module doesn't count toward the 'must have exactly one main' rule."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "a", "module": "mod-a", "slot_type": "canary", "enabled": False},
+        {"name": "b", "module": "mod-b", "slot_type": "main"},
+    ]
+    model = TopologySpecModel.model_validate(data)
+    assert model.components[0].modules[0].enabled is False
+
+
+def test_topology_component_module_rejects_path_like_name():
+    """A module reference names a document, not a path — '../' shapes fail PlatformName."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [{"name": "a", "module": "../../etc/passwd"}]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_duplicate_namespace_refs():
+    """Duplicate namespace references within a topology are rejected."""
+    data = _minimal_topology()
+    data["namespaces"] = [{"namespace": "myapp"}, {"namespace": "myapp"}]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_duplicate_volume_names():
+    """Duplicate volume names within a topology are rejected."""
+    data = _minimal_topology()
+    data["volumes"] = [{"name": "cache"}, {"name": "cache"}]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_empty_components():
+    """An empty components list is rejected (min_length=1)."""
+    data = _minimal_topology()
+    data["components"] = []
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_invalid_component_resource_syntax():
+    """A resource reference that isn't a valid PlatformName (e.g. uppercase) is rejected.
+
+    This only catches syntactically malformed names — existence-checking
+    against the workspace's own `spec.resources` is a `WorkspaceSpecModel`
+    cross-field validator now that topology is inline (see
+    `test_workspace_rejects_topology_component_undefined_resource` below,
+    ADR-0028).
+    """
+    data = _minimal_topology()
+    data["components"][0]["resource"] = "AksCluster"
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_invalid_namespace_ref_syntax():
+    """A namespace reference that isn't a valid PlatformName is rejected."""
+    data = _minimal_topology()
+    data["namespaces"] = [{"namespace": "My App"}]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_provider_field():
+    """provider is rejected — Topology is pure grouping, tool binding is a separate concern (ADR-0011)."""
+    data = _minimal_topology()
+    data["provider"] = "azure"
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_provisioner_field():
+    """provisioner is rejected — Topology is pure grouping, tool binding is a separate concern (ADR-0011)."""
+    data = _minimal_topology()
+    data["provisioner"] = "terraform-main"
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_unknown_fields():
+    """Extra/unknown fields are rejected (extra='forbid')."""
+    data = _minimal_topology()
+    data["unknown_field"] = "oops"
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# WorkspaceSpecModel <-> inline topology cross-references (ADR-0028's Phase 1
+# model validators, replacing WorkspaceService.validate_topology_references())
+# ---------------------------------------------------------------------------
+
+
+def _workspace_with_topology(**topology_overrides) -> dict:
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [
+        {"name": "aks_cluster", "resource": "aks-cluster-class"},
+        {"name": "blobstore", "resource": "storage-account"},
+    ]
+    topology = _minimal_topology()
+    topology["components"] = [{"resource": "aks_cluster"}, {"resource": "blobstore"}]
+    topology.update(topology_overrides)
+    data["spec"]["topology"] = [topology]
+    return data
+
+
+def test_workspace_rejects_topology_component_undefined_resource():
+    """A topology component referencing a resource not in spec.resources is rejected
+    (Phase 1, same-document — possible only because topology is inline, ADR-0028)."""
+    data = _workspace_with_topology()
+    data["spec"]["topology"][0]["components"].append({"resource": "ghost-vm"})
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_rejects_topology_namespace_undefined():
+    """A topology namespace reference not in spec.namespaces is rejected (Phase 1, ADR-0028)."""
+    data = _workspace_with_topology()
+    data["spec"]["topology"][0]["namespaces"] = [{"namespace": "ghost-ns"}]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_accepts_topology_namespace_reference():
+    """A topology namespace reference that does exist in spec.namespaces is accepted."""
+    data = _workspace_with_topology()
+    data["spec"]["namespaces"] = ["ghost-ns"]
+    data["spec"]["topology"][0]["namespaces"] = [{"namespace": "ghost-ns"}]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.topology[0].namespaces[0].namespace == "ghost-ns"
+
+
+def test_workspace_rejects_duplicate_topology_names():
+    """Duplicate topology names within a workspace are rejected."""
+    data = _workspace_with_topology()
+    data["spec"]["topology"].append(dict(data["spec"]["topology"][0]))
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# spec.cve_policy (docs/archive/cve-scanner-integration.md)
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_cve_policy_is_optional():
+    """spec.cve_policy may be omitted entirely — the common case."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.cve_policy is None
+
+
+def test_workspace_accepts_cve_policy_with_defaults():
+    """A minimal cve_policy (only the required max_severity) fills in its own defaults."""
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "HIGH"}
+    model = WorkspaceModel.model_validate(data)
+    policy = model.spec.cve_policy
+    assert policy.max_severity == "HIGH"
+    assert policy.max_count == 0
+    assert policy.severity_threshold is None
+    assert policy.enforcement == "deny"
+    assert policy.on_missing_data == "block"
+
+
+def test_workspace_accepts_fully_specified_cve_policy():
+    """Every cve_policy field can be set explicitly."""
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {
+        "max_severity": "CRITICAL",
+        "max_count": 3,
+        "severity_threshold": "LOW",
+        "enforcement": "warn",
+        "on_missing_data": "skip",
+    }
+    model = WorkspaceModel.model_validate(data)
+    policy = model.spec.cve_policy
+    assert policy.max_count == 3
+    assert policy.severity_threshold == "LOW"
+    assert policy.enforcement == "warn"
+    assert policy.on_missing_data == "skip"
+
+
+def test_workspace_cve_policy_rejects_invalid_max_severity():
+    """max_severity only accepts CRITICAL/HIGH/MEDIUM/LOW — not UNKNOWN (gating on 'unknown
+    severity' findings is meaningless)."""
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "UNKNOWN"}
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_cve_policy_rejects_negative_max_count():
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "HIGH", "max_count": -1}
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_cve_policy_rejects_unknown_fields():
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "HIGH", "unknown_field": "oops"}
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# spec.release_gate_policy / spec.image_gate_policy (docs/design/security-gates.md D3)
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_security_gate_policies_are_optional():
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.release_gate_policy is None
+    assert model.spec.image_gate_policy is None
+
+
+def test_workspace_accepts_both_security_gate_policies():
+    data = _minimal_workspace()
+    data["spec"]["release_gate_policy"] = {"integration": "aikido-ci", "repository": "org/infra"}
+    data["spec"]["image_gate_policy"] = {"integration": "aikido-api", "max_severity": "CRITICAL"}
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.release_gate_policy.integration == "aikido-ci"
+    assert model.spec.image_gate_policy.max_severity == "CRITICAL"
+
+
+def test_workspace_security_gate_policy_rejects_vendor_options():
+    """Vendor knobs belong on the Integration document (design D4), never on the policy."""
+    data = _minimal_workspace()
+    data["spec"]["release_gate_policy"] = {"integration": "aikido-ci", "repository": "org/infra", "sla_mode": True}
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_cve_policy_rejects_a_threshold_more_restrictive_than_max_severity():
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "LOW", "severity_threshold": "HIGH"}
+    with pytest.raises(ValidationError, match="more restrictive"):
+        WorkspaceModel.model_validate(data)

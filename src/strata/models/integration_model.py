@@ -1,189 +1,408 @@
 #!/usr/bin/env python3
 """Pydantic models for external integration configuration.
 
-Integrations define external tools and services the platform uses to
-extend its capabilities (e.g. git, terraform, bitwarden, vault).
+Unlike v1, `Integration` is a **standalone kind** here — v1 embedded
+`IntegrationModel` as a bare sub-model list directly on
+`ConfigurationSpecModel.integrations`, with no `PlatformKind`/apiVersion of
+its own (confirmed: v1's `PlatformKind` enum has no `"integration"` entry).
+Promoted to a full kind here for the same reason Topology was promoted in
+ADR-0011 — independently authorable/reusable, consistent with every other
+kind Configuration/Workspace can reference by name+file, rather than a list
+only reachable by editing Configuration directly.
+
+Built per ADR-0021 (the integration layer): `type`, `capabilities` (core,
+closed, plus open `x-`-prefixed extensions — D9), `description`, `required`,
+`enabled`, `authentication` (direct reuse of `AuthenticationModel`),
+`transport` (open string — D1; enforced against the resolved class's own
+`TRANSPORTS` at runtime, not schema time, since a bare document has no way
+to know what class `type` will resolve to), `version` (a constraint string —
+D4, replaces `ProvisionerModel.version`, which this ADR removes), `command`
+(overrides the class's default executable — needed for a generic wrapper
+whose binary isn't known until the document supplies it), `endpoints` (an
+address, needed once `transport` is networked), and `lifecycle` (hook
+scripts, restricted to `.py` — D11, see `IntegrationLifecyclePhaseModel`).
+
+Still deferred, each a real v1 field with no v2 consumer yet: `properties`
+(freeform passthrough — cheap but inert until something reads it) and the
+`customsecret`/`customvariable`/... custom-type allowlist (modeling it would
+mean inventing an arbitrary "supported custom wrapper types" set with
+nothing concrete driving it — ADR-0021 D10 solves the same problem
+differently, via installable entry points instead of a type vocabulary).
+
+**`validation` (v1's CLI availability/min_version/max_version block) is not
+merely deferred — it is rejected.** ADR-0021 D4 found the same fact modelled
+in three places in v1 (`IntegrationModel.validation`,
+`WorkspaceIacModel.version`, and the `WorkspaceIacModel.integration` binding
+itself) with nothing arbitrating between them, and settled ownership on this
+model's own `version` field. Reintroducing `validation` would recreate
+exactly that conflict.
+
+v1's runtime `Protocol` capability classes (`IVariableStore`, `ISecretStore`,
+etc.) and `IntegrationFactory` registry are pure execution-layer code, not
+schema — out of scope for this models-only rewrite entirely, not merely
+deferred. ADR-0021 replaces both with `strata.integrations`.
 """
 
-from typing import Any, Dict, Optional, Set
+from enum import StrEnum
+from typing import Any, ClassVar
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, RootModel, field_validator
 
 from strata.models.auth_models import AuthenticationModel
-from strata.models.common_models import CommonLifecycleModel, PlatformBaseModel
+from strata.models.common_models import (
+    PlatformBaseModel,
+    PlatformKind,
+    PlatformName,
+    PlatformVersion,
+    validate_kind_matches,
+    validate_script_file,
+)
+from strata.utils.version_constraints import parse_version_constraint
+
+#: Extension prefix marking a capability strata does not dispatch on — an
+#: integration's own concern, carried and never rejected as unknown. See
+#: `validate_capabilities` and ADR-0021 D9.
+_EXTENSION_CAPABILITY_PREFIX = "x-"
+
+#: Extensions an Integration lifecycle hook may use. Narrower than the
+#: general `SCRIPT_EXTENSIONS` (`.sh`/`.bash`/`.py`/`.ps1`/`.js`/`.mjs`/`.go`):
+#: nothing anywhere dispatches a script to an interpreter yet — v1's only
+#: executor hardcodes `python <script>` — so a `.ps1` hook would pass schema
+#: validation and then fail at run time. Widen this once an
+#: extension -> interpreter map exists (ADR-0021 D11).
+_INTEGRATION_SCRIPT_EXTENSIONS = frozenset({".py"})
 
 
-class IntegrationValidationSpecModel(PlatformBaseModel):
-    """Validation specification for integration availability checking."""
+class Capability(StrEnum):
+    """The core, closed capability vocabulary (ADR-0021 D9) — a `StrEnum`
+    (project floor is Python 3.13, `pyproject.toml`'s own `requires-python`)
+    so every dispatch site (`if Capability.CONTAINER in
+    integration.CAPABILITIES`) checks a named member instead of a bare
+    string literal a typo could slip past unnoticed, while still comparing
+    equal to (and hashing the same as) the plain strings a YAML document or
+    an `x-`-prefixed plugin capability uses —
+    `IntegrationSpecModel.capabilities`/`Integration.CAPABILITIES` both stay
+    `set[str]`/`frozenset[str]` deliberately (see their own docstrings): an
+    `x-`-prefixed extension capability (ADR-0021 D9,
+    `test_integrations_registry.py`'s real `"x-ticketing"` plugin) has no
+    enum member and never will, by design — only this closed core tier gets
+    one.
 
-    command: str = Field(
-        ...,
-        description="Command to check integration availability (e.g., 'git --version')",
-    )
-    min_version: Optional[str] = Field(None, description="Minimum required version (e.g., '2.30.0')")
-    max_version: Optional[str] = Field(None, description="Maximum supported version (e.g., '2.40.0')")
-
-
-class IntegrationEndpointsSpecModel(PlatformBaseModel):
-    """Endpoint specification for remote integrations."""
-
-    address: str = Field(
-        ...,
-        description="Service endpoint URL (supports env var substitution: ${VAR_NAME:default})",
-    )
-
-
-class IntegrationModel(PlatformBaseModel):
+    v1's real set has ~16 entries (azure/aws/gcloud CLI, identity, siem
+    audit, cve scanner, cost estimator, diagram render, etc.) — deliberately
+    not ported wholesale; extend only when a concrete v2 feature needs the
+    capability (ADR-0003's "minimal slice" policy).
     """
-    Model for external integration configuration.
 
-    Integrations extend platform capabilities by connecting to external
-    tools (CLI), services (APIs), or cloud resources (SDKs).
+    VARIABLES = "variables"  #: VariableStoreModel-backed stores
+    SECRETS = "secrets"  #: SecretStoreModel-backed stores
+    FEATURES = "features"  #: FeatureStoreModel-backed stores
+    INFRASTRUCTURE = "infrastructure"  #: Provisioner.tool-backed IaC/CM tools
+    # Distinct from INFRASTRUCTURE even though both map to the same
+    # InfraIntegration ABC (ADR-0021 D1/D6) — the label says *what kind* of
+    # thing is provisioned (v1's IContainerTool vs IInfrastructureTool
+    # split), which matters for a human reading the document even where the
+    # runtime contract doesn't distinguish them.
+    CONTAINER = "container"  #: Compose/Helm-backed container tools
+    # Named `sources`, not v1's `repository` (which maps to its
+    # `IRepositoryTool` Protocol): a v2 remote covers git, OCI registries and
+    # Helm chart indexes alike, so the narrower "repository" would be as
+    # misleading here as `CONTAINER`/`GITOPS` were on `RemoteType`.
+    SOURCES = "sources"  #: SolutionRemoteModel-backed artifact sources (git/oci/helm auth)
+    # Promoted from the `x-audit` extension tier (docs/design/audit-sink-dispatch.md
+    # change 1): an audit sink is dispatched on by `audit_run._dispatch_sink()`,
+    # and `capabilities.py`'s own contract is that an `x-`-prefixed capability
+    # "never reaches here — there is nothing to dispatch it to".
+    AUDIT = "audit"  #: AuditSinkModel-backed audit event destinations
+    # The "cve scanner" entry the class docstring above already anticipated
+    # — now a real, concrete, shipped v2 feature
+    # (docs/archive/cve-scanner-integration.md), not speculative. Covers any
+    # external security scanner (`CveScannerIntegration`'s Trivy/Grype
+    # today; a future Checkov integration, docs/archive/
+    # checkov-integration.md, would declare it too) — see
+    # `ScannerIntegration`'s own docstring (`capabilities.py`) for exactly
+    # how thin that shared contract deliberately is.
+    SCANNER = "scanner"  #: External security scanner tools (CVE/SCA, static IaC, ...)
+    # docs/work/key-value-store-integration.md — get/put of a single small
+    # value by key with optional compare-and-swap, backend-agnostic (not
+    # one feature's name, e.g. not 'output_store' — this capability already
+    # has more than one real consumer planned, see that doc's own
+    # Terminology section).
+    KEY_VALUE = "key_value"  #: Small, keyed records needing optional compare-and-swap writes
+    # docs/design/security-gates.md D1. Not `scanner`: that ABC is about a locally installed
+    # tool (`ensure_available()`); this is a remote service's verdict, nothing runs locally.
+    RELEASE_GATE = "release_gate"  #: Pass/fail verdict for a repository at a commit
+    # Same design, same "not scanner" reasoning: a lookup of a remote service's open issues.
+    IMAGE_FINDINGS = "image_findings"  #: Open security issues for a container image
 
-    Examples:
-        - name: git
-          type: git
-          capabilities: [repository]
-          required: true
 
-        - name: bitwarden
-          type: bitwarden
-          capabilities: [secrets]
-          required: false
-          endpoints:
-            address: https://bitwarden.com/api
+#: Capability vocabulary v2 currently has real consumers for. Closed/curated
+#: on purpose, unlike `type` below — a capability is an abstract contract the
+#: codebase itself dispatches on, not an arbitrary tool name (same reasoning
+#: as `STANDARD_SLOT_TYPES` being closed while `Module.spec.type` stays
+#: open). An `x-`-prefixed capability bypasses this vocabulary entirely
+#: (ADR-0021 D9) — this set is the *core* tier only. Derived from `Capability`
+#: itself (`frozenset(Capability)`) so the two can never drift apart.
+VALID_INTEGRATION_CAPABILITIES: frozenset[Capability] = frozenset(Capability)
+
+
+class IntegrationSpecModel(PlatformBaseModel):
+    """What an external tool or service is and what it can do: its `type`, its `capabilities`, how to reach
+    it and how to authenticate. Other documents bind to it by name, for example a provisioner, a remote,
+    an audit sink, a security gate or a value store.
+
+    Design notes:
+    Integration specification: what external tool/service this is and what it can do.
+
+    `type` is an open `PlatformName` string (matches `ProvisionerModel.tool`'s
+    pattern, ADR-0011) — describes a *specific* tool/service (terraform,
+    vault, azure-keyvault, bitwarden, git, or a custom plugin name), an
+    unbounded set. `capabilities` is mostly closed (see
+    `VALID_INTEGRATION_CAPABILITIES`) but accepts an open `x-`-prefixed
+    extension tier (ADR-0021 D9).
     """
 
-    name: str = Field(..., description="Unique integration name (used for registry lookup)")
-    type: str = Field(
-        ...,
-        description="Integration type (maps to integration class: git, terraform, bitwarden, vault, etc.)",
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Every capability must be one of "
+        + ", ".join(sorted(c.value for c in VALID_INTEGRATION_CAPABILITIES))
+        + ", or start with `x-`.",
+        "`version` must be a constraint strata can parse, such as `~> 1.9` or `>= 1.17`.",
     )
-    capabilities: Set[str] = Field(
+
+    type: PlatformName = Field(
+        description="Type of the tool or service. Built-in types and the capabilities they "
+        "provide:\n\n"
+        "- `terraform`: infrastructure. Runs Terraform.\n"
+        "- `compose`: container. Docker Compose.\n"
+        "- `helm`: container. Helm charts.\n"
+        "- `script`: infrastructure. Runs a script.\n"
+        "- `argocd`: infrastructure. Pushes rendered configuration to the git "
+        "repository Argo CD watches.\n"
+        "- `flux`: infrastructure. Pushes rendered configuration to the git repository "
+        "Flux watches.\n"
+        "- `git`: sources. Git credentials for remotes.\n"
+        "- `infisical`: variables, secrets. Infisical.\n"
+        "- `azure-keyvault`: secrets, key_value. Azure Key Vault.\n"
+        "- `azure-appconfig`: variables, features, key_value. Azure App Configuration.\n"
+        "- `azure-blob`: key_value. Records in Azure Blob Storage.\n"
+        "- `webhook`: audit. Posts audit events as JSON.\n"
+        "- `otel`: audit. Sends audit events as OpenTelemetry logs.\n"
+        "- `sentinel`: audit. Sends audit events to Microsoft Sentinel.\n"
+        "- `aikido`: release_gate, image_findings. The Aikido security platform.\n"
+        "- `trivy`: scanner. CVE scanner.\n"
+        "- `grype`: scanner. CVE scanner.\n"
+        "- `checkov`: scanner. Static IaC security scanner.\n\n"
+        "Any other type needs a plugin registered under the `strata.integrations` "
+        "entry point group.\n\n"
+        "Design notes: Integration type (e.g. terraform, vault, azure-keyvault, "
+        "bitwarden, git, or a custom name)"
+    )
+    capabilities: set[str] = Field(
         default_factory=set,
-        description=(
-            "Set of capabilities this integration provides. "
-            "Valid values: api, audit, container, cost, cve_scanner, diagram_render, features, "
-            "infrastructure, keyvalue, repository, secrets, sync, variables. "
-            "Use 'infrastructure' for IaC and configuration-management tools (Terraform, Ansible, OpenTofu). "
-            "Use 'container' for container runtimes and container-native deployment tools (Docker, Helm, Podman). "
-            "Use 'cost' for infrastructure cost estimation tools (Infracost). "
-            "Use 'cve_scanner' for CVE vulnerability scanners (Trivy, Grype). "
-            "Use 'audit' for SIEM/audit sink integrations. "
-            "Use 'diagram_render' for diagram-to-image rendering tools (Kroki)."
-        ),
+        description="What this integration provides. Core capabilities: `variables`, `secrets` and "
+        "`features` (value stores), `key_value` (small keyed records with optional "
+        "compare-and-swap), `infrastructure` (IaC and configuration tools such as "
+        "terraform), `container` (Compose and Helm), `sources` (credentials for git, "
+        "OCI and Helm remotes), `audit` (audit event destinations), `scanner` "
+        "(security scanners), `release_gate` (pass/fail verdict for a repository at a "
+        "commit) and `image_findings` (open issues for container images). A name "
+        "starting with `x-` is a custom capability that strata does not dispatch on.\n\n"
+        "Design notes: Capabilities this integration provides — core (see "
+        "VALID_INTEGRATION_CAPABILITIES) or an 'x-'-prefixed extension strata does not "
+        "dispatch on",
     )
-    description: Optional[str] = Field(None, description="Human-readable description of the integration")
-    required: bool = Field(
-        default=False,
-        description="Whether this integration is required for platform operation",
-    )
+    description: str | None = Field(None, description="Human-readable description of the integration")
+    required: bool = Field(False, description="Whether this integration is required for platform operation")
     enabled: bool = Field(
-        default=True,
-        description="Whether this integration is enabled (for optional integrations)",
+        True,
+        description="Whether this integration is enabled. A disabled integration is not "
+        "auto-bound.\n\n"
+        "Design notes: Whether this integration is enabled",
     )
-    validation: Optional[IntegrationValidationSpecModel] = Field(
-        None,
-        description="Validation specification for checking integration availability",
-    )
-    authentication: Optional[AuthenticationModel] = Field(
+    authentication: AuthenticationModel | None = Field(
         None, description="Authentication configuration for accessing the integration"
     )
-    endpoints: Optional[IntegrationEndpointsSpecModel] = Field(
-        None, description="Endpoint specification for remote integrations"
-    )
-    lifecycle: Optional[CommonLifecycleModel] = Field(
-        None, description="Lifecycle hook specification for API integrations"
-    )
-    properties: Optional[Dict[str, Any]] = Field(
+    transport: str | None = Field(
         None,
-        description=(
-            "Integration-specific properties (e.g. data_collection_rule_id for Sentinel, "
-            "index_pattern for ELK, resource_attributes for OTel). "
-            "Keys and values are free-form and interpreted by the integration class."
-        ),
+        description="How the integration is reached, for example `cli`, `http` or `sdk`. Omit to "
+        "let the integration type choose. It is checked against the transports the "
+        "type supports when the integration runs, not when the document is loaded.\n\n"
+        "Design notes: How this integration is reached (e.g. 'cli', 'http', 'sdk'). An "
+        "open string, checked against the resolved integration class's own supported "
+        "transports at runtime — not here, since a bare document has no way to know "
+        "what class 'type' will resolve to. Omitted lets the class choose (ADR-0021 "
+        "D1).",
     )
+    version: str | None = Field(
+        None,
+        description="Version constraint of the tool or service this integration expects, for "
+        "example `~> 1.9` or `>= 1.17`. An assertion, not an installation: strata "
+        "never installs software, so a mismatch fails the preflight check. A "
+        "provisioner names an integration rather than stating its own version.\n\n"
+        "Design notes: Tool/service version this integration expects (e.g. '~> 1.9', "
+        "'>= 1.17'). An assertion, not an install instruction: strata never installs "
+        "software, so this is checked at preflight and fails on a mismatch. The single "
+        "owner of this fact (ADR-0021 D4) — a Provisioner names an Integration rather "
+        "than asserting its own version.",
+    )
+    command: str | None = Field(
+        None,
+        description="Overrides the integration class's default executable name. Needed for a generic/custom "
+        "wrapper whose binary isn't known until the document supplies it; a built-in like terraform does not "
+        "need this.",
+    )
+    endpoints: "IntegrationEndpointsModel | None" = Field(
+        None,
+        description="Service endpoint, as `address` (a URL). Required by azure-keyvault, "
+        "azure-appconfig, azure-blob, webhook, otel and sentinel; meaningless for "
+        "CLI-only integrations such as terraform.\n\n"
+        "Design notes: Service endpoint. Required once 'transport' is networked; "
+        "meaningless for a CLI-only integration.",
+    )
+    lifecycle: "IntegrationLifecycleModel | None" = Field(
+        None,
+        description="Hook scripts per phase name, Python only. Accepted and validated, but strata "
+        "does not run lifecycle hooks yet.\n\n"
+        "Design notes: Hook scripts keyed by phase name (e.g. 'connect_before', "
+        "'teardown'). Restricted to Python scripts — see "
+        "IntegrationLifecyclePhaseModel.",
+    )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Settings read by the integration's own type, not validated by strata. Known "
+        "keys: `webhook`: `headers`, `token_env_var`, `auth_scheme`; `otel`: "
+        "`resource_attributes`; `sentinel`: `data_collection_rule_id`, `stream_name`; "
+        "`infisical`: `project_id`, `environment`; `aikido`: `region`, `release_gate`, "
+        "`images`. Add an `attributeconfig` with `target.kind: integration` and "
+        "`target.block: configuration` to validate them.\n\n"
+        "Design notes: Raw passthrough configuration for this integration (e.g. "
+        "SDK-specific setup not otherwise modeled). Not validated by strata, passed "
+        "through as-is.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form values for your own scripts. Strata does not deliver them anywhere "
+        "yet.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Integration "
+        "is not part of the deploy-value pipeline at all — this is not delivered as an "
+        "env var or forwarded anywhere yet.",
+    )
+    # No default_tags/custom_tags: an Integration describes a connection to an external
+    # system, not a deployed/tagged cloud resource of its own.
 
     @field_validator("capabilities")
     @classmethod
-    def validate_capabilities(cls, v: Set[str]) -> Set[str]:
-        """
-        Validate that all capability names are valid.
-
-        Imports inside validator to avoid circular dependency.
-        """
-        # Lazy import to avoid circular dependency
-        from strata.models.capabilities import VALID_CAPABILITY_NAMES
-
-        invalid = v - VALID_CAPABILITY_NAMES
+    def validate_capabilities(cls, v: set[str]) -> set[str]:
+        """Validate every core capability name; accept any 'x'-prefixed extension unchecked."""
+        core = {name for name in v if not name.startswith(_EXTENSION_CAPABILITY_PREFIX)}
+        invalid = core - VALID_INTEGRATION_CAPABILITIES
         if invalid:
             raise ValueError(
-                f"Invalid capability names: {invalid}. Valid capabilities are: {sorted(VALID_CAPABILITY_NAMES)}"
+                f"Invalid capability names: {sorted(invalid)}. "
+                f"Valid capabilities: {sorted(c.value for c in VALID_INTEGRATION_CAPABILITIES)}, "
+                "or an 'x-'-prefixed extension."
             )
         return v
 
-    @field_validator("type")
+    @field_validator("version")
     @classmethod
-    def validate_type(cls, v: str) -> str:
-        """
-        Validate that integration type is either a custom type or a built-in type.
-
-        Custom types (customsecret, customvariable, etc.) are validated immediately.
-        Built-in types are assumed valid - actual registration checked at runtime.
-
-        Imports inside validator to avoid circular dependency.
-        """
-        # Lazy import to avoid circular dependency
-        from strata.models.capabilities import (
-            CUSTOM_INTEGRATION_TYPES,
-            is_custom_integration_type,
-        )
-
-        # Check if it's a custom type
-        if is_custom_integration_type(v):
-            return v
-
-        # For built-in types, we just check the format (lowercase, alphanumeric + underscore)
-        # Actual registration is checked when IntegrationService tries to create the instance
-        if not v.islower() or not v.replace("_", "").replace("-", "").isalnum():
-            raise ValueError(
-                f"Invalid integration type format: '{v}'. "
-                f"Type must be lowercase alphanumeric (with underscores). "
-                f"Valid custom types: {sorted(CUSTOM_INTEGRATION_TYPES)}"
-            )
-
+    def validate_version(cls, v: str | None) -> str | None:
+        """Reject a constraint the readiness check could not parse (docs/work/integration-readiness.md D3)."""
+        if v is not None:
+            parse_version_constraint(v)
         return v
 
-    @model_validator(mode="after")
-    def validate_custom_type_capabilities(self):
-        """
-        Validate that custom integration types have appropriate capabilities.
 
-        For example, customsecret should have 'secrets' in capabilities.
-        """
-        # Lazy import to avoid circular dependency
-        from strata.models.capabilities import (
-            CUSTOM_TYPE_CAPABILITY_MAP,
-            is_custom_integration_type,
-        )
+class IntegrationEndpointsModel(PlatformBaseModel):
+    """A service endpoint address for a networked integration transport."""
 
-        # Only validate custom types
-        if not is_custom_integration_type(self.type):
-            return self
+    address: str = Field(min_length=1, description="Service endpoint URL (e.g. https://consul.example.com:8500)")
 
-        # Get expected capability for this custom type
-        expected_capability = CUSTOM_TYPE_CAPABILITY_MAP.get(self.type)
 
-        # customapi can have any capability, skip validation
-        if expected_capability is None:
-            return self
+class IntegrationLifecyclePhaseModel(PlatformBaseModel):
+    """One lifecycle phase: an optional description and the Python scripts it runs, as paths relative to
+    the solution root. Only Python scripts are accepted for an integration.
 
-        # Check if expected capability is present
-        if expected_capability not in self.capabilities:
-            raise ValueError(
-                f"Custom integration type '{self.type}' must include "
-                f"capability '{expected_capability}' in capabilities. "
-                f"Current capabilities: {self.capabilities}"
-            )
+    Design notes:
+    One lifecycle phase: a description plus the Python scripts it runs.
 
-        return self
+    Deliberately its own small model rather than reusing `ScriptsModel`/
+    `CommonLifecycleModel` (used by deployment/module/namespace/provider/
+    resource/workspace): those accept every `SCRIPT_EXTENSIONS` entry, but
+    nothing dispatches a script to an interpreter yet except Python (see
+    module docstring), so an Integration hook is restricted at the field
+    level instead. Also drops `ScriptPathModel`'s `scope`/`priority`/`target`
+    — those describe running once per resource/deployment instance, which
+    has no meaning for a hook attached to an external-system connection.
+    """
+
+    description: str | None = Field(None, description="Optional description for documentation purposes")
+    scripts: list[str] | None = Field(
+        None, description="Python script paths for this phase, relative to the solution root"
+    )
+
+    @field_validator("scripts")
+    @classmethod
+    def validate_scripts(cls, v: list[str] | None) -> list[str] | None:
+        """Validate each path (see `validate_script_file`), restricted to `.py`."""
+        for item in v or []:
+            validate_script_file(item, allowed=_INTEGRATION_SCRIPT_EXTENSIONS)
+        return v
+
+
+class IntegrationLifecycleModel(RootModel[dict[str, IntegrationLifecyclePhaseModel]]):
+    """Lifecycle hooks of an integration, keyed by phase name, for example `connect_before` or `teardown`.
+    Accepted and validated, but strata does not run lifecycle hooks yet.
+
+    Design notes:
+    Lifecycle phases for an Integration, keyed by phase name.
+
+    Open map (any phase name allowed), same shape as `CommonLifecycleModel`
+    used elsewhere — only the phase's own script model differs (see
+    `IntegrationLifecyclePhaseModel`).
+    """
+
+    root: dict[str, IntegrationLifecyclePhaseModel] = Field(default_factory=dict)
+
+
+class IntegrationMetaModel(PlatformBaseModel):
+    """Integration metadata (name, annotations, labels, tags)."""
+
+    name: PlatformName = Field(description="Unique integration name")
+    annotations: dict[str, Any] | None = Field(
+        None, description="Optional annotations (key-value pairs for documentation)"
+    )
+    labels: dict[str, Any] | None = Field(
+        None, description="Optional labels (key-value pairs for classification/filtering)"
+    )
+    tags: list[Any] | None = Field(None, description="Optional list of tags")
+
+
+class IntegrationModel(PlatformBaseModel):
+    """A connection to an external tool or service: Terraform, a secrets store, a git host, a scanner, an
+    audit destination. Create one per tool or service and reference it by name where it is needed.
+
+    Design notes:
+    Root model for an integration configuration file.
+    """
+
+    apiVersion: PlatformVersion = Field(
+        default=PlatformVersion.v2,
+        frozen=True,
+        description="API version for integration configuration",
+    )
+    kind: PlatformKind = Field(
+        default=PlatformKind.INTEGRATION,
+        frozen=True,
+        description="Platform kind (always 'integration')",
+    )
+    meta: IntegrationMetaModel = Field(description="Integration metadata (name, annotations, labels, tags)")
+    spec: IntegrationSpecModel = Field(
+        description="Integration specification (type, capabilities, authentication, ...)"
+    )
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.INTEGRATION)

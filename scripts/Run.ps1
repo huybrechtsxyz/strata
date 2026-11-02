@@ -6,9 +6,9 @@
 .PARAMETER Clean
     Removes all __pycache__ directories before running.
 .EXAMPLE
-    .\Run.ps1 version
-    .\Run.ps1 deploy platform.yaml --log-level debug
-    .\Run.ps1 -Clean deploy platform.yaml
+    .\scripts\Run.ps1 version
+    .\scripts\Run.ps1 validate
+    .\scripts\Run.ps1 -Clean validate
 .NOTES
 #>
 
@@ -27,7 +27,7 @@ Set-Location $projectRoot
 
 if ($Clean) {
     Write-Host "[*] Cleaning __pycache__ directories..." -ForegroundColor Yellow
-    Get-ChildItem -Path $projectRoot -Recurse -Directory -Filter "__pycache__" |
+    Get-ChildItem -Path $projectRoot -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue |
     ForEach-Object {
         Write-Host "    Removing: $($_.FullName)" -ForegroundColor Gray
         Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue

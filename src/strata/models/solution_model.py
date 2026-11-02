@@ -1,160 +1,412 @@
 #!/usr/bin/env python3
-"""Pydantic models for solution file validation.
+"""The solution manifest — `strata.yaml` at the solution root.
 
-Solution models intentionally extend ``BaseModel`` instead of ``PlatformBaseModel``.
-The solution file (``.strata/solution.json``) is a CLI-managed state file — not a
-user-authored YAML document — so ``extra="forbid"`` would break forward compatibility
-when older CLIs encounter fields added by newer versions.
+This is the **bootstrap** document: the marker that says "a strata solution
+starts here", plus the minimum needed to find everything else. It is found by
+walking up from the current directory (like `go.mod`, `Cargo.toml`,
+`package.json`), not by discovery — discovery rules live downstream of it.
+
+v1 had this concept but only as machine-local runtime state:
+`.strata/solution.json` is a real `kind: solution` document with `meta.name`
+and `spec.repositories[]`, but v1's `.gitignore` lists
+`**/.strata/solution.json`, so it never survives a clone. Everything durable
+therefore had to be duplicated into a committed `config/remotes.yaml`, and
+in production the two drifted — the same remote is `type: bundled` in
+`remotes.yaml` and `type: gitops` in `solution.json`, with the location
+recorded in both (`deploy_path` vs `path`). `remotes.yaml`'s own comment
+concedes it: "These values must match the `path` recorded for the same
+repository in .strata/solution.json, which is what `strata repo add` wrote."
+Committing the manifest collapses those two registries into one.
+
+No lock file counterpart is planned. `reference` is pinned here and the
+checkout location is a CLI convention, so a lock would mostly re-record
+declared facts — which is exactly what produced v1's drift.
+
+**Scope discipline.** This file answers "what/where is this solution",
+never "what rules govern it". Platform policy — provider/topology
+registries, path conventions, stores — stays in `Configuration`. Same split
+as `go.mod` (module identity and deps) versus build configuration. Resist
+adding policy fields here.
+
+**Known constraint (ADR-0015).** Remotes supply *artifacts* (Terraform
+modules, charts, copied files), not *documents*. Strata documents are
+discovered from the solution repo only, so a Module/ProviderConfig document
+cannot currently live in a shared repository the way v1's
+`ModuleReferenceModel.file: "@repo/..."` allowed. The painful case is
+org-wide governance registries owned by a platform team. The planned
+mitigation is remote-qualified identity (`providers: ["@platform/azure"]`,
+Bazel's `@repo//pkg:target` precedent) — deferred until something needs it,
+but the loader's index must be keyed `(remote, kind, name)` with
+`remote=None` for local so it stays an additive change.
 """
 
-from typing import Any, Dict, List, Optional
+from enum import Enum
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
-from strata.models.common_models import PlatformName
+from strata.models.common_models import (
+    PlatformBaseModel,
+    PlatformKind,
+    PlatformName,
+    PlatformVersion,
+    validate_kind_matches,
+)
+from strata.utils.names import check_unique_names
+from strata.utils.path_safety import (
+    validate_no_path_traversal,
+    validate_no_url_credentials,
+    validate_not_option_like,
+    validate_relative_path,
+)
 
 
-class SolutionSpecProfileConfigModel(BaseModel):
+class RemoteType(str, Enum):
+    """What kind of source a remote is: `git` (a git repository), `oci` (an OCI registry serving images,
+    Helm charts or other artifacts), `helm` (a Helm chart repository index) or `local` (a directory
+    inside the solution). Who fetches the remote is a separate setting, `fetch`.
+
+    Design notes:
+    Remote artifact-source type — *what kind of thing* a remote is.
+
+    Ports v1's `RemoteType` with clearer names: `GITOPS` -> `GIT` (GitOps is
+    a delivery methodology, not a source type — the thing being declared is
+    simply a git repository), `CONTAINER` -> `OCI` (an OCI registry serves
+    container images, Helm charts and arbitrary artifacts alike, so the
+    narrower "container" was misleading), and `BUNDLED` -> `LOCAL`.
+
+    Deliberately says nothing about *who fetches* the remote — see
+    `RemoteFetch`, which v1 conflated into this same field.
     """
-    Model for configuration paths in the solution specification profiles.
+
+    GIT = "git"
+    OCI = "oci"
+    HELM = "helm"
+    LOCAL = "local"
+
+
+class RemoteFetch(str, Enum):
+    """Who materialises a remote on disk: `strata` (default) fetches it, `external` means CI or the
+    developer already checked it out and strata only reads it. Use `external` with the real `type` (for
+    example `git` plus the pinned `reference`) when a pipeline clones the repository itself.
+
+    Design notes:
+    Who is responsible for materialising a remote on disk.
+
+    Split out of `type` because v1 conflated the two, and real deployments
+    had to lie about the type to get the behaviour they needed. A production
+    `config/remotes.yaml` declares a git repository as `type: bundled`
+    purely so strata skips its own fetch: in CI the repo is already cloned by
+    Azure Pipelines' `resources.repositories`/`checkout`, and strata has no
+    git credentials of its own there. Its comment records the cost — pinning
+    to a `reference` and dirty-working-tree gating both silently stopped
+    applying, because "bundled" means "trust whatever is on disk".
+
+    With this split, that case is stated honestly: `type: git` (keep the URL
+    and the pinned ref) plus `fetch: external` (somebody else clones it).
     """
 
-    name: PlatformName = Field(..., description="Name of the configuration path")
-    path: str = Field(..., description="Path to the configuration file")
-    type: Optional[str] = Field(
+    STRATA = "strata"
+    EXTERNAL = "external"
+
+
+class SolutionRemoteModel(PlatformBaseModel):
+    """A named remote source of modules, charts or files, referenced elsewhere as `@<name>/<path>` (for
+    example `source: @infra/modules/network`).
+
+    A remote only says where the source is, at which ref and how to authenticate. What to take from it
+    is chosen where it is used. Declaring a source once here gives one place to rotate credentials, one
+    place to redirect to a mirror, and a single pinned ref per repository for the whole solution.
+
+    Design notes:
+    A named remote artifact source, referenced elsewhere as ``@<name>/<path>``.
+
+    Declares *identity and location only* — "where `infra` is, at which ref,
+    authenticated how". Selecting *what* to take from it belongs at the use
+    site (`SourceModel.remote`/`source_path`, `ModuleFileModel.source`),
+    which names this remote via `@<name>/...` — see `strata.utils.repo_refs`.
+
+    This split is the near-universal pattern across comparable tooling: Flux
+    (`GitRepository`/`OCIRepository` + `sourceRef`), Bazel
+    (`@repo_name//pkg:target`), Nix flake `inputs`, and Helm's own
+    ``repositories.yaml`` + ``@alias`` dependency syntax. It buys three
+    things inlined URLs cannot: one place to rotate credentials, one place to
+    redirect upstream -> internal mirror (airgap/fork), and a single ref per
+    repo per solution so two modules cannot silently pull different versions
+    of the same repository.
+
+    Remotes live here rather than in `Configuration` because of bootstrap
+    ordering: v1's own `solution.json` registers a `config` repository, i.e.
+    Configuration itself can live in a remote — so remotes must resolve
+    before Configuration can be loaded.
+
+    Two v1 fields are deliberately NOT ported:
+
+    - ``source_path`` — declaring a path on the *remote* makes it "a specific
+      thing inside a repo" rather than "a repo", so it cannot be reused for a
+      second artifact in that same repository. Selection stays at the use site.
+    - ``deploy_path`` — the local checkout location is CLI convention, not
+      declarative schema. v1 recorded it in both `remotes.yaml` and
+      `.strata/solution.json` and required humans to keep them equal; when
+      they diverged, builds failed with "has not been fetched yet" against an
+      already-fetched repo.
+
+    Also deferred — ``conventions`` (release/quality-gate tag regexes), a real
+    v1 feature consumed by its policy engine and ``strata repo status``,
+    neither of which exists in v2.
+
+    Example::
+
+        remotes:
+          - name: infra
+            type: git
+            url: https://github.com/org/infra.git
+            reference: v2.1.0
+            integration: corp-git
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`reference` is required for type `git`: pin a branch, tag or commit SHA.",
+        "`reference` is not allowed for type `helm` or `local`; pick chart versions where the "
+        "chart is used (`chart_version`).",
+        "For type `oci`, `reference` is required when the remote serves a non-chart artifact (pin "
+        "one tag or digest) and optional when it only serves charts.",
+        "Type `local`: `url` is a path relative to the solution root without `..`, and "
+        "`integration` and a non-default `fetch` are not allowed.",
+        "`url` must not embed credentials or start with `-`; put credentials in an Integration and "
+        "name it in `integration`.",
+    )
+
+    name: PlatformName = Field(
+        description="Remote name, used as the `@<name>` prefix wherever the remote is referenced "
+        "(for example `@infra/modules/network`). Required.\n\n"
+        "Design notes: Remote name, used as the '@<name>' prefix at every use site. "
+        "Required — v1 made this field Optional, and its own get_remote_map() then "
+        "silently skipped unnamed entries."
+    )
+    type: RemoteType = Field(description="What kind of source this is: git, oci, helm, or local")
+    url: str = Field(
+        min_length=1,
+        description="Remote location: a URL for git/oci/helm, or a solution-relative path for 'local'.",
+    )
+    reference: str | None = Field(
         None,
-        description="Type of the configuration (e.g., config, dotenv, data, secret)",
+        min_length=1,
+        description="The ref every artifact of this remote is taken at: a git branch, tag or "
+        "commit SHA, or an OCI tag or digest. Required for `git`. For `oci`, required "
+        "when the remote serves a real image or blob (pinned at one immutable digest) "
+        "and optional when it only serves Helm charts, where the version is chosen per "
+        "chart with `chart_version`. Not allowed for `helm` or `local`.\n\n"
+        "Design notes: Ref every artifact from this remote is taken at (git "
+        "branch/tag/commit SHA, or OCI tag/digest). Required for git remotes always. "
+        "For OCI, required only when the remote serves non-chart artifacts (a real "
+        "image/blob pinned at one immutable digest) — optional when every consumer is "
+        "a chart-based SourceModel, since a chart index legitimately serves many "
+        "versions and the real pin is SourceModel.chart_version instead. Whether an "
+        "OCI remote is chart-serving needs the loaded solution's SourceModel usages, "
+        "so that half of the rule is a Phase 2 check "
+        "(docs/design/solution-loading-and-phase2-validation.md, gap #3) — this field "
+        "is merely optional here, and schema-valid to omit even for a non-chart OCI "
+        "remote until Phase 2 sees a real consumer.",
     )
-    created: Optional[str] = Field(None, description="Creation timestamp of the configuration path")
-
-
-class SolutionSpecProfileModel(BaseModel):
-    """
-    Model for profiles in the solution specification.
-    """
-
-    name: PlatformName = Field(..., description="Name of the profile")
-    active: bool = Field(..., description="Whether the profile is active")
-    created: Optional[str] = Field(None, description="Creation timestamp of the profile")
-    configfile_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
-        None, description="List of configuration paths associated with the profile"
+    fetch: RemoteFetch = Field(
+        default=RemoteFetch.STRATA,
+        description="Who materialises this remote on disk: 'strata' (default) fetches it, 'external' means "
+        "CI or the developer already checked it out and strata must only read it. Use 'external' instead of "
+        "misdeclaring the type when a pipeline clones the repo itself.",
     )
-    envfile_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
-        None, description="List of dotenv/env-file paths associated with the profile"
-    )
-    datafile_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
-        None, description="List of data-file paths associated with the profile"
-    )
-    secretfile_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
-        None, description="List of secret-file paths associated with the profile"
-    )
-
-
-class SolutionSpecRepositoryModel(BaseModel):
-    """
-    Model for a repository entry in the solution specification.
-    """
-
-    name: PlatformName = Field(..., description="Name of the repository")
-    url: str = Field(..., description="URL of the repository")
-    path: str = Field(..., description="Local path to the repository")
-    type: str = Field(..., description="Type of the repository")
-    branch: str = Field(..., description="Branch of the repository")
-    created: Optional[str] = Field(None, description="Creation timestamp of the repository")
-
-
-class SolutionTemplateBundleEntryModel(BaseModel):
-    """A single entry in a solution template bundle."""
-
-    name: str = Field(..., description="Template source name to look up via the standard resolution chain")
-    path: str = Field(..., description="Jinja2 destination path relative to the work path")
-
-
-class SolutionTemplateModel(BaseModel):
-    """A named template defined in solution.json that expands to one or more destination paths."""
-
-    name: str = Field(..., description="Template name matched by --template")
-    bundle: List["SolutionTemplateBundleEntryModel"] = Field(
-        ..., description="One or more bundle entries describing source templates and their destination paths"
-    )
-
-
-class SolutionSpecDeploymentModel(BaseModel):
-    """
-    Model for a registered deployment file entry in the solution specification.
-
-    Deployment files are registered via ``strata sln deployment add`` so that
-    commands like ``strata promote`` can enumerate all deployments without
-    requiring an explicit ``-f`` flag on every invocation.
-    """
-
-    name: str = Field(..., description="Deployment name (from meta.name in the deployment YAML)")
-    path: str = Field(..., description="Path to the deployment YAML file (relative to work-path or absolute)")
-    created: Optional[str] = Field(None, description="Registration timestamp (ISO 8601)")
-
-
-class SolutionSpecModel(BaseModel):
-    """
-    Specification model for solution resource types.
-    """
-
-    solution_id: str = Field(..., description="Unique identifier for the solution")
-    repositories: Optional[List[SolutionSpecRepositoryModel]] = Field(
-        None, description="List of repositories associated with the solution"
-    )
-    deployments: Optional[List[SolutionSpecDeploymentModel]] = Field(
-        None, description="List of deployment files registered in this solution"
-    )
-    profiles: Optional[List[SolutionSpecProfileModel]] = Field(
-        None, description="List of profiles associated with the solution"
-    )
-    context: Optional[Dict[str, str]] = Field(
+    integration: PlatformName | None = Field(
         None,
-        description="Team-shared template substitution variables (committed to solution.json).",
+        description="Name of an Integration providing credentials for this remote (must declare the "
+        "'sources' capability). Omit for public/unauthenticated remotes and for type 'local'. Credentials "
+        "are never inline here — Integration is strata's single credential mechanism.",
     )
-    templates: Optional[List[SolutionTemplateModel]] = Field(
-        None,
-        description="Named solution templates that scaffold one or more paths from a bundle definition.",
-    )
+    description: str | None = Field(None, description="Optional description for documentation purposes")
 
-
-class SolutionMetaModel(BaseModel):
-    """
-    Metadata model for solution resource types.
-    """
-
-    name: str = Field(..., description="Name of the solution")
-    annotations: Optional[Dict[str, Any]] = Field(None, description="Annotations for the model")
-    labels: Optional[Dict[str, Any]] = Field(None, description="Key-value pairs for labeling the model")
-    tags: Optional[List[Any]] = Field(None, description="List of tags associated with the model")
-
-    @field_validator("name")
+    @field_validator("reference")
     @classmethod
-    def validate_name_non_empty(cls, v: str) -> str:
-        """Ensure name is not empty."""
-        if not v or not v.strip():
-            raise ValueError("Name cannot be empty")
-        return v.strip()
+    def validate_reference_no_traversal(cls, v: str | None) -> str | None:
+        """Reject an absolute-looking value or a '..' segment (found on
+        code review, 2026-10-02) — `reference` is used verbatim as a
+        directory-path segment by every remote-checkout function
+        (`layout.remote_checkout_path()`, `.audit_push_checkout_path()`,
+        `.gitops_push_checkout_path()`). Unlike `source_path`-style fields,
+        a git ref legitimately contains internal '/' (`feature/foo`), so
+        this uses `validate_no_path_traversal()` (rejects a leading slash/
+        drive letter and '..' only) rather than the normalizing
+        `validate_relative_path()`, which would also strip/rewrite
+        separators a real git ref needs to keep exactly as declared.
+        """
+        if v is not None:
+            validate_no_path_traversal(v)
+            validate_not_option_like(v, "reference")
+        return v
 
-
-class SolutionModel(BaseModel):
-    """
-    Model for solution resource types.
-
-    A solution groups a collection of related repositories together and provides
-    the source of truth for ``strata init <name>``, including the VS Code workspace
-    definition, shared profiles, and per-repo metadata.
-    """
-
-    apiVersion: str = Field(..., description="API version of the solution model")
-    kind: str = Field(..., description="Kind of the solution model")
-    meta: SolutionMetaModel = Field(..., description="Metadata for the solution")
-    spec: SolutionSpecModel = Field(..., description="Specification for the solution")
-
-    @field_validator("apiVersion", "kind")
+    @field_validator("url")
     @classmethod
-    def validate_non_empty(cls, v: str) -> str:
-        """Ensure apiVersion and kind are not empty."""
-        if not v or not v.strip():
-            raise ValueError("Field cannot be empty")
-        return v.strip()
+    def validate_url_not_option_like(cls, v: str) -> str:
+        """`url` is a positional argument to `git clone`; see `validate_not_option_like()`."""
+        validate_not_option_like(v, "url")
+        validate_no_url_credentials(v, "url")
+        return v
+
+    @model_validator(mode="after")
+    def validate_reference_for_type(self) -> "SolutionRemoteModel":
+        """`reference` is required for git always; OCI's requirement is mode-dependent (Phase 2, gap #3).
+
+        A git remote at a ref IS one immutable tree, so the ref is part of
+        its identity — checked here, unconditionally. An OCI remote is the
+        same *if* it serves a real image/artifact, but not if it serves a
+        Helm chart index (many versions, no single ref) — telling those
+        apart needs the loaded solution's SourceModel usages, so that half
+        is deferred to a Phase 2 check rather than guessed here. A helm
+        remote is always an index serving many (chart, version) pairs — the
+        version is a per-chart *selection* (`SourceModel.chart_version`),
+        not remote identity. A local remote is whatever is on disk.
+        """
+        if self.type is RemoteType.GIT and self.reference is None:
+            raise ValueError(
+                f"Remote '{self.name}': 'reference' is required for type 'git' (pin a branch, tag, or commit SHA)."
+            )
+        if self.type in (RemoteType.HELM, RemoteType.LOCAL) and self.reference is not None:
+            raise ValueError(
+                f"Remote '{self.name}': 'reference' is not valid for type '{self.type.value}'. "
+                "Chart versions are selected per-use via SourceModel.chart_version."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_local_remote(self) -> "SolutionRemoteModel":
+        """A 'local' remote is an on-disk solution-relative path.
+
+        Rejects absolute paths and '..' traversal (v1 applied no validation
+        at all here, so a bundled remote could point anywhere on the host),
+        rejects `integration` since on-disk files need no credentials, and
+        rejects a non-default `fetch` since there is nothing to fetch.
+        """
+        if self.type is RemoteType.LOCAL:
+            validate_relative_path(self.url)
+            if self.integration is not None:
+                raise ValueError(f"Remote '{self.name}': 'integration' is not valid for type 'local'.")
+            if self.fetch is not RemoteFetch.STRATA:
+                raise ValueError(
+                    f"Remote '{self.name}': 'fetch' is not valid for type 'local' — it is already on disk."
+                )
+        return self
+
+
+class SolutionDiscoveryModel(PlatformBaseModel):
+    """Tuning for how strata finds documents under the solution root. Only `exclude` exists: add patterns
+    for folders that hold strata-shaped YAML which must not be loaded, such as a `templates/` or
+    `examples/` folder with placeholders.
+
+    Design notes:
+    Tuning for the document discovery scan (ADR-0015).
+
+    Only `exclude` — deliberately no `include`. An include list overlaps with
+    "where the solution root is", and include/exclude precedence is a
+    well-known source of confusion (VS Code's own `files.exclude` vs
+    `search.exclude` vs `.gitignore` interaction being the obvious example).
+    One mechanism.
+
+    Patterns are **additive** to the loader's built-in ignores (`.git`,
+    `.venv`, `build`, `.strata`, tool caches, ...), never a replacement —
+    otherwise writing `exclude: ["foo"]` would silently re-enable scanning
+    `.git`. The built-ins are the floor; this raises it.
+
+    Kept in the manifest rather than a sibling `.strataignore` file: the
+    manifest is already the single bootstrap document, and a second
+    must-find-first file would undermine that. (Flux uses `.sourceignore`
+    because its source is a remote repo it does not own; a solution owns its
+    own root.)
+
+    The common real case is scaffolding — a `templates/` or `examples/`
+    directory holding strata-shaped YAML with placeholders, which would
+    otherwise fail to parse or index as bogus documents.
+    """
+
+    exclude: list[str] | None = Field(
+        None,
+        description="Glob patterns matched against each path relative to the solution root, POSIX-style "
+        "(e.g. 'templates/**', 'examples', '*.generated.yaml'). A matching directory is not descended into. "
+        "Added to the loader's built-in ignores, never replacing them. Note: these are fnmatch-style globs, "
+        "not full gitignore syntax \u2014 there is no negation ('!') and no leading-slash anchoring.",
+    )
+
+
+class SolutionSpecModel(PlatformBaseModel):
+    """Solution specification: where Configuration lives, and what this solution is composed of."""
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Remote names must be unique, because the name is how `@<name>/...` references are resolved.",
+    )
+
+    configuration: str = Field(
+        "config",
+        description="Solution-relative path to the Configuration document(s) — either a single file or a "
+        "directory whose 'kind: configuration' documents are all merged. Defaults to 'config', which is "
+        "what real solutions use. Overridden by the CLI's --config-file/--config-path.",
+    )
+    discovery: SolutionDiscoveryModel | None = Field(
+        None, description="Optional discovery tuning (extra exclude patterns)"
+    )
+    remotes: list[SolutionRemoteModel] | None = Field(
+        None,
+        description="Named remote artifact sources (git/oci/helm/local), referenced elsewhere as '@<name>/<path>'",
+    )
+    description: str | None = Field(None, description="Optional description for documentation purposes")
+
+    @field_validator("configuration")
+    @classmethod
+    def validate_configuration_path(cls, v: str) -> str:
+        """The configuration pointer must stay inside the solution."""
+        return validate_relative_path(v)
+
+    @model_validator(mode="after")
+    def validate_unique_remote_names(self) -> "SolutionSpecModel":
+        """Remote names must be unique — they are the '@<name>' resolution key."""
+        if self.remotes:
+            check_unique_names([r.name for r in self.remotes], "remote names in solution")
+        return self
+
+
+class SolutionMetaModel(PlatformBaseModel):
+    """Solution metadata (name, annotations, labels, tags)."""
+
+    name: PlatformName = Field(description="Unique solution name")
+    annotations: dict[str, Any] | None = Field(
+        None, description="Optional annotations (key-value pairs for documentation)"
+    )
+    labels: dict[str, Any] | None = Field(
+        None, description="Optional labels (key-value pairs for classification/filtering)"
+    )
+    tags: list[Any] | None = Field(None, description="Optional list of tags")
+
+
+class SolutionModel(PlatformBaseModel):
+    """The solution manifest, `strata.yaml`, at the root of every strata solution. It names the solution,
+    points to the Configuration (`spec.configuration`) and declares the remotes (git, OCI, Helm or local
+    sources) that other documents reference as `@<name>/<path>`. One per solution.
+
+    Design notes:
+    Root model for the solution manifest (`strata.yaml`).
+    """
+
+    apiVersion: PlatformVersion = Field(
+        default=PlatformVersion.v2,
+        frozen=True,
+        description="API version for the solution manifest",
+    )
+    kind: PlatformKind = Field(
+        default=PlatformKind.SOLUTION,
+        frozen=True,
+        description="Platform kind (always 'solution')",
+    )
+    meta: SolutionMetaModel = Field(description="Solution metadata (name, annotations, labels, tags)")
+    spec: SolutionSpecModel = Field(description="Solution specification (configuration pointer, remotes)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.SOLUTION)

@@ -1,71 +1,29 @@
-﻿# strata
+# strata
 
-You already have Terraform. The problem is you have eight environment folders — `dev`, `staging`, `prd`, `prd-eu`, `prd-us`, `dr`, `sandbox`, `perf` — and they are 90% identical. Every change gets applied to one folder, forgotten in three others, and you only find out when production drifts. `strata` is a YAML config layer over Terraform, Helm, and scripts that treats your environments as data, not as copy-pasted folders. One source of truth, one command to validate it, one command to deploy it.
+You already have Terraform. The problem is you have eight environment folders: `dev`, `staging`, `prd`, `prd-eu`, `prd-us`, `dr`, `sandbox`, `perf` and they are 90% identical. Every change gets applied to one folder, forgotten in three others, and you only find out when production drifts. `strata` is a YAML layer over Terraform, Helm, and Compose that treats your environments as data, not copy-pasted folders. One source of truth, one command to validate it, one command to deploy it.
 
-📖 **[Full documentation](https://huybrechtsxyz.github.io/strata)**
-
-**Support:** [GitHub Issues](https://github.com/huybrechtsxyz/strata/issues)
+**This is v2**. A ground-up, evidence-driven rebuild of strata: every feature here is justified by v1's real source or a real consumer's real CI, not by assumption. It's alpha, so schemas and the CLI surface are still moving. See [docs/design/v2-schema-overview.md](docs/design/v2-schema-overview.md) for what's actually implemented today.
 
 ---
 
-## Quick Start
+## Why a YAML layer over Terraform/Helm/Compose
 
-```bash
-pipx install xyz-strata                        # install
-strata sln init                                             # scaffold a new config workspace
-strata console                                              # interactive guided session
-strata validate --file stack/my-environment.yaml        # validate before you touch anything
-strata deploy run --file deploy/my-environment.yaml     # deploy to the target environment
-```
+- **One document model, many provisioners.** Providers, resources, networks, modules, and namespaces are declared once as plain YAML and rendered into Terraform, Helm, or Compose, you don't hand-roll the same VM, network, or module three times per environment.
+- **Environments are data, not folders.** A deployment composes a workspace with an environment's variables/secrets and a tenant's defaults, promoting to a new environment is a small new YAML document, not a copy-pasted directory tree.
+- **Validate before you touch anything.** Every document is schema-checked and cross-referenced (unresolved variables, missing modules, dangling version pins) before anything is rendered or applied.
+- **Built to be scripted.** Structured JSON output and stable exit codes, so CI pipelines and AI agents can drive it without screen-scraping.
 
-New here? See the [feature overview](docs/guides/features.md) for a practical rundown of what strata does, or the [Getting Started guide](docs/platform/getting-started.md) for the full walkthrough. Run `strata --help` to see all commands. Dev install: `uv sync`.
+## Status
 
-**No PyPI access? Using a Dev Container?** Inject strata from the published image — no Python install required:
+v2 is a rebuild, not a fork. [docs/decisions/](docs/decisions/) holds the full trail of architecture decision records (ADRs) behind it; [docs/design/](docs/design/) tracks living, current status per feature. See [.github/CHANGELOG.md](.github/CHANGELOG.md).
 
-```dockerfile
-# .devcontainer/Dockerfile
-FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
-COPY --from=ghcr.io/huybrechtsxyz/strata:latest /app/.venv /opt/strata
-ENV PATH="/opt/strata/bin:$PATH"
-```
+## Documentation
 
-See the [Getting Started guide](docs/platform/getting-started.md#install) for the full devcontainer and air-gapped registry setup.
-
----
-
-## Automation & AI Agents
-
-Set `STRATA_OUTPUT=json` once (or `strata config set output json`) and every command returns a structured JSON envelope on **stdout**:
-
-```json
-{
-  "success": true,
-  "command": "validate",
-  "execution_id": "fb063135-...",
-  "timestamp": "2026-05-18T14:31:47.267924",
-  "data": { "validation_passed": true, "errors": [] },
-  "messages": [],
-  "errors": []
-}
-```
-
-Key conventions for automation:
-
-| Concern               | Guidance                                                                                        |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| Output format         | Always use `--output json` or `STRATA_OUTPUT=json`                                              |
-| Exit codes            | `0` success · `1` system failure · `2` bad args · `3` validation failure                        |
-| Workspace             | Set `STRATA_WORK_PATH` to target a workspace without `cd`                                       |
-| Error stream          | In console mode, errors go to **stderr**; structured JSON always goes to **stdout**             |
-| Execution correlation | `execution_id` in the envelope maps directly to `strata audit list --execution-id <id>`         |
-| Env-var overrides     | Every CLI flag has an `XYZ_<OPTION>` equivalent (`STRATA_VERBOSE=true`, `STRATA_QUIET=true`, …) |
-
-Safe read-only commands that work outside an initialized workspace (no `.strata/solution.json` required): `validate`, `status`, `schema list`, `schema get`.
-
-**AI agents/Copilot users:** drop [`.github/skills/strata-onboarding.md`](.github/skills/strata-onboarding.md) into your agent's skill/instructions folder for strata-aware YAML assistance before you even have a workspace — the same content is also published at [`docs/skills/strata-onboarding.md`](docs/skills/strata-onboarding.md).
-
----
+- [config/README.md](config/README.md): a real, working example solution used to dogfood the CLI end to end
+- [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md): dev environment setup and contribution workflow
+- [.github/CHANGELOG.md](.github/CHANGELOG.md): what's changed
 
 ## License
 
-GNU Affero General Public License v3.0 — see [LICENSE](LICENSE).
+GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
+

@@ -1,0 +1,18 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: topologyconfig
+meta:
+  name: kubernetes
+spec:
+  description: "Kubernetes topology type registry"
+  additional_components: true
+  components:
+    - role: control-plane
+      description: "Cluster control plane"
+      required: true
+      min_count: 1
+      max_count: 1
+    - role: worker
+      description: "Worker node pool"
+      required: false
+      min_count: 0
+      max_count: 0

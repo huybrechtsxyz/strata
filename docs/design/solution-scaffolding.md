@@ -1,0 +1,320 @@
+# Solution Scaffolding — `strata sln init`/`strata sln update` — Design
+
+- Status: **Fully implemented (2026-09-30)** — all 3 phases done.
+  `strata sln init`/`strata sln update` are real, working CLI commands
+  (`ScaffoldController`, `scaffold_templates.py`, the two ported
+  templates + `.strata/README.md`, wired into `cli.py`), cross-linked
+  from [audit-trail.md](../work/audit-trail.md) and
+  [v2-schema-overview.md](v2-schema-overview.md).
+- Date: 2026-09-30
+- Related: [docs/work/audit-trail.md](../work/audit-trail.md) (Layer 1 — PR
+  template + extraction — is this design's motivating, first real
+  consumer), [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md)
+  (`strata.yaml` — v2's own, different bootstrap document from v1's
+  `.strata/solution.json`), [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) (ADR-0020's
+  Tier 2 classification of `init`/etc. as "local interactive bootstrap
+  only... does not block either consumer's redeploy path" — still true
+  here, this is deliberately not a CI-critical-path feature)
+
+## Problem
+
+[audit-trail.md](../work/audit-trail.md)'s real-usage scoping (2026-09-30) found
+Layer 1 (PR template + issue template scaffolding) is real and active in
+`config-repo` today — `.github/pull_request_template.md` and
+`.github/ISSUE_TEMPLATE/deployment-change-request.yml` both exist,
+matching v1's design exactly. v2 has **no scaffolding command at all**
+today — `src/strata/commands/` is 4 flat command files (`validate`/
+`values`/`build`/`deploy`), no command group, no package-shipped template
+tree, no "create/refresh the files strata itself owns in this repo"
+concept.
+
+v1's real mechanism for this (`strata sln init`/`strata sln update`,
+`SolutionController` in `e:\SourcesXYZ\strata\src\strata\controllers\
+solution_controller.py`) is a good fit to convert, per direct request —
+read directly:
+
+- **`init(name)`**: creates `.strata/`, `solution.json`, a
+  `.code-workspace` file, then deep-copies the package's own
+  `templates/solution/` directory tree into the workspace — every file
+  copied idempotently (skipped if the destination already exists).
+- **`update()`**: re-copies only files under a fixed set of **package-owned
+  prefixes** (`README.md`, `.gitignore`, `.strata/integrations/`,
+  `.strata/templates/`, `.devcontainer/`, `.github/`) — always
+  overwriting them — while explicitly leaving a **user-owned** set
+  (`.strata/cli.yaml`, `.strata/logging.yaml`, `.vscode/`, root
+  `README.md`) untouched. Everything else scaffolded that isn't in either
+  list is implicitly treated as user-owned (skipped).
+- **Token substitution**: Jinja2, but with `DebugUndefined` (lenient) —
+  a variable not in the substitution context is left visible in the
+  output as literal `{{ var }}` rather than raising, since scaffold
+  templates are rendered with only a small, fixed context
+  (`SOLUTION_NAME`, `STRATA_VERSION`). `.j2` and `.md` files are copied
+  **verbatim, never rendered** — `.j2` files are themselves raw Jinja2
+  templates meant for a *later*, end-user-driven render pass (unrelated
+  to this one); `.md` files are documentation/skill content whose own
+  example code (which may contain literal `{{ }}`) must not be touched.
+- **`dot.` path-segment convention**: every directory/file in the
+  template source tree that should land as a real dotfile/dotdir in the
+  target repo is named with a `dot.` prefix instead (`dot.github/` ->
+  `.github/`, `dot.gitignore` -> `.gitignore`) and renamed at copy time.
+  Not explicitly commented in v1's source on *why*, but the practical
+  reason is real regardless of whether it was the original motivation:
+  a template source tree containing literal `.github/`/`.vscode/`/
+  `.devcontainer/` directories would be treated as *strata's own*
+  GitHub/VS Code/devcontainer config by every tool that scans for those
+  by name (editors, CI systems, `git status` conventions) during
+  strata's own development — `dot.` prefixing sidesteps that ambiguity
+  entirely, for the cost of one rename step at copy time.
+
+## Proposed design
+
+### Scope: mechanism is general, initial content is narrow
+
+Port the **mechanism** (idempotent init, package-owned-refresh update,
+lenient Jinja2 substitution, `dot.` renaming) in full — it's real,
+non-trivial, and this is exactly why v1's version is a good conversion
+candidate. Do **not** port v1's full `templates/solution/dot.github/`
+tree (Copilot agent/skills/prompts/instructions, CI workflow) — that's a
+separate, unrelated concern (AI-agent customization + CI bootstrapping),
+not this design's motivating problem. Initial shipped content is the two
+audit-trail Layer 1 files, plus one small package-owned file so `update`
+has something real to do from day one rather than only a theoretical
+rule with nothing to exercise it:
+
+```
+src/strata/templates/solution/
+├── dot.strata/
+│   └── README.md            # package-owned — always refreshed by `update`
+└── dot.github/
+    ├── pull_request_template.md          # user-owned — write-once
+    └── ISSUE_TEMPLATE/
+        └── deployment-change-request.yml  # user-owned — write-once
+```
+
+`.strata/README.md` documents, in the target repo itself, what `.strata/`
+is for and that it's package-managed (mirrors v1's own self-documenting
+scaffold convention) — genuinely useful content, not a placeholder
+invented only to exercise the mechanism, and it gives `sln update` a
+real, first-class file to refresh immediately, not just after some
+future addition. More can be added later (CI workflow, `.vscode/`
+scaffold, etc.) without redesigning the mechanism — each addition is
+just another file under `templates/solution/`, classified by which
+top-level directory it lands in.
+
+### New CLI surface: `strata sln init`/`strata sln update`
+
+A new Click group (`strata/commands/sln_command.py`), matching v1's
+naming — first command group in v2 (every existing command is a flat
+top-level command). Per ADR-0020's own Tier 2 classification (still
+accurate: neither real consumer's CI ever calls `init`/`repo`/`profile`/
+`config`), this is deliberately **not** on the CI-critical path — a
+one-time bootstrap / occasional-refresh operation a human runs.
+
+- `strata sln init <name>`: creates `strata.yaml` (v2's real bootstrap
+  document, ADR-0015) **only if it doesn't already exist** — never
+  overwrites an existing one, even to change `meta.name` (simpler than
+  v1's own `init()`, which reloads and rewrites `meta.name` on a re-run;
+  not `.strata/solution.json` + a `.code-workspace` file, both
+  v1-specific and not part of v2's design at all) — then runs the same
+  scaffold refresh `update` does.
+- `strata sln update`: requires `strata.yaml` to already exist (error,
+  not silently running init); refreshes package-owned files
+  (`.strata/`), leaves user-owned files (`.github/`) alone if already
+  present.
+
+Resolves Open Question #3: `init` and `update` share one underlying
+scaffold operation (see "New controller" below) — the only difference
+is whether `strata.yaml` gets created first. Re-running `init` on an
+already-initialised solution is therefore always safe and always a
+no-op-or-refresh, never an error.
+
+### Package-owned vs. user-owned split — resolved by directory, not a prefix list
+
+**`.github/` is always user-owned; `.strata/` is always package-owned.**
+Resolves Open Question #1: unlike v1 (which treats all of `.github/` as
+package-owned, always overwritten), v2 flips this deliberately —
+`.github/pull_request_template.md`/`ISSUE_TEMPLATE/deployment-change-request.yml`
+are the kind of file a repo commonly tailors per-org, so `sln update`
+must never silently destroy that customization. `.strata/` (v2's own
+state/config area, same spirit as v1's `.strata/integrations/`/
+`.strata/templates/`) is the opposite — strata's own opinion should
+always win there, since nothing under it is meant to be hand-edited.
+
+This is simpler than v1's fixed prefix list (`README.md`/`.gitignore`/
+`.devcontainer/`/`.github/`/two `.strata/` subpaths, individually
+enumerated) — a two-directory rule covers today's real content and every
+foreseeable future addition without needing a new prefix added to a list
+each time: `dest_relative_path()`'s own top-level path segment
+(`.github` vs `.strata`, before renaming) decides ownership directly.
+
+### Worked example — `init`, a user customization, then `update`
+
+A new repo, `strata sln init acme-platform` run in an empty directory:
+
+```
+strata.yaml                                    # created (user-owned, ADR-0015)
+.strata/
+└── README.md                                  # created (package-owned)
+.github/
+├── pull_request_template.md                   # created (user-owned)
+└── ISSUE_TEMPLATE/
+    └── deployment-change-request.yml          # created (user-owned)
+```
+
+The team then customizes their PR template (adds an org-specific
+compliance field) — a normal, expected edit:
+
+```diff
+ # .github/pull_request_template.md
+ ## Risk level
++## SOC2 control reference
++<!-- Link the specific control this change satisfies -->
+```
+
+Months later, someone upgrades the installed `strata` package (which has
+since improved its own `.strata/README.md` content) and runs
+`strata sln update` to pick up the change. Outcome:
+
+| File                                                   | Package-owned?                                                                          | Result                                                                                                                                    |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata.yaml`                                          | No (never touched by `update` at all — only `init` ever writes it, and only if missing) | Untouched                                                                                                                                 |
+| `.strata/README.md`                                    | Yes                                                                                     | **Overwritten** with the new package content — the customization-risk this file never has, since nothing in it is meant to be hand-edited |
+| `.github/pull_request_template.md`                     | No                                                                                      | **Untouched** — the team's SOC2 field survives, exactly the case Open Question #1 exists to protect                                       |
+| `.github/ISSUE_TEMPLATE/deployment-change-request.yml` | No                                                                                      | Untouched (already existed, never customized in this example, but the rule is the same either way)                                        |
+
+This is the complete behavior matrix `update` needs to satisfy — every
+file it touches falls into exactly one of these two rows, decided purely
+by which top-level directory it's under.
+
+### New controller: `strata/controllers/scaffold_controller.py`
+
+`ScaffoldController.init(root: Path, name: str)`/`.update(root: Path)`,
+mirroring `solution_controller.py`'s existing placement/shape (a
+controller owns filesystem-level orchestration) but a clean split from
+it — v2's `SolutionController` is purely discovery/loading, a different
+responsibility than v1's monolithic one that also scaffolds. Keeping
+scaffolding as its own controller avoids growing `SolutionController`
+into a second concern.
+
+Both public methods share one private `_scaffold(root)` step (per Open
+Question #3's resolution): `init()` is `_ensure_manifest(root, name)`
+(write `strata.yaml` only if missing) followed by `_scaffold(root)`;
+`update()` is a manifest-existence check followed by the exact same
+`_scaffold(root)` call. `_scaffold()` itself walks the template tree
+once, and for each file: `.github/` (user-owned) is written only if the
+destination doesn't already exist; `.strata/` (package-owned) is always
+written.
+
+### New utility: `strata/utils/scaffold_templates.py`
+
+Deliberately **not** added to the existing `strata/utils/templater.py` —
+that file is tightly scoped to `output.template` (build-time-validate +
+deploy-time-strict-render, per its own docstring) and mixing a third,
+lenient-undefined Jinja2 environment into the same file would blur which
+environment applies where. New, narrowly-scoped file (same reasoning as
+`path_conventions.py`'s recent precedent — a fresh utils file per
+feature, pure logic, no models/integrations dependency):
+
+```python
+def render_scaffold(content: str, context: dict[str, str]) -> str:
+    """Lenient Jinja2 render — an undeclared variable stays literal
+    ('{{ var }}') rather than raising. Scaffold templates only ever
+    supply a small, fixed context (SOLUTION_NAME, STRATA_VERSION)."""
+
+def dest_relative_path(template_relative_path: str) -> str:
+    """Rename every 'dot.'-prefixed path segment to '.' (dot.github/ ->
+    .github/, dot.gitignore -> .gitignore)."""
+
+def is_package_owned(dest_relative_path: str) -> bool:
+    """True when the *renamed* destination path's top-level segment is
+    '.strata' (always refreshed by `sln update`); False for '.github'
+    (or anything else — never refreshed, `init`-only)."""
+```
+
+### Packaging: `pyproject.toml`
+
+`[tool.setuptools.package-data]` currently ships only `py.typed` — needs
+`"strata" = ["py.typed", "templates/**/*"]` so a real installed wheel
+(not just an editable/source checkout) actually contains the template
+tree. Untested today because nothing ships non-`.py` package data yet.
+
+### JSON Schema export + VS Code `yaml.schemas` wiring (added 2026-10-02)
+
+`ScaffoldController._export_schemas()` writes one JSON Schema per
+registered kind (`model_cls.model_json_schema()`, unmodified) to
+`.strata/schemas/<kind>.json`, plus a synthesized umbrella
+(`.strata/schemas/strata.json`) that dispatches to the matching per-kind
+file via an `if`/`then` chain keyed on the document's own `kind:` value —
+one `yaml.schemas` mapping covers every kind at once, instead of one
+entry per kind/directory glob. `SERVICE_BY_KIND` (`solution_controller.py`)
+is reused as the one source of truth for "every registered kind" —
+deliberately not a second, separately-maintained kind list (v1 had two
+independent lists for this exact feature that silently drifted apart).
+Called unconditionally at the end of `_scaffold()`, so both `init` and
+`update` always regenerate every schema file — same "package-owned,
+always refreshed" rule as the rest of `.strata/`, never hand-edited.
+`dot.vscode/settings.json` is shipped as real scaffold content (user-owned,
+write-once like `.github/`) pre-wired with
+`"yaml.schemas": {".strata/schemas/strata.json": ["**/*.yaml", "**/*.yml"]}`,
+so a freshly-scaffolded repo gets real editor autocomplete/inline
+validation with zero extra steps.
+
+### Agent skills: `.claude/skills/` (added 2026-10-24, ADR-0046)
+
+Two [Agent Skills](https://agentskills.io) are scaffolded into
+`.claude/skills/`, the one project location read by both Claude Code and
+VS Code Copilot:
+
+- **`strata/SKILL.md`** - how to work with a strata solution: ground rules
+  (validate first, `--output json`, never `values get` for inspection,
+  deploy/`values set` only on request), the command table, document/merge
+  rules and known pitfalls. Rendered by `_export_agent_skill()` from
+  `templates/agent/strata/SKILL.md` (outside `templates/solution/`, so
+  `_scaffold()` does not copy it) with the running version and the kind list
+  from `SERVICE_BY_KIND`. Ownership is decided by content, not path: a
+  `<!-- Generated by strata ... -->` marker line means strata owns it and
+  `update` rewrites it; a team that deletes the marker owns it and `update`
+  reports `Kept:` and leaves it alone.
+- **`project-gotchas/SKILL.md`** - the team's own tooling lessons
+  (Symptom/Cause/Fix). Plain user-owned scaffold content, written once.
+
+Drift guard: `test_agent_skill_documents_every_visible_command` walks the
+click tree and fails when a visible command is missing from the skill's
+command table. Other agents (`AGENTS.md`, `.agents/skills/`) are not
+scaffolded yet; add them when a consumer uses one.
+
+## Deliberately out of scope
+
+- **v1's full `dot.github/` tree** (Copilot agent/prompts/
+  instructions, `workflows/deploy.yml`) — v2 scaffolds agent skills
+  instead (see "Agent skills" above); CI workflows remain a separate
+  future decision.
+- **Every other `strata sln *` subcommand** v1 has
+  (`add_deployment`/`remove_deployment`/`list_deployments`/
+  `scan_deployments`/`export_template`/`doctor`) — none relate to
+  scaffolding; out of scope for this design entirely.
+- **v1's `.strata/solution.json` + `.code-workspace` file** — v1-specific
+  bootstrap artifacts with no v2 equivalent (ADR-0015 already gives v2 a
+  different, simpler bootstrap: `strata.yaml` alone, found by walking up).
+
+
+## History
+
+- `.github/` is always user-owned (never touched by `update`) while `.strata/` is always package-owned (always refreshed) - avoids silently destroying a repo's own customized PR template, the real risk v1's blanket "`.github/` is package-owned" behavior carried.
+- `strata.yaml` is user-owned and `init` is idempotent - re-running it on an existing solution leaves `meta.name`/identity untouched (unlike v1, which reloads and rewrites it); `init` is simply "create `strata.yaml` if missing, then run the same refresh `update()` does."
+- Command naming (`sln init`/`sln update`) kept v1's names as-is - no competing v2 convention existed yet to prefer something else.
+- Shipped scaffold content deliberately starts narrow (just the two audit-trail-relevant `.github/` files) - v1's much larger `.github/` tree (Copilot agent/skills/prompts, CI workflow) is a separate, unrelated concern left out for now.
+- **Correction (2026-10-18, docs-only):** this doc's own "Deliberately out
+  of scope" section claimed `.vscode/` scaffolding and JSON Schema
+  export/`yaml.schemas` wiring had no v2 equivalent — stale since
+  2026-10-02 (commit `133fe98`, "Implement JSON Schema export and update
+  documentation for schema management"), which built exactly that
+  (`ScaffoldController._export_schemas()`, `dot.vscode/settings.json`)
+  but never circled back to update this doc's own scope-boundary list.
+  Found while answering a question about whether v1's VS Code extension
+  gap `strata.exportSchemas` could be closed via `sln init`/`sln update`
+  — it already is, on the CLI/backend side (`docs/work/gap_fit_v1_vscode.md`
+  gap #2 updated to match).
+- **2026-10-24:** agent skills scaffolded into `.claude/skills/` (ADR-0046) -
+  a strata-generated `strata` skill, rewritten by `update` only while its
+  generated marker is present, and a team-owned `project-gotchas` skill.

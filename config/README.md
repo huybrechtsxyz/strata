@@ -1,39 +1,50 @@
 # config/
 
-Reference example workspaces demonstrating strata across different cloud providers and deployment patterns. Each sub-directory is a self-contained workspace showing the full file dependency chain: **configuration → environment → workspace → resources/namespaces/modules → deployment**.
+A single, real, working solution used to dogfood `strata` end to end — not a
+gallery of per-cloud example workspaces (that was v1's `config/`). Every
+document here is exercised by the test suite and by hand via the CLI, so it
+must always be valid.
 
-Use these as a starting point or learning resource alongside `strata new --list` and `strata sln init --template`.
+## Entry points
 
-## Example Workspaces
+- [`strata.yaml`](strata.yaml) — the solution manifest (`kind: solution`).
+  Document discovery starts here: everything under this directory (except
+  what's excluded below) is walked and indexed.
+- [`configuration.yaml`](configuration.yaml) — platform-wide policy
+  (`kind: configuration`): which providers/topologies this solution allows.
 
-| Directory | Cloud | Stack | Description |
-|-----------|-------|-------|-------------|
-| [`azure-aks/`](azure-aks/) | Azure | Terraform + Helm | AKS cluster with Traefik ingress |
-| [`aws-eks/`](aws-eks/) | AWS | Terraform + Helm | EKS cluster with ALB Controller |
-| [`gcp-gke/`](gcp-gke/) | GCP | Terraform + Helm | GKE Autopilot with NGINX ingress |
-| [`hetzner-compose/`](hetzner-compose/) | Hetzner | Terraform + Compose | Cloud server with Docker Compose + INWX DNS |
-| [`kamatera-swarm/`](kamatera-swarm/) | Kamatera | Terraform + Swarm | Virtual machines with Docker Swarm + Traefik |
+## Structure
 
-## Common Structure
+Documents are addressed by `(kind, meta.name)` identity (ADR-0015), never by
+file path — the loader walks up to `strata.yaml` and indexes every document
+it finds by its `kind:` field, regardless of which directory it lives in or
+what the file is named.
 
-Every example follows the same directory layout:
+By convention, documents are grouped one directory per kind (pluralized,
+e.g. `providers/`, `deployments/`, `environments/`) purely for human
+readability. Nothing enforces this and nothing here reads directory names —
+add, remove, rename, split, or merge any of these directories freely as the
+example solution evolves; this file never needs to change to match.
 
-```
-<workspace>/
-├── config/          # kind: configuration — remotes, integrations, zones
-├── environments/    # kind: environment   — variables + secrets per env
-├── stack/           # kind: workspace, provider, resource, namespace, module
-└── deploy/          # kind: deployment    — ties workspace + env into stages
-```
+Two directories are special:
 
-## Validating Examples
+- [`templates/`](templates/) — scaffolding: strata-shaped YAML with
+  placeholders that would otherwise index as bogus documents. Explicitly
+  excluded via `strata.yaml`'s `discovery.exclude`.
+- [`vendor/`](vendor/) — local stand-ins for the remote module sources
+  declared under `strata.yaml`'s `remotes:`, so the example builds end to
+  end with no network access.
+
+`.strata/` (if present) is runtime-only state, never a source of truth —
+document discovery deliberately never descends into it.
+
+## Using this solution
 
 ```bash
-# Validate a single deployment
-strata validate -f config/azure-aks/deploy/azure-aks-deploy-prd.yaml
+# Validate every document in the solution
+strata validate
 
-# Validate all YAML files in an example
-for f in config/azure-aks/**/*.yaml; do strata validate -f "$f"; done
+# Render a deployment's workspace into on-disk artifacts (name, not a file path)
+strata build run prd-deployment
 ```
 
----

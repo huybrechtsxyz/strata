@@ -1,0 +1,37 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: module
+meta:
+  name: portainer
+  annotations:
+    description: "Translated from haven's real module (config/hearth/modules/portainer.yaml) — Docker container management UI. Kept as type: compose to exercise ComposeIntegration.prepare_namespace()'s merge behaviour (ADR-0022 D6) alongside authentik.yaml's Helm module, in the same hearth namespace."
+  tags: ["management", "console"]
+spec:
+  source:
+    remote: bundled
+    source_path: portainer
+  type: compose
+  default_labels:
+    app: portainer
+  services:
+    - name: portainer
+      image: portainer/portainer-ce:2.39.3-alpine
+      restart: unless-stopped
+      command: ["--http-disabled"]
+      # Edge tunnel port for Docker/Kubernetes Edge Agents — not proxied by
+      # Caddy (raw tunnel protocol, not plain HTTP) in the real haven setup.
+      ports:
+        - "8000:8000"
+      environment:
+        - key: TZ
+          value: Europe/Brussels
+        - key: TRUSTED_ORIGINS
+          value: portainer.huybrechts.xyz
+      mounts:
+        - name: data
+          type: bind
+          source_path: /opt/haven/var/data/portainer
+          target_path: /data
+        - name: docker-socket
+          type: bind
+          source_path: /var/run/docker.sock
+          target_path: /var/run/docker.sock

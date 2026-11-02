@@ -1,0 +1,16 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: prd-acme-deployment
+  annotations:
+    description: "Production instance serving customer acme's own API definitions"
+  tags: ["production"]
+spec:
+  extends: deploy-base
+
+  environments:
+    - prd
+
+  assets:
+    - slot: api
+      asset: acme-api

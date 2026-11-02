@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 """Pydantic models for firewall ruleset validation."""
 
-import ipaddress
 import re
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Optional, Union
+from typing import Any, ClassVar
 
-from pydantic import (
-    ConfigDict,
-    Field,
-    field_validator,
-    model_validator,
-)
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
+from strata.utils.names import check_unique_names
+from strata.utils.value_tokens import validate_cidr_or_token
 
 
 class FirewallPermission(str, Enum):
@@ -44,53 +41,101 @@ class FirewallProtocol(str, Enum):
 
 
 class FirewallRuleModel(PlatformBaseModel):
-    """
+    """One firewall rule: `direction`, and optionally `proto`, `port`, `interface`, `from`, `to` and a
+    `comment`. `from` and `to` are a literal IP or CIDR, or a string with value tokens such as
+    `${var:KEY}`, `${secret:KEY}` or `${feature:KEY}`.
+
+    Design notes:
     Model for an individual firewall rule.
-    Supports direction, protocol, port(s), interface, source/destination, and comments.
-    Validates IP/CIDR, port formats, and interface names.
+
+    Supports direction, protocol, port(s), interface, source/destination, and
+    comment. ``from``/``to`` are Value bindings (ADR-0002): a literal IP or
+    CIDR (e.g. ``"10.0.0.0/24"``), or a string containing ``${var:KEY}``/
+    ``${secret:KEY}``/``${feature:KEY}`` tokens — this is the fix for
+    ADR-0001's "Firewall Lacks Parametrization" gap (a hand-authored
+    `spec.references` field was originally proposed there; superseded by
+    ADR-0002's unified Value-token syntax, reusing the same mechanism already
+    built for `network`/`dns`).
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`proto` is required when `port` is set.",
+        "An `icmp` rule cannot set `port`.",
+    )
 
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str | None = Field(
+        None,
+        description="Optional rule identifier, unique within the ruleset (across `allow` and "
+        "`deny`) when set. Most clouds require one, for example Azure NSG and GCP "
+        "firewall rules.\n\n"
+        "Design notes: Optional rule identifier, unique within the ruleset (across "
+        "both allow and deny) when set. Required by most real implementations (e.g. "
+        "Azure NSG, GCP firewall rules) but optional here to stay non-breaking for "
+        "existing documents that predate this field.",
+    )
+    priority: int | None = Field(
+        None,
+        description="Optional evaluation order, lower first, as in Azure NSG and GCP firewall "
+        "rules. AWS security groups have no such concept. It does not guarantee "
+        "precedence over a cloud's own reserved default rules, so pick a value that is "
+        "safe for your provider.\n\n"
+        "Design notes: Optional explicit evaluation order (lower evaluated first, "
+        "matching Azure NSG/GCP firewall semantics) — not universal (AWS Security "
+        "Groups have no such concept at all), so left optional rather than required. "
+        "Makes ordering intent part of the reviewable YAML source instead of an "
+        "emergent property of list position plus whatever the consuming provisioner's "
+        "translation layer invents. Does not by itself guarantee precedence over a "
+        "cloud provider's own injected default rules (e.g. Azure's non-removable "
+        "AllowAzureLoadBalancerInBound) — those live at cloud-reserved priority "
+        "numbers strata's schema has no knowledge of; the author still has to pick a "
+        "safe value.",
+    )
     direction: FirewallDirection = Field(..., description="Direction of traffic: 'in' for inbound, 'out' for outbound.")
-    proto: Optional[FirewallProtocol] = Field(
+    proto: FirewallProtocol | None = Field(
         None, description="Protocol for the rule: 'tcp', 'udp', or 'icmp'. Optional."
     )
-    port: Optional[
-        Annotated[
-            Union[int, str, List[Union[int, str]]],
-            Field(
-                description="Single port (int), port range (str like '80:90'), or list of ports/ranges. Optional.",
-            ),
-        ]
-    ] = None
-    interface: Optional[str] = Field(None, description="Network interface name (e.g., 'eth0', 'lo'). Optional.")
-    from_: Optional[str] = Field(
+    port: int | str | list[int | str] | None = Field(
+        None,
+        description="Single port (int), port range (str like '80:90'), or list of ports/ranges. Optional.",
+    )
+    interface: str | None = Field(None, description="Network interface name (e.g., 'eth0', 'lo'). Optional.")
+    from_: str | None = Field(
         None,
         alias="from",
         serialization_alias="from",
-        description="Source IP address or CIDR (for inbound rules). Optional.",
+        description="Source IP or CIDR (for inbound rules): literal, or a string containing "
+        "'${var:KEY}'/'${secret:KEY}'/'${feature:KEY}' tokens. Optional.",
     )
-    to: Optional[str] = Field(
+    to: str | None = Field(
         None,
-        description="Destination IP address or CIDR (for outbound rules). Optional.",
+        description="Destination IP or CIDR (for outbound rules): literal, or a string containing "
+        "'${var:KEY}'/'${secret:KEY}'/'${feature:KEY}' tokens. Optional.",
     )
-    comment: Optional[str] = Field(None, description="Optional comment or documentation for the rule.")
+    comment: str | None = Field(None, description="Optional comment or documentation for the rule.")
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Provider-specific values for this rule, for example Azure's \"destination is "
+        'an Application Security Group" pattern, passed to Terraform inside the rule. '
+        "Strata does not validate them.\n\n"
+        "Design notes: Raw provider-specific passthrough for this rule (e.g. Azure's "
+        "'destination is an Application Security Group, not an address' pattern, which "
+        "has no cross-cloud equivalent). Not validated by strata, passed through as-is "
+        "to the provisioner.",
+    )
 
     @field_validator("from_", "to")
     @classmethod
-    def validate_ip_network(cls, v):
-        if v is None:
-            return v
-        try:
-            ipaddress.ip_network(v, strict=False)
-        except ValueError as e:
-            raise ValueError(f"Invalid IP or network: {v}") from e
+    def validate_ip_or_token(cls, v: str | None) -> str | None:
+        """Validate literal IP/CIDR syntax, or Value-token syntax."""
+        if v is not None:
+            validate_cidr_or_token(v)
         return v
 
     @field_validator("interface")
     @classmethod
-    def validate_interface_name(cls, v):
+    def validate_interface_name(cls, v: str | None) -> str | None:
         """Validate interface name format if provided."""
         if v is not None and not re.match(r"^[a-zA-Z0-9_\-]+$", v):
             raise ValueError(f"Invalid interface name: {v}")
@@ -98,7 +143,7 @@ class FirewallRuleModel(PlatformBaseModel):
 
     @field_validator("port")
     @classmethod
-    def validate_ports(cls, v):
+    def validate_ports(cls, v: int | str | list[int | str] | None) -> int | str | list[int | str] | None:
         return cls.validate_port(v)
 
     @model_validator(mode="after")
@@ -111,14 +156,14 @@ class FirewallRuleModel(PlatformBaseModel):
         return self
 
     @classmethod
-    def validate_port(cls, value):
-        """
-        Validate port value: must be an integer (1-65535), a valid range string ("80:90"), or a list of ports/ranges.
-        """
+    def validate_port(cls, value: int | str | list[int | str] | None) -> int | str | list[int | str] | None:
+        """Validate port value: an int (1-65535), a range string ("80:90"), or a list of ports/ranges."""
+        if value is None:
+            return value
         if isinstance(value, int):
             if not (0 < value <= 65535):
                 raise ValueError(f"Port must be between 1 and 65535: {value}")
-        elif isinstance(value, List):
+        elif isinstance(value, list):
             for port in value:
                 cls.validate_port(port)
         elif isinstance(value, str):
@@ -133,84 +178,159 @@ class FirewallRuleModel(PlatformBaseModel):
 
 
 class FirewallDefaultsModel(PlatformBaseModel):
-    """
-    Model for a default firewall rule (direction, permission, comment).
+    """Model for a default firewall rule (direction, permission, comment).
+
     Used to set baseline allow/deny behavior for inbound/outbound traffic.
     """
 
     direction: FirewallDirection = Field(..., description="Direction of traffic for the default rule: 'in' or 'out'.")
     permission: FirewallPermission = Field(..., description="Permission for the default rule: 'allow' or 'deny'.")
-    comment: Optional[str] = Field(None, description="Optional comment or documentation for the default rule.")
+    comment: str | None = Field(None, description="Optional comment or documentation for the default rule.")
 
 
 class FirewallSpecModel(PlatformBaseModel):
-    """
+    """A firewall ruleset: optional default allow or deny per direction, plus explicit `allow` and `deny`
+    rules. A workspace uses it by listing the document in `firewalls`; a workspace resource can attach
+    it.
+
+    Design notes:
     Model for a firewall ruleset specification.
-    Includes default rules, allow/deny lists, and validation for uniqueness and conflicts.
+
+    No ``references`` field: v1 never had one for Firewall either (ADR-0001
+    flagged this as a gap and proposed adding it; superseded by ADR-0002 —
+    parametrization is now handled via Value tokens directly on `from`/`to`,
+    not a hand-authored declared-keys list).
     """
 
-    reset: Optional[bool] = Field(
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Default rules must have unique directions: at most one for `in` and one for `out`.",
+        "The same rule (direction, proto, port, from and to) must not appear in both `allow` and `deny`.",
+        "Rule names, where set, must be unique across `allow` and `deny` together.",
+    )
+
+    reset: bool | None = Field(
         False,
         description="If true, reset all existing firewall rules before applying these rules.",
     )
-    defaults: Optional[List[FirewallDefaultsModel]] = Field(
+    defaults: list[FirewallDefaultsModel] | None = Field(
         None,
         description="List of default rules (baseline allow/deny for each direction).",
     )
-    deny: Optional[List[FirewallRuleModel]] = Field(None, description="List of explicit deny rules.")
-    allow: Optional[List[FirewallRuleModel]] = Field(None, description="List of explicit allow rules.")
+    deny: list[FirewallRuleModel] | None = Field(None, description="List of explicit deny rules.")
+    allow: list[FirewallRuleModel] | None = Field(None, description="List of explicit allow rules.")
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Free-form provisioner settings (for example Terraform NSG arguments strata "
+        "does not model), passed to Terraform as "
+        "`strata.firewalls.<name>.configuration`. Strata does not validate the keys "
+        "itself: add an `attributeconfig` with `target.kind: firewall` and "
+        "`target.block: configuration` to do so.\n\n"
+        "Design notes: Raw provisioner-specific passthrough configuration (e.g. "
+        "Terraform NSG arguments not otherwise modeled). Not validated by strata, "
+        "passed through as-is to the provisioner.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.firewalls.<name>.custom`. Strata does not interpret them. Validate "
+        "them with an `attributeconfig` targeting `firewall` and `custom`.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside the `firewalls` category payload, delivered as part of one shared "
+        "`TF_VAR_firewalls` env var — not its own.",
+    )
+    default_tags: dict[str, str] | None = Field(
+        None,
+        description="Baseline cloud tags for this firewall (for example `cost-center`, "
+        "`environment`, `owner`), passed to Terraform as "
+        "`strata.firewalls.<name>.default_tags`. Not the same as `meta.tags`, which is "
+        "a free-form list for documentation. Strata does not limit the number of tags, "
+        "so stay within your cloud provider's limit.\n\n"
+        "Design notes: Baseline cloud provider tags for this firewall/NSG (e.g. "
+        "cost-center, environment, owner). Deliberately distinct from meta.tags (a "
+        "free-form list used for strata-internal categorization/documentation, not "
+        "cloud tags). Optional (v1-derived documents commonly carry no cloud tags at "
+        "all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum "
+        "tag count.",
+    )
+    custom_tags: dict[str, str] | None = Field(
+        None,
+        description="Additional cloud tags on top of `default_tags`, for one-off needs.\n\n"
+        "Design notes: Optional additional cloud provider tags beyond default_tags.",
+    )
 
-    # Validate direction is unique across defaults
     @model_validator(mode="after")
     def validate_unique_directions(self) -> "FirewallSpecModel":
+        """Validate that default rules have unique directions."""
         if self.defaults:
             directions = [default.direction for default in self.defaults if default.direction]
             if len(directions) != len(set(directions)):
                 raise ValueError("Default rules must have unique directions.")
         return self
 
-    # Validate no conflicting rules between allow and deny
     @model_validator(mode="after")
     def validate_no_conflicting_rules(self) -> "FirewallSpecModel":
+        """Validate that no rule (by signature) appears in both allow and deny."""
         if self.allow and self.deny:
-            allow_directions = {
+            allow_signatures = {
                 (rule.direction, rule.proto, str(rule.port), rule.from_, rule.to) for rule in self.allow
             }
-            deny_directions = {(rule.direction, rule.proto, str(rule.port), rule.from_, rule.to) for rule in self.deny}
-            conflicts = allow_directions.intersection(deny_directions)
+            deny_signatures = {(rule.direction, rule.proto, str(rule.port), rule.from_, rule.to) for rule in self.deny}
+            conflicts = allow_signatures.intersection(deny_signatures)
             if conflicts:
                 raise ValueError(f"Conflicting rules found between allow and deny: {conflicts}")
         return self
 
+    @model_validator(mode="after")
+    def validate_unique_rule_names(self) -> "FirewallSpecModel":
+        """Validate that every rule *that sets a name* is unique across both allow and deny.
+
+        `name` is optional (non-breaking for documents that predate it) — an
+        unnamed rule is simply not checked, same "check only what's present"
+        discipline as every other optional-uniqueness check in this codebase.
+        """
+        named = [rule.name for rule in (*(self.allow or []), *(self.deny or [])) if rule.name is not None]
+        if named:
+            check_unique_names(named, "firewall rule names")
+        return self
+
 
 class FirewallMetaModel(PlatformBaseModel):
-    """
-    Model for firewall resource metadata (name, annotations, labels, tags).
-    """
+    """Firewall metadata including name, annotations, labels, and tags."""
 
-    name: PlatformName = Field(..., description="Unique name for the firewall resource.")
-    annotations: Optional[Dict[str, Any]] = Field(
+    name: PlatformName = Field(..., description="Unique name for the firewall resource")
+    annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
-    labels: Optional[Dict[str, Any]] = Field(..., description="Labels for categorization and filtering.")
-    tags: Optional[List[Any]] = Field(None, description="Optional list of tags for the firewall resource.")
+    labels: dict[str, Any] | None = Field(
+        None, description="Optional labels (key-value pairs for classification/filtering)"
+    )
+    tags: list[Any] | None = Field(None, description="Optional list of tags for the firewall resource")
 
 
 class FirewallModel(PlatformBaseModel):
-    """
-    Top-level model for a firewall ruleset resource.
-    Includes metadata and specification for validation and orchestration.
+    """A firewall or network security group ruleset: default allow or deny per direction and explicit rules
+    with ports, protocols and source or destination addresses. Create one per ruleset and list it in a
+    workspace's `firewalls`.
+
+    Design notes:
+    Root model for a firewall ruleset configuration file.
     """
 
     apiVersion: PlatformVersion = Field(
-        default=PlatformVersion.v1,
+        default=PlatformVersion.v2,
         frozen=True,
-        description="API version of the firewall resource model.",
+        description="API version for firewall configuration",
     )
     kind: PlatformKind = Field(
         default=PlatformKind.FIREWALL,
         frozen=True,
-        description="Resource kind: always 'firewall'.",
+        description="Platform kind (always 'firewall')",
     )
-    meta: FirewallMetaModel = Field(..., description="Metadata for the firewall resource.")
-    spec: FirewallSpecModel = Field(..., description="Specification for the firewall ruleset.")
+    meta: FirewallMetaModel = Field(description="Firewall metadata (name, annotations, labels, tags)")
+    spec: FirewallSpecModel = Field(description="Firewall specification (defaults, allow, deny rules)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.FIREWALL)

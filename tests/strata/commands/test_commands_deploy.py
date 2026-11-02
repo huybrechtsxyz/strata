@@ -1,2434 +1,773 @@
-"""Tests for the `deploy` command group."""
+#!/usr/bin/env python3
+"""Tests for `strata deploy run` (docs/design/deploy-command.md).
 
+Every test runs `build run` first (via the real CLI, matching real usage)
+to populate `--build-path`, then exercises `deploy run` against it with
+`run_command`/`shutil.which` stubbed — no real `terraform` binary needed,
+same convention `test_deploy_controller.py` already established.
+"""
+
+import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
-from strata.commands.cli_deploy import deploy
-from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.commands.deploy.run_deploy_command import RunDeployCommand
-from strata.integrations.lock.base_lock_backend import LockBackendError, LockTimeoutError
-from strata.utils.resolved_values import ResolvedValues
+from strata.commands.cli import cli
+from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE, EXIT_VALIDATION
+from strata.utils.transport import CommandResult
+
+MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
+kind: solution
+meta:
+  name: test-solution
+spec: {}
+"""
+
+PROVIDER = """apiVersion: strata.huybrechts.xyz/v2
+kind: provider
+meta:
+  name: p1
+spec:
+  type: local
+  region: local
+"""
+
+RESOURCE = """apiVersion: strata.huybrechts.xyz/v2
+kind: resource
+meta:
+  name: r1
+spec:
+  provider_type: local
+  resource_type: server
+  category: compute
+  default_tags:
+    managed-by: strata
+"""
+
+WORKSPACE = """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  providers:
+    - p1
+  provisioners:
+    - name: tf_main
+      tool: terraform
+      source:
+        source_path: infra
+  execution:
+    - name: apply_infra
+      provisioner: tf_main
+      resources:
+        - r1
+  resources:
+    - name: r1
+      resource: r1
+"""
+
+ENVIRONMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec: {}
+"""
+
+DEPLOYMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: app
+spec:
+  workspace: main
+  environments:
+    - prd
+"""
 
 
-class TestDeployRun:
-    def test_run_basic(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.run_deploy_command.RunDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_with_file(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.run_deploy_command.RunDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["run", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_stage_option(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.run_deploy_command.RunDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["run", "--stage", "production", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_dry_run_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.run_deploy_command.RunDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["run", "--dry-run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_force_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.run_deploy_command.RunDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["run", "--force", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.run_deploy_command.RunDeployCommand.execute", return_value=False):
-            result = runner.invoke(deploy, ["run", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
+@pytest.fixture
+def runner():
+    return CliRunner()
 
 
-class TestRunDeployCommandLoadRelatedServices:
-    """Regression: `run_deploy_command.py` must not shadow
-    `BaseDeployCommand._load_related_services()` with a no-op. A stale no-op override
-    here previously left `DeploymentService._environment_service`/`_workspace_service`
-    unset for `deploy run`, causing `ServiceNotValidatedError: Service
-    'EnvironmentService' must be validated before use` the moment `_resolve_values()`
-    ran — even though `strata validate --deep` and `strata build run` on the same file
-    both succeeded first. Introduced when `_load_related_services()` became an
-    overridable hook (v1.7.0) — before that, `base_deploy_command.py` called
-    `deployment_service.load_deploy_services()` directly and unconditionally, so this
-    class's pre-existing no-op override was never actually invoked.
+def _write(root: Path, relative: str, content: str) -> None:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+@pytest.fixture
+def solution(tmp_path):
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(root, "provider.yaml", PROVIDER)
+    _write(root, "resource.yaml", RESOURCE)
+    _write(root, "workspace.yaml", WORKSPACE)
+    _write(root, "environment.yaml", ENVIRONMENT)
+    _write(root, "deployment.yaml", DEPLOYMENT)
+    return root
+
+
+@pytest.fixture
+def _stub_terraform(monkeypatch):
+    """No real `terraform` binary needed — every call succeeds."""
+    calls: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return calls
+
+
+def _build(runner, solution):
+    result = runner.invoke(cli, ["build", "run", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+
+def _deploy(runner, *args):
+    return runner.invoke(cli, ["deploy", "run", *[str(a) for a in args]])
+
+
+# ---------------------------------------------------------------------------
+# Exit codes
+# ---------------------------------------------------------------------------
+
+
+def test_successful_deploy_exits_zero(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+
+def test_unknown_deployment_exits_two(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "ghost-deployment", "--path", solution, "--force")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_outside_a_solution_exits_two(runner, tmp_path, _stub_terraform):
+    result = _deploy(runner, "app", "--path", tmp_path, "--force")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_invalid_solution_exits_three(runner, solution, _stub_terraform):
+    _write(solution, "deployment.yaml", DEPLOYMENT.replace("workspace: main", "workspace: ghost-workspace"))
+    result = _deploy(runner, "app", "--path", solution, "--force")
+    assert result.exit_code == EXIT_VALIDATION
+
+
+def test_step_failure_exits_three(runner, solution, monkeypatch):
+    _build(runner, solution)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "plan":
+            return CommandResult(returncode=1, stdout="", stderr="plan exploded")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    result = _deploy(runner, "app", "--path", solution, "--force")
+    assert result.exit_code == EXIT_VALIDATION
+
+
+# ---------------------------------------------------------------------------
+# Options wiring
+# ---------------------------------------------------------------------------
+
+
+def test_build_path_option_overrides_the_default(runner, solution, tmp_path, _stub_terraform):
+    custom = tmp_path / "out"
+    result = runner.invoke(cli, ["build", "run", "app", "--path", str(solution), "--build-path", str(custom)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    result = _deploy(runner, "app", "--path", solution, "--build-path", custom, "--force")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+
+def test_dry_run_calls_plan_but_not_apply(runner, solution, _stub_terraform):
+    """`--dry-run` now runs a real preview (init/validate/plan) and stops;
+    the old "zero tool contact" meaning moved to `--smoke-test`.
     """
-
-    def test_does_not_override_load_related_services(self):
-        """`deploy run` needs the full workspace+environment load (unlike `deploy show`/
-        `values get`/etc., which legitimately override this hook for a lighter-weight,
-        environment-only load) — it must inherit the base class's implementation."""
-        assert "_load_related_services" not in RunDeployCommand.__dict__
-
-    def test_delegates_to_deployment_service_load(self, tmp_path):
-        """Behavioral check: the inherited method actually calls
-        deployment_service.load_deploy_services() and propagates its result, rather
-        than unconditionally returning True regardless of whether loading succeeded."""
-        cmd = _make_run_command(tmp_path)
-        deployment_service = MagicMock()
-        deployment_service.load_deploy_services.return_value = False
-        deployment_service.get_validation_errors.return_value = ["boom"]
-
-        ok = cmd._load_related_services(deployment_service, {})
-
-        deployment_service.load_deploy_services.assert_called_once()
-        assert ok is False
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--dry-run")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "validate", "plan"]
 
 
-class TestDeployDestroy:
-    def test_destroy_dry_run(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["destroy", "--dry-run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_destroy_force_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["destroy", "--force", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_destroy_stage_option(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True):
-            result = runner.invoke(
-                deploy, ["destroy", "--stage", "production", "--dry-run", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code == 0
-
-    def test_destroy_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=False):
-            result = runner.invoke(deploy, ["destroy", "--dry-run", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
+def test_smoke_test_never_calls_run_command(runner, solution, _stub_terraform):
+    """`--smoke-test` keeps the old `--dry-run` meaning permanently: zero
+    tool contact at all."""
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--smoke-test")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert _stub_terraform == []
 
 
-class TestDeployPlan:
-    def test_plan_basic(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.plan_deploy_command.PlanDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["plan", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_plan_with_file(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.plan_deploy_command.PlanDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["plan", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_plan_stage_option(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.plan_deploy_command.PlanDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["plan", "--stage", "production", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
+def test_dry_run_and_smoke_test_are_mutually_exclusive(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--dry-run", "--smoke-test")
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert _stub_terraform == []
 
 
-class TestDeployShow:
-    def test_show_basic(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.show_deploy_command.ShowDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["show", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
+@pytest.fixture
+def _stub_terraform_streaming(monkeypatch):
+    """Like `_stub_terraform`, but also invokes `line_callback` with one
+    fake line per call."""
 
-    def test_show_with_file(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.show_deploy_command.ShowDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["show", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if line_callback is not None:
+            line_callback("stdout", f"fake output for {' '.join(args)}")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
 
-    def test_show_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.show_deploy_command.ShowDeployCommand.execute", return_value=False):
-            result = runner.invoke(deploy, ["show", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
 
-class TestDeployHistory:
-    def test_history_basic(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["history", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_history_lines_option(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["history", "--lines", "10", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_history_operation_filter(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["history", "--operation", "run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_history_invalid_operation_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(deploy, ["history", "--operation", "badop", "--work-path", str(tmp_path)])
-        assert result.exit_code == 2
+def test_follow_streams_tool_prefixed_lines_on_console_output(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" in result.output
 
 
-# ---------------------------------------------------------------------------
-# _evaluate_phase_policies unit tests
-# ---------------------------------------------------------------------------
+def test_follow_reroutes_to_stderr_with_json_output(runner, solution, _stub_terraform_streaming):
+    """Previously `--follow` was silently inert under `--output json` (no
+    warning, lines dropped entirely) — now it reroutes every line to
+    stderr instead, matching `--verbose`'s own real precedent, while
+    stdout stays exactly one parseable JSON document."""
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" in result.stderr
+    assert "terraform │" not in result.stdout
+    json.loads(result.stdout)
 
 
-def _make_deployer_mock() -> MagicMock:
-    """Return a deployer mock whose show_plan() returns a proper 3-tuple."""
-    deployer = MagicMock()
-    deployer.show_plan.return_value = (True, None, [])
-    return deployer
+def test_follow_ndjson_requires_output_json(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "ndjson")
+    assert result.exit_code == EXIT_USAGE, result.output
 
 
-def _make_run_command(tmp_path: Path) -> RunDeployCommand:
-    with patch.object(BaseDeployCommand, "_initialize", return_value=None):
-        cmd = RunDeployCommand(work_path=str(tmp_path), file="deploy.yaml")
-    cmd._work_path = tmp_path
-    cmd._build_path = tmp_path / "build"
-    cmd._configuration_service = None
-    cmd._deployment_service = None
-    return cmd
+def test_follow_ndjson_streams_line_and_progress_events_to_stdout(runner, solution, _stub_terraform_streaming):
+    """`--follow ndjson` (requires `--output json`) streams one JSON event
+    per subprocess line and per progress message to stdout, ending with
+    the normal `build_envelope()` result as the final line — unchanged
+    from plain `--output json`, not a bespoke shape (docs/archive/
+    ndjson-output.md's "Final event shape" decision)."""
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "ndjson", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert len(events) > 1  # at least one live event, plus the final envelope
+
+    live, final = events[:-1], events[-1]
+    kinds = {entry["event"] for entry in live}
+    assert "line" in kinds
+    assert "progress" in kinds
+    assert any(entry["event"] == "line" and entry["tool"] == "terraform" for entry in live)
+
+    assert final["ok"] is True
+    assert final["command"] == "deploy run"
+    assert "event" not in final
 
 
-def _make_policy_model(name: str, phase: str, enforcement: str = "deny", enabled: bool = True):
-    m = MagicMock()
-    m.phase = phase
-    m.enabled = enabled
-    m.type = "script"
-    m.name = name
-    return m
+def test_follow_ndjson_does_not_escape_non_ascii_text(runner, solution, monkeypatch):
+    """`json.dumps(..., ensure_ascii=False)` must match `format_json()`'s
+    own policy — a non-ASCII subprocess line should appear literally in
+    the `line` event, not as a `\\uXXXX` escape sequence."""
+    _build(runner, solution)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if line_callback is not None:
+            line_callback("stdout", "café résumé → done")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "ndjson", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "café résumé → done" in result.stdout
+    assert "\\u" not in result.stdout
 
 
-def _make_policy_result(name: str, passed: bool, enforcement: str = "deny", violations=None):
-    r = MagicMock()
-    r.policy_name = name
-    r.passed = passed
-    r.enforcement = enforcement
-    r.violations = violations or ([] if passed else ["violation message"])
-    return r
+def test_stage_option_restricts_execution(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--stage", "apply_infra")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert any(call[1] == "apply" for call in _stub_terraform)
 
 
-class TestEvaluatePhasePolices:
-    def test_returns_true_when_no_configuration_service(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._configuration_service = None
-        deployer = MagicMock()
-        assert cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock()) is True
+def test_stage_option_rejects_unknown_stage(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--stage", "ghost-stage")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert _stub_terraform == []
 
-    def test_returns_true_when_no_matching_phase_policies(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cfg_svc = MagicMock()
-        cfg_svc.model.spec.policies = [_make_policy_model("p1", "plan")]
-        cmd._configuration_service = cfg_svc
-        assert cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock()) is True
 
-    def test_returns_true_when_policy_passes(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cfg_svc = MagicMock()
-        policy_model = _make_policy_model("allow_all", "deploy", enforcement="deny")
-        cfg_svc.model.spec.policies = [policy_model]
-        cmd._configuration_service = cfg_svc
-
-        passing_result = _make_policy_result("allow_all", passed=True)
-
-        with (
-            patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine,
-        ):
-            mock_engine.return_value.evaluate.return_value = [passing_result]
-            result = cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
-
-        assert result is True
-
-    def test_returns_false_when_deny_policy_fails(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cfg_svc = MagicMock()
-        policy_model = _make_policy_model("blocker", "deploy", enforcement="deny")
-        cfg_svc.model.spec.policies = [policy_model]
-        cmd._configuration_service = cfg_svc
-
-        failing_result = _make_policy_result("blocker", passed=False, enforcement="deny")
-
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
-            mock_engine.return_value.evaluate.return_value = [failing_result]
-            result = cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
-
-        assert result is False
-        assert any("blocker" in e for e in cmd._errors)
-
-    def test_returns_true_when_warn_policy_fails(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cfg_svc = MagicMock()
-        policy_model = _make_policy_model("advisory", "deploy", enforcement="warn")
-        cfg_svc.model.spec.policies = [policy_model]
-        cmd._configuration_service = cfg_svc
-
-        warn_result = _make_policy_result("advisory", passed=False, enforcement="warn")
-
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
-            mock_engine.return_value.evaluate.return_value = [warn_result]
-            result = cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
-
-        assert result is True
-        assert not cmd._errors
-
-    def test_policy_result_recorded_in_manifest(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cfg_svc = MagicMock()
-        policy_model = _make_policy_model("tag_check", "deploy", enforcement="deny")
-        cfg_svc.model.spec.policies = [policy_model]
-        cmd._configuration_service = cfg_svc
-
-        passing_result = _make_policy_result("tag_check", passed=True, enforcement="deny")
-
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
-            mock_engine.return_value.evaluate.return_value = [passing_result]
-            cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
-
-        assert len(cmd._policy_results) == 1
-        assert cmd._policy_results[0].phase == "deploy"
-        assert cmd._policy_results[0].policy_name == "tag_check"
-
-    def test_disabled_policy_skipped(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cfg_svc = MagicMock()
-        cfg_svc.model.spec.policies = [_make_policy_model("off_policy", "deploy", enabled=False)]
-        cmd._configuration_service = cfg_svc
-
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
-            cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
-            mock_engine.assert_not_called()
-
-        assert not cmd._errors  # no crash, no errors
-
-    def test_works_for_plan_phase_too(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cfg_svc = MagicMock()
-        policy_model = _make_policy_model("plan_guard", "plan", enforcement="deny")
-        cfg_svc.model.spec.policies = [policy_model]
-        cmd._configuration_service = cfg_svc
-
-        passing_result = _make_policy_result("plan_guard", passed=True)
-
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
-            mock_engine.return_value.evaluate.return_value = [passing_result]
-            result = cmd._evaluate_phase_policies("plan", MagicMock(), _make_deployer_mock())
-
-        assert result is True
-        assert cmd._policy_results[0].phase == "plan"
+def test_force_flag_is_accepted_and_currently_inert(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    apply_call = next(call for call in _stub_terraform if call[1] == "apply")
+    assert "-auto-approve" not in apply_call
 
 
 # ---------------------------------------------------------------------------
-# Helpers shared by TestLockingWiring
+# --pin (docs/work/version-lifecycle.md Phase 5)
 # ---------------------------------------------------------------------------
 
 
-def _make_locking_spec(enabled: bool = True, wait_timeout: str = "5m") -> MagicMock:
-    locking = MagicMock()
-    locking.enabled = enabled
-    locking.wait_timeout = wait_timeout
-    spec = MagicMock()
-    spec.locking = locking
-    spec.approvals = None
-    return spec
-
-
-def _make_stage(name: str = "production") -> MagicMock:
-    stage = MagicMock()
-    stage.name = name
-    stage.provisioner = None
-    stage.topology = None
-    stage.scope = None
-    stage.on_failure = "stop"
-    stage.approval = None
-    # Optional[...] fields must be set explicitly: an unset MagicMock attribute is
-    # truthy AND iterates as empty, so leaving these off would silently exercise
-    # the wrong branch (gated-by-expression / empty depends_on) instead of the
-    # "not set" default. See ADR-0083 Phase 1.
-    stage.enabled = None
-    stage.depends_on = None
-    return stage
-
-
-class TestLockingWiring:
-    """Unit-tests for _should_lock, _resolve_lock_backend, _acquire_lock, _release_lock,
-    and the lock wrapping inside _execute_provisioning."""
-
-    # ------------------------------------------------------------------
-    # _should_lock
-    # ------------------------------------------------------------------
-
-    def test_should_lock_false_when_dry_run(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = True
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        cmd._deployment_service = svc
-        assert cmd._should_lock() is False
-
-    def test_should_lock_false_when_locking_disabled(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=False)
-        cmd._deployment_service = svc
-        assert cmd._should_lock() is False
-
-    def test_should_lock_false_when_no_deployment_service(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._deployment_service = None
-        assert cmd._should_lock() is False
-
-    def test_should_lock_true_when_enabled_and_not_dry_run(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        cmd._deployment_service = svc
-        assert cmd._should_lock() is True
-
-    def test_should_lock_false_when_strategy_is_delegate(self, tmp_path):
-        """delegate strategy defers locking to the backend — strata must not take a lock."""
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        svc = MagicMock()
-        spec = _make_locking_spec(enabled=True)
-        spec.locking.strategy = "delegate"
-        svc.model.spec = spec
-        cmd._deployment_service = svc
-        assert cmd._should_lock() is False
-
-    # ------------------------------------------------------------------
-    # _acquire_lock / _release_lock
-    # ------------------------------------------------------------------
-
-    def test_acquire_lock_returns_handle_and_sets_lock_ref(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "abc-123"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-
-        backend = MagicMock()
-        backend.acquire.return_value = handle
-
-        result = cmd._acquire_lock(backend)
-
-        assert result is handle
-        assert cmd._lock_ref is not None
-        assert cmd._lock_ref.lock_id == "abc-123"
-        assert cmd._lock_ref.backend == "local"
-
-    def test_acquire_lock_returns_none_on_timeout(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        backend = MagicMock()
-        exc = LockTimeoutError(deployment_name="my-deploy", timeout_seconds=60, holder="ci-bot")
-        backend.acquire.side_effect = exc
-
-        result = cmd._acquire_lock(backend)
-
-        assert result is None
-        assert len(cmd._errors) == 1
-
-    def test_acquire_lock_returns_none_on_backend_error(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        backend = MagicMock()
-        backend.acquire.side_effect = LockBackendError("disk full")
-
-        result = cmd._acquire_lock(backend)
-
-        assert result is None
-        assert len(cmd._errors) == 1
-
-    def test_release_lock_updates_released_at(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        from strata.models.deployment_manifest_model import ManifestLockReferenceModel
-
-        cmd._lock_ref = ManifestLockReferenceModel(
-            lock_id="abc-123",
-            backend="local",
-            acquired_at="2024-01-01T00:00:00Z",
-            holder="me",
-            hostname="host",
-        )
-
-        handle = MagicMock()
-        handle.lock_id = "abc-123"
-        handle.backend_type = "local"
-
-        backend = MagicMock()
-        cmd._release_lock(backend, handle)
-
-        backend.release.assert_called_once_with(handle)
-        assert cmd._lock_ref.released_at is not None
-
-    def test_release_lock_swallows_exceptions(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        handle = MagicMock()
-        handle.lock_id = "abc-123"
-        handle.backend_type = "local"
-
-        backend = MagicMock()
-        backend.release.side_effect = RuntimeError("disk gone")
-
-        # Must not raise
-        cmd._release_lock(backend, handle)
-
-    # ------------------------------------------------------------------
-    # lock.acquired / lock.released audit forwarding (ADR-0066 follow-up)
-    # ------------------------------------------------------------------
-
-    def test_acquire_lock_forwards_when_gate_enabled(self, tmp_path):
-        from strata.models.audit_config_model import AuditConfigModel, AuditPolicyModel
-
-        cmd = _make_run_command(tmp_path)
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "abc-123"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-
-        backend = MagicMock()
-        backend.acquire.return_value = handle
-
-        audit_cfg = AuditConfigModel(policy=AuditPolicyModel(events={"lock.acquired": True}))
-        mock_config_service = MagicMock()
-        mock_config_service.model.spec.audit = audit_cfg
-
-        with (
-            patch(
-                "strata.services.configuration_service.ConfigurationService.get_instance",
-                return_value=mock_config_service,
-            ),
-            patch("strata.controllers.audit_controller.AuditController.forward") as mock_forward,
-        ):
-            cmd._acquire_lock(backend)
-
-        mock_forward.assert_called_once()
-        args, kwargs = mock_forward.call_args
-        assert args[0] == "lock.acquired"
-        assert args[1]["deployment"] == "my-deploy"
-        assert args[1]["lock_id"] == "abc-123"
-
-    def test_acquire_lock_no_forward_when_gate_disabled_by_default(self, tmp_path):
-        """_forward_lock_audit_event() always calls forward() — the gate is checked
-        *inside* forward() itself, so with no config the default-disabled gate means
-        no journal write and no sink fan-out, even though forward() is still invoked."""
-        cmd = _make_run_command(tmp_path)
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "abc-123"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-
-        backend = MagicMock()
-        backend.acquire.return_value = handle
-
-        with patch("strata.logger.audit") as mock_journal:
-            cmd._acquire_lock(backend)
-
-        mock_journal.assert_not_called()
-
-    def test_release_lock_forwards_when_gate_enabled(self, tmp_path):
-        from strata.models.audit_config_model import AuditConfigModel, AuditPolicyModel
-
-        cmd = _make_run_command(tmp_path)
-        svc = MagicMock()
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "abc-123"
-        handle.backend_type = "local"
-
-        backend = MagicMock()
-
-        audit_cfg = AuditConfigModel(policy=AuditPolicyModel(events={"lock.released": True}))
-        mock_config_service = MagicMock()
-        mock_config_service.model.spec.audit = audit_cfg
-
-        with (
-            patch(
-                "strata.services.configuration_service.ConfigurationService.get_instance",
-                return_value=mock_config_service,
-            ),
-            patch("strata.controllers.audit_controller.AuditController.forward") as mock_forward,
-        ):
-            cmd._release_lock(backend, handle)
-
-        mock_forward.assert_called_once()
-        args, kwargs = mock_forward.call_args
-        assert args[0] == "lock.released"
-        assert args[1]["deployment"] == "my-deploy"
-
-    def test_release_lock_forward_failure_does_not_raise(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        handle = MagicMock()
-        handle.lock_id = "abc-123"
-        handle.backend_type = "local"
-        backend = MagicMock()
-
-        with patch("strata.controllers.audit_controller.AuditController.forward", side_effect=RuntimeError("boom")):
-            # Must not raise
-            cmd._release_lock(backend, handle)
-
-    # ------------------------------------------------------------------
-    # Stage loop wrapping — acquire called before stages, release in finally
-    # ------------------------------------------------------------------
-
-    def test_acquire_called_before_stages_when_locking_enabled(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"  # suppress emoji echoes on Windows terminals
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "h1"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-
-        backend_mock = MagicMock()
-        backend_mock.acquire.return_value = handle
-
-        with (
-            patch.object(cmd, "_should_lock", return_value=True),
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            stage = _make_stage()
-            # Call directly via the helper
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        # acquire was called
-        backend_mock.acquire.assert_called_once()
-        assert result is True
-
-    def test_release_called_in_finally_on_success(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "h1"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-
-        backend_mock = MagicMock()
-        backend_mock.acquire.return_value = handle
-
-        with (
-            patch.object(cmd, "_should_lock", return_value=True),
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        backend_mock.release.assert_called_once_with(handle)
-
-    def test_release_called_in_finally_on_stage_failure(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"
-        stage = _make_stage()
-        spec = _make_locking_spec(enabled=True)
-        spec.stages = [stage]
-        svc = MagicMock()
-        svc.model.spec = spec
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "h1"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-
-        backend_mock = MagicMock()
-        backend_mock.acquire.return_value = handle
-
-        with (
-            patch.object(cmd, "_should_lock", return_value=True),
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=False),
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is False
-        backend_mock.release.assert_called_once_with(handle)
-
-    def test_dry_run_skips_lock(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = True
-        cmd._output_format = "json"
-
-        backend_mock = MagicMock()
-
-        with (
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        backend_mock.acquire.assert_not_called()
-
-    def test_lock_timeout_makes_execute_provisioning_return_false(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        exc = LockTimeoutError(deployment_name="my-deploy", timeout_seconds=60, holder="ci-bot")
-        backend_mock = MagicMock()
-        backend_mock.acquire.side_effect = exc
-
-        with (
-            patch.object(cmd, "_should_lock", return_value=True),
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is False
-        assert len(cmd._errors) > 0
+def test_pin_is_accepted_and_overrides_spec_version(runner, solution, _stub_terraform):
+    _write(
+        solution,
+        "version.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n  pins: {}\n",
+    )
+    _build(runner, solution)
+    before = (solution / "deployment.yaml").read_text(encoding="utf-8")
+
+    result = _deploy(runner, "app", "--path", solution, "--force", "--pin", "prd")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert (solution / "deployment.yaml").read_text(encoding="utf-8") == before
+
+
+def test_pin_names_an_unknown_version_exits_two(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--pin", "ghost")
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []
 
 
 # ---------------------------------------------------------------------------
-# _resolve_lock_backend() matching algorithm — direct tests (previously this
-# method was only ever mocked out, never exercised directly, anywhere in the
-# test suite). Added alongside ADR-0071's fix removing lock_deploy_command.py's
-# duplicate, non-stage-aware implementation, which could pick the wrong
-# Terraform provisioner's backend for a workspace declaring more than one.
+# --output-max-age (docs/work/cross-run-step-output-delivery.md)
 # ---------------------------------------------------------------------------
 
 
-def _make_provisioner(name: str, provisioner: str = "terraform", backend=None) -> MagicMock:
-    prov = MagicMock()
-    prov.name = name
-    prov.provisioner = provisioner
-    prov.backend = backend
-    return prov
+def test_output_max_age_is_accepted_and_inert_without_a_configured_output_store(runner, solution, _stub_terraform):
+    """No `output_store` configured on the workspace at all \u2014 the option
+    is parsed and threaded through, but has nothing to act on."""
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--output-max-age", "60")
+    assert result.exit_code == EXIT_SUCCESS, result.output
 
 
-class TestResolveLockBackendMatching:
-    def test_no_stages_falls_back_to_local(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        svc = MagicMock()
-        svc.get_workspace_service.return_value = None
-        cmd._deployment_service = svc
+def test_output_max_age_rejects_a_non_integer_value(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--output-max-age", "not-a-number")
+    assert result.exit_code == EXIT_USAGE
 
-        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
-            cmd._resolve_lock_backend([])
 
-        create.assert_called_once_with(None, cmd._work_path)
-
-    def test_matches_stage_provisioner_by_name(self, tmp_path):
-        """Single terraform provisioner, referenced by name — the common case."""
-        cmd = _make_run_command(tmp_path)
-        backend = MagicMock(name="backend-a")
-        ws_svc = MagicMock()
-        ws_svc.model.spec.provisioners = [_make_provisioner("infra", backend=backend)]
-        svc = MagicMock()
-        svc.get_workspace_service.return_value = ws_svc
-        cmd._deployment_service = svc
-
-        stage = _make_stage()
-        stage.provisioner = "infra"
-
-        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
-            cmd._resolve_lock_backend([stage])
-
-        create.assert_called_once_with(backend, cmd._work_path)
-
-    def test_ignores_earlier_unrelated_terraform_provisioner(self, tmp_path):
-        """Regression test for the ADR-0071 bug: a workspace with two Terraform
-        provisioners must resolve the one this deployment's stage actually
-        references — not just the first Terraform provisioner declared in
-        spec.provisioners, which may belong to a different deployment/stage
-        sharing the same workspace file."""
-        cmd = _make_run_command(tmp_path)
-        backend_a = MagicMock(name="backend-a")  # unrelated — declared first
-        backend_b = MagicMock(name="backend-b")  # the one this deployment uses
-        ws_svc = MagicMock()
-        ws_svc.model.spec.provisioners = [
-            _make_provisioner("networking", backend=backend_a),
-            _make_provisioner("compute", backend=backend_b),
-        ]
-        svc = MagicMock()
-        svc.get_workspace_service.return_value = ws_svc
-        cmd._deployment_service = svc
-
-        stage = _make_stage()
-        stage.provisioner = "compute"
-
-        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
-            cmd._resolve_lock_backend([stage])
-
-        create.assert_called_once_with(backend_b, cmd._work_path)
-
-    def test_non_terraform_provisioner_falls_back_to_local(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        backend = MagicMock(name="ansible-backend")
-        ws_svc = MagicMock()
-        ws_svc.model.spec.provisioners = [_make_provisioner("config", provisioner="ansible", backend=backend)]
-        svc = MagicMock()
-        svc.get_workspace_service.return_value = ws_svc
-        cmd._deployment_service = svc
-
-        stage = _make_stage()
-        stage.provisioner = "config"
-
-        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
-            cmd._resolve_lock_backend([stage])
-
-        create.assert_called_once_with(None, cmd._work_path)
-
-    def test_provisioner_without_backend_falls_back_to_local(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        ws_svc = MagicMock()
-        ws_svc.model.spec.provisioners = [_make_provisioner("infra", backend=None)]
-        svc = MagicMock()
-        svc.get_workspace_service.return_value = ws_svc
-        cmd._deployment_service = svc
-
-        stage = _make_stage()
-        stage.provisioner = "infra"
-
-        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
-            cmd._resolve_lock_backend([stage])
-
-        create.assert_called_once_with(None, cmd._work_path)
-
-    def test_stage_without_provisioner_name_is_skipped(self, tmp_path):
-        """A topology-based stage (no explicit stage.provisioner) contributes
-        nothing to resolution — matches today's behavior, not part of this bug."""
-        cmd = _make_run_command(tmp_path)
-        backend = MagicMock(name="backend-a")
-        ws_svc = MagicMock()
-        ws_svc.model.spec.provisioners = [_make_provisioner("infra", backend=backend)]
-        svc = MagicMock()
-        svc.get_workspace_service.return_value = ws_svc
-        cmd._deployment_service = svc
-
-        stage = _make_stage()
-        stage.provisioner = None
-        stage.topology = "some-topology"
-
-        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
-            cmd._resolve_lock_backend([stage])
-
-        create.assert_called_once_with(None, cmd._work_path)
+def test_output_max_age_rejects_a_non_positive_value(runner, solution, _stub_terraform):
+    """Matches `WorkspaceSpecModel.output_store_max_age`'s own `ge=1` —
+    a CLI override should reject the same invalid range, not just the
+    workspace-level config field."""
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--output-max-age", "0")
+    assert result.exit_code == EXIT_USAGE
 
 
 # ---------------------------------------------------------------------------
-# Pre-flight provisioner validation — every stage's tool/auth must be checked
-# BEFORE any stage runs (and before the deployment lock is acquired), so a
-# later stage's missing tool can't be discovered only after an earlier stage
-# already made real infrastructure changes.
+# --change-* (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
 # ---------------------------------------------------------------------------
 
 
-class TestPreflightCheckProvisioners:
-    def _deployer_mock(self, workspace_ok=True, workspace_msgs=None, env_ok=True, env_msgs=None) -> MagicMock:
-        deployer = MagicMock()
-        deployer.validate_workspace.return_value = (workspace_ok, workspace_msgs or [])
-        deployer.validate_environment.return_value = (env_ok, env_msgs or [])
-        return deployer
-
-    def test_no_errors_when_all_stages_pass(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        stage = _make_stage("infra")
-        deployer = self._deployer_mock()
-
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            errors = cmd._preflight_check_provisioners([stage])
-
-        assert errors == []
-        deployer.validate_workspace.assert_called_once()
-        deployer.validate_environment.assert_called_once()
-
-    def test_stop_stage_failure_is_fatal(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        stage = _make_stage("infra")
-        stage.on_failure = "stop"
-        deployer = self._deployer_mock(env_ok=False, env_msgs=["terraform binary not found on PATH"])
-
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            errors = cmd._preflight_check_provisioners([stage])
-
-        assert len(errors) == 1
-        assert "infra" in errors[0]
-        assert "terraform binary not found on PATH" in errors[0]
-
-    def test_continue_stage_failure_is_downgraded_to_warning(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        stage = _make_stage("optional-stage")
-        stage.on_failure = "continue"
-        deployer = self._deployer_mock(env_ok=False, env_msgs=["ansible not found"])
-
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            errors = cmd._preflight_check_provisioners([stage])
-
-        assert errors == []
-        assert any("ansible not found" in m for m in cmd._messages)
-
-    def test_rollback_stage_failure_is_fatal_like_stop(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        stage = _make_stage("infra")
-        stage.on_failure = "rollback"
-        deployer = self._deployer_mock(workspace_ok=False, workspace_msgs=["no *.tf files found"])
-
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            errors = cmd._preflight_check_provisioners([stage])
-
-        assert len(errors) == 1
-        assert "no *.tf files found" in errors[0]
-
-    def test_deployer_creation_failure_is_fatal_for_stop_stage(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        stage = _make_stage("infra")
-        stage.on_failure = "stop"
-
-        def _fail_create(_stage):
-            cmd._errors.append("Stage 'infra': no provisioner or topology declared.")
-            return None
-
-        with patch.object(cmd, "_create_deployer", side_effect=_fail_create):
-            errors = cmd._preflight_check_provisioners([stage])
-
-        assert len(errors) == 1
-        assert "no provisioner or topology declared" in errors[0]
-        # The error reclaimed from _create_deployer must not leak into
-        # self._errors directly — only into the returned fatal_errors list.
-        assert cmd._errors == []
-
-    def test_deployer_creation_failure_is_warning_for_continue_stage(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        stage = _make_stage("optional-stage")
-        stage.on_failure = "continue"
-
-        def _fail_create(_stage):
-            cmd._errors.append("Stage 'optional-stage': no provisioner or topology declared.")
-            return None
-
-        with patch.object(cmd, "_create_deployer", side_effect=_fail_create):
-            errors = cmd._preflight_check_provisioners([stage])
-
-        assert errors == []
-        assert cmd._errors == []
-        assert any("no provisioner or topology declared" in m for m in cmd._messages)
-
-    def test_only_first_failing_check_recorded_per_stage(self, tmp_path):
-        """workspace check fails -> environment check is skipped for that stage."""
-        cmd = _make_run_command(tmp_path)
-        stage = _make_stage("infra")
-        stage.on_failure = "stop"
-        deployer = self._deployer_mock(workspace_ok=False, workspace_msgs=["workspace broken"])
-
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            errors = cmd._preflight_check_provisioners([stage])
-
-        assert len(errors) == 1
-        assert "workspace broken" in errors[0]
-        deployer.validate_environment.assert_not_called()
-
-    def test_multiple_stages_all_checked_and_errors_aggregated(self, tmp_path):
-        stage1 = _make_stage("infra")
-        stage1.on_failure = "stop"
-        stage2 = _make_stage("configure")
-        stage2.on_failure = "stop"
-
-        cmd = _make_run_command(tmp_path)
-        good_deployer = self._deployer_mock()
-        bad_deployer = self._deployer_mock(env_ok=False, env_msgs=["ansible not found"])
-
-        def _create(stage):
-            return good_deployer if stage.name == "infra" else bad_deployer
-
-        with patch.object(cmd, "_create_deployer", side_effect=_create):
-            errors = cmd._preflight_check_provisioners([stage1, stage2])
-
-        assert len(errors) == 1
-        assert "configure" in errors[0]
-        assert "ansible not found" in errors[0]
-
-    def test_execute_provisioning_aborts_before_lock_on_preflight_failure(self, tmp_path):
-        """End-to-end: a failing stop-stage aborts _execute_provisioning() before
-        the deployment lock is ever acquired."""
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"
-        stage = _make_stage("infra")
-        stage.on_failure = "stop"
-        spec = _make_locking_spec(enabled=True)
-        spec.stages = [stage]
-        svc = MagicMock()
-        svc.model.spec = spec
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        backend_mock = MagicMock()
-
-        with (
-            patch.object(cmd, "_should_lock", return_value=True),
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_preflight_check_provisioners", return_value=["Stage 'infra': terraform not found"]),
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is False
-        backend_mock.acquire.assert_not_called()
-        assert any("terraform not found" in e for e in cmd._errors)
-
-
-class TestExecuteProvisioningNamespaceFilter:
-    """Tests for the --namespace pre-flight check in _execute_provisioning()."""
-
-    def _make_service_with_namespaces(self, stage, known_namespaces):
-        svc = MagicMock()
-        spec = _make_locking_spec(enabled=False)
-        spec.stages = [stage]
-        svc.model.spec = spec
-        svc.model.meta.name = "my-deploy"
-        svc.get_namespace_services.return_value = {n: MagicMock() for n in known_namespaces}
-        return svc
-
-    def test_no_namespaces_flag_skips_check_entirely(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"
-        stage = _make_stage("apps")
-        stage.helm_namespaces = None
-        cmd._deployment_service = self._make_service_with_namespaces(stage, ["immich", "media"])
-        assert cmd._namespaces is None
-
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is True
-        cmd._deployment_service.get_namespace_services.assert_not_called()
-
-    def test_known_namespace_passes(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"
-        cmd._namespaces = ["immich"]
-        stage = _make_stage("apps")
-        stage.helm_namespaces = None
-        cmd._deployment_service = self._make_service_with_namespaces(stage, ["immich", "media"])
-
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is True
-
-    def test_unknown_namespace_hard_errors_before_any_stage_runs(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"
-        cmd._namespaces = ["does-not-exist"]
-        stage = _make_stage("apps")
-        stage.helm_namespaces = None
-        cmd._deployment_service = self._make_service_with_namespaces(stage, ["immich", "media"])
-
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]) as preflight,
-            patch.object(cmd, "_execute_stage_provisioning") as stage_exec,
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is False
-        assert any("does-not-exist" in e and "not found" in e for e in cmd._errors), cmd._errors
-        # Fails fast — never even reaches the preflight/stage-execution phase
-        preflight.assert_not_called()
-        stage_exec.assert_not_called()
-
-
-class TestExecuteProvisioningStageGating:
-    """ADR-0083 Phase 3 — `enabled` gating inside _execute_provisioning()."""
-
-    def _make_command(self, tmp_path, stages, resolved=None):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"
-        svc = MagicMock()
-        spec = _make_locking_spec(enabled=False)
-        spec.stages = stages
-        svc.model.spec = spec
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-        cmd._resolved_values = resolved
-        return cmd
-
-    def test_disabled_stage_never_constructs_a_deployer(self, tmp_path):
-        """Goal 3: a gated-out stage must not initialise a backend.
-
-        Asserting only that the stage did not deploy would pass even if pre-flight
-        had already built its deployer and authenticated — which is the cost this
-        feature exists to avoid. So _create_deployer is left real and observed.
-        """
-        core, api = _make_stage("core"), _make_stage("api")
-        api.enabled = False
-        cmd = self._make_command(tmp_path, [core, api])
-
-        deployer = MagicMock()
-        deployer.validate_workspace.return_value = (True, [])
-        deployer.validate_environment.return_value = (True, [])
-
-        with (
-            patch.object(cmd, "_create_deployer", return_value=deployer) as create_deployer,
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True) as stage_exec,
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is True
-        assert [c.args[0].name for c in create_deployer.call_args_list] == ["core"]
-        assert [c.args[0].name for c in stage_exec.call_args_list] == ["core"]
-
-    def test_feature_expression_gates_the_stage(self, tmp_path):
-        core, api = _make_stage("core"), _make_stage("api")
-        api.enabled = "${feature:enable_api}"
-        cmd = self._make_command(tmp_path, [core, api], resolved=ResolvedValues(features={"enable_api": False}))
-
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True) as stage_exec,
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is True
-        assert [c.args[0].name for c in stage_exec.call_args_list] == ["core"]
-
-    def test_enabled_expression_runs_the_stage(self, tmp_path):
-        api = _make_stage("api")
-        api.enabled = "${feature:enable_api}"
-        cmd = self._make_command(tmp_path, [api], resolved=ResolvedValues(features={"enable_api": True}))
-
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True) as stage_exec,
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is True
-        assert [c.args[0].name for c in stage_exec.call_args_list] == ["api"]
-
-    def test_unresolvable_gate_aborts_before_any_stage_runs(self, tmp_path):
-        api = _make_stage("api")
-        api.enabled = "${feature:typo}"
-        cmd = self._make_command(tmp_path, [api], resolved=ResolvedValues(features={"other": True}))
-
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]) as preflight,
-            patch.object(cmd, "_execute_stage_provisioning") as stage_exec,
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is False
-        assert any("typo" in e for e in cmd._errors), cmd._errors
-        preflight.assert_not_called()
-        stage_exec.assert_not_called()
-
-    def test_stage_flag_naming_a_disabled_stage_is_rejected(self, tmp_path):
-        """D4: --stage does not override `enabled`."""
-        api = _make_stage("api")
-        api.enabled = False
-        cmd = self._make_command(tmp_path, [_make_stage("core"), api])
-        cmd._stage = "api"
-
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]) as preflight,
-            patch.object(cmd, "_execute_stage_provisioning") as stage_exec,
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is False
-        assert any("is disabled in this environment" in e for e in cmd._errors), cmd._errors
-        preflight.assert_not_called()
-        stage_exec.assert_not_called()
-
-    def test_all_stages_disabled_succeeds_without_deploying_anything(self, tmp_path):
-        a, b = _make_stage("a"), _make_stage("b")
-        a.enabled = False
-        b.enabled = False
-        cmd = self._make_command(tmp_path, [a, b])
-
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
-            patch.object(cmd, "_execute_stage_provisioning") as stage_exec,
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is True
-        stage_exec.assert_not_called()
-
-
-class TestSkippedStageIsRecorded:
-    """ADR-0083 Phase 4 / D6 — a gated-out stage is recorded, never silently absent."""
-
-    def _make_command(self, tmp_path, stages, resolved=None):
-        cmd = _make_run_command(tmp_path)
-        cmd._dry_run = False
-        cmd._output_format = "json"
-        svc = MagicMock()
-        spec = _make_locking_spec(enabled=False)
-        spec.stages = stages
-        svc.model.spec = spec
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-        cmd._resolved_values = resolved
-        return cmd
-
-    def _run(self, cmd):
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            return cmd._execute_provisioning()  # type: ignore[call-arg]
-
-    def test_skipped_stage_appears_in_stage_results_with_skipped_status(self, tmp_path):
-        core, api = _make_stage("core"), _make_stage("api")
-        api.enabled = False
-        api.provisioner = "dispatcher_tf"
-        cmd = self._make_command(tmp_path, [core, api])
-
-        assert self._run(cmd) is True
-
-        recorded = {sr.name: sr for sr in cmd._stage_results}
-        assert "api" in recorded, "a gated-out stage must not be silently absent"
-        assert recorded["api"].status == "skipped"
-        assert recorded["api"].provisioner == "dispatcher_tf"
-
-    def test_skip_reason_names_the_expression_and_resolved_value(self, tmp_path):
-        api = _make_stage("api")
-        api.enabled = "${feature:enable_api}"
-        cmd = self._make_command(tmp_path, [api], resolved=ResolvedValues(features={"enable_api": False}))
-
-        assert self._run(cmd) is True
-
-        reason = next(sr.skip_reason for sr in cmd._stage_results if sr.name == "api")
-        assert "${feature:enable_api}" in reason
-        assert "false" in reason
-
-    def test_skipped_is_distinguishable_from_failed(self, tmp_path):
-        api = _make_stage("api")
-        api.enabled = False
-        cmd = self._make_command(tmp_path, [api])
-
-        assert self._run(cmd) is True
-
-        result = cmd._stage_results[0]
-        assert result.status == "skipped"
-        assert result.error is None, "a skip is not a failure"
-
-    def test_skip_is_recorded_even_when_the_run_aborts_afterwards(self, tmp_path):
-        """The audit fact must survive a later failure in the same invocation."""
-        core, api = _make_stage("core"), _make_stage("api")
-        api.enabled = False
-        cmd = self._make_command(tmp_path, [core, api])
-        cmd._namespaces = ["does-not-exist"]
-        cmd._deployment_service.get_namespace_services.return_value = {}
-
-        with patch.object(cmd, "_execute_stage_provisioning") as stage_exec:
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is False
-        stage_exec.assert_not_called()
-        assert [sr.name for sr in cmd._stage_results] == ["api"]
-        assert cmd._stage_results[0].status == "skipped"
-
-    def test_deploy_log_carries_status_and_reason(self, tmp_path):
-        """The deploy-log is built from the same stage results (one call site)."""
-        from strata.models.deploy_log_model import DeployLogStageModel
-
-        api = _make_stage("api")
-        api.enabled = False
-        cmd = self._make_command(tmp_path, [api])
-        assert self._run(cmd) is True
-
-        sr = cmd._stage_results[0]
-        entry = DeployLogStageModel(
-            name=sr.name,
-            success=(sr.status == "success"),
-            status=sr.status,
-            skip_reason=sr.skip_reason,
-            started_at="2026-09-17T00:00:00Z",
-            completed_at="2026-09-17T00:00:00Z",
-            duration_seconds=0.0,
-        )
-
-        assert entry.status == "skipped"
-        assert entry.success is False
-        assert entry.skip_reason is not None
-
-    def test_cascade_skipped_stage_reaches_the_manifest(self, tmp_path):
-        """ADR-0083 Phase 5 exit criterion — recorded by Phase 4's machinery, no new code."""
-        core, api = _make_stage("core"), _make_stage("api")
-        core.enabled = False
-        api.depends_on = ["core"]
-        cmd = self._make_command(tmp_path, [core, api])
-
-        assert self._run(cmd) is True
-
-        recorded = {sr.name: sr for sr in cmd._stage_results}
-        assert set(recorded) == {"core", "api"}
-        assert recorded["api"].status == "skipped"
-        assert "depends on skipped stage 'core'" in recorded["api"].skip_reason
-
-    def test_dependency_ordering_applies_to_execution(self, tmp_path):
-        """depends_on now controls run order, not just diagram edges."""
-        later, earlier = _make_stage("later"), _make_stage("earlier")
-        later.depends_on = ["earlier"]
-        cmd = self._make_command(tmp_path, [later, earlier])
-
-        with (
-            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
-            patch.object(cmd, "_execute_stage_provisioning", return_value=True) as stage_exec,
-            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
-        ):
-            assert cmd._execute_provisioning() is True  # type: ignore[call-arg]
-
-        assert [c.args[0].name for c in stage_exec.call_args_list] == ["earlier", "later"]
-
-
-class TestDestroyIsNeverGated:
-    """ADR-0083 D3 — gating destroy would strand already-created infrastructure."""
-
-    def test_destroy_still_sees_a_disabled_stage(self, tmp_path):
-        cmd = _make_destroy_command(tmp_path)
-        cmd._dry_run = False
-        disabled = _make_stage("api")
-        disabled.enabled = False
-        svc = MagicMock()
-        spec = _make_locking_spec(enabled=False)
-        spec.stages = [disabled]
-        svc.model.spec = spec
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        with (
-            patch.object(cmd, "_evaluate_preflight_policies", return_value=True),
-            patch.object(cmd, "_execute_stage_destroy", return_value=True) as stage_destroy,
-        ):
-            result = cmd._execute_provisioning()  # type: ignore[call-arg]
-
-        assert result is True
-        assert [c.args[0].name for c in stage_destroy.call_args_list] == ["api"]
-
-    """Tests for `strata deploy list`."""
-
-    def _write_deployment(self, path: Path, name: str, layers: dict | None = None, tenant: str | None = None) -> Path:
-        """Write a minimal deployment YAML to *path/<name>.yaml*."""
-        layers_yaml = ""
-        if layers:
-            lines = "\n".join(f"    {k}: {v}" for k, v in layers.items())
-            layers_yaml = f"  layers:\n{lines}\n"
-        tenant_yaml = f"  tenant: {tenant}\n" if tenant else ""
-        content = (
-            f"apiVersion: strata.huybrechts.xyz/v1\n"
-            f"kind: deployment\n"
-            f"meta:\n"
-            f"  name: {name}\n"
-            f"spec:\n"
-            f"{layers_yaml}"
-            f"{tenant_yaml}"
-            f"  workspace:\n"
-            f"    name: ws_{name}\n"
-            f"  environments:\n"
-            f"    - env.yaml\n"
-        )
-        out = path / f"{name}.yaml"
-        out.write_text(content, encoding="utf-8")
-        return out
-
-    def test_list_basic(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.list_deploy_command.ListDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["list", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_list_with_path(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.list_deploy_command.ListDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["list", "--path", str(tmp_path), "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_list_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.list_deploy_command.ListDeployCommand.execute", return_value=False):
-            result = runner.invoke(deploy, ["list", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
-
-    def test_list_finds_deployment_manifests(self, tmp_path):
-        """Real scan: deployment YAMLs are discovered; non-deployment files ignored."""
-        self._write_deployment(tmp_path, "acme_prd", layers={"environment": "prd"}, tenant="acme")
-        self._write_deployment(tmp_path, "globex_dev", layers={"environment": "dev", "zone": "eu"})
-        (tmp_path / "not-a-deployment.yaml").write_text("kind: workspace\nmeta:\n  name: ws\n", encoding="utf-8")
-
-        runner = CliRunner()
-        result = runner.invoke(deploy, ["list", "--path", str(tmp_path), "--work-path", str(tmp_path)])
-        assert result.exit_code == 0, result.output
-        assert "acme_prd" in result.output
-        assert "globex_dev" in result.output
-        assert "not-a-deployment" not in result.output
-
-    def test_list_json_output(self, tmp_path):
-        """--output json emits a JSON array of deployment entries."""
-        import json
-
-        self._write_deployment(tmp_path, "acme_prd", layers={"environment": "prd", "zone": "eu"}, tenant="acme")
-
-        runner = CliRunner()
-        result = runner.invoke(
-            deploy,
-            ["list", "--path", str(tmp_path), "--output", "json", "--work-path", str(tmp_path)],
-        )
-        assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
-        assert isinstance(data, dict)
-        deployments = data["data"]["deployments"]
-        assert len(deployments) == 1
-        entry = deployments[0]
-        assert entry["name"] == "acme_prd"
-        assert entry["environment"] == "prd"
-        assert entry["zone"] == "eu"
-        assert entry["tenant"] == "acme"
-        assert entry["workspace"] == "ws_acme_prd"
-        assert "file" in entry
-
-    def test_list_layers_promoted_to_top_level(self, tmp_path):
-        """All spec.layers keys appear as top-level fields in each entry."""
-        import json
-
-        self._write_deployment(tmp_path, "d1", layers={"env": "prd", "region": "northeurope", "tier": "premium"})
-
-        runner = CliRunner()
-        result = runner.invoke(
-            deploy,
-            ["list", "--path", str(tmp_path), "--output", "json", "--work-path", str(tmp_path)],
-        )
-        assert result.exit_code == 0, result.output
-        entry = json.loads(result.output)["data"]["deployments"][0]
-        assert entry["env"] == "prd"
-        assert entry["region"] == "northeurope"
-        assert entry["tier"] == "premium"
-
-    def test_list_recursive_scan(self, tmp_path):
-        """Manifests in subdirectories are discovered."""
-        subdir = tmp_path / "tenants" / "acme"
-        subdir.mkdir(parents=True)
-        self._write_deployment(subdir, "acme_prd", layers={"environment": "prd"}, tenant="acme")
-
-        runner = CliRunner()
-        result = runner.invoke(deploy, ["list", "--path", str(tmp_path), "--work-path", str(tmp_path)])
-        assert result.exit_code == 0, result.output
-        assert "acme_prd" in result.output
-
-    def test_list_empty_directory(self, tmp_path):
-        """Empty directory exits 0 with an appropriate message."""
-        runner = CliRunner()
-        result = runner.invoke(deploy, ["list", "--path", str(tmp_path), "--work-path", str(tmp_path)])
-        assert result.exit_code == 0, result.output
-        assert "no deployment" in result.output.lower()
-
-    def test_list_invalid_path_exits_nonzero(self, tmp_path):
-        """Non-existent scan path exits non-zero."""
-        runner = CliRunner()
-        result = runner.invoke(
-            deploy,
-            ["list", "--path", str(tmp_path / "does_not_exist"), "--work-path", str(tmp_path)],
-        )
-        assert result.exit_code != 0
+def test_change_reference_flags_populate_the_manifest(runner, solution, _stub_terraform):
+    from strata.utils import layout
+
+    _build(runner, solution)
+    result = _deploy(
+        runner,
+        "app",
+        "--path",
+        solution,
+        "--force",
+        "--change-system",
+        "jira",
+        "--change-id",
+        "OPS-1234",
+        "--change-reason",
+        "planned maintenance",
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    manifest_path = next(layout.audit_dir(solution).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"system": "jira"' in manifest_text
+    assert '"id": "OPS-1234"' in manifest_text
+    assert '"reason": "planned maintenance"' in manifest_text
+
+
+def test_partial_change_reference_flags_exit_two_before_deploy_runs(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--change-system", "jira")
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []  # deploy_run() must never have been called
+
+
+def test_change_approval_flags_populate_the_manifest(runner, solution, _stub_terraform):
+    from strata.utils import layout
+
+    _build(runner, solution)
+    result = _deploy(
+        runner,
+        "app",
+        "--path",
+        solution,
+        "--force",
+        "--change-system",
+        "jira",
+        "--change-id",
+        "OPS-1234",
+        "--change-reason",
+        "planned maintenance",
+        "--change-approved-by",
+        "jsmith",
+        "--change-approved-at",
+        "2026-10-04T09:00:00+00:00",
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    manifest_path = next(layout.audit_dir(solution).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"approved_by": "jsmith"' in manifest_text
+    assert '"approved_at": "2026-10-04T09:00:00+00:00"' in manifest_text
+
+
+def test_partial_change_approval_flags_exit_two_before_deploy_runs(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(
+        runner,
+        "app",
+        "--path",
+        solution,
+        "--force",
+        "--change-system",
+        "jira",
+        "--change-id",
+        "OPS-1234",
+        "--change-reason",
+        "planned maintenance",
+        "--change-approved-by",
+        "jsmith",
+    )
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []  # deploy_run() must never have been called
+
+
+def test_change_approval_flags_without_the_base_trio_exit_two(runner, solution, _stub_terraform):
+    """An approval needs a change reference to approve — --change-approved-by/
+    --change-approved-at alone (no --change-system/--change-id/--change-reason)
+    must not be silently dropped."""
+    _build(runner, solution)
+    result = _deploy(
+        runner,
+        "app",
+        "--path",
+        solution,
+        "--force",
+        "--change-approved-by",
+        "jsmith",
+        "--change-approved-at",
+        "2026-10-04T09:00:00+00:00",
+    )
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []
 
 
 # ---------------------------------------------------------------------------
-# _run_hierarchy_lifecycle_phase
+# `deploy setup`/`deploy check` (docs/design/deploy-pipeline-stage-commands.md)
 # ---------------------------------------------------------------------------
 
 
-def _make_service_mock(name: str) -> MagicMock:
-    svc = MagicMock()
-    svc.__class__.__name__ = name
-    return svc
+def test_deploy_setup_calls_only_init(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "setup", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init"]
 
 
-class TestRunHierarchyLifecyclePhase:
-    """Unit tests for BaseDeployCommand._run_hierarchy_lifecycle_phase."""
+def test_deploy_check_calls_init_then_validate(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "check", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "validate"]
 
-    def _make_command(self, tmp_path) -> RunDeployCommand:
-        cmd = RunDeployCommand.__new__(RunDeployCommand)
-        cmd._work_path = tmp_path
-        cmd._errors = []
-        cmd._messages = []
-        cmd._deployment_service = None
-        cmd._output_format = "json"
-        return cmd
 
-    def _make_deployment_service(self, namespaces=None, providers=None, resources=None, modules=None):
-        ws = _make_service_mock("WorkspaceService")
-        ds = MagicMock()
-        ds.get_workspace_service.return_value = ws
-        ds.get_namespace_services.return_value = namespaces or {}
-        ds.get_provider_services.return_value = providers or {}
-        ds.get_resource_services.return_value = resources or {}
-        ds.get_module_services.return_value = modules or {}
-        return ds, ws
+def test_deploy_check_unknown_deployment_exits_two(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "check", "ghost-deployment", "--path", str(solution)])
+    assert result.exit_code == EXIT_USAGE
 
-    def test_no_deployment_service_returns_true(self, tmp_path):
-        cmd = self._make_command(tmp_path)
-        with patch(
-            "strata.controllers.lifecycle_controller.LifecycleController.execute_configuration_phase",
-            return_value=True,
-        ):
-            assert cmd._run_hierarchy_lifecycle_phase("deploy_stage_before") is True
 
-    def test_all_levels_called_in_order(self, tmp_path: Path) -> None:
-        cmd = self._make_command(tmp_path)
-        ns_svc = _make_service_mock("NamespaceService")
-        prov_svc = _make_service_mock("ProviderService")
-        res_svc = _make_service_mock("ResourceService")
-        mod_svc = _make_service_mock("ModuleService")
-        ds, ws_svc = self._make_deployment_service(
-            namespaces={"ns1": ns_svc},
-            providers={"prov1": prov_svc},
-            resources={"res1": res_svc},
-            modules={"res1:mod1": mod_svc},
-        )
-        cmd._deployment_service = ds
+def test_deploy_check_step_failure_exits_three(runner, solution, monkeypatch):
+    _build(runner, solution)
 
-        call_order: list[str] = []
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "validate":
+            return CommandResult(returncode=1, stdout="", stderr="validate exploded")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
 
-        def config_phase(*args, **kwargs):
-            call_order.append("config")
-            return True
+    import strata.integrations.base as base_module
 
-        def workspace_phase(base_service, *args, **kwargs):
-            call_order.append(f"workspace:{base_service.__class__.__name__}")
-            return True
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
-        with (
-            patch(
-                "strata.controllers.lifecycle_controller.LifecycleController.execute_configuration_phase",
-                side_effect=config_phase,
-            ),
-            patch(
-                "strata.controllers.lifecycle_controller.LifecycleController.execute_workspace_phase",
-                side_effect=workspace_phase,
-            ),
-        ):
-            result = cmd._run_hierarchy_lifecycle_phase("deploy_stage_before")
+    result = runner.invoke(cli, ["deploy", "check", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_VALIDATION
 
-        assert result is True
-        assert call_order[0] == "config"
-        # workspace level fires for workspace + each ns + prov + res + module
-        assert "workspace:WorkspaceService" in call_order
-        assert any("NamespaceService" in e for e in call_order)
-        assert any("ProviderService" in e for e in call_order)
-        assert any("ResourceService" in e for e in call_order)
-        assert any("ModuleService" in e for e in call_order)
 
-    def test_config_failure_stops_traversal(self, tmp_path):
-        cmd = self._make_command(tmp_path)
-        ds, _ = self._make_deployment_service()
-        cmd._deployment_service = ds
+def test_deploy_setup_and_check_forward_stage_and_scope(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "setup", "app", "--path", str(solution), "--stage", "apply_infra"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    result = runner.invoke(cli, ["deploy", "check", "app", "--path", str(solution), "--scope", "infra"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
 
-        lc = MagicMock()
-        lc.execute_configuration_phase.return_value = False
-        lc.get_errors.return_value = ["config script exited 1"]
-        lc.execute_workspace_phase.return_value = True
 
-        with patch("strata.controllers.lifecycle_controller.LifecycleController", return_value=lc):
-            result = cmd._run_hierarchy_lifecycle_phase("deploy_stage_before")
+def test_deploy_check_help_lists_check_not_validate(runner):
+    """`check` is the canonical, documented name; `validate` is a hidden
+    alias (docs/design/deploy-pipeline-stage-commands.md's naming-collision
+    resolution) — must not clutter `--help`'s command list. (The word
+    "validate" legitimately appears in `check`'s own help text, describing
+    what it runs — only the command *list* itself must omit a "validate"
+    entry.)"""
+    result = runner.invoke(cli, ["deploy", "--help"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "check" in result.output
+    assert not any(line.strip().startswith("validate") for line in result.output.splitlines())
 
-        assert result is False
-        lc.execute_workspace_phase.assert_not_called()
-        assert any("config" in e for e in cmd._errors)
 
-    def test_workspace_failure_stops_traversal(self, tmp_path):
-        cmd = self._make_command(tmp_path)
-        ns_svc = _make_service_mock("NamespaceService")
-        ds, ws_svc = self._make_deployment_service(namespaces={"ns1": ns_svc})
-        cmd._deployment_service = ds
+def test_deploy_validate_hidden_alias_behaves_identically_to_check(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "validate", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "validate"]
 
-        call_count = {"workspace": 0}
 
-        def workspace_phase(base_service, *args, **kwargs):
-            call_count["workspace"] += 1
-            return False  # fail on workspace
+def test_deploy_setup_gracefully_skips_container_capable_step(runner, tmp_path, _stub_terraform):
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(root, "charts/authentik/Chart.yaml", "name: authentik\n")
+    _write(root, "provider.yaml", PROVIDER)
+    _write(root, "resource.yaml", RESOURCE)
+    _write(
+        root,
+        "module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    source_path: charts/authentik\n  type: helm\n"
+        "  default_labels:\n    app: authentik\n  services:\n    - name: server\n",
+    )
+    _write(
+        root,
+        "namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: apps\nspec:\n"
+        "  default_labels:\n    app: apps\n  modules:\n    - name: auth\n      module: authentik\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n  namespaces:\n    - apps\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n"
+        "      scope: infra\n"
+        "    - name: deploy_apps\n      provisioner: helm_main\n      namespaces:\n        - apps\n"
+        "      scope: apps\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(root, "environment.yaml", ENVIRONMENT)
+    _write(root, "deployment.yaml", DEPLOYMENT)
 
-        lc = MagicMock()
-        lc.execute_configuration_phase.return_value = True
-        lc.get_errors.return_value = ["workspace hook failed"]
-        lc.execute_workspace_phase.side_effect = workspace_phase
-
-        with patch("strata.controllers.lifecycle_controller.LifecycleController", return_value=lc):
-            result = cmd._run_hierarchy_lifecycle_phase("deploy_stage_before")
-
-        assert result is False
-        # workspace level was called once (for the workspace itself)
-        assert lc.execute_workspace_phase.call_count == 1
-
-    def test_context_enriched_per_level(self, tmp_path: Path) -> None:
-        cmd = self._make_command(tmp_path)
-        ns_svc = _make_service_mock("NamespaceService")
-        ds, ws_svc = self._make_deployment_service(namespaces={"production": ns_svc})
-        cmd._deployment_service = ds
-
-        captured_contexts: list[dict] = []
-
-        def workspace_phase(base_service, phase_name, work_path, context=None, **kwargs):
-            captured_contexts.append(dict(context or {}))
-            return True
-
-        with (
-            patch(
-                "strata.controllers.lifecycle_controller.LifecycleController.execute_configuration_phase",
-                return_value=True,
-            ),
-            patch(
-                "strata.controllers.lifecycle_controller.LifecycleController.execute_workspace_phase",
-                side_effect=workspace_phase,
-            ),
-        ):
-            cmd._run_hierarchy_lifecycle_phase("deploy_stage_before", context={"stage": "infra"})
-
-        # namespace call should inject "namespace" key
-        ns_ctx = next((c for c in captured_contexts if "namespace" in c), None)
-        assert ns_ctx is not None
-        assert ns_ctx["namespace"] == "production"
-        assert ns_ctx["stage"] == "infra"
+    _build(runner, root)
+    result = runner.invoke(cli, ["deploy", "setup", "app", "--path", str(root)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    tf_commands = [call[1] for call in _stub_terraform if call[0] == "terraform"]
+    assert tf_commands == ["init"]
+    assert not any(call[0] == "helm" for call in _stub_terraform)
 
 
 # ---------------------------------------------------------------------------
-# --force-lock CLI wiring
+# `deploy apply` (docs/design/deploy-pipeline-stage-commands.md)
 # ---------------------------------------------------------------------------
 
 
-class TestForceLockFlag:
-    """--force-lock is parsed and forwarded to the underlying command."""
-
-    def test_run_force_lock_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.run_deploy_command.RunDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["run", "--force-lock", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_destroy_force_lock_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["destroy", "--force-lock", "--dry-run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
+def test_deploy_apply_missing_plan_file_exits_three_not_a_traceback(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "apply", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_VALIDATION, result.output
+    assert "no saved plan found" in result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init"]
 
 
-# ---------------------------------------------------------------------------
-# _acquire_lock — force_lock behaviour
-# ---------------------------------------------------------------------------
+def test_deploy_apply_applies_an_existing_saved_plan(runner, solution, tmp_path, _stub_terraform):
+    _build(runner, solution)
+    (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
+
+    result = runner.invoke(cli, ["deploy", "apply", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "apply", "output"]
 
 
-class TestForceLockAcquire:
-    """Tests for the --force-lock path inside _acquire_lock (base class)."""
+def test_deploy_apply_force_flag_is_accepted_and_currently_inert(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
 
-    def test_force_lock_releases_held_lock_before_acquire(self, tmp_path):
-        """When force_lock=True and a lock is held, force_release is called before acquire."""
-        cmd = _make_run_command(tmp_path)
-        cmd._force_lock = True
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
+    result = runner.invoke(cli, ["deploy", "apply", "app", "--path", str(solution), "--force"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    apply_call = next(call for call in _stub_terraform if call[1] == "apply")
+    assert "-auto-approve" not in apply_call
 
-        existing = MagicMock()
-        existing.holder = "old-ci-bot"
-        existing.hostname = "old-host"
-        existing.lock_id = "old-lock-id"
 
-        handle = MagicMock()
-        handle.lock_id = "new-lock-id"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
+def test_deploy_apply_forwards_stage_and_scope(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
 
-        backend = MagicMock()
-        backend.status.return_value = existing
-        backend.acquire.return_value = handle
+    result = runner.invoke(
+        cli, ["deploy", "apply", "app", "--path", str(solution), "--stage", "apply_infra", "--scope", "infra"]
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
 
-        result = cmd._acquire_lock(backend)
 
-        backend.force_release.assert_called_once_with("my-deploy")
-        assert result is handle
+def test_deploy_apply_change_reference_flags_populate_the_manifest(runner, solution, _stub_terraform):
+    from strata.utils import layout
 
-    def test_force_lock_no_held_lock_skips_force_release(self, tmp_path):
-        """When force_lock=True but no lock is held, force_release is not called."""
-        cmd = _make_run_command(tmp_path)
-        cmd._force_lock = True
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
+    _build(runner, solution)
+    (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
 
-        handle = MagicMock()
-        handle.lock_id = "new-lock"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "apply",
+            "app",
+            "--path",
+            str(solution),
+            "--change-system",
+            "jira",
+            "--change-id",
+            "OPS-1234",
+            "--change-reason",
+            "planned maintenance",
+        ],
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    manifest_path = next(layout.audit_dir(solution).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"system": "jira"' in manifest_text
+    assert '"id": "OPS-1234"' in manifest_text
 
-        backend = MagicMock()
-        backend.status.return_value = None  # nothing held
-        backend.acquire.return_value = handle
 
-        result = cmd._acquire_lock(backend)
-
-        backend.force_release.assert_not_called()
-        assert result is handle
-
-    def test_force_lock_false_skips_status_check(self, tmp_path):
-        """Default (force_lock=False): status() is never called before acquire."""
-        cmd = _make_run_command(tmp_path)
-        cmd._force_lock = False
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "lock-id"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-
-        backend = MagicMock()
-        backend.acquire.return_value = handle
-
-        cmd._acquire_lock(backend)
-
-        backend.status.assert_not_called()
-
-    def test_force_release_backend_error_returns_none(self, tmp_path):
-        """When force_release raises LockBackendError, _acquire_lock returns None."""
-        cmd = _make_run_command(tmp_path)
-        cmd._force_lock = True
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
-        svc.model.meta.name = "my-deploy"
-        cmd._deployment_service = svc
-
-        existing = MagicMock()
-        existing.holder = "old-ci"
-        existing.hostname = "old-host"
-        existing.lock_id = "old-lock"
-
-        backend = MagicMock()
-        backend.status.return_value = existing
-        backend.force_release.side_effect = LockBackendError("storage unavailable")
-
-        result = cmd._acquire_lock(backend)
-
-        assert result is None
-        assert len(cmd._errors) == 1
-        assert "Force-lock" in cmd._errors[0]
+def test_deploy_apply_partial_change_reference_flags_exit_two_before_deploy_runs(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(
+        cli,
+        ["deploy", "apply", "app", "--path", str(solution), "--change-system", "jira"],
+    )
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []  # deploy_run() must never have been called
 
 
 # ---------------------------------------------------------------------------
-# TestDestroyLocking — locking enforcement in DestroyDeployCommand
+# `deploy plan` (docs/design/deploy-pipeline-stage-commands.md)
 # ---------------------------------------------------------------------------
 
 
-def _make_destroy_command(tmp_path: Path):
-    from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
-
-    cmd = DestroyDeployCommand(work_path=str(tmp_path), force=True, dry_run=False)
-    cmd._work_path = tmp_path
-    cmd._build_path = tmp_path / "build"
-    cmd._output_format = "json"
-    return cmd
-
-
-class TestDestroyLocking:
-    """State locking enforcement for deploy destroy mirrors deploy run."""
-
-    def test_should_lock_true_when_enabled(self, tmp_path):
-        cmd = _make_destroy_command(tmp_path)
-        cmd._dry_run = False
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        cmd._deployment_service = svc
-        assert cmd._should_lock() is True
-
-    def test_should_lock_false_when_dry_run(self, tmp_path):
-        cmd = _make_destroy_command(tmp_path)
-        cmd._dry_run = True
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        cmd._deployment_service = svc
-        assert cmd._should_lock() is False
-
-    def test_should_lock_false_when_disabled(self, tmp_path):
-        cmd = _make_destroy_command(tmp_path)
-        cmd._dry_run = False
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=False)
-        cmd._deployment_service = svc
-        assert cmd._should_lock() is False
-
-    def test_acquire_called_before_stages(self, tmp_path):
-        """Lock is acquired before the stage loop runs."""
-        cmd = _make_destroy_command(tmp_path)
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        svc.model.spec.stages = [_make_stage()]
-        svc.model.meta.name = "prod"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "h1"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-        backend_mock = MagicMock()
-        backend_mock.acquire.return_value = handle
-
-        with (
-            patch.object(cmd, "_should_lock", return_value=True),
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_execute_stage_destroy", return_value=True),
-        ):
-            result = cmd._execute_provisioning()
-
-        backend_mock.acquire.assert_called_once()
-        assert result is True
-
-    def test_release_called_in_finally_on_success(self, tmp_path):
-        cmd = _make_destroy_command(tmp_path)
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        svc.model.spec.stages = [_make_stage()]
-        svc.model.meta.name = "prod"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "h1"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-        backend_mock = MagicMock()
-        backend_mock.acquire.return_value = handle
-
-        with (
-            patch.object(cmd, "_should_lock", return_value=True),
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_execute_stage_destroy", return_value=True),
-        ):
-            cmd._execute_provisioning()
-
-        backend_mock.release.assert_called_once_with(handle)
-
-    def test_release_called_in_finally_on_failure(self, tmp_path):
-        cmd = _make_destroy_command(tmp_path)
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        svc.model.spec.stages = [_make_stage()]
-        svc.model.meta.name = "prod"
-        cmd._deployment_service = svc
-
-        handle = MagicMock()
-        handle.lock_id = "h1"
-        handle.backend_type = "local"
-        handle.acquired_at = "2024-01-01T00:00:00Z"
-        backend_mock = MagicMock()
-        backend_mock.acquire.return_value = handle
-
-        with (
-            patch.object(cmd, "_should_lock", return_value=True),
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_execute_stage_destroy", return_value=False),
-        ):
-            result = cmd._execute_provisioning()
-
-        assert result is False
-        backend_mock.release.assert_called_once_with(handle)
-
-    def test_lock_timeout_returns_false(self, tmp_path):
-        cmd = _make_destroy_command(tmp_path)
-        svc = MagicMock()
-        svc.model.spec = _make_locking_spec(enabled=True)
-        svc.model.spec.stages = [_make_stage()]
-        svc.model.meta.name = "prod"
-        cmd._deployment_service = svc
-
-        backend_mock = MagicMock()
-        backend_mock.acquire.side_effect = LockTimeoutError(
-            deployment_name="prod", timeout_seconds=60, holder="other-ci"
-        )
-
-        with (
-            patch.object(cmd, "_should_lock", return_value=True),
-            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-        ):
-            result = cmd._execute_provisioning()
-
-        assert result is False
-        assert len(cmd._errors) > 0
-
-
-# ---------------------------------------------------------------------------
-# deploy drift CLI routing tests
-# ---------------------------------------------------------------------------
-
-
-class TestDeployDrift:
-    """CLI routing tests for `strata deploy drift` subgroup."""
-
-    def test_drift_run_basic(self, tmp_path):
-        """drift run with --file routes to DriftDeployCommand and exits 0."""
-        runner = CliRunner()
-        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["drift", "run", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_drift_run_stage_option(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
-            result = runner.invoke(
-                deploy,
-                ["drift", "run", "--file", "deploy.yaml", "--stage", "networking", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_drift_run_severity_option(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
-            result = runner.invoke(
-                deploy,
-                ["drift", "run", "--file", "deploy.yaml", "--severity", "high", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_drift_run_baseline_flag(self, tmp_path):
-        """--baseline flag is accepted."""
-        runner = CliRunner()
-        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
-            result = runner.invoke(
-                deploy,
-                ["drift", "run", "--file", "deploy.yaml", "--baseline", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_drift_run_invalid_severity_exits_2(self, tmp_path):
-        """Passing an invalid severity value should return Click usage error (exit 2)."""
-        runner = CliRunner()
-        result = runner.invoke(
-            deploy,
-            ["drift", "run", "--file", "deploy.yaml", "--severity", "badvalue", "--work-path", str(tmp_path)],
-        )
-        assert result.exit_code == 2
-
-    def test_drift_run_execute_false_returns_nonzero(self, tmp_path):
-        """When DriftDeployCommand.execute() returns False the CLI exits non-zero."""
-        runner = CliRunner()
-        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=False):
-            result = runner.invoke(deploy, ["drift", "run", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
-
-    def test_drift_run_file_required(self, tmp_path):
-        """Omitting --file should return Click usage error (exit 2)."""
-        runner = CliRunner()
-        result = runner.invoke(deploy, ["drift", "run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 2
-
-    def test_drift_acknowledge_basic(self, tmp_path):
-        """drift acknowledge routes to AcknowledgeDriftDeployCommand."""
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.acknowledge_drift_deploy_command.AcknowledgeDriftDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                deploy,
-                [
-                    "drift",
-                    "acknowledge",
-                    "--file",
-                    "deploy.yaml",
-                    "--address",
-                    "azurerm_autoscale_setting.web",
-                    "--reason",
-                    "auto-scaler",
-                    "--work-path",
-                    str(tmp_path),
-                ],
-            )
-        assert result.exit_code == 0
-
-    def test_drift_acknowledge_remove_flag(self, tmp_path):
-        """--remove flag is accepted."""
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.acknowledge_drift_deploy_command.AcknowledgeDriftDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                deploy,
-                [
-                    "drift",
-                    "acknowledge",
-                    "--file",
-                    "deploy.yaml",
-                    "--address",
-                    "azurerm_autoscale_setting.web",
-                    "--remove",
-                    "--work-path",
-                    str(tmp_path),
-                ],
-            )
-        assert result.exit_code == 0
-
-    def test_drift_acknowledge_address_required(self, tmp_path):
-        """Omitting --address should return Click usage error (exit 2)."""
-        runner = CliRunner()
-        result = runner.invoke(deploy, ["drift", "acknowledge", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 2
-
-    def test_drift_history_basic(self, tmp_path):
-        """drift history routes to DriftHistoryDeployCommand."""
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.drift_history_deploy_command.DriftHistoryDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                deploy,
-                ["drift", "history", "--file", "deploy.yaml", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_drift_history_last_option(self, tmp_path):
-        """--last N is accepted."""
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.drift_history_deploy_command.DriftHistoryDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                deploy,
-                ["drift", "history", "--file", "deploy.yaml", "--last", "5", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-
-# ---------------------------------------------------------------------------
-# RunDeployCommand._resolve_values() seeded/generated note output tests
-# ---------------------------------------------------------------------------
-
-
-def _make_run_cmd(tmp_path):
-    from unittest.mock import MagicMock
-
-    from strata.commands.deploy.run_deploy_command import RunDeployCommand
-
-    cmd = RunDeployCommand.__new__(RunDeployCommand)
-    cmd._work_path = tmp_path
-    cmd._file_path = tmp_path / "deploy.yaml"
-    cmd._stage = None
-    cmd._dry_run = False
-    cmd._force = False
-    cmd._errors = []
-    cmd._messages = []
-    cmd._output_data = {}
-    cmd._output_format = "console"
-    cmd._output_quiet = False
-    cmd._output_verbose = False
-    cmd._resolved_values = None
-    cmd._deployment_service = None
-    cmd._configuration_service = None
-    cmd._solution_controller = MagicMock()
-    cmd.logger = MagicMock()
-    return cmd
-
-
-class TestDeployRunSeedNotes:
-    """Unit tests for seeded/generated note output in RunDeployCommand._resolve_values()."""
-
-    def _run_resolve(
-        self,
-        tmp_path,
-        variable_notes=None,
-        secret_notes=None,
-        feature_notes=None,
-        variables=None,
-        secrets=None,
-        features=None,
-    ):
-        from unittest.mock import MagicMock, patch
-
-        from strata.utils.resolved_values import ResolvedValues
-
-        cmd = _make_run_cmd(tmp_path)
-        resolved = ResolvedValues(
-            variables=variables or {"X": "1"},
-            secrets=secrets or {},
-            features=features or {},
-            variable_notes=variable_notes or {},
-            secret_notes=secret_notes or {},
-            feature_notes=feature_notes or {},
-        )
-        value_ctrl = MagicMock()
-        value_ctrl.resolve_values.return_value = (True, resolved, [])
-        with patch("strata.commands.deploy.run_deploy_command.ValueController", return_value=value_ctrl):
-            output = []
-            with patch("click.echo", side_effect=output.append):
-                cmd._resolve_values()
-        return output
-
-    def test_seeded_variable_shown_in_output(self, tmp_path):
-        output = self._run_resolve(
-            tmp_path,
-            variables={"LOG_LEVEL": "info"},
-            variable_notes={"LOG_LEVEL": "default: info"},
-        )
-        seeded_lines = [line for line in output if "Seeded on first run" in str(line)]
-        assert len(seeded_lines) == 1
-        assert "LOG_LEVEL=info" in seeded_lines[0]
-
-    def test_seeded_feature_shown_in_output(self, tmp_path):
-        output = self._run_resolve(
-            tmp_path,
-            variables={"X": "1"},
-            features={"DARK_MODE": False},
-            feature_notes={"DARK_MODE": "default: false"},
-        )
-        seeded_lines = [line for line in output if "Seeded on first run" in str(line)]
-        assert len(seeded_lines) == 1
-        assert "DARK_MODE=false" in seeded_lines[0]
-
-    def test_generated_secret_shown_in_output(self, tmp_path):
-        output = self._run_resolve(
-            tmp_path,
-            variables={"X": "1"},
-            secrets={"DB_PASSWORD": "s3cr3t"},
-            secret_notes={"DB_PASSWORD": "generated"},
-        )
-        gen_lines = [line for line in output if "Generated on first run" in str(line)]
-        assert len(gen_lines) == 1
-        assert "DB_PASSWORD" in gen_lines[0]
-
-    def test_no_extra_lines_when_notes_empty(self, tmp_path):
-        output = self._run_resolve(tmp_path)
-        assert not any("Seeded on first run" in str(line) for line in output)
-        assert not any("Generated on first run" in str(line) for line in output)
-
-    def test_non_default_variable_note_not_shown(self, tmp_path):
-        output = self._run_resolve(
-            tmp_path,
-            variables={"X": "1"},
-            variable_notes={"X": "some-other-note"},
-        )
-        assert not any("Seeded on first run" in str(line) for line in output)
-
-
-# ---------------------------------------------------------------------------
-# TestResolveValuesStoreUnavailable — bug fix: RunDeployCommand._resolve_values()
-# must abort the deploy (return False) when a store is unreachable/unauthenticated,
-# even in non-strict mode, instead of silently continuing.
-# ---------------------------------------------------------------------------
-
-
-class TestResolveValuesStoreUnavailable:
-    def _run_resolve(self, tmp_path, store_unavailable_errors, ok=False, errors=None):
-        from unittest.mock import MagicMock, patch
-
-        from strata.utils.resolved_values import ResolvedValues
-
-        cmd = _make_run_cmd(tmp_path)
-        resolved = ResolvedValues(store_unavailable_errors=list(store_unavailable_errors))
-        value_ctrl = MagicMock()
-        value_ctrl.resolve_values.return_value = (ok, resolved, errors or [])
-        with patch("strata.commands.deploy.run_deploy_command.ValueController", return_value=value_ctrl):
-            with patch("click.echo"):
-                result = cmd._resolve_values()
-        return cmd, result
-
-    def test_returns_false_when_store_unavailable(self, tmp_path):
-        cmd, result = self._run_resolve(tmp_path, ["Secret 'DB_PASSWORD': Store 'infisical' unavailable: auth failed"])
-        assert result is False
-
-    def test_store_unavailable_errors_added_to_command_errors(self, tmp_path):
-        msg = "Secret 'DB_PASSWORD': Store 'infisical' unavailable: auth failed"
-        cmd, result = self._run_resolve(tmp_path, [msg])
-        assert msg in cmd._errors
-
-    def test_no_store_unavailable_errors_returns_true(self, tmp_path):
-        cmd, result = self._run_resolve(tmp_path, [], ok=True)
-        assert result is True
-        assert cmd._errors == []
-
-
-# ---------------------------------------------------------------------------
-# TestDestroyNdjsonStreaming — NDJSON event emission in _execute_stage_destroy
-# ---------------------------------------------------------------------------
-
-
-def _make_destroy_stage(name: str = "infra"):
-    stage = MagicMock()
-    stage.name = name
-    stage.provisioner = "tf_main"
-    stage.topology = None
-    return stage
-
-
-# ---------------------------------------------------------------------------
-# _run_cost_diff_for_stage — gated on CostController.is_auto_diff_enabled()
-# (i.e. a cost estimator declared in spec.integrations), not just on whether
-# an estimator binary happens to be installed.
-# ---------------------------------------------------------------------------
-
-
-class TestRunCostDiffForStage:
-    def _make_stage(self, provisioner: str = "terraform"):
-        stage = MagicMock()
-        stage.name = "infra"
-        stage.provisioner = provisioner
-        return stage
-
-    def test_skips_when_auto_diff_not_enabled(self, tmp_path):
-        """Not declared in spec.integrations -> never even checks is_available()
-        or attempts a diff, regardless of whether the binary is installed."""
-        cmd = _make_run_command(tmp_path)
-        cmd._deployment_service = MagicMock()
-        stage = self._make_stage()
-
-        mock_controller = MagicMock()
-        mock_controller.is_auto_diff_enabled.return_value = False
-
-        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
-            cmd._run_cost_diff_for_stage(stage, tmp_path / "plan.json")
-
-        mock_controller.is_auto_diff_enabled.assert_called_once()
-        mock_controller.is_available.assert_not_called()
-        mock_controller.diff.assert_not_called()
-
-    def test_proceeds_when_auto_diff_enabled_and_available(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._deployment_service = MagicMock()
-        cmd._output_format = "json"  # suppress console rendering
-        stage = self._make_stage()
-
-        mock_controller = MagicMock()
-        mock_controller.is_auto_diff_enabled.return_value = True
-        mock_controller.is_available.return_value = True
-        mock_controller.diff.return_value = (True, {"diff": {}, "totalMonthlyCost": "0", "pastTotalMonthlyCost": "0"})
-        mock_controller.get_messages.return_value = []
-        mock_controller.get_errors.return_value = []
-
-        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
-            cmd._run_cost_diff_for_stage(stage, tmp_path / "plan.json")
-
-        mock_controller.is_auto_diff_enabled.assert_called_once()
-        mock_controller.is_available.assert_called_once()
-        mock_controller.diff.assert_called_once()
-
-    def test_skips_when_enabled_but_binary_not_available(self, tmp_path):
-        """Declared in spec.integrations but the binary itself isn't installed
-        -> still skips silently (non-fatal), same as before this change."""
-        cmd = _make_run_command(tmp_path)
-        cmd._deployment_service = MagicMock()
-        stage = self._make_stage()
-
-        mock_controller = MagicMock()
-        mock_controller.is_auto_diff_enabled.return_value = True
-        mock_controller.is_available.return_value = False
-
-        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
-            cmd._run_cost_diff_for_stage(stage, tmp_path / "plan.json")
-
-        mock_controller.diff.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# _record_final_cost_history — exactly one snapshot per deploy run (ADR-0031
-# section 3b), called once after all stages finish, not per stage.
-# ---------------------------------------------------------------------------
-
-
-class TestRecordFinalCostHistory:
-    def test_no_op_when_no_deployment_service(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._deployment_service = None
-
-        with patch("strata.controllers.cost_controller.CostController") as mock_cls:
-            cmd._record_final_cost_history()
-
-        mock_cls.assert_not_called()
-
-    def test_delegates_to_cost_controller(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._deployment_service = MagicMock()
-
-        mock_controller = MagicMock()
-        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller) as mock_cls:
-            cmd._record_final_cost_history()
-
-        mock_cls.assert_called_once_with(work_path=cmd._work_path)
-        mock_controller.record_final_history_snapshot.assert_called_once_with(
-            deployment_service=cmd._deployment_service,
-            build_path=cmd._build_path,
-        )
-
-    def test_nonfatal_on_exception(self, tmp_path):
-        cmd = _make_run_command(tmp_path)
-        cmd._deployment_service = MagicMock()
-
-        mock_controller = MagicMock()
-        mock_controller.record_final_history_snapshot.side_effect = RuntimeError("boom")
-        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
-            cmd._record_final_cost_history()  # must not raise
-
-
-def _make_mock_deployer(step_names=("setup", "destroy")):
-    deployer = MagicMock()
-    deployer.get_deployer_name.return_value = "terraform"
-    deployer.get_supported_steps.return_value = list(step_names)
-    deployer.validate_workspace.return_value = (True, [])
-    deployer.validate_environment.return_value = (True, [])
-    for step in step_names:
-        getattr(deployer, step).return_value = (True, [])
-    return deployer
-
-
-class TestDestroyNdjsonStreaming:
-    """NDJSON stage/step events emitted by _execute_stage_destroy."""
-
-    def _make_cmd(self, tmp_path: Path, force: bool = True):
-        from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
-
-        cmd = DestroyDeployCommand(work_path=str(tmp_path), force=force, dry_run=False)
-        cmd._work_path = tmp_path
-        cmd._build_path = tmp_path / "build"
-        cmd._output_format = "ndjson"
-        cmd._dry_run = False
-        cmd._force = force
-        cmd._deployment_service = MagicMock()
-        cmd._configuration_service = MagicMock()
-        cmd._solution_controller = MagicMock()
-        return cmd
-
-    def test_stage_start_end_emitted(self, tmp_path):
-        cmd = self._make_cmd(tmp_path)
-        deployer = _make_mock_deployer()
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            cmd.emit_ndjson = MagicMock()
-            result = cmd._execute_stage_destroy(_make_destroy_stage())
-
-        assert result is True
-        events = [call.args[0]["event"] for call in cmd.emit_ndjson.call_args_list]
-        assert events[0] == "stage_start"
-        assert events[-1] == "stage_end"
-
-    def test_step_start_end_emitted_per_step(self, tmp_path):
-        cmd = self._make_cmd(tmp_path)
-        deployer = _make_mock_deployer(step_names=("setup", "destroy"))
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            cmd.emit_ndjson = MagicMock()
-            cmd._execute_stage_destroy(_make_destroy_stage())
-
-        events = [call.args[0]["event"] for call in cmd.emit_ndjson.call_args_list]
-        assert events.count("step_start") == 2
-        assert events.count("step_end") == 2
-
-    def test_step_end_failure_emitted_on_step_failure(self, tmp_path):
-        cmd = self._make_cmd(tmp_path)
-        deployer = _make_mock_deployer()
-        deployer.setup.return_value = (True, [])
-        deployer.destroy.return_value = (False, ["destroy failed"])
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            cmd.emit_ndjson = MagicMock()
-            result = cmd._execute_stage_destroy(_make_destroy_stage())
-
-        assert result is False
-        step_ends = [call.args[0] for call in cmd.emit_ndjson.call_args_list if call.args[0].get("event") == "step_end"]
-        failed = [e for e in step_ends if not e.get("success")]
-        assert len(failed) == 1
-        assert failed[0]["step"] == "destroy"
-
-    def test_stage_end_not_emitted_on_failure(self, tmp_path):
-        cmd = self._make_cmd(tmp_path)
-        deployer = _make_mock_deployer()
-        deployer.destroy.return_value = (False, ["fail"])
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            cmd.emit_ndjson = MagicMock()
-            cmd._execute_stage_destroy(_make_destroy_stage())
-
-        events = [call.args[0]["event"] for call in cmd.emit_ndjson.call_args_list]
-        assert "stage_end" not in events
-
-    def test_no_events_when_not_ndjson(self, tmp_path):
-        from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
-
-        cmd = DestroyDeployCommand(work_path=str(tmp_path), force=True, dry_run=False)
-        cmd._work_path = tmp_path
-        cmd._build_path = tmp_path / "build"
-        cmd._output_format = "console"
-        cmd._dry_run = False
-        cmd._force = True
-        cmd._deployment_service = MagicMock()
-        cmd._configuration_service = MagicMock()
-        cmd._solution_controller = MagicMock()
-
-        deployer = _make_mock_deployer()
-        with patch.object(cmd, "_create_deployer", return_value=deployer):
-            cmd.emit_ndjson = MagicMock()
-            cmd._execute_stage_destroy(_make_destroy_stage())
-
-        cmd.emit_ndjson.assert_not_called()
+def test_deploy_plan_calls_init_validate_plan_but_not_apply(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "validate", "plan"]
+
+
+def test_deploy_plan_saves_a_tfplan_file(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    plan_call = next(call for call in _stub_terraform if call[1] == "plan")
+    assert "-out" in plan_call and "apply_infra.tfplan" in plan_call
+
+
+def test_deploy_plan_streams_console_output_by_default_without_follow(runner, solution, _stub_terraform_streaming):
+    """Unlike every other deploy subcommand, `deploy plan` streams the
+    diff to the console WITHOUT needing `--follow` — its own `--follow`
+    option defaults to `"console"`, mirroring real `terraform plan`'s
+    interactive UX (docs/design/deploy-pipeline-stage-commands.md)."""
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" in result.output
+
+
+def test_deploy_plan_explicit_follow_ndjson_still_overrides_the_console_default(
+    runner, solution, _stub_terraform_streaming
+):
+    _build(runner, solution)
+    result = runner.invoke(
+        cli, ["deploy", "plan", "app", "--path", str(solution), "--follow", "ndjson", "--output", "json"]
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert '"event": "line"' in result.output
+
+
+def test_deploy_plan_output_json_reroutes_the_default_console_stream_to_stderr(
+    runner, solution, _stub_terraform_streaming
+):
+    """No flag fully silences the default stream — `--output json` reroutes
+    it to stderr instead, same precedent `deploy run --follow --output json`
+    already established, so stdout stays exactly one JSON document."""
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution), "--output", "json"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" in result.stderr
+    assert "terraform │" not in result.stdout
+    json.loads(result.stdout)
+
+
+def test_deploy_plan_unknown_deployment_exits_two(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "plan", "ghost-deployment", "--path", str(solution)])
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_deploy_plan_plan_failure_exits_three(runner, solution, monkeypatch):
+    _build(runner, solution)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "plan":
+            return CommandResult(returncode=1, stdout="", stderr="plan exploded")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
+    assert result.exit_code == EXIT_VALIDATION

@@ -1,892 +1,256 @@
 {
   "name": "xyz-strata",
   "displayName": "Strata",
-  "description": "Strata infrastructure workspace integration — validate YAML, explore workspace, build and deploy.",
-  "version": "1.11.2",
+  "description": "Validate strata solutions on every save, explore how their documents reference each other, and get schema autocomplete for every document kind.",
+  "version": "2.0.0",
   "publisher": "huybrechts-xyz",
-  "icon": "resources/icon.png",
   "license": "AGPL-3.0-or-later",
+  "icon": "resources/icon.png",
+  "galleryBanner": {
+    "color": "#14202E",
+    "theme": "dark"
+  },
+  "homepage": "https://github.com/huybrechtsxyz/strata#readme",
+  "bugs": {
+    "url": "https://github.com/huybrechtsxyz/strata/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/huybrechtsxyz/strata"
+    "url": "https://github.com/huybrechtsxyz/strata.git",
+    "directory": "src/vscode"
   },
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Other",
-    "Linters"
+    "Linters",
+    "Visualization",
+    "Other"
   ],
   "keywords": [
     "strata",
-    "infrastructure",
-    "deployment",
+    "terraform",
+    "helm",
+    "docker-compose",
+    "infrastructure-as-code",
+    "iac",
     "yaml",
-    "platform"
+    "devops"
   ],
   "activationEvents": [
-    "workspaceContains:.strata/solution.json"
+    "workspaceContains:strata.yaml"
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "chatParticipants": [
-      {
-        "id": "strata.chat",
-        "fullName": "Strata",
-        "name": "strata",
-        "description": "Ask questions about your strata infrastructure workspace.",
-        "isSticky": true,
-        "commands": [
-          {
-            "name": "status",
-            "description": "Show workspace health, profile, and readiness"
-          },
-          {
-            "name": "validate",
-            "description": "Validate the current file or a named file"
-          },
-          {
-            "name": "guide",
-            "description": "Show the 8-phase readiness checklist"
-          },
-          {
-            "name": "build",
-            "description": "Run or dry-run a build on the current deployment"
-          },
-          {
-            "name": "deploy",
-            "description": "Run or dry-run a deploy on the current deployment"
-          },
-          {
-            "name": "stage",
-            "description": "Deploy a specific stage: /stage [file] <stage-name>"
-          },
-          {
-            "name": "values",
-            "description": "Inspect resolved values for the current deployment"
-          },
-          {
-            "name": "drift",
-            "description": "Run drift detection on the current deployment"
-          },
-          {
-            "name": "repos",
-            "description": "Show repository status with latest release and quality-gate tags"
-          },
-          {
-            "name": "promote",
-            "description": "Show promotion status, matrix, or trigger a promotion"
-          },
-          {
-            "name": "versions",
-            "description": "Show version pins and lock status for a ring"
-          },
-          {
-            "name": "review",
-            "description": "AI plan review: run terraform plan and analyse risks with AI"
-          },
-          {
-            "name": "diagnose",
-            "description": "AI failure diagnosis: explain the last failed deployment"
-          },
-          {
-            "name": "sbom",
-            "description": "AI SBOM analysis: analyse supply-chain risks in the component inventory"
-          },
-          {
-            "name": "approvals",
-            "description": "Show pending work items (approval gates, cost reviews, security reviews)"
-          },
-          {
-            "name": "diagram",
-            "description": "List diagrams, show one (/diagram show <name>), or generate one from a description (/diagram create <description>)"
-          }
-        ]
-      }
-    ],
     "commands": [
       {
-        "command": "strata.approveWorkItem",
-        "title": "Strata: Approve Work Item",
+        "command": "strata.validate",
+        "title": "Strata: Validate Solution",
         "icon": "$(check)"
       },
       {
-        "command": "strata.rejectWorkItem",
-        "title": "Strata: Reject Work Item",
-        "icon": "$(x)"
-      },
-      {
-        "command": "strata.refreshWorkItems",
-        "title": "Strata: Refresh Work Items",
+        "command": "strata.refreshGraph",
+        "title": "Strata: Refresh Graph",
         "icon": "$(refresh)"
       },
       {
-        "command": "strata.refreshCache",
-        "title": "Strata: Refresh Model Cache",
-        "icon": "$(database)"
+        "command": "strata.openGraphLocation",
+        "title": "Strata: Open Reference Location"
       },
       {
-        "command": "strata.showWorkItem",
-        "title": "Strata: Show Work Item Details",
-        "icon": "$(info)"
-      },
-      {
-        "command": "strata.initWorkspace",
-        "title": "Strata: Initialize Workspace",
-        "icon": "$(cloud)"
-      },
-      {
-        "command": "strata.validateCurrentFile",
-        "title": "Strata: Validate Current File",
-        "icon": "$(check)"
-      },
-      {
-        "command": "strata.validateAll",
-        "title": "Strata: Validate All Files",
-        "icon": "$(checklist)"
-      },
-      {
-        "command": "strata.buildDryRun",
-        "title": "Strata: Build (Dry Run)",
-        "icon": "$(play)"
-      },
-      {
-        "command": "strata.buildRun",
-        "title": "Strata: Build",
-        "icon": "$(play-circle)"
-      },
-      {
-        "command": "strata.deployDryRun",
-        "title": "Strata: Deploy (Dry Run)",
-        "icon": "$(rocket)"
-      },
-      {
-        "command": "strata.deployRun",
-        "title": "Strata: Deploy",
-        "icon": "$(cloud-upload)"
-      },
-      {
-        "command": "strata.envStatus",
-        "title": "Strata: Show Environment Status",
-        "icon": "$(pulse)"
-      },
-      {
-        "command": "strata.envDrift",
-        "title": "Strata: Detect Drift",
-        "icon": "$(diff)"
-      },
-      {
-        "command": "strata.envDoctor",
-        "title": "Strata: Run Doctor",
-        "icon": "$(heart)"
-      },
-      {
-        "command": "strata.auditChanges",
-        "title": "Strata: Show Audit Trail",
-        "icon": "$(history)"
-      },
-      {
-        "command": "strata.auditResend",
-        "title": "Strata: Resend to Audit Sinks",
-        "icon": "$(broadcast)"
-      },
-      {
-        "command": "strata.auditExport",
-        "title": "Strata: Export Audit Trail",
-        "icon": "$(export)"
-      },
-      {
-        "command": "strata.showGuide",
-        "title": "Strata: Show Guide",
-        "icon": "$(list-ordered)"
-      },
-      {
-        "command": "strata.showIntegrationHelp",
-        "title": "Strata: Show Integration Help",
-        "icon": "$(book)"
-      },
-      {
-        "command": "strata.switchProfile",
-        "title": "Strata: Switch Profile",
-        "icon": "$(account)"
-      },
-      {
-        "command": "strata.exportSchemas",
-        "title": "Strata: Export & Wire Schemas",
-        "icon": "$(file-code)"
-      },
-      {
-        "command": "strata.openConsole",
-        "title": "Strata: Open Console",
-        "icon": "$(terminal)"
-      },
-      {
-        "command": "strata.showDependencyGraph",
-        "title": "Strata: Show Dependency Graph",
-        "icon": "$(type-hierarchy)"
-      },
-      {
-        "command": "strata.showTopologyDiagram",
-        "title": "Strata: Show Infrastructure Topology",
-        "icon": "$(circuit-board)"
-      },
-      {
-        "command": "strata.previewDiagramFile",
-        "title": "Strata: Preview Diagram",
-        "icon": "$(preview)"
-      },
-      {
-        "command": "strata.refreshDiagrams",
-        "title": "Refresh",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "strata.filterDiagrams",
-        "title": "Filter Diagrams",
-        "icon": "$(filter)"
-      },
-      {
-        "command": "strata.openDiagramBuilder",
-        "title": "Strata: New Diagram (Builder)",
-        "icon": "$(add)"
-      },
-      {
-        "command": "strata.editDiagramInBuilder",
-        "title": "Edit in Diagram Builder",
-        "icon": "$(edit)"
-      },
-      {
-        "command": "strata.refreshTreeView",
-        "title": "Refresh",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "strata.openFile",
-        "title": "Open File",
-        "icon": "$(go-to-file)"
-      },
-      {
-        "command": "strata.deployStage",
-        "title": "Strata: Deploy Stage",
-        "icon": "$(rocket)"
-      },
-      {
-        "command": "strata.lockStatus",
-        "title": "Strata: Show Lock Status",
-        "icon": "$(lock)"
-      },
-      {
-        "command": "strata.releaseLock",
-        "title": "Strata: Force Release Lock",
-        "icon": "$(unlock)"
-      },
-      {
-        "command": "strata.showValues",
-        "title": "Strata: Inspect Values",
-        "icon": "$(symbol-variable)"
-      },
-      {
-        "command": "strata.copyValueKey",
-        "title": "Copy Key",
-        "icon": "$(copy)"
-      },
-      {
-        "command": "strata.buildSbom",
-        "title": "Strata: Generate SBOM",
-        "icon": "$(package)"
-      },
-      {
-        "command": "strata.syncRepo",
-        "title": "Strata: Sync Repository",
+        "command": "strata.updateSolution",
+        "title": "Strata: Update Solution Files (schemas, scaffold)",
         "icon": "$(sync)"
       },
       {
-        "command": "strata.addRepo",
-        "title": "Strata: Add Repository",
-        "icon": "$(add)"
+        "command": "strata.selectDeployment",
+        "title": "Strata: Select Deployment",
+        "icon": "$(rocket)"
       },
       {
-        "command": "strata.removeRepo",
-        "title": "Strata: Remove Repository",
-        "icon": "$(trash)"
+        "command": "strata.refreshIntegrations",
+        "title": "Strata: Refresh Integrations",
+        "icon": "$(refresh)"
       },
       {
-        "command": "strata.auditFilter",
-        "title": "Strata: Filter Audit Trail",
-        "icon": "$(filter)"
+        "command": "strata.checkIntegration",
+        "title": "Check Connection",
+        "icon": "$(plug)"
       },
       {
-        "command": "strata.auditSetLimit",
-        "title": "Strata: Set Audit Entry Limit",
-        "icon": "$(list-ordered)"
-      },
-      {
-        "command": "strata.buildPlan",
-        "title": "Strata: Build Plan",
-        "icon": "$(diff)"
+        "command": "strata.refreshPolicies",
+        "title": "Strata: Refresh Policies",
+        "icon": "$(refresh)"
       },
       {
         "command": "strata.checkPolicy",
         "title": "Strata: Check Policies",
-        "icon": "$(shield)"
+        "icon": "$(play)"
       },
       {
-        "command": "strata.copyOutputValue",
-        "title": "Copy Output Value",
-        "icon": "$(copy)"
-      },
-      {
-        "command": "strata.manageRefs",
-        "title": "Strata: Manage Profile References",
-        "icon": "$(references)"
-      },
-      {
-        "command": "strata.promoteStatus",
-        "title": "Strata: Show Promotion Status",
-        "icon": "$(rocket)"
-      },
-      {
-        "command": "strata.promoteMatrix",
-        "title": "Strata: Show Version Matrix",
-        "icon": "$(table)"
-      },
-      {
-        "command": "strata.promoteHistory",
-        "title": "Strata: Show Promotion History",
-        "icon": "$(history)"
-      },
-      {
-        "command": "strata.promoteStart",
-        "title": "Strata: Promote to Ring",
-        "icon": "$(arrow-up)"
-      },
-      {
-        "command": "strata.promoteRollback",
-        "title": "Strata: Rollback Promotion",
-        "icon": "$(arrow-down)"
-      },
-      {
-        "command": "strata.refreshPromotions",
-        "title": "Refresh",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "strata.selectDeployment",
-        "title": "Strata: Select Active Deployment",
-        "icon": "$(search)"
-      },
-      {
-        "command": "strata.setActiveDeployment",
-        "title": "Strata: Set as Active Deployment",
-        "icon": "$(target)"
-      },
-      {
-        "command": "strata.newFile",
-        "title": "Strata: New File",
-        "icon": "$(add)"
-      },
-      {
-        "command": "strata.activateProfile",
-        "title": "Strata: Activate Profile",
-        "icon": "$(account)"
-      },
-      {
-        "command": "strata.showCostHistory",
-        "title": "Strata: Show Cost History",
-        "icon": "$(dashboard)"
-      },
-      {
-        "command": "strata.showHelp",
-        "title": "Strata: Show Help",
-        "icon": "$(book)"
-      },
-      {
-        "command": "strata.stateService.checkHealth",
-        "title": "Strata: Check State Service Health",
-        "icon": "$(radio-tower)"
-      },
-      {
-        "command": "strata.stateService.showTail",
-        "title": "Strata: Show State Service Tail",
-        "icon": "$(output)"
-      },
-      {
-        "command": "strata.stateService.createToken",
-        "title": "Strata: Create Ingest Token",
-        "icon": "$(key)"
-      },
-      {
-        "command": "strata.stateService.listTokens",
-        "title": "Strata: List Ingest Tokens",
+        "command": "strata.showPolicyFindings",
+        "title": "Show Findings",
         "icon": "$(list-unordered)"
-      },
-      {
-        "command": "strata.stateService.revokeToken",
-        "title": "Strata: Revoke Ingest Token",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "strata.stateService.setAdminToken",
-        "title": "Strata: Set State Service Admin Token",
-        "icon": "$(lock)"
-      },
-      {
-        "command": "strata.stateService.clearAdminToken",
-        "title": "Strata: Clear State Service Admin Token",
-        "icon": "$(clear-all)"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "strata-explorer",
-          "title": "Strata",
-          "icon": "resources/strata.svg"
-        }
-      ]
-    },
-    "views": {
-      "strata-explorer": [
-        {
-          "id": "strataWorkspace",
-          "name": "Workspace",
-          "contextualTitle": "Strata Workspace"
-        },
-        {
-          "id": "strataDeployments",
-          "name": "Deployments",
-          "contextualTitle": "Strata Deployments"
-        },
-        {
-          "id": "strataOperations",
-          "name": "Operations",
-          "contextualTitle": "Strata Operations"
-        },
-        {
-          "id": "strataAudit",
-          "name": "Audit Trail",
-          "contextualTitle": "Strata Audit Trail"
-        },
-        {
-          "id": "strataValues",
-          "name": "Values",
-          "contextualTitle": "Strata Values"
-        },
-        {
-          "id": "strataPromotions",
-          "name": "Promotions",
-          "contextualTitle": "Strata Promotions"
-        },
-        {
-          "id": "strataWorkItems",
-          "name": "Pending Work",
-          "contextualTitle": "Strata Pending Work Items"
-        },
-        {
-          "id": "strataHelp",
-          "name": "Help",
-          "contextualTitle": "Strata Help"
-        },
-        {
-          "id": "strataDiagrams",
-          "name": "Diagrams",
-          "contextualTitle": "Strata Diagrams"
-        }
-      ]
-    },
     "menus": {
       "view/title": [
         {
-          "command": "strata.refreshTreeView",
-          "when": "view == strataWorkspace || view == strataDeployments || view == strataOperations || view == strataAudit || view == strataValues || view == strataPromotions",
+          "command": "strata.refreshGraph",
+          "when": "view == strataGraph",
           "group": "navigation"
         },
         {
           "command": "strata.selectDeployment",
-          "when": "view == strataDeployments",
-          "group": "navigation"
+          "when": "view == strataIntegrations || view == strataPolicies",
+          "group": "navigation@1"
         },
         {
-          "command": "strata.newFile",
-          "when": "view == strataDeployments",
-          "group": "navigation"
+          "command": "strata.refreshIntegrations",
+          "when": "view == strataIntegrations",
+          "group": "navigation@2"
         },
         {
-          "command": "strata.envDoctor",
-          "when": "view == strataOperations",
-          "group": "navigation"
+          "command": "strata.checkPolicy",
+          "when": "view == strataPolicies",
+          "group": "navigation@2"
         },
         {
-          "command": "strata.auditExport",
-          "when": "view == strataAudit",
-          "group": "navigation"
-        },
-        {
-          "command": "strata.auditFilter",
-          "when": "view == strataAudit",
-          "group": "navigation"
-        },
-        {
-          "command": "strata.auditSetLimit",
-          "when": "view == strataAudit",
-          "group": "navigation"
-        },
-        {
-          "command": "strata.showGuide",
-          "when": "view == strataWorkspace",
-          "group": "navigation"
-        },
-        {
-          "command": "strata.addRepo",
-          "when": "view == strataWorkspace",
-          "group": "navigation"
-        },
-        {
-          "command": "strata.showHelp",
-          "when": "view == strataHelp",
-          "group": "navigation"
-        },
-        {
-          "command": "strata.refreshDiagrams",
-          "when": "view == strataDiagrams",
-          "group": "navigation"
-        },
-        {
-          "command": "strata.filterDiagrams",
-          "when": "view == strataDiagrams",
-          "group": "navigation"
-        },
-        {
-          "command": "strata.openDiagramBuilder",
-          "when": "view == strataDiagrams",
-          "group": "navigation"
-        },
-        {
-          "command": "strata.refreshWorkItems",
-          "when": "view == strataWorkItems",
-          "group": "navigation"
+          "command": "strata.refreshPolicies",
+          "when": "view == strataPolicies",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
-          "command": "strata.editDiagramInBuilder",
-          "when": "view == strataDiagrams && viewItem == diagram",
+          "command": "strata.checkIntegration",
+          "when": "view == strataIntegrations && viewItem == integration",
           "group": "inline"
-        },
-        {
-          "command": "strata.approveWorkItem",
-          "when": "view == strataWorkItems && viewItem == workitem-pending",
-          "group": "inline"
-        },
-        {
-          "command": "strata.rejectWorkItem",
-          "when": "view == strataWorkItems && viewItem == workitem-pending",
-          "group": "inline"
-        },
-        {
-          "command": "strata.approveWorkItem",
-          "when": "view == strataWorkItems && viewItem == workitem-pending",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.rejectWorkItem",
-          "when": "view == strataWorkItems && viewItem == workitem-pending",
-          "group": "strata@2"
-        },
-        {
-          "command": "strata.showIntegrationHelp",
-          "when": "view == strataWorkspace && (viewItem == tool || viewItem == tool-unavailable)",
-          "group": "inline"
-        },
-        {
-          "command": "strata.showIntegrationHelp",
-          "when": "view == strataWorkspace && (viewItem == tool || viewItem == tool-unavailable)",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.activateProfile",
-          "when": "view == strataWorkspace && viewItem == profile",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.syncRepo",
-          "when": "view == strataWorkspace && viewItem == repository",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.removeRepo",
-          "when": "view == strataWorkspace && viewItem == repository",
-          "group": "strata@2"
-        },
-        {
-          "command": "strata.openFile",
-          "when": "view == strataDeployments && (viewItem == provider-item || viewItem == environment-item || viewItem == configuration-item)",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.setActiveDeployment",
-          "when": "view == strataDeployments && viewItem == deployment-other",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.buildPlan",
-          "when": "view == strataDeployments && viewItem == deployment-active",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.buildDryRun",
-          "when": "view == strataDeployments && viewItem == deployment-active",
-          "group": "strata@2"
-        },
-        {
-          "command": "strata.deployDryRun",
-          "when": "view == strataDeployments && viewItem == deployment-active",
-          "group": "strata@3"
         },
         {
           "command": "strata.checkPolicy",
-          "when": "view == strataDeployments && viewItem == deployment-active",
-          "group": "strata@4"
+          "when": "view == strataPolicies && viewItem =~ /;check/",
+          "group": "inline@1"
         },
         {
-          "command": "strata.showDependencyGraph",
-          "when": "view == strataDeployments && viewItem == deployment-active",
-          "group": "strata@5"
-        },
-        {
-          "command": "strata.showTopologyDiagram",
-          "when": "view == strataDeployments && viewItem == deployment-active",
-          "group": "strata@6"
-        },
-        {
-          "command": "strata.copyOutputValue",
-          "when": "view == strataOperations && viewItem == output-entry",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.auditResend",
-          "when": "view == strataAudit && viewItem == entry",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.copyValueKey",
-          "when": "view == strataValues && viewItem == value",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.promoteStart",
-          "when": "view == strataPromotions && viewItem == ring",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.promoteRollback",
-          "when": "view == strataPromotions && viewItem == ring",
-          "group": "strata@2"
+          "command": "strata.showPolicyFindings",
+          "when": "view == strataPolicies && viewItem =~ /;findings/",
+          "group": "inline@2"
         }
       ],
-      "editor/title": [
+      "commandPalette": [
         {
-          "command": "strata.validateCurrentFile",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata"
-        }
-      ],
-      "editor/context": [
-        {
-          "command": "strata.envStatus",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@1"
+          "command": "strata.openGraphLocation",
+          "when": "false"
         },
         {
-          "command": "strata.envDrift",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@2"
+          "command": "strata.checkIntegration",
+          "when": "false"
         },
         {
-          "command": "strata.validateCurrentFile",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@3"
-        },
-        {
-          "command": "strata.auditChanges",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@4"
-        },
-        {
-          "command": "strata.showValues",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@5"
-        },
-        {
-          "command": "strata.buildSbom",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@6"
-        },
-        {
-          "command": "strata.buildPlan",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@7"
-        },
-        {
-          "command": "strata.checkPolicy",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@8"
-        },
-        {
-          "command": "strata.lockStatus",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@9"
-        },
-        {
-          "command": "strata.showDependencyGraph",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@10"
-        },
-        {
-          "command": "strata.showTopologyDiagram",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@11"
-        },
-        {
-          "command": "strata.previewDiagramFile",
-          "when": "resourceExtname == .yaml && strata.workspaceActive",
-          "group": "strata@12"
+          "command": "strata.showPolicyFindings",
+          "when": "false"
         }
       ]
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "strata",
+          "title": "Strata",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "strata": [
+        {
+          "id": "strataGraph",
+          "name": "Graph"
+        },
+        {
+          "id": "strataIntegrations",
+          "name": "Integrations"
+        },
+        {
+          "id": "strataPolicies",
+          "name": "Policies"
+        }
+      ]
+    },
+    "walkthroughs": [
+      {
+        "id": "strata.gettingStarted",
+        "title": "Get started with Strata",
+        "description": "From an installed CLI to a validated solution, with autocomplete and an AI agent that knows strata.",
+        "steps": [
+          {
+            "id": "strata.gettingStarted.cli",
+            "title": "Install the strata CLI",
+            "description": "Every check in this extension is the real `strata` CLI. Install it once, or let the extension find it in your project's `.venv`.\n[Configure the CLI path](command:workbench.action.openSettings?%5B%22strata.cliPath%22%5D)",
+            "media": {
+              "markdown": "resources/walkthrough/cli.md"
+            }
+          },
+          {
+            "id": "strata.gettingStarted.solution",
+            "title": "Open a solution",
+            "description": "Strata starts when the folder you open contains a `strata.yaml`. No solution yet? Create one with `strata sln init`.\n[Open Folder](command:workbench.action.files.openFolder)",
+            "media": {
+              "markdown": "resources/walkthrough/solution.md"
+            }
+          },
+          {
+            "id": "strata.gettingStarted.validate",
+            "title": "Validate your solution",
+            "description": "Check every document and every reference between them. From now on this happens each time you save.\n[Validate Solution](command:strata.validate)",
+            "media": {
+              "markdown": "resources/walkthrough/validate.md"
+            }
+          },
+          {
+            "id": "strata.gettingStarted.graph",
+            "title": "Explore the reference graph",
+            "description": "See which document points at which, and spot the references that don't resolve.\n[Open the Graph](command:strataGraph.focus)",
+            "media": {
+              "markdown": "resources/walkthrough/graph.md"
+            },
+            "completionEvents": [
+              "onView:strataGraph"
+            ]
+          },
+          {
+            "id": "strata.gettingStarted.update",
+            "title": "Turn on autocomplete and agent skills",
+            "description": "Export a JSON Schema for every document kind, and give Claude and GitHub Copilot a strata skill.\n[Update Solution Files](command:strata.updateSolution)",
+            "media": {
+              "markdown": "resources/walkthrough/update.md"
+            }
+          }
+        ]
+      }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "strataGraph",
+        "contents": "No reference graph loaded yet.\n[Refresh Graph](command:strata.refreshGraph)\n\nRequires the `strata` CLI and a solution (`strata.yaml`) in this workspace."
+      }
+    ],
     "configuration": {
       "title": "Strata",
       "properties": {
         "strata.cliPath": {
           "type": "string",
           "default": "strata",
-          "description": "Path to the strata CLI. Use 'uv run strata' for uv-managed projects."
-        },
-        "strata.workItemPollIntervalSeconds": {
-          "type": "number",
-          "default": 60,
-          "minimum": 10,
-          "description": "How often (in seconds) the Pending Work panel polls for new work items. Set to a higher value (e.g. 300) on slow networks or shared workspaces. Minimum 10."
+          "description": "Path to the strata CLI. Leave as 'strata' to auto-detect a workspace .venv/venv before falling back to PATH, or set an explicit override such as 'uv run strata'."
         },
         "strata.validateOnSave": {
           "type": "boolean",
           "default": true,
-          "description": "Validate strata YAML files automatically when saved."
-        },
-        "strata.validateOnType": {
-          "type": "boolean",
-          "default": false,
-          "description": "Validate strata YAML files as you type (debounced, 1.5 s delay). More responsive but heavier on CPU."
-        },
-        "strata.showCodeLens": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show Validate / Build / Deploy actions above strata YAML documents."
-        },
-        "strata.showStatusBar": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show workspace readiness and active profile in the status bar."
-        },
-        "strata.autoExportSchemas": {
-          "type": "boolean",
-          "default": false,
-          "description": "Auto-export and wire JSON schemas when a workspace is opened."
-        },
-        "strata.showFileDecorations": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show validation status badges (✓/⚠️/❌) on strata files in the Explorer."
-        },
-        "strata.defaultProfile": {
-          "type": "string",
-          "default": "",
-          "description": "Profile to activate automatically when the workspace opens. Leave empty to use the last active profile."
-        },
-        "strata.cache.backgroundWarm": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically warm the resolved-model cache (ADR-0026) in the background when strata YAML files are saved, and once on startup."
-        },
-        "strata.stateService.url": {
-          "type": "string",
-          "default": "",
-          "description": "Base URL of a running strata state-service server (ADR-0065). Leave empty to disable the status bar indicator, tools row, and tail view."
-        },
-        "strata.stateService.pollIntervalSeconds": {
-          "type": "number",
-          "default": 60,
-          "minimum": 10,
-          "description": "How often the state-service status bar item and tail view poll the server. Minimum 10."
+          "description": "Re-validate the whole solution when a YAML file is saved."
         }
       }
-    },
-    "taskDefinitions": [
-      {
-        "type": "strata",
-        "required": [
-          "command"
-        ],
-        "properties": {
-          "command": {
-            "type": "string",
-            "enum": [
-              "validate",
-              "build",
-              "deploy",
-              "sbom"
-            ],
-            "description": "Strata operation to run."
-          },
-          "file": {
-            "type": "string",
-            "description": "YAML file path relative to the workspace root."
-          },
-          "dryRun": {
-            "type": "boolean",
-            "default": false,
-            "description": "Run in dry-run mode (no changes applied)."
-          },
-          "stage": {
-            "type": "string",
-            "description": "Target a specific deployment stage."
-          }
-        }
-      }
-    ],
-    "walkthroughs": [
-      {
-        "id": "strata.gettingStarted",
-        "title": "Get started with Strata",
-        "description": "Set up your infrastructure workspace in a few steps.",
-        "steps": [
-          {
-            "id": "strata.gettingStarted.init",
-            "title": "Initialize your workspace",
-            "description": "Create the `.strata/` directory and solution registry.\n[Run strata sln init](command:strata.initWorkspace)",
-            "media": {
-              "markdown": "resources/walkthrough/init.md"
-            }
-          },
-          {
-            "id": "strata.gettingStarted.schemas",
-            "title": "Wire YAML schemas",
-            "description": "Enable autocomplete and inline validation for all strata YAML files.\n[Export & Wire Schemas](command:strata.exportSchemas)",
-            "media": {
-              "markdown": "resources/walkthrough/schemas.md"
-            }
-          },
-          {
-            "id": "strata.gettingStarted.guide",
-            "title": "Check workspace readiness",
-            "description": "See the 8-phase checklist and what to do next.\n[Show Guide](command:strata.showGuide)",
-            "media": {
-              "markdown": "resources/walkthrough/guide.md"
-            }
-          }
-        ]
-      }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

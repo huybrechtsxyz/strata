@@ -3,85 +3,116 @@
 
 import warnings
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Any, ClassVar
 
-from pydantic import (
-    Field,
-    StringConstraints,
-    model_validator,
-)
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     CommonLifecycleModel,
-    FeatureRefs,
+    ModuleReferenceModel,
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    SecretRefs,
-    VariableRefs,
-    check_unique_names,
+    validate_kind_matches,
 )
+from strata.utils.names import check_unique_names
 
 
 class NamespaceType(str, Enum):
-    """Namespace ownership type — controls cross-layer overlap validation."""
+    """`dedicated`: the namespace belongs to one deployment layer. `shared`: it is intentionally used by
+    several layers. Documents intent only: strata does not check cross-layer overlap yet.
+
+    Design notes:
+    Namespace ownership type — controls cross-layer overlap validation.
+    """
 
     DEDICATED = "dedicated"
     SHARED = "shared"
 
 
-class NamespaceReferenceModel(PlatformBaseModel):
-    """
-    References to variables, secrets, and features required by this namespace.
-
-    Lists the keys that must be defined in the environment configuration.
-    Actual values and store backends are defined at environment/workspace level.
-    """
-
-    variables: VariableRefs = Field(
-        None,
-        description="List of variable keys this namespace requires from environment",
-    )
-    secrets: SecretRefs = Field(None, description="List of secret keys this namespace requires from environment")
-    features: FeatureRefs = Field(
-        None,
-        description="List of feature flag keys this namespace requires from environment",
-    )
-
-
-class NamespaceModuleModel(PlatformBaseModel):
-    """Model for a namespace module (name, description, properties, lifecycle, labels, tags)."""
-
-    name: PlatformName = Field(description="Unique module name within the namespace")
-    description: Optional[Annotated[str, StringConstraints(strip_whitespace=True)]] = Field(
-        None, description="Optional description of what this module provides"
-    )
-    file: str = Field(description="File reference for the module configuration or script")
-
-
 class NamespaceSpecModel(PlatformBaseModel):
-    """Model for namespace spec (lifecycle, modules, validation)."""
+    """A group of modules deployed together, typically a Kubernetes namespace or a Compose deployment: its
+    `modules`, plus optional lifecycle hooks, labels and free-form settings.
+
+    Design notes:
+    Model for namespace spec (type, lifecycle, modules).
+
+    No ``references`` field (ADR-0002): scoping/typo-catching for any future
+    Value bindings is a direct Phase 2 check against a real Environment, not
+    an internal declared-keys list.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A namespace needs `modules`, `lifecycle` or both; an empty namespace is rejected. A "
+        "namespace with only `lifecycle` gives a warning.",
+        "Module reference names must be unique within the namespace.",
+    )
 
     type: NamespaceType = Field(
         default=NamespaceType.DEDICATED,
-        description=(
-            "Namespace ownership type. 'dedicated' (default) means this namespace belongs "
-            "to a single deployment layer — cross-layer overlap is flagged as a warning. "
-            "'shared' means the namespace is intentionally used by multiple layers (e.g. "
-            "kube-system, traefik) — cross-layer overlap is suppressed."
-        ),
+        description="`dedicated` (default) or `shared`. Documents whether the namespace is used by "
+        "one deployment layer or intentionally by several; strata does not act on it "
+        "yet.\n\n"
+        "Design notes: Namespace ownership type. 'dedicated' (default) means this "
+        "namespace belongs to a single deployment layer — cross-layer overlap is "
+        "flagged as a warning. 'shared' means the namespace is intentionally used by "
+        "multiple layers (e.g. kube-system, traefik) — cross-layer overlap is "
+        "suppressed.",
     )
-    lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Namespace lifecycle phases")
-    modules: Optional[List[NamespaceModuleModel]] = Field(None, description="List of modules in the namespace")
-    references: Optional[NamespaceReferenceModel] = Field(
-        None, description="Namespace references for variable and secret injection"
+    lifecycle: CommonLifecycleModel | None = Field(
+        None,
+        description="Hook scripts per phase name. Accepted and validated, but strata does not run "
+        "lifecycle hooks yet.\n\n"
+        "Design notes: Namespace lifecycle phases",
+    )
+    modules: list[ModuleReferenceModel] | None = Field(
+        None,
+        description="Modules deployed in this namespace, each a reference to a Module document. "
+        "Disabled references are skipped.\n\n"
+        "Design notes: List of modules in the namespace",
+    )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Free-form settings for this namespace (for example annotations or quotas), "
+        "passed to Terraform as `strata.namespaces.<name>.configuration`. Strata does "
+        "not validate the keys itself: add an `attributeconfig` with `target.kind: "
+        "namespace` and `target.block: configuration` to do so.\n\n"
+        "Design notes: Raw passthrough configuration for this namespace (e.g. k8s "
+        "namespace annotations/quotas not otherwise modeled). Not validated by strata, "
+        "passed through as-is to the builder.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.namespaces.<name>.custom`. Strata does not interpret them.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Rides "
+        "inside the `namespaces` category payload, delivered as part of one shared "
+        "`TF_VAR_namespaces` env var — not its own.",
+    )
+    # No default_tags/custom_tags: a Namespace is a Kubernetes-native grouping concept, not an
+    # individually cloud-tagged ARM/AWS resource. Instead it gets default_labels/custom_labels —
+    # a real Kubernetes Namespace object supports metadata.labels directly on itself (e.g. for
+    # namespace selectors, network policies, istio-injection), distinct from the labels applied
+    # to the individual Modules/workloads placed inside it.
+    default_labels: dict[str, str] | None = Field(
+        None,
+        description="Baseline labels for this namespace (for example `environment`, `team`), "
+        "passed to Terraform as `strata.namespaces.<name>.default_labels`. Strata does "
+        "not set them on the Kubernetes Namespace object itself.\n\n"
+        "Design notes: Baseline labels applied to this namespace itself (Kubernetes "
+        "metadata.labels on the generated Namespace object) — e.g. environment, team, "
+        "istio-injection. Optional (v1-derived documents commonly carry no labels at "
+        "all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum "
+        "label count.",
+    )
+    custom_labels: dict[str, str] | None = Field(
+        None, description="Optional additional namespace labels beyond default_labels."
     )
 
     @model_validator(mode="after")
     def validate_namespace_spec(self) -> "NamespaceSpecModel":
-        """Validate namespace specification."""
-        # Ensure namespace has either lifecycle or modules (or both)
+        """Namespace must have lifecycle and/or modules — empty namespaces are not allowed."""
         has_lifecycle = self.lifecycle is not None
         has_modules = self.modules is not None and len(self.modules) > 0
 
@@ -91,7 +122,6 @@ class NamespaceSpecModel(PlatformBaseModel):
                 "Empty namespaces are not allowed."
             )
 
-        # Warn if no modules
         if not has_modules:
             warnings.warn(
                 "No modules specified for namespace. This namespace will only have lifecycle hooks.",
@@ -99,7 +129,6 @@ class NamespaceSpecModel(PlatformBaseModel):
                 stacklevel=2,
             )
 
-        # Validate unique module names
         if self.modules:
             check_unique_names([m.name for m in self.modules], "module names")
 
@@ -107,31 +136,41 @@ class NamespaceSpecModel(PlatformBaseModel):
 
 
 class NamespaceMetaModel(PlatformBaseModel):
-    """Model for namespace metadata (name, annotations, labels, tags)."""
+    """Namespace metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique namespace name")
-    annotations: Optional[Dict[str, Any]] = Field(
+    annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
-    labels: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Optional labels (key-value pairs for classification/filtering)",
+    labels: dict[str, Any] | None = Field(
+        None, description="Optional labels (key-value pairs for classification/filtering)"
     )
-    tags: Optional[List[Any]] = Field(None, description="Optional list of tags")
+    tags: list[Any] | None = Field(None, description="Optional list of tags")
 
 
 class NamespaceModel(PlatformBaseModel):
-    """Top-level model for a namespace resource."""
+    """A group of modules deployed together, for example a Kubernetes namespace or a Compose deployment.
+    Create one per group, list it in a workspace's `namespaces`, and let an execution step deploy it.
+
+    Design notes:
+    Root model for a namespace resource.
+    """
 
     apiVersion: PlatformVersion = Field(
-        default=PlatformVersion.v1,
+        default=PlatformVersion.v2,
         frozen=True,
         description="API version for namespace configuration",
     )
     kind: PlatformKind = Field(
         default=PlatformKind.NAMESPACE,
         frozen=True,
-        description="Resource kind (always 'Namespace')",
+        description="Platform kind (always 'namespace')",
     )
     meta: NamespaceMetaModel = Field(description="Namespace metadata (name, annotations, labels, tags)")
-    spec: NamespaceSpecModel = Field(description="Namespace specification (lifecycle, modules, variables, secrets)")
+    spec: NamespaceSpecModel = Field(description="Namespace specification (type, lifecycle, modules)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.NAMESPACE)

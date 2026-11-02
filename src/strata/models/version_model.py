@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""Pydantic models for version-pin configuration validation.
+
+A `version` document is the single place an operator changes to perform an
+upgrade: it pins the images, charts, remote refs and tool versions a
+deployment resolves to. Every other document declares *what* it needs; this
+one declares *which version of it*.
+
+Design driver — v1's real production file (`haven/versions/prd.yaml`) carried
+a hand-written rationale on all 14 of its pins ("HELD — postgres majors need
+pg_upgrade", "UNVERIFIED — could not confirm the chart version upstream"),
+and warned in its own header that `strata versions lock`/`refresh` *rewrite
+the file and strip comments*. The reasoning was the most valuable content in
+the file and the tooling destroyed it on every run. So here that rationale is
+**schema, not comments**: `status`/`reason`/`available`/`reviewed` survive any
+machine rewrite, and a held pin must say why it is held.
+
+v1 modelled this as two kinds (`version-manifest` + `version-lock`, 332 lines
+across two files, backed by a 424-line service, a 454-line controller and
+seven CLI commands) supporting pointer-vs-inline locks, rollback snapshots,
+canary scope overlays, waves and floating `track: latest` pins. A census of
+every repository found **one** `kind: version` document in production, **zero**
+`version-lock`/`version-manifest` documents, and not one use of those optional
+features. v2 ports the one shape that is actually used.
+
+Scope rule — **a pin may only target something strata itself materialises.**
+Everything else is already on disk before strata's process starts, so a pin
+could only misreport it. In the reference CI, `actions/checkout` places the
+solution repo, `setup-strata` places the CLI, and `setup-terraform`/
+`setup-helm` place the tool binaries; strata fetches remotes (`fetch: strata`)
+and renders image/chart versions. So only those last three are pinnable, and
+`fetch` is the discriminator that decides it for remotes.
+
+Three v1 fields are deliberately NOT ported:
+
+- ``spec.ring`` — duplicated `meta.name` in the only real document (both
+  "prd"), the same redundancy dropped from `tenant.spec.code`. Rings resolve
+  against a progression registry (v1's `promotion_model.py`) that v2 has not
+  ported. **Update, 2026-10-06 (docs/work/promotion.md Phase 1)**: ring
+  tagging did land inside this model after all, as `spec.promotion.ring` —
+  the plan above (attaching *around* this model via a separate kind) was
+  reconsidered: once `spec.workspace` existed to group every version
+  document by product, a dedicated kind's only job was a `promote status`
+  table equally derivable by tagging `Version` documents directly. See
+  `VersionPromotionModel` below. Not a resurrection of the original
+  `spec.ring` this bullet dropped — that duplicated `meta.name` as a bare
+  top-level field; `spec.promotion.ring` is one tag among three
+  (`ring`/`order`/`wave`), grouped in its own optional sub-model.
+- ``track: latest`` / ``resolved`` / ``resolved_at`` / ``resolved_sha`` — a
+  floating-pin mechanism with zero real use. A pin that floats is not a pin;
+  `status: current` plus a refreshed `available` covers the intent without a
+  second resolution path.
+- ``pins.tools`` — zero real use, and it fails the scope rule above: CI
+  installs the tool binaries, so strata cannot make a tool be a given version.
+  Declaring the version a recipe expects stays on `ProvisionerModel.version`,
+  where it is an **assertion** strata verifies against what is present.
+  Installing software is not strata's job.
+
+``spec.hash`` was a v2-only field (never ported from v1, never built against
+any real consumer) removed on 2026-10-06 (docs/work/version-lifecycle.md
+Phase 0): grepped every call site and found zero construction anywhere, and
+its own tamper-detection premise didn't survive scrutiny — `_manifest.json`
+is already pushed to a git audit sink, so its own commit history is the
+tamper-evidence, not a hash on the one document in the system explicitly
+designed to be hand-edited. Not deferred, not needed.
+"""
+
+from collections.abc import Iterator
+from datetime import date
+from enum import Enum
+from typing import Annotated, Any, ClassVar
+
+from pydantic import ConfigDict, Field, StringConstraints, model_validator
+
+from strata.models.common_models import (
+    PlatformBaseModel,
+    PlatformKind,
+    PlatformName,
+    PlatformVersion,
+    scalar_shorthand_schema,
+    validate_kind_matches,
+)
+from strata.models.reference_fields import References
+
+#: Pin categories, in the order they are reported. Each maps to exactly one
+#: field elsewhere in the schema — see `VersionPinsModel`.
+PIN_CATEGORIES = ("images", "charts", "remotes", "artifacts", "assets")
+
+
+class VersionPinStatus(str, Enum):
+    """Why a pin sits at the version it does.
+
+    The vocabulary is taken from the real file's own comments, which already
+    used exactly these three states in prose ("HELD —", "UNVERIFIED —", and
+    plain bumps/"already latest").
+    """
+
+    CURRENT = "current"
+    """Pinned at the intended version; nothing is being held back."""
+
+    HELD = "held"
+    """Deliberately behind the available version. Requires a `reason`."""
+
+    UNVERIFIED = "unverified"
+    """The pinned version could not be confirmed upstream — do not trust it
+    for an automated bump. Requires a `reason`."""
+
+
+class VersionPinModel(PlatformBaseModel):
+    """One pinned version, with the reasoning that a machine rewrite must preserve. A bare string is
+    shorthand for `{version: <string>}`.
+
+    Design notes:
+    One pinned version, plus the reasoning a machine rewrite must preserve.
+
+    Accepts a bare string as shorthand, so the simple majority stays terse::
+
+        images:
+          caddy: caddy:2-alpine                    # shorthand
+          db:                                       # structured
+            version: docker.io/library/postgres:16-alpine
+            status: held
+            available: 18.6-alpine
+            reason: "postgres majors need pg_upgrade/dump-restore"
+            reviewed: 2026-09-08
+
+    Both forms produce the same model, so consumers never branch on shape.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A pin with status `held` or `unverified` needs a `reason` that explains why.",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra=scalar_shorthand_schema(Annotated[str, StringConstraints(min_length=1)])
+    )
+
+    version: str = Field(min_length=1, description="The pinned value: image reference, chart version, or git ref")
+    status: VersionPinStatus = Field(
+        default=VersionPinStatus.CURRENT, description="Why the pin sits here: current, held, or unverified"
+    )
+    available: str | None = Field(
+        None,
+        min_length=1,
+        description="Version known to be available upstream. Refresh tooling may rewrite this field freely; "
+        "it must never rewrite 'reason'.",
+    )
+    reason: str | None = Field(
+        None,
+        min_length=1,
+        description="Why this pin is held or unverified. Required for those states — an unexplained hold is "
+        "the knowledge loss this model exists to prevent.",
+    )
+    reviewed: date | None = Field(None, description="Date a human last reviewed this pin (ISO 8601)")
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_scalar_shorthand(cls, value: Any) -> Any:
+        """Treat a bare string as `{version: <string>}`."""
+        if isinstance(value, str):
+            return {"version": value}
+        return value
+
+    @model_validator(mode="after")
+    def validate_reason_present_when_not_current(self) -> "VersionPinModel":
+        """A held or unverified pin must say why.
+
+        This is the whole point of the model: v1 lost exactly this information
+        on every tooling run. Requiring it means a machine rewrite cannot
+        produce a file that has forgotten why something is pinned back.
+        """
+        if self.status is not VersionPinStatus.CURRENT and not self.reason:
+            raise ValueError(f"A pin with status '{self.status.value}' requires a 'reason' explaining why.")
+        return self
+
+
+class VersionPinsModel(PlatformBaseModel):
+    """Pins grouped by what they target. The key is always the target's own name. A pin may only target
+    something strata itself materialises.
+
+    - `images`: a module service's `image`; the key is the service name.
+    - `charts`: a Helm module's `chart_version`; the key is the module name.
+    - `remotes`: a remote's `reference`; the key is the remote name. Only for remotes with `fetch:
+      strata`; a pin on an `external` remote is rejected.
+    - `artifacts`: an Artifact's `image_tag`; the key is the artifact name. `image_name` is never
+      pinned.
+    - `assets`: the `reference` of an asset's own `location`; the key is the asset name. Only with
+      `fetch: strata`. An asset that uses a manifest remote is pinned through `remotes`.
+
+    Design notes:
+    Pins grouped by what they target.
+
+    Each category resolves against a different part of the schema, all of
+    which already exist — nothing here needs a new override subtree (v1
+    delivered pins by rewriting `Environment.spec.overrides`, a subtree v2
+    did not port):
+
+    - ``images``  -> `ModuleServiceModel.image`
+    - ``charts``  -> `SourceModel.chart_version`
+    - ``remotes`` -> `SolutionRemoteModel.reference`, and only where that
+      remote is `fetch: strata`. A `fetch: external` remote is placed by CI
+      before strata runs, so pinning it cannot take effect — resolution
+      rejects such a pin rather than ignoring it silently.
+    - ``artifacts`` -> `ArtifactSpecModel.image_tag` (docs/design/
+      artifact-references.md). A separate category from `images`, not an
+      overload of it — `images` stays unambiguously `ModuleServiceModel.
+      name`, no disambiguation logic needed. `image_name` is identity and
+      is never overlaid by a pin here, same as `charts` never overlays
+      `chart_name`.
+    - ``assets``  -> `AssetLocationModel.reference` (docs/design/asset-management.md),
+      only for an asset declaring its own `spec.location` with `fetch: strata`.
+      An asset using a manifest `remote` is pinned through ``remotes`` instead.
+
+    Keys are the target's own name, so a pin is a plain identity reference
+    like every other cross-document link in v2 (ADR-0015).
+    """
+
+    images: dict[PlatformName, VersionPinModel] | None = Field(
+        default=None,
+        description="Container image pins. The key is the module service name.\n\n"
+        "Design notes: Container image pins. Key = ModuleServiceModel.name.",
+    )
+    charts: dict[PlatformName, VersionPinModel] | None = Field(
+        default=None, description="Helm chart version pins. Key = Module document name."
+    )
+    remotes: dict[PlatformName, VersionPinModel] | None = Field(
+        default=None,
+        description="Git or OCI ref pins. The key is the remote name. Only valid for remotes that "
+        "strata fetches itself (`fetch: strata`).\n\n"
+        "Design notes: Git/OCI ref pins. Key = SolutionRemoteModel.name. Only valid "
+        "for remotes strata materialises itself (fetch: strata).",
+    )
+    artifacts: dict[PlatformName, VersionPinModel] | None = Field(
+        default=None,
+        description="Artifact image tag pins. Key = ArtifactModel.meta.name; overlays spec.image_tag only "
+        "(image_name is identity, never pinned).",
+    )
+    assets: dict[PlatformName, VersionPinModel] | None = Field(
+        default=None,
+        description="Git ref pins for an asset's own location. Key = AssetModel.meta.name; overlays "
+        "spec.location.reference. Only valid for an asset with a location and fetch: strata.",
+    )
+
+    def iter_pins(self) -> Iterator[tuple[str, str, VersionPinModel]]:
+        """Yield `(category, target_name, pin)` for every pin declared.
+
+        Used by resolution to apply pins and by logging to report them; a
+        single traversal keeps the two from drifting apart.
+        """
+        for category in PIN_CATEGORIES:
+            entries: dict[str, VersionPinModel] | None = getattr(self, category)
+            for name, pin in (entries or {}).items():
+                yield category, name, pin
+
+
+class VersionPromotionModel(PlatformBaseModel):
+    """Optional rollout tags that let `strata promote status` show where a version is across rings. Omit
+    for a product with no multi-ring rollout.
+
+    Design notes:
+    Optional ring/order/wave rollout-visibility tags (docs/work/promotion.md).
+
+    Not a separate `kind: promotion` document — ADR-0015's identity
+    mechanism (`Deployment.spec.version`) already lets several deployments
+    share one `Version` document, so tagging *that* document is enough to
+    answer "where is version X right now, across every ring?" by
+    computation (`strata promote status`), without a second,
+    user-maintained source of truth to keep in sync. All three fields are
+    optional — a single-app product with no rollout pipeline omits
+    `spec.promotion` entirely (see Worked Example A).
+
+    Deliberately permissive about what counts as valid *content* here: no
+    inference from `meta.name` or file location, no enum of known ring
+    names, no bound on `order`'s range. The two rules this model enforces
+    are the only ones statable without looking at another document —
+    everything else (ring/order bijection across a workspace, uniqueness
+    of a `(ring, order, wave)` slot, no mixing waved/waveless at one slot)
+    needs to see every `Version` document sharing a workspace together,
+    which is `build_promotion_view()`'s job (Phase 2), not this model's.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`wave` requires `ring`.",
+        "`ring` requires `order`.",
+    )
+
+    ring: str | None = Field(
+        None, min_length=1, description="Which ring this document represents (e.g. 'dev', 'qas', 'prd')"
+    )
+    order: int | None = Field(
+        None,
+        description="Sequence position in the rollout (e.g. dev=1, qas=2, prd=3) — required whenever 'ring' is set",
+    )
+    wave: str | None = Field(
+        None,
+        min_length=1,
+        description="Distinguishes documents sharing the same (ring, order) — e.g. 'canary'/'general'. "
+        "Required whenever set alongside a 'ring'; requires 'ring' to be set at all.",
+    )
+
+    @model_validator(mode="after")
+    def validate_wave_requires_ring(self) -> "VersionPromotionModel":
+        """A wave of *which* ring? No inference — state it explicitly."""
+        if self.wave is not None and self.ring is None:
+            raise ValueError("'wave' requires 'ring' to also be set.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_ring_requires_order(self) -> "VersionPromotionModel":
+        """`order` is the entire reason sortability works — no inferring it
+        from name or file order, same "no guessing" rule this doc applies
+        everywhere else."""
+        if self.ring is not None and self.order is None:
+            raise ValueError("'ring' requires 'order' to also be set.")
+        return self
+
+
+class VersionSpecModel(PlatformBaseModel):
+    """Specification for a version document."""
+
+    workspace: Annotated[PlatformName, References(PlatformKind.WORKSPACE)] | None = Field(
+        None,
+        description="Name of the Workspace this version document applies to, which limits the "
+        "effect of editing it to deployments of that workspace. Every deployment that "
+        "references this document must use that workspace. When unset, the first "
+        "referencing deployment establishes it; a declared value is authoritative and "
+        "a mismatch is an error.\n\n"
+        "Design notes: Name of the Workspace document this version document applies "
+        "to. Bounds the blast radius of editing this file to deployments running that "
+        "one workspace. Phase 2 validation checks every Deployment referencing this "
+        "document (via 'spec.version') agrees on the workspace: the first real "
+        "reference establishes it when unset here, a declared value is authoritative, "
+        "and a mismatch is an error.",
+    )
+    promotion: VersionPromotionModel | None = Field(
+        None,
+        description="Optional rollout tags (`ring`, `order`, `wave`). Omit for a product with no "
+        "multi-ring rollout.\n\n"
+        "Design notes: Optional ring/order/wave rollout-visibility tags "
+        "(docs/work/promotion.md). Omit entirely for a product with no multi-ring "
+        "rollout pipeline.",
+    )
+    pins: VersionPinsModel = Field(
+        default=VersionPinsModel(),
+        description="Version pins grouped by target category. May be empty — a new document with nothing "
+        "pinned yet is valid.",
+    )
+    description: str | None = Field(None, description="Optional description for documentation purposes")
+
+
+class VersionMetaModel(PlatformBaseModel):
+    """Metadata for a version document."""
+
+    name: PlatformName = Field(
+        description="Unique version-document name, referenced by 'Deployment.spec.version'. Typically the "
+        "ring or channel it represents (e.g. 'prd')."
+    )
+    annotations: dict[str, Any] | None = Field(None, description="Optional free-form annotations")
+    labels: dict[str, Any] | None = Field(None, description="Optional labels (key-value pairs for classification)")
+    tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
+
+
+class VersionModel(PlatformBaseModel):
+    """The single place to change to upgrade: it pins container images, Helm chart versions, remote refs,
+    artifact tags and asset refs, each with a status and the reason it is held. A deployment selects it
+    with `version`. Typically one per ring or channel, for example `prd`.
+
+    Design notes:
+    Root model for a version configuration document.
+    """
+
+    apiVersion: PlatformVersion = Field(
+        default=PlatformVersion.v2, frozen=True, description="API version for version configuration"
+    )
+    kind: PlatformKind = Field(default=PlatformKind.VERSION, description="Platform kind (always 'version')")
+    meta: VersionMetaModel = Field(description="Version metadata")
+    spec: VersionSpecModel = Field(description="Version specification")
+
+    @model_validator(mode="after")
+    def validate_kind(self) -> "VersionModel":
+        """Reject a document declaring a different kind (ADR-0016)."""
+        validate_kind_matches(self.kind, PlatformKind.VERSION)
+        return self

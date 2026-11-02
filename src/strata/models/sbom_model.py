@@ -1,43 +1,57 @@
-"""Pydantic models for SBOM references and internal component representation."""
+#!/usr/bin/env python3
+"""SBOM component/reference models (docs/design/sbom-generation.md Phase 1),
+plus the CVE scanner models (docs/archive/cve-scanner-integration.md).
 
-from typing import Any, Dict, List, Optional
+Ported from v1's `models/sbom_model.py`. `SbomIgnore*RuleModel`
+(`sbom-ignore.yaml`) remains a separate, not-yet-designed concern — the CVE
+allowlist (`ConfigurationSpecModel.cve_allowed`, `CveAllowedEntryModel`
+below) is a dedicated, different mechanism, confirmed never shared with it
+in v1.
+"""
 
-from pydantic import Field, field_validator
+from datetime import date
+from typing import ClassVar, Literal
 
-from strata.models.common_models import PlatformBaseModel
+from pydantic import Field, field_validator, model_validator
+
+from strata.models.common_models import PlatformBaseModel, expires_date_text
+
+#: Shared with `strata.integrations.cve_scanner` and
+#: `strata.controllers.sbom_controller` — one source of truth for severity
+#: ordering (CRITICAL is most severe) rather than three independent copies.
+CVE_SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
 
 
 class SbomComponentModel(PlatformBaseModel):
     """Internal representation of a single SBOM component.
 
-    This model is the currency between collectors and ``SbomBuilder``.
-    Collectors produce ``SbomComponentModel`` instances; ``SbomBuilder``
-    converts them to CycloneDX objects.  No ``cyclonedx-python-lib`` imports
-    here — collectors stay dependency-free.
+    The currency between a collector (`strata.integrations.sbom_collectors`)
+    and `sbom_controller.write_sbom()` — collectors produce these, the
+    controller converts them to CycloneDX objects. No `cyclonedx-python-lib`
+    import here — collectors stay dependency-free of the serialisation
+    library (matches v1's own isolation convention).
     """
 
     component_type: str = Field(description="CycloneDX component type: container | library | framework")
     name: str = Field(description="Component name (service name, chart name, provider name, …)")
-    version: Optional[str] = Field(
-        None,
-        description="Version string or constraint (e.g. 'v3.0.1', '~>5.0', '2024.12.0')",
-    )
-    purl: str = Field(description="Package URL string (pkg:docker/…, pkg:helm/…, pkg:terraform/…, pkg:ansible/…)")
-    properties: Dict[str, str] = Field(
+    version: str | None = Field(None, description="Version string or constraint (e.g. 'v3.0.1', '~>5.0')")
+    purl: str = Field(description="Package URL string (pkg:docker/…, pkg:helm/…, pkg:terraform/…)")
+    properties: dict[str, str] = Field(
         default_factory=dict,
         description="Component properties keyed by name (e.g. {'strata:tag-stability': 'floating'})",
     )
     source_collector: str = Field(
-        description="Short name of the collector that produced this component (image | helm | terraform | ansible)"
+        description="Short name of the collector that produced this component (image | compose | helm | terraform)"
     )
 
 
 class SbomReferenceModel(PlatformBaseModel):
-    """Reference to a generated SBOM file — stored in the deployment manifest spec.
+    """Reference to a generated SBOM file.
 
-    Written by ``SbomBuilder`` after successfully producing ``sbom.json``.
-    The path is workspace-relative so that the manifest is portable across
-    machines.
+    Written by `sbom_controller.write_sbom()` after successfully producing
+    `sbom.json`. Not yet embedded anywhere (no v2 deployment manifest exists
+    — docs/design/gap_fit_v1.md gap #7); kept so that feature can read the
+    hash straight off the already-written file once it is designed.
     """
 
     path: str = Field(description="Workspace-relative path to sbom.json")
@@ -47,28 +61,27 @@ class SbomReferenceModel(PlatformBaseModel):
 
 
 class CveFindingModel(PlatformBaseModel):
-    """A single CVE finding from vulnerability scanning."""
+    """A single CVE finding from vulnerability scanning.
+
+    Field-for-field port of v1's real `CveFindingModel`
+    (docs/archive/cve-scanner-integration.md) — populated identically from
+    either backend's own JSON output (`strata.integrations.cve_scanner`).
+    """
 
     vulnerability_id: str = Field(description="CVE identifier (e.g. 'CVE-2024-1234')")
     severity: str = Field(description="Severity level: CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN")
     package_name: str = Field(description="Affected package name")
     installed_version: str = Field(description="Installed version of the affected package")
-    fixed_version: Optional[str] = Field(None, description="Version that fixes the vulnerability, if available")
-    title: Optional[str] = Field(None, description="Short description of the vulnerability")
-    purl: Optional[str] = Field(None, description="Package URL of the affected component")
-
-
-class CveAllowedEntryModel(PlatformBaseModel):
-    """A single entry in the CVE allowlist (.strata/cve-allowed.yaml)."""
-
-    id: str = Field(description="CVE identifier to suppress (e.g. 'CVE-2024-1234')")
-    reason: str = Field(description="Justification for allowing this CVE")
-    package: Optional[str] = Field(None, description="Scope to a specific package name (optional)")
-    expires: Optional[str] = Field(None, description="ISO date after which this entry is ignored (e.g. '2026-12-31')")
+    fixed_version: str | None = Field(None, description="Version that fixes the vulnerability, if available")
+    title: str | None = Field(None, description="Short description of the vulnerability")
+    purl: str | None = Field(None, description="Package URL of the affected component")
 
 
 class CveAuditResultModel(PlatformBaseModel):
-    """Summary of CVE vulnerability scan results."""
+    """Summary of a CVE vulnerability scan — pre-aggregated severity counts,
+    not re-derived from `findings` on every read (matches v1's own shape;
+    `strata.controllers.sbom_controller`'s allowlist filtering recomputes
+    these fields after suppression, rather than decrementing them)."""
 
     scanner: str = Field(description="Scanner backend used: 'trivy' | 'grype'")
     scanner_version: str = Field(description="Version of the scanner")
@@ -79,111 +92,113 @@ class CveAuditResultModel(PlatformBaseModel):
     medium: int = Field(default=0, description="Count of MEDIUM severity findings")
     low: int = Field(default=0, description="Count of LOW severity findings")
     unknown: int = Field(default=0, description="Count of UNKNOWN severity findings")
-    findings: List[CveFindingModel] = Field(default_factory=list, description="Individual vulnerability findings")
+    findings: list[CveFindingModel] = Field(default_factory=list, description="Individual vulnerability findings")
 
 
-# ---------------------------------------------------------------------------
-# sbom-ignore.yaml models
-# ---------------------------------------------------------------------------
+class CveAllowedEntryModel(PlatformBaseModel):
+    """One accepted CVE. `id` and `reason` are required; add `package` to limit it to one package and
+    `expires` (an ISO date) to stop honouring it after that day.
 
+    Design notes:
+    A single entry in the CVE allowlist
+    (`ConfigurationSpecModel.cve_allowed`, docs/work/
+    cve-scanner-integration.md Phase 3).
 
-class SbomIgnorePathRuleModel(PlatformBaseModel):
-    """A single path glob ignore rule with justification."""
-
-    pattern: str = Field(
-        description="Glob pattern matched against the file path relative to the scan root (e.g. 'docs/**')"
-    )
-    justification: Optional[str] = Field(
-        None, description="Reason this path is excluded from SBOM scanning (audit trail)"
-    )
-
-
-class SbomIgnoreFileRuleModel(PlatformBaseModel):
-    """A single filename ignore rule — exact match or Python regex."""
-
-    pattern: str = Field(
-        description=(
-            "Filename to exclude.  Exact match by default; set is_regex=true for a "
-            "Python regex (e.g. '^.+-dev\\\\.txt$')"
-        )
-    )
-    is_regex: bool = Field(default=False, description="Treat pattern as a Python regular expression when True")
-    justification: Optional[str] = Field(
-        None, description="Reason this file is excluded from SBOM scanning (audit trail)"
-    )
-
-
-class SbomIgnorePackageRuleModel(PlatformBaseModel):
-    """A single package-name glob ignore rule."""
-
-    pattern: str = Field(description="Glob pattern matched against the package name (e.g. 'pytest*', 'dev-*')")
-    justification: Optional[str] = Field(
-        None, description="Reason this package is excluded from the SBOM (audit trail)"
-    )
-
-
-class SbomIgnoreTypeRuleModel(PlatformBaseModel):
-    """Ignore dependencies by semantic type."""
-
-    type: str = Field(description="Dependency type to exclude: dev | optional | peer | test | build")
-    justification: Optional[str] = Field(
-        None, description="Reason this dependency type is excluded from the SBOM (audit trail)"
-    )
-
-
-class SbomIgnoreConfigModel(PlatformBaseModel):
-    """Schema for ``.strata/sbom-ignore.yaml``.
-
-    Controls which dependency files, paths, packages, and dependency types are
-    excluded from the SBOM produced by ``DependencyFileCollector``.  Rules are
-    **additive** — they extend the built-in default ignores rather than replace them.
-
-    Each list item accepts either a bare string (backward-compatible shorthand
-    for ``{pattern: "..."}`` / ``{type: "..."}``) or a full object with a
-    ``justification`` field for audit traceability.
+    Ported field-for-field from v1's real `.strata/cve-allowed.yaml` shape
+    — placement differs (a solution-wide `Configuration` document field,
+    not a `.strata/` file: that directory is runtime-only state in v2,
+    never document-discovered, and this is a reviewed governance decision,
+    not transient state), the entry shape itself does not.
     """
 
-    ignore_paths: List[SbomIgnorePathRuleModel] = Field(
-        default_factory=list,
-        description="Glob patterns matched against file paths relative to each scan root",
-    )
-    ignore_files: List[SbomIgnoreFileRuleModel] = Field(
-        default_factory=list,
-        description="Filenames (exact or regex) to exclude regardless of location",
-    )
-    ignore_packages: List[SbomIgnorePackageRuleModel] = Field(
-        default_factory=list,
-        description="Package name glob patterns to exclude after parsing",
-    )
-    ignore_dependency_types: List[SbomIgnoreTypeRuleModel] = Field(
-        default_factory=list,
-        description="Dependency types to exclude (requires parsers that populate dep_type)",
+    id: str = Field(description="CVE identifier to suppress, e.g. 'CVE-2024-1234'")
+    reason: str = Field(description="Justification for accepting this CVE")
+    package: str | None = Field(None, description="Scope to a specific package name (optional)")
+    expires: str | None = Field(None, description="ISO date after which this entry is ignored (e.g. '2026-12-31')")
+
+    @field_validator("expires", mode="before")
+    @classmethod
+    def accept_an_unquoted_yaml_date(cls, value: object) -> object:
+        return expires_date_text(value)
+
+    @field_validator("expires")
+    @classmethod
+    def validate_expires_is_iso_date(cls, value: str | None) -> str | None:
+        """Fail at document-load time, not at evaluation time — v1 left this
+        as a bare, unvalidated string; a malformed date should not silently
+        behave as 'never expires' (or, worse, 'already expired') the first
+        time `evaluate_cve_policy()` tries to parse it.
+        """
+        if value is not None:
+            try:
+                date.fromisoformat(value)
+            except ValueError as exc:
+                raise ValueError(f"expires '{value}' is not a valid ISO date (e.g. '2026-12-31'): {exc}") from exc
+        return value
+
+
+class CveMaxSeverityPolicyModel(PlatformBaseModel):
+    """Gate for `build run` on the CVE findings in the SBOM it just generated: the build fails when the
+    findings at or above `max_severity` outnumber `max_count`.
+
+    Design notes:
+    `WorkspaceSpecModel.cve_policy` — gates `build run` on CVE findings in
+    the SBOM it just generated (docs/archive/cve-scanner-integration.md).
+
+    A small, dedicated field rather than a generic `policies:` list (v2 has
+    no policy engine at all yet, docs/work/policy-engine-architecture.md's
+    own Open Question 1) — matches the `tenant_zone` static tier's own
+    "model the one real check directly" precedent, just with real
+    configurable knobs this policy genuinely needs and that check didn't.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`severity_threshold` must be `max_severity` or a lower severity (CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN).",
     )
 
-    @field_validator("ignore_paths", mode="before")
-    @classmethod
-    def _coerce_paths(cls, v: Any) -> Any:
-        if isinstance(v, list):
-            return [{"pattern": item} if isinstance(item, str) else item for item in v]
-        return v
+    max_severity: Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"] = Field(
+        description="Fail when findings at or above this severity exceed max_count"
+    )
+    max_count: int = Field(default=0, ge=0, description="Fail when the breaching count exceeds this (default 0)")
+    severity_threshold: Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] | None = Field(
+        default=None,
+        description="Minimum severity passed to the scanner. Defaults to `max_severity`. It may be "
+        "lower (more inclusive) but never higher, because the scanner would then hide "
+        "findings the policy needs to count.\n\n"
+        "Design notes: Minimum severity sent to the scanner itself. Defaults to "
+        "max_severity when unset — lowering it (e.g. to include UNKNOWN-severity noise "
+        "in the raw result) is fine, but it can never be set *more* restrictive than "
+        "max_severity: the scanner would then filter out the very findings the policy "
+        "needs to see, silently under-counting a breach (enforced below).",
+    )
+    enforcement: Literal["deny", "warn"] = Field(
+        default="deny", description="deny fails the build; warn reports and continues"
+    )
+    on_missing_data: Literal["skip", "warn", "block"] = Field(
+        default="block",
+        description="What to do when no SBOM or scanner is available: `skip`, `warn` or `block` "
+        '(default). The default is `block` so that "never scanned" cannot be mistaken '
+        'for "scanned, nothing found".\n\n'
+        "Design notes: What to do when no SBOM/scanner is available to produce a "
+        "result. Defaults to 'block' (not the generic 'skip') — v1's own docstring "
+        "explicitly warns that 'skip' makes 'never scanned' indistinguishable from "
+        "'scanned, found nothing', a real risk for a security-flavored guardrail.",
+    )
 
-    @field_validator("ignore_files", mode="before")
-    @classmethod
-    def _coerce_files(cls, v: Any) -> Any:
-        if isinstance(v, list):
-            return [{"pattern": item} if isinstance(item, str) else item for item in v]
-        return v
-
-    @field_validator("ignore_packages", mode="before")
-    @classmethod
-    def _coerce_packages(cls, v: Any) -> Any:
-        if isinstance(v, list):
-            return [{"pattern": item} if isinstance(item, str) else item for item in v]
-        return v
-
-    @field_validator("ignore_dependency_types", mode="before")
-    @classmethod
-    def _coerce_types(cls, v: Any) -> Any:
-        if isinstance(v, list):
-            return [{"type": item} if isinstance(item, str) else item for item in v]
-        return v
+    @model_validator(mode="after")
+    def validate_severity_threshold_covers_max_severity(self) -> "CveMaxSeverityPolicyModel":
+        """`severity_threshold` must be at least as inclusive as `max_severity` —
+        otherwise the scanner itself would filter out findings the policy
+        needs to see before they ever reach evaluation (e.g. `max_severity:
+        LOW` with `severity_threshold: HIGH` would never surface a LOW
+        finding at all, silently under-counting every breach).
+        """
+        if self.severity_threshold is None:
+            return self
+        if CVE_SEVERITY_ORDER.index(self.severity_threshold) < CVE_SEVERITY_ORDER.index(self.max_severity):
+            raise ValueError(
+                f"severity_threshold '{self.severity_threshold}' is more restrictive than max_severity "
+                f"'{self.max_severity}' — the scanner would filter out findings the policy needs to see. "
+                "severity_threshold must be max_severity or lower (more inclusive)."
+            )
+        return self

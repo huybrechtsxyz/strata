@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: artifact
+meta:
+  name: example-api
+  annotations:
+    description: "Example application image that the Terraform root deploys; strata only resolves its tag"
+spec:
+  image_name: example/api
+  # The tag every deployment gets unless a version document pins another: versions/prd.yaml
+  # moves the production rollout without touching this document. Leave it out to make a pin
+  # mandatory; `image_tag_policy` (workspaces/main.yaml) then fails a deployment with no pin.
+  image_tag: "1.0.0"
+  registry: registry.example.com

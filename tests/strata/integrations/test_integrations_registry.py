@@ -1,116 +1,110 @@
 #!/usr/bin/env python3
-"""Unit tests for IntegrationRegistry."""
+"""Tests for the lean lazily-loaded registry (ADR-0021 D2, D3, D10)."""
+
+from dataclasses import dataclass
+from typing import Any
 
 import pytest
 
-from strata.integrations.registry import IntegrationRegistry
+from strata.integrations import registry
+from strata.integrations.azure_appconfig_resolver import AzureAppConfigResolver
+from strata.integrations.azure_blob_keyvalue_store import AzureBlobKeyValueStore
+from strata.integrations.azure_keyvault_resolver import AzureKeyVaultResolver
+from strata.integrations.base import Integration
+from strata.integrations.infisical_resolver import InfisicalResolver
+from strata.integrations.registry import IntegrationNotFoundError, get
 
 
-class FakeIntegration:
-    """Minimal stand-in — just needs is_available()."""
+@dataclass
+class _FakeEntryPoint:
+    """Duck-types the bits of `importlib.metadata.EntryPoint` the registry actually uses."""
 
-    def __init__(self, available=True):
-        self._available = available
+    name: str
+    value: str
+    _target: Any
 
-    def is_available(self):
-        return self._available
-
-
-class TestIntegrationRegistrySingleton:
-    def setup_method(self):
-        IntegrationRegistry.reset()
-
-    def test_singleton(self):
-        a = IntegrationRegistry()
-        b = IntegrationRegistry()
-        assert a is b
-
-    def test_get_instance(self):
-        r = IntegrationRegistry.get_instance()
-        assert isinstance(r, IntegrationRegistry)
-
-    def test_reset_gives_new_instance(self):
-        a = IntegrationRegistry()
-        IntegrationRegistry.reset()
-        b = IntegrationRegistry()
-        assert a is not b
+    def load(self) -> Any:
+        return self._target
 
 
-class TestIntegrationRegistryRegister:
-    def setup_method(self):
-        IntegrationRegistry.reset()
-
-    def test_register_integration(self):
-        r = IntegrationRegistry()
-        r.register_integration("git", FakeIntegration())
-        assert r.is_integration_registered("git")
-
-    def test_register_without_is_available_raises(self):
-        r = IntegrationRegistry()
-        with pytest.raises(ValueError, match="is_available"):
-            r.register_integration("bad", object())
-
-    def test_get_integration_returns_instance(self):
-        r = IntegrationRegistry()
-        fake = FakeIntegration()
-        r.register_integration("git", fake)
-        assert r.get_integration("git") is fake
-
-    def test_get_integration_returns_none_for_unknown(self):
-        r = IntegrationRegistry()
-        assert r.get_integration("nonexistent") is None
-
-    def test_get_all_integrations(self):
-        r = IntegrationRegistry()
-        r.register_integration("git", FakeIntegration())
-        r.register_integration("terraform", FakeIntegration())
-        all_i = r.get_all_integrations()
-        assert "git" in all_i
-        assert "terraform" in all_i
+def test_known_types_lists_built_ins_and_installed_plugins_sorted(monkeypatch):
+    plugin = _FakeEntryPoint(name="zz-plugin", value="pkg:Cls", _target=object)
+    monkeypatch.setattr(registry, "entry_points", lambda group: [plugin])
+    types = registry.known_types()
+    assert types == sorted(types)
+    assert {"terraform", "aikido", "zz-plugin"} <= set(types) and "ansible" not in types
 
 
-class TestIntegrationRegistryAvailability:
-    def setup_method(self):
-        IntegrationRegistry.reset()
-
-    def test_available_integration(self):
-        r = IntegrationRegistry()
-        r.register_integration("git", FakeIntegration(available=True))
-        assert r.is_integration_available("git") is True
-
-    def test_unavailable_integration(self):
-        r = IntegrationRegistry()
-        r.register_integration("git", FakeIntegration(available=False))
-        assert r.is_integration_available("git") is False
-
-    def test_unregistered_is_not_available(self):
-        r = IntegrationRegistry()
-        assert r.is_integration_available("nonexistent") is False
+def test_get_returns_an_instance_of_the_registered_class():
+    instance = get("infisical")
+    assert isinstance(instance, InfisicalResolver)
 
 
-class TestIntegrationRegistryRequirements:
-    def setup_method(self):
-        IntegrationRegistry.reset()
+def test_get_returns_the_right_class_per_built_in_type():
+    assert isinstance(get("azure-keyvault"), AzureKeyVaultResolver)
+    assert isinstance(get("azure-appconfig"), AzureAppConfigResolver)
+    assert isinstance(get("azure-blob"), AzureBlobKeyValueStore)
 
-    def test_register_and_validate_operation_all_available(self):
-        r = IntegrationRegistry()
-        r.register_integration("git", FakeIntegration())
-        r.register_integration("terraform", FakeIntegration())
-        r.register_requirement("deploy", ["git", "terraform"])
-        ok, errors = r.validate_operation("deploy")
-        assert ok
-        assert errors == []
 
-    def test_validate_operation_missing_integration(self):
-        r = IntegrationRegistry()
-        r.register_requirement("deploy", ["git"])
-        ok, errors = r.validate_operation("deploy")
-        assert not ok
-        assert any("git" in e for e in errors)
+def test_get_constructs_a_new_instance_every_call():
+    """No cache lives in the registry itself (ADR-0021 D3) — that's the caller's job."""
+    assert get("infisical") is not get("infisical")
 
-    def test_validate_operation_unknown_operation(self):
-        r = IntegrationRegistry()
-        # Unregistered operation is treated as a configuration error
-        ok, errors = r.validate_operation("nonexistent_op")
-        assert not ok
-        assert any("not registered" in e for e in errors)
+
+def test_unknown_type_raises_with_no_v1_hint():
+    with pytest.raises(IntegrationNotFoundError, match="no integration registered for type 'totally-made-up'"):
+        get("totally-made-up")
+
+
+def test_get_class_returns_the_class_without_constructing_an_instance():
+    assert registry.get_class("azure-keyvault") is AzureKeyVaultResolver
+
+
+def test_get_class_raises_the_same_error_as_get_for_an_unknown_type():
+    with pytest.raises(IntegrationNotFoundError, match="no integration registered for type 'totally-made-up'"):
+        registry.get_class("totally-made-up")
+
+
+def test_unknown_type_known_from_v1_gets_a_hint():
+    with pytest.raises(IntegrationNotFoundError, match="not yet ported to v2"):
+        get("vault")
+
+
+def test_entry_point_plugin_is_discovered(monkeypatch):
+    class _FakePlugin(Integration):
+        TYPE = "servicenow"
+        CAPABILITIES = frozenset({"x-ticketing"})
+        TRANSPORTS = frozenset({"http"})
+
+    fake_entry_point = _FakeEntryPoint(name="servicenow", value="does.not.matter:Ignored", _target=_FakePlugin)
+    monkeypatch.setattr(registry, "entry_points", lambda group: [fake_entry_point])
+
+    instance = get("servicenow")
+    assert isinstance(instance, _FakePlugin)
+
+
+def test_entry_point_colliding_with_a_built_in_name_is_an_error(monkeypatch):
+    fake_entry_point = _FakeEntryPoint(name="infisical", value="does.not.matter:Ignored", _target=InfisicalResolver)
+    monkeypatch.setattr(registry, "entry_points", lambda group: [fake_entry_point])
+
+    with pytest.raises(IntegrationNotFoundError, match="built-in integration type"):
+        get("infisical")
+
+
+def test_multiple_entry_points_for_the_same_unknown_type_is_an_error(monkeypatch):
+    class _PluginA(Integration):
+        TYPE = "servicenow"
+        CAPABILITIES = frozenset({"x-ticketing"})
+        TRANSPORTS = frozenset({"http"})
+
+    class _PluginB(Integration):
+        TYPE = "servicenow"
+        CAPABILITIES = frozenset({"x-ticketing"})
+        TRANSPORTS = frozenset({"http"})
+
+    first = _FakeEntryPoint(name="servicenow", value="pkg_a:PluginA", _target=_PluginA)
+    second = _FakeEntryPoint(name="servicenow", value="pkg_b:PluginB", _target=_PluginB)
+    monkeypatch.setattr(registry, "entry_points", lambda group: [first, second])
+
+    with pytest.raises(IntegrationNotFoundError, match="multiple installed plugins"):
+        get("servicenow")

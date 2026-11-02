@@ -11,16 +11,13 @@
     "ms-python.vscode-pylance", // Type checking and IntelliSense
     // "ms-python.vscode-python-envs", // Python environment management experimental extension
     "charliermarsh.ruff", // Ruff linter and formatter
-    // PowerShell
-    "ms-vscode.powershell", // PowerShell language support
-    "pspester.pester-test", // Pester testing framework
     // General
     "streetsidesoftware.code-spell-checker", // Spell checker
     "vscode-icons-team.vscode-icons", // VSCode icons
     // Deployment and DevOps
     "ms-vscode-remote.remote-containers", // Remote Containers for development in Docker  
     // Terraform
-    "hashicorp.terraform" // Terraform language support
+    "hashicorp.terraform" // Terraform language support (config/vendor/infra/terraform)
   ],
   "unwantedRecommendations": [
     "ms-python.black-formatter", // Replaced by Ruff

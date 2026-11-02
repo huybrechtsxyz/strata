@@ -34,17 +34,16 @@ Work item: <!-- ORG-1234, CAB-567, or equivalent ticket reference -->
 ## Rollback plan
 
 <!-- Step-by-step instructions to revert this change if the deployment fails -->
-
 1. Revert PR: `git revert <merge-commit>`
-2. Re-deploy: `strata deploy run -f <deployment.yaml>`
-3. Verify: `strata deploy health -f <deployment.yaml>`
+2. Re-deploy: `strata deploy run <deployment-name>`
+3. Verify: confirm the deployment succeeded (exit code 0) and check the target system directly
 
 ---
 
 ## Pre-merge checklist (author)
 
 - [ ] Change request issue linked above
-- [ ] `strata validate run -f <deployment.yaml>` passes
+- [ ] `strata validate` passes
 - [ ] Tested in a lower environment first (or N/A for low-risk changes)
 - [ ] Rollback plan documented and verified
 

@@ -1,0 +1,647 @@
+#!/usr/bin/env python3
+"""Tests for ProvisionerModel/ProvisioningStepModel validation."""
+
+import pytest
+from pydantic import ValidationError
+
+from strata.models.provisioning_model import (
+    ProvisionerModel,
+    ProvisioningStepModel,
+    validate_provisioning_steps,
+)
+
+
+def _minimal_provisioner() -> dict:
+    return {
+        "name": "terraform-main",
+        "tool": "terraform",
+        "source": {"remote": "infra-repo", "source_path": "terraform/main"},
+    }
+
+
+def test_provisioner_minimal_is_valid():
+    """A minimal provisioner (terraform, with source) validates successfully."""
+    model = ProvisionerModel.model_validate(_minimal_provisioner())
+    assert model.name == "terraform-main"
+    assert model.tool == "terraform"
+    assert model.source.remote == "infra-repo"
+
+
+def test_provisioner_terraform_requires_source():
+    """terraform (a non-sync tool) requires a source."""
+    data = _minimal_provisioner()
+    del data["source"]
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_sync_type_does_not_require_source():
+    """argocd/flux (sync/GitOps types) don't require a source."""
+    model = ProvisionerModel.model_validate({"name": "argocd-main", "tool": "argocd"})
+    assert model.source is None
+
+
+def test_provisioner_unknown_tool_does_not_require_source():
+    """An unrecognized (custom plugin) tool isn't forced to have a source either way.
+
+    Its own plugin code is the only consumer, and could legitimately be a
+    sync-like tool by its own design, not just built-in argocd/flux.
+    """
+    model = ProvisionerModel.model_validate({"name": "pulumi-main", "tool": "pulumi"})
+    assert model.source is None
+
+
+def test_provisioner_backend_accepted_for_terraform():
+    """backend is accepted when tool is terraform."""
+    data = _minimal_provisioner()
+    data["backend"] = {"type": "azurerm", "configuration": {"resource_group_name": "tfstate-rg"}}
+    model = ProvisionerModel.model_validate(data)
+    assert model.backend.type == "azurerm"
+
+
+def test_provisioner_backend_rejected_for_non_terraform():
+    """backend is rejected when tool is a known non-terraform type."""
+    data = {
+        "name": "ansible-init",
+        "tool": "ansible",
+        "source": {"remote": "infra-repo", "source_path": "ansible/init"},
+        "backend": {"type": "azurerm", "configuration": {}},
+    }
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_backend_allowed_for_unknown_tool():
+    """backend isn't rejected for an unrecognized (custom plugin) tool.
+
+    Its own plugin code, not strata core, is the consumer of `backend` for a
+    custom tool — the schema has no basis to say it's wrong.
+    """
+    data = {
+        "name": "custom-main",
+        "tool": "pulumi",
+        "source": {"remote": "infra-repo", "source_path": "pulumi/main"},
+        "backend": {"type": "s3", "configuration": {}},
+    }
+    model = ProvisionerModel.model_validate(data)
+    assert model.backend.type == "s3"
+
+
+def test_provisioner_backend_accepted_for_opentofu():
+    """backend is accepted for opentofu — a recognized, terraform-compatible tool."""
+    data = {
+        "name": "opentofu-main",
+        "tool": "opentofu",
+        "source": {"remote": "infra-repo", "source_path": "terraform/main"},
+        "backend": {"type": "azurerm", "configuration": {"resource_group_name": "tfstate-rg"}},
+    }
+    model = ProvisionerModel.model_validate(data)
+    assert model.backend.type == "azurerm"
+
+
+def test_provisioner_output_template_accepted_for_terraform():
+    data = _minimal_provisioner()
+    data["output"] = {"template": "variables.json.j2"}
+    model = ProvisionerModel.model_validate(data)
+    assert model.output.template == "variables.json.j2"
+
+
+def test_provisioner_output_template_accepted_for_ansible():
+    """Unlike `backend`/`properties`, `output` is valid for any tool — ADR-0023 D3's
+    "same field, same mechanism on both pipelines" (tool-agnostic escape hatch)."""
+    data = {
+        "name": "ansible-init",
+        "tool": "ansible",
+        "source": {"remote": "infra-repo", "source_path": "ansible/init"},
+        "output": {"template": "extra-vars.json.j2"},
+    }
+    model = ProvisionerModel.model_validate(data)
+    assert model.output.template == "extra-vars.json.j2"
+
+
+def test_provisioner_output_is_optional():
+    model = ProvisionerModel.model_validate(_minimal_provisioner())
+    assert model.output is None
+
+
+def test_provisioner_opentofu_requires_source():
+    """opentofu (a recognized, non-sync tool) requires a source, same as terraform."""
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate({"name": "opentofu-main", "tool": "opentofu"})
+
+
+def test_provisioner_properties_accepted_for_ansible():
+    """properties is accepted when tool is ansible."""
+    data = {
+        "name": "ansible-init",
+        "tool": "ansible",
+        "source": {"remote": "infra-repo", "source_path": "ansible/init"},
+        "properties": {"playbook": "site.yml"},
+    }
+    model = ProvisionerModel.model_validate(data)
+    assert model.properties.playbook == "site.yml"
+
+
+def test_provisioner_properties_rejected_for_non_ansible():
+    """properties is rejected when tool is a known non-ansible type."""
+    data = _minimal_provisioner()
+    data["properties"] = {"playbook": "site.yml"}
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_properties_allowed_for_unknown_tool():
+    """properties isn't rejected for an unrecognized (custom plugin) tool."""
+    data = {
+        "name": "custom-main",
+        "tool": "pulumi",
+        "source": {"remote": "infra-repo", "source_path": "pulumi/main"},
+        "properties": {"playbook": "site.yml"},
+    }
+    model = ProvisionerModel.model_validate(data)
+    assert model.properties.playbook == "site.yml"
+
+
+def test_provisioner_accepts_configuration_passthrough():
+    """configuration is a freeform passthrough dict, unvalidated."""
+    data = _minimal_provisioner()
+    data["configuration"] = {"skip_provider_registration": True}
+    model = ProvisionerModel.model_validate(data)
+    assert model.configuration == {"skip_provider_registration": True}
+
+
+def test_provisioner_rejects_unknown_fields():
+    """Extra/unknown fields are rejected (extra='forbid')."""
+    data = _minimal_provisioner()
+    data["unknown_field"] = "oops"
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# integration (ADR-0021 D4) — names an Integration document; the sole owner
+# of the expected tool version. `.version` was removed from this model.
+# ---------------------------------------------------------------------------
+
+
+def test_provisioner_has_no_version_field():
+    """Removed by ADR-0021 D4 — the Integration document owns this fact now."""
+    assert "version" not in ProvisionerModel.model_fields
+
+
+def test_provisioner_accepts_integration_reference():
+    data = _minimal_provisioner()
+    data["integration"] = "terraform-main"
+    model = ProvisionerModel.model_validate(data)
+    assert model.integration == "terraform-main"
+
+
+def test_provisioner_integration_is_optional():
+    model = ProvisionerModel.model_validate(_minimal_provisioner())
+    assert model.integration is None
+
+
+def test_provisioner_integration_valid_for_any_tool():
+    """Unlike v1 (terraform/ansible/bicep only) — every tool eventually needs
+    a binding, not just the ones v1 built CLI checks for."""
+    data = {
+        "name": "forge-apps",
+        "tool": "helm",
+        "source": {"remote": "charts-repo", "source_path": "charts/forge"},
+        "integration": "helm-main",
+    }
+    model = ProvisionerModel.model_validate(data)
+    assert model.tool == "helm"
+    assert model.integration == "helm-main"
+
+
+# ---------------------------------------------------------------------------
+# gitops (docs/design/gitops-integration.md Phase 1) — only valid for a sync
+# tool (argocd/flux); no `source` needed, same as those tools already allow.
+# ---------------------------------------------------------------------------
+
+
+def test_provisioner_gitops_accepted_for_argocd():
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "forge_sync",
+            "tool": "argocd",
+            "gitops": {"remote": "gitops-config", "output_file": "apps/forge/values.yaml"},
+        }
+    )
+    assert model.gitops.remote == "gitops-config"
+    assert model.gitops.output_file == "apps/forge/values.yaml"
+    assert model.source is None
+
+
+def test_provisioner_gitops_accepted_for_flux():
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "forge_sync",
+            "tool": "flux",
+            "gitops": {"remote": "gitops-config", "output_file": "apps/forge/values.yaml"},
+        }
+    )
+    assert model.gitops.remote == "gitops-config"
+
+
+def test_provisioner_gitops_requires_remote_and_output_file():
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate({"name": "forge_sync", "tool": "argocd", "gitops": {}})
+
+
+@pytest.mark.parametrize(
+    "bad_output_file",
+    [
+        "../../../../etc/cron.d/evil",
+        "apps/../../../etc/passwd",
+        "/etc/passwd",
+        "C:\\Windows\\System32\\evil.bat",
+    ],
+)
+def test_provisioner_gitops_rejects_path_traversal_in_output_file(bad_output_file):
+    """Regression test for the path-traversal gap found on code review
+    (2026-10-02): `output_file` is joined verbatim onto the GitOps checkout
+    directory and written to directly — an absolute path or '..' segment
+    must be rejected at the schema level, same guard `SourceModel.
+    source_path`/`.target_path` already use."""
+    with pytest.raises(ValidationError, match="relative|absolute|parent directory"):
+        ProvisionerModel.model_validate(
+            {
+                "name": "forge_sync",
+                "tool": "argocd",
+                "gitops": {"remote": "gitops-config", "output_file": bad_output_file},
+            }
+        )
+
+
+def test_provisioner_gitops_rejected_for_non_sync_known_tool():
+    """gitops is rejected for a known tool that isn't argocd/flux."""
+    data = _minimal_provisioner()
+    data["gitops"] = {"remote": "gitops-config", "output_file": "apps/forge/values.yaml"}
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_gitops_allowed_for_unknown_tool():
+    """gitops isn't rejected for an unrecognized (custom plugin) tool — same
+    leniency `validate_source_required_unless_sync()` already applies."""
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "custom-sync",
+            "tool": "pulumi-gitops",
+            "gitops": {"remote": "gitops-config", "output_file": "apps/forge/values.yaml"},
+        }
+    )
+    assert model.gitops.remote == "gitops-config"
+
+
+def test_provisioner_gitops_is_optional():
+    model = ProvisionerModel.model_validate({"name": "argocd-main", "tool": "argocd"})
+    assert model.gitops is None
+
+
+# ---------------------------------------------------------------------------
+# script (docs/design/script-provisioner.md) — only valid for tool
+# 'script'; required there (nothing else says what to run). Unlike gitops,
+# 'script' is not a sync type, so `source` is still required.
+# ---------------------------------------------------------------------------
+
+
+def _minimal_script_provisioner() -> dict:
+    return {
+        "name": "deploy-script",
+        "tool": "script",
+        "source": {"remote": "infra-repo", "source_path": "scripts"},
+        "script": {"file": "deploy.py"},
+    }
+
+
+def test_provisioner_script_required_for_script_tool():
+    data = _minimal_script_provisioner()
+    del data["script"]
+    with pytest.raises(ValidationError, match="'script' is required"):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_accepted_for_script_tool():
+    model = ProvisionerModel.model_validate(_minimal_script_provisioner())
+    assert model.script.file == "deploy.py"
+    assert model.script.args is None
+
+
+def test_provisioner_script_accepts_args():
+    data = _minimal_script_provisioner()
+    data["script"]["args"] = ["--environment", "prod"]
+    model = ProvisionerModel.model_validate(data)
+    assert model.script.args == ["--environment", "prod"]
+
+
+def test_provisioner_script_requires_source():
+    """'script' is not a sync type (unlike argocd/flux) — source stays required."""
+    data = _minimal_script_provisioner()
+    del data["source"]
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_rejected_for_non_script_known_tool():
+    data = _minimal_provisioner()
+    data["script"] = {"file": "deploy.py"}
+    with pytest.raises(ValidationError, match="'script' is only valid"):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_allowed_for_unknown_tool():
+    """script isn't rejected for an unrecognized (custom plugin) tool — its
+    own plugin code, not strata core, is the consumer."""
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "custom-main",
+            "tool": "pulumi",
+            "source": {"remote": "infra-repo", "source_path": "pulumi/main"},
+            "script": {"file": "deploy.py"},
+        }
+    )
+    assert model.script.file == "deploy.py"
+
+
+@pytest.mark.parametrize("valid_file", ["deploy.ps1", "deploy.sh", "deploy.bash", "deploy.py", "deploy.bat"])
+def test_provisioner_script_accepts_every_supported_extension(valid_file):
+    data = _minimal_script_provisioner()
+    data["script"]["file"] = valid_file
+    model = ProvisionerModel.model_validate(data)
+    assert model.script.file == valid_file
+
+
+def test_provisioner_script_rejects_unsupported_extension():
+    """`.js`/`.mjs`/`.go` (in the general SCRIPT_EXTENSIONS, lifecycle hooks'
+    own set) are deliberately not in this narrower, dedicated set."""
+    data = _minimal_script_provisioner()
+    data["script"]["file"] = "deploy.js"
+    with pytest.raises(ValidationError, match="valid extension"):
+        ProvisionerModel.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "bad_file",
+    [
+        "../../../../etc/cron.d/evil.py",
+        "scripts/../../../etc/passwd.py",
+        "/etc/passwd.py",
+        "C:\\Windows\\System32\\evil.bat",
+    ],
+)
+def test_provisioner_script_rejects_path_traversal_in_file(bad_file):
+    data = _minimal_script_provisioner()
+    data["script"]["file"] = bad_file
+    with pytest.raises(ValidationError, match="relative|absolute|parent directory"):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_is_optional():
+    model = ProvisionerModel.model_validate(_minimal_provisioner())
+    assert model.script is None
+
+
+# ---------------------------------------------------------------------------
+# depends_on (ADR-0029) — names other Provisioners in the same workspace
+# whose source must be materialised first, independent of execution/targets.
+# Cross-field validation (unknown-name/cycle checks) needs sibling awareness
+# and lives on WorkspaceSpecModel instead — see test_models_workspace.py.
+# ---------------------------------------------------------------------------
+
+
+def test_provisioner_accepts_depends_on():
+    data = _minimal_provisioner()
+    data["depends_on"] = ["iac_components", "iac_primitives"]
+    model = ProvisionerModel.model_validate(data)
+    assert model.depends_on == ["iac_components", "iac_primitives"]
+
+
+def test_provisioner_depends_on_is_optional():
+    model = ProvisionerModel.model_validate(_minimal_provisioner())
+    assert model.depends_on is None
+
+
+def test_provisioner_rejects_self_dependency():
+    data = _minimal_provisioner()
+    data["depends_on"] = ["terraform-main"]
+    with pytest.raises(ValidationError, match="cannot depend on itself"):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_depends_on_is_distinct_from_step_depends_on():
+    """A provisioner with no execution step at all can still declare
+    depends_on — this is the whole point of ADR-0029 (no borrowed
+    'targets:'/fake execution step needed just to get materialised)."""
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "iac_components",
+            "tool": "terraform",
+            "source": {"remote": "infra-repo", "source_path": "terraform/components"},
+        }
+    )
+    assert model.depends_on is None  # itself has no further dependencies, but is a valid dependency target
+
+
+# ---------------------------------------------------------------------------
+# ProvisioningStepModel
+# ---------------------------------------------------------------------------
+
+
+def _minimal_step(**overrides) -> dict:
+    data = {"name": "provision-infra", "provisioner": "terraform-main", "resources": ["aks_cluster", "blobstore"]}
+    data.update(overrides)
+    return data
+
+
+def test_provisioning_step_minimal_is_valid():
+    """A minimal provisioning step validates successfully."""
+    model = ProvisioningStepModel.model_validate(_minimal_step())
+    assert model.name == "provision-infra"
+    assert model.resources == ["aks_cluster", "blobstore"]
+
+
+def test_provisioning_step_rejects_when_no_target_field_set():
+    """At least one of resources/namespaces/topologies/dns_zones/firewalls/networks is required."""
+    data = _minimal_step(resources=[])
+    with pytest.raises(ValidationError, match="at least one target field is required"):
+        ProvisioningStepModel.model_validate(data)
+
+
+def test_provisioning_step_rejects_duplicate_resources():
+    """Duplicate names within a single target field are rejected."""
+    data = _minimal_step(resources=["aks_cluster", "aks_cluster"])
+    with pytest.raises(ValidationError):
+        ProvisioningStepModel.model_validate(data)
+
+
+def test_provisioning_step_rejects_duplicate_names_across_different_target_fields():
+    """Duplicate-name checking is per-field — a name repeated in a different field is not itself an error here
+    (cross-field collisions across pools are a Workspace-level concern, not this model's)."""
+    data = _minimal_step(resources=["aks_cluster"], namespaces=["aks_cluster"])
+    model = ProvisioningStepModel.model_validate(data)
+    assert model.resources == ["aks_cluster"]
+    assert model.namespaces == ["aks_cluster"]
+
+
+def test_provisioning_step_accepts_topologies():
+    """topologies names a workspace topology grouping — expansion happens at the Workspace container level."""
+    data = _minimal_step(resources=None, topologies=["web-tier"])
+    model = ProvisioningStepModel.model_validate(data)
+    assert model.topologies == ["web-tier"]
+
+
+def test_provisioning_step_accepts_dns_firewalls_networks_directly():
+    """dns_zones/firewalls/networks are a direct escape hatch, independent of resources/namespaces."""
+    data = _minimal_step(resources=None, dns_zones=["public-dns"], firewalls=["web-fw"], networks=["vnet-main"])
+    model = ProvisioningStepModel.model_validate(data)
+    assert model.dns_zones == ["public-dns"]
+    assert model.firewalls == ["web-fw"]
+    assert model.networks == ["vnet-main"]
+
+
+def test_provisioning_step_assets_defaults_to_none():
+    """assets (docs/design/asset-management.md Phase 2) is optional — most steps won't need one."""
+    model = ProvisioningStepModel.model_validate(_minimal_step())
+    assert model.assets is None
+
+
+def test_provisioning_step_accepts_assets():
+    """assets accepts a list of names, existence checked at the Workspace container level."""
+    data = _minimal_step(assets=["openapi"])
+    model = ProvisioningStepModel.model_validate(data)
+    assert model.assets == ["openapi"]
+
+
+def test_provisioning_step_rejects_duplicate_assets():
+    """Duplicate asset names within a step are rejected (same rule as duplicate targets)."""
+    data = _minimal_step(assets=["openapi", "openapi"])
+    with pytest.raises(ValidationError):
+        ProvisioningStepModel.model_validate(data)
+
+
+def test_provisioning_step_rejects_self_dependency():
+    """A step cannot depend on itself."""
+    data = _minimal_step(depends_on=["provision-infra"])
+    with pytest.raises(ValidationError):
+        ProvisioningStepModel.model_validate(data)
+
+
+def test_provisioning_step_accepts_depends_on():
+    """depends_on accepts references to other step names (existence checked at the container level)."""
+    data = _minimal_step(depends_on=["provision-network"])
+    model = ProvisioningStepModel.model_validate(data)
+    assert model.depends_on == ["provision-network"]
+
+
+def test_provisioning_step_scope_defaults_to_none():
+    """scope is optional and defaults to None — most steps won't set it."""
+    model = ProvisioningStepModel.model_validate(_minimal_step())
+    assert model.scope is None
+
+
+def test_provisioning_step_accepts_free_form_scope():
+    """scope is a free-form label, not a fixed 'infra'/'apps' vocabulary — any string is accepted."""
+    for label in ("infra", "apps", "network", "some-other-label"):
+        model = ProvisioningStepModel.model_validate(_minimal_step(scope=label))
+        assert model.scope == label
+
+
+def test_provisioning_step_scope_uniqueness_not_enforced():
+    """Multiple steps may share a scope label by design — that's the whole point of the filter."""
+    steps = [
+        ProvisioningStepModel.model_validate(_minimal_step(name="a", resources=["t1"], scope="infra")),
+        ProvisioningStepModel.model_validate(_minimal_step(name="b", resources=["t2"], scope="infra")),
+    ]
+    validate_provisioning_steps(steps)  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# validate_provisioning_steps (cross-step validation)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_provisioning_steps_accepts_ordered_shared_target():
+    """Two steps sharing a target are fine when one depends_on the other."""
+    steps = [
+        ProvisioningStepModel.model_validate({"name": "infra", "provisioner": "tf", "resources": ["aks_cluster"]}),
+        ProvisioningStepModel.model_validate(
+            {"name": "init", "provisioner": "ansible", "resources": ["aks_cluster"], "depends_on": ["infra"]}
+        ),
+    ]
+    validate_provisioning_steps(steps)  # should not raise
+
+
+def test_validate_provisioning_steps_rejects_ambiguous_shared_target():
+    """Two steps sharing a target with no ordering between them are rejected."""
+    steps = [
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["aks_cluster"]}),
+        ProvisioningStepModel.model_validate({"name": "b", "provisioner": "ansible", "resources": ["aks_cluster"]}),
+    ]
+    with pytest.raises(ValueError, match="Ambiguous provisioning order"):
+        validate_provisioning_steps(steps)
+
+
+def test_validate_provisioning_steps_rejects_unknown_depends_on():
+    """A depends_on referencing a step not in the list is rejected."""
+    steps = [
+        ProvisioningStepModel.model_validate(
+            {"name": "a", "provisioner": "tf", "resources": ["x"], "depends_on": ["nonexistent"]}
+        ),
+    ]
+    with pytest.raises(ValueError, match="not a defined step"):
+        validate_provisioning_steps(steps)
+
+
+def test_validate_provisioning_steps_rejects_cycle():
+    """A cycle in depends_on is rejected."""
+    steps = [
+        ProvisioningStepModel.model_validate(
+            {"name": "a", "provisioner": "tf", "resources": ["x"], "depends_on": ["b"]}
+        ),
+        ProvisioningStepModel.model_validate(
+            {"name": "b", "provisioner": "tf", "resources": ["y"], "depends_on": ["a"]}
+        ),
+    ]
+    with pytest.raises(ValueError, match="Circular dependency"):
+        validate_provisioning_steps(steps)
+
+
+def test_validate_provisioning_steps_rejects_duplicate_step_names():
+    """Duplicate step names across the list are rejected."""
+    steps = [
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["x"]}),
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["y"]}),
+    ]
+    with pytest.raises(ValueError, match="Duplicate"):
+        validate_provisioning_steps(steps)
+
+
+def test_validate_provisioning_steps_accepts_transitive_ordering():
+    """Ordering can be transitive: c depends on b, b depends on a — c and a sharing a target is fine."""
+    steps = [
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["shared"]}),
+        ProvisioningStepModel.model_validate(
+            {"name": "b", "provisioner": "ansible", "resources": ["other"], "depends_on": ["a"]}
+        ),
+        ProvisioningStepModel.model_validate(
+            {"name": "c", "provisioner": "script", "resources": ["shared"], "depends_on": ["b"]}
+        ),
+    ]
+    validate_provisioning_steps(steps)  # should not raise
+
+
+def test_validate_provisioning_steps_accepts_disjoint_targets_with_no_ordering():
+    """Two steps with no shared targets and no depends_on are fine."""
+    steps = [
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "resources": ["x"]}),
+        ProvisioningStepModel.model_validate({"name": "b", "provisioner": "tf", "resources": ["y"]}),
+    ]
+    validate_provisioning_steps(steps)  # should not raise
+
+
+def test_validate_provisioning_steps_empty_list_is_noop():
+    """An empty steps list is a no-op."""
+    validate_provisioning_steps([])

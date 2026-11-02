@@ -1,0 +1,119 @@
+# ===============================================================================
+# Script Name   : ci-image.yml
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Description   : On-demand CLI Docker image builds. Versioned images are built
+#                 by ci-release.yml on tag push — that is the default, everyday
+#                 path. This workflow is for the rare/manual case: dispatch it
+#                 from any branch to build+push a test image tagged from that
+#                 branch (or an explicit `tag` input, e.g. to (re)build `edge`).
+#                 No automatic build-on-push — that wasted CI minutes on images
+#                 that were rarely ever pulled. The image is cleaned up
+#                 automatically once its source branch is deleted.
+# ===============================================================================
+
+name: "CI Image"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to publish (defaults to a sanitized branch name)."
+        required: false
+        default: ""
+  delete: {} # cleans up the matching image once its source branch is deleted
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job: Build and push a CLI image to GHCR for the dispatched branch
+  # ---------------------------------------------------------------------------
+  publish-ghcr-cli:
+    name: Publish CLI image to GHCR
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # explicit tag input wins; otherwise sanitize the dispatched branch name
+      # into a valid Docker tag (main -> "edge" as a convenience default).
+      - name: Determine image tag
+        id: vars
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            if [ "${{ github.ref_name }}" = "main" ]; then
+              TAG="edge"
+            else
+              TAG=$(echo "${{ github.ref_name }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g')
+            fi
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing image tag: $TAG"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/strata
+          tags: |
+            type=raw,value=${{ steps.vars.outputs.tag }}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push CLI image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.cli
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.vars.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Job: Delete stray (non-release) CLI images from GHCR once a branch is gone
+  # ---------------------------------------------------------------------------
+  cleanup-ghcr-cli:
+    name: Cleanup — delete stray CLI images (GHCR)
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    continue-on-error: true # GitHub blocks deletion of packages with 5000+ downloads
+
+    steps:
+      - name: Delete stray CLI image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: strata
+          package-type: container
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-only-untagged-versions: false
+          ignore-versions: "^(latest|edge|\\d+\\.\\d+(\\.\\d+)?)$"
+          min-versions-to-keep: 0

@@ -1,767 +1,96 @@
 #!/usr/bin/env python3
-"""
-===============================================================================
-Script Name   : test_models_environment.py
-Author        : Vincent Huybrechts
-Version       : 1.0.0
-Python Version: 3.12+
-Description   : Environment model using Pydantic for data validation and YAML parsing.
-===============================================================================
-"""
-
-import os
+"""Tests for EnvironmentModel YAML validation."""
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from strata.models.environment_model import EnvironmentModel
 
 
-@pytest.fixture(autouse=True)
-def set_pythonpath_env(monkeypatch):
-    monkeypatch.setenv("PYTHONPATH", "src")
+def _minimal_environment() -> dict:
+    return {
+        "meta": {"name": "prd"},
+        "spec": {
+            "variables": [{"key": "REGION", "store": "constant", "value": "westeurope"}],
+            "secrets": [{"key": "DB_PASSWORD", "store": "infisical", "value": "DB_PASSWORD"}],
+            "features": [{"key": "ENABLE_X", "store": "constant", "value": "true"}],
+        },
+    }
 
 
-ENVIRONMENT_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "environments")
-
-# List of YAML files to test (extensible)
-ENVIRONMENT_VALID_FILES = [
-    os.path.join(ENVIRONMENT_FOLDER, "environment-standard.yaml"),
-    os.path.join(ENVIRONMENT_FOLDER, "environment-insecure-secrets.yaml"),
-    os.path.join(ENVIRONMENT_FOLDER, "environment-overrides.yaml"),
-    os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "..",
-        "..",
-        "config",
-        "kamatera-swarm",
-        "environments",
-        "kamatera-swarm-env-prd.yaml",
-    ),
-]
-
-# List of invalid YAML files to test (extensible)
-ENVIRONMENT_INVALID_FILES = [os.path.join(ENVIRONMENT_FOLDER, "environment-invalid.yaml")]
+def test_environment_minimal_is_valid():
+    """An environment declaring the three store kinds validates."""
+    model = EnvironmentModel.model_validate(_minimal_environment())
+    assert model.meta.name == "prd"
+    assert model.spec.variables[0].key == "REGION"
+    assert model.spec.secrets[0].key == "DB_PASSWORD"
+    assert model.spec.features[0].key == "ENABLE_X"
+    assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
+    assert model.kind.value == "environment"
 
 
-@pytest.mark.parametrize("yaml_path", ENVIRONMENT_VALID_FILES)
-def test_environment_yaml_valid(yaml_path):
-    """Test that an environment YAML file is a valid EnvironmentModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def test_environment_rejects_mismatched_kind():
+    """A document declaring another kind is rejected (ADR-0016)."""
+    data = _minimal_environment()
+    data["kind"] = "workspace"
+    with pytest.raises(ValidationError, match="Expected kind 'environment'"):
+        EnvironmentModel.model_validate(data)
+
+
+def test_environment_allows_empty_spec():
+    """All stores are optional — an environment may carry only properties."""
+    model = EnvironmentModel.model_validate({"meta": {"name": "empty"}, "spec": {"properties": {"tier": "std"}}})
+    assert model.spec.variables is None
+    assert model.spec.properties == {"tier": "std"}
+
+
+def test_environment_rejects_duplicate_variable_keys():
+    """Duplicate keys within one store are rejected."""
+    data = _minimal_environment()
+    data["spec"]["variables"].append({"key": "REGION", "store": "constant", "value": "eastus"})
+    with pytest.raises(ValidationError, match="Duplicate"):
+        EnvironmentModel.model_validate(data)
+
+
+def test_environment_rejects_duplicate_secret_keys():
+    """Duplicate secret keys are rejected."""
+    data = _minimal_environment()
+    data["spec"]["secrets"].append({"key": "DB_PASSWORD", "store": "constant", "value": "x"})
+    with pytest.raises(ValidationError, match="Duplicate"):
+        EnvironmentModel.model_validate(data)
+
+
+def test_environment_allows_same_key_across_different_stores():
+    """'${var:X}' and '${secret:X}' are different tokens — the name may repeat."""
+    data = _minimal_environment()
+    data["spec"]["variables"] = [{"key": "SHARED", "store": "constant", "value": "a"}]
+    data["spec"]["secrets"] = [{"key": "SHARED", "store": "constant", "value": "b"}]
     model = EnvironmentModel.model_validate(data)
-    assert model is not None
+    assert model.spec.variables[0].key == "SHARED"
+    assert model.spec.secrets[0].key == "SHARED"
 
 
-@pytest.mark.parametrize("yaml_path", ENVIRONMENT_INVALID_FILES)
-def test_environment_yaml_invalid(yaml_path):
-    """Test that an environment YAML file is NOT a valid EnvironmentModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def test_environment_accepts_secret_generate_spec():
+    """Store-model features carry through — e.g. generated secrets."""
+    data = _minimal_environment()
+    data["spec"]["secrets"] = [
+        {"key": "ROOT_PW", "store": "infisical", "value": "ROOT_PW", "generate": {"type": "urlsafe", "length": 32}}
+    ]
+    model = EnvironmentModel.model_validate(data)
+    assert model.spec.secrets[0].generate.type.value == "urlsafe"
+
+
+def test_environment_rejects_v1_overrides_block():
+    """v1's overrides subtree is not ported — 0 of 26 real documents use it."""
+    data = _minimal_environment()
+    data["spec"]["overrides"] = {"resources": [{"resource": "web-vm", "enabled": False}]}
     with pytest.raises(ValidationError):
         EnvironmentModel.model_validate(data)
-    model = None
-    assert model is None
 
 
-class TestEnvironmentStoreValidation:
-    """Test environment store model validation."""
-
-    def test_variable_store_types(self):
-        """Test that variable store types are validated correctly."""
-        valid_stores = ["constant", "environment", "azure-appconfig", "consul", "vault"]
-
-        for store_type in valid_stores:
-            data = {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "environment",
-                "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-                "spec": {"variables": [{"key": "TEST_VAR", "store": store_type, "value": "test_value"}]},
-            }
-            model = EnvironmentModel.model_validate(data)
-            assert model.spec.variables[0].store == store_type
-
-    def test_secret_store_types(self):
-        """Test that secret store types are validated correctly."""
-        # SecretStoreType supports: constant, environment, azure-keyvault, bitwarden, vault
-        valid_stores = [
-            "bitwarden",
-            "azure-keyvault",
-            "vault",
-            "constant",
-            "environment",
-        ]
-
-        for store_type in valid_stores:
-            data = {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "environment",
-                "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-                "spec": {
-                    "secrets": [
-                        {
-                            "key": "TEST_SECRET",
-                            "store": store_type,
-                            "value": "test_value",
-                        }
-                    ]
-                },
-            }
-            model = EnvironmentModel.model_validate(data)
-            assert model.spec.secrets[0].store == store_type
-
-    def test_feature_store_types(self):
-        """Test that feature store types are validated correctly."""
-        valid_stores = ["constant", "environment", "azure-appconfig"]
-
-        for store_type in valid_stores:
-            data = {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "environment",
-                "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-                "spec": {
-                    "features": [
-                        {
-                            "key": "TEST_FEATURE",
-                            "store": store_type,
-                            "value": "test_value",
-                        }
-                    ]
-                },
-            }
-            model = EnvironmentModel.model_validate(data)
-            assert model.spec.features[0].store == store_type
-
-    def test_invalid_variable_store_type(self):
-        """Test that invalid variable store types are rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {"variables": [{"key": "TEST_VAR", "store": "invalid_store", "value": "test_value"}]},
-        }
-        with pytest.raises(Exception) as exc_info:
-            EnvironmentModel.model_validate(data)
-        assert "store" in str(exc_info.value).lower()
-
-    def test_duplicate_variable_keys(self):
-        """Test that duplicate variable keys are rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "variables": [
-                    {"key": "DUPLICATE_KEY", "store": "constant", "value": "value1"},
-                    {"key": "DUPLICATE_KEY", "store": "constant", "value": "value2"},
-                ]
-            },
-        }
-        with pytest.raises(ValueError) as exc_info:
-            EnvironmentModel.model_validate(data)
-        assert "duplicate" in str(exc_info.value).lower()
-        assert "DUPLICATE_KEY" in str(exc_info.value)
-
-    def test_duplicate_secret_keys(self):
-        """Test that duplicate secret keys are rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "secrets": [
-                    {
-                        "key": "DUPLICATE_SECRET",
-                        "store": "bitwarden",
-                        "value": "value1",
-                    },
-                    {"key": "DUPLICATE_SECRET", "store": "vault", "value": "value2"},
-                ]
-            },
-        }
-        with pytest.raises(ValueError) as exc_info:
-            EnvironmentModel.model_validate(data)
-        assert "duplicate" in str(exc_info.value).lower()
-        assert "DUPLICATE_SECRET" in str(exc_info.value)
-
-    def test_duplicate_feature_keys(self):
-        """Test that duplicate feature keys are rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "features": [
-                    {"key": "DUPLICATE_FEATURE", "store": "constant", "value": True},
-                    {"key": "DUPLICATE_FEATURE", "store": "constant", "value": False},
-                ]
-            },
-        }
-        with pytest.raises(ValueError) as exc_info:
-            EnvironmentModel.model_validate(data)
-        assert "duplicate" in str(exc_info.value).lower()
-        assert "DUPLICATE_FEATURE" in str(exc_info.value)
-
-
-class TestEnvironmentOverrides:
-    """Test environment override validation."""
-
-    def test_resource_overrides(self):
-        """Test that resource overrides are validated correctly."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "resources": [
-                        {
-                            "resource": "manager",
-                            "count": 3,
-                            "configuration": {"cpu": 4, "ram_mb": 8192},
-                        }
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        assert model.spec.overrides.resources[0].resource == "manager"
-        assert model.spec.overrides.resources[0].count == 3
-
-    def test_module_overrides(self):
-        """Test that module overrides are validated correctly."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "modules": [
-                        {
-                            "module": "traefik",
-                            "resource": "manager",
-                            "slot_type": "main",
-                            "enabled": True,
-                        }
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        assert model.spec.overrides.modules[0].module == "traefik"
-        assert model.spec.overrides.modules[0].resource == "manager"
-        assert model.spec.overrides.modules[0].slot_type == "main"
-
-    def test_module_override_services_image(self):
-        """Test that module overrides can pin service images."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "modules": [
-                        {
-                            "module": "xyz_backend",
-                            "services": [
-                                {"name": "server", "image": "registry.omp.com/product/backend:2025.3.0"},
-                                {"name": "worker", "image": "registry.omp.com/product/backend:2025.3.0"},
-                            ],
-                        }
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        override = model.spec.overrides.modules[0]
-        assert override.module == "xyz_backend"
-        assert override.resource is None
-        assert len(override.services) == 2
-        assert override.services[0].name == "server"
-        assert override.services[0].image == "registry.omp.com/product/backend:2025.3.0"
-
-    def test_module_override_chart_version(self):
-        """Test that module overrides can pin chart versions."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "modules": [
-                        {
-                            "module": "traefik",
-                            "chart_version": "26.1.0",
-                        }
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        assert model.spec.overrides.modules[0].chart_version == "26.1.0"
-
-    def test_module_override_rejects_resource_and_namespace(self):
-        """Test that specifying both resource and namespace is rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "modules": [
-                        {
-                            "module": "traefik",
-                            "resource": "manager",
-                            "namespace": "platform_ns",
-                        }
-                    ]
-                }
-            },
-        }
-        with pytest.raises(ValueError) as exc_info:
-            EnvironmentModel.model_validate(data)
-        assert "resource" in str(exc_info.value).lower()
-        assert "namespace" in str(exc_info.value).lower()
-
-    def test_module_override_duplicate_service_names(self):
-        """Test that duplicate service names in overrides are rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "modules": [
-                        {
-                            "module": "traefik",
-                            "services": [
-                                {"name": "server", "image": "img:v1"},
-                                {"name": "server", "image": "img:v2"},
-                            ],
-                        }
-                    ]
-                }
-            },
-        }
-        with pytest.raises(ValueError) as exc_info:
-            EnvironmentModel.model_validate(data)
-        assert "duplicate" in str(exc_info.value).lower()
-
-    def test_module_override_module_only(self):
-        """Test module override without resource or namespace scope."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "modules": [
-                        {
-                            "module": "traefik",
-                            "enabled": False,
-                        }
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        override = model.spec.overrides.modules[0]
-        assert override.module == "traefik"
-        assert override.resource is None
-        assert override.namespace is None
-        assert override.enabled is False
-
-    def test_duplicate_resource_overrides(self):
-        """Test that duplicate resource overrides are rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "resources": [
-                        {"resource": "manager", "count": 3},
-                        {"resource": "manager", "count": 5},
-                    ]
-                }
-            },
-        }
-        with pytest.raises(ValueError) as exc_info:
-            EnvironmentModel.model_validate(data)
-        assert "duplicate" in str(exc_info.value).lower()
-        assert "manager" in str(exc_info.value).lower()
-
-    def test_provider_override_configuration_only(self):
-        """Provider override with configuration only is valid."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "providers": [
-                        {
-                            "provider": "kamatera_europe",
-                            "configuration": {"region": "eu-fr", "network_tier": "premium"},
-                        },
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        prov = model.spec.overrides.providers[0]
-        assert str(prov.provider) == "kamatera_europe"
-        assert prov.file is None
-        assert prov.configuration["region"] == "eu-fr"
-
-    def test_provider_override_file_only(self):
-        """Provider override with file only is valid."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "providers": [
-                        {"provider": "kamatera_europe", "file": "@config/providers/kamatera-prod.yaml"},
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        prov = model.spec.overrides.providers[0]
-        assert str(prov.provider) == "kamatera_europe"
-        assert prov.file == "@config/providers/kamatera-prod.yaml"
-        assert prov.configuration is None
-
-    def test_provider_override_file_and_configuration(self):
-        """Provider override can specify both file and configuration overrides."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "providers": [
-                        {
-                            "provider": "kamatera_europe",
-                            "file": "@config/providers/kamatera-prod.yaml",
-                            "description": "Production override",
-                            "configuration": {"region": "eu-de"},
-                        },
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        prov = model.spec.overrides.providers[0]
-        assert str(prov.provider) == "kamatera_europe"
-        assert prov.file == "@config/providers/kamatera-prod.yaml"
-        assert prov.description == "Production override"
-        assert prov.configuration["region"] == "eu-de"
-
-    def test_duplicate_provider_overrides(self):
-        """Test that duplicate provider overrides are rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "providers": [
-                        {"provider": "kamatera_europe", "description": "First"},
-                        {"provider": "kamatera_europe", "description": "Second"},
-                    ]
-                }
-            },
-        }
-        with pytest.raises(ValueError) as exc_info:
-            EnvironmentModel.model_validate(data)
-        assert "duplicate" in str(exc_info.value).lower()
-        assert "kamatera_europe" in str(exc_info.value).lower()
-
-    def test_module_slot_type_validation(self):
-        """Test that module slot_type is validated."""
-        valid_slots = ["main", "staging", "canary", "sidecar", "init"]
-
-        for slot in valid_slots:
-            data = {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "environment",
-                "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-                "spec": {
-                    "overrides": {
-                        "modules": [
-                            {
-                                "module": "traefik",
-                                "slot_type": slot,
-                            }
-                        ]
-                    }
-                },
-            }
-            model = EnvironmentModel.model_validate(data)
-            assert model.spec.overrides.modules[0].slot_type == slot
-
-
-class TestEnvironmentIncludes:
-    """Test environment terraform file include validation."""
-
-    def test_resource_override_with_includes(self):
-        """Test that resource overrides can have includes."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "resources": [
-                        {
-                            "resource": "manager",
-                            "includes": [
-                                {
-                                    "source": "@haven/terraform/waf/listeners/*.tf",
-                                    "target": "waf_listeners.tf",
-                                    "strategy": "concatenate",
-                                }
-                            ],
-                        }
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        includes = model.spec.overrides.resources[0].includes
-        assert includes is not None
-        assert len(includes) == 1
-        assert includes[0].source == "@haven/terraform/waf/listeners/*.tf"
-        assert includes[0].target == "waf_listeners.tf"
-        assert includes[0].strategy.value == "concatenate"
-
-    def test_resource_override_with_merge_strategy(self):
-        """Test include with merge strategy."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "resources": [
-                        {
-                            "resource": "worker",
-                            "includes": [
-                                {
-                                    "source": "@haven/tenants/standard.tfvars",
-                                    "target": "tenants.auto.tfvars.json",
-                                    "strategy": "merge",
-                                    "order": 0,
-                                },
-                                {
-                                    "source": "@haven/tenants/acme/overrides.tfvars",
-                                    "target": "tenants.auto.tfvars.json",
-                                    "strategy": "merge",
-                                    "order": 1,
-                                },
-                            ],
-                        }
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        includes = model.spec.overrides.resources[0].includes
-        assert len(includes) == 2
-        assert includes[0].strategy.value == "merge"
-        assert includes[0].order == 0
-        assert includes[1].order == 1
-
-    def test_env_wide_includes(self):
-        """Test environment-wide includes (on EnvironmentOverridesModel)."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "includes": [
-                        {
-                            "source": "@haven/terraform/shared/providers.tf",
-                            "target": "providers.tf",
-                            "strategy": "concatenate",
-                        },
-                        {
-                            "source": "@haven/terraform/shared/backend.tf",
-                            "target": "backend.tf",
-                            "strategy": "concatenate",
-                            "optional": True,
-                        },
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        includes = model.spec.overrides.includes
-        assert includes is not None
-        assert len(includes) == 2
-        assert includes[0].optional is False
-        assert includes[1].optional is True
-
-    def test_include_defaults(self):
-        """Test include field defaults (strategy=concatenate, optional=False, order=None)."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "includes": [
-                        {
-                            "source": "@haven/terraform/extra.tf",
-                            "target": "extra.tf",
-                        }
-                    ]
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        include = model.spec.overrides.includes[0]
-        assert include.strategy.value == "concatenate"
-        assert include.optional is False
-        assert include.order is None
-
-    def test_include_invalid_strategy_rejected(self):
-        """Test that invalid strategy values are rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "includes": [
-                        {
-                            "source": "@haven/terraform/x.tf",
-                            "target": "x.tf",
-                            "strategy": "invalid_strategy",
-                        }
-                    ]
-                }
-            },
-        }
-        with pytest.raises(ValidationError):
-            EnvironmentModel.model_validate(data)
-
-    def test_include_empty_source_rejected(self):
-        """Test that empty source is rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "includes": [
-                        {
-                            "source": "",
-                            "target": "output.tf",
-                        }
-                    ]
-                }
-            },
-        }
-        with pytest.raises(ValidationError):
-            EnvironmentModel.model_validate(data)
-
-    def test_include_empty_target_rejected(self):
-        """Test that empty target is rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "includes": [
-                        {
-                            "source": "@haven/terraform/x.tf",
-                            "target": "",
-                        }
-                    ]
-                }
-            },
-        }
-        with pytest.raises(ValidationError):
-            EnvironmentModel.model_validate(data)
-
-    def test_include_path_traversal_rejected(self):
-        """Test that path traversal in target is rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "includes": [
-                        {
-                            "source": "@haven/terraform/x.tf",
-                            "target": "../../etc/passwd",
-                        }
-                    ]
-                }
-            },
-        }
-        with pytest.raises(ValidationError) as exc_info:
-            EnvironmentModel.model_validate(data)
-        assert "traversal" in str(exc_info.value).lower()
-
-    def test_include_negative_order_rejected(self):
-        """Test that negative order is rejected."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "includes": [
-                        {
-                            "source": "@haven/terraform/x.tf",
-                            "target": "output.tf",
-                            "order": -1,
-                        }
-                    ]
-                }
-            },
-        }
-        with pytest.raises(ValidationError):
-            EnvironmentModel.model_validate(data)
-
-    def test_include_both_resource_and_env_wide(self):
-        """Test that includes can exist at both resource and env-wide levels."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "environment",
-            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
-            "spec": {
-                "overrides": {
-                    "resources": [
-                        {
-                            "resource": "manager",
-                            "includes": [
-                                {
-                                    "source": "@haven/terraform/waf/*.tf",
-                                    "target": "waf.tf",
-                                }
-                            ],
-                        }
-                    ],
-                    "includes": [
-                        {
-                            "source": "@haven/terraform/shared/backend.tf",
-                            "target": "backend.tf",
-                        }
-                    ],
-                }
-            },
-        }
-        model = EnvironmentModel.model_validate(data)
-        assert len(model.spec.overrides.resources[0].includes) == 1
-        assert len(model.spec.overrides.includes) == 1
+def test_environment_rejects_unknown_fields():
+    """Extra/unknown fields are rejected (extra='forbid')."""
+    data = _minimal_environment()
+    data["spec"]["unknown_field"] = "oops"
+    with pytest.raises(ValidationError):
+        EnvironmentModel.model_validate(data)

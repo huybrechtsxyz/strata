@@ -1,404 +1,157 @@
-"""Registry for managing and querying registered integration instances by name and capability."""
+#!/usr/bin/env python3
+"""One lean, lazily-loaded registry (ADR-0021 D2): `type` string -> `Integration` class.
 
-import threading
-from typing import Any, Dict, List, Optional, Set, Tuple, Type
+Collapses v1's `IntegrationFactory` (type -> class) + `IntegrationRegistry`
+(name -> instance, process-wide singleton) + `IntegrationService` (loads from
+Configuration, capability preflight) into one function. The lazy import is
+kept — genuinely useful, not bloat: it's the only thing standing between
+"add a Vault integration" and every `strata` invocation hard-depending on
+`hvac`.
 
-from strata.logger import get_logger
-from strata.models.capabilities import (
-    CAPABILITY_REGISTRY,
-    IContainerTool,
-    ICveScanner,
-    IFeatureStore,
-    IInfrastructureTool,
-    IKVStore,
-    IRepositoryTool,
-    ISecretStore,
-    ISiemSink,
-    IVariableStore,
-    get_capability_name,
+No instance cache lives here (ADR-0021 D3) — a process-wide singleton needs
+`.reset()` calls sprinkled through a test suite to avoid cross-test
+contamination (v1's own `IntegrationRegistry.reset()`), for a problem
+(auth-reuse across a long deploy) `strata`'s short-lived commands don't have
+yet. Callers that want reuse across a batch keep their own short-lived cache
+(e.g. `value_controller.resolve_values()`), the same pattern `values get`
+already used before this registry existed.
+"""
+
+from importlib import import_module
+from importlib.metadata import entry_points
+from typing import cast
+
+from strata.integrations.base import Integration
+from strata.integrations.errors import IntegrationError
+from strata.models.integration_model import IntegrationModel
+
+#: Entry point group a third-party package registers a custom integration
+#: class under (ADR-0021 D10) — e.g. `[project.entry-points."strata.integrations"]`.
+ENTRY_POINT_GROUP = "strata.integrations"
+
+#: Built-in types: `type` string -> (module path, class name). Imported lazily,
+#: only when `get()` actually needs the class. Every addition is one entry +
+#: one small file — this dict's shape does not change.
+_KNOWN: dict[str, tuple[str, str]] = {
+    "infisical": ("strata.integrations.infisical_resolver", "InfisicalResolver"),
+    "azure-keyvault": ("strata.integrations.azure_keyvault_resolver", "AzureKeyVaultResolver"),
+    "azure-appconfig": ("strata.integrations.azure_appconfig_resolver", "AzureAppConfigResolver"),
+    "azure-blob": ("strata.integrations.azure_blob_keyvalue_store", "AzureBlobKeyValueStore"),
+    "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
+    "compose": ("strata.integrations.compose", "ComposeIntegration"),
+    "helm": ("strata.integrations.helm", "HelmIntegration"),
+    "script": ("strata.integrations.script", "ScriptIntegration"),
+    "argocd": ("strata.integrations.gitops", "ArgoCDIntegration"),
+    "flux": ("strata.integrations.gitops", "FluxIntegration"),
+    "webhook": ("strata.integrations.webhook", "WebhookIntegration"),
+    "otel": ("strata.integrations.otel", "OtelIntegration"),
+    "sentinel": ("strata.integrations.sentinel", "SentinelIntegration"),
+    "aikido": ("strata.integrations.aikido", "AikidoIntegration"),
+    "git": ("strata.integrations.git_cli", "GitIntegration"),
+    "trivy": ("strata.integrations.cve_scanner", "TrivyIntegration"),
+    "grype": ("strata.integrations.cve_scanner", "GrypeIntegration"),
+    "checkov": ("strata.integrations.checkov", "CheckovIntegration"),
+    # ansible/git/bicep/opentofu/vault/consul/etcd/bitwarden/flagsmith/cost/
+    # cve/splunk/syslog/identity as each gets a real v2 consumer (ADR-0021
+    # Phase 7+).
+}
+
+#: v1 types not yet ported to v2. Only used so "not built yet" (a real, known
+#: type) reads differently from "not real" (a typo) in `get()`'s error.
+_KNOWN_V1_TYPES = frozenset(
+    {
+        "opentofu",
+        "ansible",
+        "bicep",
+        "vault",
+        "consul",
+        "etcd",
+        "bitwarden",
+        "flagsmith",
+        "docker",
+        "docker-compose",
+        "infracost",
+        "kroki",
+        "opa",
+        "azure-cli",
+        "aws-cli",
+        "gcloud-cli",
+        "elk",
+        "splunk",
+        "syslog",
+    }
 )
 
-logger = get_logger(__name__)
+
+class IntegrationNotFoundError(IntegrationError):
+    """No class is registered for a requested `type` — neither built-in nor an installed entry point."""
 
 
-class IntegrationRegistry:
+def get(integration_type: str, config: IntegrationModel | None = None) -> Integration:
+    """Construct the `Integration` registered for `integration_type`.
+
+    Args:
+        integration_type: A `type` string (e.g. "terraform", "infisical") —
+            matches `ProvisionerModel.tool`/a store's `store` field.
+        config: The `Integration` document configuring this instance, when
+            the solution declares one (D1's transport selection reads it).
+            Omitted for a tool that needs nothing but PATH/environment
+            variables — finding the document to pass is the *caller's* job:
+            this module sits below `strata.services` and cannot reach the
+            document index.
+
+    Returns:
+        A new instance — never cached or reused here (see module docstring).
+
+    Raises:
+        IntegrationNotFoundError: `integration_type` is registered neither
+            as a built-in nor as an installed entry point, or collides
+            between the two.
     """
-    Registry for managing external integration dependencies.
+    integration_class = get_class(integration_type)
+    return integration_class(config)
 
-    Tracks which integrations are loaded for specific operations and validates
-    their availability before execution.
 
-    Singleton Pattern:
-    - Thread-safe singleton implementation
-    - Single registry instance across the platform
+def known_types() -> list[str]:
+    """Every registered type, built-in and installed plugin, sorted - for "did you mean" messages."""
+    return sorted(set(_KNOWN) | {ep.name for ep in entry_points(group=ENTRY_POINT_GROUP)})
+
+
+def get_class(integration_type: str) -> type[Integration]:
+    """Resolve `integration_type` to its registered class, without
+    constructing an instance — no credentials/network/PATH touched at all,
+    unlike `get()`.
+
+    The one real caller that needs this instead of `get()`: a static,
+    validate-time check inspecting a class-level attribute (e.g.
+    `KeyValueStoreIntegration.SUPPORTS_CAS`) to catch a structurally
+    incompatible configuration before `deploy run` ever constructs the
+    real thing (docs/work/cross-run-step-output-delivery.md).
+
+    Raises:
+        IntegrationNotFoundError: `integration_type` is registered neither
+            as a built-in nor as an installed entry point, or collides
+            between the two.
     """
-
-    _instance: Optional["IntegrationRegistry"] = None
-    _lock = threading.Lock()
-    _initialized: bool
-
-    def __new__(cls):
-        """Create singleton instance."""
-        with cls._lock:
-            if cls._instance is None:
-                instance = super().__new__(cls)
-                instance._initialized = False
-                cls._instance = instance
-            return cls._instance
-
-    def __init__(self) -> None:
-        """Initialize integration registry (only once)."""
-        if self._initialized:
-            return
-        self._integrations: Dict[str, Any] = {}
-        self._requirements: Dict[str, Set[str]] = {}
-        self._initialized = True
-        logger.debug("IntegrationRegistry initialized")
-
-    @classmethod
-    def get_instance(cls) -> "IntegrationRegistry":
-        """Get singleton instance."""
-        return cls()
-
-    @classmethod
-    def reset(cls):
-        """Reset singleton instance (useful for testing)."""
-        with cls._lock:
-            if cls._instance:
-                cls._instance._integrations.clear()
-                cls._instance._requirements.clear()
-            cls._instance = None
-
-    # Integration registration methods
-
-    def register_integration(self, name: str, integration_instance: Any) -> None:
-        """
-        Register an integration instance.
-
-        Args:
-            name: Integration name (e.g., 'git', 'terraform', 'bitwarden')
-            integration_instance: Integration instance (must have is_available() method)
-        """
-        if not hasattr(integration_instance, "is_available"):
-            raise ValueError(f"Integration instance for '{name}' must have is_available() method")
-        self._integrations[name] = integration_instance
-        logger.debug("Integration registered", name=name)
-
-    def get_integration(self, name: str) -> Optional[Any]:
-        """
-        Get registered integration instance.
-
-        Args:
-            name: Integration name
-
-        Returns:
-            Integration instance or None if not registered
-        """
-        return self._integrations.get(name)
-
-    def get_all_integrations(self) -> Dict[str, Any]:
-        """
-        Get all registered integrations.
-
-        Returns:
-            Dictionary of integration name to integration instance
-        """
-        return dict(self._integrations)
-
-    def is_integration_registered(self, name: str) -> bool:
-        """
-        Check if integration is registered.
-
-        Args:
-            name: Integration name
-
-        Returns:
-            True if integration is registered
-        """
-        return name in self._integrations
-
-    def is_integration_available(self, name: str) -> bool:
-        """
-        Check if registered integration is available.
-
-        Args:
-            name: Integration name
-
-        Returns:
-            True if integration is available, False otherwise
-        """
-        integration = self._integrations.get(name)
-        if integration is None:
-            return False
-        return integration.is_available()
-
-    def list_integrations(self) -> List[str]:
-        """
-        List all registered integration names.
-
-        Returns:
-            List of integration names
-        """
-        return list(self._integrations.keys())
-
-    def get_integration_status(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Get status of all registered integrations.
-
-        Returns:
-            Dictionary with integration status information
-        """
-        status = {}
-        for name, integration in self._integrations.items():
-            status[name] = {
-                "registered": True,
-                "name": (integration.integration_name if hasattr(integration, "integration_name") else name),
-                "type": (integration.integration_type if hasattr(integration, "integration_type") else "unknown"),
-                "available": integration.is_available(),
-                "version": (integration.get_version() if hasattr(integration, "get_version") else None),
-                "info": (integration.get_info() if hasattr(integration, "get_info") else {}),
-            }
-        return status
-
-    def validate_integrations(self, integration_names: List[str]) -> Tuple[bool, List[str]]:
-        """
-        Validate that specific integrations are available.
-
-        Args:
-            integration_names: List of integration names to validate
-
-        Returns:
-            Tuple of (success, list of error messages)
-        """
-        errors = []
-
-        for integration_name in integration_names:
-            if not self.is_integration_registered(integration_name):
-                errors.append(f"Integration '{integration_name}' is not registered in registry")
-                continue
-
-            if not self.is_integration_available(integration_name):
-                integration = self._integrations[integration_name]
-                integration_display = getattr(integration, "integration_name", integration_name)
-                errors.append(
-                    f"Integration '{integration_display}' is not available. "
-                    f"Please install it and ensure it's in your PATH."
-                )
-
-        return len(errors) == 0, errors
-
-    # Capability-based integration query methods
-
-    def supports_capability(self, integration_name: str, capability: Type) -> bool:
-        """
-        Check if an integration supports a specific capability.
-
-        Checks explicit CAPABILITIES attribute first, then falls back to
-        structural subtyping (Protocol) via isinstance().
-
-        Args:
-            integration_name: Integration name
-            capability: Capability protocol class (e.g., IVariableStore)
-
-        Returns:
-            True if integration supports the capability, False otherwise
-        """
-        integration = self._integrations.get(integration_name)
-        if integration is None:
-            return False
-
-        # Check explicit CAPABILITIES declaration first
-        if hasattr(integration, "CAPABILITIES"):
-            return capability in integration.CAPABILITIES
-
-        # Fall back to isinstance() check for duck typing
-        return isinstance(integration, capability)
-
-    def get_integrations_with_capability(self, capability: Type) -> List[str]:
-        """
-        Get all integrations that support a specific capability.
-
-        Args:
-            capability: Capability protocol class (e.g., IVariableStore)
-
-        Returns:
-            List of integration names supporting the capability
-        """
-        return [name for name in self._integrations.keys() if self.supports_capability(name, capability)]
-
-    def get_integrations_with_capabilities(self, capabilities: List[Type], match_all: bool = True) -> List[str]:
-        """
-        Get integrations that support multiple capabilities.
-
-        Args:
-            capabilities: List of capability protocol classes
-            match_all: If True, integration must support ALL capabilities.
-                      If False, integration must support AT LEAST ONE capability.
-
-        Returns:
-            List of integration names matching the capability criteria
-        """
-        result = []
-        for name in self._integrations.keys():
-            if match_all:
-                # Integration must support ALL capabilities
-                if all(self.supports_capability(name, cap) for cap in capabilities):
-                    result.append(name)
-            else:
-                # Integration must support AT LEAST ONE capability
-                if any(self.supports_capability(name, cap) for cap in capabilities):
-                    result.append(name)
-        return result
-
-    def get_integration_capabilities(self, integration_name: str) -> List[str]:
-        """
-        Get all capabilities supported by an integration.
-
-        Args:
-            integration_name: Integration name
-
-        Returns:
-            List of capability names (e.g., ['IVariableStore', 'ISecretStore'])
-        """
-        integration = self._integrations.get(integration_name)
-        if integration is None:
-            return []
-
-        # Check explicit CAPABILITIES declaration first
-        if hasattr(integration, "CAPABILITIES"):
-            return [get_capability_name(cap) for cap in integration.CAPABILITIES]
-
-        # Fall back to checking all known capabilities
-        capabilities = []
-        for capability in [
-            IVariableStore,
-            ISecretStore,
-            IFeatureStore,
-            IKVStore,
-            IRepositoryTool,
-            IInfrastructureTool,
-            IContainerTool,
-            ISiemSink,
-            ICveScanner,
-        ]:
-            if isinstance(integration, capability):
-                capabilities.append(get_capability_name(capability))
-
-        return capabilities
-
-    def get_capability_matrix(self) -> Dict[str, List[str]]:
-        """
-        Get a matrix of integrations and their supported capabilities.
-
-        Returns:
-            Dictionary mapping integration names to lists of capability names
-        """
-        return {name: self.get_integration_capabilities(name) for name in self._integrations.keys()}
-
-    def list_capabilities(self) -> List[Dict[str, Any]]:
-        """
-        List all available capabilities with metadata.
-
-        Returns:
-            List of dictionaries with capability information
-        """
-        return [
-            {
-                "name": name,
-                "description": info.get("description", ""),
-                "methods": info.get("methods", []),
-                "examples": info.get("examples", []),
-            }
-            for name, info in CAPABILITY_REGISTRY.items()
-        ]
-
-    # Requirement registration methods
-
-    def register_requirement(self, operation: str, integrations: List[str]) -> None:
-        """
-        Register integration requirements for an operation.
-
-        Args:
-            operation: Operation name (e.g., 'gitops_fetch', 'terraform_provision')
-            integrations: List of required integration names
-        """
-        if operation not in self._requirements:
-            self._requirements[operation] = set()
-        self._requirements[operation].update(integrations)
-        logger.debug(
-            "Integration requirements registered",
-            operation=operation,
-            integrations=integrations,
-        )
-
-    def get_requirements(self, operation: str) -> Set[str]:
-        """
-        Get integration requirements for an operation.
-
-        Args:
-            operation: Operation name
-
-        Returns:
-            Set of required integration names
-        """
-        return self._requirements.get(operation, set())
-
-    def validate_operation(self, operation: str) -> Tuple[bool, List[str]]:
-        """
-        Validate that all required integrations are available for an operation.
-
-        Args:
-            operation: Operation name
-
-        Returns:
-            Tuple of (success, list of error messages)
-        """
-        errors = []
-
-        # Check if operation is registered
-        if operation not in self._requirements:
-            errors.append(f"Operation '{operation}' is not registered. This is likely a configuration error")
-            return False, errors
-
-        required_integrations = self.get_requirements(operation)
-
-        if not required_integrations:
-            # Operation registered but no integrations required
-            return True, []
-
-        for integration_name in required_integrations:
-            if not self.is_integration_registered(integration_name):
-                errors.append(f"Integration '{integration_name}' is required but not registered in registry")
-                continue
-
-            if not self.is_integration_available(integration_name):
-                integration = self._integrations[integration_name]
-                integration_display = getattr(integration, "integration_name", integration_name)
-                errors.append(f"Integration '{integration_display}' is required but not available")
-
-        return len(errors) == 0, errors
-
-    def get_operations_for_integration(self, integration_name: str) -> List[str]:
-        """
-        Get operations that require a specific integration.
-
-        Args:
-            integration_name: Integration name
-
-        Returns:
-            List of operation names
-        """
-        operations = []
-        for operation, integrations in self._requirements.items():
-            if integration_name in integrations:
-                operations.append(operation)
-        return operations
-
-    def list_operations(self) -> List[str]:
-        """
-        List all registered operations.
-
-        Returns:
-            List of operation names
-        """
-        return list(self._requirements.keys())
+    plugins = [ep for ep in entry_points(group=ENTRY_POINT_GROUP) if ep.name == integration_type]
+
+    if integration_type in _KNOWN:
+        if plugins:
+            raise IntegrationNotFoundError(
+                f"'{integration_type}' is a built-in integration type; an installed plugin may not reuse "
+                "a built-in name."
+            )
+        module_path, class_name = _KNOWN[integration_type]
+        module = import_module(module_path)
+        return cast(type[Integration], getattr(module, class_name))
+
+    if plugins:
+        if len(plugins) > 1:
+            raise IntegrationNotFoundError(
+                f"multiple installed plugins register type '{integration_type}': "
+                f"{[plugin.value for plugin in plugins]}."
+            )
+        return cast(type[Integration], plugins[0].load())
+
+    hint = " (a v1 integration type not yet ported to v2)" if integration_type in _KNOWN_V1_TYPES else ""
+    raise IntegrationNotFoundError(f"no integration registered for type '{integration_type}'{hint}.")

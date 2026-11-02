@@ -6,8 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        This form captures the evidence auditors need for every infrastructure change.
-        Strata automatically embeds this information in the deploy-log when the PR is merged.
+        This form captures the evidence auditors need for every infrastructure change —
+        what changed, why, who approved it, and how to roll it back.
 
   - type: input
     id: ticket
@@ -72,8 +72,8 @@ body:
       description: How to revert if the deployment fails or causes issues.
       placeholder: |
         1. Revert PR (git revert)
-        2. Re-run `strata deploy run -f deploy/deploy-prd.yaml`
-        3. Verify health with `strata deploy health -f deploy/deploy-prd.yaml`
+        2. Re-run `strata deploy run <deployment-name>`
+        3. Verify the deployment succeeded and check the target system directly
     validations:
       required: true
 
@@ -82,7 +82,7 @@ body:
     attributes:
       label: Pre-submission checklist
       options:
-        - label: Change validated locally with `strata validate run -f <deployment.yaml>`
+        - label: Change validated locally with `strata validate`
           required: true
         - label: Rollback plan documented above
           required: true

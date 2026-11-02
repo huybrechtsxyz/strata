@@ -1,27 +1,32 @@
 <#
 .SYNOPSIS
-    Setup script for strata on Windows.
+    Setup script for strata-v2 on Windows.
 .DESCRIPTION
-    Installs uv, creates a virtual environment, and installs project dependencies.
+    Installs uv, creates a virtual environment, and installs project dependencies
+    (including dev extras) via `uv sync`.
 .PARAMETER UseProGet
     Register the internal ProGet package index in uv's config. Use this on work machines.
-    Omit on home machines to resolve packages directly from PyPI.
+    The index URL comes from STRATA_PACKAGE_INDEX_URL, set in the environment or in
+    scripts\setup.env (git-ignored, KEY=VALUE lines). Omit on home machines to resolve
+    packages directly from PyPI.
 .EXAMPLE
-    .\Setup.ps1
-    .\Setup.ps1 -UseProGet
+    .\scripts\Setup.ps1
+    .\scripts\Setup.ps1 -UseProGet
 .NOTES
+    `uv sync` installs the `dev` dependency-group by default (uv's default-group
+    behavior) — this is exactly what CI's setup-python action runs, so it's the
+    proven-correct way to get mypy/ruff/pytest/import-linter installed here.
 #>
 param(
     [switch]$UseProGet
 )
 
-# Function to get the project root directory
 function Get-ProjectRoot {
     return Split-Path -Parent $PSScriptRoot
 }
 
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
-Write-Host "[*] strata - Setup" -ForegroundColor Cyan
+Write-Host "[*] strata-v2 - Setup" -ForegroundColor Cyan
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -61,7 +66,6 @@ Write-Host "[*] Creating virtual environment with uv..." -ForegroundColor Blue
 uv venv "$projectRoot\.venv"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] Failed to create virtual environment." -ForegroundColor Red
-    Read-Host "[.] Press Enter to exit"
     exit 1
 }
 Write-Host "[+] Virtual environment created." -ForegroundColor Green
@@ -78,6 +82,23 @@ Write-Host ""
 # Run Setup.ps1 -UseProGet on work machines to register the internal index.
 if ($UseProGet) {
     Write-Host "[*] Configuring uv package index (ProGet)..." -ForegroundColor Blue
+
+    # An already-set environment variable wins over setup.env.
+    $envFile = Join-Path $PSScriptRoot "setup.env"
+    if (Test-Path $envFile) {
+        foreach ($line in Get-Content $envFile) {
+            if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$' -and -not $line.TrimStart().StartsWith('#')) {
+                if (-not [Environment]::GetEnvironmentVariable($Matches[1])) {
+                    [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim('"'), "Process")
+                }
+            }
+        }
+    }
+    if (-not $env:STRATA_PACKAGE_INDEX_URL) {
+        Write-Host "[!] STRATA_PACKAGE_INDEX_URL is not set. Export it or add it to $envFile." -ForegroundColor Red
+        exit 1
+    }
+
     $uvConfigDir = "$env:APPDATA\uv"
     $uvConfigFile = "$uvConfigDir\uv.toml"
     if (-not (Test-Path $uvConfigDir)) {
@@ -86,7 +107,7 @@ if ($UseProGet) {
     if (-not (Test-Path $uvConfigFile)) {
         @"
 [[index]]
-url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple"
+url = "$env:STRATA_PACKAGE_INDEX_URL"
 "@ | Set-Content -Path $uvConfigFile -Encoding UTF8
         Write-Host "[+] uv config created at $uvConfigFile" -ForegroundColor Green
     }
@@ -108,12 +129,13 @@ else {
     Write-Host ""
 }
 
-# Install project dependencies
-Write-Host "[*] Installing dependencies..." -ForegroundColor Blue
-uv pip install -e .
+# Install project dependencies, incl. the default `dev` dependency-group
+# (mypy/ruff/pytest/import-linter/nox) — matches CI's setup-python action.
+Write-Host "[*] Syncing dependencies (uv sync)..." -ForegroundColor Blue
+$env:UV_INDEX_STRATEGY = "unsafe-best-match"
+uv sync
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "[!] Failed to install dependencies." -ForegroundColor Red
-    Read-Host "[.] Press Enter to exit"
+    Write-Host "[!] Failed to sync dependencies." -ForegroundColor Red
     exit 1
 }
 Write-Host "[+] Dependencies installed." -ForegroundColor Green
@@ -122,5 +144,3 @@ Write-Host ""
 Write-Host "[+] ================================================" -ForegroundColor Cyan
 Write-Host "[+] Setup completed successfully!" -ForegroundColor Green
 Write-Host "[+] ================================================" -ForegroundColor Cyan
-
-Read-Host "[.] Press Enter to continue"

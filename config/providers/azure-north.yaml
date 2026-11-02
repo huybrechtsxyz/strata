@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: provider
+meta:
+  name: azure-north
+spec:
+  # A second region of the same platform. The workspace's `azure` provider
+  # slot defaults to azure-main (westeurope); a deployment rebinds the slot to
+  # this document to deploy the same workspace here (see deployments/region-north.yaml).
+  type: azure
+  region: northeurope
+  display_name: "North Europe"
+  default_tags:
+    managed-by: strata

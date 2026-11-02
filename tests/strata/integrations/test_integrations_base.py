@@ -1,326 +1,315 @@
 #!/usr/bin/env python3
-"""Unit tests for BaseIntegration."""
-
-from unittest.mock import MagicMock, patch
+"""Tests for `Integration` (ADR-0021 D1) — transport resolution, the command
+fallback chain, and version checking. Exercised with fake subclasses; no
+real tool required.
+"""
 
 import pytest
 
-from strata.integrations.base_integration import BaseIntegration
+from strata.integrations.base import Integration
+from strata.integrations.errors import IntegrationError
+from strata.models.common_models import SourceModel
 from strata.models.integration_model import IntegrationModel
-
-# ---------------------------------------------------------------------------
-# Concrete subclass for testing (not abstract)
-# ---------------------------------------------------------------------------
+from strata.models.provisioning_model import ProvisionerModel
+from strata.utils.transport import CommandResult, HttpResult
 
 
-class ConcreteIntegration(BaseIntegration):
-    COMMAND = "echo"
+class _CliOnly(Integration):
+    """A class with exactly one transport."""
 
-    def get_version_command(self):
-        return ["echo", "--version"]
-
-    def parse_version(self, output: str) -> str:
-        return output.strip()
-
-
-def _make_config(name="test", itype="echo", **kwargs) -> IntegrationModel:
-    return IntegrationModel(name=name, type=itype, **kwargs)
+    TYPE = "widget"
+    CAPABILITIES = frozenset({"infrastructure"})
+    TRANSPORTS = frozenset({"cli"})
+    COMMAND = "widget-cli"
 
 
-# ---------------------------------------------------------------------------
-# Singleton behaviour
-# ---------------------------------------------------------------------------
+class _NetworkedOnly(Integration):
+    """A class with exactly one, non-cli, transport."""
+
+    TYPE = "widget"
+    CAPABILITIES = frozenset({"secrets"})
+    TRANSPORTS = frozenset({"http"})
 
 
-class TestBaseIntegrationSingleton:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
+class _DualTransport(Integration):
+    """The Consul-shaped case: cli or http, either configurable."""
 
-    def test_same_class_returns_same_instance(self):
-        cfg = _make_config()
-        a = ConcreteIntegration(cfg)
-        b = ConcreteIntegration(cfg)
-        assert a is b
+    TYPE = "widget"
+    CAPABILITIES = frozenset({"secrets"})
+    TRANSPORTS = frozenset({"cli", "http"})
+    COMMAND = "definitely-not-a-real-binary-xyz"
 
-    def test_reset_instances_gives_new_instance(self):
-        cfg = _make_config()
-        a = ConcreteIntegration(cfg)
-        BaseIntegration._instances.clear()
-        b = ConcreteIntegration(cfg)
-        assert a is not b
 
-    def test_different_names_of_same_type_give_distinct_instances(self):
-        """ADR-0066: singleton key is config.name, not a shared 'default' literal —
-        two declarations of the same integration type no longer silently collapse
-        into one object."""
-        a = ConcreteIntegration(_make_config(name="first"))
-        b = ConcreteIntegration(_make_config(name="second"))
-        assert a is not b
-
-    def test_same_name_of_same_type_gives_same_instance(self):
-        a = ConcreteIntegration(_make_config(name="shared"))
-        b = ConcreteIntegration(_make_config(name="shared"))
-        assert a is b
-
-    def test_default_instance_key_is_config_name(self):
-        cfg = _make_config(name="my-integration")
-        assert BaseIntegration._get_instance_key_static(ConcreteIntegration, cfg) == "my-integration"
-
-    def test_default_instance_key_falls_back_when_no_config(self):
-        assert BaseIntegration._get_instance_key_static(ConcreteIntegration) == "default"
+def _config(**spec_overrides: object) -> IntegrationModel:
+    spec: dict[str, object] = {"type": "widget", "capabilities": []}
+    spec.update(spec_overrides)
+    return IntegrationModel.model_validate({"meta": {"name": "widget-main"}, "spec": spec})
 
 
 # ---------------------------------------------------------------------------
-# Initialisation attributes
+# construction
 # ---------------------------------------------------------------------------
 
 
-class TestBaseIntegrationInit:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
+def test_construction_without_config_is_allowed():
+    """A built-in works from PATH alone, zero configuration (ADR-0021 D4)."""
+    integration = _CliOnly()
+    assert integration.name == "widget"
+    assert integration.config is None
 
-    def test_integration_name_from_config(self):
-        cfg = _make_config(name="my_git")
-        i = ConcreteIntegration(cfg)
-        assert i.integration_name == "my_git"
 
-    def test_integration_type_from_config(self):
-        cfg = _make_config(itype="git")
-        i = ConcreteIntegration(cfg)
-        assert i.integration_type == "git"
+def test_bind_is_a_no_op_by_default():
+    """Base `Integration.bind()` (docs/design/script-provisioner.md)
+    accepts any ProvisionerModel and changes nothing observable — every
+    existing integration inherits this unless it overrides `bind()` itself
+    (only `ScriptIntegration` does)."""
+    integration = _CliOnly()
+    provisioner = ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))
 
-    def test_command_from_class_attribute(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        assert i.command == "echo"
+    assert integration.bind(provisioner) is None
+    assert integration.name == "widget"
+    assert integration.command == "widget-cli"
 
-    def test_command_fallback_to_type_when_no_class_attr(self):
-        class NoCommandIntegration(BaseIntegration):
-            def get_version_command(self):
-                return ["mytool", "--version"]
 
-            def parse_version(self, o):
-                return o.strip()
+def test_construction_rejects_mismatched_type():
+    """Configuring a class with the wrong document's type is a caller bug, not an authoring error."""
+    bad_config = IntegrationModel.model_validate({"meta": {"name": "x"}, "spec": {"type": "not-widget"}})
+    with pytest.raises(IntegrationError, match="not-widget"):
+        _CliOnly(bad_config)
 
-        cfg = _make_config(itype="mytool")
-        i = NoCommandIntegration(cfg)
-        assert i.command == "mytool"
 
-    def test_initial_state_none(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        assert i._is_available is None
-        assert i._version is None
+def test_name_falls_back_to_type_without_a_document():
+    assert _CliOnly().name == "widget"
+
+
+def test_name_uses_the_document_when_given():
+    assert _CliOnly(_config()).name == "widget-main"
 
 
 # ---------------------------------------------------------------------------
-# _get_command_from_config: validation.command path
+# command resolution (ADR-0021 D6 fallback chain)
 # ---------------------------------------------------------------------------
 
 
-class TestGetCommandFromConfig:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
-
-    def test_validation_command_takes_first_word(self):
-        from strata.models.integration_model import IntegrationValidationSpecModel
-
-        class CustomIntegration(BaseIntegration):
-            def get_version_command(self):
-                return ["customtool", "--version"]
-
-            def parse_version(self, o):
-                return o.strip()
-
-        cfg = _make_config(
-            itype="customtool",
-            validation=IntegrationValidationSpecModel(command="customtool --version"),
-        )
-        i = CustomIntegration(cfg)
-        assert i.command == "customtool"
+def test_command_uses_the_class_default_with_no_document():
+    assert _CliOnly().command == "widget-cli"
 
 
-# ---------------------------------------------------------------------------
-# _get_env_var / _resolve_env_vars
-# ---------------------------------------------------------------------------
+def test_command_override_wins_over_the_class_default():
+    integration = _CliOnly(_config(command="custom-binary"))
+    assert integration.command == "custom-binary"
 
 
-class TestEnvVarHelpers:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
+def test_command_falls_back_to_type_when_the_class_has_no_default():
+    """A generic wrapper with no COMMAND of its own uses the document's `type`."""
 
-    def test_get_env_var_returns_value(self, monkeypatch):
-        monkeypatch.setenv("MY_VAR", "hello")
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        assert i._get_env_var("MY_VAR") == "hello"
+    class _Generic(Integration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset()
+        TRANSPORTS = frozenset({"cli"})
 
-    def test_get_env_var_returns_default(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        assert i._get_env_var("__MISSING_VAR__", "fallback") == "fallback"
+    integration = _Generic(_config())
+    assert integration.command == "widget"
 
-    def test_resolve_env_vars_curly(self, monkeypatch):
-        monkeypatch.setenv("HOST", "myhost")
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        assert i._resolve_env_vars("https://{{ env.HOST }}/api") == "https://myhost/api"
 
-    def test_resolve_env_vars_dollar(self, monkeypatch):
-        monkeypatch.setenv("PORT", "8080")
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        assert i._resolve_env_vars("http://host:{{ env.PORT }}") == "http://host:8080"
+def test_command_is_none_with_no_document_and_no_class_default():
+    class _ApiOnlyNoCommand(Integration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset()
+        TRANSPORTS = frozenset({"http"})
 
-    def test_resolve_env_vars_missing_raises(self):
-        from jinja2 import UndefinedError
-
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        with pytest.raises(UndefinedError):
-            i._resolve_env_vars("{{ env.__TOTALLY_MISSING__ }}")
+    assert _ApiOnlyNoCommand().command is None
 
 
 # ---------------------------------------------------------------------------
-# is_available / get_version
+# transport resolution — all four cases (ADR-0021 D1)
 # ---------------------------------------------------------------------------
 
 
-class TestAvailabilityAndVersion:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
+def test_transport_explicit_choice_is_honoured():
+    integration = _DualTransport(_config(transport="http"))
+    assert integration.transport == "http"
 
-    def test_is_available_true_when_command_succeeds(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        mock_result = MagicMock(returncode=0, stdout="1.0.0", stderr="")
-        with patch("strata.integrations.base_integration.run_command", return_value=mock_result):
-            assert i.is_available(use_cache=False) is True
 
-    def test_is_available_false_when_command_fails(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        mock_result = MagicMock(returncode=1, stdout="", stderr="not found")
-        with patch("strata.integrations.base_integration.run_command", return_value=mock_result):
-            assert i.is_available(use_cache=False) is False
+def test_transport_rejects_a_choice_outside_the_class_transports():
+    integration = _CliOnly(_config(transport="grpc"))
+    with pytest.raises(IntegrationError, match="grpc"):
+        _ = integration.transport
 
-    def test_is_available_false_on_exception(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        with patch("strata.integrations.base_integration.run_command", side_effect=FileNotFoundError):
-            assert i.is_available(use_cache=False) is False
 
-    def test_is_available_uses_cache(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        i._is_available = True
-        # Should return cached value without calling run_command
-        with patch("strata.integrations.base_integration.run_command") as mock_cmd:
-            assert i.is_available() is True
-            mock_cmd.assert_not_called()
+def test_transport_resolves_to_the_sole_supported_one():
+    assert _CliOnly().transport == "cli"
+    assert _NetworkedOnly().transport == "http"
 
-    def test_get_version_returns_parsed_string(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        i._is_available = True
-        mock_result = MagicMock(returncode=0, stdout="  2.40.0  ", stderr="")
-        with patch("strata.integrations.base_integration.run_command", return_value=mock_result):
-            assert i.get_version(use_cache=False) == "2.40.0"
 
-    def test_get_version_none_when_unavailable(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        i._is_available = False
-        assert i.get_version(use_cache=False) is None
+def test_transport_falls_back_to_cli_when_available_and_unconfigured():
+    import sys
+
+    class _AlwaysAvailable(_DualTransport):
+        COMMAND = sys.executable  # guaranteed present, unlike a bare "python"
+
+    integration = _AlwaysAvailable()
+    assert integration.is_available()
+    assert integration.transport == "cli"
+
+
+def test_transport_falls_back_to_the_remaining_option_when_cli_unavailable():
+    """_DualTransport's COMMAND does not exist on PATH."""
+    integration = _DualTransport()
+    assert not integration.is_available()
+    assert integration.transport == "http"
+
+
+def test_transport_is_cached_after_first_resolution():
+    integration = _CliOnly(_config(transport="cli"))
+    first = integration.transport
+    # Mutate the backing config; a cached property must not notice.
+    integration.config.spec.transport = "grpc"  # type: ignore[union-attr]
+    assert integration.transport == first == "cli"
 
 
 # ---------------------------------------------------------------------------
-# validate_version
+# is_available / run / request
 # ---------------------------------------------------------------------------
 
 
-class TestValidateVersion:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
+def test_is_available_false_for_an_unresolvable_command():
+    assert not _DualTransport().is_available()
 
-    def test_no_validation_spec_always_valid(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        ok, msg = i.validate_version()
-        assert ok
-        assert msg == ""
 
-    def test_version_meets_minimum(self):
-        from strata.models.integration_model import IntegrationValidationSpecModel
+def test_is_available_true_for_a_real_command():
+    import sys
 
-        cfg = _make_config(validation=IntegrationValidationSpecModel(command="echo --version", min_version="1.0.0"))
-        i = ConcreteIntegration(cfg)
-        i._is_available = True
-        mock_result = MagicMock(returncode=0, stdout="2.0.0", stderr="")
-        with patch("strata.integrations.base_integration.run_command", return_value=mock_result):
-            ok, msg = i.validate_version()
-        assert ok
+    integration = _CliOnly(_config(command=sys.executable))
+    assert integration.is_available()
 
-    def test_version_below_minimum_fails(self):
-        from strata.models.integration_model import IntegrationValidationSpecModel
 
-        cfg = _make_config(validation=IntegrationValidationSpecModel(command="echo --version", min_version="3.0.0"))
-        i = ConcreteIntegration(cfg)
-        i._is_available = True
-        mock_result = MagicMock(returncode=0, stdout="2.0.0", stderr="")
-        with patch("strata.integrations.base_integration.run_command", return_value=mock_result):
-            ok, msg = i.validate_version()
-        assert not ok
-        assert "below minimum" in msg
+def test_run_reports_a_missing_command_without_raising():
+    class _NoCommand(Integration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset()
+        TRANSPORTS = frozenset({"cli"})
 
-    def test_version_above_maximum_fails(self):
-        from strata.models.integration_model import IntegrationValidationSpecModel
+    result = _NoCommand().run("--version")
+    assert isinstance(result, CommandResult)
+    assert not result.is_successful
 
-        cfg = _make_config(validation=IntegrationValidationSpecModel(command="echo --version", max_version="1.9.9"))
-        i = ConcreteIntegration(cfg)
-        i._is_available = True
-        mock_result = MagicMock(returncode=0, stdout="2.0.0", stderr="")
-        with patch("strata.integrations.base_integration.run_command", return_value=mock_result):
-            ok, msg = i.validate_version()
-        assert not ok
-        assert "above maximum" in msg
+
+def test_run_delegates_to_run_command_with_the_resolved_executable():
+    import sys
+
+    integration = _CliOnly(_config(command=sys.executable))
+    result = integration.run("-c", "print('hi')")
+    assert result.is_successful
+    assert result.payload.strip() == "hi"
+
+
+def test_run_forwards_line_callback_to_run_command(monkeypatch):
+    """`run()` must thread `line_callback` through to `run_command()`,
+    which already implements the real streaming."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=300, input=None, line_callback=None):
+        captured["line_callback"] = line_callback
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+
+    def _cb(stream: str, text: str) -> None:
+        pass
+
+    integration = _CliOnly(_config(command="widget-cli"))
+    integration.run("--version", line_callback=_cb)
+
+    assert captured["line_callback"] is _cb
+
+
+def test_run_forwards_input_to_run_command_and_defaults_to_none(monkeypatch):
+    seen: list[object] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=300, input=None, line_callback=None):
+        seen.append((list(args), input))
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    integration = _CliOnly(_config(command="widget-cli"))
+
+    integration.run("login", input="s3cret-value")
+    integration.run("version")
+
+    assert seen == [(["widget-cli", "login"], "s3cret-value"), (["widget-cli", "version"], None)]
+
+
+def test_run_delivers_input_on_stdin_never_in_the_arguments():
+    import sys
+
+    integration = _CliOnly(_config(command=sys.executable))
+
+    result = integration.run("-c", "import sys; print(sys.stdin.read().upper())", input="hunter2")
+
+    assert result.is_successful
+    assert result.payload.strip() == "HUNTER2"
+
+
+def test_request_reports_a_missing_endpoint_without_raising():
+    result = _NetworkedOnly().request("GET", "/v1/kv/x")
+    assert isinstance(result, HttpResult)
+    assert not result.is_successful
+
+
+def test_request_joins_path_onto_the_configured_endpoint(monkeypatch):
+    import strata.integrations.base as base_module
+
+    captured: dict[str, object] = {}
+
+    def _fake_http_request(method, url, **kwargs):
+        captured["method"] = method
+        captured["url"] = url
+        return HttpResult(status=200, body="ok")
+
+    monkeypatch.setattr(base_module, "http_request", _fake_http_request)
+    integration = _NetworkedOnly(_config(endpoints={"address": "https://example.test:8500/"}))
+    result = integration.request("GET", "/v1/kv/x")
+    assert result.is_successful
+    assert captured["url"] == "https://example.test:8500/v1/kv/x"
 
 
 # ---------------------------------------------------------------------------
-# get_info
+# version
 # ---------------------------------------------------------------------------
 
 
-class TestGetInfo:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
-
-    def test_get_info_returns_dict(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        i._is_available = False
-        info = i.get_info()
-        assert info["name"] == "test"
-        assert info["type"] == "echo"
-        assert info["command"] == "echo"
-        assert "available" in info
-        assert "version" in info
+def test_get_version_is_none_for_a_networked_only_integration():
+    assert _NetworkedOnly().get_version() is None
 
 
-# ---------------------------------------------------------------------------
-# _run_integration
-# ---------------------------------------------------------------------------
+def test_get_version_is_none_when_the_command_is_unavailable():
+    assert _DualTransport().get_version() is None
 
 
-class TestRunIntegration:
-    def setup_method(self):
-        BaseIntegration._instances.clear()
+def test_get_version_uses_parse_version_hook():
+    import sys
 
-    def test_run_integration_prepends_command(self):
-        cfg = _make_config()
-        i = ConcreteIntegration(cfg)
-        mock_result = MagicMock(returncode=0, stdout="ok", stderr="")
-        with patch("strata.integrations.base_integration.run_command", return_value=mock_result) as mock_cmd:
-            i._run_integration(["arg1", "arg2"])
-            called_cmd = mock_cmd.call_args[0][0]
-            assert called_cmd == ["echo", "arg1", "arg2"]
+    class _FakeCli(Integration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset()
+        TRANSPORTS = frozenset({"cli"})
+        COMMAND = sys.executable
+        VERSION_ARGS = ("-c", "print('MyTool v9.9.9')")
+
+        def parse_version(self, raw: str) -> str:
+            return raw.strip().removeprefix("MyTool v")
+
+    assert _FakeCli().get_version() == "9.9.9"
+
+
+def test_parse_version_default_just_strips():
+    assert _CliOnly().parse_version("  1.2.3  \n") == "1.2.3"
+
+
+def test_get_version_is_none_for_a_networked_integration():
+    assert _NetworkedOnly().get_version() is None

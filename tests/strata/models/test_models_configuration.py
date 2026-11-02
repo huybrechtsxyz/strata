@@ -1,411 +1,280 @@
 #!/usr/bin/env python3
-"""
-===============================================================================
-Script Name   : test_models_configuration.py
-Author        : Vincent Huybrechts
-Version       : 1.0.0
-Python Version: 3.12+
-Description   : Tests for configuration models in strata.
-===============================================================================
-"""
+"""Tests for ConfigurationModel YAML validation.
 
-import os
-from pathlib import Path
+`spec.providers`/`spec.topologies` are thin `{name, file}` pointers to
+standalone `ProviderConfigModel`/`TopologyConfigModel` documents (ADR-0014)
+— the actual registry content (regions/resources, component roles) is
+tested in `test_models_provider_config.py`/`test_models_topology_config.py`.
+"""
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from strata.models.configuration_model import ConfigurationModel
 
 
-@pytest.fixture(autouse=True)
-def set_pythonpath_env(monkeypatch):
-    monkeypatch.setenv("PYTHONPATH", "src")
+def _minimal_configuration() -> dict:
+    return {
+        "meta": {"name": "solution-config"},
+        "spec": {
+            "providers": ["kamatera"],
+        },
+    }
 
 
-CONFIGURATION_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "configurations")
-
-SCRIPTS_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "scripts")
-
-# List of YAML files to test (extensible)
-CONFIGURATION_VALID_FILES = [
-    os.path.join(CONFIGURATION_FOLDER, "configuration-standard.yaml"),
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", "azure-aks", "config", "azure-aks-config.yaml"),
-]
-
-# List of invalid YAML files to test (extensible)
-CONFIGURATION_INVALID_FILES = [
-    os.path.join(CONFIGURATION_FOLDER, "invalid-configuration.yaml"),
-]
+def test_configuration_minimal_is_valid():
+    """A minimal configuration with one provider registry pointer validates successfully."""
+    model = ConfigurationModel.model_validate(_minimal_configuration())
+    assert model.meta.name == "solution-config"
+    assert model.spec.providers[0] == "kamatera"
 
 
-@pytest.mark.parametrize("yaml_path", CONFIGURATION_VALID_FILES)
-def test_configuration_yaml_valid(yaml_path):
-    """Test that a configuration YAML file is a valid ConfigurationModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def test_configuration_rejects_duplicate_provider_names():
+    """Duplicate provider names across the registry raise a ValidationError."""
+    data = _minimal_configuration()
+    data["spec"]["providers"].append(data["spec"]["providers"][0])
+    with pytest.raises(ValidationError, match="Duplicate"):
+        ConfigurationModel.model_validate(data)
+
+
+def test_configuration_topologies_is_optional():
+    """spec.topologies may be omitted entirely."""
+    model = ConfigurationModel.model_validate(_minimal_configuration())
+    assert model.spec.topologies is None
+    assert model.spec.additional_topologies is False
+
+
+def test_configuration_accepts_topology_registry_pointer():
+    """spec.topologies accepts a plain TopologyConfig document name."""
+    data = _minimal_configuration()
+    data["spec"]["topologies"] = ["kubernetes"]
     model = ConfigurationModel.model_validate(data)
-    assert model is not None
+    assert model.spec.topologies[0] == "kubernetes"
 
 
-@pytest.mark.parametrize("yaml_path", CONFIGURATION_INVALID_FILES)
-def test_configuration_yaml_invalid(yaml_path):
-    """Test that a configuration YAML file is NOT a valid ConfigurationModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def test_configuration_rejects_duplicate_topology_names():
+    """Duplicate topology type names across the registry raise a ValidationError."""
+    data = _minimal_configuration()
+    data["spec"]["topologies"] = ["kubernetes", "kubernetes"]
+    with pytest.raises(ValidationError, match="Duplicate"):
+        ConfigurationModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# spec.security (docs/design/gap_fit_v1.md gap #7 — real usage: config-repo's
+# config/stores.yaml)
+# ---------------------------------------------------------------------------
+
+
+def test_configuration_security_is_optional():
+    """spec.security may be omitted entirely — no restriction declared."""
+    model = ConfigurationModel.model_validate(_minimal_configuration())
+    assert model.spec.security is None
+
+
+def test_configuration_accepts_security_allow_lists():
+    data = _minimal_configuration()
+    data["spec"]["security"] = {
+        "allowed_secret_stores": ["github", "azure-keyvault"],
+        "allowed_variable_stores": ["constant", "azure-appconfig"],
+        "allowed_feature_stores": ["constant", "azure-appconfig"],
+        "allowed_key_value_stores": ["azure-keyvault", "azure-appconfig"],
+    }
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.security.allowed_secret_stores == ["github", "azure-keyvault"]
+    assert model.spec.security.allowed_variable_stores == ["constant", "azure-appconfig"]
+    assert model.spec.security.allowed_feature_stores == ["constant", "azure-appconfig"]
+    assert model.spec.security.allowed_key_value_stores == ["azure-keyvault", "azure-appconfig"]
+
+
+def test_configuration_security_fields_are_each_independently_optional():
+    data = _minimal_configuration()
+    data["spec"]["security"] = {"allowed_secret_stores": ["azure-keyvault"]}
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.security.allowed_secret_stores == ["azure-keyvault"]
+    assert model.spec.security.allowed_variable_stores is None
+    assert model.spec.security.allowed_feature_stores is None
+    assert model.spec.security.allowed_key_value_stores is None
+
+
+def test_configuration_security_rejects_unknown_fields():
+    """extra='forbid' still applies to the nested security model."""
+    data = _minimal_configuration()
+    data["spec"]["security"] = {"allowed_widget_stores": ["nope"]}
     with pytest.raises(ValidationError):
         ConfigurationModel.model_validate(data)
-    model = None
-    assert model is None
 
 
-class TestPathConventionTenantResolver:
-    """Tests for PathConventionModel.resolves and the at-most-one-tenant-resolver rule."""
-
-    def test_resolves_tenant_requires_code_segment(self):
-        from strata.models.configuration_model import PathConventionModel
-
-        with pytest.raises(ValidationError, match=r"\{code\}"):
-            PathConventionModel(
-                name="tenant-location",
-                resolves="tenant",
-                scope="customers/**",
-                pattern="customers/{name}/customer.yaml",  # missing {code}
-            )
-
-    def test_resolves_tenant_with_code_segment_is_valid(self):
-        from strata.models.configuration_model import PathConventionModel
-
-        conv = PathConventionModel(
-            name="tenant-location",
-            resolves="tenant",
-            scope="customers/**",
-            pattern="customers/{code}/customer.yaml",
-        )
-        assert conv.resolves == "tenant"
-
-    def test_resolves_none_by_default(self):
-        from strata.models.configuration_model import PathConventionModel
-
-        conv = PathConventionModel(name="generic", scope="zones/**", pattern="zones/{zone}")
-        assert conv.resolves is None
-
-    def test_only_one_convention_may_resolve_tenant(self):
-        from strata.models.configuration_model import ConfigurationSpecModel, PathConventionModel
-
-        with pytest.raises(ValidationError, match="Multiple spec.paths conventions declare resolves: tenant"):
-            ConfigurationSpecModel(
-                paths=[
-                    PathConventionModel(name="a", resolves="tenant", scope="a/**", pattern="a/{code}.yaml"),
-                    PathConventionModel(name="b", resolves="tenant", scope="b/**", pattern="b/{code}.yaml"),
-                ]
-            )
-
-    def test_multiple_paths_with_only_one_tenant_resolver_is_valid(self):
-        from strata.models.configuration_model import ConfigurationSpecModel, PathConventionModel
-
-        spec = ConfigurationSpecModel(
-            paths=[
-                PathConventionModel(name="a", resolves="tenant", scope="a/**", pattern="a/{code}.yaml"),
-                PathConventionModel(name="b", scope="b/**", pattern="b/{zone}"),
-            ]
-        )
-        assert spec.paths is not None
-        assert len(spec.paths) == 2
+# ---------------------------------------------------------------------------
+# spec.paths (docs/design/path-conventions.md, docs/design/gap_fit_v1.md gap #7 —
+# real usage: config-repo's config/paths.yaml)
+# ---------------------------------------------------------------------------
 
 
-class TestUniqueIntegrationNames:
-    """ADR-0066: integration identity is the declared name — duplicates must fail."""
-
-    def test_duplicate_integration_names_raise(self):
-        from strata.models.configuration_model import ConfigurationSpecModel
-        from strata.models.integration_model import IntegrationModel
-
-        with pytest.raises(ValidationError, match="integration names in configuration"):
-            ConfigurationSpecModel(
-                integrations=[
-                    IntegrationModel(name="splunk", type="splunk"),
-                    IntegrationModel(name="splunk", type="splunk"),
-                ]
-            )
-
-    def test_unique_integration_names_are_valid(self):
-        from strata.models.configuration_model import ConfigurationSpecModel
-        from strata.models.integration_model import IntegrationModel
-
-        spec = ConfigurationSpecModel(
-            integrations=[
-                IntegrationModel(name="splunk-prod", type="splunk"),
-                IntegrationModel(name="splunk-dr", type="splunk"),
-            ]
-        )
-        assert len(spec.integrations) == 2
+def test_configuration_paths_is_optional():
+    model = ConfigurationModel.model_validate(_minimal_configuration())
+    assert model.spec.paths is None
 
 
-class TestConfigurationLifecycleModel:
-    """Test lifecycle phase models in ConfigurationModel."""
+def test_configuration_accepts_a_tenant_resolving_path_convention():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "tenant-path",
+            "scope": "customers/**",
+            "pattern": "customers/{code}",
+            "filename_pattern": "tenant.yaml",
+            "resolves": "tenant",
+        }
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].name == "tenant-path"
+    assert model.spec.paths[0].filename_pattern == "tenant.yaml"
+    assert model.spec.paths[0].resolves == "tenant"
+    assert model.spec.paths[0].enforcement == "warn"
 
-    @pytest.fixture
-    def valid_lifecycle_config(self, tmp_path):
-        """Create valid configuration YAML with lifecycle phases."""
-        # Create dummy script files
-        script1 = tmp_path / "validate.ps1"
-        script1.write_text("Write-Host 'Validate'\nexit 0")
-        script2 = tmp_path / "cleanup.ps1"
-        script2.write_text("Write-Host 'Cleanup'\nexit 0")
 
-        config_content = f"""
-apiVersion: strata.huybrechts.xyz/v1
-kind: configuration
-meta:
-  name: test_config
-spec:
-  lifecycle:
-    config_clean_before:
-      description: Pre-clean phase
-      scripts:
-        - {script1}
-    config_clean_after:
-      description: Post-clean cleanup
-      scripts:
-        - {script2}
-    config_fetch_before:
-      description: Pre-fetch validation
-"""
-        config_file = tmp_path / "test-config.yaml"
-        config_file.write_text(config_content)
-        return config_file
+def test_configuration_filename_pattern_is_optional():
+    """None (default) means any filename is accepted under a matching directory."""
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [{"name": "hub-path", "scope": "deploy/hubs/**", "pattern": "deploy/hubs/{hub}"}]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].filename_pattern is None
 
-    def test_lifecycle_phase_with_scripts(self, tmp_path):
-        """Test valid lifecycle phase with scripts."""
-        # Use existing script from tests/data/scripts
-        script_path = os.path.join(SCRIPTS_FOLDER, "validate-before.ps1")
 
-        config_content = f"""
-apiVersion: strata.huybrechts.xyz/v1
-kind: configuration
-meta:
-  name: test_config
-spec:
-  lifecycle:
-    config_clean_before:
-      description: Pre-clean phase
-      scripts:
-        - {script_path}
-"""
-        config_file = tmp_path / "test-config.yaml"
-        config_file.write_text(config_content)
+def test_configuration_filename_pattern_can_capture_with_no_directory_capture():
+    """provider-path's real shape: the capture lives entirely in the filename."""
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {"name": "provider-path", "scope": "providers/**", "pattern": "providers", "filename_pattern": "{region}.yaml"}
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].pattern == "providers"
+    assert model.spec.paths[0].filename_pattern == "{region}.yaml"
 
-        with open(config_file, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        model = ConfigurationModel.model_validate(data)
 
-        assert model.spec.lifecycle is not None
-        phase = model.spec.lifecycle.root.get("config_clean_before")
-        assert phase is not None
-        assert phase.description == "Pre-clean phase"
-        assert len(phase.scripts) == 1
-        assert Path(phase.scripts[0]).name == "validate-before.ps1"
+def test_configuration_accepts_a_structural_path_convention_with_no_resolves():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {"name": "provider-path", "scope": "providers/**", "pattern": "providers", "filename_pattern": "{region}.yaml"}
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].resolves is None
+    assert model.spec.paths[0].segments is None
 
-    def test_lifecycle_phase_without_scripts(self, tmp_path):
-        """Test lifecycle phase with only description."""
-        config_content = """
-apiVersion: strata.huybrechts.xyz/v1
-kind: configuration
-meta:
-  name: test_config
-spec:
-  lifecycle:
-    empty_phase:
-      description: Empty phase
-"""
-        config_file = tmp_path / "test-config.yaml"
-        config_file.write_text(config_content)
 
-        with open(config_file, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        model = ConfigurationModel.model_validate(data)
+def test_configuration_accepts_a_layers_resolving_path_convention_with_segments():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "control-path",
+            "scope": "deploy/control/**",
+            "pattern": "deploy/control/{control}",
+            "resolves": "layers",
+            "segments": [{"name": "control", "pattern": "^[a-z][a-z0-9-]*$"}],
+        }
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].segments[0].name == "control"
 
-        assert model.spec.lifecycle is not None
-        phase = model.spec.lifecycle.root.get("empty_phase")
-        assert phase is not None
-        assert phase.description == "Empty phase"
-        assert phase.scripts is None or len(phase.scripts) == 0
 
-    def test_lifecycle_multiple_phases(self, tmp_path):
-        """Test configuration with multiple lifecycle phases."""
-        # Use existing scripts from tests/data/scripts
-        script1 = os.path.join(SCRIPTS_FOLDER, "validate-before.ps1")
-        script2 = os.path.join(SCRIPTS_FOLDER, "validate-after.ps1")
+def test_configuration_rejects_layers_resolving_convention_without_segments():
+    """docs/design/path-conventions.md's Open Question #1 (resolved: required)."""
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "control-path",
+            "scope": "deploy/control/**",
+            "pattern": "deploy/control/{control}",
+            "resolves": "layers",
+        }
+    ]
+    with pytest.raises(ValidationError, match="requires 'segments'"):
+        ConfigurationModel.model_validate(data)
 
-        config_content = f"""
-apiVersion: strata.huybrechts.xyz/v1
-kind: configuration
-meta:
-  name: test_config
-spec:
-  lifecycle:
-    config_clean_before:
-      description: Pre-clean
-      scripts:
-        - {script1}
-    config_clean_after:
-      description: Post-clean
-      scripts:
-        - {script2}
-    config_fetch_before:
-      description: Pre-fetch
-"""
-        config_file = tmp_path / "test-config.yaml"
-        config_file.write_text(config_content)
 
-        with open(config_file, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        model = ConfigurationModel.model_validate(data)
+def test_configuration_rejects_layers_resolving_convention_with_empty_segments():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "control-path",
+            "scope": "deploy/control/**",
+            "pattern": "deploy/control/{control}",
+            "resolves": "layers",
+            "segments": [],
+        }
+    ]
+    with pytest.raises(ValidationError, match="requires 'segments'"):
+        ConfigurationModel.model_validate(data)
 
-        assert model.spec.lifecycle is not None
-        assert len(model.spec.lifecycle.root) == 3
 
-        clean_before = model.spec.lifecycle.root.get("config_clean_before")
-        assert clean_before is not None
-        assert clean_before.description == "Pre-clean"
-        assert len(clean_before.scripts) == 1
+def test_configuration_rejects_unknown_resolves_value():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [{"name": "bogus-path", "scope": "bogus/**", "pattern": "bogus/{x}", "resolves": "bogus"}]
+    with pytest.raises(ValidationError):
+        ConfigurationModel.model_validate(data)
 
-        clean_after = model.spec.lifecycle.root.get("config_clean_after")
-        assert clean_after is not None
-        assert clean_after.description == "Post-clean"
 
-        fetch_before = model.spec.lifecycle.root.get("config_fetch_before")
-        assert fetch_before is not None
-        assert fetch_before.description == "Pre-fetch"
+def test_configuration_rejects_duplicate_path_convention_names():
+    data = _minimal_configuration()
+    entry = {
+        "name": "tenant-path",
+        "scope": "customers/**",
+        "pattern": "customers/{code}",
+        "filename_pattern": "tenant.yaml",
+    }
+    data["spec"]["paths"] = [entry, dict(entry)]
+    with pytest.raises(ValidationError, match="Duplicate"):
+        ConfigurationModel.model_validate(data)
 
-    def test_lifecycle_phase_multiple_scripts(self, tmp_path):
-        """Test lifecycle phase with multiple scripts."""
-        # Use existing scripts from tests/data/scripts
-        script1 = os.path.join(SCRIPTS_FOLDER, "validate-before.ps1")
-        script2 = os.path.join(SCRIPTS_FOLDER, "validate-after.ps1")
-        script3 = os.path.join(SCRIPTS_FOLDER, "mock_validate.sh")
 
-        config_content = f"""
-apiVersion: strata.huybrechts.xyz/v1
-kind: configuration
-meta:
-  name: test_config
-spec:
-  lifecycle:
-    multi_script_phase:
-      description: Phase with multiple scripts
-      scripts:
-        - {script1}
-        - {script2}
-        - {script3}
-"""
-        config_file = tmp_path / "test-config.yaml"
-        config_file.write_text(config_content)
+def test_configuration_path_convention_enforcement_can_be_set_to_deny():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "provider-path",
+            "scope": "providers/**",
+            "pattern": "providers",
+            "filename_pattern": "{region}.yaml",
+            "enforcement": "deny",
+        }
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].enforcement == "deny"
 
-        with open(config_file, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        model = ConfigurationModel.model_validate(data)
 
-        assert model.spec.lifecycle is not None
-        phase = model.spec.lifecycle.root.get("multi_script_phase")
-        assert phase is not None
-        assert len(phase.scripts) == 3
-        assert Path(phase.scripts[0]).name == "validate-before.ps1"
-        assert Path(phase.scripts[1]).name == "validate-after.ps1"
-        assert Path(phase.scripts[2]).name == "mock_validate.sh"
+# ---------------------------------------------------------------------------
+# spec.cve_allowed (docs/archive/cve-scanner-integration.md Phase 3)
+# ---------------------------------------------------------------------------
 
-    def test_configuration_without_lifecycle(self, tmp_path):
-        """Test configuration without lifecycle section."""
-        config_content = """
-apiVersion: strata.huybrechts.xyz/v1
-kind: configuration
-meta:
-  name: test_config
-spec:
-  additional_topologies: false
-"""
-        config_file = tmp_path / "test-config.yaml"
-        config_file.write_text(config_content)
 
-        with open(config_file, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        model = ConfigurationModel.model_validate(data)
+def test_configuration_cve_allowed_is_optional():
+    model = ConfigurationModel.model_validate(_minimal_configuration())
+    assert model.spec.cve_allowed is None
 
-        assert model.spec.lifecycle is None or len(model.spec.lifecycle.root) == 0
 
-    def test_lifecycle_phase_script_path_validation(self, tmp_path):
-        """Test that script file paths are validated as Path objects."""
-        # Use existing scripts from tests/data/scripts
-        script1 = os.path.join(SCRIPTS_FOLDER, "validate-before.ps1")
-        script2 = os.path.join(SCRIPTS_FOLDER, "mock_validate.sh")
+def test_configuration_accepts_cve_allowed_entries():
+    data = _minimal_configuration()
+    data["spec"]["cve_allowed"] = [
+        {"id": "CVE-2024-1234", "reason": "false positive"},
+        {"id": "CVE-2024-5678", "reason": "scoped to one package", "package": "openssl", "expires": "2026-12-31"},
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.cve_allowed[0].id == "CVE-2024-1234"
+    assert model.spec.cve_allowed[0].package is None
+    assert model.spec.cve_allowed[1].package == "openssl"
+    assert model.spec.cve_allowed[1].expires == "2026-12-31"
 
-        config_content = f"""
-apiVersion: strata.huybrechts.xyz/v1
-kind: configuration
-meta:
-  name: test_config
-spec:
-  lifecycle:
-    test_phase:
-      scripts:
-        - {script1}
-        - {script2}
-"""
-        config_file = tmp_path / "test-config.yaml"
-        config_file.write_text(config_content)
 
-        with open(config_file, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        model = ConfigurationModel.model_validate(data)
+def test_configuration_cve_allowed_rejects_a_non_iso_expires_date():
+    data = _minimal_configuration()
+    data["spec"]["cve_allowed"] = [{"id": "CVE-2024-1234", "reason": "false positive", "expires": "31-12-2026"}]
+    with pytest.raises(ValidationError, match="not a valid ISO date"):
+        ConfigurationModel.model_validate(data)
 
-        phase = model.spec.lifecycle.root.get("test_phase")
-        assert phase is not None
 
-        # Scripts are stored as strings (raw path); verify via Path helper
-
-        assert isinstance(phase.scripts[0], str)
-        assert isinstance(phase.scripts[1], str)
-        assert Path(phase.scripts[0]).name == "validate-before.ps1"
-        assert Path(phase.scripts[1]).name == "mock_validate.sh"
-
-    def test_lifecycle_phase_naming_convention(self, tmp_path):
-        """Test that common lifecycle phase names are accepted."""
-        common_phases = [
-            "config_clean_before",
-            "config_clean_after",
-            "config_fetch_before",
-            "config_fetch_after",
-            "config_build_before",
-            "config_build_after",
-            "custom_phase_name",
-        ]
-
-        config_content = """
-apiVersion: strata.huybrechts.xyz/v1
-kind: configuration
-meta:
-  name: test_config
-spec:
-  lifecycle:
-"""
-        # Add all phases
-        for phase_name in common_phases:
-            config_content += f"    {phase_name}:\n      description: Test {phase_name}\n"
-
-        config_file = tmp_path / "test-config.yaml"
-        config_file.write_text(config_content)
-
-        with open(config_file, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        model = ConfigurationModel.model_validate(data)
-
-        assert model.spec.lifecycle is not None
-        assert len(model.spec.lifecycle.root) == len(common_phases)
-
-        # Verify all phases exist
-        for phase_name in common_phases:
-            phase = model.spec.lifecycle.root.get(phase_name)
-            assert phase is not None
-            assert phase.description == f"Test {phase_name}"
+def test_configuration_cve_allowed_rejects_unknown_fields():
+    data = _minimal_configuration()
+    data["spec"]["cve_allowed"] = [{"id": "CVE-2024-1234", "reason": "false positive", "unknown_field": "oops"}]
+    with pytest.raises(ValidationError):
+        ConfigurationModel.model_validate(data)

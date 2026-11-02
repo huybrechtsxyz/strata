@@ -1,0 +1,14 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: contoso-env
+  annotations:
+    description: "Tenant-wide defaults for customer contoso, merged before each deployment's own environments"
+  tags: ["example", "customer"]
+spec:
+  # '${value:kind.name.path}' reads a field of another document, so the tenant code is typed once, on the tenant.
+  variables:
+    - key: CUSTOMER_CODE
+      store: constant
+      value: "${value:tenant.contoso.meta.name}"
+      description: "The tenant's own code, read from the tenant document"

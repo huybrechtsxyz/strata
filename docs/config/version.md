@@ -1,130 +1,85 @@
-# Version Manifest
+# Version (`kind: version`)
 
-A **version manifest** (kind: `version`) declares intended versions for a deployment ring. It's a human- and tool-editable file that serves as the single source of truth for infrastructure component versions across a ring.
+Pinned tool/image/chart/remote versions with rationale. The single place an operator changes to
+perform an upgrade — every other document declares *what* it needs; this one declares *which
+version of it*. A pin's `reason` is schema, not a comment, so tooling that rewrites `version`/
+`available` can never silently erase why a pin is held.
 
-## Purpose
-
-Version manifests enable:
-
-- **Centralized version control** — one place to declare and update all component versions (images, Helm charts, infrastructure-as-code modules)
-- **Version progression** — feed manifests into the promotion pipeline to advance versions through rings (dev → staging → prod)
-- **Operator control** — operators or external tooling (CI, version management bots) can edit the manifest directly
-- **Audit trail** — git history tracks version changes and who made them
-
-## Conceptual Model
-
-| File                 | Author         | Purpose                                                |
-| -------------------- | -------------- | ------------------------------------------------------ |
-| **Version Manifest** | Human / Tools  | Desired versions (editable, operator-controlled)       |
-| **Version Lock**     | strata promote | Frozen snapshot of deployed versions (machine-written) |
-
-The manifest is the **input**; the lock is the **output** after promotion or manual locking.
+Only ported the one shape a real census found actually used — v1's `version`/`version-lock`
+promotion/rollback/canary/floating-pin machinery is not carried over (zero real usage found).
 
 ## Schema
 
-```yaml
-apiVersion: strata.huybrechts.xyz/v1
-kind: version
-meta:
-  name: <ring_name>              # Required: ring identifier (e.g., 'dev', 'prd')
-  annotations:
-    description: <description>
-  labels:
-    version: "<version>"         # Optional labels
-spec:
-  ring: <ring_name>              # Required: ring identifier (same as meta.name)
-  pins:
-    images:                       # Optional: container images by service/module
-      <service_name>: <tag>
-    charts:                       # Optional: Helm chart versions by module
-      <module_name>: <version>
-    remotes:                      # Optional: git remote versions (tags, branches, SHAs)
-      <remote_name>: <ref>
-    tools:                        # Optional: provisioner tool versions
-      <provisioner_name>: <version>
-  hash: <sha256>                 # Optional: written by 'strata versions lock' for tamper detection
-```
+- `spec.pins.images` — image tag/digest pins, keyed by name
+- `spec.pins.charts` — Helm chart version pins, keyed by chart/module name
+- `spec.pins.remotes` — overrides a [solution.md](solution.md) remote's `reference` (only valid
+  when that remote is `fetch: strata` — an `fetch: external` remote is placed by CI before strata
+  runs, so pinning it can't do anything)
+- `spec.pins.artifacts` — overrides an [`artifact`](artifact.md) document's `image_tag`
+- `spec.pins.assets` — overrides the git `reference` of an [`asset`](asset.md) that declares its own
+  `spec.location`, keyed by the asset's name (only valid when its `location.fetch` is `strata`; an
+  asset using a manifest remote is pinned under `remotes`)
+
+Each pin is either a bare string (shorthand — nothing held back) or structured:
+
+- `version` — the pinned value
+- `status` — `current` (default), `held`, or `unverified` — the latter two **require** `reason`
+- `available` — the version known to be available upstream (refresh tooling may rewrite this freely)
+- `reason` — why the pin is held/unverified — never rewritten by tooling
+- `reviewed` — date the pin was last looked at
 
 ## Example
 
 ```yaml
-apiVersion: strata.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v2
 kind: version
 meta:
-  name: dev
-  annotations:
-    description: "Development ring versions"
-  labels:
-    environment: development
+  name: prd
 spec:
-  ring: dev
   pins:
     images:
-      app: v2.1.0
-      worker: v2.1.0
+      # Shorthand: nothing is held back. Keyed by the module service's name.
+      portainer: portainer/portainer-ce:2.39.3-alpine
+      db:
+        version: docker.io/library/postgres:16-alpine
+        status: held
+        available: 18.6-alpine
+        reason: "postgres majors need pg_upgrade/dump-restore; plan as its own migration task"
+        reviewed: 2026-09-08
     charts:
-      traefik: "28.2.0"
-      cert-manager: "1.16.0"
+      # Keyed by the chart module's document name.
+      authentik:
+        version: 2026.5.2
+        status: unverified
+        reason: "chart version could not be confirmed upstream; re-verify before bumping"
+        reviewed: 2026-09-08
+    artifacts:
+      # Overrides `image_tag` of the artifact named example-api.
+      example-api: 1.4.2
     remotes:
-      iac_core: v2.6.0
+      infra: v1.0.0
+    assets:
+      contoso-api: v1.5.0
 ```
 
-## Key Fields
+This is `config/versions/prd.yaml`, the working example in this repository.
 
-| Field               | Type   | Required | Description                                                        |
-| ------------------- | ------ | -------- | ------------------------------------------------------------------ |
-| `meta.name`         | string | Yes      | Ring identifier (e.g., `dev`, `staging`, `prd`)                    |
-| `spec.ring`         | string | Yes      | Ring being versioned (must match a ring in the progression)        |
-| `spec.pins.images`  | dict   | No       | Container image versions keyed by service/module name              |
-| `spec.pins.charts`  | dict   | No       | Helm chart versions keyed by module name                           |
-| `spec.pins.remotes` | dict   | No       | Git remote versions keyed by remote name (tags, branches, SHAs)    |
-| `spec.pins.tools`   | dict   | No       | Provisioner tool versions keyed by provisioner name                |
-| `spec.hash`         | string | No       | SHA-256 hash written by `strata versions lock` to detect tampering |
+## Notes
 
-## Workflow
-
-### Creating a Manifest
-
-```bash
-# Initialize a new version manifest for a ring
-strata versions init --ring dev --output versions/dev.yaml
-```
-
-### Updating Versions
-
-Edit the manifest directly or use external tooling:
-
-```yaml
-spec:
-  pins:
-    images:
-      app: v2.2.0          # Update image tag
-```
-
-### Locking a Manifest
-
-Convert a manifest into an immutable lock file:
-
-```bash
-# Generate a version-lock from this manifest
-strata versions lock --from versions/dev.yaml --output versions/dev.lock.yaml
-```
-
-### Applying in Deployments
-
-Reference the manifest in a deployment:
-
-```yaml
-kind: deployment
-spec:
-  properties:
-    versions:
-      manifest: versions/dev.yaml
-```
-
-## Relationship to Version Lock
-
-- **Version Manifest** (`kind: version`) — human-editable input
-- **Version Lock** (`kind: version-lock`) — machine-written snapshot
-
-After promotion, manifests are typically frozen into locks. Locks serve as the immutable record of what was deployed.
+- **A pin may only target something strata itself materializes.** Tool binaries (Terraform, Helm)
+  are placed by CI before strata runs, so there is no `pins.tools` category — the version a recipe
+  expects lives on the [`provisioner`](workspace.md)'s `integration` binding instead, as an
+  assertion strata checks, not an install instruction.
+- `strata validate` checks pin existence/applicability: a pin naming no module service, chart
+  module, remote, artifact or asset is a `stale_pin` warning. `images`, `charts`, `remotes` and
+  `assets` pins are applied by `build run`; `artifacts` pins are applied wherever the artifact is
+  resolved (`store: artifact`, build and deploy). `--pin NAME` on `build run`/`deploy run`
+  overrides a deployment's `spec.version` for that run only.
+- A target with no current value of its own (a module service with no `image`) is never seeded by
+  `version new --from` or offered as a pin to add by `version update`: a pin must have a non-empty
+  value. An artifact with a blank `image_tag` is the exception for `version update`: with no pin it
+  has no tag at all, so it is reported as needing a version (`pin_needed`), though still never seeded.
+- `strata version update NAME` lists the pins you could add (each target with no pin yet, seeded with
+  its current value) and the pins to remove (stale ones). It never edits the file and exits 0, since
+  a target with no pin is normal. Add `--check` to exit 3 when anything is left to add or remove, for a
+  CI gate. An artifact with no tag and no pin is a warning even without `--check`, and an error with it.

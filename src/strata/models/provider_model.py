@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic model for provider configuration validation."""
 
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any
 
 from pydantic import (
     Field,
@@ -12,57 +12,99 @@ from pydantic import (
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import (
     CommonLifecycleModel,
-    FeatureRefs,
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    SecretRefs,
-    VariableRefs,
+    validate_kind_matches,
 )
 
 
-class ProviderReferencesModel(PlatformBaseModel):
-    """
-    References to variables, secrets, and features required by this provider.
+class ProviderSpecModel(PlatformBaseModel):
+    """A cloud or infrastructure account: its provider `type`, primary `region`, how to authenticate, and
+    optional free-form settings and default tags.
 
-    Lists the keys that must be defined in the environment configuration.
-    Actual values and store backends are defined at environment/workspace level.
+    Design notes:
+    Provider specification containing properties and lifecycle configuration.
     """
 
-    variables: VariableRefs = Field(
+    lifecycle: CommonLifecycleModel | None = Field(
         None,
-        description="List of variable keys this provider requires from environment",
+        description="Hook scripts per phase name, for example `deploy_plan_before` or "
+        "`deploy_destroy_after`. Accepted and validated, but strata does not run "
+        "lifecycle hooks yet.\n\n"
+        "Design notes: IaC workflow lifecycle phases, keyed by phase name (e.g. "
+        "deploy_check, deploy_plan_before, deploy_provision, deploy_destroy_after)",
     )
-    secrets: SecretRefs = Field(None, description="List of secret keys this provider requires from environment")
-    features: FeatureRefs = Field(
-        None,
-        description="List of feature flag keys this provider requires from environment",
-    )
-
-
-class ProviderPropertiesModel(PlatformBaseModel):
-    """
-    Provider configuration: cloud provider and datacenter location.
-    """
-
     type: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Cloud or infrastructure provider (e.g., kamatera, local). Must match a provider type in configuration.yaml."
+        description="Provider type, for example `azure` or `kamatera`. Must be listed in the "
+        "Configuration's `spec.providers`, and is matched to the ProviderConfig "
+        "document of that name.\n\n"
+        "Design notes: Cloud or infrastructure provider (e.g., kamatera, local). Must "
+        "match a provider type in configuration.yaml."
     )
     region: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Region of the datacenter used by the provider API to select the datacenter"
+        description="Primary region or datacenter of this account, for example `westeurope`. Must "
+        "be one of the regions in the ProviderConfig of this `type`, unless that "
+        "ProviderConfig allows additional regions. It is strata's own identifier, not "
+        "necessarily an argument of the Terraform provider block; the region's "
+        "geography comes from the ProviderConfig.\n\n"
+        "Design notes: Primary region/datacenter for this provider account, "
+        "cross-checked in Phase 2 against ProviderConfig.spec.regions. This is "
+        "strata's own governance identifier, not necessarily a literal provider-block "
+        "argument for every provisioner (e.g. azurerm has none at that level) — each "
+        "region entry in ProviderConfig.spec.regions may optionally carry a "
+        "'geography' tag (a compliance/deployment boundary grouping several regions, "
+        "e.g. Azure's 'geography' concept); geography is derived from that registry, "
+        "not duplicated here."
     )
-    location: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
+    display_name: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
         None,
-        description="Optional location of the datacenter (e.g., 'West US', 'eu-west-1'). Used for documentation and may be used by some providers for resource naming or tagging, but is not required for provider validation.",
+        description="Optional human-readable label for the region (e.g., 'West US', 'eu-west-1'). Purely "
+        "cosmetic/documentation — not a distinct geographic concept from `region` and not required for "
+        "provider validation.",
     )
-    organization: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
-        None,
-        description="Optional organization or subscription name/ID for this provider. Used for documentation and may be used by some providers for resource naming or tagging, but is not required for provider validation.",
+    authentication: AuthenticationModel | None = Field(
+        None, description="Authentication configuration for cloud provider access"
     )
-    version: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
+    configuration: dict[str, Any] | None = Field(
         None,
-        description="Version constraint for the provider (e.g., '~>3.0')",
+        description="Free-form provisioner settings (for example extra Terraform provider-block "
+        "arguments such as `skip_provider_registration`), passed to Terraform as "
+        "`strata.providers.<slot>.configuration`. Strata does not validate the keys "
+        "itself: add an `attributeconfig` with `target.kind: provider` and "
+        "`target.block: configuration` to do so.\n\n"
+        "Design notes: Raw provisioner-specific passthrough configuration (e.g. extra "
+        "Terraform provider-block arguments such as 'skip_provider_registration' or "
+        "'partner_id'). Unlike `type`/`region`, these keys are not validated by strata "
+        "and are passed through as-is to the provisioner. Must be consumed by the "
+        "corresponding builder/service — a field here is inert until that layer "
+        "exists.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form key/value pairs for your own scripts and Terraform code (for "
+        "example cost center or billing account), passed to Terraform as "
+        "`strata.providers.<slot>.custom`. Strata does not interpret them. Validate "
+        "them with an `attributeconfig` targeting `provider` and `custom`.\n\n"
+        "Design notes: Optional custom key-value pairs for automation/bookkeeping "
+        "(e.g. cost center, billing account). Not consumed by any provisioner — for "
+        "external tooling/documentation only. Must be explicitly wired through by the "
+        "builder/service layer if it needs to reach build output; it is not automatic.",
+    )
+    default_tags: dict[str, str] | None = Field(
+        None,
+        description="Default cloud tags for everything created through this provider, passed to "
+        "Terraform as `strata.providers.<slot>.default_tags`. Not the same as "
+        "`meta.tags`, which is a free-form list for documentation. Strata does not "
+        "limit the number of tags, so stay within your cloud provider's limit.\n\n"
+        "Design notes: Default tags to apply to all resources created by this provider "
+        "(ignored if provider doesn't support tagging). Deliberately distinct from "
+        "meta.tags (a free-form list used for strata-internal "
+        "categorization/documentation, not cloud tags). Optional (unlike "
+        "ResourceSpecModel.default_tags) — not every provider account needs an "
+        "organization-wide tagging policy; no custom_tags sibling either, since this "
+        "is a broad provider-scope default, not an individually-tagged resource.",
     )
 
     @field_validator("type")
@@ -86,51 +128,31 @@ class ProviderPropertiesModel(PlatformBaseModel):
         return v
 
 
-class ProviderSpecModel(PlatformBaseModel):
-    """
-    Provider specification containing properties, references, and lifecycle configuration.
-    """
-
-    lifecycle: Optional[CommonLifecycleModel] = Field(
-        None,
-        description="IaC workflow lifecycle phases (setup, validate, plan, apply, output, destroy)",
-    )
-    properties: ProviderPropertiesModel = Field(
-        description="Provider configuration (cloud provider, IaC tool, datacenter location)"
-    )
-    authentication: Optional[AuthenticationModel] = Field(
-        None, description="Authentication configuration for cloud provider access"
-    )
-    references: Optional[ProviderReferencesModel] = Field(
-        None,
-        description="Variable and secret mappings for runtime configuration injection",
-    )
-    custom: Optional[Dict[str, Any]] = Field(None, description="Optional custom key-value pairs for automation")
-    default_tags: Optional[Dict[str, str]] = Field(
-        None,
-        description="Default tags to apply to all resources created by this provider (ignored if provider doesn't support tagging)",
-    )
-
-
 class ProviderMetaModel(PlatformBaseModel):
     """Provider metadata including name, annotations, labels, and tags."""
 
     name: PlatformName = Field(description="Unique provider name")
-    annotations: Optional[Dict[str, Any]] = Field(
+    annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
-    labels: Optional[Dict[str, Any]] = Field(
+    labels: dict[str, Any] | None = Field(
         None,
         description="Optional labels (key-value pairs for classification/filtering)",
     )
-    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
+    tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
 
 
 class ProviderModel(PlatformBaseModel):
-    """Root model for a provider configuration file."""
+    """A cloud or infrastructure account, for example one Azure subscription: its provider type, primary
+    region and credentials. Create one per account. A workspace uses providers through named slots,
+    which a deployment can rebind to another provider.
+
+    Design notes:
+    Root model for a provider configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
-        default=PlatformVersion.v1,
+        default=PlatformVersion.v2,
         frozen=True,
         description="API version for provider configuration",
     )
@@ -140,4 +162,10 @@ class ProviderModel(PlatformBaseModel):
         description="Resource kind (always 'Provider')",
     )
     meta: ProviderMetaModel = Field(description="Provider metadata (name, annotations, labels, tags)")
-    spec: ProviderSpecModel = Field(description="Provider specification (properties, references, lifecycle)")
+    spec: ProviderSpecModel = Field(description="Provider specification (type, region, authentication, lifecycle)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.PROVIDER)

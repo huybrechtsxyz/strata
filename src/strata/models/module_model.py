@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
 """Pydantic models for module configuration validation."""
 
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, ClassVar
 
-from pydantic import (
-    Field,
-    model_validator,
-)
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     CommonLifecycleModel,
-    FeatureRefs,
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    SecretRefs,
-    ServiceDeployerType,
     SourceModel,
-    VariableRefs,
-    check_unique_names,
+    validate_kind_matches,
 )
+from strata.models.reference_fields import References
+from strata.utils.builtin_types import WORKLOAD_DEPLOYER_TYPES, ProvisionerType
+from strata.utils.names import check_unique_names
+from strata.utils.path_safety import validate_file_ref_no_traversal
+from strata.utils.value_tokens import validate_value_tokens
 
 
 class ModuleFileModel(PlatformBaseModel):
-    """One file or glob pattern to copy verbatim into the module's build output directory.
+    """A file or glob to copy unchanged into the module's build output directory. Accepted and validated,
+    but strata does not copy these files yet.
+
+    Design notes:
+    One file or glob pattern to copy verbatim into the module's build output directory.
 
     Template substitution (STRATA_* variables) is applied to all copied text files.
 
@@ -37,106 +39,110 @@ class ModuleFileModel(PlatformBaseModel):
             target: "config/"
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A glob in `source` requires `target` to be a directory, written with a trailing `/`.",
+        "`source` and `target` must be relative: no leading `/` and no `..` (a `source` may start with `@<remote>/`).",
+    )
+
     source: str = Field(
-        description=(
-            "Source file path or glob pattern. Supports @repo/ cross-repository references. "
-            "Examples: 'services/traefik/traefik.yaml', '@infra/configs/*', 'scripts/**/*.sh'"
-        )
+        description="Source file path or glob pattern. Supports @repo/ cross-repository references. "
+        "Examples: 'services/traefik/traefik.yaml', '@infra/configs/*', 'scripts/**/*.sh'"
     )
     target: str = Field(
-        description=(
-            "Relative destination path inside the module's build output directory. "
-            "Use a trailing '/' to indicate a directory (required when source is a glob). "
-            "Examples: 'traefik.yaml', 'config/', 'conf.d/'"
-        )
+        description="Relative destination path inside the module's build output directory. "
+        "Use a trailing '/' to indicate a directory (required when source is a glob). "
+        "Examples: 'traefik.yaml', 'config/', 'conf.d/'"
     )
+
+    @field_validator("source", "target")
+    @classmethod
+    def validate_no_traversal(cls, v: str) -> str:
+        """Reject absolute paths / '..' — both land relative to the module's build
+        output directory (or a referenced repo's root, for '@repo/' sources).
+        """
+        validate_file_ref_no_traversal(v)
+        return v
 
     @model_validator(mode="after")
     def validate_glob_requires_dir_target(self) -> "ModuleFileModel":
         """Glob source patterns require target to be a directory (trailing '/')."""
-        if any(c in self.source for c in ("*", "?", "[")):
-            if not self.target.endswith("/"):
-                raise ValueError(
-                    f"source '{self.source}' is a glob pattern — "
-                    "target must be a directory path ending with '/' "
-                    f"(got '{self.target}')"
-                )
+        if any(c in self.source for c in ("*", "?", "[")) and not self.target.endswith("/"):
+            raise ValueError(
+                f"source '{self.source}' is a glob pattern — target must be a directory path "
+                f"ending with '/' (got '{self.target}')"
+            )
         return self
-
-
-class ModuleReferenceModel(PlatformBaseModel):
-    """
-    References to variables, secrets, and features required by this module.
-
-    Lists the keys that must be defined in the environment configuration.
-    Actual values and store backends are defined at environment/workspace level.
-
-    Similar to how SourceModel references repositories by name, this model
-    references variable/secret/feature keys by name.
-    """
-
-    variables: VariableRefs = Field(None, description="List of variable keys this module requires from environment")
-    secrets: SecretRefs = Field(None, description="List of secret keys this module requires from environment")
-    features: FeatureRefs = Field(
-        None,
-        description="List of feature flag keys this module requires from environment",
-    )
 
 
 class ModuleEndpointModel(PlatformBaseModel):
     """Model for a module endpoint configuration."""
 
-    name: Optional[PlatformName] = Field(None, description="Name of the endpoint")
-    label: Optional[str] = Field(None, description="Label for the endpoint")
-    url: Optional[str] = Field(None, description="URL or address of the endpoint")
-    description: Optional[str] = Field(None, description="Human-readable description of the endpoint")
-    type: Optional[str] = Field(None, description="Type of endpoint (e.g., http, tcp)")
-    port: Optional[int] = Field(None, description="Port number for the endpoint")
-    protocol: Optional[str] = Field(None, description="Protocol for the endpoint (e.g., tcp, udp)")
+    name: PlatformName | None = Field(None, description="Name of the endpoint")
+    label: str | None = Field(None, description="Label for the endpoint")
+    url: str | None = Field(None, description="URL or address of the endpoint")
+    description: str | None = Field(None, description="Human-readable description of the endpoint")
+    type: str | None = Field(None, description="Type of endpoint (e.g., http, tcp)")
+    port: int | None = Field(None, description="Port number for the endpoint")
+    protocol: str | None = Field(None, description="Protocol for the endpoint (e.g., tcp, udp)")
 
 
 class ModuleCheckModel(PlatformBaseModel):
     """Model for a module health check configuration."""
 
     name: PlatformName = Field(description="Name of the health check")
-    label: Optional[str] = Field(None, description="Label for the health check")
-    target: Optional[str] = Field(None, description="Target resource for the health check")
-    type: Optional[str] = Field(None, description="Type of health check (e.g., http, tcp, command)")
-    interval: Optional[str] = Field(None, description="Interval between health checks (e.g., '30s')")
-    timeout: Optional[str] = Field(None, description="Timeout for each health check (e.g., '5s')")
-    retries: Optional[int] = Field(None, description="Number of retries before marking as unhealthy")
-    endpoint: Optional[str] = Field(None, description="Endpoint URL for HTTP-type health checks")
-    command: Optional[List[str]] = Field(None, description="Command to run for 'command' type health checks")
+    label: str | None = Field(None, description="Label for the health check")
+    target: str | None = Field(None, description="Target resource for the health check")
+    type: str | None = Field(None, description="Type of health check (e.g., http, tcp, command)")
+    interval: str | None = Field(None, description="Interval between health checks (e.g., '30s')")
+    timeout: str | None = Field(None, description="Timeout for each health check (e.g., '5s')")
+    retries: int | None = Field(None, description="Number of retries before marking as unhealthy")
+    endpoint: str | None = Field(None, description="Endpoint URL for HTTP-type health checks")
+    command: list[str] | None = Field(None, description="Command to run for 'command' type health checks")
 
 
 class ModuleMountModel(PlatformBaseModel):
-    """Model for a module mount configuration."""
+    """A mount for a module or one of its services. For Compose use `volume_ref` (a named volume); for
+    Kubernetes use `storage_class` to request a PersistentVolumeClaim.
 
-    name: Optional[PlatformName] = Field(None, description="Name of the mount")
-    type: Optional[str] = Field(None, description="Type of the mount (e.g., volume, bind)")
-    chmod: Optional[str] = Field(None, description="Permissions for the mount (e.g., '0644', '0600')")
-    target_path: Optional[str] = Field(None, description="Path inside the module")
-    source_path: Optional[str] = Field(None, description="Source path of the mount (bind mount host path)")
-    description: Optional[str] = Field(None, description="Description of the mount")
+    Design notes:
+    Model for a module mount configuration.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`volume_ref` and `storage_class` are mutually exclusive.",
+        "`storage_size` is required when `storage_class` is set.",
+    )
+
+    name: PlatformName | None = Field(None, description="Name of the mount")
+    type: str | None = Field(None, description="Type of the mount (e.g., volume, bind)")
+    chmod: str | None = Field(None, description="Permissions for the mount (e.g., '0644', '0600')")
+    target_path: str | None = Field(None, description="Path inside the module")
+    source_path: str | None = Field(None, description="Source path of the mount (bind mount host path)")
+    description: str | None = Field(None, description="Description of the mount")
 
     # Compose: reference a named volume declared in workspace topology
-    volume_ref: Optional[str] = Field(
+    volume_ref: str | None = Field(
         None,
-        description="Name of a WorkspaceVolumeModel to mount. Builder emits a Docker named volume. "
-        "Mutually exclusive with storage_class.",
+        description="Name of the Compose named volume to mount. Mutually exclusive with "
+        "`storage_class`.\n\n"
+        "Design notes: Name of a WorkspaceVolumeModel to mount. Builder emits a Docker "
+        "named volume. Mutually exclusive with storage_class.",
     )
 
     # Helm / K8s: PersistentVolumeClaim fields
-    storage_class: Optional[str] = Field(
+    storage_class: str | None = Field(
         None,
-        description="Kubernetes StorageClass name (e.g. 'standard', 'fast-ssd'). "
+        description="Kubernetes StorageClass name (for example `standard`). A Helm module then "
+        "gets a `persistence` entry in its values with the class, `access_mode` and "
+        "`storage_size`. Mutually exclusive with `volume_ref`.\n\n"
+        "Design notes: Kubernetes StorageClass name (e.g. 'standard', 'fast-ssd'). "
         "When set, builder generates a PVC. Mutually exclusive with volume_ref.",
     )
-    access_mode: Optional[str] = Field(
+    access_mode: str | None = Field(
         None,
         description="PVC access mode (e.g. 'ReadWriteOnce', 'ReadWriteMany'). Defaults to 'ReadWriteOnce'.",
     )
-    storage_size: Optional[str] = Field(
+    storage_size: str | None = Field(
         None,
         description="PVC storage size (e.g. '10Gi'). Required when storage_class is set.",
     )
@@ -155,60 +161,51 @@ class ModuleMountModel(PlatformBaseModel):
 
 
 class ModuleServiceEnvironmentModel(PlatformBaseModel):
-    """
+    """One environment variable of a service. `value` is a literal, or contains value tokens such as
+    `${var:KEY}`, `${secret:KEY}` or `${feature:KEY}`, resolved at build or deploy time.
+
+    Design notes:
     One environment variable on a service container.
 
-    Exactly one of value / var / secret / feature must be set:
-      - value:   literal string written directly into the artifact
-      - var:     key in module spec.references.variables — resolved at build time
-      - secret:  key in module spec.references.secrets — emitted as ${KEY} substitution,
-                 injected via .env file (compose) or --set flag (helm) at deploy time
-      - feature: key in module spec.references.features — resolved to "true"/"false"
+    ``value`` is a Value binding (ADR-0002): a literal string (written
+    directly into the artifact) or a string containing ``${var:KEY}``/
+    ``${secret:KEY}``/``${feature:KEY}`` tokens, resolved once the
+    build/deploy layer exists.
 
     Example::
 
         environment:
           - key: POSTGRES_PASSWORD
-            secret: DB_PASSWORD
+            value: "${secret:DB_PASSWORD}"
           - key: TZ
             value: Europe/Brussels
           - key: APP_VERSION
-            var: APP_VERSION
+            value: "${var:APP_VERSION}"
     """
 
     key: str = Field(description="Environment variable name (e.g. POSTGRES_PASSWORD)")
-    value: Optional[str] = Field(None, description="Literal environment variable value")
-    var: Optional[str] = Field(
-        None,
-        description="Variable key from module references.variables — resolved at build time",
-    )
-    secret: Optional[str] = Field(
-        None,
-        description="Secret key from module references.secrets — emitted as ${KEY} substitution",
-    )
-    feature: Optional[str] = Field(
-        None,
-        description="Feature flag key from module references.features — resolved to 'true'/'false'",
+    value: str = Field(
+        ...,
+        min_length=1,
+        description="Literal value, or a string containing '${var:KEY}'/'${secret:KEY}'/'${feature:KEY}' tokens.",
     )
 
-    @model_validator(mode="after")
-    def validate_exactly_one_source(self) -> "ModuleServiceEnvironmentModel":
-        """Exactly one of value / var / secret / feature must be set."""
-        sources = [f for f in (self.value, self.var, self.secret, self.feature) if f is not None]
-        if len(sources) == 0:
-            raise ValueError(
-                f"Environment variable '{self.key}' must have exactly one of: value, var, secret, feature."
-            )
-        if len(sources) > 1:
-            raise ValueError(
-                f"Environment variable '{self.key}' has multiple sources set. "
-                "Use exactly one of: value, var, secret, feature."
-            )
-        return self
+    @field_validator("value")
+    @classmethod
+    def validate_value_token_syntax(cls, v: str) -> str:
+        """Reject malformed '${...}' tokens immediately (Phase 1)."""
+        validate_value_tokens(v)
+        return v
 
 
 class ModuleServiceModel(PlatformBaseModel):
-    """
+    """One container (or sub-chart component) of a module. For Compose each service becomes a Compose
+    service; for Helm each becomes a section of the chart's values.
+
+    Service names are prefixed with the module name (service `redis` of module `authentik` becomes
+    `authentik-redis`), except when a service has the same name as its module.
+
+    Design notes:
     One container (or sub-chart component) within a module.
 
     For compose modules, each service maps to a Docker Compose service entry.
@@ -221,117 +218,255 @@ class ModuleServiceModel(PlatformBaseModel):
     The builder rewrites them to the prefixed form automatically.
     """
 
+    schema_rules: ClassVar[tuple[str, ...]] = ("`image` and `artifact` are mutually exclusive: use one or the other.",)
+
     name: PlatformName = Field(description="Service identifier within the module")
-    image: Optional[str] = Field(
+    image: str | None = Field(
         None,
         description="Container image and tag (e.g. 'postgres:16-alpine'). "
-        "Omit for Helm charts that define their own image.",
+        "Omit for Helm charts that define their own image. Mutually exclusive with `artifact`.",
     )
-    command: Optional[List[str]] = Field(
+    artifact: Annotated[PlatformName, References(PlatformKind.ARTIFACT)] | None = Field(
         None,
-        description="Override the container entrypoint/command (e.g. ['worker'] for Authentik worker)",
+        description="Name of an Artifact document that supplies this service's image (its "
+        "`image_name` and `image_tag`; a Version document can pin it). Mutually "
+        "exclusive with `image`: use `image` for a literal, unpinned string.\n\n"
+        "Design notes: Name of an Artifact document supplying this service's image "
+        "(image_name[:image_tag], kind: version's pins.artifacts-pinnable). Mutually "
+        "exclusive with `image` — use `image` for a literal, unpinned string; use "
+        "`artifact` to source it from a named, pinnable reference "
+        "(docs/work/artifact-references.md).",
     )
-    restart: Optional[str] = Field(
+    command: list[str] | None = Field(
+        None,
+        description="Override the container entrypoint or command, for example `[worker]`. Used "
+        "for Compose; Helm ignores it.\n\n"
+        "Design notes: Override the container entrypoint/command (e.g. ['worker'] for "
+        "Authentik worker)",
+    )
+    restart: str | None = Field(
         None,
         description="Compose restart policy (e.g. 'unless-stopped'). Ignored by helm/argocd.",
     )
-    environment: Optional[List[ModuleServiceEnvironmentModel]] = Field(
+    environment: list[ModuleServiceEnvironmentModel] | None = Field(
         None,
-        description="Environment variables for this service. Use var/secret/feature refs to avoid plaintext secrets.",
+        description="Environment variables for this service, used by both Compose and Helm. Use "
+        "`${secret:KEY}`, `${var:KEY}` or `${feature:KEY}` tokens to keep secrets out "
+        "of plaintext.\n\n"
+        "Design notes: Environment variables for this service. Use "
+        "'${secret:}'/'${var:}'/'${feature:}' tokens to avoid plaintext secrets.",
     )
-    ports: Optional[List[str]] = Field(
+    ports: list[str] | None = Field(
         None,
-        description="Port mappings in '\"host:container\"' format (e.g. '8080:80'). "
+        description="Port mappings as `host:container`, for example `8080:80`. Used for Compose; "
+        "Helm and Argo CD expose ports through Kubernetes Services.\n\n"
+        "Design notes: Port mappings in '\"host:container\"' format (e.g. '8080:80'). "
         "Compose only — ignored by helm/argocd (Kubernetes Services handle exposure).",
     )
-    mounts: Optional[List[ModuleMountModel]] = Field(
+    mounts: list[ModuleMountModel] | None = Field(
         None,
-        description="Volume and bind mounts for this service. Use volume_ref for named volumes, "
-        "storage_class for Kubernetes PVCs.",
+        description="Volume and bind mounts. Use `volume_ref` for Compose named volumes and "
+        "`storage_class` for Kubernetes persistent volume claims.\n\n"
+        "Design notes: Volume and bind mounts for this service. Use volume_ref for "
+        "named volumes, storage_class for Kubernetes PVCs.",
     )
-    depends_on: Optional[List[str]] = Field(
+    depends_on: list[str] | None = Field(
         None,
-        description="Services that must start before this service. "
-        "Use short names for intra-module deps (e.g. 'redis'). "
-        "Use @module/service for cross-module deps within the same namespace "
-        "(e.g. '@mod_auth/server'). Use @module when module name equals service name. "
-        "Builder rewrites all entries to prefixed names. "
-        "Intra-module refs are validated at load time; cross-module refs at build time.",
+        description="Services that must start first. Use short names for services of this module "
+        "(for example `redis`), and `@module/service` (or `@module` when the service "
+        "has the module's name) for another module in the same namespace. Names of "
+        "this module's services are checked when the document is loaded, cross-module "
+        "names at build time. Used for Compose; Helm ignores it.\n\n"
+        "Design notes: Services that must start before this service. Use short names "
+        "for intra-module deps (e.g. 'redis'). Use @module/service for cross-module "
+        "deps within the same namespace (e.g. '@mod_auth/server'). Use @module when "
+        "module name equals service name. Builder rewrites all entries to prefixed "
+        "names. Intra-module refs are validated at load time; cross-module refs at "
+        "build time.",
     )
-    healthcheck: Optional[ModuleCheckModel] = Field(
+    healthcheck: ModuleCheckModel | None = Field(
         None,
-        description="Health check for this service. Maps to Docker Compose healthcheck or "
-        "Kubernetes readinessProbe depending on module type.",
+        description="Health check for this service, rendered as a Compose healthcheck. Helm "
+        "modules do not use it.\n\n"
+        "Design notes: Health check for this service. Maps to Docker Compose "
+        "healthcheck or Kubernetes readinessProbe depending on module type.",
     )
-    configuration: Optional[Dict[str, Any]] = Field(
+    configuration: dict[str, Any] | None = Field(
         None,
-        description="Deployer-specific overrides merged verbatim. For compose: merged into the service block. "
-        "For helm: merged into values.{service.name}.",
+        description="Extra settings merged verbatim into the output: into the service entry for "
+        "Compose, and into this service's section of the chart values for Helm.\n\n"
+        "Design notes: Deployer-specific overrides merged verbatim. For compose: "
+        "merged into the service block. For helm: merged into values.{service.name}.",
     )
 
-
-class ModulePropertiesModel(PlatformBaseModel):
-    """Model for module-specific properties and configurations."""
-
-    mounts: Optional[List[ModuleMountModel]] = Field(None, description="List of module mount configurations")
-    checks: Optional[List[ModuleCheckModel]] = Field(None, description="List of module health check configurations")
-    endpoints: Optional[List[ModuleEndpointModel]] = Field(None, description="List of module endpoint configurations")
+    @model_validator(mode="after")
+    def validate_image_and_artifact_exclusive(self) -> "ModuleServiceModel":
+        """`image` and `artifact` are mutually exclusive — both name the same
+        thing (this service's container image), by two different means (a
+        literal string vs. a named, pinnable reference). Neither is required
+        (a Helm chart may define its own image, unchanged from today).
+        """
+        if self.image is not None and self.artifact is not None:
+            raise ValueError(
+                f"service '{self.name}': 'image' and 'artifact' are mutually exclusive — "
+                "use 'image' for a literal string, or 'artifact' to source it from a named Artifact document."
+            )
+        return self
 
 
 class ModuleSpecModel(PlatformBaseModel):
-    """Model for module spec (lifecycle, modules, validation)."""
+    """What a module deploys and how: its `source`, a deployer `type`, and either `services` (containers or
+    sub-charts) or, for a single service, `mounts`, `checks` and `endpoints`. A namespace references it.
 
-    source: SourceModel = Field(description="Module deployment configuration")
-    type: Optional[ServiceDeployerType] = Field(
+    Design notes:
+    Model for module spec (source, lifecycle, services, configuration).
+
+    No ``references`` field (ADR-0002): environment variable Value bindings
+    (``${var:}``/``${secret:}``/``${feature:}`` tokens, see
+    `ModuleServiceEnvironmentModel`) are checked against a real Environment in
+    Phase 2, not an internal declared-keys list.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Service names must be unique within the module.",
+        "`compose_file` and `services` are mutually exclusive.",
+        "Every short name in `services[].depends_on` must be a service of this module; entries "
+        "starting with `@` are only syntax-checked here and resolved at build time.",
+        "`type` may not be a known infrastructure tool. The deployers are "
+        + ", ".join(sorted(t.value for t in WORKLOAD_DEPLOYER_TYPES))
+        + "; any other name is treated as a custom plugin.",
+    )
+
+    source: SourceModel = Field(
+        description="Where the module's code comes from: a git path or a Helm chart.\n\n"
+        "Design notes: Module deployment configuration"
+    )
+    type: PlatformName | None = Field(
         None,
-        description="Service deployer type for this module (helm, compose, argocd, script). Required for service deployment commands.",
+        description="Deployer for this module: `helm`, `compose`, `argocd` or `script`, or a "
+        "custom provisioner plugin name. Required to render the module. Infrastructure "
+        "tools such as `terraform`, `ansible` and `bicep` are rejected.\n\n"
+        "Design notes: Deployer tool for this module (e.g. helm, compose, argocd, "
+        "script, or a custom provisioner plugin name). Required for service deployment "
+        "commands.",
     )
-    lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Module-specific lifecycle hooks")
-    properties: Optional[ModulePropertiesModel] = Field(
-        None, description="Module-specific properties and configurations"
+    lifecycle: CommonLifecycleModel | None = Field(
+        None,
+        description="Hook scripts per phase name. Accepted and validated, but strata does not run "
+        "lifecycle hooks yet.\n\n"
+        "Design notes: Module-specific lifecycle hooks",
     )
-    references: Optional[ModuleReferenceModel] = Field(
-        None, description="Module references for variable and secret injection"
+    mounts: list[ModuleMountModel] | None = Field(
+        None,
+        description="Mounts for a single-service module, passed to Terraform as "
+        "`strata.modules.<name>.properties.mounts`. Compose and Helm output is "
+        "generated from `services` instead.\n\n"
+        "Design notes: List of module mount configurations (single-service shape, see "
+        "`services` for the multi-container alternative)",
     )
-    configuration: Optional[Dict[str, Any]] = Field(None, description="Module-specific configuration data")
+    checks: list[ModuleCheckModel] | None = Field(
+        None,
+        description="Health checks for a single-service module, passed to Terraform as "
+        "`strata.modules.<name>.properties.checks`. Compose and Helm output is "
+        "generated from `services` instead.\n\n"
+        "Design notes: List of module health check configurations (single-service "
+        "shape, see `services` for the multi-container alternative)",
+    )
+    endpoints: list[ModuleEndpointModel] | None = Field(
+        None,
+        description="Endpoints for a single-service module, passed to Terraform as "
+        "`strata.modules.<name>.properties.endpoints`. Compose and Helm output is "
+        "generated from `services` instead.\n\n"
+        "Design notes: List of module endpoint configurations (single-service shape, "
+        "see `services` for the multi-container alternative)",
+    )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Free-form settings. For a Helm module they are merged into the chart's "
+        "`values.yaml`, and a key that a local chart does not declare gives a warning. "
+        "They are also passed to Terraform as `strata.modules.<name>.configuration`. "
+        "Strata does not validate the keys itself: add an `attributeconfig` with "
+        "`target.kind: module` and `target.block: configuration` to do so.\n\n"
+        "Design notes: Module-specific configuration data",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form values for your own scripts and Terraform code, passed to Terraform "
+        "as `strata.modules.<name>.custom`. Strata does not interpret them. "
+        "Environment variables belong in `services[].environment`.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Not "
+        "Terraform at all — feeds the Helm/Compose workload pipeline's own build "
+        "output, not a literal env var (that's `services[].environment`'s job, a "
+        "separate field).",
+    )
+    # No default_tags/custom_tags: a Module deploys onto a Resource (e.g. code on a Function
+    # App) — it has no cloud identity of its own to tag; the underlying Resource is what's tagged.
+    # Instead it gets default_labels/custom_labels — Kubernetes/Compose labels, not cloud tags,
+    # since what Module actually produces (Pods/Deployments, or Compose services) speaks
+    # labels, not ARM/AWS tags.
+    default_labels: dict[str, str] | None = Field(
+        None,
+        description="Baseline labels for this module, passed to Terraform as "
+        "`strata.modules.<name>.default_labels`. Strata does not add them to the Helm "
+        "or Compose output itself.\n\n"
+        "Design notes: Baseline labels applied to this module's workload (e.g. "
+        "Kubernetes metadata.labels on generated Pods/Deployments, or Docker Compose "
+        "service labels) — e.g. app.kubernetes.io/name, environment. Optional "
+        "(v1-derived documents commonly carry no labels at all — gap #4, "
+        "docs/design/gap_fit_v1.md). Strata does not enforce a maximum label count.",
+    )
+    custom_labels: dict[str, str] | None = Field(
+        None,
+        description="Additional labels on top of `default_labels`, passed to Terraform the same "
+        "way.\n\n"
+        "Design notes: Optional additional workload labels beyond default_labels.",
+    )
 
     # Multi-container service definitions
-    services: Optional[List[ModuleServiceModel]] = Field(
+    services: list[ModuleServiceModel] | None = Field(
         None,
-        description="List of services (containers/sub-charts) that make up this module. "
-        "When absent, the module is treated as single-service using the properties shape (backward compatible). "
-        "When present, each entry defines one container (compose) or sub-chart section (helm).",
+        description="Containers (Compose) or sub-chart sections (Helm) that make up this module. "
+        "Without it the module uses the single-service shape (`mounts`, `checks`, "
+        "`endpoints`).\n\n"
+        "Design notes: List of services (containers/sub-charts) that make up this "
+        "module. When absent, the module is treated as single-service using the "
+        "`mounts`/`checks`/`endpoints` shape directly on `spec` (backward compatible). "
+        "When present, each entry defines one container (compose) or sub-chart section "
+        "(helm).",
     )
 
     # Compose pass-through mode
-    compose_file: Optional[str] = Field(
+    compose_file: str | None = Field(
         None,
-        description=(
-            "Explicit path reference to an external docker-compose.yml file "
-            "(@repo/path/to/docker-compose.yml or workspace-relative path). "
-            "When set, ComposeBuilder copies this file verbatim to the build path instead of "
-            "generating one from spec.services. Mutually exclusive with spec.services."
-        ),
+        description="Path to an existing docker-compose file (`@<remote>/path` or "
+        "solution-relative) to use instead of `services`. Not implemented yet: "
+        "rendering fails with a message to use `services`.\n\n"
+        "Design notes: Explicit path reference to an external docker-compose.yml file "
+        "(@repo/path/to/docker-compose.yml or workspace-relative path). When set, "
+        "ComposeBuilder copies this file verbatim to the build path instead of "
+        "generating one from spec.services. Mutually exclusive with spec.services.",
     )
 
     # Extra files to copy into the build output
-    files: Optional[List["ModuleFileModel"]] = Field(
+    files: list[ModuleFileModel] | None = Field(
         None,
-        description=(
-            "Extra files to copy verbatim into the module's build output directory. "
-            "Supports glob patterns and @repo/ cross-repository references. "
-            "Template substitution (STRATA_* variables) is applied to all copied text files. "
-            "For compose modules, files land in {build}/{namespace}/{module}/. "
-            "For helm modules, files land in {build}/{namespace}/{module}/."
-        ),
+        description="Extra files to copy into the module's build output. Accepted and validated, "
+        "but strata does not copy them yet.\n\n"
+        "Design notes: Extra files to copy verbatim into the module's build output "
+        "directory. Supports glob patterns and @repo/ cross-repository references. "
+        "Template substitution (STRATA_* variables) is applied to all copied text "
+        "files.",
     )
 
     # Helm / ArgoCD deploy identity
-    release_name: Optional[str] = Field(
+    release_name: str | None = Field(
         None,
-        description="Helm release name or ArgoCD Application name. Defaults to module.meta.name when not set.",
+        description="Helm release name or Argo CD application name. Defaults to the name of the "
+        "module reference in the namespace.\n\n"
+        "Design notes: Helm release name or ArgoCD Application name. Defaults to "
+        "module.meta.name when not set.",
     )
-    kubernetes_namespace: Optional[str] = Field(
+    kubernetes_namespace: str | None = Field(
         None,
         description="Kubernetes namespace to deploy this module into. "
         "Defaults to the strata namespace name when not set.",
@@ -341,11 +476,38 @@ class ModuleSpecModel(PlatformBaseModel):
     def validate_service_names_unique(self) -> "ModuleSpecModel":
         """Service names must be unique within a module."""
         if self.services:
-            check_unique_names(
-                [s.name for s in self.services],
-                "service names in module",
-            )
+            check_unique_names([s.name for s in self.services], "service names in module")
         return self
+
+    @field_validator("type")
+    @classmethod
+    def validate_type_is_workload_deployer(cls, v: str | None) -> str | None:
+        """Reject `type` only when it's a *known* infra-provisioning built-in.
+
+        `type` is an open string, not a closed `ProvisionerType` enum — v1's
+        real `DeployerFactory` supports user-registered provisioner plugins
+        (`.strata/provisioners/*.py`, optionally with a `provisioner.yaml`
+        manifest) beyond the built-in tools, so a custom name must remain
+        schema-valid here. If `v` matches a recognized built-in
+        (`ProvisionerType`) that's NOT in `WORKLOAD_DEPLOYER_TYPES` (i.e. a
+        known infra tool like terraform/ansible/bicep), reject it — that's a
+        real, known mismatch. If `v` doesn't match any known built-in, allow
+        it through unchecked: it may be a custom plugin, and validating that
+        requires the plugin registry (deferred to Phase 2, mirroring
+        `DeployerFactory.is_known_type()` — not built in v2 yet).
+        """
+        if v is not None:
+            try:
+                known = ProvisionerType(v)
+            except ValueError:
+                return v  # unrecognized — may be a custom provisioner plugin
+            if known not in WORKLOAD_DEPLOYER_TYPES:
+                allowed = ", ".join(sorted(t.value for t in WORKLOAD_DEPLOYER_TYPES))
+                raise ValueError(
+                    f"Module type '{v}' is a known infra-provisioning tool, not a workload deployer. "
+                    f"Allowed built-ins: {allowed} (or a custom provisioner plugin name)."
+                )
+        return v
 
     @model_validator(mode="after")
     def validate_compose_file_exclusive(self) -> "ModuleSpecModel":
@@ -358,33 +520,80 @@ class ModuleSpecModel(PlatformBaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_depends_on(self) -> "ModuleSpecModel":
+        """Validate services[].depends_on.
+
+        Intra-module entries must reference a real service name in this
+        module. Cross-module '@module/service' entries are syntax-checked
+        only here — actual resolution happens at build time.
+        """
+        if not self.services:
+            return self
+
+        service_names = {s.name for s in self.services}
+        errors: list[str] = []
+        for service in self.services:
+            for dep in service.depends_on or []:
+                if dep.startswith("@"):
+                    ref = dep[1:]
+                    parts = ref.split("/", 1)
+                    mod_part = parts[0]
+                    svc_part = parts[1] if len(parts) > 1 else None
+                    if not mod_part:
+                        errors.append(
+                            f"service '{service.name}': depends_on '{dep}' has invalid syntax — "
+                            f"expected @module or @module/service."
+                        )
+                    elif svc_part is not None and not svc_part:
+                        errors.append(f"service '{service.name}': depends_on '{dep}' has empty service name after '/'.")
+                elif dep not in service_names:
+                    errors.append(
+                        f"service '{service.name}': depends_on '{dep}' is not a service defined in this "
+                        f"module. Available services: {sorted(service_names)}."
+                    )
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
+
 
 class ModuleMetaModel(PlatformBaseModel):
-    """Model for module metadata (name, annotations, labels, tags)."""
+    """Module metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique module name")
-    annotations: Optional[Dict[str, Any]] = Field(
+    annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
-    labels: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Optional labels (key-value pairs for classification/filtering)",
+    labels: dict[str, Any] | None = Field(
+        None, description="Optional labels (key-value pairs for classification/filtering)"
     )
-    tags: Optional[List[Any]] = Field(None, description="Optional list of tags for the module")
+    tags: list[Any] | None = Field(None, description="Optional list of tags for the module")
 
 
 class ModuleModel(PlatformBaseModel):
-    """Top-level model for a module resource."""
+    """A deployable workload: a Helm chart, Docker Compose services, an Argo CD application or a script,
+    with its source and settings. Create one per workload and reference it from a namespace's `modules`
+    (or a topology component's `modules`).
+
+    Design notes:
+    Root model for a module resource.
+    """
 
     apiVersion: PlatformVersion = Field(
-        default=PlatformVersion.v1,
+        default=PlatformVersion.v2,
         frozen=True,
         description="API version for module configuration",
     )
     kind: PlatformKind = Field(
         default=PlatformKind.MODULE,
         frozen=True,
-        description="Resource kind (always 'Module')",
+        description="Platform kind (always 'module')",
     )
     meta: ModuleMetaModel = Field(description="Module metadata (name, annotations, labels, tags)")
-    spec: ModuleSpecModel = Field(description="Module specification (lifecycle, modules, variables, secrets)")
+    spec: ModuleSpecModel = Field(description="Module specification (source, lifecycle, services, configuration)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.MODULE)

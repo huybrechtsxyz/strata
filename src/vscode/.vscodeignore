@@ -1,20 +1,11 @@
-# Dev-only — not shipped in the VSIX
-.vscode/
-.vscode-test/
-.vscode-test.mjs
-node_modules/
-src/
-tests/
-
-# Config / meta
+.vscode-test/**
 .gitignore
-.vscodeignore
-tsconfig.json
-*.map
-**/*.ts
-
-# Re-include what IS needed
-!package.json
-!out/**
-!resources/**
-
+**/*.map
+**/tsconfig.json
+**/.eslintrc.json
+node_modules/**
+src/**
+*.vsix
+DEVELOPMENT.md
+out/test/**
+.vscode-test.mjs

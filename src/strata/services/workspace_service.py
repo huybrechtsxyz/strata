@@ -1,1024 +1,301 @@
-"""Service for loading and validating workspace configurations."""
+#!/usr/bin/env python3
+"""Service for loading and validating workspace configuration."""
 
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union, cast
-
-from strata.exceptions import InvalidReferenceError
-from strata.models.common_models import ProvisionerType
-from strata.models.configuration_model import ConfigurationModel
-from strata.models.firewall_model import FirewallModel
-from strata.models.workspace_model import WorkspaceModel
+from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel
+from strata.models.deployment_model import DeploymentModel
+from strata.models.network_model import NetworkModel
+from strata.models.topology_config_model import TopologyConfigModel
+from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
 from strata.services.base_service import BaseService
-from strata.services.configuration_service import ConfigurationService
-from strata.services.dns_service import DnsService
-from strata.services.firewall_service import FirewallService
-from strata.services.module_service import ModuleService
-from strata.services.namespace_service import NamespaceService
-from strata.services.network_service import NetworkService
-from strata.services.provider_service import ProviderService
-from strata.services.resource_service import ResourceService
+from strata.utils.diagnostics import Diagnostics
 
 
-class WorkspaceService(BaseService["WorkspaceModel"]):
-    """Service for handling workspace configurations."""
+def _overlay_bindings(defaults: dict[str, str], bindings: list[tuple[str, str]]) -> dict[str, str]:
+    """`defaults` with each `(slot, document)` binding applied. A binding naming a slot that
+    is not in `defaults` is ignored; reporting it is validation's job."""
+    effective = dict(defaults)
+    for slot, document in bindings:
+        if slot in effective:
+            effective[slot] = document
+    return effective
 
-    # Initialization
 
-    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
-        """
-        Initialize the WorkspaceService.
+def effective_providers(workspace: WorkspaceModel, deployment: DeploymentModel | None) -> dict[str, str]:
+    """`{slot: provider document name}` — the workspace's defaults, overlaid by
+    the deployment's bindings (docs/design/provider-slots.md).
 
-        _related_services = {
-            "providers": {"provider_name": ProviderService, ...},
-        }
-        """
-        super().__init__(path=path, data=data)
-        self.model = None
-        self._related_services: Optional[Dict[str, Dict[str, BaseService]]] = None
-        self._validation_errors: List[str] = []
-        self._structured_errors: List[InvalidReferenceError] = []
+    A binding naming a slot the workspace does not declare is ignored here;
+    reporting it is Phase 2 validation's job (`provider_slot_unknown`).
+    """
+    bound = [(b.slot, b.provider) for b in (deployment.spec.providers or [])] if deployment is not None else []
+    return _overlay_bindings({s.slot: s.provider for s in workspace.spec.providers}, bound)
 
-    # Lifecycle hooks
 
-    def on_init(self) -> None:
-        """Lifecycle hook: called after __init__ completes."""
-        pass
+def effective_assets(workspace: WorkspaceModel, deployment: DeploymentModel | None) -> dict[str, str]:
+    """`{slot: asset document name}` — the workspace's defaults, overlaid by the
+    deployment's bindings (docs/design/asset-management.md). Same rule as `effective_providers()`;
+    an unknown slot is ignored here and reported by validation (`asset_slot_unknown`).
+    """
+    bound = [(b.slot, b.asset) for b in (deployment.spec.assets or [])] if deployment is not None else []
+    return _overlay_bindings({a.slot: a.asset for a in (workspace.spec.assets or [])}, bound)
 
-    def on_ready(self) -> None:
-        """Lifecycle hook: called after validation succeeds."""
-        pass
 
-    def on_shutdown(self) -> None:
-        """Lifecycle hook: called before cleanup/destruction."""
-        pass
+class WorkspaceService(BaseService[WorkspaceModel]):
+    """Service for handling workspace configuration.
 
-    # Abstract methods
+    `validate_topology_components()` below is a self-contained public method
+    a future solution-loading layer can call once it has resolved the
+    `TopologyConfigModel` instances `configuration.spec.topologies` names —
+    same "assume the caller already loaded it" shape as
+    `_validate_dynamic(configuration_model)`'s own contract.
+    `Topology` itself is inline on `spec.topology` now (ADR-0028), so no
+    Topology-document loading is needed; its own internal reference checks
+    (`components[].resource`/`namespaces[].namespace` against this
+    workspace's `resources`/`namespaces`) are Phase 1 model validators on
+    `WorkspaceSpecModel` itself.
 
-    def _get_model_class(self):
+    `validate_resource_subnets()` below is the same shape, for
+    `WorkspaceResourceModel.subnet.subnet` against the real subnet names
+    inside the referenced Network document(s) — `.network` (which Network
+    *document*) is already checked in Phase 1
+    (`validate_resource_subnet_references`); this is the Phase 2 half, once
+    that document is actually loaded.
+    """
+
+    def _get_model_class(self) -> type[WorkspaceModel]:
         """Return the WorkspaceModel class for validation."""
         return WorkspaceModel
 
-    def _validate_dynamic(
-        self,
-        configuration_model: Optional[ConfigurationModel] = None,
-        work_path: Optional[str] = None,
-    ) -> Tuple[bool, List[str]]:
+    def claimed_document_names(self) -> set[str]:
+        """Every dns_zones/networks/firewalls/namespaces name claimed by
+        some execution step — the ownership half of `${output:...}`
+        resolution (docs/design/gap_fit_v1.md gap #12, generalized to
+        namespaces so a Module reached through a targeted namespace is
+        covered too, not just a directly-targeted DNS/network/firewall
+        document — see docs/design/deploy-command.md's "Cross-invocation
+        output access" section, "Expanded finding" subsection, for why
+        Modules needed the same treatment).
+
+        Namespace claiming extends symmetrically to topology-expanded
+        membership (docs/design/workspace-execution-model.md) — a namespace
+        reached only through a step's `topologies` is claimed exactly as if
+        it were listed directly under `namespaces`. dns_zones/networks/
+        firewalls claiming is delegated to `claimed_names()`, which
+        additionally derives claims from a step's effective resources
+        (direct + topology-expanded) referencing those documents, not just
+        a step's own direct `dns_zones`/`firewalls`/
+        `networks` fields.
+
+        Pure function of this workspace's own declarations — no other
+        loaded document needed. `resources_by_name` excludes any resource
+        with `enabled=False`, same rule as `WorkspaceSpecModel.
+        validate_execution()` (a disabled resource behaves as if absent).
+        A resource itself is deliberately not surfaced as "claimable" here
+        even though it's a valid provisioning target too: a Resource
+        document has no Value-token-bearing field of its own that
+        `${output:...}` could ever appear in (unlike a Module reached
+        through a namespace).
         """
-        Phase 2: Dynamic validation against configuration.
-
-        Validates:
-        1. Provisioner repository references (workspace.spec.provisioners -> solution registered repos)
-        2. Provisioner validity (validated via ProvisionerType enum)
-        3. Module repository references (loaded modules -> solution registered repos)
-        4. Topology provider references (workspace.spec.providers)
-        5. Topology provisioner references (workspace.spec.provisioners)
-        6. Component roles against configuration topology definitions
-
-        Args:
-            configuration_model: Optional ConfigurationModel for cross-validation
-            work_path: Optional working path for file resolution
-
-        Returns:
-            Tuple[bool, List[str]]: (success, list of error messages)
-        """
-        if not configuration_model or not self.model:
-            return True, []
-
-        errors = []
-        # Note: Do not call _ensure_validated() here as this is called during validate()
-        # before the model is marked as validated
-
-        # Get workspace provider names and create provider map
-        workspace_provider_names = {p.name for p in self.model.spec.providers}
-
-        # Get workspace provisioner names (topology references provisioners by name)
-        workspace_provisioner_names = {p.name for p in self.model.spec.provisioners}
-
-        # Build solution repository names from the repo map registered via `strata repo add`
-        # (stored in solution.json, set on self._repo_map before _validate_dynamic is called).
-        # Note: configuration_model.spec.remotes is for named remote endpoints — a different concept.
-        solution_repository_names: Set[str] = set(self._repo_map.keys()) if self._repo_map else set()
-
-        # STEP 1: Validate provisioner repository references
-        # Check that each provisioner's source.repository exists in the solution's registered repos
-        for provisioner in self.model.spec.provisioners:
-            if provisioner.source and provisioner.source.repository:
-                if provisioner.source.repository not in solution_repository_names:
-                    error = InvalidReferenceError(
-                        source_type="Provisioner",
-                        source_name=provisioner.name,
-                        reference_type="repository",
-                        reference_value=provisioner.source.repository,
-                    )
-                    self._structured_errors.append(error)
-                    errors.append(str(error))
-
-        # STEP 2: Provisioner name validity is validated by the WorkspaceSpecModel model validator
-
-        # STEP 1b: Validate integration-aware provisioner (terraform/ansible/bicep) bindings
-        # ahead of deploy time (ADR-0079/ADR-0080). Mirrors
-        # IntegrationService.resolve_for_provisioner()'s algorithm, but works directly off the
-        # configuration spec since no IntegrationService/registry is initialized during
-        # `strata validate` — this only runs with --deep (configuration_model is only passed
-        # in that case).
-        errors.extend(self._validate_provisioner_integration_bindings(configuration_model))
-
-        # STEP 3: Validate module repository references (if modules are defined in resources)
-        if self.model and self.model.spec.resources:
-            for resource in self.model.spec.resources:
-                if resource.modules:
-                    # Note: Modules in workspace are references with file paths.
-                    # The actual module source.repository is in the module file itself.
-                    # For thorough validation, we would need to load each module file,
-                    # but that's expensive. This check is documented for when module
-                    # services are loaded via related_services.
-                    pass
-
-        # Validate module repository references from loaded module services (if available)
-        if self._related_services and "modules" in self._related_services:
-            for module_name, module_service in self._related_services["modules"].items():
-                if (
-                    hasattr(module_service, "model")
-                    and module_service.model is not None
-                    and hasattr(module_service.model, "spec")
-                    and hasattr(module_service.model.spec, "source")
-                    and module_service.model.spec.source
-                ):
-                    module_repo = module_service.model.spec.source.repository
-                    if module_repo not in solution_repository_names:
-                        error = InvalidReferenceError(
-                            source_type="Module",
-                            source_name=module_name,
-                            reference_type="repository",
-                            reference_value=module_repo,
-                        )
-                        self._structured_errors.append(error)
-                        errors.append(str(error))
-
-        # Build topology configuration map and roles map from configuration
-        topology_config_map = {}
-        topology_roles_map = {}
-        if configuration_model.spec.topologies:
-            for topo_config in configuration_model.spec.topologies:
-                # Store the full config object
-                topology_config_map[topo_config.type] = topo_config
-                # Build roles map
-                if topo_config.components:
-                    topo_roles: Set[str] = {comp.role for comp in topo_config.components}
-                    topology_roles_map[topo_config.type] = topo_roles
-
-        # Validate topology provider, provisioner, and component role references
-        for topology in self.model.spec.topology:
-            # Check provider reference
-            if topology.provider not in workspace_provider_names:
-                error = InvalidReferenceError(
-                    source_type="Topology",
-                    source_name=topology.name,
-                    reference_type="provider",
-                    reference_value=topology.provider,
-                )
-                self._structured_errors.append(error)
-                errors.append(str(error))
-
-            # Check provisioner reference (by name)
-            if topology.provisioner not in workspace_provisioner_names:
-                error = InvalidReferenceError(
-                    source_type="Topology",
-                    source_name=topology.name,
-                    reference_type="provisioner",
-                    reference_value=topology.provisioner,
-                )
-                self._structured_errors.append(error)
-                errors.append(str(error))
-
-            # Validate component roles against configuration topology
-            topology_type_normalized = topology.type.lower().replace("-", "_")
-
-            # Find matching configuration topology (with normalization)
-            valid_roles: Optional[Set[str]] = None
-            matching_config = None
-            for config_type, topo_config in topology_config_map.items():
-                config_type_normalized = config_type.lower().replace("-", "_")
-                if config_type_normalized == topology_type_normalized:
-                    valid_roles = topology_roles_map.get(config_type)
-                    matching_config = topo_config
-                    break
-
-            # Check if topology type is allowed (additional_topologies validation)
-            if matching_config is None and not configuration_model.spec.additional_topologies:
-                # available_topologies = sorted(topology_config_map.keys())
-                error = InvalidReferenceError(
-                    source_type="Topology",
-                    source_name=topology.name,
-                    reference_type="topology type",
-                    reference_value=topology.type,
-                )
-                self._structured_errors.append(error)
-                errors.append(str(error))
-                continue  # Skip component validation for this topology
-
-            # If topology type is defined in configuration, validate component roles
-            if valid_roles:
-                additional_components_allowed = matching_config.additional_components if matching_config else True
-
-                for component in topology.components:
-                    # Resolve role from component or resource reference
-                    component_role = self._get_component_role(component)
-                    if not component_role:
-                        continue  # Skip components without role
-                    component_role_normalized = component_role.lower().replace("-", "_")
-                    valid_roles_normalized = {r.lower().replace("-", "_") for r in valid_roles}
-
-                    if component_role_normalized not in valid_roles_normalized:
-                        # Check if additional components are allowed
-                        if not additional_components_allowed:
-                            # Get component name for error message
-                            component_name = component.resource
-                            error = InvalidReferenceError(
-                                source_type="Component",
-                                source_name=component_name,
-                                reference_type="role",
-                                reference_value=component_role,
-                            )
-                            self._structured_errors.append(error)
-                            errors.append(str(error))
-
-            # Validate component constraints from configuration (min/max count, required, uses_module)
-            if matching_config and matching_config.components:
-                config_validation_errors = self._validate_component_constraints(topology, matching_config)
-                errors.extend(config_validation_errors)
-
-        # STEP 5: Validate that all file: references resolve to existing files on disk
-        if work_path:
-            config_repo_map = configuration_model.get_remote_map() if configuration_model else {}
-            repo_map = {**config_repo_map, **(self._repo_map or {})}
-            file_refs = []
-            for p in self.model.spec.providers:
-                file_refs.append((f"Provider '{p.name}'", p.file))
-            if self.model.spec.resources:
-                for r in self.model.spec.resources:
-                    if r.file:
-                        file_refs.append((f"Resource '{r.name}'", r.file))
-                    if r.modules:
-                        for m in r.modules:
-                            file_refs.append((f"Resource '{r.name}' module '{m.name}'", m.file))
-            if self.model.spec.namespaces:
-                for ns in self.model.spec.namespaces:
-                    file_refs.append((f"Namespace '{ns.name}'", ns.file))
-            if self.model.spec.firewalls:
-                for fw in self.model.spec.firewalls:
-                    file_refs.append((f"Firewall '{fw.name}'", fw.file))
-            if self.model.spec.dns_zones:
-                for dz in self.model.spec.dns_zones:
-                    file_refs.append((f"DNS zone '{dz.name}'", dz.file))
-            if self.model.spec.networks:
-                for net in self.model.spec.networks:
-                    file_refs.append((f"Network '{net.name}'", net.file))
-            errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
-
-        return len(errors) == 0, errors
-
-    def _validate_provisioner_integration_bindings(self, configuration_model: ConfigurationModel) -> List[str]:
-        """Resolve every integration-aware provisioner entry's binding ahead of deploy time
-        (ADR-0079 for `terraform`, ADR-0080 for `ansible`/`bicep`).
-
-        Surfaces the same failures each deployer's `validate_environment()` would hit at
-        deploy time — missing/wrong-class explicit `integration:`, or an ambiguous auto-bind
-        candidate set — as a validation error instead, so operators find out at
-        `strata validate --deep` rather than partway through `deploy run`.
-
-        Deliberately does not use `IntegrationService`/`IntegrationRegistry` (those require a
-        live, initialized singleton this validation pass doesn't set up) — it evaluates the
-        same resolution algorithm directly against the raw `configuration.spec.integrations`
-        specs instead. Kept as one method (not split per provisioner type) since the algorithm
-        is identical modulo which integration class each type expects and whether a
-        zero-candidate auto-bind is an error — see `_integration_binding_rules` below, which
-        must be kept in sync with each deployer's `resolve_for_provisioner()`/`default_factory`
-        call (ADR-0079/0080).
-        """
-        from strata.integrations.ansible import AnsibleIntegration
-        from strata.integrations.azure_cli import AzureCLIIntegration
-        from strata.integrations.factory import IntegrationFactory
-        from strata.integrations.terraform import TerraformIntegration
-
-        if not self.model or not self.model.spec.provisioners:
-            return []
-
-        # provisioner type -> (compatible integration class, is a zero-candidate auto-bind an
-        # error). Terraform has no ad-hoc default (ADR-0079: zero registered is always an
-        # error). Ansible/Bicep fall back to a hardcoded default integration when nothing is
-        # declared (ADR-0080), so zero candidates is not an error for them — mirrors each
-        # deployer's `default_factory` argument to `resolve_for_provisioner()`.
-        _integration_binding_rules: Dict[ProvisionerType, Tuple[type, bool]] = {
-            ProvisionerType.TERRAFORM: (TerraformIntegration, True),
-            ProvisionerType.ANSIBLE: (AnsibleIntegration, False),
-            ProvisionerType.BICEP: (AzureCLIIntegration, False),
-        }
-
-        integration_specs = [s for s in (configuration_model.spec.integrations or []) if s.enabled]
-
-        # IntegrationFactory.create_by_type() instantiates a throwaway integration purely to
-        # check its class — cache per (type string, expected class) pair so repeated types
-        # (e.g. several `terraform` provisioners) don't re-instantiate for every provisioner.
-        compat_cache: Dict[Tuple[str, type], bool] = {}
-
-        def _is_compatible(type_str: str, expected_class: type) -> bool:
-            key = (type_str, expected_class)
-            if key not in compat_cache:
-                try:
-                    compat_cache[key] = isinstance(IntegrationFactory.create_by_type(type_str), expected_class)
-                except Exception:
-                    compat_cache[key] = False
-            return compat_cache[key]
-
-        errors: List[str] = []
-        for provisioner in self.model.spec.provisioners:
-            rule = _integration_binding_rules.get(provisioner.provisioner)  # type: ignore[call-overload]
-            if rule is None:
-                continue
-            expected_class, zero_candidates_is_error = rule
-            # Friendly display name for error messages ("Terraform", "Ansible", "AzureCLI")
-            # rather than the raw class name — preserves the exact wording
-            # ADR-0079's original Terraform-only messages/tests already established.
-            expected_name = expected_class.__name__.removesuffix("Integration")
-
-            if provisioner.integration:
-                match = next((s for s in integration_specs if s.name == provisioner.integration), None)
-                if match is None:
-                    errors.append(
-                        f"Provisioner '{provisioner.name}': integration '{provisioner.integration}' is not "
-                        "registered. Check configuration.spec.integrations for a matching 'name'."
-                    )
-                elif not _is_compatible(match.type, expected_class):
-                    errors.append(
-                        f"Provisioner '{provisioner.name}': integration '{provisioner.integration}' (type "
-                        f"'{match.type}') is not compatible — expected a {expected_name}."
-                    )
-                continue
-
-            candidates = [s for s in integration_specs if _is_compatible(s.type, expected_class)]
-            if not candidates:
-                if zero_candidates_is_error:
-                    errors.append(
-                        f"Provisioner '{provisioner.name}': no {expected_name}-compatible integration "
-                        "registered. Add one to configuration.spec.integrations, or set 'integration:' "
-                        "explicitly if one already exists under a different name."
-                    )
-                # else: this provisioner type falls back to a hardcoded default at deploy time
-                # (ADR-0080) — zero declared is valid, not an error.
-            elif len(candidates) > 1:
-                names = ", ".join(c.name for c in candidates)
-                errors.append(
-                    f"Provisioner '{provisioner.name}': {len(candidates)} {expected_name}-compatible "
-                    f"integrations registered ({names}) — ambiguous. Set 'integration:' explicitly to "
-                    "pick one."
-                )
-
-        return errors
-
-    def _validate_component_constraints(self, topology, matching_config) -> List[str]:
-        """
-        Validate component constraints from configuration.
-
-        Validates:
-        - uses_module: Component must have a module if required
-        - required: Topology must include required components
-        - min_count: Topology must have at least min_count instances
-        - max_count: Topology must not exceed max_count instances (0 = unlimited)
-
-        Args:
-            topology: WorkspaceTopologyModel instance
-            matching_config: ConfigurationTopologyModel instance
-
-        Returns:
-            List[str]: List of validation error messages
-        """
-        errors = []
-
-        # Build a map of component roles to their instances in the workspace topology
-        # Count both full definitions and simple resource references by resolving roles
-        component_role_counts: Dict[str, int] = {}
-        component_role_modules: Dict[str, List[str]] = {}
-        for component in topology.components:
-            # Resolve role from component or resource reference
-            component_role = self._get_component_role(component)
-            if not component_role:
-                continue  # Skip components without role
-            role_normalized = component_role.lower().replace("-", "_")
-            component_role_counts[role_normalized] = component_role_counts.get(role_normalized, 0) + 1
-            # Check if resource has modules (component is just a reference)
-            resource = self._get_resource_by_name(component.resource)
-            if resource and resource.modules:
-                component_role_modules.setdefault(role_normalized, []).append(component.resource)
-
-        # Validate each component configuration constraint
-        for config_comp in matching_config.components:
-            if not config_comp.role:
-                continue  # Skip components without role
-            role_normalized = config_comp.role.lower().replace("-", "_")
-            actual_count = component_role_counts.get(role_normalized, 0)
-
-            # Validate required components
-            if config_comp.required and actual_count == 0:
-                error = InvalidReferenceError(
-                    source_type="Topology",
-                    source_name=topology.name,
-                    reference_type="required component role",
-                    reference_value=config_comp.role,
-                )
-                self._structured_errors.append(error)
-                errors.append(str(error))
-                continue
-
-            # Skip further validation if component is not present
-            if actual_count == 0:
-                continue
-
-            # Validate min_count constraint
-            if config_comp.min_count and actual_count < config_comp.min_count:
-                error = InvalidReferenceError(
-                    source_type="Topology",
-                    source_name=topology.name,
-                    reference_type="component role (min_count)",
-                    reference_value=f"{config_comp.role} (has {actual_count}, needs {config_comp.min_count})",
-                )
-                self._structured_errors.append(error)
-                errors.append(str(error))
-
-            # Validate max_count constraint (0 means unlimited)
-            if config_comp.max_count and config_comp.max_count > 0 and actual_count > config_comp.max_count:
-                error = InvalidReferenceError(
-                    source_type="Topology",
-                    source_name=topology.name,
-                    reference_type="component role (max_count)",
-                    reference_value=f"{config_comp.role} (has {actual_count}, max {config_comp.max_count})",
-                )
-                self._structured_errors.append(error)
-                errors.append(str(error))
-
-            # Validate uses_module constraint
-            if config_comp.uses_module:
-                components_without_module = []
-                for component in topology.components:
-                    # Resolve role from component or resource reference
-                    comp_role = self._get_component_role(component)
-                    if not comp_role:
-                        continue
-                    comp_role_normalized = comp_role.lower().replace("-", "_")
-                    # Check if resource has modules (component is just a reference)
-                    resource = self._get_resource_by_name(component.resource)
-                    if comp_role_normalized == role_normalized and (not resource or not resource.modules):
-                        components_without_module.append(component.resource)
-
-                if components_without_module:
-                    error = InvalidReferenceError(
-                        source_type="Component",
-                        source_name=", ".join(components_without_module),
-                        reference_type="module (required by role)",
-                        reference_value=config_comp.role,
-                    )
-                    self._structured_errors.append(error)
-                    errors.append(str(error))
-
-        return errors
-
-    def _get_resource_by_name(self, resource_name: str) -> Optional[Any]:
-        """
-        Get a resource definition by its name.
-
-        Args:
-            resource_name: Name of the resource to find
-
-        Returns:
-            WorkspaceResourceModel instance, or None if not found
-        """
-        if self.model and self.model.spec.resources:
-            for resource_ref in self.model.spec.resources:
-                if resource_ref.name == resource_name:
-                    return resource_ref
-        return None
-
-    def _get_component_role(self, component) -> Optional[str]:
-        """
-        Get the role for a component by resolving its resource reference.
-
-        Args:
-            component: WorkspaceComponentModel instance (has only 'resource' field)
-
-        Returns:
-            The role from the referenced resource, or None if not found
-        """
-        # Component only has a resource name reference - look up role from resources
-        if isinstance(component.resource, str):
-            # Find the resource definition
-            if self.model and self.model.spec.resources:
-                for resource_ref in self.model.spec.resources:
-                    if resource_ref.name == component.resource:
-                        return resource_ref.role
-
-        return None
-
-    # Service Methods
-
-    def get_validation_errors(self) -> List[str]:
-        """Return all validation errors: Phase 1 (Pydantic) errors from _errors plus
-        dynamic errors accumulated in _validation_errors."""
-        return self._errors + self._validation_errors
-
-    def load_workspace_services(
-        self, objects_path: Optional[str] = None, repo_map: Optional[Dict[str, str]] = None
-    ) -> Tuple[Dict[str, Dict[str, BaseService]], bool]:
-        """
-        Load all related services (providers, resources, namespaces, firewalls) into a dictionary.
-
-        Uses service cache to avoid re-parsing the same files.
-
-        Args:
-            objects_path: Optional base directory for resolving relative file paths.
-                          If None, uses the directory of the workspace file.
-
-        Returns:
-            Tuple containing:
-            - Dict with structure:
-              {
-                  "providers": {"provider_name": ProviderService, ...},
-                  "resources": {"resource_name": ResourceService, ...},
-                  "namespaces": {"namespace_name": NamespaceService, ...},
-                  "firewalls": {"firewall_name": FirewallService, ...}
-              }
-            - bool: Success status (True if all services loaded successfully)
-        """
-        # Return cached services if already loaded
-        if self._related_services is not None:
-            self.logger.debug("Returning cached related services")
-            return self._related_services, True
-
-        self._ensure_validated()
-        self.logger.info(
-            "Loading related services for workspace",
-            workspace_name=self.get_name(),
-        )
-        success = True
-
-        # Validate objects_path parameter
-        if objects_path is None:
-            error_msg = (
-                "objects_path parameter is required for loading related services. "
-                "Paths in workspace YAML are relative to project root."
-            )
-            self.logger.error(
-                error_msg,
-                workspace_name=self.get_name(),
-            )
-            raise ValueError(error_msg)
-
-        services: Dict[str, Dict[str, BaseService]] = {
-            "providers": {},
-            "resources": {},
-            "namespaces": {},
-            "firewalls": {},
-            "dns_zones": {},
-            "networks": {},
-            "modules": {},
-        }
         if self.model is None:
-            error_msg = "Workspace model is not loaded. Cannot load related services."
-            self.logger.error(error_msg)
-            raise ValueError(error_msg)
-        workspace: WorkspaceModel = self.model
+            return set()
+        spec = self.model.spec
+        resources_by_name = {r.name: r for r in (spec.resources or []) if r.enabled}
+        topologies_by_name = {t.name: t for t in (spec.topology or [])}
+        claimed: set[str] = set()
+        for step in spec.execution or []:
+            _, namespaces_eff = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
+            claimed |= namespaces_eff
+            claimed |= claimed_names(step, resources_by_name, topologies_by_name)
+        return claimed
 
-        # Build repo_map once for all @repo_name/... path resolutions in this call.
-        # Merge solution-level map (caller-supplied) with config-service map.
-        # Solution names take precedence so @haven/... refs resolve correctly.
-        config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_remote_map()
-        repo_map = {**config_repo_map, **(repo_map or {})}
-
-        def _load_simple_services(
-            refs: Optional[list],
-            service_cls: Type[BaseService],
-            bucket_key: str,
-            label: str,
-        ) -> None:
-            """Load a list of file-referenced services into *services[bucket_key]*.
-
-            Handles the common try / validate / log / error pattern used for
-            DNS zones, firewalls, providers, and namespaces.
-            """
-            nonlocal success
-            if not refs:
-                return
-            self.logger.debug(f"Loading {label}", count=len(refs))
-            for ref in refs:
-                ref_path = self._resolve_file_path(ref.file, objects_path, repo_map)
-                try:
-                    svc = service_cls.load(ref_path, validate=True)
-                    if svc.is_validated():
-                        services[bucket_key][ref.name] = svc
-                        self.logger.debug(f"Loaded {label.rstrip('s')}", name=ref.name, path=ref_path)
-                    else:
-                        success = False
-                        errs = svc.get_validation_errors()
-                        self._validation_errors.append(f"{label.rstrip('s').title()} '{ref.name}' validation failed")
-                        self._validation_errors.extend(errs)
-                        self.logger.warning(
-                            f"{label.rstrip('s').title()} validation failed",
-                            name=ref.name,
-                            path=ref_path,
-                            error_count=len(errs),
-                        )
-                except Exception as e:
-                    success = False
-                    self._validation_errors.append(
-                        f"Failed to load {label.rstrip('s')} '{ref.name}' from {ref_path}: {str(e)}"
-                    )
-                    self.logger.error(
-                        f"Failed to load {label.rstrip('s')}",
-                        name=ref.name,
-                        path=ref_path,
-                        exc_info=True,
-                    )
-
-        # Load simple file-referenced services
-        _load_simple_services(workspace.spec.dns_zones, DnsService, "dns_zones", "DNS zones")
-        _load_simple_services(workspace.spec.firewalls, FirewallService, "firewalls", "firewalls")
-        _load_simple_services(workspace.spec.providers, ProviderService, "providers", "providers")
-        _load_simple_services(workspace.spec.namespaces, NamespaceService, "namespaces", "namespaces")
-        _load_simple_services(workspace.spec.networks, NetworkService, "networks", "networks")
-
-        # Load resource services from workspace resources section
-        # Resources are defined in workspace.spec.resources with file references
-        # Components in topology reference these resources by name
-        if workspace.spec.resources:
-            self.logger.debug("Loading resources", count=len(workspace.spec.resources))
-            for resource_ref in workspace.spec.resources:
-                # Skip externally-managed resources (no file to load)
-                if resource_ref.managed_by:
-                    resource_key = resource_ref.name
-                    # Managed resources have no backing service (no file to load) — the
-                    # dict is declared as Dict[str, BaseService] but this sentinel case
-                    # is handled by callers via .get()/len() only, never by iterating
-                    # and calling methods on the value.
-                    services["resources"][resource_key] = None  # type: ignore[assignment]
-                    self.logger.debug(
-                        "Skipping managed resource", name=resource_key, managed_by=resource_ref.managed_by
-                    )
-                    continue
-                if resource_ref.file is None:
-                    # Unreachable in practice: WorkspaceResourceModel validation enforces
-                    # that exactly one of `file` or `managed_by` is set.
-                    continue
-                resource_path = self._resolve_file_path(resource_ref.file, objects_path, repo_map)
-                resource_key = resource_ref.name
-                if resource_key not in services["resources"]:
-                    try:
-                        # Use service cache to avoid re-parsing same files
-                        rx_service: ResourceService = ResourceService.load(resource_path, validate=True)
-                        if rx_service.is_validated():
-                            services["resources"][resource_key] = rx_service
-                            self.logger.debug("Loaded resource", name=resource_key, path=resource_path)
-
-                            # Merge multiple firewalls if resource references more than one
-                            if resource_ref.firewalls and len(resource_ref.firewalls) > 0:
-                                self.logger.debug(
-                                    "Merging firewalls for resource",
-                                    resource=resource_key,
-                                    count=len(resource_ref.firewalls),
-                                )
-                                firewall_services: List[Union[FirewallModel, FirewallService]] = []
-                                for fw_name in resource_ref.firewalls:
-                                    fw_service_raw = services["firewalls"].get(fw_name)
-                                    if fw_service_raw:
-                                        firewall_services.append(cast(FirewallService, fw_service_raw))
-                                    else:
-                                        self.logger.warning(
-                                            "Firewall not found for resource", firewall=fw_name, resource=resource_key
-                                        )
-
-                                if firewall_services:
-                                    try:
-                                        merged_firewall = FirewallService.merge_firewalls(firewall_services)
-                                        rx_service.set_merged_firewall(merged_firewall)
-                                        self.logger.debug(
-                                            "Merged firewalls for resource",
-                                            resource=resource_key,
-                                            count=len(firewall_services),
-                                        )
-                                    except Exception as e:
-                                        success = False
-                                        self._validation_errors.append(
-                                            f"Failed to merge firewalls for resource '{resource_key}': {str(e)}"
-                                        )
-                                        self.logger.error(
-                                            "Failed to merge firewalls for resource",
-                                            resource=resource_key,
-                                            firewall_count=len(firewall_services),
-                                            exc_info=True,
-                                        )
-
-                        else:
-                            success = False
-                            errors = rx_service.get_validation_errors()
-                            self._validation_errors.append(f"Resource '{resource_ref.name}' validation failed")
-                            self._validation_errors.extend(errors)
-                            self.logger.warning(
-                                "Resource validation failed",
-                                name=resource_ref.name,
-                                path=resource_path,
-                                error_count=len(errors),
-                            )
-
-                    except Exception as e:
-                        success = False
-                        self._validation_errors.append(
-                            f"Failed to load resource '{resource_ref.name}' from {resource_path}: {str(e)}"
-                        )
-                        self.logger.error(
-                            "Failed to load resource",
-                            name=resource_ref.name,
-                            path=resource_path,
-                            exc_info=True,
-                        )
-
-        # Load module services referenced by resources
-        if workspace.spec.resources:
-            for resource_ref in workspace.spec.resources:
-                if resource_ref.modules:
-                    self.logger.debug(
-                        "Loading modules for resource", resource=resource_ref.name, count=len(resource_ref.modules)
-                    )
-                    for module_ref in resource_ref.modules:
-                        module_path = self._resolve_file_path(module_ref.file, objects_path, repo_map)
-                        # Use resource_name:module_name as key to avoid conflicts
-                        module_key = f"{resource_ref.name}:{module_ref.name}"
-
-                        try:
-                            mod_service: ModuleService = ModuleService.load(module_path, validate=True)
-                            if mod_service.is_validated():
-                                services["modules"][module_key] = mod_service
-                                self.logger.debug(
-                                    "Loaded module for resource",
-                                    module=module_ref.name,
-                                    resource=resource_ref.name,
-                                    path=module_path,
-                                )
-                            else:
-                                success = False
-                                errors = mod_service.get_validation_errors()
-                                self._validation_errors.append(
-                                    f"Module '{module_ref.name}' for resource '{resource_ref.name}' validation failed"
-                                )
-                                self._validation_errors.extend(errors)
-                                self.logger.warning(
-                                    "Module validation failed",
-                                    name=module_ref.name,
-                                    resource=resource_ref.name,
-                                    path=module_path,
-                                    error_count=len(errors),
-                                )
-                        except Exception as e:
-                            success = False
-                            self._validation_errors.append(
-                                f"Failed to load module '{module_ref.name}' for resource '{resource_ref.name}' from {module_path}: {str(e)}"
-                            )
-                            self.logger.error(
-                                "Failed to load module for resource",
-                                module=module_ref.name,
-                                resource=resource_ref.name,
-                                path=module_path,
-                                exc_info=True,
-                            )
-
-        # Load module services referenced by namespaces
-        if workspace.spec.namespaces:
-            for namespace_ref in workspace.spec.namespaces:
-                # First ensure the namespace service is loaded
-                namespace_service = services["namespaces"].get(namespace_ref.name)
-                ns_model = getattr(namespace_service, "model", None) if namespace_service else None
-                ns_spec = getattr(ns_model, "spec", None) if ns_model else None
-                if namespace_service and ns_spec and hasattr(ns_spec, "modules") and ns_spec.modules:
-                    self.logger.debug(
-                        "Loading modules for namespace",
-                        namespace=namespace_ref.name,
-                        count=len(ns_spec.modules),
-                    )
-                    for module_ref in ns_spec.modules:
-                        module_path = self._resolve_file_path(module_ref.file, objects_path, repo_map)
-                        # Use namespace_name:module_name as key to avoid conflicts
-                        module_key = f"{namespace_ref.name}:{module_ref.name}"
-
-                        try:
-                            mod_service = ModuleService.load(module_path, validate=True)
-                            if mod_service.is_validated():
-                                services["modules"][module_key] = mod_service
-                                self.logger.debug(
-                                    "Loaded module for namespace",
-                                    module=module_ref.name,
-                                    namespace=namespace_ref.name,
-                                    path=module_path,
-                                )
-                            else:
-                                success = False
-                                errors = mod_service.get_validation_errors()
-                                self._validation_errors.append(
-                                    f"Module '{module_ref.name}' for namespace '{namespace_ref.name}' validation failed"
-                                )
-                                self._validation_errors.extend(errors)
-                                self.logger.warning(
-                                    "Module validation failed",
-                                    name=module_ref.name,
-                                    namespace=namespace_ref.name,
-                                    path=module_path,
-                                    error_count=len(errors),
-                                )
-                        except Exception as e:
-                            success = False
-                            self._validation_errors.append(
-                                f"Failed to load module '{module_ref.name}' for namespace '{namespace_ref.name}' from {module_path}: {str(e)}"
-                            )
-                            self.logger.error(
-                                "Failed to load module for namespace",
-                                module=module_ref.name,
-                                namespace=namespace_ref.name,
-                                path=module_path,
-                                exc_info=True,
-                            )
-
-        # Cache services if successful
-        if success:
-            self._related_services = services
-            self.logger.info(
-                "All related services loaded successfully",
-                workspace_name=self.get_name(),
-                providers=len(services["providers"]),
-                resources=len(services["resources"]),
-                modules=len(services["modules"]),
-                namespaces=len(services["namespaces"]),
-                firewalls=len(services["firewalls"]),
-                dns_zones=len(services["dns_zones"]),
-                networks=len(services["networks"]),
-            )
-        else:
-            self.logger.warning(
-                "Some related services failed to load",
-                workspace_name=self.get_name(),
-                error_count=len(self._validation_errors),
-            )
-
-        return services, success
-
-    def get_dns_services(self) -> Optional[Dict[str, DnsService]]:
-        """Get all DNS zone services keyed by name."""
-        value = self._get_workspace_related_services("dns_zones", None)
-        if value is not None and isinstance(value, dict):
-            casted = {k: cast(DnsService, v) for k, v in value.items() if isinstance(v, DnsService)}
-            return casted
-        return None
-
-    def get_dns_service(self, dns_name: str) -> Optional[DnsService]:
-        """Get a specific DNS zone service by name."""
-        value = self._get_workspace_related_services("dns_zones", dns_name)
-        if value is not None and isinstance(value, DnsService):
-            return cast(DnsService, value)
-        return None
-
-    def get_firewall_services(self) -> Optional[Dict[str, FirewallService]]:
-        """Get all firewall services keyed by name."""
-        value = self._get_workspace_related_services("firewalls", None)
-        if value is not None and isinstance(value, dict):
-            casted = {k: cast(FirewallService, v) for k, v in value.items() if isinstance(v, FirewallService)}
-            return casted
-        return None
-
-    def get_firewall_service(self, firewall_name: str) -> Optional[FirewallService]:
-        """Get a specific firewall service by name."""
-        value = self._get_workspace_related_services("firewalls", firewall_name)
-        if value is not None and isinstance(value, FirewallService):
-            return cast(FirewallService, value)
-        return None
-
-    def get_network_services(self) -> Optional[Dict[str, NetworkService]]:
-        """Get all network topology services keyed by name."""
-        value = self._get_workspace_related_services("networks", None)
-        if value is not None and isinstance(value, dict):
-            casted = {k: cast(NetworkService, v) for k, v in value.items() if isinstance(v, NetworkService)}
-            return casted
-        return None
-
-    def get_network_service(self, network_name: str) -> Optional[NetworkService]:
-        """Get a specific network topology service by name."""
-        value = self._get_workspace_related_services("networks", network_name)
-        if value is not None and isinstance(value, NetworkService):
-            return cast(NetworkService, value)
-        return None
-
-    def get_module_services(self) -> Optional[Dict[str, ModuleService]]:
-        """Get all module services keyed by resource:module name."""
-        value = self._get_workspace_related_services("modules", None)
-        if value is not None and isinstance(value, dict):
-            casted = {k: cast(ModuleService, v) for k, v in value.items() if isinstance(v, ModuleService)}
-            return casted
-        return None
-
-    def get_module_service(self, resource_name: str, module_name: str) -> Optional[ModuleService]:
-        """Get a specific module service by resource and module name."""
-        module_key = f"{resource_name}:{module_name}"
-        value = self._get_workspace_related_services("modules", module_key)
-        if value is not None and isinstance(value, ModuleService):
-            return cast(ModuleService, value)
-        return None
-
-    def get_namespace_services(
+    def validate_topology_components(
         self,
-    ) -> Optional[Dict[str, NamespaceService]]:
-        """Get all namespace services keyed by name."""
-        value = self._get_workspace_related_services("namespaces", None)
-        if value is not None and isinstance(value, dict):
-            casted = {k: cast(NamespaceService, v) for k, v in value.items() if isinstance(v, NamespaceService)}
-            return casted
-        return None
+        configuration_model: ConfigurationModel,
+        topology_config_models: dict[str, TopologyConfigModel],
+    ) -> Diagnostics:
+        """Cross-check each topology's component roles against the
+        configuration's topology type registry (ADR-0013/ADR-0014).
 
-    def get_namespace_service(self, namespace_name: str) -> Optional[NamespaceService]:
-        """Get a specific namespace service by name."""
-        value = self._get_workspace_related_services("namespaces", namespace_name)
-        if value is not None and isinstance(value, NamespaceService):
-            return cast(NamespaceService, value)
-        return None
-
-    def get_provider_services(self) -> Optional[Dict[str, ProviderService]]:
-        """Get all provider services keyed by name."""
-        value = self._get_workspace_related_services("providers", None)
-        if value is not None and isinstance(value, dict):
-            casted = {k: cast(ProviderService, v) for k, v in value.items() if isinstance(v, ProviderService)}
-            return casted
-        return None
-
-    def get_provider_service(self, provider_name: str) -> Optional[ProviderService]:
-        """Get a specific provider service by name."""
-        value = self._get_workspace_related_services("providers", provider_name)
-        if value is not None and isinstance(value, ProviderService):
-            return cast(ProviderService, value)
-        return None
-
-    def replace_provider_service(self, provider_name: str, service: ProviderService) -> None:
-        """Replace a loaded provider service.
-
-        Called by DeploymentService during environment override application when an
-        environment declares ``overrides.providers[].file`` to swap the provider binding.
-        """
-        if self._related_services is not None:
-            if "providers" not in self._related_services:
-                self._related_services["providers"] = {}
-            self._related_services["providers"][provider_name] = service
-
-    def get_resource_services(
-        self,
-    ) -> Optional[Dict[str, ResourceService]]:
-        """Get all resource services keyed by name."""
-        value = self._get_workspace_related_services("resources", None)
-        if value is not None and isinstance(value, dict):
-            casted = {k: cast(ResourceService, v) for k, v in value.items() if isinstance(v, ResourceService)}
-            return casted
-        return None
-
-    def get_resource_service(self, resource_name: str) -> Optional[ResourceService]:
-        """Get a specific resource service by name."""
-        value = self._get_workspace_related_services("resources", resource_name)
-        if value is not None and isinstance(value, ResourceService):
-            return cast(ResourceService, value)
-        return None
-
-    # Helper method to get related services
-
-    def _get_workspace_related_services(
-        self, service_type: str, service_name: Optional[str] = None
-    ) -> Optional[Union[BaseService, Dict[str, BaseService]]]:
-        """
-        Get a specific related service by type and optionally by name.
-
-        This is a helper method for subclasses that manage related services.
+        Direct port of v1's real `WorkspaceService._validate_component_constraints()`/
+        `_get_component_role()`: a component's "role" comes from the
+        `WorkspaceResourceModel.role` of the resource it references (not a
+        field on the component itself), matched against a loaded
+        `TopologyConfigModel.spec.components[].role` entries for the
+        topology's own `type`.
 
         Args:
-            service_type: Type of service (e.g., 'providers', 'resources', etc.)
-            service_name: Optional name for dict-based services
+            configuration_model: Loaded configuration registry (used for
+                `additional_topologies`; `spec.topologies` itself is just a
+                list of TopologyConfig document names — ADR-0014).
+            topology_config_models: Already-loaded `TopologyConfigModel`
+                instances keyed by topology type (`meta.name`) — the caller
+                resolves each name in `configuration_model.spec.topologies`
+                itself.
+        """
+        if self.model is None or not self.model.spec.topology:
+            return Diagnostics()
+
+        diagnostics = Diagnostics()
+        resource_roles = {r.name: r.role for r in (self.model.spec.resources or [])}
+
+        for topo in self.model.spec.topology:
+            topo_type = topo.type
+            matching_config = topology_config_models.get(topo_type)
+
+            if matching_config is None:
+                if not configuration_model.spec.additional_topologies:
+                    diagnostics.error(
+                        f"Topology '{topo.name}': type '{topo_type}' is not registered in "
+                        "configuration.spec.topologies and additional_topologies is False",
+                        location="spec.topology",
+                        code="unregistered_topology_type",
+                    )
+                continue
+
+            role_counts: dict[str, int] = {}
+            role_has_module: dict[str, bool] = {}
+            for component in topo.components:
+                role = resource_roles.get(component.resource)
+                if role is None:
+                    continue
+                role_counts[role] = role_counts.get(role, 0) + 1
+                if component.modules:
+                    role_has_module[role] = True
+
+            valid_roles = {c.role for c in (matching_config.spec.components or [])}
+            if not matching_config.spec.additional_components:
+                for role in role_counts:
+                    if role not in valid_roles:
+                        diagnostics.error(
+                            f"Topology '{topo.name}': component role '{role}' is not registered "
+                            f"for topology type '{topo_type}' and additional_components is False",
+                            location="spec.resources",
+                            code="unregistered_component_role",
+                        )
+
+            for comp_config in matching_config.spec.components or []:
+                actual_count = role_counts.get(comp_config.role, 0)
+
+                if comp_config.required and actual_count == 0:
+                    diagnostics.error(
+                        f"Topology '{topo.name}': required component role '{comp_config.role}' is missing",
+                        location="spec.resources",
+                        code="missing_required_role",
+                    )
+                    continue
+                if actual_count == 0:
+                    continue
+
+                if comp_config.min_count and actual_count < comp_config.min_count:
+                    diagnostics.error(
+                        f"Topology '{topo.name}': component role '{comp_config.role}' has "
+                        f"{actual_count} instance(s), needs at least {comp_config.min_count}",
+                        location="spec.resources",
+                        code="role_count_below_minimum",
+                    )
+                if comp_config.max_count and actual_count > comp_config.max_count:
+                    diagnostics.error(
+                        f"Topology '{topo.name}': component role '{comp_config.role}' has "
+                        f"{actual_count} instance(s), exceeds max {comp_config.max_count}",
+                        location="spec.resources",
+                        code="role_count_above_maximum",
+                    )
+                if comp_config.uses_module and not role_has_module.get(comp_config.role, False):
+                    diagnostics.error(
+                        f"Topology '{topo.name}': component role '{comp_config.role}' requires a "
+                        "module attached but none of its resources have one",
+                        location="spec.resources",
+                        code="role_missing_module",
+                    )
+
+        return diagnostics
+
+    def validate_resource_subnets(self, network_models: dict[str, NetworkModel]) -> Diagnostics:
+        """Cross-check each resource's `subnet.subnet` against the real
+        subnet names inside its referenced Network document.
+
+        `subnet.network` already named a real, existing workspace network
+        in Phase 1 (`validate_resource_subnet_references`, `workspace_model.py`)
+        — this is the Phase 2 half, once that Network document is actually
+        loaded. A Network document's own `spec.networks[]` can declare more
+        than one independently-named network (`docs/config/network.md`),
+        and `WorkspaceResourceSubnetModel` has no field naming which
+        internal network a resource means — only the document as a whole —
+        so `subnet.subnet` is checked against the union of every internal
+        network's subnet names in that one document, not a single one of
+        them.
+
+        Args:
+            network_models: Already-loaded `NetworkModel` documents, keyed
+                by `meta.name`, for every network name this workspace's
+                resources reference via `subnet.network`. A name missing
+                from this dict (an unresolved reference) is silently
+                skipped — `validate_references` already reported it; this
+                method would otherwise duplicate that finding.
+        """
+        diagnostics = Diagnostics()
+        if self.model is None:
+            return diagnostics
+
+        for resource in self.model.spec.resources or []:
+            if resource.subnet is None:
+                continue
+
+            network_model = network_models.get(resource.subnet.network)
+            if network_model is None:
+                continue  # unresolved reference — validate_references already reported it
+
+            subnet_names = {subnet.name for definition in network_model.spec.networks for subnet in definition.subnets}
+            if resource.subnet.subnet not in subnet_names:
+                diagnostics.error(
+                    f"Resource '{resource.name}' subnet '{resource.subnet.subnet}' not found in network "
+                    f"'{resource.subnet.network}'. Available subnets: {sorted(subnet_names)}",
+                    location="spec.resources",
+                    code="unregistered_subnet",
+                )
+
+        return diagnostics
+
+    def validate_allowed_key_value_store(
+        self, security: ConfigurationSecurityModel, backend_type: str | None
+    ) -> Diagnostics:
+        """Check this workspace's resolved output-store backend type against
+        the platform's key/value store allow-list (same convention as
+        `EnvironmentService.validate_allowed_stores()`, docs/work/
+        cross-run-step-output-delivery.md's Implementation Plan step 1,
+        'Governance').
+
+        Unlike variable/secret/feature stores (many independent per-key
+        declarations), a workspace declares at most one key/value backend —
+        so this takes the already-resolved backend type directly rather
+        than walking a list. Resolving `output_store_integration` to its
+        target document's own `spec.type` is the caller's job (needs the
+        `DocumentIndex`, which services never touch — ADR-0021 D2's same
+        rule); a dangling reference there is not re-checked here either —
+        `validate_references` already reports it.
+
+        Args:
+            security: The single Configuration document's `spec.security`
+                (never `None` itself — same calling convention as
+                `validate_allowed_stores()`).
+            backend_type: The resolved backend type, or `None` when
+                neither `output_store` nor `output_store_integration` is
+                set (feature disabled for this workspace — nothing to
+                check).
 
         Returns:
-            The requested service or None if not found
+            One error if `backend_type` is set and not in
+            `allowed_key_value_stores`. Empty when unrestricted (`None`)
+            or no backend is configured at all.
         """
-        # Check if subclass has _related_services attribute
-        if not hasattr(self, "_related_services") or self._related_services is None:
-            return None
-
-        # Check if requested service type is available
-        if service_type not in self._related_services:
-            return None
-
-        # Get the service object for the requested type
-        service_obj = self._related_services.get(service_type)
-
-        # If service is a dict and name provided, get specific item
-        if isinstance(service_obj, dict):
-            if service_name:
-                return service_obj.get(service_name)
-            # No service_name requested → return the full dict
-            return service_obj
-
-        return None
+        diagnostics = Diagnostics()
+        if security.allowed_key_value_stores is None or backend_type is None:
+            return diagnostics
+        if backend_type not in security.allowed_key_value_stores:
+            diagnostics.error(
+                f"output_store: backend '{backend_type}' is not in the platform's allowed_key_value_stores. "
+                f"Available: {sorted(security.allowed_key_value_stores)}",
+                location="spec.output_store",
+                code="disallowed_store",
+            )
+        return diagnostics

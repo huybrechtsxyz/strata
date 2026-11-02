@@ -1,31 +1,244 @@
-"""Tests for SolutionModel and related Pydantic models."""
+#!/usr/bin/env python3
+"""Tests for SolutionModel (`strata.yaml`) validation.
 
-from strata.models.solution_model import SolutionSpecModel
+The solution manifest is the bootstrap document: solution identity, where
+Configuration lives, and the named remotes everything else resolves
+`@<name>/...` references against.
+"""
+
+import pytest
+from pydantic import ValidationError
+
+from strata.models.solution_model import SolutionModel
+from strata.services.base_service import diagnostics_from_validation_error
 
 
-def _make_spec(**kwargs) -> SolutionSpecModel:
-    return SolutionSpecModel(solution_id="00000000-0000-0000-0000-000000000001", **kwargs)
+def _minimal_solution() -> dict:
+    return {
+        "meta": {"name": "integration"},
+        "spec": {},
+    }
 
 
-class TestSolutionSpecContext:
-    def test_solution_spec_context_optional(self):
-        """spec.context is optional — defaults to None."""
-        spec = _make_spec()
-        assert spec.context is None
+def test_solution_minimal_is_valid():
+    """A solution with no remotes validates, and spec.configuration defaults to 'config'."""
+    model = SolutionModel.model_validate(_minimal_solution())
+    assert model.meta.name == "integration"
+    assert model.spec.configuration == "config"
+    assert model.spec.remotes is None
+    assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
+    assert model.kind.value == "solution"
 
-    def test_solution_spec_context_set(self):
-        """spec.context accepts a dict of strings."""
-        spec = _make_spec(context={"owner": "team", "version": "2.0.0"})
-        assert spec.context == {"owner": "team", "version": "2.0.0"}
 
-    def test_solution_spec_context_empty_dict(self):
-        """spec.context accepts an empty dict."""
-        spec = _make_spec(context={})
-        assert spec.context == {}
+def test_solution_rejects_mismatched_kind():
+    """A document declaring another kind is rejected (see validate_kind_matches)."""
+    data = _minimal_solution()
+    data["kind"] = "configuration"
+    with pytest.raises(ValidationError, match="Expected kind 'solution'"):
+        SolutionModel.model_validate(data)
 
-    def test_solution_spec_context_roundtrip(self):
-        """spec.context survives a Pydantic model_dump / model_validate round-trip."""
-        spec = _make_spec(context={"owner": "acme"})
-        dumped = spec.model_dump()
-        restored = SolutionSpecModel.model_validate(dumped)
-        assert restored.context == {"owner": "acme"}
+
+def test_solution_accepts_configuration_file_pointer():
+    """spec.configuration may point at a single file rather than a directory."""
+    data = _minimal_solution()
+    data["spec"]["configuration"] = "config/configuration.yaml"
+    model = SolutionModel.model_validate(data)
+    assert model.spec.configuration == "config/configuration.yaml"
+
+
+def test_solution_rejects_configuration_outside_solution():
+    """spec.configuration must stay inside the solution."""
+    data = _minimal_solution()
+    data["spec"]["configuration"] = "../elsewhere/config"
+    with pytest.raises(ValidationError):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_accepts_git_remote():
+    """A git remote with a pinned reference and an Integration credential ref validates."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {
+            "name": "infra",
+            "type": "git",
+            "url": "https://github.com/org/infra.git",
+            "reference": "v2.1.0",
+            "integration": "corp-git",
+        }
+    ]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].name == "infra"
+    assert model.spec.remotes[0].type.value == "git"
+    assert model.spec.remotes[0].reference == "v2.1.0"
+    assert model.spec.remotes[0].integration == "corp-git"
+
+
+def test_solution_remote_defaults_to_strata_fetch():
+    """fetch defaults to 'strata' — strata materialises the remote itself."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": "main"}]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].fetch.value == "strata"
+
+
+def test_solution_remote_accepts_external_fetch():
+    """A git remote already checked out by CI keeps its type and ref, with fetch: external."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {
+            "name": "env-repo",
+            "type": "git",
+            "url": "https://host/env-repo.git",
+            "reference": "main",
+            "fetch": "external",
+        }
+    ]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].type.value == "git"
+    assert model.spec.remotes[0].fetch.value == "external"
+
+
+def test_solution_git_remote_requires_reference():
+    """A git remote without a pinned reference is rejected."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "infra", "type": "git", "url": "https://host/infra.git"}]
+    with pytest.raises(ValidationError, match="'reference' is required"):
+        SolutionModel.model_validate(data)
+
+
+@pytest.mark.parametrize("bad_reference", ["../../etc", "/etc/passwd", "C:\\Windows\\System32"])
+def test_solution_remote_rejects_path_traversal_in_reference(bad_reference):
+    """Regression test for the path-traversal gap found on code review
+    (2026-10-02): `reference` is used verbatim as a directory-path segment
+    by every remote-checkout function (`layout.remote_checkout_path()`,
+    `.audit_push_checkout_path()`, `.gitops_push_checkout_path()`) — an
+    absolute path or '..' segment must be rejected at the schema level."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": bad_reference}
+    ]
+    with pytest.raises(ValidationError, match="relative|absolute|parent directory"):
+        SolutionModel.model_validate(data)
+
+
+@pytest.mark.parametrize("field", ["url", "reference"])
+@pytest.mark.parametrize("value", ["--upload-pack=touch pwned", "-n"])
+def test_solution_remote_rejects_a_url_or_reference_git_would_read_as_an_option(field, value):
+    remote = {"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": "v1"}
+    remote[field] = value
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [remote]
+    with pytest.raises(ValidationError, match="must not start with '-'"):
+        SolutionModel.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "url", ["git@github.com:org/infra.git", "ssh://git@host/infra.git", "https://user@host/infra.git"]
+)
+def test_solution_remote_accepts_urls_without_a_password(url):
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "infra", "type": "git", "url": url, "reference": "v1"}]
+    assert SolutionModel.model_validate(data).spec.remotes[0].url == url
+
+
+def test_solution_remote_rejects_a_password_in_the_url_without_echoing_it():
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "infra", "type": "git", "url": "https://bot:s3cr3tpw@host/infra.git", "reference": "v1"}
+    ]
+    with pytest.raises(ValidationError, match="must not embed a password") as excinfo:
+        SolutionModel.model_validate(data)
+    assert "s3cr3tpw" not in repr(diagnostics_from_validation_error(excinfo.value).messages())
+
+
+def test_solution_remote_accepts_reference_with_internal_slash():
+    """A real git branch name like 'feature/foo' is still accepted —
+    `validate_no_path_traversal()` only rejects a *leading* slash/drive
+    letter and '..', never an internal '/'."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": "feature/foo"}
+    ]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].reference == "feature/foo"
+
+
+def test_solution_helm_remote_rejects_reference():
+    """A helm remote serves many chart versions — a remote-level reference is rejected."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "goauthentik", "type": "helm", "url": "https://charts.goauthentik.io", "reference": "1.0.0"}
+    ]
+    with pytest.raises(ValidationError, match="'reference' is not valid"):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_accepts_helm_remote_without_reference():
+    """A helm remote without a reference is the valid shape."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "goauthentik", "type": "helm", "url": "https://charts.goauthentik.io"}]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].reference is None
+
+
+def test_solution_oci_remote_accepts_a_reference():
+    """An OCI remote pinning a real artifact still works exactly as before."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "images", "type": "oci", "url": "oci://ghcr.io/org/images", "reference": "v1.2.3"}
+    ]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].reference == "v1.2.3"
+
+
+def test_solution_oci_remote_without_reference_is_now_schema_valid():
+    """gap #3: Phase 1 no longer requires `reference` for OCI — whether it's
+    actually needed depends on real consumers, checked at Phase 2 instead
+    (`semantic_checks._check_remotes()`)."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "charts", "type": "oci", "url": "oci://ghcr.io/org/charts"}]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].reference is None
+
+
+def test_solution_local_remote_rejects_absolute_path():
+    """A local remote's url must be a solution-relative path, not absolute."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "bundled", "type": "local", "url": "/etc/strata/modules"}]
+    with pytest.raises(ValidationError):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_local_remote_rejects_traversal():
+    """A local remote's url must not escape the solution via '..'."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "bundled", "type": "local", "url": "../../etc/passwd"}]
+    with pytest.raises(ValidationError):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_local_remote_rejects_integration():
+    """On-disk local remotes need no credentials."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "bundled", "type": "local", "url": "modules", "integration": "corp-git"}]
+    with pytest.raises(ValidationError, match="'integration' is not valid"):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_local_remote_rejects_external_fetch():
+    """There is nothing to fetch for a local remote."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "bundled", "type": "local", "url": "modules", "fetch": "external"}]
+    with pytest.raises(ValidationError, match="'fetch' is not valid"):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_rejects_duplicate_remote_names():
+    """Remote names are the '@<name>' resolution key — duplicates are rejected."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "infra", "type": "git", "url": "https://host/a.git", "reference": "main"},
+        {"name": "infra", "type": "git", "url": "https://host/b.git", "reference": "main"},
+    ]
+    with pytest.raises(ValidationError, match="Duplicate"):
+        SolutionModel.model_validate(data)

@@ -1,0 +1,855 @@
+#!/usr/bin/env python3
+"""`strata build run`'s orchestrator (ADR-0022) — renders a workspace's
+provisioners into on-disk artifacts, never executes anything.
+
+Four small, independent helpers plus the loop itself:
+
+- `build_resolved_workspace_graph()` (ADR-0022 D1a's assembly step) — the
+  only place `ResolvedWorkspaceGraph` gets built from a real
+  `DocumentIndex`; every reference it walks is already existence-checked by
+  Phase 1's `validate_references` (each field is `References(...)`-annotated),
+  so lookups here are defensive, not primary validation.
+- `ordered_by_depends_on()` — a Kahn's-algorithm topological sort, the same
+  shape `provisioning_model.validate_provisioning_steps()` already uses to
+  *detect* a cycle, but returning the order instead of discarding it.
+  Assumes its input already passed that validator (acyclic, unique names,
+  `depends_on` referencing real steps) — `WorkspaceSpecModel.validate_execution()`
+  already guarantees this for `spec.execution`, so this function does not
+  re-validate.
+- `find_provisioner()` (lives in `integration_resolution.py`) — `WorkspaceSpecModel.validate_execution()` already
+  guarantees `step.provisioner` names a real entry in `spec.provisioners`;
+  this is a lookup, not a check.
+- `materialise_provisioner_sources()` (ADR-0029 — docs/work/
+  provisioner-source-dependencies.md Phase 4) — recursively syncs a
+  provisioner's own `depends_on` chain before the step loop materialises
+  the step's own provisioner, so a provisioner named only in another
+  provisioner's `depends_on` (never in `execution`) still gets synced.
+
+`build_run()` only calls `prepare()` — never `plan`/`deploy`/`destroy`
+(ADR-0022 D4: build renders, deploy executes).
+"""
+
+import os
+import shutil
+from collections.abc import Callable
+from dataclasses import replace
+from pathlib import Path
+from typing import Any, cast
+
+import yaml
+
+from strata.controllers.checkov_controller import evaluate_checkov_policy
+from strata.controllers.effective_images import effective_images
+from strata.controllers.image_tag_policy import check_image_tag_policy
+from strata.controllers.integration_readiness import integration_preflight
+from strata.controllers.integration_resolution import find_provisioner, resolve_integration
+from strata.controllers.policy_results import checkov_policy_result as build_checkov_policy_result
+from strata.controllers.policy_results import cve_policy_result as build_cve_policy_result
+from strata.controllers.policy_results import image_tag_policy_result as build_image_tag_policy_result
+from strata.controllers.policy_results import write_policy_results
+from strata.controllers.remote_credentials import RemoteCredentialResolver
+from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
+from strata.controllers.sbom_controller import evaluate_cve_policy, write_sbom
+from strata.controllers.solution_context import SolutionContext
+from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.source_sync import (
+    SourceSyncError,
+    describe_source,
+    resolved_asset_info,
+    source_destination,
+    sync_asset,
+    sync_source,
+)
+from strata.controllers.value_controller import (
+    build_value_references,
+    reachable_environments,
+    resolve_deployment_workspace,
+    resolve_tenant,
+    resolve_values,
+    resolve_version,
+)
+from strata.controllers.version_pins import log_pin_applied
+from strata.controllers.workload_controller import build_workload_modules
+from strata.integrations.errors import IntegrationError
+from strata.integrations.resolved_context import (
+    EffectiveImage,
+    ResolvedAssetInfo,
+    ResolvedWorkspaceGraph,
+    ValueReference,
+    ValueResolution,
+)
+from strata.models.asset_model import AssetModel
+from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import DeploymentModel
+from strata.models.dns_model import DnsModel
+from strata.models.firewall_model import FirewallModel
+from strata.models.module_model import ModuleModel
+from strata.models.namespace_model import NamespaceModel
+from strata.models.network_model import NetworkModel
+from strata.models.provider_model import ProviderModel
+from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
+from strata.models.resource_model import ResourceModel
+from strata.models.solution_model import SolutionRemoteModel
+from strata.models.tenant_model import TenantModel
+from strata.models.version_model import VersionModel
+from strata.models.workspace_model import WorkspaceModel
+from strata.services.environment_service import (
+    merge_environment_models,
+    merge_workspace_environment_deployment_properties,
+)
+from strata.services.version_service import VersionService
+from strata.services.workspace_service import effective_assets, effective_providers
+from strata.utils.dependency_order import topological_order
+from strata.utils.diagnostics import Diagnostics
+from strata.utils.env_file import load_env_file
+from strata.utils.errors import SystemError, UsageError
+
+
+class BuildCleanError(SystemError):
+    """`build_path` could not be wiped before rendering (`clean=True`)."""
+
+
+def apply_remote_version_pins(
+    remotes: dict[str, SolutionRemoteModel], version: VersionModel | None
+) -> dict[str, SolutionRemoteModel]:
+    """Overlay `version.spec.pins.remotes` onto `remotes` (docs/design/
+    version-pin-overlay.md Phase 3).
+
+    Returns `remotes` unchanged (same object, not a copy) when `version` is
+    `None` or pins nothing here — avoids an unconditional dict-copy on the
+    common no-version/no-pin path. A remote with a matching pin gets a new
+    `SolutionRemoteModel` (`model_copy(update={"reference": ...})`) in its
+    place; every other remote's entry is untouched. Logs each application
+    (ADR-0019 decision 7).
+
+    Trusts `check_version_pins()` (Phase 2) already rejected a `fetch:
+    external` pin before this ever runs — no re-check here.
+    """
+    if version is None:
+        return remotes
+    version_service = VersionService.from_model(version)
+    overlaid: dict[str, SolutionRemoteModel] | None = None
+    for name, remote in remotes.items():
+        pin = version_service.resolve("remotes", name)
+        if pin is None:
+            continue
+        if overlaid is None:
+            overlaid = dict(remotes)
+        log_pin_applied("remotes", name, remote.reference, pin.version, version.meta.name)
+        overlaid[name] = remote.model_copy(update={"reference": pin.version})
+    return overlaid if overlaid is not None else remotes
+
+
+def apply_asset_version_pin(asset: AssetModel, version: VersionModel | None) -> AssetModel:
+    """Overlay `version.spec.pins.assets[<asset name>]` onto `asset.spec.location.reference`
+    (docs/design/asset-management.md).
+
+    Returns `asset` unchanged when there is no version, the asset declares no location of its
+    own (a manifest-remote asset is pinned under `remotes`), or nothing pins it. Trusts
+    `check_version_pins()` to have rejected a `fetch: external` pin already.
+    """
+    location = asset.spec.location
+    if version is None or location is None:
+        return asset
+    pin = VersionService.from_model(version).resolve("assets", asset.meta.name)
+    if pin is None:
+        return asset
+    log_pin_applied("assets", asset.meta.name, location.reference, pin.version, version.meta.name)
+    pinned_location = location.model_copy(update={"reference": pin.version})
+    return asset.model_copy(update={"spec": asset.spec.model_copy(update={"location": pinned_location})})
+
+
+def _lookup_all(index: DocumentIndex, kind: PlatformKind, names: list[str] | None) -> dict[str, Any]:
+    """`{name: model}` for every name in `names` that resolves in `index`.
+
+    Silently skips a name that does not resolve rather than raising — every
+    caller here passes a `References(...)`-annotated field, already
+    existence-checked by Phase 1's `validate_references`; this is a
+    defensive fallback for an unvalidated context, not primary validation.
+    """
+    result: dict[str, Any] = {}
+    for name in names or []:
+        entry = index.get(kind, name)
+        if entry is not None:
+            result[name] = entry.model
+    return result
+
+
+def _lookup_provider_slots(
+    index: DocumentIndex, workspace: WorkspaceModel, deployment: DeploymentModel | None
+) -> dict[str, ProviderModel]:
+    """`{slot: provider model}` — keyed by slot, not document name, so IaC addresses
+    `strata.providers.<slot>` regardless of which document `deployment` binds
+    (docs/design/provider-slots.md). Same silent-skip contract as
+    `_lookup_all()`.
+    """
+    result: dict[str, ProviderModel] = {}
+    for slot, provider_name in effective_providers(workspace, deployment).items():
+        entry = index.get(PlatformKind.PROVIDER, provider_name)
+        if entry is not None:
+            result[slot] = cast(ProviderModel, entry.model)
+    return result
+
+
+def workspace_namespaces(index: DocumentIndex, workspace: WorkspaceModel) -> dict[str, NamespaceModel]:
+    """`{name: namespace}` for `workspace.spec.namespaces`, as `ResolvedWorkspaceGraph.namespaces` holds them."""
+    return cast(dict[str, NamespaceModel], _lookup_all(index, PlatformKind.NAMESPACE, workspace.spec.namespaces))
+
+
+def build_resolved_workspace_graph(
+    index: DocumentIndex,
+    workspace: WorkspaceModel,
+    *,
+    variable_refs: list[ValueReference] | None = None,
+    feature_refs: list[ValueReference] | None = None,
+    secret_refs: list[ValueReference] | None = None,
+    properties: dict[str, Any] | None = None,
+    custom: dict[str, Any] | None = None,
+    tenant: TenantModel | None = None,
+    deployment: DeploymentModel | None = None,
+    version: VersionModel | None = None,
+    images: list[EffectiveImage] | None = None,
+) -> ResolvedWorkspaceGraph:
+    """Assemble a `ResolvedWorkspaceGraph` by walking every name `workspace`
+    references (ADR-0022 D1a).
+
+    `variable_refs`/`feature_refs`/`secret_refs`/`properties`/`custom`/
+    `deployment` (docs/design/build-time-value-categories.md, Q1/Q3/Q4;
+    docs/design/terraform-tfvars-parity.md for `deployment`) are optional —
+    callers with no deployment in scope yet (none exist today; kept optional
+    for exactly that reason) get the empty defaults `ResolvedWorkspaceGraph`
+    itself already provides.
+    """
+    resource_names = [wr.resource for wr in (workspace.spec.resources or []) if wr.resource is not None]
+    namespaces = workspace_namespaces(index, workspace)
+    # Module names come from every resolved namespace's own spec.modules
+    # (docs/design/unified-terraform-projection.md Phase 1) — `namespaces`
+    # must be resolved first, not from workspace.spec.namespaces directly,
+    # since the module references live one level down on the Namespace
+    # document itself, not on the workspace.
+    module_names = [ref.module for namespace in namespaces.values() for ref in (namespace.spec.modules or [])]
+    return ResolvedWorkspaceGraph(
+        workspace=workspace,
+        providers=_lookup_provider_slots(index, workspace, deployment),
+        resources=cast(dict[str, ResourceModel], _lookup_all(index, PlatformKind.RESOURCE, resource_names)),
+        namespaces=namespaces,
+        firewalls=cast(dict[str, FirewallModel], _lookup_all(index, PlatformKind.FIREWALL, workspace.spec.firewalls)),
+        dns=cast(dict[str, DnsModel], _lookup_all(index, PlatformKind.DNS, workspace.spec.dns_zones)),
+        networks=cast(dict[str, NetworkModel], _lookup_all(index, PlatformKind.NETWORK, workspace.spec.networks)),
+        modules=cast(dict[str, ModuleModel], _lookup_all(index, PlatformKind.MODULE, module_names)),
+        variable_refs=variable_refs or [],
+        feature_refs=feature_refs or [],
+        secret_refs=secret_refs or [],
+        properties=properties or {},
+        custom=custom or {},
+        tenant=tenant,
+        deployment=deployment,
+        version=version,
+        images=images or [],
+    )
+
+
+def _dump_refs(refs: list[ValueReference]) -> dict[str, dict[str, Any]]:
+    """One `resolved.yaml` section (docs/design/build-time-value-categories.md,
+    Q8) — `key -> {store, description?, value?}`. `value` is omitted
+    entirely (not even `null`) unless it was actually populated by
+    `build_value_references()` (`constant`/`environment` stores only) —
+    keeps a secret's entry visibly value-less rather than `value: null`,
+    which could misread as "resolved to nothing".
+    """
+    dumped: dict[str, dict[str, Any]] = {}
+    for ref in refs:
+        entry: dict[str, Any] = {"store": ref.store}
+        if ref.description is not None:
+            entry["description"] = ref.description
+        if ref.value is not None:
+            entry["value"] = ref.value
+        dumped[ref.key] = entry
+    return dumped
+
+
+def _dump_promotion(graph: ResolvedWorkspaceGraph) -> dict[str, Any] | None:
+    """`resolved.yaml`'s optional `promotion` section (docs/work/promotion.md
+    Phase 4) — present only when `graph.deployment.spec.version` resolved to
+    a `Version` document actually tagged with a ring (`spec.promotion.ring`).
+
+    Answers a different question than Phase 2's cross-document checks:
+    "did *this* deployment land where *I* meant it to", a human-intent
+    check against the one document this build actually used — not whether
+    every `Version` document in the workspace is internally consistent with
+    every other one (that's `validate_promotions()`'s job, already wired
+    into `strata validate`). So this reads `graph.version` directly, never
+    `build_promotion_view()` — no cross-document grouping is needed to
+    answer it.
+
+    `workspace` comes from the deployment's own `spec.workspace`, not
+    `version.spec.workspace` — this section is deployment-scoped ("did
+    *my* deployment land right"), and the deployment's own declared value
+    is the one a human actually wrote down, whether or not the `Version`
+    document also happens to declare one. `wave` is omitted entirely (not
+    `null`) when the document carries no wave, matching every other
+    omitted-rather-than-null field in this file.
+    """
+    version = graph.version
+    if version is None:
+        return None
+    promotion = version.spec.promotion
+    if promotion is None or promotion.ring is None:
+        return None
+
+    workspace = graph.deployment.spec.workspace if graph.deployment is not None else version.spec.workspace
+    entry: dict[str, Any] = {
+        "workspace": workspace,
+        "ring": promotion.ring,
+        "order": promotion.order,
+        "version": version.meta.name,
+    }
+    if promotion.wave is not None:
+        entry["wave"] = promotion.wave
+    return entry
+
+
+def write_resolved_manifest(build_path: Path, graph: ResolvedWorkspaceGraph) -> Path:
+    """Write `build_path/resolved.yaml` (docs/design/build-time-value-categories.md,
+    Q8) — plain YAML, deliberately not `*.auto.tfvars.json`: Terraform never
+    auto-loads it, so no `.tf` module needs a matching `variable {}` block
+    just to accommodate strata's own bookkeeping output.
+
+    Safe to write in full: every value in `graph.variable_refs`/`.feature_refs`
+    is either a declaration (no `value` key at all) or a `constant`/
+    `environment`-store value already written to a real `.auto.tfvars.json`
+    file elsewhere in this same build. `graph.secret_refs` never carries a
+    `value` at all — enforced by `ValueReference`'s own construction in
+    `build_value_references()`, not filtered out here.
+
+    Gains an optional `promotion` key (docs/work/promotion.md Phase 4,
+    `_dump_promotion()`) when `graph.version` resolved to a document tagged
+    with a ring — omitted entirely, not written as `null`/`{}`, for the
+    common untagged case (Worked Example A).
+    """
+    manifest = {
+        "variables": _dump_refs(graph.variable_refs),
+        "features": _dump_refs(graph.feature_refs),
+        "secrets": _dump_refs(graph.secret_refs),
+        "properties": graph.properties,
+        "custom": graph.custom,
+    }
+    promotion = _dump_promotion(graph)
+    if promotion is not None:
+        manifest["promotion"] = promotion
+    build_path.mkdir(parents=True, exist_ok=True)
+    path = build_path / "resolved.yaml"
+    path.write_text(yaml.safe_dump(manifest, sort_keys=True), encoding="utf-8")
+    return path
+
+
+def ordered_by_depends_on(steps: list[ProvisioningStepModel]) -> list[ProvisioningStepModel]:
+    """Return `steps` in an order where every `depends_on` runs first.
+
+    Assumes `steps` already passed `provisioning_model.validate_provisioning_steps()`
+    (acyclic, unique names, `depends_on` referencing real steps) — does not
+    re-validate existence. A cycle here now raises (via `topological_order()`,
+    docs/design/provisioner-source-dependencies.md — the same
+    Kahn's-algorithm shape `validate_provisioning_steps()` already uses to
+    *detect* a cycle, here used to keep the real order instead) rather than
+    silently dropping the cyclic steps from the result, which was this
+    function's old behaviour — this is never called on unvalidated input in
+    the first place (`WorkspaceSpecModel`'s own `validate_execution()`
+    already guarantees it for `spec.execution`), so the change is not
+    observable on any real call site.
+    """
+    by_name = {step.name: step for step in steps}
+    depends_on = {step.name: step.depends_on or [] for step in steps}
+    order = topological_order(list(by_name), depends_on, label="execution steps")
+    return [by_name[name] for name in order]
+
+
+def materialise_provisioner_sources(
+    context: SolutionContext,
+    build_path: Path,
+    remotes: dict[str, SolutionRemoteModel],
+    workspace: WorkspaceModel,
+    provisioner: ProvisionerModel,
+    materialised: dict[str, Path | None],
+    *,
+    dry_run: bool = False,
+    on_step: Callable[[str], None] | None = None,
+    credentials: RemoteCredentialResolver | None = None,
+) -> Path | None:
+    """Recursively sync `provisioner.depends_on`'s own sources first, then
+    `provisioner`'s own (ADR-0029 — docs/design/provisioner-source-dependencies.md).
+    This is the actual fix for the reported bug: a provisioner
+    named only in another provisioner's `depends_on`, never in `execution`,
+    used to never be passed to `sync_source()` at all.
+
+    Plain reachability DFS, not a full topological sort — sibling sources
+    are independent file copies into separate directories with no
+    cross-reads at sync time, so the *order* two unrelated dependencies are
+    copied in never matters, only whether each gets synced at all does
+    (contrast `ordered_by_depends_on()` above, which orders *execution*
+    steps, where real ordering does matter). `WorkspaceSpecModel.
+    validate_provisioner_depends_on()` already guarantees this graph is
+    acyclic, so this never needs to detect a cycle itself.
+
+    `materialised` is shared across the whole `build_run()` invocation
+    (seeded once before the step loop) so a dependency provisioner named by
+    more than one consumer (the issue's own `iac_components`/
+    `iac_primitives` example, each depended on by the same or different
+    step provisioners) is synced exactly once. Keyed by provisioner name,
+    not by path — a provisioner with no `source` (a sync/GitOps dependency,
+    an unusual but not rejected shape, see this doc's own Open Questions)
+    maps to `None` and is treated as already handled on a repeat visit.
+
+    Returns the path `provisioner`'s source was (or, under `dry_run`, would
+    be) materialised to — `None` for a sync/GitOps provisioner with no
+    `source` to copy. Only called for a provisioner reached via some other
+    provisioner's `depends_on`; the step loop's own per-step materialisation
+    (handling the step-name-keyed GitOps destination convention) is a
+    separate call site that now writes into this same `materialised` dict
+    too (docs/archive/checkov-integration.md Open Question 2 — so a future
+    evaluator reads one unified mapping regardless of how a provisioner was
+    reached) — a provisioner that happens to be both a `depends_on` target
+    and the subject of its own execution step is synced twice (once here,
+    once by the step loop), which is harmless (`sync_source()` is an
+    idempotent copy); the step loop's own write simply overwrites this
+    function's entry with the (identical) path afterwards.
+    """
+    if provisioner.name in materialised:
+        return materialised[provisioner.name]
+    for dep_name in provisioner.depends_on or []:
+        materialise_provisioner_sources(
+            context,
+            build_path,
+            remotes,
+            workspace,
+            find_provisioner(workspace, dep_name),
+            materialised,
+            dry_run=dry_run,
+            on_step=on_step,
+            credentials=credentials,
+        )
+    source_path: Path | None = None
+    if provisioner.source is not None:
+        if dry_run:
+            if on_step:
+                on_step(
+                    f"would materialise provisioner '{provisioner.name}' source "
+                    f"(dependency, {describe_source(provisioner.source)})"
+                )
+        else:
+            source_path = sync_source(context.root, build_path, provisioner.source, remotes, credentials=credentials)
+            if on_step:
+                on_step(f"materialised provisioner '{provisioner.name}' source at {source_path} (dependency)")
+    materialised[provisioner.name] = source_path
+    return source_path
+
+
+def expected_source_paths(build_path: Path, workspace: WorkspaceModel) -> dict[str, Path | None]:
+    """The `materialised` mapping `build_run()` builds, re-derived from the model (security-gates plan P9-1).
+
+    Same reach (every execution step's provisioner plus its `depends_on` closure) and the same
+    destinations; a path not on disk maps to `None`, i.e. "not materialised during this build".
+    """
+    paths: dict[str, Path | None] = {}
+
+    def reach(provisioner: ProvisionerModel) -> None:
+        if provisioner.name in paths:
+            return
+        for dep_name in provisioner.depends_on or []:
+            reach(find_provisioner(workspace, dep_name))
+        paths[provisioner.name] = (
+            source_destination(build_path, provisioner.source) if provisioner.source is not None else None
+        )
+
+    for step in ordered_by_depends_on(workspace.spec.execution or []):
+        provisioner = find_provisioner(workspace, step.provisioner)
+        for dep_name in provisioner.depends_on or []:
+            reach(find_provisioner(workspace, dep_name))
+        paths[provisioner.name] = (
+            source_destination(build_path, provisioner.source)
+            if provisioner.source is not None
+            else build_path / step.name
+        )
+    return {name: path if path is not None and path.exists() else None for name, path in paths.items()}
+
+
+def build_run(
+    context: SolutionContext,
+    deployment_name: str,
+    build_path: Path,
+    *,
+    clean: bool = True,
+    dry_run: bool = False,
+    on_step: Callable[[str], None] | None = None,
+    resolve: bool = False,
+    env_files: list[Path] | None = None,
+    pin: str | None = None,
+) -> Diagnostics:
+    """Render `deployment_name`'s workspace provisioners into `build_path`.
+
+    Renders only — never calls `plan`/`deploy`/`destroy` (ADR-0022 D4).
+
+    Args:
+        context: An already-`require_valid()`-ed solution.
+        deployment_name: `meta.name` of the deployment to build.
+        build_path: Where rendered artifacts land.
+        clean: Wipe `build_path` before rendering (default `True`, matching
+            v1's `PlatformBuilder`). A build only ever adds/overwrites
+            files otherwise (`sync_source()`'s `copytree(dirs_exist_ok=True)`,
+            each `.auto.tfvars.json` written per-category) — a document
+            removed from the solution (the last `dns_zones` entry, say)
+            would leave its old, still-auto-loaded output behind with no
+            error. Callers pointing `build_path` somewhere they don't fully
+            own (e.g. a user-supplied `--build-path`) should pass `False`
+            explicitly — the safe default assumes `build_path` is
+            exclusively this build's own directory
+            (`layout.build_dir()`'s own convention).
+        dry_run: Report what would happen instead of doing it — skips the
+            `clean` wipe, materialising any source, writing `resolved.yaml`,
+            and every render. Deliberately not a second, parallel code path:
+            every step below still runs (deployment/workspace resolution,
+            value-reference derivation, integration resolution, `--resolve`'s
+            validation), so a dry run still catches a bad deployment name,
+            an unresolvable integration, or (with `resolve=True`) a value
+            that fails to resolve — only filesystem mutation is skipped.
+        on_step: Called with a one-line progress message at each meaningful
+            point (clean, per-provisioner materialise/render, per-namespace
+            workload materialise/render) — the same call sites `dry_run`
+            reports through, just describing real work instead of planned
+            work. Optional: a caller that doesn't want streaming progress
+            (e.g. a test) can omit it.
+        resolve: Opt-in full value validation (docs/design/
+            build-time-value-categories.md, Q7) — when `True`, additionally
+            resolves **every** declared variable/feature/secret (not just
+            the `constant`/`environment`-backed ones `build run` writes to
+            disk), including real network calls to integration-backed
+            stores. Findings are merged into the returned `Diagnostics`;
+            the resolved values themselves are never written anywhere,
+            with or without this flag. Default `False`: no network call
+            happens beyond `sync_source()`'s own.
+        env_files: `.env`-style files (docs/design/
+            build-time-value-categories.md, Q9) merged into the real
+            process `os.environ` via `setdefault` before anything else runs
+            — a real, already-exported env var always wins over a file's
+            value. Covers `environment`-store variables/features a local
+            dev machine's shell doesn't already have, the way a CI
+            pipeline's own exported env vars would.
+        pin: `--pin` (docs/work/version-lifecycle.md Phase 5, reviving
+            ADR-0019's own design) — resolves `pin` against `kind: version`
+            and overrides `deployment.spec.version` for this invocation
+            only; zero persisted mutation, the deployment document on disk
+            is never touched. Primary target for this flag: `images`/
+            `charts`/`remotes` pins only ever take effect at build time
+            (see the selection table in docs/work/version-lifecycle.md),
+            so `--pin` has to live here to affect 3 of the 4 pin
+            categories at all. Forwarded to `resolve_deployment()` (the
+            one place the override happens) and to `resolve_values()`
+            when `resolve=True`, so the `artifacts` category's `store:
+            artifact` resolution sees it too.
+
+    Returns:
+        Diagnostics accumulated while deriving build-time values and,
+        if `resolve=True`, validating every declared value — not raised,
+        since a partial build may still be useful to inspect.
+
+    Raises:
+        UsageError: `deployment_name` does not exist, its `workspace` is
+            unset or does not resolve, `pin` does not name an indexed
+            Version document, or a provisioning step names an
+            integration/provisioner that cannot be resolved.
+        BuildCleanError: `clean` is `True`, `dry_run` is `False`, and
+            `build_path` could not be removed (permissions, a file in use).
+    """
+
+    def _step(message: str) -> None:
+        if on_step is not None:
+            on_step(message)
+
+    for env_file in env_files or []:
+        for key, value in load_env_file(env_file).items():
+            os.environ.setdefault(key, value)
+
+    index = context.controller.index
+
+    deployment, workspace = resolve_deployment_workspace(context, deployment_name, version_pin=pin)
+
+    environments = reachable_environments(context, deployment)
+    variable_refs, feature_refs, secret_refs = build_value_references(
+        environments, context=context, deployment=deployment
+    )
+    properties = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "properties")
+    custom = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "custom")
+    tenant = resolve_tenant(context, deployment)
+    version = resolve_version(context, deployment)
+
+    diagnostics = Diagnostics()
+    # docs/work/integration-readiness.md D21: a required integration that is not ready stops the build first.
+    preflight = integration_preflight(index)
+    diagnostics.extend(preflight)
+    if not preflight.ok:
+        return diagnostics
+
+    # Image tag policy (docs/design/image-tag-policy.md): offline, so it also runs under `dry_run`, and before
+    # anything is cleaned or rendered so a `deny` breach leaves nothing behind. A no-op when the field is unset.
+    images = effective_images(context, deployment, pinned_by_flag=pin is not None)
+    image_tag_diagnostics = check_image_tag_policy(context, deployment, workspace, images=images)
+    diagnostics.extend(image_tag_diagnostics)
+    if not image_tag_diagnostics.ok:
+        return diagnostics
+    image_tag_result = build_image_tag_policy_result(workspace, image_tag_diagnostics)
+    resolved = ValueResolution(deployment=deployment_name)
+    if resolve:
+        variables, secrets, features = merge_environment_models(environments)
+        all_keys = sorted({**variables, **secrets, **features})
+        validation = resolve_values(context, deployment_name, all_keys, version_pin=pin)
+        diagnostics.extend(validation.diagnostics)
+
+    if clean and build_path.exists():
+        if dry_run:
+            _step(f"would clean {build_path}")
+        else:
+            try:
+                shutil.rmtree(build_path)
+            except OSError as exc:
+                raise BuildCleanError(f"Could not clean build_path '{build_path}': {exc}") from exc
+            _step(f"cleaned {build_path}")
+
+    graph = build_resolved_workspace_graph(
+        index,
+        workspace,
+        variable_refs=variable_refs,
+        feature_refs=feature_refs,
+        secret_refs=secret_refs,
+        properties=properties,
+        custom=custom,
+        tenant=tenant,
+        deployment=deployment,
+        version=version,
+        images=images,
+    )
+    if dry_run:
+        _step(f"would write {build_path / 'resolved.yaml'}")
+    else:
+        manifest_path = write_resolved_manifest(build_path, graph)
+        _step(f"wrote {manifest_path}")
+    remotes: dict[str, SolutionRemoteModel] = (
+        {remote.name: remote for remote in (context.controller.solution.spec.remotes or [])}
+        if context.controller.solution is not None
+        else {}
+    )
+    remotes = apply_remote_version_pins(remotes, version)
+    # One per build: lazy, so a build that clones nothing resolves no credential; `--resolve` also
+    # lets a credential come from an integration-backed store.
+    credentials = RemoteCredentialResolver(context, deployment_name, allow_stores=resolve, pin=pin)
+
+    # Assets (docs/design/asset-management.md Phases 3-4) — every asset slot
+    # actually selected by this build's execution steps, statically
+    # scanned and resolved once up front, the same timing properties/graph
+    # already have — not lazily inside the step loop below (see that doc's
+    # own "Sync mechanism" section for why).
+    asset_by_slot = effective_assets(workspace, deployment)
+    slot_names = {name for step in (workspace.spec.execution or []) for name in (step.assets or [])}
+    resolved_assets: dict[str, ResolvedAssetInfo] = {}
+    for slot in sorted(slot_names):
+        asset_name = asset_by_slot.get(slot)
+        if asset_name is None:
+            # Defensive backstop, not primary validation — WorkspaceSpecModel.
+            # validate_execution()'s asset_slots check already guarantees this.
+            raise UsageError(f"Workspace '{workspace.meta.name}' references undeclared asset slot '{slot}'.")
+        asset_entry = index.get(PlatformKind.ASSET, asset_name)
+        if asset_entry is None:
+            raise UsageError(
+                f"Workspace '{workspace.meta.name}' asset slot '{slot}' references undeclared asset '{asset_name}'."
+            )
+        asset = apply_asset_version_pin(cast(AssetModel, asset_entry.model), version)
+        into_slot = f" into slot '{slot}'" if slot != asset_name else ""
+        if dry_run:
+            _step(f"would materialise asset '{asset_name}'{into_slot} (source_path '{asset.spec.source_path}')")
+        else:
+            try:
+                asset_path = sync_asset(
+                    context.root, build_path, asset, graph.properties, remotes, slot=slot, credentials=credentials
+                )
+            except SourceSyncError as exc:
+                if slot == asset_name:
+                    raise
+                raise SourceSyncError(f"Asset slot '{slot}': {exc}") from exc
+            _step(f"materialised asset '{asset_name}'{into_slot} at {asset_path}")
+            resolved_assets[slot] = resolved_asset_info(build_path, slot, asset_name)
+    if resolved_assets:
+        # ResolvedWorkspaceGraph is frozen (ADR-0021 D2's immutable-handoff
+        # shape) — `graph` was already assembled/written to resolved.yaml
+        # above, so this replaces it with an equivalent copy carrying
+        # `resolved_assets`, picked up by every `integration.prepare(...,
+        # graph=graph, ...)` call in the step loop below
+        # (`build_strata_assets()`, docs/design/asset-management.md Phase 4).
+        graph = replace(graph, resolved_assets=resolved_assets)
+
+    materialised: dict[str, Path | None] = {}
+    for step in ordered_by_depends_on(workspace.spec.execution or []):
+        provisioner = find_provisioner(workspace, step.provisioner)
+        for dep_name in provisioner.depends_on or []:
+            materialise_provisioner_sources(
+                context,
+                build_path,
+                remotes,
+                workspace,
+                find_provisioner(workspace, dep_name),
+                materialised,
+                dry_run=dry_run,
+                on_step=on_step,
+                credentials=credentials,
+            )
+        integration = resolve_integration(index, provisioner)
+        integration_type = type(integration).__name__
+
+        template_path: Path | None = None
+        if provisioner.output and provisioner.output.template:
+            template_path = context.root / provisioner.output.template
+            if not template_path.is_file():
+                raise UsageError(
+                    f"Provisioner '{provisioner.name}': output.template '{provisioner.output.template}' "
+                    f"does not exist at {template_path}."
+                )
+
+        if dry_run:
+            if provisioner.source is None:
+                _step(f"provisioner '{step.name}': no source to materialise (sync/GitOps)")
+            else:
+                _step(f"would materialise provisioner '{step.name}' source ({describe_source(provisioner.source)})")
+            if template_path is not None:
+                # Cheap and local — validate now rather than only on a real run,
+                # matching --resolve's own "dry run still catches a bad value" rule.
+                try:
+                    integration.prepare(
+                        build_path / step.name,
+                        resolved=resolved,
+                        provisioner=provisioner,
+                        graph=replace(graph, step_root=step.name),
+                        template_path=template_path,
+                    )
+                except IntegrationError as exc:
+                    raise UsageError(f"Provisioner '{provisioner.name}': {exc}") from exc
+                _step(f"would validate output.template for provisioner '{step.name}' (render deferred to deploy)")
+            else:
+                _step(f"would render provisioner '{step.name}' via {integration_type}")
+            continue
+
+        if provisioner.source is None:
+            # Sync/GitOps provisioner (argocd/flux) — renders from the
+            # resolved graph directly, nothing to materialise first.
+            source_path = build_path / step.name
+        else:
+            source_path = sync_source(context.root, build_path, provisioner.source, remotes, credentials=credentials)
+            _step(f"materialised provisioner '{step.name}' source at {source_path}")
+
+        # Extends `materialised` (ADR-0029, seeded above) to also cover
+        # execution-step provisioners, not just dependency-only ones — a
+        # real prerequisite found while designing the Checkov integration
+        # (docs/archive/checkov-integration.md Open Question 2): this
+        # `source_path` used to be a local variable, discarded here before
+        # any future evaluator could read it. `materialised` is now the one
+        # unified mapping regardless of how a provisioner was reached —
+        # reusing the existing dict rather than adding a second, parallel
+        # one that would otherwise sit unread until a future phase wires in
+        # a real consumer.
+        materialised[provisioner.name] = source_path
+
+        try:
+            # `remotes`/`root` are unused by every `prepare()` override except
+            # `BaseGitOpsIntegration`'s (docs/design/gitops-integration.md
+            # Phase 3) — accepted for free by the base `InfraIntegration.
+            # prepare()`'s own `**kwargs: Any`, so no other integration is
+            # affected.
+            integration.prepare(
+                source_path,
+                resolved=resolved,
+                provisioner=provisioner,
+                graph=replace(graph, step_root=source_path.relative_to(build_path).as_posix()),
+                template_path=template_path,
+                remotes=remotes,
+                root=context.root,
+            )
+        except IntegrationError as exc:
+            # See workload_controller.build_workload_modules()'s identical
+            # guard: IntegrationError is a plain Exception, not a
+            # StrataError, and would otherwise escape command_run()'s
+            # `except StrataError` as a raw traceback.
+            raise UsageError(f"Provisioner '{provisioner.name}': {exc}") from exc
+        if template_path is not None:
+            _step(f"validated output.template for provisioner '{step.name}' — render deferred to deploy")
+        else:
+            _step(f"rendered provisioner '{step.name}' via {integration_type}")
+
+    # Workload pipeline (ADR-0022 D5-D7) — a second, disconnected input shape
+    # (Namespace.spec.modules, never ProvisionerModel/ProvisioningStepModel),
+    # so it is not part of the ordered provisioner loop above; every
+    # namespace the workspace references is already resolved onto `graph`
+    # (build_resolved_workspace_graph()), so no extra index walk is needed.
+    for namespace in graph.namespaces.values():
+        workload_diagnostics = build_workload_modules(
+            index,
+            context.root,
+            remotes,
+            namespace,
+            resolved,
+            build_path,
+            version=version,
+            context=context,
+            deployment=deployment,
+            dry_run=dry_run,
+            on_step=on_step,
+            credentials=credentials,
+        )
+        diagnostics.extend(workload_diagnostics)
+
+    # SBOM generation (docs/design/sbom-generation.md Phase 1) — runs dead
+    # last, after every provisioner/workload module is materialised and
+    # rendered, matching v1's own unconditional "sbom runs last" ordering.
+    # Skipped in a dry run: nothing has actually been rendered to scan yet.
+    if not dry_run:
+        sbom_diagnostics = write_sbom(build_path, graph, index)
+        diagnostics.extend(sbom_diagnostics)
+        _step(f"wrote {build_path / 'sbom.json'}")
+
+        # CVE policy gate (docs/archive/cve-scanner-integration.md) — runs
+        # immediately after SBOM generation, the only point `build_run()`
+        # has both a written SBOM and the resolved workspace to read
+        # `spec.cve_policy` from. A no-op when that field is unset.
+        #
+        # `evaluate_cve_policy()`'s own, unmerged Diagnostics is captured
+        # here (not immediately folded into the shared `diagnostics`
+        # accumulator) so `policy_results.cve_policy_result()` can build a
+        # ManifestPolicyResultModel from exactly this policy's own
+        # findings, not build_run()'s full, mixed accumulation
+        # (docs/work/audit-trail.md's "DeploymentManifestModel.
+        # policy_results population" design).
+        cve_diagnostics = evaluate_cve_policy(build_path, graph.workspace, index)
+        diagnostics.extend(cve_diagnostics)
+        cve_policy_result = build_cve_policy_result(graph.workspace, cve_diagnostics)
+
+        # Checkov policy gate (docs/archive/checkov-integration.md Phase 2/3) —
+        # same placement/capture-then-extend pattern as the CVE gate just
+        # above; reads each provisioner's real source path from the same
+        # `materialised` dict the step loop above now populates for every
+        # provisioner (Phase 1's own prerequisite fix). `namespaces`/`index`
+        # are only used by the `framework: helm` branch (Phase 3) — already
+        # in scope here, same `graph`/`index` the rest of `build_run()` uses.
+        checkov_diagnostics = evaluate_checkov_policy(
+            build_path, graph.workspace, materialised, namespaces=graph.namespaces, index=index
+        )
+        diagnostics.extend(checkov_diagnostics)
+        checkov_policy_result = build_checkov_policy_result(graph.workspace, checkov_diagnostics)
+
+        # Both results are written together, not via two separate calls —
+        # write_policy_results() overwrites the whole file each call, so a
+        # second, independent call here would have silently discarded
+        # whichever policy's result was written first the moment a second
+        # build-phase policy was ever configured at once.
+        policy_results = [r for r in (image_tag_result, cve_policy_result, checkov_policy_result) if r is not None]
+        if policy_results:
+            write_policy_results(build_path, policy_results)
+    else:
+        _step(f"would write {build_path / 'sbom.json'}")
+
+    return diagnostics

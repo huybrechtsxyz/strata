@@ -1,38 +1,26 @@
-# Workspace README
+# `.strata/`
 
-This `.strata` folder contains workspace state and helper files created by the Strata CLI.
+This directory is managed by the `strata` CLI. Files under it are
+refreshed automatically by `strata sln update` (rerun after upgrading the
+installed `strata` package) — don't hand-edit anything here, since your
+changes will be silently overwritten the next time someone runs it.
 
-Included files:
+`schemas/` holds one JSON Schema per document kind, plus a `strata.json`
+umbrella schema that dispatches to the right one based on each document's
+own `kind:` field — regenerated from the installed `strata` package's own
+models every time, so it always matches the version you have installed.
+`.vscode/settings.json` (scaffolded once by `strata sln init`, yours to
+customize afterwards) points VS Code's YAML extension at `strata.json`, so
+every `.yaml`/`.yml` file in this solution gets real-time schema validation
+and autocomplete out of the box.
 
-- `logging.yaml` — development logging configuration for local runs
-- `cli.yaml` — CLI preference values for the workspace
-- `.gitignore` — files to ignore from the `.strata` folder
-- `integrations/` — per-integration help documents (one markdown file per integration)
+The schemas are written to be read as well: each one's root `description` says what the kind is for and its
+`examples` are working documents to start from, a `Rules:` section lists the cross-field rules that
+`strata validate` enforces, and hovering a field in the editor shows its description and those rules. The
+`strata` agent skill (`.claude/skills/strata/`) draws on them to answer "how do I model this?".
 
-## Using the integration docs
-
-Each file under `.strata/integrations/` documents how to configure and use an integration (for example, `azure_keyvault.md`, `git.md`, `terraform.md`). Use these documents as the first-stop reference when wiring credentials, environment variables, or diagnosing common issues.
-
-Examples:
-
-- To see the Azure Key Vault guide: open `.strata/integrations/azure_keyvault.md`
-- To find quick Git setup instructions: open `.strata/integrations/git.md`
-- To find Bitwarden Secrets Manager setup: open `.strata/integrations/bitwarden.md`
-
-## Available integrations
-
-| File                   | Integration               |
-| ---------------------- | ------------------------- |
-| `azure_appconfig.md`   | Azure App Configuration   |
-| `azure_keyvault.md`    | Azure Key Vault           |
-| `bitwarden.md`         | Bitwarden Secrets Manager |
-| `docker.md`            | Docker                    |
-| `git.md`               | Git                       |
-| `hashicorp_consul.md`  | HashiCorp Consul          |
-| `hashicorp_vault.md`   | HashiCorp Vault           |
-| `store_integration.md` | Generic Store             |
-| `terraform.md`         | Terraform                 |
-
-## Customising
-
-You can safely edit these files in your workspace to add project-specific notes (for example, the vault name to use in your environment or a private registry URL). Local edits are intended to be committed into your repository.
+Anything you *do* want to customize belongs outside `.strata/` — for
+example, `.github/pull_request_template.md` and
+`.github/ISSUE_TEMPLATE/deployment-change-request.yml` (scaffolded by
+`strata sln init`) are yours to edit freely; `strata sln update` never
+touches them.

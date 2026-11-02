@@ -1,54 +1,79 @@
 #!/usr/bin/env python3
-"""
-===============================================================================
-Script Name   : test_models_provider.py
-Author        : Vincent Huybrechts
-Version       : 1.0.0
-Python Version: 3.12+
-Description   : Security tests for ProviderModel YAML validation.
-===============================================================================
-"""
-
-import os
+"""Tests for ProviderModel YAML validation."""
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from strata.models.provider_model import ProviderModel
 
 
-@pytest.fixture(autouse=True)
-def set_pythonpath_env(monkeypatch):
-    monkeypatch.setenv("PYTHONPATH", "src")
+def _minimal_provider() -> dict:
+    return {
+        "meta": {"name": "kamatera-primary"},
+        "spec": {
+            "type": "kamatera",
+            "region": "eu-west",
+        },
+    }
 
 
-PROVIDER_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "providers")
+def test_provider_minimal_is_valid():
+    """A minimal provider (only required fields) validates successfully."""
+    model = ProviderModel.model_validate(_minimal_provider())
+    assert model.meta.name == "kamatera-primary"
+    assert model.spec.type == "kamatera"
+    assert model.spec.region == "eu-west"
+    assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
+    assert model.kind.value == "provider"
 
-# List of YAML files to test (extensible)
-PROVIDER_VALID_FILES = [
-    os.path.join(PROVIDER_FOLDER, "provider-standard.yaml"),
-]
 
-# List of invalid YAML files to test (extensible)
-PROVIDER_INVALID_FILES = [os.path.join(PROVIDER_FOLDER, "provider-invalid.yaml")]
-
-
-@pytest.mark.parametrize("yaml_path", PROVIDER_VALID_FILES)
-def test_provider_yaml_valid(yaml_path):
-    """Test that a provider YAML file is a valid ProviderModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def test_provider_full_is_valid():
+    """A provider with authentication, configuration, and lifecycle validates successfully."""
+    data = _minimal_provider()
+    data["spec"]["authentication"] = {
+        "method": "cli",
+        "cli": {"use_cli": True},
+    }
+    data["spec"]["lifecycle"] = {
+        "deploy_plan_before": {"scripts": ["scripts/validate.sh"]},
+        "deploy_provision": {"description": "Provision the provider", "scripts": ["scripts/provision.py"]},
+    }
+    data["spec"]["configuration"] = {"skip_provider_registration": True}
+    data["spec"]["custom"] = {"costcenter": "strata"}
     model = ProviderModel.model_validate(data)
-    assert model is not None
+    assert model.spec.authentication.method == "cli"
+    assert model.spec.lifecycle.root["deploy_plan_before"].scripts == ["scripts/validate.sh"]
+    assert model.spec.configuration == {"skip_provider_registration": True}
+    assert model.spec.custom == {"costcenter": "strata"}
 
 
-@pytest.mark.parametrize("yaml_path", PROVIDER_INVALID_FILES)
-def test_provider_yaml_invalid(yaml_path):
-    """Test that a provider YAML file is NOT a valid ProviderModel."""
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+def test_provider_rejects_references_field():
+    """spec.references is rejected (Requirement was removed as a schema concept — ADR-0002)."""
+    data = _minimal_provider()
+    data["spec"]["references"] = {"variables": ["internal_network_cidr"]}
     with pytest.raises(ValidationError):
         ProviderModel.model_validate(data)
-    model = None
-    assert model is None
+
+
+def test_provider_missing_required_field_is_invalid():
+    """Missing spec.region raises a ValidationError."""
+    data = _minimal_provider()
+    del data["spec"]["region"]
+    with pytest.raises(ValidationError):
+        ProviderModel.model_validate(data)
+
+
+def test_provider_rejects_unknown_fields():
+    """Extra/unknown fields are rejected (extra='forbid')."""
+    data = _minimal_provider()
+    data["spec"]["unknown_field"] = "oops"
+    with pytest.raises(ValidationError):
+        ProviderModel.model_validate(data)
+
+
+def test_provider_name_must_be_lowercase():
+    """meta.name must match the PlatformName pattern (lowercase, dashes/underscores)."""
+    data = _minimal_provider()
+    data["meta"]["name"] = "Invalid-Name"
+    with pytest.raises(ValidationError):
+        ProviderModel.model_validate(data)

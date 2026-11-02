@@ -1,820 +1,851 @@
-"""Tests for the `values` command group (list / get / set / resolve)."""
+#!/usr/bin/env python3
+"""Tests for `strata values get`."""
 
-import os
-from unittest.mock import MagicMock, patch
+import json
 
+import pytest
 from click.testing import CliRunner
 
-from strata.commands.cli_values import values_group
-from strata.commands.deploy.get_values_deploy_command import GetValuesDeployCommand
-
-
-class TestValuesList:
-    def test_missing_file_option_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(values_group, ["list", "--work-path", str(tmp_path)])
-        assert result.exit_code == 2
-
-    def test_basic_list_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.list_values_deploy_command.ListValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(values_group, ["list", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_type_filter_variables(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.list_values_deploy_command.ListValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group, ["list", "-f", "deploy.yaml", "--type", "variables", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code == 0
-
-    def test_type_filter_secrets(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.list_values_deploy_command.ListValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group, ["list", "-f", "deploy.yaml", "--type", "secrets", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code == 0
-
-    def test_type_filter_features(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.list_values_deploy_command.ListValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group, ["list", "-f", "deploy.yaml", "--type", "features", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code == 0
-
-    def test_invalid_type_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(
-            values_group, ["list", "-f", "deploy.yaml", "--type", "badtype", "--work-path", str(tmp_path)]
-        )
-        assert result.exit_code == 2
-
-    def test_show_store_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.list_values_deploy_command.ListValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group, ["list", "-f", "deploy.yaml", "--show-store", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code == 0
-
-    def test_unresolved_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.list_values_deploy_command.ListValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group, ["list", "-f", "deploy.yaml", "--unresolved", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code == 0
-
-    def test_stage_option(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.list_values_deploy_command.ListValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group, ["list", "-f", "deploy.yaml", "--stage", "production", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code == 0
-
-    def test_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.list_values_deploy_command.ListValuesDeployCommand.execute",
-            return_value=False,
-        ):
-            result = runner.invoke(values_group, ["list", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
-
+from strata.commands.cli import cli
+from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE, EXIT_VALIDATION
+
+MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
+kind: solution
+meta:
+  name: test-solution
+spec: {}
+"""
+
+ENVIRONMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec:
+  variables:
+    - key: REGION
+      store: constant
+      value: westeurope
+  secrets:
+    - key: DB_PASSWORD
+      store: constant
+      value: hunter2
+"""
+
+DEPLOYMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: app
+spec:
+  partial: true
+  environments: [prd]
+"""
+
+ENVIRONMENT_FULL = """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec:
+  variables:
+    - key: REGION
+      store: constant
+      value: westeurope
+  secrets:
+    - key: DB_PASSWORD
+      store: infisical
+      value: db/password
+      generate:
+        type: password
+        length: 24
+      rotate:
+        max_age: 90
+        policy: warn
+  features:
+    - key: ENABLE_BETA
+      store: constant
+      value: "true"
+"""
+
+
+@pytest.fixture
+def runner():
+    return CliRunner()
+
+
+@pytest.fixture
+def solution(tmp_path):
+    root = tmp_path / "sln"
+    root.mkdir()
+    (root / "strata.yaml").write_text(MANIFEST, encoding="utf-8")
+    (root / "environment.yaml").write_text(ENVIRONMENT, encoding="utf-8")
+    (root / "deployment.yaml").write_text(DEPLOYMENT, encoding="utf-8")
+    return root
+
+
+@pytest.fixture
+def solution_full(tmp_path):
+    """A solution whose environment declares one of each kind — a secret
+    with `generate:`/`rotate:` specs, for `values list --declared-only`."""
+    root = tmp_path / "sln-full"
+    root.mkdir()
+    (root / "strata.yaml").write_text(MANIFEST, encoding="utf-8")
+    (root / "environment.yaml").write_text(ENVIRONMENT_FULL, encoding="utf-8")
+    (root / "deployment.yaml").write_text(DEPLOYMENT, encoding="utf-8")
+    return root
+
+
+def _run(runner, *args):
+    return runner.invoke(cli, ["values", "get", *[str(a) for a in args]])
+
+
+def _run_list(runner, *args):
+    return runner.invoke(cli, ["values", "list", *[str(a) for a in args]])
+
+
+# ---------------------------------------------------------------------------
+# Exit codes
+# ---------------------------------------------------------------------------
+
 
-class TestValuesGet:
-    def test_missing_file_option_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(values_group, ["get", "DB_PASSWORD", "--work-path", str(tmp_path)])
-        assert result.exit_code == 2
-
-    def test_missing_key_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(values_group, ["get", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 2
-
-    def test_single_key_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.get_values_deploy_command.GetValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group, ["get", "-f", "deploy.yaml", "DB_PASSWORD", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code == 0
-
-    def test_multiple_keys_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.get_values_deploy_command.GetValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group,
-                ["get", "-f", "deploy.yaml", "DB_PASSWORD", "API_KEY", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.get_values_deploy_command.GetValuesDeployCommand.execute",
-            return_value=False,
-        ):
-            result = runner.invoke(
-                values_group, ["get", "-f", "deploy.yaml", "MISSING_KEY", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code != 0
-
-    def test_format_raw_with_single_key_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.get_values_deploy_command.GetValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group,
-                ["get", "-f", "deploy.yaml", "DB_PASSWORD", "--format", "raw", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_format_raw_with_multiple_keys_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(
-            values_group,
-            [
-                "get",
-                "-f",
-                "deploy.yaml",
-                "DB_PASSWORD",
-                "API_KEY",
-                "--format",
-                "raw",
-                "--work-path",
-                str(tmp_path),
-            ],
-        )
-        assert result.exit_code == 2
-
-    def test_format_env_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.get_values_deploy_command.GetValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group,
-                ["get", "-f", "deploy.yaml", "DB_PASSWORD", "--format", "env", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_format_export_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.get_values_deploy_command.GetValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group,
-                ["get", "-f", "deploy.yaml", "DB_PASSWORD", "--format", "export", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_invalid_format_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(
-            values_group,
-            ["get", "-f", "deploy.yaml", "DB_PASSWORD", "--format", "bogus", "--work-path", str(tmp_path)],
-        )
-        assert result.exit_code == 2
-
-    def test_format_and_output_mutually_exclusive_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(
-            values_group,
-            [
-                "get",
-                "-f",
-                "deploy.yaml",
-                "DB_PASSWORD",
-                "--format",
-                "env",
-                "--output",
-                "json",
-                "--work-path",
-                str(tmp_path),
-            ],
-        )
-        assert result.exit_code == 2
-
-
-class TestValuesSet:
-    """Tests for `strata values set`."""
-
-    def test_missing_file_option_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(values_group, ["set", "--key", "FOO", "--value", "bar", "--work-path", str(tmp_path)])
-        assert result.exit_code == 2
-
-    def test_missing_key_option_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(
-            values_group, ["set", "-f", "deploy.yaml", "--value", "bar", "--work-path", str(tmp_path)]
-        )
-        assert result.exit_code == 2
-
-    def test_no_value_source_fails(self, tmp_path):
-        """No --value, --from-file, or --stdin should fail."""
-        runner = CliRunner()
-        with (
-            patch(
-                "strata.commands.deploy.set_values_deploy_command.SetValuesDeployCommand._initialize",
-                return_value=True,
-            ),
-            patch(
-                "strata.commands.deploy.set_values_deploy_command.SetValuesDeployCommand._before_execute",
-                return_value=True,
-            ),
-        ):
-            result = runner.invoke(
-                values_group, ["set", "-f", "deploy.yaml", "--key", "FOO", "--work-path", str(tmp_path)]
-            )
-        assert result.exit_code != 0
-
-    def test_value_flag_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.set_values_deploy_command.SetValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group,
-                ["set", "-f", "deploy.yaml", "--key", "DB_HOST", "--value", "new-host", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_from_file_flag_mocked(self, tmp_path):
-        cert_file = tmp_path / "cert.pem"
-        cert_file.write_text("-----BEGIN CERTIFICATE-----\nfoo\n-----END CERTIFICATE-----\n")
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.set_values_deploy_command.SetValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group,
-                [
-                    "set",
-                    "-f",
-                    "deploy.yaml",
-                    "--key",
-                    "TLS_CERT",
-                    "--from-file",
-                    str(cert_file),
-                    "--work-path",
-                    str(tmp_path),
-                ],
-            )
-        assert result.exit_code == 0
-
-    def test_stdin_flag_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.set_values_deploy_command.SetValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group,
-                ["set", "-f", "deploy.yaml", "--key", "SSH_KEY", "--stdin", "--work-path", str(tmp_path)],
-                input="ssh-rsa AAAA...\n",
-            )
-        assert result.exit_code == 0
-
-    def test_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.set_values_deploy_command.SetValuesDeployCommand.execute",
-            return_value=False,
-        ):
-            result = runner.invoke(
-                values_group,
-                ["set", "-f", "deploy.yaml", "--key", "FOO", "--value", "bar", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code != 0
-
-
-class TestValuesSetCommand:
-    """Unit tests for SetValuesDeployCommand internals."""
-
-    def test_resolve_input_value_from_value(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="K", value="hello")
-        result = cmd._resolve_input_value()
-        assert result == "hello"
-
-    def test_resolve_input_value_from_file(self, tmp_path):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-
-        f = tmp_path / "data.txt"
-        f.write_text("multiline\ncontent\n")
-        cmd = SetValuesDeployCommand(file="x.yaml", key="K", from_file=str(f))
-        result = cmd._resolve_input_value()
-        assert result == "multiline\ncontent\n"
-
-    def test_resolve_input_value_missing_file(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="K", from_file="/nonexistent/path.txt")
-        result = cmd._resolve_input_value()
-        assert result is None
-        assert any("not found" in e.lower() for e in cmd._errors)
-
-    def test_resolve_input_value_multiple_sources_fails(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="K", value="x", from_stdin=True)
-        result = cmd._resolve_input_value()
-        assert result is None
-        assert any("multiple" in e.lower() for e in cmd._errors)
-
-    def test_resolve_input_value_no_source_fails(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="K")
-        result = cmd._resolve_input_value()
-        assert result is None
-        assert any("no value" in e.lower() for e in cmd._errors)
-
-    def test_find_item_variable(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-        from strata.models.store_models import VariableStoreModel, VariableStoreType
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="DB_HOST", value="v")
-        env_svc = MagicMock()
-        env_svc.get_variables.return_value = [
-            VariableStoreModel(key="DB_HOST", store=VariableStoreType.CONSTANT, value="old"),
-        ]
-        env_svc.get_secrets.return_value = []
-        env_svc.get_features.return_value = []
-
-        item, item_type = cmd._find_item(env_svc)
-        assert item is not None
-        assert item.key == "DB_HOST"
-        assert item_type == "variable"
-
-    def test_find_item_secret(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-        from strata.models.store_models import SecretStoreModel, SecretStoreType
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="API_KEY", value="v")
-        env_svc = MagicMock()
-        env_svc.get_variables.return_value = []
-        env_svc.get_secrets.return_value = [
-            SecretStoreModel(key="API_KEY", store=SecretStoreType.AZURE_KEYVAULT, value="my-secret-ref"),
-        ]
-        env_svc.get_features.return_value = []
-
-        item, item_type = cmd._find_item(env_svc)
-        assert item is not None
-        assert item.key == "API_KEY"
-        assert item_type == "secret"
-
-    def test_find_item_feature(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-        from strata.models.store_models import FeatureStoreModel, FeatureStoreType
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="DARK_MODE", value="true")
-        env_svc = MagicMock()
-        env_svc.get_variables.return_value = []
-        env_svc.get_secrets.return_value = []
-        env_svc.get_features.return_value = [
-            FeatureStoreModel(key="DARK_MODE", store=FeatureStoreType.CONSTANT, value=False),
-        ]
-
-        item, item_type = cmd._find_item(env_svc)
-        assert item is not None
-        assert item.key == "DARK_MODE"
-        assert item_type == "feature"
-
-    def test_find_item_not_found(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="MISSING", value="v")
-        env_svc = MagicMock()
-        env_svc.get_variables.return_value = []
-        env_svc.get_secrets.return_value = []
-        env_svc.get_features.return_value = []
-
-        item, item_type = cmd._find_item(env_svc)
-        assert item is None
-
-    def test_handle_constant_returns_instruction(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-        from strata.models.store_models import VariableStoreModel, VariableStoreType
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="WORKSPACE", value="new")
-        cmd._deployment_service = MagicMock()
-        env_svc = MagicMock()
-        env_svc.path = "/path/to/env.yaml"
-        cmd._deployment_service.get_environment_service.return_value = env_svc
-
-        item = VariableStoreModel(key="WORKSPACE", store=VariableStoreType.CONSTANT, value="old")
-        ok, msg = cmd._handle_constant(item, "variable")
-        assert ok is True
-        assert "constant" in msg
-        assert "/path/to/env.yaml" in msg
-
-    def test_handle_environment_returns_instruction(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-        from strata.models.store_models import VariableStoreModel, VariableStoreType
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="K", value="v")
-        item = VariableStoreModel(key="K", store=VariableStoreType.ENVIRONMENT, value="MY_ENV_VAR")
-        ok, msg = cmd._handle_environment(item, "new-value")
-        assert ok is True
-        assert "MY_ENV_VAR" in msg
-        assert "export" in msg
-
-    def test_handle_integration_success(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-        from strata.models.store_models import SecretStoreModel, SecretStoreType
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="SECRET", value="v")
-        item = SecretStoreModel(key="SECRET", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
-
-        mock_integration = MagicMock()
-        mock_integration.ensure_available.return_value = (True, None)
-        mock_integration.set_secret.return_value = True
-
-        with (
-            patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized"),
-            patch(
-                "strata.controllers.value_controller.ValueController._get_integration_by_type",
-                return_value=mock_integration,
-            ),
-        ):
-            ok, msg = cmd._handle_integration(item, "secret", "new-secret-value")
-
-        assert ok is True
-        assert "updated" in msg
-        mock_integration.set_secret.assert_called_once_with("my-ref", "new-secret-value")
-
-    def test_handle_integration_no_integration(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-        from strata.models.store_models import SecretStoreModel, SecretStoreType
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="SECRET", value="v")
-        item = SecretStoreModel(key="SECRET", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
-
-        with (
-            patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized"),
-            patch(
-                "strata.controllers.value_controller.ValueController._get_integration_by_type",
-                return_value=None,
-            ),
-        ):
-            ok, msg = cmd._handle_integration(item, "secret", "value")
-
-        assert ok is False
-        assert "no integration" in msg.lower()
-
-    def test_handle_integration_not_available(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-        from strata.models.store_models import VariableStoreModel, VariableStoreType
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="K", value="v")
-        item = VariableStoreModel(key="K", store=VariableStoreType.AZURE_APPCONFIG, value="my/key")
-
-        mock_integration = MagicMock()
-        mock_integration.ensure_available.return_value = (False, "auth failed")
-
-        with (
-            patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized"),
-            patch(
-                "strata.controllers.value_controller.ValueController._get_integration_by_type",
-                return_value=mock_integration,
-            ),
-        ):
-            ok, msg = cmd._handle_integration(item, "variable", "new-val")
-
-        assert ok is False
-        assert "not available" in msg
-
-    def test_handle_integration_set_returns_false(self):
-        from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
-        from strata.models.store_models import VariableStoreModel, VariableStoreType
-
-        cmd = SetValuesDeployCommand(file="x.yaml", key="K", value="v")
-        item = VariableStoreModel(key="K", store=VariableStoreType.HASHICORP_CONSUL, value="config/db_host")
-
-        mock_integration = MagicMock()
-        mock_integration.ensure_available.return_value = (True, None)
-        mock_integration.set_variable.return_value = False
-
-        with (
-            patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized"),
-            patch(
-                "strata.controllers.value_controller.ValueController._get_integration_by_type",
-                return_value=mock_integration,
-            ),
-        ):
-            ok, msg = cmd._handle_integration(item, "variable", "new-val")
-
-        assert ok is False
-        assert "failure" in msg.lower()
-
-
-class TestValuesResolve:
-    """CLI wiring tests for `strata values resolve`."""
-
-    def test_missing_file_option_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(values_group, ["resolve", "--work-path", str(tmp_path)])
-        assert result.exit_code == 2
-
-    def test_basic_resolve_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.resolve_values_deploy_command.ResolveValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(values_group, ["resolve", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_key_filter_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.resolve_values_deploy_command.ResolveValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group,
-                ["resolve", "-f", "deploy.yaml", "-k", "DB_HOST", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_probe_flag_mocked(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.resolve_values_deploy_command.ResolveValuesDeployCommand.execute",
-            return_value=True,
-        ):
-            result = runner.invoke(
-                values_group,
-                ["resolve", "-f", "deploy.yaml", "--probe", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.resolve_values_deploy_command.ResolveValuesDeployCommand.execute",
-            return_value=False,
-        ):
-            result = runner.invoke(values_group, ["resolve", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
-
-
-class TestValuesResolveCommand:
-    """Unit tests for ResolveValuesDeployCommand internals."""
-
-    def test_diagnose_constant_always_ok(self):
-        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
-        from strata.models.store_models import VariableStoreModel, VariableStoreType
-
-        cmd = ResolveValuesDeployCommand(file="x.yaml")
-        item = VariableStoreModel(key="K", store=VariableStoreType.CONSTANT, value="hello")
-        diag = cmd._diagnose_item(item, "variable")
-        assert diag["ok"] is True
-        assert diag["store"] == "constant"
-        assert any(c["check"] == "store" for c in diag["checks"])
-
-    def test_diagnose_env_var_set(self):
-        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
-        from strata.models.store_models import VariableStoreModel, VariableStoreType
-
-        cmd = ResolveValuesDeployCommand(file="x.yaml")
-        item = VariableStoreModel(key="K", store=VariableStoreType.ENVIRONMENT, value="PATH")
-        diag = cmd._diagnose_item(item, "variable")
-        # PATH is always set
-        assert diag["ok"] is True
-        assert any(c["status"] == "ok" and "set" in c["detail"] for c in diag["checks"])
-
-    def test_diagnose_env_var_not_set(self):
-        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
-        from strata.models.store_models import VariableStoreModel, VariableStoreType
-
-        cmd = ResolveValuesDeployCommand(file="x.yaml")
-        item = VariableStoreModel(key="K", store=VariableStoreType.ENVIRONMENT, value="STRATA_TEST_NONEXISTENT_VAR_XYZ")
-        diag = cmd._diagnose_item(item, "variable")
-        assert diag["ok"] is False
-        assert any(c["status"] == "fail" for c in diag["checks"])
-
-    def test_diagnose_github_not_in_ci(self):
-        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
-        from strata.models.store_models import SecretStoreModel, SecretStoreType
-
-        cmd = ResolveValuesDeployCommand(file="x.yaml")
-        item = SecretStoreModel(key="TOKEN", store=SecretStoreType.GITHUB, value="MY_TOKEN")
-        with patch.dict("os.environ", {}, clear=False):
-            # Ensure GITHUB_ACTIONS is not set
-            os.environ.pop("GITHUB_ACTIONS", None)
-            os.environ.pop("MY_TOKEN", None)
-            diag = cmd._diagnose_item(item, "secret")
-        assert diag["ok"] is False
-        assert any(c["check"] == "context" and c["status"] == "warn" for c in diag["checks"])
-        assert any(c["check"] == "env_var" and c["status"] == "fail" for c in diag["checks"])
-
-    def test_diagnose_integration_not_registered(self):
-        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
-        from strata.models.store_models import SecretStoreModel, SecretStoreType
-
-        cmd = ResolveValuesDeployCommand(file="x.yaml")
-        item = SecretStoreModel(key="S", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
-
-        with patch(
-            "strata.controllers.value_controller.ValueController._get_integration_by_type",
-            return_value=None,
-        ):
-            diag = cmd._diagnose_item(item, "secret")
-
-        assert diag["ok"] is False
-        assert any(c["check"] == "integration" and c["status"] == "fail" for c in diag["checks"])
-
-    def test_diagnose_integration_not_available(self):
-        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
-        from strata.models.store_models import SecretStoreModel, SecretStoreType
-
-        cmd = ResolveValuesDeployCommand(file="x.yaml")
-        item = SecretStoreModel(key="S", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
-
-        mock_integration = MagicMock()
-        mock_integration.ensure_available.return_value = (False, "az CLI not found")
-
-        with patch(
-            "strata.controllers.value_controller.ValueController._get_integration_by_type",
-            return_value=mock_integration,
-        ):
-            diag = cmd._diagnose_item(item, "secret")
-
-        assert diag["ok"] is False
-        assert any(c["check"] == "available" and c["status"] == "fail" for c in diag["checks"])
-
-    def test_diagnose_integration_available_no_probe(self):
-        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
-        from strata.models.store_models import SecretStoreModel, SecretStoreType
-
-        cmd = ResolveValuesDeployCommand(file="x.yaml", probe=False)
-        item = SecretStoreModel(key="S", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
-
-        mock_integration = MagicMock()
-        mock_integration.ensure_available.return_value = (True, "")
-        mock_integration.get_info.return_value = {"version": "2.50.0"}
-
-        with patch(
-            "strata.controllers.value_controller.ValueController._get_integration_by_type",
-            return_value=mock_integration,
-        ):
-            diag = cmd._diagnose_item(item, "secret")
-
-        assert diag["ok"] is True
-        assert not any(c["check"] == "probe" for c in diag["checks"])
-
-    def test_diagnose_integration_with_probe_success(self):
-        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
-        from strata.models.store_models import SecretStoreModel, SecretStoreType
-
-        cmd = ResolveValuesDeployCommand(file="x.yaml", probe=True)
-        item = SecretStoreModel(key="S", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
-
-        mock_integration = MagicMock()
-        mock_integration.ensure_available.return_value = (True, "")
-        mock_integration.get_info.return_value = {"version": "2.50.0"}
-        mock_integration.get_secret.return_value = "some-value"
-
-        with patch(
-            "strata.controllers.value_controller.ValueController._get_integration_by_type",
-            return_value=mock_integration,
-        ):
-            diag = cmd._diagnose_item(item, "secret")
-
-        assert diag["ok"] is True
-        assert any(c["check"] == "probe" and c["status"] == "ok" for c in diag["checks"])
-
-
-class TestGetValuesDeployCommandFormatRenderers:
-    """Unit tests for GetValuesDeployCommand's --format renderers (raw/env/export)."""
-
-    def test_print_raw_outputs_bare_value(self, capsys):
-        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD"], value_format="raw")
-        cmd._print_raw({"DB_PASSWORD": "s3cr3t"})
-        out = capsys.readouterr().out
-        assert out == "s3cr3t\n"
-
-    def test_print_env_outputs_key_equals_value_lines(self, capsys):
-        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD", "API_KEY"], value_format="env")
-        cmd._print_env({"DB_PASSWORD": "s3cr3t", "API_KEY": "abc123"})
-        out = capsys.readouterr().out
-        assert out == "DB_PASSWORD=s3cr3t\nAPI_KEY=abc123\n"
-
-    def test_print_export_shell_quotes_values(self, capsys):
-        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD"], value_format="export")
-        cmd._print_export({"DB_PASSWORD": "has space's"})
-        out = capsys.readouterr().out
-        assert out == "export DB_PASSWORD='has space'\"'\"'s'\n"
-
-    def test_execute_skips_format_output_when_any_key_failed(self, capsys):
-        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD"], value_format="env")
-        env_service = MagicMock()
-        env_service.get_variables.return_value = []
-        env_service.get_secrets.return_value = []
-        env_service.get_features.return_value = []
-
-        cmd._deployment_service = MagicMock()
-        cmd._deployment_service.get_environment_service.return_value = env_service
-
-        with patch.object(
-            cmd,
-            "_resolve_values",
-            return_value=(None, MagicMock(variables={}, secrets={}, features={}, errors=[]), None),
-        ):
-            result = cmd._execute()
-
-        assert result is False
-        out = capsys.readouterr().out
-        # Nothing printed for a failed key in env/export/raw formats — only the
-        # non-zero exit / self._errors signal the failure.
-        assert out == ""
-
-    def test_execute_prints_env_format_on_success(self, capsys):
-        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD"], value_format="env")
-        env_service = MagicMock()
-        env_service.get_variables.return_value = []
-        env_service.get_secrets.return_value = []
-        env_service.get_features.return_value = []
-
-        cmd._deployment_service = MagicMock()
-        cmd._deployment_service.get_environment_service.return_value = env_service
-
-        with patch.object(
-            cmd,
-            "_resolve_values",
-            return_value=(
-                None,
-                MagicMock(variables={"DB_PASSWORD": "s3cr3t"}, secrets={}, features={}, errors=[]),
-                None,
-            ),
-        ):
-            result = cmd._execute()
-
-        assert result is True
-        out = capsys.readouterr().out
-        assert out == "DB_PASSWORD=s3cr3t\n"
-
-    def test_diagnose_integration_with_probe_failure(self):
-        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
-        from strata.models.store_models import VariableStoreModel, VariableStoreType
-
-        cmd = ResolveValuesDeployCommand(file="x.yaml", probe=True)
-        item = VariableStoreModel(key="V", store=VariableStoreType.HASHICORP_CONSUL, value="config/missing")
-
-        mock_integration = MagicMock()
-        mock_integration.ensure_available.return_value = (True, "")
-        mock_integration.get_info.return_value = {"version": "1.15.0"}
-        mock_integration.get_variable.return_value = None
-
-        with patch(
-            "strata.controllers.value_controller.ValueController._get_integration_by_type",
-            return_value=mock_integration,
-        ):
-            diag = cmd._diagnose_item(item, "variable")
-
-        assert diag["ok"] is False
-        assert any(c["check"] == "probe" and c["status"] == "fail" for c in diag["checks"])
+def test_all_keys_resolved_exits_zero(runner, solution):
+    result = _run(runner, "app", "REGION", "DB_PASSWORD", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS
+
+
+def test_resolved_count_ignores_value_references_nobody_asked_for(runner, solution):
+    """`${value:}` references anywhere in the solution are resolved too and land
+    in the same map; they must not inflate the 'resolved N of M keys' count."""
+    environment = solution / "environment.yaml"
+    environment.write_text(
+        environment.read_text(encoding="utf-8").replace(
+            "  secrets:",
+            '    - key: ENV_NAME\n      store: constant\n      value: "${value:environment.prd.meta.name}"\n  secrets:',
+        ),
+        encoding="utf-8",
+    )
+    result = _run(runner, "app", "REGION", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "resolved 1 of 1 keys" in result.output
+
+
+def test_resolved_count_excludes_failed_keys(runner, solution):
+    result = _run(runner, "app", "REGION", "GHOST", "--path", solution)
+    assert "resolved 1 of 2 keys" in result.output
+
+
+def test_unresolved_key_exits_three(runner, solution):
+    result = _run(runner, "app", "REGION", "GHOST", "--path", solution)
+    assert result.exit_code == EXIT_VALIDATION
+
+
+def test_unknown_deployment_exits_two(runner, solution):
+    result = _run(runner, "ghost-deployment", "REGION", "--path", solution)
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_outside_a_solution_exits_two(runner, tmp_path):
+    result = _run(runner, "app", "REGION", "--path", tmp_path)
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_raw_format_requires_exactly_one_key(runner, solution):
+    result = _run(runner, "app", "REGION", "DB_PASSWORD", "--path", solution, "--format", "raw")
+    assert result.exit_code == EXIT_USAGE
+
+
+# ---------------------------------------------------------------------------
+# Console rendering
+# ---------------------------------------------------------------------------
+
+
+def test_table_format_shows_every_requested_key(runner, solution):
+    output = _run(runner, "app", "REGION", "DB_PASSWORD", "--path", solution).output
+    assert "westeurope" in output
+    assert "hunter2" in output
+
+
+def test_raw_format_prints_the_bare_value(runner, solution):
+    result = _run(runner, "app", "REGION", "--path", solution, "--format", "raw")
+    assert "westeurope" in result.output
+    # Bare value — no key name, no report chrome, on its own line.
+    assert "REGION" not in [line.strip() for line in result.output.splitlines()]
+
+
+def test_env_format_renders_key_equals_value(runner, solution):
+    output = _run(runner, "app", "REGION", "--path", solution, "--format", "env").output
+    assert "REGION=westeurope" in output
+
+
+def test_export_format_quotes_the_value(runner, solution):
+    output = _run(runner, "app", "REGION", "--path", solution, "--format", "export").output
+    assert "export REGION=westeurope" in output
+
+
+def test_raw_env_export_emit_nothing_when_a_key_fails(runner, solution):
+    """A script must never mistake a partial result for a complete one."""
+    output = _run(runner, "app", "REGION", "GHOST", "--path", solution, "--format", "env").output
+    assert "REGION=" not in output
+
+
+# ---------------------------------------------------------------------------
+# JSON
+# ---------------------------------------------------------------------------
+
+
+def test_json_emits_the_resolved_values(runner, solution):
+    payload = json.loads(_run(runner, "app", "REGION", "DB_PASSWORD", "--path", solution, "--output", "json").output)
+    assert payload["ok"] is True
+    assert payload["data"]["deployment"] == "app"
+    assert payload["data"]["results"] == {"REGION": "westeurope", "DB_PASSWORD": "hunter2"}
+
+
+def test_json_reports_a_failed_key_as_null_and_a_diagnostic(runner, solution):
+    payload = json.loads(_run(runner, "app", "REGION", "GHOST", "--path", solution, "--output", "json").output)
+    assert payload["ok"] is False
+    assert payload["data"]["results"] == {"REGION": "westeurope", "GHOST": None}
+    assert any("GHOST" in d["message"] for d in payload["diagnostics"])
+
+
+# ---------------------------------------------------------------------------
+# `values list` — live mode (default)
+# ---------------------------------------------------------------------------
+
+
+def test_list_live_exits_zero_when_everything_resolves(runner, solution):
+    result = _run_list(runner, "app", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS
+
+
+def test_list_live_shows_variables_in_full(runner, solution):
+    output = _run_list(runner, "app", "--path", solution).output
+    assert "westeurope" in output
+
+
+def test_list_live_masks_secret_values(runner, solution):
+    output = _run_list(runner, "app", "--path", solution).output
+    assert "hunt" in output  # first 4 chars kept
+    assert "hunter2" not in output  # never revealed in full
+
+
+def test_list_live_show_store_adds_the_store_column(runner, solution):
+    without = _run_list(runner, "app", "--path", solution).output
+    with_store = _run_list(runner, "app", "--path", solution, "--show-store").output
+    assert "constant" not in without
+    assert "constant" in with_store
+
+
+def test_list_live_exits_three_when_a_key_fails(runner, solution_full):
+    """`solution_full`'s DB_PASSWORD is `store: infisical` with no
+    credentials configured in the test environment — a real failure."""
+    result = _run_list(runner, "app", "--path", solution_full)
+    assert result.exit_code == EXIT_VALIDATION
+
+
+def test_list_live_unresolved_filters_to_failures_only(runner, solution_full):
+    output = _run_list(runner, "app", "--path", solution_full, "--unresolved").output
+    assert "DB_PASSWORD" in output
+    assert "REGION" not in output
+    assert "ENABLE_BETA" not in output
+
+
+def test_list_live_type_filter_restricts_to_one_kind(runner, solution):
+    output = _run_list(runner, "app", "--path", solution, "--type", "variables").output
+    assert "REGION" in output
+    assert "DB_PASSWORD" not in output
+
+
+def test_list_live_json_shape(runner, solution):
+    payload = json.loads(_run_list(runner, "app", "--path", solution, "--output", "json").output)
+    assert payload["ok"] is True
+    assert payload["data"]["declared_only"] is False
+    by_key = {row["key"]: row for row in payload["data"]["values"]}
+    assert by_key["REGION"] == {
+        "key": "REGION",
+        "kind": "variable",
+        "store": "constant",
+        "value": "westeurope",
+        "ok": True,
+        "reason": None,
+    }
+    assert by_key["DB_PASSWORD"]["value"] == "hunt***"  # masked, never the full "hunter2"
+
+
+def test_list_live_unknown_deployment_exits_two(runner, solution):
+    result = _run_list(runner, "ghost-deployment", "--path", solution)
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_list_live_with_no_environment_exits_zero_with_empty_list(runner, tmp_path):
+    root = tmp_path / "sln-empty"
+    root.mkdir()
+    (root / "strata.yaml").write_text(MANIFEST, encoding="utf-8")
+    (root / "deployment.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n  partial: true\n",
+        encoding="utf-8",
+    )
+    result = _run_list(runner, "app", "--path", root)
+    assert result.exit_code == EXIT_SUCCESS
+    assert "no variables, secrets, or features declared" in result.output
+
+
+# ---------------------------------------------------------------------------
+# `values list --declared-only`
+# ---------------------------------------------------------------------------
+
+
+def test_list_declared_only_exits_zero(runner, solution_full):
+    result = _run_list(runner, "app", "--path", solution_full, "--declared-only")
+    assert result.exit_code == EXIT_SUCCESS
+
+
+def test_list_declared_only_shows_every_kind(runner, solution_full):
+    output = _run_list(runner, "app", "--path", solution_full, "--declared-only").output
+    assert "REGION" in output
+    assert "DB_PASSWORD" in output
+    assert "ENABLE_BETA" in output
+
+
+def test_list_declared_only_never_resolves_or_reveals_a_secret_value(runner, solution_full):
+    """No store I/O at all — never resolves/reveals the actual secret value."""
+    output = _run_list(runner, "app", "--path", solution_full, "--declared-only").output
+    assert "hunter2" not in output  # never resolved, so never revealed
+
+
+def test_list_declared_only_json_includes_the_declared_value_ref(runner, solution_full):
+    """Console rendering omits `value_ref` (matches v1's `secret list`); JSON carries it."""
+    payload = json.loads(
+        _run_list(runner, "app", "--path", solution_full, "--declared-only", "--output", "json").output
+    )
+    by_key = {row["key"]: row for row in payload["data"]["values"]}
+    assert by_key["DB_PASSWORD"]["value_ref"] == "db/password"
+
+
+def test_list_declared_only_shows_generate_and_rotate_specs(runner, solution_full):
+    output = _run_list(runner, "app", "--path", solution_full, "--declared-only").output
+    assert "generate:password/24" in output
+    assert "rotate:90d/warn" in output
+
+
+def test_list_declared_only_type_filter_restricts_to_one_kind(runner, solution_full):
+    output = _run_list(runner, "app", "--path", solution_full, "--declared-only", "--type", "secrets").output
+    assert "DB_PASSWORD" in output
+    assert "REGION" not in output
+    assert "ENABLE_BETA" not in output
+
+
+def test_list_unknown_deployment_exits_two(runner, solution_full):
+    result = _run_list(runner, "ghost-deployment", "--path", solution_full, "--declared-only")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_list_declared_only_json_shape(runner, solution_full):
+    payload = json.loads(
+        _run_list(runner, "app", "--path", solution_full, "--declared-only", "--output", "json").output
+    )
+    assert payload["ok"] is True
+    assert payload["data"]["deployment"] == "app"
+    assert payload["data"]["declared_only"] is True
+    by_key = {row["key"]: row for row in payload["data"]["values"]}
+    assert by_key["REGION"] == {
+        "key": "REGION",
+        "kind": "variable",
+        "store": "constant",
+        "value_ref": "westeurope",
+        "generate": None,
+        "rotate": None,
+    }
+    assert by_key["DB_PASSWORD"]["generate"] == "password/24"
+    assert by_key["DB_PASSWORD"]["rotate"] == "90d/warn"
+    assert by_key["ENABLE_BETA"]["kind"] == "feature"
+
+
+def test_list_declared_only_with_no_environment_exits_zero_with_empty_list(runner, tmp_path):
+    root = tmp_path / "sln-empty"
+    root.mkdir()
+    (root / "strata.yaml").write_text(MANIFEST, encoding="utf-8")
+    (root / "deployment.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n  partial: true\n",
+        encoding="utf-8",
+    )
+    result = _run_list(runner, "app", "--path", root, "--declared-only")
+    assert result.exit_code == EXIT_SUCCESS
+    assert "no variables, secrets, or features declared" in result.output
+
+
+# ---------------------------------------------------------------------------
+# `values resolve` — diagnostic only, never reveals a value
+# ---------------------------------------------------------------------------
+
+
+def _run_resolve(runner, *args):
+    return runner.invoke(cli, ["values", "resolve", *[str(a) for a in args]])
+
+
+def test_resolve_all_keys_would_resolve_exits_zero(runner, solution):
+    result = _run_resolve(runner, "app", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS
+
+
+def test_resolve_shows_every_key(runner, solution):
+    output = _run_resolve(runner, "app", "--path", solution).output
+    assert "REGION" in output
+    assert "DB_PASSWORD" in output
+
+
+def test_resolve_never_reveals_a_value(runner, solution):
+    output = _run_resolve(runner, "app", "--path", solution).output
+    assert "westeurope" not in output
+    assert "hunter2" not in output
+
+
+def test_resolve_key_filters_to_one_key(runner, solution):
+    output = _run_resolve(runner, "app", "--path", solution, "--key", "REGION").output
+    assert "REGION" in output
+    assert "DB_PASSWORD" not in output
+
+
+def test_resolve_unknown_key_exits_three(runner, solution):
+    result = _run_resolve(runner, "app", "--path", solution, "--key", "GHOST")
+    assert result.exit_code == EXIT_VALIDATION
+
+
+def test_resolve_unset_environment_variable_exits_three(runner, tmp_path, monkeypatch):
+    monkeypatch.delenv("PROBE_MISSING_VAR", raising=False)
+    root = tmp_path / "sln-env"
+    root.mkdir()
+    (root / "strata.yaml").write_text(MANIFEST, encoding="utf-8")
+    (root / "environment.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: GREETING\n      store: environment\n      value: PROBE_MISSING_VAR\n",
+        encoding="utf-8",
+    )
+    (root / "deployment.yaml").write_text(DEPLOYMENT, encoding="utf-8")
+
+    result = _run_resolve(runner, "app", "--path", root)
+    assert result.exit_code == EXIT_VALIDATION
+
+
+def test_resolve_unknown_deployment_exits_two(runner, solution):
+    result = _run_resolve(runner, "ghost-deployment", "--path", solution)
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_resolve_json_shape(runner, solution):
+    payload = json.loads(_run_resolve(runner, "app", "--path", solution, "--output", "json").output)
+    assert payload["ok"] is True
+    assert payload["data"]["deployment"] == "app"
+    assert payload["data"]["mode"] == "path"
+    by_key = {row["key"]: row for row in payload["data"]["results"]}
+    assert by_key["REGION"] == {
+        "key": "REGION",
+        "kind": "variable",
+        "store": "constant",
+        "registered": True,
+        "probed": False,
+        "ok": True,
+        "reason": None,
+    }
+
+
+def test_resolve_probe_flag_is_reflected_in_json_mode(runner, solution):
+    payload = json.loads(_run_resolve(runner, "app", "--path", solution, "--probe", "--output", "json").output)
+    assert payload["data"]["mode"] == "probe"
+    # constant stores are never "probed" — they're checked directly, cheaply, always.
+    assert all(not row["probed"] for row in payload["data"]["results"])
+
+
+# ---------------------------------------------------------------------------
+# `values set`
+# ---------------------------------------------------------------------------
+
+
+def _run_set(runner, *args):
+    return runner.invoke(cli, ["values", "set", *[str(a) for a in args]])
+
+
+def _patch_writable_store(monkeypatch):
+    """A `StoreIntegration` whose `set()` records what was written, bound
+    in place of the real registry lookup — no network I/O."""
+    from strata.integrations.capabilities import StoreIntegration
+
+    class _FakeWritableStore(StoreIntegration):
+        TYPE = "infisical"
+        CAPABILITIES = frozenset({"secrets"})
+        TRANSPORTS: frozenset = frozenset()
+
+        def __init__(self) -> None:
+            super().__init__(None)
+            self.written: tuple[str, str] | None = None
+
+        def resolve(self, key: str) -> str:
+            return f"resolved-{key}"
+
+        def set(self, key: str, value: str) -> None:
+            self.written = (key, value)
+
+    store = _FakeWritableStore()
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: store)
+    return store
+
+
+def test_set_writes_an_explicit_value_and_exits_zero(runner, solution_full, monkeypatch):
+    store = _patch_writable_store(monkeypatch)
+    result = _run_set(runner, "app", "--path", solution_full, "--key", "DB_PASSWORD", "--value", "new-value")
+    assert result.exit_code == EXIT_SUCCESS
+    assert store.written == ("db/password", "new-value")
+
+
+def test_set_console_confirmation_never_shows_the_value(runner, solution_full, monkeypatch):
+    _patch_writable_store(monkeypatch)
+    output = _run_set(runner, "app", "--path", solution_full, "--key", "DB_PASSWORD", "--value", "top-secret").output
+    assert "top-secret" not in output
+    assert "DB_PASSWORD" in output
+    assert "infisical" in output
+
+
+def test_set_generate_shows_generated_in_the_confirmation(runner, solution_full, monkeypatch):
+    _patch_writable_store(monkeypatch)
+    output = _run_set(runner, "app", "--path", solution_full, "--key", "DB_PASSWORD", "--generate").output
+    assert "generated" in output
+
+
+def test_set_from_file_reads_the_file(runner, solution_full, monkeypatch, tmp_path):
+    store = _patch_writable_store(monkeypatch)
+    cert = tmp_path / "cert.pem"
+    cert.write_text("multi\nline\ncontent\n", encoding="utf-8")
+
+    result = _run_set(runner, "app", "--path", solution_full, "--key", "DB_PASSWORD", "--from-file", cert)
+    assert result.exit_code == EXIT_SUCCESS
+    assert store.written == ("db/password", "multi\nline\ncontent\n")
+
+
+def test_set_requires_exactly_one_value_source(runner, solution_full):
+    result = _run_set(runner, "app", "--path", solution_full, "--key", "DB_PASSWORD")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_set_rejects_a_constant_store(runner, solution):
+    result = _run_set(runner, "app", "--path", solution, "--key", "REGION", "--value", "northeurope")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_set_generate_on_a_non_secret_exits_two(runner, solution):
+    result = _run_set(runner, "app", "--path", solution, "--key", "REGION", "--generate")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_set_unknown_key_exits_two(runner, solution):
+    result = _run_set(runner, "app", "--path", solution, "--key", "GHOST", "--value", "x")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_set_unknown_deployment_exits_two(runner, solution):
+    result = _run_set(runner, "ghost-deployment", "--path", solution, "--key", "REGION", "--value", "x")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_set_json_shape(runner, solution_full, monkeypatch):
+    _patch_writable_store(monkeypatch)
+    payload = json.loads(
+        _run_set(
+            runner, "app", "--path", solution_full, "--key", "DB_PASSWORD", "--value", "x", "--output", "json"
+        ).output
+    )
+    assert payload["ok"] is True
+    assert payload["data"] == {
+        "deployment": "app",
+        "key": "DB_PASSWORD",
+        "written": True,
+        "kind": "secret",
+        "store": "infisical",
+        "generated": False,
+    }
+
+
+def test_set_write_failure_exits_three(runner, solution_full, monkeypatch):
+    from strata.integrations.capabilities import StoreIntegration
+    from strata.integrations.errors import IntegrationError
+
+    class _FailingStore(StoreIntegration):
+        TYPE = "infisical"
+        CAPABILITIES = frozenset({"secrets"})
+        TRANSPORTS: frozenset = frozenset()
+
+        def resolve(self, key: str) -> str:
+            return f"resolved-{key}"
+
+        def set(self, key: str, value: str) -> None:
+            raise IntegrationError("unreachable")
+
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: _FailingStore())
+
+    result = _run_set(runner, "app", "--path", solution_full, "--key", "DB_PASSWORD", "--value", "x")
+    assert result.exit_code == EXIT_VALIDATION
+
+
+# ---------------------------------------------------------------------------
+# `values rotate`
+# ---------------------------------------------------------------------------
+
+
+def _run_rotate(runner, *args, **kwargs):
+    return runner.invoke(cli, ["values", "rotate", *[str(a) for a in args]], **kwargs)
+
+
+def test_rotate_with_force_writes_without_prompting(runner, solution_full, monkeypatch):
+    store = _patch_writable_store(monkeypatch)
+    result = _run_rotate(runner, "app", "DB_PASSWORD", "--path", solution_full, "--force")
+    assert result.exit_code == EXIT_SUCCESS
+    assert store.written is not None
+    assert store.written[0] == "db/password"
+    assert len(store.written[1]) == 24  # solution_full's DB_PASSWORD: generate type=password, length=24
+
+
+def test_rotate_confirmation_prompt_declined_does_not_write(runner, solution_full, monkeypatch):
+    store = _patch_writable_store(monkeypatch)
+    result = _run_rotate(runner, "app", "DB_PASSWORD", "--path", solution_full, input="n\n")
+    assert result.exit_code != EXIT_SUCCESS
+    assert store.written is None
+
+
+def test_rotate_confirmation_prompt_accepted_writes(runner, solution_full, monkeypatch):
+    store = _patch_writable_store(monkeypatch)
+    result = _run_rotate(runner, "app", "DB_PASSWORD", "--path", solution_full, input="y\n")
+    assert result.exit_code == EXIT_SUCCESS
+    assert store.written is not None
+
+
+def test_rotate_console_confirmation_never_shows_the_value(runner, solution_full, monkeypatch):
+    _patch_writable_store(monkeypatch)
+    output = _run_rotate(runner, "app", "DB_PASSWORD", "--path", solution_full, "--force").output
+    assert "DB_PASSWORD" in output
+    assert "infisical" in output
+
+
+def test_rotate_without_generate_spec_exits_two(runner, solution):
+    """`solution`'s DB_PASSWORD is `store: constant` — no generate: spec possible."""
+    result = _run_rotate(runner, "app", "DB_PASSWORD", "--path", solution, "--force")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_rotate_on_a_variable_exits_two(runner, solution):
+    result = _run_rotate(runner, "app", "REGION", "--path", solution, "--force")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_rotate_unknown_key_exits_two(runner, solution_full):
+    result = _run_rotate(runner, "app", "GHOST", "--path", solution_full, "--force")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_rotate_unknown_deployment_exits_two(runner, solution_full):
+    result = _run_rotate(runner, "ghost-deployment", "DB_PASSWORD", "--path", solution_full, "--force")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_rotate_json_shape(runner, solution_full, monkeypatch):
+    _patch_writable_store(monkeypatch)
+    payload = json.loads(
+        _run_rotate(runner, "app", "DB_PASSWORD", "--path", solution_full, "--force", "--output", "json").output
+    )
+    assert payload["ok"] is True
+    assert payload["data"] == {
+        "deployment": "app",
+        "key": "DB_PASSWORD",
+        "rotated": True,
+        "store": "infisical",
+    }
+
+
+def test_rotate_write_failure_exits_three(runner, solution_full, monkeypatch):
+    from strata.integrations.capabilities import StoreIntegration
+    from strata.integrations.errors import IntegrationError
+
+    class _FailingStore(StoreIntegration):
+        TYPE = "infisical"
+        CAPABILITIES = frozenset({"secrets"})
+        TRANSPORTS: frozenset = frozenset()
+
+        def resolve(self, key: str) -> str:
+            return f"resolved-{key}"
+
+        def set(self, key: str, value: str) -> None:
+            raise IntegrationError("unreachable")
+
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: _FailingStore())
+
+    result = _run_rotate(runner, "app", "DB_PASSWORD", "--path", solution_full, "--force")
+    assert result.exit_code == EXIT_VALIDATION
+
+
+# ---------------------------------------------------------------------------
+# `values status`
+# ---------------------------------------------------------------------------
+
+
+def _run_status(runner, *args):
+    return runner.invoke(cli, ["values", "status", *[str(a) for a in args]])
+
+
+def _patch_metadata_store(monkeypatch, metadata):
+    from strata.integrations.capabilities import StoreIntegration
+
+    class _FakeStoreWithMetadata(StoreIntegration):
+        TYPE = "infisical"
+        CAPABILITIES = frozenset({"secrets"})
+        TRANSPORTS: frozenset = frozenset()
+
+        def resolve(self, key: str) -> str:
+            return f"resolved-{key}"
+
+        def metadata(self, key: str):
+            return metadata
+
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeStoreWithMetadata())
+
+
+def test_status_ok_when_within_max_age_exits_zero(runner, solution_full, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from strata.integrations.resolved_context import SecretMetadata
+
+    _patch_metadata_store(monkeypatch, SecretMetadata(updated_at=datetime.now(timezone.utc) - timedelta(days=10)))
+    result = _run_status(runner, "app", "--path", solution_full)
+    assert result.exit_code == EXIT_SUCCESS
+    assert "DB_PASSWORD" in result.output
+
+
+def test_status_overdue_exits_three(runner, solution_full, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from strata.integrations.resolved_context import SecretMetadata
+
+    _patch_metadata_store(monkeypatch, SecretMetadata(updated_at=datetime.now(timezone.utc) - timedelta(days=100)))
+    result = _run_status(runner, "app", "--path", solution_full)
+    assert result.exit_code == EXIT_VALIDATION
+    assert "OVERDUE" in result.output
+
+
+def test_status_no_metadata_does_not_fail(runner, solution_full, monkeypatch):
+    _patch_metadata_store(monkeypatch, None)
+    result = _run_status(runner, "app", "--path", solution_full)
+    assert result.exit_code == EXIT_SUCCESS
+    assert "no_metadata" in result.output
+
+
+def test_status_never_reveals_the_secret_value(runner, solution_full, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from strata.integrations.resolved_context import SecretMetadata
+
+    _patch_metadata_store(monkeypatch, SecretMetadata(updated_at=datetime.now(timezone.utc) - timedelta(days=10)))
+    output = _run_status(runner, "app", "--path", solution_full).output
+    assert "hunter2" not in output
+
+
+def test_status_no_secrets_with_rotate_spec_exits_zero(runner, solution):
+    """`solution`'s DB_PASSWORD has no `rotate:` spec — nothing to report."""
+    result = _run_status(runner, "app", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS
+    assert "no secrets with a rotation policy" in result.output
+
+
+def test_status_unknown_deployment_exits_two(runner, solution_full):
+    result = _run_status(runner, "ghost-deployment", "--path", solution_full)
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_status_json_shape(runner, solution_full, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from strata.integrations.resolved_context import SecretMetadata
+
+    _patch_metadata_store(monkeypatch, SecretMetadata(updated_at=datetime.now(timezone.utc) - timedelta(days=10)))
+    payload = json.loads(_run_status(runner, "app", "--path", solution_full, "--output", "json").output)
+    assert payload["ok"] is True
+    assert payload["data"]["deployment"] == "app"
+    assert payload["data"]["overdue"] == 0
+    row = payload["data"]["secrets"][0]
+    assert row["key"] == "DB_PASSWORD"
+    assert row["status"] == "ok"
+    assert row["age_days"] == 10
+    assert row["days_remaining"] == 80
+
+
+def test_status_json_overdue_count(runner, solution_full, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from strata.integrations.resolved_context import SecretMetadata
+
+    _patch_metadata_store(monkeypatch, SecretMetadata(updated_at=datetime.now(timezone.utc) - timedelta(days=100)))
+    payload = json.loads(_run_status(runner, "app", "--path", solution_full, "--output", "json").output)
+    assert payload["ok"] is False
+    assert payload["data"]["overdue"] == 1
+
+
+# ---------------------------------------------------------------------------
+# `values generate` / `values mask` — pure utilities, no solution needed
+# ---------------------------------------------------------------------------
+
+
+def test_generate_prints_a_bare_value_by_default(runner):
+    result = runner.invoke(cli, ["values", "generate", "--format", "hex", "--length", "8"])
+    assert result.exit_code == EXIT_SUCCESS
+    assert len(result.output.strip()) == 16  # 8 bytes -> 16 hex chars, plus trailing newline
+
+
+def test_generate_needs_no_solution_at_all(runner, tmp_path, monkeypatch):
+    """Unlike every other `values` subcommand, `generate` never calls `open_solution()`."""
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(cli, ["values", "generate", "--format", "uuid4"])
+    assert result.exit_code == EXIT_SUCCESS
+
+
+def test_generate_json_includes_format_and_length(runner):
+    payload = json.loads(
+        runner.invoke(cli, ["values", "generate", "--format", "numeric", "--length", "6", "--output", "json"]).output
+    )
+    assert payload["format"] == "numeric"
+    assert payload["length"] == 6
+    assert len(payload["secret"]) == 6
+
+
+def test_generate_json_omits_length_for_uuid_formats(runner):
+    payload = json.loads(runner.invoke(cli, ["values", "generate", "--format", "uuid7", "--output", "json"]).output)
+    assert "length" not in payload
+
+
+def test_generate_rejects_unknown_format(runner):
+    result = runner.invoke(cli, ["values", "generate", "--format", "rot13"])
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_generate_rejects_too_short_a_password(runner):
+    result = runner.invoke(cli, ["values", "generate", "--format", "password", "--length", "3"])
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_mask_prints_the_bare_masked_value_by_default(runner):
+    result = runner.invoke(cli, ["values", "mask", "hunter2-supersecret", "--show", "4"])
+    assert result.exit_code == EXIT_SUCCESS
+    assert result.output.strip() == "hunt***************"
+
+
+def test_mask_needs_no_solution_at_all(runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(cli, ["values", "mask", "abcdef"])
+    assert result.exit_code == EXIT_SUCCESS
+
+
+def test_mask_uses_a_custom_char(runner):
+    result = runner.invoke(cli, ["values", "mask", "abcdefgh", "--show", "2", "--char", "#"])
+    assert result.output.strip() == "ab######"
+
+
+def test_mask_json_includes_show_and_char(runner):
+    payload = json.loads(runner.invoke(cli, ["values", "mask", "abcdefgh", "--output", "json"]).output)
+    assert payload == {"masked": "abcd****", "show": 4, "char": "*"}
+
+
+def test_mask_rejects_a_multi_character_replacement(runner):
+    result = runner.invoke(cli, ["values", "mask", "abcdefgh", "--char", "**"])
+    assert result.exit_code == EXIT_USAGE

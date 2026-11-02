@@ -1,67 +1,17 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Run: strata",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}\\src\\strata\\__main__.py",
-      "args": "${input:cliArgs}",
-      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}\\src"
-      },
-      "console": "integratedTerminal",
-      "justMyCode": true
-    },
-    {
-      "name": "Debug: strata",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}\\src\\strata\\__main__.py",
-      "args": "${input:cliArgs}",
-      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}\\src"
-      },
-      "console": "integratedTerminal",
-      "justMyCode": false
-    },
-    {
-      "name": "Run Extension",
-      "type": "extensionHost",
-      "request": "launch",
-      "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}/src/vscode"
-      ],
-      "outFiles": [
-        "${workspaceFolder}/src/vscode/out/**/*.js"
-      ],
-      "preLaunchTask": "VS Code Extension: watch"
-    },
-    {
-      "name": "Extension Tests",
-      "type": "extensionHost",
-      "request": "launch",
-      "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}/src/vscode",
-        "--extensionTestsPath=${workspaceFolder}/tests/vscode/suite/index.js"
-      ],
-      "outFiles": [
-        "${workspaceFolder}/src/vscode/out/**/*.js",
-        "${workspaceFolder}/tests/vscode/out/**/*.js"
-      ],
-      "preLaunchTask": "VS Code Extension: watch"
-    }
-  ],
-  "inputs": [
-    {
-      "id": "cliArgs",
-      "type": "promptString",
-      "description": "CLI arguments (e.g. --help, version, deploy platform.yaml)",
-      "default": "--help"
-    }
-  ]
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run VS Code Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}/src/vscode"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/src/vscode/out/**/*.js"
+            ],
+            "preLaunchTask": "VS Code Extension: watch"
+        }
+    ]
 }

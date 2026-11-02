@@ -1,1702 +1,363 @@
-"""Controller for solution lifecycle operations."""
+#!/usr/bin/env python3
+"""Solution root discovery, document indexing and resolution (ADR-0015).
 
-import json
-import os
-from datetime import datetime, timedelta, timezone
+The loading layer every parked Phase 2 validator has been waiting for. It
+does three things:
+
+1. **Find the solution root** — walk up from a starting directory to the
+   nearest `strata.yaml`, like `go.mod`/`Cargo.toml`/`package.json`.
+2. **Discover documents** — recursively scan the root, take each document's
+   `kind` from its own field (folder layout is irrelevant, the
+   `kubectl apply -R -f` model), validate it through its existing service,
+   and index it by identity.
+3. **Resolve references** — look documents up by `(remote, kind, name)`.
+
+Deliberate behaviours, all from ADR-0015:
+
+- A YAML file without a strata `apiVersion` is **skipped silently**. Real
+  solution trees are full of Helm values, CI pipelines and k8s manifests;
+  erroring on them would make discovery unusable.
+- A file *with* a strata `apiVersion` but an unrecognised `kind` is an
+  **error** — that is a typo, not a foreign file.
+- Duplicate `(remote, kind, name)` is a **hard error**, never last-write-wins.
+- Recursion stops at any nested `strata.yaml`: that is a different solution.
+  Self-maintaining, unlike a hardcoded deny-list.
+- Every entry carries the path it came from. With `file:` gone from the
+  schema, provenance lives only here, and every error message needs it.
+
+The index key includes a `remote` slot that is always `None` today. Remote
+qualified references (`@platform/azure`) are not implemented — but the key
+is shaped for them now so adding them later is additive rather than a
+rewrite (ADR-0015).
+"""
+
+from collections.abc import Iterator
+from collections.abc import Set as AbstractSet
+from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import Any
 
-if TYPE_CHECKING:
-    from strata.models.workspace_model import WorkspaceIacModel
-    from strata.services.deployment_service import DeploymentService
+import yaml
 
-from strata.controllers.base_controller import BaseController
-from strata.logger.logger import get_active_log_file
-from strata.models.common_models import PlatformVersion
-from strata.models.solution_model import (
-    SolutionModel,
-    SolutionSpecDeploymentModel,
-    SolutionSpecProfileConfigModel,
-    SolutionSpecProfileModel,
-    SolutionSpecRepositoryModel,
-)
+from strata.models.common_models import PlatformBaseModel, PlatformKind
+from strata.models.solution_model import SolutionModel
+from strata.services.artifact_service import ArtifactService
+from strata.services.asset_service import AssetService
+from strata.services.attributeconfig_service import AttributeConfigService
+from strata.services.base_service import BaseService
+from strata.services.configuration_service import ConfigurationService
+from strata.services.deployment_service import DeploymentService
+from strata.services.dns_service import DnsService
+from strata.services.environment_service import EnvironmentService
+from strata.services.firewall_service import FirewallService
+from strata.services.integration_service import IntegrationService
+from strata.services.module_service import ModuleService
+from strata.services.namespace_service import NamespaceService
+from strata.services.network_service import NetworkService
+from strata.services.provider_config_service import ProviderConfigService
+from strata.services.provider_service import ProviderService
+from strata.services.resource_service import ResourceService
 from strata.services.solution_service import SolutionService
-from strata.utils.config import (
-    SOLUTION_CONFIG_FILE,
-    SOLUTION_DIR,
-    SOLUTION_GITIGNORE_FILE,
-    SOLUTION_INTEGRATIONS_DIR,
-    SOLUTION_LOGGING_FILE,
-    SOLUTION_LOGS_DIR,
-    SOLUTION_SCHEMAS_DIR,
-    SOLUTION_TEMPLATES_DIR,
-    SOLUTION_WORKSPACE_SUFFIX,
+from strata.services.tenant_service import TenantService
+from strata.services.topology_config_service import TopologyConfigService
+from strata.services.version_service import VersionService
+from strata.services.workspace_service import WorkspaceService
+from strata.utils.diagnostics import Diagnostics
+from strata.utils.layout import (
+    DEFAULT_IGNORED_DIRS,
+    MANIFEST_FILENAME,
+    YAML_SUFFIXES,
+    manifest_path,
 )
-from strata.utils.config import (
-    get_audit_log_path as _get_audit_log_path,
-)
-from strata.utils.config import (
-    get_build_dir as _get_build_dir,
-)
-from strata.utils.config import (
-    get_cli_config_path as _get_cli_config_path,
-)
-from strata.utils.config import (
-    get_collectors_path as _get_collectors_path,
-)
-from strata.utils.config import (
-    get_configuration_path as _get_configuration_path,
-)
-from strata.utils.config import (
-    get_cve_allowed_path as _get_cve_allowed_path,
-)
-from strata.utils.config import (
-    get_deploy_log_dir as _get_deploy_log_dir,
-)
-from strata.utils.config import (
-    get_deployments_dir as _get_deployments_dir,
-)
-from strata.utils.config import (
-    get_guide_path as _get_guide_path,
-)
-from strata.utils.config import (
-    get_integrations_dir as _get_integrations_dir,
-)
-from strata.utils.config import (
-    get_lockfile_parsers_dir as _get_lockfile_parsers_dir,
-)
-from strata.utils.config import (
-    get_locks_dir as _get_locks_dir,
-)
-from strata.utils.config import (
-    get_logging_config_path as _get_logging_config_path,
-)
-from strata.utils.config import (
-    get_logs_dir as _get_logs_dir,
-)
-from strata.utils.config import (
-    get_outputs_dir as _get_outputs_dir,
-)
-from strata.utils.config import (
-    get_plugins_dir as _get_plugins_dir,
-)
-from strata.utils.config import (
-    get_policies_dir as _get_policies_dir,
-)
-from strata.utils.config import (
-    get_sbom_ignore_path as _get_sbom_ignore_path,
-)
-from strata.utils.config import (
-    get_schemas_dir as _get_schemas_dir,
-)
-from strata.utils.config import (
-    get_solution_json_path as _get_solution_json_path,
-)
-from strata.utils.config import (
-    get_strata_dir as _get_strata_dir,
-)
-from strata.utils.config import (
-    get_templates_dir as _get_templates_dir,
-)
-from strata.utils.system import generate_uuid, get_pkg_templates_path
-from strata.utils.templater import TemplateProcessor
+
+#: Every `apiVersion` value that marks a document as ours. Anything else (or
+#: nothing) means "not a strata document" and is skipped without complaint.
+_STRATA_API_PREFIXES = ("strata.",)
+
+#: Which service validates which kind. The service already knows its model
+#: and owns Phase 1/Phase 2, so the controller does not duplicate either.
+SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
+    PlatformKind.SOLUTION: SolutionService,
+    PlatformKind.CONFIGURATION: ConfigurationService,
+    PlatformKind.PROVIDERCONFIG: ProviderConfigService,
+    PlatformKind.TOPOLOGYCONFIG: TopologyConfigService,
+    PlatformKind.ATTRIBUTECONFIG: AttributeConfigService,
+    PlatformKind.PROVIDER: ProviderService,
+    PlatformKind.RESOURCE: ResourceService,
+    PlatformKind.DNS: DnsService,
+    PlatformKind.NETWORK: NetworkService,
+    PlatformKind.FIREWALL: FirewallService,
+    PlatformKind.MODULE: ModuleService,
+    PlatformKind.NAMESPACE: NamespaceService,
+    PlatformKind.WORKSPACE: WorkspaceService,
+    PlatformKind.INTEGRATION: IntegrationService,
+    PlatformKind.TENANT: TenantService,
+    PlatformKind.ENVIRONMENT: EnvironmentService,
+    PlatformKind.DEPLOYMENT: DeploymentService,
+    PlatformKind.VERSION: VersionService,
+    PlatformKind.ARTIFACT: ArtifactService,
+    PlatformKind.ASSET: AssetService,
+}
 
 
-class SolutionController(BaseController):
-    """
-    Controller for solution-level operations.
+@dataclass(frozen=True)
+class DocumentRef:
+    """Identity of a document: what it is and what it's called.
 
-    Responsibilities:
-    - Initialise a new solution (``strata sln init <name>``)
-    - Load and validate an existing solution from disk
-    - Add / remove repositories from a solution
-    - Generate the VS Code ``.code-workspace`` file from solution state
-    - Persist solution changes back to ``solution.json``
+    `remote` is always `None` today; it exists so remote-qualified
+    references can be added without rekeying the index (ADR-0015).
     """
 
-    def __init__(self, work_path: Path) -> None:
-        super().__init__()
-        self._work_path = work_path
-        self._service = SolutionService.get_instance()
-        self._solution: Optional[SolutionModel] = None
+    kind: PlatformKind
+    name: str
+    remote: str | None = None
 
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
+    def __str__(self) -> str:
+        prefix = f"@{self.remote}/" if self.remote else ""
+        return f"{prefix}{self.kind.value}/{self.name}"
+
+
+@dataclass(frozen=True)
+class IndexEntry:
+    """A validated document plus where it was found."""
+
+    ref: DocumentRef
+    model: PlatformBaseModel
+    source: Path
+
+
+class DocumentIndex:
+    """Documents keyed by identity, with the path each came from."""
+
+    def __init__(self) -> None:
+        self._entries: dict[DocumentRef, IndexEntry] = {}
+        self._names: dict[PlatformKind, set[str]] = {}
+
+    def add(self, entry: IndexEntry) -> None:
+        """Add an entry. Callers must check `get()` first — duplicates raise."""
+        if entry.ref in self._entries:
+            existing = self._entries[entry.ref]
+            raise ValueError(f"Duplicate {entry.ref}: defined in both '{existing.source}' and '{entry.source}'")
+        self._entries[entry.ref] = entry
+        self._names.setdefault(entry.ref.kind, set()).add(entry.ref.name)
+
+    def get(self, kind: PlatformKind, name: str, remote: str | None = None) -> IndexEntry | None:
+        """Return the entry for this identity, or None."""
+        return self._entries.get(DocumentRef(kind=kind, name=name, remote=remote))
+
+    def all_of(self, kind: PlatformKind) -> list[IndexEntry]:
+        """Every indexed document of one kind, sorted by name."""
+        return sorted((e for e in self._entries.values() if e.ref.kind is kind), key=lambda e: e.ref.name)
+
+    def all(self) -> list[IndexEntry]:
+        """Every indexed document, in discovery order.
+
+        Discovery order rather than sorted, so findings about one file stay
+        together in the order a reader encountered them — the same reason
+        `Diagnostics` does not sort by severity.
+        """
+        return list(self._entries.values())
+
+    def names_of(self, kind: PlatformKind) -> AbstractSet[str]:
+        """Every indexed name for one kind. A read-only view: callers look names up per reference, so this must not scan."""
+        return self._names.get(kind, frozenset())
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __contains__(self, ref: DocumentRef) -> bool:
+        return ref in self._entries
+
+
+def find_solution_root(start: Path) -> Path | None:
+    """Walk up from `start` to the nearest directory holding a `strata.yaml`.
+
+    Returns None when there is none, which means "not inside a solution".
+    """
+    current = start.resolve()
+    for candidate in (current, *current.parents):
+        if manifest_path(candidate).is_file():
+            return candidate
+    return None
+
+
+# libyaml's safe loader (same constructors, no arbitrary tags) parses about 5x faster than the pure-Python one.
+_FAST_LOADER: Any = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def _parse_documents(text: str) -> list[Any]:
+    """Every YAML document in `text`, parsed safely."""
+    try:
+        return list(yaml.load_all(text, Loader=_FAST_LOADER))
+    except yaml.YAMLError:
+        # libyaml's messages drop the offending line; the pure-Python loader's keep it.
+        return list(yaml.load_all(text, Loader=yaml.SafeLoader))
+
+
+def _is_strata_document(raw: object) -> bool:
+    """True when `raw` is a mapping carrying a strata `apiVersion`."""
+    if not isinstance(raw, dict):
+        return False
+    api_version = raw.get("apiVersion")
+    return isinstance(api_version, str) and api_version.startswith(_STRATA_API_PREFIXES)
+
+
+class SolutionController:
+    """Loads a solution: its manifest, then every document under its root."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root.resolve()
+        self.solution: SolutionModel | None = None
+        self.index = DocumentIndex()
+        self.diagnostics = Diagnostics()
 
     @property
-    def solution(self) -> Optional[SolutionModel]:
-        """Currently loaded solution model, or None if not yet loaded."""
-        return self._solution
+    def _exclude_patterns(self) -> tuple[str, ...]:
+        """User-declared exclude globs from the manifest, if any."""
+        if self.solution is None or self.solution.spec.discovery is None:
+            return ()
+        return tuple(self.solution.spec.discovery.exclude or ())
 
-    def get_solution_id(self) -> str:
-        """Return the solution_id of the loaded solution, or '' if not loaded."""
-        if self._solution is None:
-            return ""
-        return self._solution.spec.solution_id
+    def _is_excluded(self, path: Path) -> bool:
+        """True when `path` matches a user-declared exclude pattern.
 
-    # ------------------------------------------------------------------
-    # Load / save
-    # ------------------------------------------------------------------
-
-    def load(self) -> Tuple[bool, List[str]]:
-        """Load the solution model from ``<work_path>/.strata/solution.json``.
-
-        Returns:
-            (success, errors)
+        Matching is fnmatch-style against the solution-relative POSIX path.
+        Note fnmatch's `*` also spans `/`, so both `templates` (the directory
+        itself) and `templates/**` (its contents) behave as expected.
         """
-        path = self._solution_path()
+        patterns = self._exclude_patterns
+        if not patterns:
+            return False
         try:
-            self._solution = self._service.load_from_json(path)
-            self.logger.info("Solution loaded", name=self._solution.meta.name, path=str(path))
-            return True, []
-        except Exception as e:
-            msg = f"Failed to load solution from {path}: {e}"
-            self._add_error(msg)
-            return False, self.get_errors()
-
-    def save(self) -> Tuple[bool, List[str]]:
-        """Persist the current solution model to disk.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded — cannot save.")
-            return False, self.get_errors()
-
-        path = self._solution_path()
-        try:
-            self._service.save_to_json(self._solution, path)
-            self.logger.info("Solution saved", name=self._solution.meta.name, path=str(path))
-            return True, []
-        except Exception as e:
-            msg = f"Failed to save solution to {path}: {e}"
-            self._add_error(msg)
-            return False, self.get_errors()
-
-    def update_last_execution(self, execution_id: str) -> Tuple[bool, List[str]]:
-        """Record the most recent execution ID and timestamp, then persist.
-
-        Args:
-            execution_id: Execution UUID to record as the last run.
-
-        Returns:
-            (success, errors)
-        """
-        # Store last-execution metadata as CLI-level state (in `cli.yaml`),
-        # not inside the solution model. This ensures the values are scoped
-        # to the user's CLI preferences rather than the solution resource.
-        ts = datetime.now(timezone.utc).isoformat()
-
-        try:
-            # Import here to avoid potential circular imports at module import time
-            from strata.controllers.configuration_controller import ConfigurationController
-
-            cfg = ConfigurationController(self._work_path)
-            ok1, errs1 = cfg.set_cli_value("last_execution_id", execution_id)
-            ok2, errs2 = cfg.set_cli_value("last_execution_on", ts)
-            if not ok1 or not ok2:
-                errors: List[str] = []
-                errors.extend(errs1 or [])
-                errors.extend(errs2 or [])
-                if not errors:
-                    errors = self.get_errors()
-                self._add_error("Failed to update cli.yaml with last execution metadata")
-                return False, errors
-
-            # Do NOT persist these values into solution.json — they belong to cli.yaml
-            self.logger.info(
-                "Last execution updated (stored in cli.yaml)",
-                execution_id=execution_id,
-                last_execution_on=ts,
-            )
-            return True, []
-        except Exception as e:
-            self._add_error(f"Failed to persist last execution metadata: {e}")
-            return False, self.get_errors()
-
-    # ------------------------------------------------------------------
-    # Initialise
-    # ------------------------------------------------------------------
-
-    def init(self, name: str) -> Tuple[bool, List[str]]:
-        """Initialise a new solution workspace.
-
-        Creates the ``.strata/`` state directory, an empty
-        ``solution.json``, and a ``<name>.code-workspace`` file in
-        *work_path*.
-
-        Args:
-            name: Solution name (used as the workspace file stem).
-
-        Returns:
-            (success, errors)
-        """
-        SolutionController.get_state_dir(self._work_path).mkdir(parents=True, exist_ok=True)
-
-        existing_path = self._solution_path()
-        if existing_path.exists():
-            ok, errors = self.load()
-            if not ok:
-                return ok, errors
-            if self._solution is not None:
-                self._solution.meta.name = name  # type: ignore[assignment]
-        else:
-            self._solution = SolutionModel(
-                apiVersion=PlatformVersion.v1,
-                kind="solution",
-                meta={"name": name},  # type: ignore[arg-type]
-                spec={"solution_id": generate_uuid()},  # type: ignore[arg-type]
-            )
-
-        ok, errors = self.save()
-        if not ok:
-            return ok, errors
-
-        ok, errors = self._scaffold_platform_dir()
-        if not ok:
-            return ok, errors
-
-        ok, errors = self.generate_workspace()
-        if not ok:
-            return ok, errors
-
-        self._add_message(f"Solution '{name}' initialised at {self._work_path}")
-        return True, []
-
-    def update(self) -> Tuple[bool, List[str]]:
-        """Update package-owned files in an existing solution workspace.
-
-        Overwrites files that ship with the strata package (schemas,
-        devcontainer, CI workflows, example templates) while preserving
-        user-customised files (.code-workspace, .vscode/, cli.yaml, etc.).
-
-        This is intended to be run after upgrading the strata package so the
-        workspace picks up new schemas, template improvements, and CI changes.
-
-        Returns:
-            (success, errors)
-        """
-        state_dir = SolutionController.get_state_dir(self._work_path)
-        if not state_dir.exists():
-            self._add_error("No .strata/ directory found — workspace not initialised. Run 'strata sln init' first.")
-            return False, self.get_errors()
-
-        # Load the solution so we have solution_name for template substitutions
-        ok, errors = self.load()
-        if not ok:
-            return ok, errors
-
-        # Phase 1: Update package-owned scaffold files (overwrite existing)
-        ok, errors = self._update_scaffold_files()
-        if not ok:
-            return ok, errors
-
-        # Phase 2: Regenerate JSON schemas (always derived from models)
-        ok, errors = self._generate_schemas()
-        if not ok:
-            return ok, errors
-
-        self._add_message("Solution workspace updated successfully")
-        return True, []
-
-    def clean_solution(
-        self,
-        work_path: Path,
-        dry_run: bool = False,
-    ) -> Tuple[bool, Dict[str, Any]]:
-        """
-        Clean workspace artifacts without modifying project state.
-
-        Args:
-            work_path: Root working directory
-            logs: If True (default), delete files in the logs/ folder
-            dry_run: If True, report what would be deleted without removing anything
-
-        Returns:
-            Tuple[bool, Dict]: Success status and stats dict
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            stats: Dict[str, Any] = {
-                "logs_deleted": 0,
-                "logs_folder": None,
-                "dry_run": dry_run,
-            }
-
-            # Logs are stored in the solution state directory (`.strata/logs`)
-            logs_folder = SolutionController.get_logs_dir(work_path)
-            stats["logs_folder"] = str(logs_folder)
-            if logs_folder.exists():
-                deleted = 0
-                skipped = 0
-                for log_file in logs_folder.iterdir():
-                    if log_file.is_file():
-                        if dry_run:
-                            deleted += 1
-                        else:
-                            try:
-                                log_file.unlink()
-                                deleted += 1
-                            except PermissionError:
-                                # File is held open by the logging system; skip it
-                                skipped += 1
-                                self._messages.append(f"Skipped locked file: {log_file.name}")
-                stats["logs_deleted"] = deleted
-                stats["logs_skipped"] = skipped
-                prefix = "[dry-run] Would delete" if dry_run else "Deleted"
-                self.logger.info(
-                    f"{'[dry-run] ' if dry_run else ''}Cleaned logs folder: {logs_folder} ({deleted} files{',' if not dry_run else ''}{'' if dry_run else f' deleted, {skipped} skipped'})"
-                )
-                self._messages.append(
-                    f"{prefix} {deleted} log file(s) from {logs_folder}"
-                    + (f" ({skipped} skipped — in use)" if skipped and not dry_run else "")
-                )
-            else:
-                self._messages.append(f"Logs folder not found (skipped): {logs_folder}")
-
-            return True, stats
-
-        except Exception as e:
-            error_msg = f"Failed to clean project: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    # ------------------------------------------------------------------
-    # Repository management
-    # ------------------------------------------------------------------
-
-    def add_repository(self, repo: SolutionSpecRepositoryModel) -> Tuple[bool, List[str]]:
-        """Add a repository to the solution.
-
-        Args:
-            repo: Repository model to add.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded.")
-            return False, self.get_errors()
-
-        if self._solution.spec.repositories is None:
-            self._solution.spec.repositories = []
-
-        existing = [r.name for r in self._solution.spec.repositories]
-        if repo.name in existing:
-            self._add_error(f"Repository '{repo.name}' already exists in solution.")
-            return False, self.get_errors()
-
-        self._solution.spec.repositories.append(repo)
-        self.logger.info("Repository added to solution", repo=repo.name)
-        return True, []
-
-    def remove_repository(self, name: str) -> Tuple[bool, List[str]]:
-        """Remove a repository from the solution by name.
-
-        Args:
-            name: Repository name to remove.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded.")
-            return False, self.get_errors()
-
-        repos = self._solution.spec.repositories or []
-        updated = [r for r in repos if r.name != name]
-
-        if len(updated) == len(repos):
-            self._add_error(f"Repository '{name}' not found in solution.")
-            return False, self.get_errors()
-
-        self._solution.spec.repositories = updated
-        self.logger.info("Repository removed from solution", repo=name)
-        return True, []
-
-    def get_repositories(self, name: Optional[str] = None) -> Tuple[List[SolutionSpecRepositoryModel], List[str]]:
-        """Return repositories from the loaded solution, optionally filtered by name.
-
-        Args:
-            name: If given, return only the repository with this name.
-                  Returns an error if no match is found.
-
-        Returns:
-            ``(repos, errors)`` — *repos* is an empty list on error.
-        """
-        if self._solution is None:
-            return [], ["No solution loaded."]
-
-        repos = self._solution.spec.repositories or []
-
-        if name:
-            repos = [r for r in repos if str(r.name) == name]
-            if not repos:
-                return [], [f"Repository '{name}' not found in solution."]
-
-        return list(repos), []
-
-    def get_repo_map(self) -> Dict[str, str]:
-        """Return a mapping of repo name → absolute root path for ``@repo/...`` resolution.
-
-        - **local** repos: the ``url`` field is the source directory (absolute, or
-          relative to the workspace root).  ``path`` is only a logical mount label
-          and is not used for resolution.
-        - **gitops** repos: the ``path`` field is where the repo was cloned,
-          relative to the workspace root.
-
-        Both branches resolve relative values against **the workspace root**, never
-        against the process working directory.  Registered repositories are
-        workspace-scoped state — they live in ``.strata/solution.json`` inside the
-        workspace — so the workspace root is the only stable base.
-
-        Resolving ``local`` repos against ``os.getcwd()`` (the previous behaviour)
-        meant ``@repo/...`` references resolved differently depending on which
-        directory ``strata`` happened to be invoked from, and silently ignored an
-        explicitly-supplied ``--work-path``: running from a nested deployment
-        directory produced ``<work_path>/<subdir>/<ref>`` instead of
-        ``<work_path>/<ref>``, failing with a diagnostic that blamed the profile's
-        config references rather than the resolution.  See ADR-0077.
-        """
-        repos, _ = self.get_repositories()
-        base = Path(self._work_path).resolve()
-        repo_map: Dict[str, str] = {}
-        for r in repos:
-            if str(r.type) == "local":
-                # url is the source directory; resolve against work_path if relative
-                url_path = Path(str(r.url))
-                if not url_path.is_absolute():
-                    url_path = base / url_path
-                repo_map[str(r.name)] = str(url_path.resolve())
-            else:
-                # git repo: cloned into work_path / r.path
-                repo_map[str(r.name)] = str((base / r.path).resolve())
-        return repo_map
-
-    # ------------------------------------------------------------------
-    # Deployment registry helpers
-    # ------------------------------------------------------------------
-
-    def add_deployment(self, deployment: SolutionSpecDeploymentModel) -> Tuple[bool, List[str]]:
-        """Register a deployment file entry in the solution.
-
-        Args:
-            deployment: Deployment model to register.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded.")
-            return False, self.get_errors()
-
-        if self._solution.spec.deployments is None:
-            self._solution.spec.deployments = []
-
-        existing = [d.name for d in self._solution.spec.deployments]
-        if deployment.name in existing:
-            self._add_error(f"Deployment '{deployment.name}' already registered in solution.")
-            return False, self.get_errors()
-
-        self._solution.spec.deployments.append(deployment)
-        self.logger.info("Deployment registered in solution", deployment=deployment.name)
-        return True, []
-
-    def remove_deployment(self, name: str) -> Tuple[bool, List[str]]:
-        """Remove a registered deployment from the solution by name.
-
-        Args:
-            name: Deployment name to remove.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded.")
-            return False, self.get_errors()
-
-        deployments = self._solution.spec.deployments or []
-        updated = [d for d in deployments if d.name != name]
-
-        if len(updated) == len(deployments):
-            self._add_error(f"Deployment '{name}' not found in solution.")
-            return False, self.get_errors()
-
-        self._solution.spec.deployments = updated
-        self.logger.info("Deployment removed from solution", deployment=name)
-        return True, []
-
-    def get_deployments(self, name: Optional[str] = None) -> Tuple[List[SolutionSpecDeploymentModel], List[str]]:
-        """Return registered deployments from the solution, optionally filtered by name.
-
-        Args:
-            name: If given, return only the deployment with this name.
-
-        Returns:
-            ``(deployments, errors)``
-        """
-        if self._solution is None:
-            return [], ["No solution loaded."]
-
-        deployments = self._solution.spec.deployments or []
-
-        if name:
-            deployments = [d for d in deployments if d.name == name]
-            if not deployments:
-                return [], [f"Deployment '{name}' not found in solution."]
-
-        return list(deployments), []
-
-    # ------------------------------------------------------------------
-    # Canonical build path helpers
-    # ------------------------------------------------------------------
-
-    def get_platform_path(self, deployment_service: "DeploymentService", build_path: Path) -> Path:
-        """Return the path to ``platform.json`` inside the deployment build output."""
-        return deployment_service.get_build_path(build_path) / "platform.json"
-
-    def get_platform_yaml_path(self, deployment_service: "DeploymentService", build_path: Path) -> Path:
-        """Return the path to ``platform.yaml`` inside the deployment build output."""
-        return deployment_service.get_build_path(build_path) / "platform.yaml"
-
-    def get_provisioner_path(
-        self,
-        deployment_service: "DeploymentService",
-        build_path: Path,
-        iac: "WorkspaceIacModel",
-    ) -> Path:
-        """Return the canonical IaC working directory inside the deployment build output.
-
-        Single source of truth used by both the builder (copy destination) and
-        the deployer (working directory).  Resolution order:
-          1. ``iac.source.target_path`` — explicit override
-          2. ``iac.source.source_path`` — default (matches what the builder copies)
-        """
-        if iac.source is None:
-            raise ValueError(f"Provisioner '{iac.name}' has no source defined.")
-        target = iac.source.target_path or iac.source.source_path
-        if target is None:
-            raise ValueError(f"Provisioner '{iac.name}' source has no source_path or target_path defined.")
-        return deployment_service.get_build_path(build_path) / target
-
-    def get_module_build_path(
-        self,
-        deployment_service: "DeploymentService",
-        build_path: Path,
-        namespace_name: str,
-        module_name: str,
-    ) -> Path:
-        """Return the canonical build directory for a namespace module (Helm).
-
-        Single source of truth used by both ``HelmBuilder`` (``values.yaml`` /
-        ``meta.yaml`` write destination, local chart source copy destination) and
-        ``HelmDeployer`` (``values_file`` / ``meta_file`` read location, local
-        ``chart_ref`` resolution) — ADR-0071.
-        """
-        return deployment_service.get_build_path(build_path) / namespace_name / module_name
-
-    def get_namespace_compose_path(
-        self,
-        deployment_service: "DeploymentService",
-        build_path: Path,
-        namespace_name: str,
-    ) -> Path:
-        """Return the canonical ``docker-compose.yml`` path for a namespace (Compose).
-
-        Single source of truth used by both ``ComposeBuilder`` (write destination)
-        and ``ComposeDeployer.validate_workspace()`` (discovery) — ADR-0071.
-        """
-        return deployment_service.get_build_path(build_path) / namespace_name / "docker-compose.yml"
-
-    def get_sync_output_path(
-        self,
-        deployment_service: "DeploymentService",
-        build_path: Path,
-        stage_name: str,
-        output_rel: str,
-    ) -> Path:
-        """Return the canonical rendered-manifest path for a sync stage.
-
-        Single source of truth used by both ``SyncBuilder`` (render/write
-        destination) and ``SyncDeployer.validate_workspace()`` (discovery) —
-        ADR-0071. ``output_rel`` comes from the stage's
-        ``integration.properties["output_file"]``, read independently by both
-        sides today.
-        """
-        return deployment_service.get_build_path(build_path) / stage_name / output_rel
-
-    # ------------------------------------------------------------------
-    # Profile management
-    # ------------------------------------------------------------------
-
-    def add_profile(self, profile: SolutionSpecProfileModel) -> Tuple[bool, List[str]]:
-        """Add a profile to the solution.
-
-        Args:
-            profile: Profile model to add.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded.")
-            return False, self.get_errors()
-
-        if self._solution.spec.profiles is None:
-            self._solution.spec.profiles = []
-
-        existing = [p.name for p in self._solution.spec.profiles]
-        if profile.name in existing:
-            self._add_error(f"Profile '{profile.name}' already exists in solution.")
-            return False, self.get_errors()
-
-        # If first profile, set active
-        if len(self._solution.spec.profiles) == 0:
-            profile.active = True
-
-        self._solution.spec.profiles.append(profile)
-        self.logger.info("Profile added to solution", profile=str(profile.name))
-        return True, []
-
-    def remove_profile(self, name: str) -> Tuple[bool, List[str]]:
-        """Remove a profile from the solution by name.
-
-        Args:
-            name: Profile name to remove.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded.")
-            return False, self.get_errors()
-
-        profiles = self._solution.spec.profiles or []
-        target = [p for p in profiles if str(p.name) == name]
-
-        if not target:
-            self._add_error(f"Profile '{name}' not found in solution.")
-            return False, self.get_errors()
-
-        if target[0].active:
-            self._add_error(f"Profile '{name}' is currently active. Activate another profile first.")
-            return False, self.get_errors()
-
-        updated = [p for p in profiles if str(p.name) != name]
-        self._solution.spec.profiles = updated
-        self.logger.info("Profile removed from solution", profile=name)
-        return True, []
-
-    def get_profiles(self, name: Optional[str] = None) -> Tuple[List[SolutionSpecProfileModel], List[str]]:
-        """Return profiles from the loaded solution, optionally filtered by name.
-
-        Args:
-            name: If given, return only the profile with this name.
-
-        Returns:
-            (profiles, errors)
-        """
-        if self._solution is None:
-            return [], ["No solution loaded."]
-
-        profiles = self._solution.spec.profiles or []
-
-        if name:
-            profiles = [p for p in profiles if str(p.name) == name]
-            if not profiles:
-                return [], [f"Profile '{name}' not found in solution."]
-
-        return list(profiles), []
-
-    def activate_profile(self, name: str) -> Tuple[bool, List[str]]:
-        """Activate a profile by name, deactivating all others.
-
-        Args:
-            name: Profile name to activate.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded.")
-            return False, self.get_errors()
-
-        profiles = self._solution.spec.profiles or []
-        target = [p for p in profiles if str(p.name) == name]
-
-        if not target:
-            self._add_error(f"Profile '{name}' not found in solution.")
-            return False, self.get_errors()
-
-        for p in profiles:
-            p.active = str(p.name) == name
-
-        self.logger.info("Profile activated", profile=name)
-        return True, []
-
-    def get_active_profile(self) -> Tuple[Optional[SolutionSpecProfileModel], List[str]]:
-        """Return the currently active profile, if any.
-
-        Returns:
-            (profile_or_none, errors)
-        """
-        if self._solution is None:
-            return None, ["No solution loaded."]
-
-        profiles = self._solution.spec.profiles or []
-        active = [p for p in profiles if p.active]
-
-        if not active:
-            return None, []
-
-        return active[0], []
-
-    def add_profile_path(
-        self, profile_name: str, path_type: str, config: SolutionSpecProfileConfigModel
-    ) -> Tuple[bool, List[str]]:
-        """Add a configuration path to a profile.
-
-        Args:
-            profile_name: Name of the profile.
-            path_type: Type of path (config, dotenv, data, secret).
-            config: Configuration path model to add.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded.")
-            return False, self.get_errors()
-
-        profiles = self._solution.spec.profiles or []
-        target = [p for p in profiles if str(p.name) == profile_name]
-
-        if not target:
-            self._add_error(f"Profile '{profile_name}' not found in solution.")
-            return False, self.get_errors()
-
-        profile = target[0]
-        type_map = {
-            "configfile": "configfile_paths",
-            "envfile": "envfile_paths",
-            "datafile": "datafile_paths",
-            "secretfile": "secretfile_paths",
-        }
-
-        attr = type_map.get(path_type)
-        if not attr:
-            self._add_error(
-                f"Invalid path type '{path_type}'. Must be one of: configfile, envfile, datafile, secretfile."
-            )
-            return False, self.get_errors()
-
-        paths: Optional[List[SolutionSpecProfileConfigModel]] = getattr(profile, attr)
-        if paths is None:
-            paths = []
-            setattr(profile, attr, paths)
-
-        existing = [c.name for c in paths]
-        if config.name in existing:
-            self._add_error(f"Path '{config.name}' already exists in {path_type} paths for profile '{profile_name}'.")
-            return False, self.get_errors()
-
-        paths.append(config)
-        self.logger.info("Profile path added", profile=profile_name, path_type=path_type, path_name=str(config.name))
-        return True, []
-
-    def remove_profile_path(self, profile_name: str, path_type: str, path_name: str) -> Tuple[bool, List[str]]:
-        """Remove a configuration path from a profile.
-
-        Args:
-            profile_name: Name of the profile.
-            path_type: Type of path (config, dotenv, data, secret).
-            path_name: Name of the path to remove.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded.")
-            return False, self.get_errors()
-
-        profiles = self._solution.spec.profiles or []
-        target = [p for p in profiles if str(p.name) == profile_name]
-
-        if not target:
-            self._add_error(f"Profile '{profile_name}' not found in solution.")
-            return False, self.get_errors()
-
-        profile = target[0]
-        type_map = {
-            "configfile": "configfile_paths",
-            "envfile": "envfile_paths",
-            "datafile": "datafile_paths",
-            "secretfile": "secretfile_paths",
-        }
-
-        attr = type_map.get(path_type)
-        if not attr:
-            self._add_error(
-                f"Invalid path type '{path_type}'. Must be one of: configfile, envfile, datafile, secretfile."
-            )
-            return False, self.get_errors()
-
-        paths: Optional[List[SolutionSpecProfileConfigModel]] = getattr(profile, attr)
-        if not paths:
-            self._add_error(f"Path '{path_name}' not found in {path_type} paths for profile '{profile_name}'.")
-            return False, self.get_errors()
-
-        updated = [c for c in paths if str(c.name) != path_name]
-        if len(updated) == len(paths):
-            self._add_error(f"Path '{path_name}' not found in {path_type} paths for profile '{profile_name}'.")
-            return False, self.get_errors()
-
-        setattr(profile, attr, updated)
-        self.logger.info("Profile path removed", profile=profile_name, path_type=path_type, path_name=path_name)
-        return True, []
-
-    def get_profile_paths(self, profile_name: str) -> Tuple[Dict[str, List[SolutionSpecProfileConfigModel]], List[str]]:
-        """Return all configuration paths for a profile, grouped by type.
-
-        Args:
-            profile_name: Name of the profile.
-
-        Returns:
-            (paths_dict, errors)
-        """
-        if self._solution is None:
-            return {}, ["No solution loaded."]
-
-        profiles = self._solution.spec.profiles or []
-        target = [p for p in profiles if str(p.name) == profile_name]
-
-        if not target:
-            return {}, [f"Profile '{profile_name}' not found in solution."]
-
-        profile = target[0]
-        return {
-            "configfile": profile.configfile_paths or [],
-            "envfile": profile.envfile_paths or [],
-            "datafile": profile.datafile_paths or [],
-            "secretfile": profile.secretfile_paths or [],
-        }, []
-
-    # ------------------------------------------------------------------
-    # VS Code workspace generation
-    # ------------------------------------------------------------------
-
-    def generate_workspace(self) -> Tuple[bool, List[str]]:
-        """Write (or overwrite) the VS Code ``.code-workspace`` file.
-
-        The workspace file is written to ``<work_path>/<solution-name>.code-workspace``
-        and includes a folder entry for each repository defined in the solution spec.
-
-        Returns:
-            (success, errors)
-        """
-        if self._solution is None:
-            self._add_error("No solution loaded — cannot generate workspace.")
-            return False, self.get_errors()
-
-        name = self._solution.meta.name
-        repos = self._solution.spec.repositories or []
-
-        folders: List[dict] = [{"path": "."}]  # always include the solution root
-        base = self._work_path.resolve()
-        for repo in repos:
-            if str(repo.type) == "local":
-                # url is relative to the workspace root (same contract as
-                # get_repo_map — never the process CWD, which would make the
-                # generated .code-workspace depend on where `strata repo add`
-                # happened to be run from). See ADR-0077.
-                url_abs = Path(str(repo.url))
-                if not url_abs.is_absolute():
-                    url_abs = base / url_abs
-                try:
-                    folder_path = os.path.relpath(url_abs.resolve(), base).replace("\\", "/")
-                except ValueError:
-                    # relpath can fail on Windows across drives — keep absolute
-                    folder_path = str(url_abs.resolve())
-            else:
-                # Gitops: cloned into work_path/repo.path, already relative to work_path
-                folder_path = str(repo.path)
-            folders.append({"path": folder_path, "name": str(repo.name)})
-
-        workspace_data = {
-            "folders": folders,
-            "settings": {},
-        }
-
-        workspace_path = self._work_path / f"{name}{SOLUTION_WORKSPACE_SUFFIX}"
-        if workspace_path.exists():
-            self.logger.debug("Workspace file already exists — skipping", path=str(workspace_path))
-            self._add_message(f"Workspace file exists (not overwritten): {workspace_path.name}")
-        else:
-            try:
-                workspace_path.write_text(
-                    json.dumps(workspace_data, indent=2),
-                    encoding="utf-8",
-                )
-                self.logger.info("VS Code workspace written", path=str(workspace_path))
-                self._add_message(f"Workspace file written: {workspace_path.name}")
-            except Exception as e:
-                msg = f"Failed to write workspace file: {e}"
-                self._add_error(msg)
-                return False, self.get_errors()
-
-        # Create a small `.vscode/` scaffold. Prefer rendering templates from
-        # package templates/vscode/*.template.* when available; fall
-        # back to the inline scaffold if templates are missing.
-        try:
-            vscode_dir = self._work_path / ".vscode"
-            vscode_dir.mkdir(parents=True, exist_ok=True)
-
-            templates_vscode = get_pkg_templates_path() / "vscode"
-            if templates_vscode.exists() and templates_vscode.is_dir():
-                # Render template files into the workspace .vscode directory.
-                context = {"SOLUTION_NAME": name}
-                for tpl in templates_vscode.iterdir():
-                    if not tpl.is_file() or ".template." not in tpl.name:
-                        continue
-                    try:
-                        content = tpl.read_text(encoding="utf-8")
-                        processed = TemplateProcessor.render(content, context)
-                        out_name = tpl.name.replace(".template.", ".")
-                        out_path = vscode_dir / out_name
-                        if not out_path.exists():
-                            out_path.write_text(processed, encoding="utf-8")
-                            self._add_message(f"Created: {out_path.relative_to(self._work_path)}")
-                        else:
-                            self.logger.debug(".vscode template output exists — skipping", path=str(out_path))
-                    except Exception as e:
-                        self.logger.warning(
-                            "Failed to render vscode template", extra={"template": str(tpl), "error": str(e)}
-                        )
-            else:
-                # No templates available; fall back to inline scaffolding (non-destructive)
-                extensions = {
-                    "recommendations": [
-                        "ms-python.python",
-                        "ms-python.vscode-pylance",
-                        "charliermarsh.ruff",
-                        "ms-vscode.powershell",
-                        "ms-vscode-remote.remote-containers",
-                        "redhat.vscode-yaml",
-                        "hashicorp.terraform",
-                        "streetsidesoftware.code-spell-checker",
-                        "eamodio.gitlens",
-                        "vscode-icons-team.vscode-icons",
-                        "EditorConfig.EditorConfig",
-                    ],
-                    "unwantedRecommendations": [
-                        "ms-python.black-formatter",
-                        "ms-python.isort",
-                    ],
-                }
-                ext_file = vscode_dir / "extensions.json"
-                if not ext_file.exists():
-                    ext_file.write_text(json.dumps(extensions, indent=2), encoding="utf-8")
-                    self._add_message(f"Created: {ext_file.relative_to(self._work_path)}")
-                else:
-                    self.logger.debug(".vscode/extensions.json already exists — skipping", path=str(ext_file))
-
-                settings = {
-                    "[python]": {
-                        "editor.insertSpaces": True,
-                        "editor.tabSize": 4,
-                        "editor.defaultFormatter": "charliermarsh.ruff",
-                        "editor.formatOnSave": True,
-                        "editor.codeActionsOnSave": {
-                            "source.fixAll.ruff": "explicit",
-                            "source.organizeImports.ruff": "explicit",
-                        },
-                    },
-                    "[yaml]": {
-                        "editor.insertSpaces": True,
-                        "editor.tabSize": 2,
-                        "editor.defaultFormatter": "redhat.vscode-yaml",
-                        "editor.formatOnSave": True,
-                    },
-                    "python.testing.pytestEnabled": True,
-                    "python.testing.pytestArgs": ["tests"],
-                    "python.envFile": "${workspaceFolder}/.env",
-                    "python.testing.cwd": "${workspaceFolder}",
-                    "editor.formatOnSave": True,
-                    "files.eol": "\n",
-                    "files.exclude": {
-                        "**/.git": True,
-                        ".ruff_cache": True,
-                        ".mypy_cache": True,
-                        ".nox": True,
-                        ".pytest_cache": True,
-                        ".coverage": True,
-                    },
-                }
-                settings_file = vscode_dir / "settings.json"
-                if not settings_file.exists():
-                    settings_file.write_text(json.dumps(settings, indent=2), encoding="utf-8")
-                    self._add_message(f"Created: {settings_file.relative_to(self._work_path)}")
-                else:
-                    self.logger.debug(".vscode/settings.json already exists — skipping", path=str(settings_file))
-
-                launch = {
-                    "version": "0.2.0",
-                    "configurations": [
-                        {
-                            "name": f"Run: {name}",
-                            "type": "debugpy",
-                            "request": "launch",
-                            "program": "${workspaceFolder}/src/strata/__main__.py",
-                            "args": "${input:cliArgs}",
-                            "cwd": "${workspaceFolder}",
-                            "env": {"PYTHONPATH": "${workspaceFolder}/src"},
-                            "console": "integratedTerminal",
-                            "justMyCode": True,
-                        },
-                        {
-                            "name": f"Debug: {name}",
-                            "type": "debugpy",
-                            "request": "launch",
-                            "program": "${workspaceFolder}/src/strata/__main__.py",
-                            "args": "${input:cliArgs}",
-                            "cwd": "${workspaceFolder}",
-                            "env": {"PYTHONPATH": "${workspaceFolder}/src"},
-                            "console": "integratedTerminal",
-                            "justMyCode": False,
-                        },
-                    ],
-                    "inputs": [
-                        {
-                            "id": "cliArgs",
-                            "type": "promptString",
-                            "description": "CLI arguments (e.g. --help, version, deploy platform.yaml)",
-                            "default": "--help",
-                        }
-                    ],
-                }
-                launch_file = vscode_dir / "launch.json"
-                if not launch_file.exists():
-                    launch_file.write_text(json.dumps(launch, indent=2), encoding="utf-8")
-                    self._add_message(f"Created: {launch_file.relative_to(self._work_path)}")
-                else:
-                    self.logger.debug(".vscode/launch.json already exists — skipping", path=str(launch_file))
-
-                tasks = {
-                    "version": "2.0.0",
-                    "tasks": [
-                        {
-                            "label": f"Run: {name}",
-                            "type": "shell",
-                            "command": "strata ${input:cliArgs}",
-                            "group": "build",
-                            "presentation": {
-                                "echo": True,
-                                "reveal": "always",
-                                "focus": True,
-                                "panel": "shared",
-                                "clear": True,
-                            },
-                            "problemMatcher": [],
-                        },
-                        {
-                            "label": "Check: lint + format + types",
-                            "type": "shell",
-                            "command": "scripts/Check.ps1",
-                            "options": {"shell": {"executable": "pwsh", "args": ["-NoProfile", "-File"]}},
-                            "group": "build",
-                            "presentation": {
-                                "echo": True,
-                                "reveal": "always",
-                                "focus": True,
-                                "panel": "shared",
-                                "clear": True,
-                            },
-                            "problemMatcher": [],
-                        },
-                    ],
-                    "inputs": [
-                        {
-                            "id": "cliArgs",
-                            "type": "promptString",
-                            "description": "CLI arguments (e.g. version, deploy platform.yaml)",
-                            "default": "version",
-                        }
-                    ],
-                }
-                tasks_file = vscode_dir / "tasks.json"
-                if not tasks_file.exists():
-                    tasks_file.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
-                    self._add_message(f"Created: {tasks_file.relative_to(self._work_path)}")
-                else:
-                    self.logger.debug(".vscode/tasks.json already exists — skipping", path=str(tasks_file))
-
-                readme_file = vscode_dir / "README.md"
-                if not readme_file.exists():
-                    readme_file.write_text(
-                        "# VS Code workspace settings\n\nThis folder contains recommended extensions, settings, tasks and launch configurations for this workspace.\n",
-                        encoding="utf-8",
-                    )
-                    self._add_message(f"Created: {readme_file.relative_to(self._work_path)}")
-                else:
-                    self.logger.debug(".vscode/README.md already exists — skipping", path=str(readme_file))
-        except Exception as e:
-            self.logger.warning("Failed to write .vscode scaffolding", extra={"error": str(e)})
-
-        return True, []
-
-    # ------------------------------------------------------------------
-    # Others (e.g. validation) can be added here as needed
-    # ------------------------------------------------------------------
-
-    # Get logging
-    def get_logs(
-        self,
-        work_path: Path,
-        lines: int = 50,
-        minutes: Optional[int] = None,
-        level: Optional[str] = None,
-        session_id: Optional[str] = None,
-        execution_id: Optional[str] = None,
-    ) -> tuple[bool, List[Dict[str, Any]], List[str]]:
-        """
-        Read and filter execution logs.
-
-        Args:
-            work_path: Working directory path
-            lines: Number of log lines to return (default: 50)
-            minutes: Filter logs from last N minutes
-            level: Filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-            session_id: Filter by session ID
-            execution_id: Filter by execution ID
-
-        Returns:
-            Tuple of (success: bool, log_entries: List[dict], errors: List[str])
-        """
-        errors = []
-
-        try:
-            # Resolve log file: active handler → session.json log_path fallback
-            log_file = self._resolve_log_file(work_path)
-
-            if not log_file:
-                self.logger.debug("No log file found (no active handler and no session.json log_path)")
-                return True, [], []
-
-            if not log_file.exists():
-                self.logger.debug("Log file not found", extra={"log_file": str(log_file)})
-                return True, [], []
-
-            # Read and parse log entries
-            log_entries = self._read_log_entries(log_file)
-
-            if not log_entries:
-                return True, [], []
-
-            # Apply filters
-            log_entries = self._apply_filters(
-                log_entries,
-                minutes=minutes,
-                level=level,
-                session_id=session_id,
-                execution_id=execution_id,
-            )
-
-            # Limit to last N lines (unless filtering by session_id or execution_id)
-            if not session_id and not execution_id and len(log_entries) > lines:
-                log_entries = log_entries[-lines:]
-
-            self.logger.debug(
-                "Retrieved logs",
-                extra={
-                    "total_entries": len(log_entries),
-                    "filters": {
-                        "minutes": minutes,
-                        "level": level,
-                        "session_id": session_id,
-                        "execution_id": execution_id,
-                    },
-                },
-            )
-
-            return True, log_entries, []
-
-        except Exception as e:
-            error_msg = f"Failed to read logs: {str(e)}"
-            self.logger.exception(error_msg)
-            errors.append(error_msg)
-            return False, [], errors
-
-    # ------------------------------------------------------------------
-    # Static path helpers  — thin wrappers; computation lives in config.*
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def get_logging_config_path(work_path: Path) -> Path:
-        return _get_logging_config_path(work_path)
-
-    @staticmethod
-    def get_configuration_path(work_path: Path) -> Path:
-        return _get_configuration_path(work_path)
-
-    @staticmethod
-    def get_solution_json_path(work_path: Path) -> Path:
-        return _get_solution_json_path(work_path)
-
-    @staticmethod
-    def get_state_dir(work_path: Path) -> Path:
-        return _get_strata_dir(work_path)
-
-    @staticmethod
-    def get_logs_dir(work_path: Path) -> Path:
-        return _get_logs_dir(work_path)
-
-    @staticmethod
-    def get_schemas_dir(work_path: Path) -> Path:
-        return _get_schemas_dir(work_path)
-
-    @staticmethod
-    def get_integrations_dir(work_path: Path) -> Path:
-        return _get_integrations_dir(work_path)
-
-    @staticmethod
-    def get_policies_dir(work_path: Path) -> Path:
-        return _get_policies_dir(work_path)
-
-    @staticmethod
-    def get_templates_dir(work_path: Path) -> Path:
-        return _get_templates_dir(work_path)
-
-    @staticmethod
-    def get_plugins_dir(work_path: Path) -> Path:
-        return _get_plugins_dir(work_path)
-
-    @staticmethod
-    def get_lockfile_parsers_dir(work_path: Path) -> Path:
-        return _get_lockfile_parsers_dir(work_path)
-
-    @staticmethod
-    def get_locks_dir(work_path: Path) -> Path:
-        return _get_locks_dir(work_path)
-
-    @staticmethod
-    def get_deployments_dir(work_path: Path) -> Path:
-        return _get_deployments_dir(work_path)
-
-    @staticmethod
-    def get_outputs_dir(work_path: Path) -> Path:
-        return _get_outputs_dir(work_path)
-
-    @staticmethod
-    def get_build_dir(work_path: Path) -> Path:
-        return _get_build_dir(work_path)
-
-    @staticmethod
-    def get_deploy_log_dir(work_path: Path) -> Path:
-        return _get_deploy_log_dir(work_path)
-
-    @staticmethod
-    def get_audit_log_path(work_path: Path) -> Path:
-        return _get_audit_log_path(work_path)
-
-    @staticmethod
-    def get_collectors_path(work_path: Path) -> Path:
-        return _get_collectors_path(work_path)
-
-    @staticmethod
-    def get_cve_allowed_path(work_path: Path) -> Path:
-        return _get_cve_allowed_path(work_path)
-
-    @staticmethod
-    def get_sbom_ignore_path(work_path: Path) -> Path:
-        return _get_sbom_ignore_path(work_path)
-
-    @staticmethod
-    def get_guide_path(work_path: Path) -> Path:
-        return _get_guide_path(work_path)
-
-    @staticmethod
-    def get_cli_config_path(work_path: Path) -> Path:
-        return _get_cli_config_path(work_path)
-
-    # ------------------------------------------------------------------
-    # Scaffold
-    # ------------------------------------------------------------------
-
-    def _scaffold_platform_dir(self) -> Tuple[bool, List[str]]:
-        """Deep-copy ``templates/solution/`` into the workspace.
-
-        Every file is copied idempotently (skipped when the destination already
-        exists).  Path components that start with ``dot.`` are renamed so that
-        the leading ``dot.`` becomes ``.`` — e.g. ``dot.strata/`` → ``.strata/``
-        and ``dot.gitignore`` → ``.gitignore``.
-
-        Token substitutions applied to every file:
-        - ``{{ SOLUTION_NAME }}`` → solution name
-        - ``.strata/logs/application.json`` → resolved log file path
-          (logging.yaml only)
-        """
-        solution_tpl = get_pkg_templates_path() / "solution"
-        solution_name = str(self._solution.meta.name) if self._solution else ""
-        state_dir = SolutionController.get_state_dir(self._work_path)
-
-        def _dest_name(part: str) -> str:
-            return "." + part[4:] if part.startswith("dot.") else part
-
-        for src in sorted(solution_tpl.rglob("*")):
-            if not src.is_file():
-                continue
-            if "__pycache__" in src.parts or src.suffix in (".pyc", ".pyo"):
-                continue
-            rel_parts = [_dest_name(p) for p in src.relative_to(solution_tpl).parts]
-            dest = self._work_path / Path(*rel_parts)
-            if dest.exists():
-                self.logger.debug("Scaffold file already exists — skipping", path=str(dest))
-                continue
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                from strata import __version__
-
-                content = src.read_text(encoding="utf-8")
-                # .j2 and .md files are copied verbatim (not rendered as templates).
-                # .j2 files are raw Jinja2 templates for end-users.
-                # .md files are documentation/skill files with example code that shouldn't be templated.
-                if src.suffix not in (".j2", ".md"):
-                    content = TemplateProcessor.render(
-                        content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
-                    )
-                if dest.name == SOLUTION_LOGGING_FILE:
-                    log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
-                    content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)
-                dest.write_text(content, encoding="utf-8")
-                self.logger.info("Scaffold file written", path=str(dest))
-                self._add_message(f"Created: {dest.relative_to(self._work_path)}")
-            except Exception as e:
-                msg = f"Failed to write scaffold file {dest}: {e}"
-                self._add_error(msg)
-                return False, self.get_errors()
-
-        # Ensure .strata/logs/ exists (not a template file — just a directory)
-        (state_dir / SOLUTION_LOGS_DIR).mkdir(parents=True, exist_ok=True)
-
-        # Generate JSON Schemas
-        ok, errors = self._generate_schemas()
-        if not ok:
-            return ok, errors
-
-        return True, []
-
-    # ------------------------------------------------------------------
-    # Package-owned file sets
-    # ------------------------------------------------------------------
-
-    # Relative paths (after dot. → . renaming) that are owned by the strata
-    # package and safe to overwrite on ``sln update``.  User-owned files are
-    # everything else from the scaffold — they are only written on first init.
-    _PACKAGE_OWNED_PREFIXES: Tuple[str, ...] = (
-        f"{SOLUTION_DIR}/README.md",
-        f"{SOLUTION_DIR}/{SOLUTION_GITIGNORE_FILE}",
-        f"{SOLUTION_DIR}/{SOLUTION_INTEGRATIONS_DIR}/",
-        f"{SOLUTION_DIR}/{SOLUTION_TEMPLATES_DIR}/",
-        ".devcontainer/",
-        ".github/",
-        ".gitignore",
-    )
-
-    # Paths that are explicitly user-owned and must never be overwritten.
-    _USER_OWNED_PREFIXES: Tuple[str, ...] = (
-        f"{SOLUTION_DIR}/{SOLUTION_CONFIG_FILE}",
-        f"{SOLUTION_DIR}/{SOLUTION_LOGGING_FILE}",
-        ".vscode/",
-        "README.md",
-    )
+            relative = path.resolve().relative_to(self.root).as_posix()
+        except ValueError:  # outside the root — should not happen, but be safe
+            return False
+        return any(fnmatch(relative, pattern) for pattern in patterns)
 
     @classmethod
-    def _is_package_owned(cls, rel_path: str) -> bool:
-        """Return True if *rel_path* is a package-owned file safe to overwrite."""
-        for prefix in cls._PACKAGE_OWNED_PREFIXES:
-            if rel_path == prefix or rel_path.startswith(prefix):
-                return True
-        return False
+    def from_directory(cls, start: Path) -> "SolutionController | None":
+        """Build a controller for the solution containing `start`, if any."""
+        root = find_solution_root(start)
+        return cls(root) if root is not None else None
 
-    def _update_scaffold_files(self) -> Tuple[bool, List[str]]:
-        """Overwrite package-owned scaffold files; skip user-owned ones.
+    def load(self) -> Diagnostics:
+        """Load the manifest, then discover and index every document.
 
-        Called by ``update()`` to refresh files that ship with the package.
+        Findings accumulate — a bad document does not stop the scan, so one run
+        reports everything wrong. `.ok` is False when any error was recorded.
         """
-        solution_tpl = get_pkg_templates_path() / "solution"
-        solution_name = str(self._solution.meta.name) if self._solution else ""
-        state_dir = SolutionController.get_state_dir(self._work_path)
+        self.diagnostics = Diagnostics()
+        self.index = DocumentIndex()
 
-        def _dest_name(part: str) -> str:
-            return "." + part[4:] if part.startswith("dot.") else part
+        self._load_manifest()
+        for path in self._walk():
+            self._load_file(path)
 
-        for src in sorted(solution_tpl.rglob("*")):
-            if not src.is_file():
-                continue
-            if "__pycache__" in src.parts or src.suffix in (".pyc", ".pyo"):
-                continue
-            rel_parts = [_dest_name(p) for p in src.relative_to(solution_tpl).parts]
-            rel_path = str(Path(*rel_parts)).replace("\\", "/")
-            dest = self._work_path / Path(*rel_parts)
+        return self.diagnostics
 
-            if not self._is_package_owned(rel_path):
-                self.logger.debug("User-owned file — skipping", path=rel_path)
-                self._add_message(f"Skipped: {rel_path} (user-owned)")
-                continue
+    def _load_manifest(self) -> None:
+        """Validate `strata.yaml` itself. Its own kind is not indexed."""
+        manifest = manifest_path(self.root)
+        if not manifest.is_file():
+            self.diagnostics.error(
+                f"No {MANIFEST_FILENAME} found at solution root '{self.root}'",
+                source=str(self.root),
+                code="manifest_missing",
+            )
+            return
 
-            dest.parent.mkdir(parents=True, exist_ok=True)
+        service = SolutionService(path=str(manifest))
+        result = service.validate()
+        if not result.ok:
+            self.diagnostics.extend(result, source=str(manifest))
+            return
+        self.solution = service.model
+
+    def _walk(self) -> Iterator[Path]:
+        """Yield every candidate YAML file under the root.
+
+        Skips built-in ignored directories and anything matching a
+        user-declared `spec.discovery.exclude` pattern, and does not descend
+        into a directory holding its own `strata.yaml` — that is a different
+        solution.
+        """
+        stack = [self.root]
+        while stack:
+            current = stack.pop()
             try:
-                from strata import __version__
+                children = sorted(current.iterdir())
+            except OSError as exc:  # unreadable directory — report, keep going
+                self.diagnostics.error(
+                    f"cannot read directory: {exc}", source=str(current), code="unreadable_directory"
+                )
+                continue
 
-                content = src.read_text(encoding="utf-8")
-                # .j2 and .md files are copied verbatim (not rendered as templates).
-                # .j2 files are raw Jinja2 templates for end-users.
-                # .md files are documentation/skill files with example code that shouldn't be templated.
-                if src.suffix not in (".j2", ".md"):
-                    content = TemplateProcessor.render(
-                        content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
-                    )
-                if dest.name == SOLUTION_LOGGING_FILE:
-                    log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
-                    content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)
-                dest.write_text(content, encoding="utf-8")
-                self.logger.info("Package file updated", path=rel_path)
-                self._add_message(f"Updated: {rel_path}")
-            except Exception as e:
-                msg = f"Failed to write scaffold file {dest}: {e}"
-                self._add_error(msg)
-                return False, self.get_errors()
-
-        return True, []
-
-    def _generate_schemas(self) -> Tuple[bool, List[str]]:
-        """Generate JSON Schemas for all platform document kinds → .strata/schemas/.
-
-        These are derived artifacts (regenerated, not user-edited), so we always overwrite.
-        """
-        state_dir = SolutionController.get_state_dir(self._work_path)
-        try:
-            from strata.models.configuration_model import ConfigurationModel
-            from strata.models.deployment_model import DeploymentModel
-            from strata.models.dns_model import DnsModel
-            from strata.models.environment_model import EnvironmentModel
-            from strata.models.firewall_model import FirewallModel
-            from strata.models.module_model import ModuleModel
-            from strata.models.namespace_model import NamespaceModel
-            from strata.models.network_model import NetworkModel
-            from strata.models.platform_artifact_model import PlatformArtifactModel
-            from strata.models.provider_model import ProviderModel
-            from strata.models.resource_model import ResourceModel
-            from strata.models.tenant_model import TenantModel
-            from strata.models.workspace_model import WorkspaceModel
-
-            _schema_map = {
-                "configuration": ConfigurationModel,
-                "deployment": DeploymentModel,
-                "dns": DnsModel,
-                "environment": EnvironmentModel,
-                "firewall": FirewallModel,
-                "module": ModuleModel,
-                "namespace": NamespaceModel,
-                "network": NetworkModel,
-                "platform": PlatformArtifactModel,
-                "provider": ProviderModel,
-                "resource": ResourceModel,
-                "tenant": TenantModel,
-                "workspace": WorkspaceModel,
-            }
-            schemas_dir = state_dir / SOLUTION_SCHEMAS_DIR
-            schemas_dir.mkdir(exist_ok=True)
-            for kind_name, model_cls in _schema_map.items():
-                schema_file = schemas_dir / f"{kind_name}.json"
-                try:
-                    schema_file.write_text(json.dumps(model_cls.model_json_schema(), indent=2), encoding="utf-8")  # type: ignore[attr-defined]
-                    self.logger.debug("Schema written", kind=kind_name)
-                except Exception as schema_exc:
-                    self.logger.warning("Failed to write schema", kind=kind_name, error=str(schema_exc))
-            # Generate umbrella schema — dispatches to per-kind schema via if/then/else on `kind:`
-            try:
-                user_kinds = [k for k in _schema_map if k != "platform"]
-                umbrella = SolutionController._build_umbrella_schema(user_kinds)
-                umbrella_file = schemas_dir / "strata.json"
-                umbrella_file.write_text(json.dumps(umbrella, indent=2), encoding="utf-8")
-                self.logger.debug("Umbrella schema written", file="strata.json")
-            except Exception as umbrella_exc:
-                self.logger.warning("Failed to write umbrella schema", error=str(umbrella_exc))
-            self._add_message(f"Updated: {SOLUTION_DIR}/{SOLUTION_SCHEMAS_DIR}/ (JSON Schemas for all kinds)")
-        except Exception as e:
-            self.logger.warning("Schema generation skipped", error=str(e))
-
-        return True, []
-
-    @staticmethod
-    def _build_umbrella_schema(kinds: list) -> dict:
-        """Build an if/then/else discriminated-union schema that routes to the
-        per-kind schema file based on the ``kind:`` field value.
-
-        The result is written as ``strata.json`` alongside the per-kind schemas
-        so that a single ``yaml.schemas`` entry can cover all strata YAML files.
-        """
-        current: dict = {}
-        for kind in reversed(kinds):
-            branch: dict = {
-                "if": {"properties": {"kind": {"const": kind}}, "required": ["kind"]},
-                "then": {"$ref": f"{kind}.json"},
-            }
-            if current:
-                branch["else"] = current
-            current = branch
-        return {
-            "$schema": "http://json-schema.org/draft-07/schema#",
-            "title": "Strata Platform Configuration",
-            "description": (
-                "Dispatches to the kind-specific schema based on the 'kind' field value. "
-                "Supported kinds: " + ", ".join(kinds)
-            ),
-            "type": "object",
-            "properties": {
-                "apiVersion": {"type": "string"},
-                "kind": {"type": "string"},
-            },
-            **current,
-        }
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _solution_path(self) -> Path:
-        return SolutionController.get_solution_json_path(self._work_path)
-
-    def _resolve_log_file(self, work_path: Path) -> Optional[Path]:
-        """
-        Resolve the active log file for a session.
-
-        Resolution order:
-        1. Active Python logging file handler (fast path)
-        2. ``logging.log_path`` from ``.strata/session.json`` — scans for
-           the first ``*.log`` file in that directory
-        3. Returns ``None`` if no log file can be found
-
-        Args:
-            work_path: Working directory path used to locate session.json
-
-        Returns:
-            Path to log file, or None if unavailable
-        """
-        # 1. Try global logging handler introspection first
-        log_file = get_active_log_file()
-        if not log_file or log_file == "":
-            self.logger.debug("No active log file from logging handlers")
-        else:
-            log_path = Path(log_file)
-            if log_path.exists():
-                self.logger.debug("Resolved log file from active logging handler", extra={"log_file": log_file})
-                return log_path
-
-        # 2. No further fallback available
-        return None
-
-    def _read_log_entries(self, log_file: Path) -> List[Dict[str, Any]]:
-        """
-        Read and parse JSON log entries from file.
-
-        Args:
-            log_file: Path to log file
-
-        Returns:
-            List of parsed log entry dictionaries
-        """
-        entries = []
-
-        try:
-            with open(log_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
+            for child in children:
+                if child.is_dir():
+                    if child.name in DEFAULT_IGNORED_DIRS:
                         continue
-                    try:
-                        entry = json.loads(line)
-                        entries.append(entry)
-                    except json.JSONDecodeError:
-                        # Skip malformed lines
-                        self.logger.debug(f"Skipping malformed log line: {line[:100]}")
+                    if manifest_path(child).is_file():
+                        continue  # nested solution — boundary
+                    if self._is_excluded(child):
                         continue
-        except Exception as e:
-            self.logger.warning(f"Error reading log file: {e}")
+                    stack.append(child)
+                elif child.suffix in YAML_SUFFIXES and child.name != MANIFEST_FILENAME:
+                    if self._is_excluded(child):
+                        continue
+                    yield child
 
-        return entries
-
-    def _apply_filters(
-        self,
-        log_entries: List[Dict[str, Any]],
-        minutes: Optional[int] = None,
-        level: Optional[str] = None,
-        session_id: Optional[str] = None,
-        execution_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Apply filters to log entries.
-
-        Args:
-            log_entries: List of log entry dictionaries
-            minutes: Filter logs from last N minutes
-            level: Filter by log level
-            session_id: Filter by session ID
-            execution_id: Filter by execution ID
-
-        Returns:
-            Filtered list of log entries
-        """
-        filtered = log_entries
-
-        # Filter by time
-        if minutes:
-            cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-            filtered = [entry for entry in filtered if self._parse_timestamp(entry) >= cutoff_time]
-
-        # Filter by level
-        if level:
-            level_upper = level.upper()
-            filtered = [entry for entry in filtered if entry.get("level", "").upper() == level_upper]
-
-        # Filter by session_id
-        if session_id:
-            filtered = [entry for entry in filtered if entry.get("session_id") == session_id]
-
-        # Filter by execution_id
-        if execution_id:
-            filtered = [entry for entry in filtered if entry.get("execution_id") == execution_id]
-
-        return filtered
-
-    def _parse_timestamp(self, entry: Dict[str, Any]) -> datetime:
-        """
-        Parse timestamp from log entry.
-
-        Args:
-            entry: Log entry dictionary
-
-        Returns:
-            Parsed datetime object (returns datetime.min if parsing fails)
-        """
-        timestamp_str = entry.get("timestamp", "")
+    def _load_file(self, path: Path) -> None:
+        """Parse one file and index every strata document inside it."""
         try:
-            # Try ISO format first
-            dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-            # Make timezone-naive for comparison
-            if dt.tzinfo is not None:
-                dt = dt.replace(tzinfo=None)
-            return dt
-        except (ValueError, TypeError):
-            try:
-                # Try common log format
-                return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
-            except ValueError:
-                # Return very old date if parsing fails
-                return datetime.min
+            documents = _parse_documents(path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            self.diagnostics.error(f"cannot parse YAML: {exc}", source=str(path), code="unparseable")
+            return
+
+        for position, raw in enumerate(documents):
+            if raw is None:
+                continue
+            if not _is_strata_document(raw):
+                continue  # not ours — skip silently
+            self._index_document(path, position, raw)
+
+    def _index_document(self, path: Path, position: int, raw: dict[str, Any]) -> None:
+        """Validate one strata document and add it to the index."""
+        where = f"{path}" if position == 0 else f"{path} (document {position + 1})"
+
+        kind_value = raw.get("kind")
+        try:
+            kind = PlatformKind(kind_value)
+        except ValueError:
+            known = ", ".join(sorted(k.value for k in PlatformKind))
+            self.diagnostics.error(
+                f"unknown kind '{kind_value}'. Known kinds: {known}",
+                source=where,
+                location="kind",
+                code="unknown_kind",
+            )
+            return
+
+        if kind is PlatformKind.SOLUTION:
+            self.diagnostics.error(
+                "a nested 'solution' document is not allowed — the manifest at the root is the only one.",
+                source=where,
+                location="kind",
+                code="nested_solution",
+            )
+            return
+
+        service_class = SERVICE_BY_KIND[kind]
+        service = service_class(data=raw)
+        result = service.validate()
+        if not result.ok or service.model is None:
+            self.diagnostics.extend(result, source=where)
+            return
+
+        name = str(service.model.meta.name)
+        entry = IndexEntry(ref=DocumentRef(kind=kind, name=name), model=service.model, source=path)
+        try:
+            self.index.add(entry)
+        except ValueError as exc:
+            self.diagnostics.error(str(exc), source=where, code="duplicate_document")

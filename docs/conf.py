@@ -3,19 +3,23 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+from pathlib import Path
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+# Read straight from VERSION.txt rather than importing strata: docs must build
+# without the package installed, and a literal here would be a second source
+# of truth that silently disagrees with the real version.
+release = (Path(__file__).resolve().parent.parent / "VERSION.txt").read_text(encoding="utf-8").strip()
+
 project = "strata"
-copyright = "2025, Huybrechts XYZ"
+copyright = "2026, Huybrechts XYZ"
 author = "Vincent Huybrechts"
-release = "0.8.0"
 
 # Project URLs
 project_urls = {
-    "Homepage": "https://huybrechtsxyz.github.io/strata",
-    "GitHub": "https://github.com/huybrechtsxyz/strata",
-    "Issues": "https://github.com/huybrechtsxyz/strata/issues",
+    "Homepage": "https://github.com/huybrechtsxyz/strata",
 }
 
 # -- General configuration ---------------------------------------------------
@@ -33,7 +37,6 @@ extensions = [
     "myst_parser",
 ]
 
-
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
 
@@ -49,15 +52,14 @@ master_doc = "index"
 # These patterns also effect html_static_path and html_extra_path
 # Convention: prefix scratch/temp docs with _ (e.g. _draft-notes.md) to
 # auto-exclude them from both the Sphinx build and the index-coverage check.
-exclude_patterns = ["_build", "_*", "Thumbs.db", ".DS_Store", "issues", "decisions", "help"]
+exclude_patterns = ["_build", "_*", "Thumbs.db", ".DS_Store", "decisions", "design", "work", "archive"]
 
-# Generate Sphinx-compatible anchors for headings (h1–h3) so that
+# Generate Sphinx-compatible anchors for headings (h1-h3) so that
 # Markdown ToC links like [Key Features](#key-features) resolve correctly.
 myst_heading_anchors = 3
 
-# Links in docs/README.md pointing to .github/ community health files are
-# intentionally outside Sphinx's source root — they work on GitHub but cannot
-# be resolved as Sphinx document cross-references. Suppress rather than error.
+# Links pointing outside the Sphinx source root cannot be resolved as
+# cross-references. Suppress rather than error.
 suppress_warnings = ["myst.xref_missing"]
 
 # The name of the Pygments (syntax highlighting) style to use.
@@ -71,12 +73,6 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 html_theme = "sphinx_rtd_theme"
-
-# Theme options are theme-specific and customize the look and feel of a
-# theme further.  For a list of options available for each theme, see the
-# documentation.
-#
-# html_theme_options = {}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -113,30 +109,3 @@ autosummary_generate = True  # Turn on sphinx.ext.autosummary
 # -- Toggleprompt / copybutton overlap
 
 toggleprompt_offset_right = 35
-
-# -- Toggleprompt / copybutton overlap
-
-toggleprompt_offset_right = 35
-
-# -- RTD theme settings
-html_theme_options = {
-    "collapse_navigation": False,
-    "sticky_navigation": True,
-    "navigation_depth": 5,
-    "includehidden": True,
-    "titles_only": False,
-    "vcs_pageview_mode": "edit",
-}
-
-
-import os
-import sys
-from pathlib import Path
-
-default_repo = Path("..").resolve()
-sys.path.insert(0, str(default_repo))
-
-repo_dir = Path(os.getenv("REPO_DIR", default_repo))
-project_name = Path(repo_dir).name
-project_name = os.getenv("PROJECT", project_name)
-python_package_name = project_name.replace("-", "_")

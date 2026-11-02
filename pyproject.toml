@@ -1,108 +1,122 @@
 [build-system]
-requires = ["setuptools>=70.3.0", "wheel>=0.43.0"]
+requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "xyz-strata"
-authors = [{ name = "Vincent Huybrechts", email = "vincent@huybrechts.xyz" }]
-license = { text = "AGPL-3.0-or-later" }
-description = "Python infrastructure platform for managing VM workspaces and clusters to deploy and maintain an automated container orchestration platform."
-readme = "README.md"
-keywords = [
-    "infrastructure",
-    "platform",
-    "orchestration",
-    "containers",
-    "automation",
-]
-urls = { Homepage = "https://github.com/huybrechtsxyz/strata", Repository = "https://github.com/huybrechtsxyz/strata", Issues = "https://github.com/huybrechtsxyz/strata/issues" }
-requires-python = ">=3.13"
-classifiers = [
-    "Programming Language :: Python :: 3.13",
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
-    "Operating System :: OS Independent",
-]
-dependencies = [
-    "pydantic>=2.4",
-    "pyyaml>=6.0",
-    "ruamel.yaml>=0.18",             # Comment-preserving round-trip YAML (strata versions lock/refresh)
-    "python-hcl2>=8.0",
-    "click>=8.0",
-    "rich>=13.0",
-    "prompt-toolkit>=3.0",
-    "requests>=2.31",
-    "jinja2>=3.1",
-    "jmespath>=1.0",
-    "paramiko>=3.0",
-    "scp>=0.14",
-    "cyclonedx-python-lib>=7.0,<12",
-    "packageurl-python>=0.11,<2",
-    # Logging - Standard libraries
-    "structlog>=24.0",                             # Structured logging (replaces python-json-logger)
-    "colorama>=0.4; platform_system == 'Windows'", # Required by structlog.dev.ConsoleRenderer(colors=True) on Windows
-    "opentelemetry-api>=1.20",                     # OpenTelemetry API
-    "opentelemetry-sdk>=1.20",                     # OpenTelemetry SDK
-    "azure-monitor-opentelemetry>=1.0",            # Azure Application Insights
-]
 dynamic = ["version"]
-
-[tool.setuptools.dynamic]
-version = { file = "VERSION.txt" }
-
-[tool.uv]
-index-strategy = "unsafe-best-match"
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-"strata.data" = ["*.yaml", "*.txt", "help/*.md", "diagrams/*.yaml"]
-"strata.templates" = [
-    "*.yaml",
-    "*.json",
-    "*.md",
-    "*.txt",
-    "solution/**/*",
-    "solution/**",
-    "examples/**/*",
-    "examples/**",
+description = "Strata v2 - Infrastructure as Code Platform"
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.0",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+    "structlog>=24.1",
+    "packaging>=23.0",
+    "jinja2>=3.1",
+    "cyclonedx-python-lib[json-validation]>=7.0,<12",
+    "packageurl-python>=0.11,<2",
+    "python-hcl2>=8.0",
+    "jsonschema>=4.20,<5",
+    "referencing>=0.30,<1",
+    "azure-identity>=1.15",
+    "azure-keyvault-secrets>=4.7",
+    "azure-appconfiguration>=1.6",
+    "azure-storage-blob>=12.19",
+    "ruamel.yaml>=0.18",
 ]
 
-[dependency-groups]
-dev = [
-    "debugpy",
-    "ruff",
-    "mypy",
-    "import-linter",
-    "nox",
-    "pytest",
-    "pytest-asyncio==1.4.0",
-    "pytest-cov",
-    "yamllint",
-    "pyyaml > 3.13",
-    "types-PyYAML",
-    "sqlalchemy>=2.0",
-    "authlib>=1.3",
-    "types-jmespath",
+[project.optional-dependencies]
+otel = [
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-exporter-otlp-proto-http>=1.24",
 ]
-doc = [
+azure-monitor = ["azure-monitor-opentelemetry>=1.6"]
+docs = [
     "sphinx",
-    "sphinx-autoapi",
     "sphinx-toggleprompt",
     "sphinx-copybutton",
     "sphinx-rtd-theme",
     "myst_parser",
-    "coverage-badge",
-    "anybadge",
 ]
 
-[project.optional-dependencies]
-mcp = ["mcp>=1.0"]
-server = ["fastapi>=0.115", "uvicorn>=0.30", "sqlalchemy>=2.0", "authlib>=1.3"]
-server-postgres = ["psycopg[binary]>=3.1"]
-server-mssql = ["pyodbc>=5.0"]
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+    "import-linter>=2.0",
+    "yamllint",
+    "nox",
+    "types-PyYAML",
+    "types-requests",
+    "types-jsonschema",
+]
+
+[project.scripts]
+strata = "strata.commands.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+# VERSION.txt is the single source of the version. Any tool in any language
+# reads it with one line — no TOML parser, no Python import — which is what
+# lets one release script bump Python, Node and CI together.
+[tool.setuptools.dynamic]
+version = { file = "VERSION.txt" }
+
+# Discovery rather than an explicit list: `packages = ["strata"]` shipped a
+# wheel containing only the top-level package — every subpackage
+# (models/services/controllers/utils/logging) was silently omitted, so an
+# installed strata could not import itself. Editable installs hid it because
+# they resolve to src/.
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["strata*"]
+
+[tool.setuptools.package-data]
+strata = ["py.typed", "templates/**/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-v"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unused_ignores = true
+mypy_path = "src"
+exclude = "^tests/"
+
+[[tool.mypy.overrides]]
+module = ["opentelemetry.*", "azure.monitor.*"]
+ignore_missing_imports = true
+
+[tool.importlinter]
+root_package = "strata"
+exclude_type_checking_imports = "True"
+
+[[tool.importlinter.contracts]]
+name = "Layered architecture (ADR-0003, ported from v1)"
+type = "layers"
+layers = [
+    "strata.commands",
+    "strata.controllers",
+    "strata.services",
+    "strata.integrations",
+    "strata.models",
+    "strata.utils",
+    "strata.logging",
+]
+# v1's full layering (for reference, extend as these packages are built):
+# strata.server > strata.commands > strata.controllers >
+# (strata.builders | strata.deployers) > strata.validators > strata.services >
+# strata.integrations > strata.models > strata.utils
+
 [tool.ruff]
 exclude = [
     ".eggs",
@@ -116,7 +130,6 @@ exclude = [
     ".pytype",
     ".ruff_cache",
     ".svn",
-    ".nox",
     ".env",
     ".venv",
     ".vscode",
@@ -125,14 +138,11 @@ exclude = [
     "dist",
     "site-packages",
     "venv",
-    "src/strata/data/help", # markdown help docs — not Python, never format
-    "src/strata/templates", # scaffold templates — may contain non-Python files
-    "docs",                 # Sphinx docs — RST/MD, not Python
+    "docs",               # Sphinx docs — RST/MD, not Python
 ]
 line-length = 120
 indent-width = 4
-target-version = "py311"
-extend-include = ["*.ipynb"]
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "B", "I", "N"]
@@ -145,91 +155,3 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-
-[tool.pytest.ini_options]
-norecursedirs = [
-    ".eggs",
-    ".git",
-    ".git-rewrite",
-    ".ipynb_checkpoints",
-    ".mypy_cache",
-    ".nox",
-    ".pyenv",
-    ".pytest_cache",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".nox",
-    ".env",
-    ".venv",
-    ".vscode",
-    "__pypackages__",
-    "build",
-    "dist",
-    "site-packages",
-    "venv",
-]
-pythonpath = ["src"]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
-asyncio_mode = "auto"
-markers = [
-    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
-    "unit: marks tests as unit tests",
-]
-filterwarnings = [
-    "ignore:Field name \"validate\" in \"ProviderLifecycleModel\".*:UserWarning",
-    "ignore:Field name \"validate\" in \"ResourceLifecycleModel\".*:UserWarning",
-    "ignore:Field name \"validate\" in \"WorkspaceLifecycleModel\".*:UserWarning",
-]
-
-[tool.mypy]
-plugins = ["pydantic.mypy"]
-exclude = [
-    ".eggs",
-    ".git",
-    ".git-rewrite",
-    ".ipynb_checkpoints",
-    ".mypy_cache",
-    ".nox",
-    ".pyenv",
-    ".pytest_cache",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".nox",
-    ".env",
-    ".venv",
-    ".vscode",
-    "__pypackages__",
-    "build",
-    "dist",
-    "site-packages",
-    "venv",
-]
-ignore_missing_imports = true
-
-[tool.importlinter]
-root_package = "strata"
-exclude_type_checking_imports = "True"
-
-[[tool.importlinter.contracts]]
-name = "Layered architecture (ADR-0003)"
-type = "layers"
-layers = [
-    "strata.server",
-    "strata.commands",
-    "strata.controllers",
-    "strata.builders | strata.deployers",
-    "strata.validators",
-    "strata.services",
-    "strata.integrations",
-    "strata.models",
-    "strata.utils",
-]
-
-[project.scripts]
-strata = "strata.cli:main"

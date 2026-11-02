@@ -1,121 +1,75 @@
 #!/usr/bin/env python3
-"""Service for loading and validating tenant configurations."""
+"""Service for loading and validating tenant configuration."""
 
-from typing import List, Optional, Tuple
-
-from strata.models.configuration_model import ConfigurationModel
+from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.tenant_model import TenantModel
 from strata.services.base_service import BaseService
+from strata.utils.diagnostics import Diagnostics
 
 
-class TenantService(BaseService["TenantModel"]):
-    """Service for handling tenant configuration files (kind: tenant)."""
+class TenantService(BaseService[TenantModel]):
+    """Service for handling tenant configuration.
 
-    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
-        """Initialize the TenantService."""
-        super().__init__(path=path, data=data)
-        self.model = None
+    `spec.environments` existence is already checked — it is typed
+    `Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)]`
+    (`tenant_model.py`), which `references.py`'s generic reference-existence
+    walker checks for every document unconditionally, no per-kind opt-in
+    needed. No dedicated method lives here for it (unlike
+    `validate_geographies_against_provider_configs()` below, which needs a
+    second document's *content*, not just its existence).
+    """
 
-    def _get_model_class(self):
+    def _get_model_class(self) -> type[TenantModel]:
         """Return the TenantModel class for validation."""
         return TenantModel
 
-    def _validate_dynamic(
-        self,
-        configuration_model: Optional["ConfigurationModel"] = None,
-        work_path: Optional[str] = None,
-    ) -> Tuple[bool, List[str]]:
-        """Phase 2: Dynamic validation against configuration and filesystem.
+    def validate_geographies_against_provider_configs(
+        self, provider_configs: dict[str, ProviderConfigModel]
+    ) -> Diagnostics:
+        """Check every declared geography is one some provider region actually has.
 
-        Validates:
-        - spec.code matches meta.name (single source of truth)
-        - spec.zones entries exist in configuration.spec.zones
-        - spec.environments file paths resolve on disk
+        v1 validated a tenant's `zones` against a `configuration.spec.zones`
+        registry that v2 has not ported (ADR-0003). It turns out not to be
+        needed: `ProviderConfigRegionModel.geography` already declares, per
+        region, which compliance/deployment boundary it belongs to — the same
+        concept under the name the provider side settled on. The set of valid
+        geographies is therefore derivable from the provider registries that
+        exist today, which is why this check is implemented rather than parked
+        with the others.
+
+        This is the existence half. The stronger check — "the region this
+        tenant's deployment actually targets is inside an allowed geography" —
+        needs a `Deployment` binding a tenant to a workspace, which is not
+        built yet.
 
         Args:
-            configuration_model: Optional ConfigurationModel for cross-validation.
-            work_path: Optional working directory for resolving environment file paths.
+            provider_configs: Already-loaded `ProviderConfigModel` documents,
+                keyed by provider type name — the caller resolves them from
+                the solution index.
 
         Returns:
-            Tuple[bool, List[str]]: (success, list of error messages)
+            One error per geography no provider region declares.
         """
-        errors: List[str] = []
-
+        diagnostics = Diagnostics()
         if self.model is None:
-            return False, ["tenant model is not initialized"]
+            diagnostics.error("Tenant model is not initialized")
+            return diagnostics
 
-        # Validate spec.code matches meta.name
-        if self.model.spec.code != self.model.meta.name:
-            errors.append(
-                f"tenant spec.code '{self.model.spec.code}' must match meta.name '{self.model.meta.name}'. "
-                "Use the same value for both fields."
-            )
+        known: set[str] = set()
+        for config in provider_configs.values():
+            for region in config.spec.regions or []:
+                if region.geography:
+                    known.add(region.geography)
 
-        # Validate spec.zones against configuration zones
-        if configuration_model and configuration_model.spec.zones:
-            config_zone_names = {z.name for z in configuration_model.spec.zones}
-            for zone in self.model.spec.zones:
-                if zone not in config_zone_names:
-                    errors.append(
-                        f"Tenant '{self.model.meta.name}' references zone '{zone}' "
-                        f"which is not defined in configuration.spec.zones. "
-                        f"Available zones: {sorted(config_zone_names)}"
-                    )
-        elif self.model.spec.zones and configuration_model and not configuration_model.spec.zones:
-            errors.append(
-                f"Tenant '{self.model.meta.name}' specifies zones {self.model.spec.zones} "
-                "but configuration.spec.zones is not defined."
-            )
+        if not known:
+            return diagnostics  # no provider declares any geography — nothing to check against
 
-        # Validate environment file paths exist on disk
-        if work_path and self.model.spec.environments:
-            config_repo_map = configuration_model.get_remote_map() if configuration_model else {}
-            repo_map = {**config_repo_map, **(self._repo_map or {})}
-            file_refs = [(f"Environment[{i}]", env_path) for i, env_path in enumerate(self.model.spec.environments)]
-            errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
-
-        return len(errors) == 0, errors
-
-    # --- Accessors ---
-
-    def get_code(self) -> str:
-        """Return the tenant's short code identifier."""
-        self._ensure_validated()
-        assert self.model is not None
-        return self.model.spec.code
-
-    def get_display_name(self) -> str:
-        """Return the tenant's human-readable display name."""
-        self._ensure_validated()
-        assert self.model is not None
-        return self.model.spec.name
-
-    def get_zones(self) -> List[str]:
-        """Return the list of zone names this tenant is allowed to deploy into."""
-        self._ensure_validated()
-        assert self.model is not None
-        return list(self.model.spec.zones)
-
-    def get_environments(self) -> List[str]:
-        """Return the ordered list of environment file paths for this tenant."""
-        self._ensure_validated()
-        assert self.model is not None
-        return list(self.model.spec.environments or [])
-
-    def get_configuration(self) -> dict:
-        """Return the custom key/value configuration block (empty dict if unset)."""
-        self._ensure_validated()
-        assert self.model is not None
-        return dict(self.model.spec.configuration or {})
-
-    def get_properties(self) -> dict:
-        """Return tenant-wide deployment properties (empty dict if unset)."""
-        self._ensure_validated()
-        assert self.model is not None
-        return dict(self.model.spec.properties or {})
-
-    def get_custom(self) -> dict:
-        """Return tenant-wide custom data (empty dict if unset)."""
-        self._ensure_validated()
-        assert self.model is not None
-        return dict(self.model.spec.custom or {})
+        for index, geography in enumerate(self.model.spec.geographies or []):
+            if geography not in known:
+                diagnostics.error(
+                    f"Tenant '{self.model.meta.name}': geography '{geography}' is not declared by any "
+                    f"provider region. Known geographies: {sorted(known)}",
+                    location=f"spec.geographies.{index}",
+                    code="unknown_geography",
+                )
+        return diagnostics

@@ -3,11 +3,25 @@
 
 All fields are key references resolved at runtime from centralized
 environment variable, secret, and feature declarations.
+
+Two differences from v1's real `auth_models.py`, found by comparison and not
+carried over here:
+
+- `AuthenticationModel.env_vars`/`.env_var` (declared, never consumed
+  anywhere in v1's codebase) are dropped — dead fields, same vestigial-field
+  pattern as `is_control` (ADR-0013).
+- `AuthenticationModel` gains `validate_method_matches_populated_config()`
+  (below), which v1 never had: v1's `method` and its method-specific blocks
+  (`oauth2`, `aws`, ...) had no cross-field check at all, so `method: oauth2`
+  with `oauth2` unset (or `aws` populated instead) validated successfully and
+  would silently resolve wrong/empty credentials at runtime — the same
+  "validates fine, silently wrong" bug class real ADR-0071 already found
+  elsewhere (Provisioner `backend`/`properties`).
 """
 
-from typing import List, Literal, Optional
+from typing import ClassVar, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from strata.models.common_models import PlatformBaseModel
 
@@ -22,13 +36,13 @@ class OAuth2AuthenticationModel(PlatformBaseModel):
 
     client_id: str = Field(description="Key reference for OAuth2 client/application ID")
     client_secret: str = Field(description="Key reference for OAuth2 client secret")
-    tenant_id: Optional[str] = Field(
+    tenant_id: str | None = Field(
         None,
         description="Key reference for tenant/directory ID (Azure AD, Okta, etc.)",
     )
-    token_url: Optional[str] = Field(None, description="Key reference for OAuth2 token endpoint URL")
-    authorization_url: Optional[str] = Field(None, description="Key reference for OAuth2 authorization endpoint URL")
-    scope: Optional[str] = Field(None, description="Key reference for OAuth2 scopes (space-separated)")
+    token_url: str | None = Field(None, description="Key reference for OAuth2 token endpoint URL")
+    authorization_url: str | None = Field(None, description="Key reference for OAuth2 authorization endpoint URL")
+    scope: str | None = Field(None, description="Key reference for OAuth2 scopes (space-separated)")
 
 
 class AWSAuthenticationModel(PlatformBaseModel):
@@ -40,12 +54,12 @@ class AWSAuthenticationModel(PlatformBaseModel):
 
     access_key_id: str = Field(description="Key reference for AWS access key ID")
     secret_access_key: str = Field(description="Key reference for AWS secret access key")
-    session_token: Optional[str] = Field(
+    session_token: str | None = Field(
         None,
         description="Key reference for AWS session token (temporary credentials)",
     )
-    region: Optional[str] = Field(None, description="Key reference for AWS region")
-    role_arn: Optional[str] = Field(None, description="Key reference for AWS IAM role ARN for AssumeRole")
+    region: str | None = Field(None, description="Key reference for AWS region")
+    role_arn: str | None = Field(None, description="Key reference for AWS IAM role ARN for AssumeRole")
 
 
 class GCPAuthenticationModel(PlatformBaseModel):
@@ -56,15 +70,15 @@ class GCPAuthenticationModel(PlatformBaseModel):
     """
 
     project_id: str = Field(description="Key reference for GCP project ID")
-    credentials_json: Optional[str] = Field(
+    credentials_json: str | None = Field(
         None,
         description="Key reference for GCP service account JSON credentials (as string content)",
     )
-    credentials_file: Optional[str] = Field(
+    credentials_file: str | None = Field(
         None,
         description="Key reference for path to GCP service account JSON file",
     )
-    service_account_email: Optional[str] = Field(None, description="Key reference for GCP service account email")
+    service_account_email: str | None = Field(None, description="Key reference for GCP service account email")
 
 
 class APIKeyAuthenticationModel(PlatformBaseModel):
@@ -76,9 +90,9 @@ class APIKeyAuthenticationModel(PlatformBaseModel):
     """
 
     api_key: str = Field(description="Key reference for API key value")
-    api_secret: Optional[str] = Field(None, description="Key reference for API secret (used alongside the API key)")
-    endpoint: Optional[str] = Field(None, description="Key reference for API endpoint URL")
-    header_name: Optional[str] = Field(
+    api_secret: str | None = Field(None, description="Key reference for API secret (used alongside the API key)")
+    endpoint: str | None = Field(None, description="Key reference for API endpoint URL")
+    header_name: str | None = Field(
         None,
         description="Key reference for HTTP header name (default: 'X-API-Key')",
     )
@@ -93,8 +107,8 @@ class CertificateAuthenticationModel(PlatformBaseModel):
 
     certificate_path: str = Field(description="Key reference for client certificate file path")
     private_key_path: str = Field(description="Key reference for private key file path")
-    ca_bundle_path: Optional[str] = Field(None, description="Key reference for CA bundle file path")
-    certificate_password: Optional[str] = Field(
+    ca_bundle_path: str | None = Field(None, description="Key reference for CA bundle file path")
+    certificate_password: str | None = Field(
         None,
         description="Key reference for certificate password (if encrypted)",
     )
@@ -110,7 +124,7 @@ class SAMLAuthenticationModel(PlatformBaseModel):
     idp_entity_id: str = Field(description="Key reference for SAML Identity Provider entity ID")
     sp_entity_id: str = Field(description="Key reference for SAML Service Provider entity ID")
     sso_url: str = Field(description="Key reference for SAML Single Sign-On URL")
-    certificate_path: Optional[str] = Field(None, description="Key reference for SAML certificate file path")
+    certificate_path: str | None = Field(None, description="Key reference for SAML certificate file path")
 
 
 class CLIAuthenticationModel(PlatformBaseModel):
@@ -140,19 +154,70 @@ class ManagedIdentityAuthenticationModel(PlatformBaseModel):
         description="Use cloud provider managed identity",
     )
     # Azure-specific
-    client_id: Optional[str] = Field(
+    client_id: str | None = Field(
         None,
         description="Key reference for user-assigned managed identity client ID (Azure only)",
     )
 
 
-class AuthenticationModel(PlatformBaseModel):
+class SSHKeyAuthenticationModel(PlatformBaseModel):
+    """SSH private key authentication, used for git deploy keys. Every field is a key reference, never the
+    key itself.
+
+    Design notes:
+    SSH private key authentication (git deploy keys) — docs/design/
+    gitops-integration.md's "Authentication" section: one of the two real
+    git-native credential shapes neither v1 nor v2's prior closed `method`
+    vocabulary modelled (confirmed by reading both directly).
+
+    All fields are key references resolved from environment declarations,
+    same convention as every other method here — never an inline secret.
     """
+
+    private_key: str = Field(description="Key reference for the SSH private key (PEM/OpenSSH format)")
+    passphrase: str | None = Field(None, description="Key reference for the private key's passphrase, if encrypted")
+    known_hosts: str | None = Field(
+        None, description="Key reference for a known_hosts entry pinning the remote host's key"
+    )
+
+
+class TokenAuthenticationModel(PlatformBaseModel):
+    """Bearer or personal access token authentication, used for git over HTTPS. `token` is a key reference;
+    `username` is a literal.
+
+    Design notes:
+    Bearer/PAT token authentication (git HTTPS remotes) — the other real
+    git-native credential shape (see `SSHKeyAuthenticationModel`'s docstring).
+
+    Not `api_key`/`certificate`: both exist already, but reusing either
+    would be modelling a new concept through an unrelated field (`api_key`'s
+    own `header_name` assumes HTTP-header delivery, not how git consumes a
+    PAT; `certificate`'s fields are TLS-flavored) — the same "validates
+    fine, silently wrong" risk this module's own docstring already names.
+    """
+
+    token: str = Field(description="Key reference for the token/PAT value")
+    username: str | None = Field(None, description="Literal username to pair with the token — not a key reference")
+
+
+class AuthenticationModel(PlatformBaseModel):
+    """How to authenticate to a cloud provider or an integration. `method` selects the scheme and the block
+    of the same name holds its settings.
+
+    Credential fields are key references: the names of variables or secrets declared in an Environment,
+    resolved when they are needed. Never put a credential value here.
+
+    Design notes:
     Authentication configuration for cloud provider or integration access.
 
     Specifies authentication method and corresponding credentials as key references.
     Keys are resolved at runtime from centralized environment declarations.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "The block named by `method` must be set (for example `method: oauth2` needs `oauth2`).",
+        "No other method's block may be set at the same time.",
+    )
 
     method: Literal[
         "oauth2",
@@ -163,32 +228,82 @@ class AuthenticationModel(PlatformBaseModel):
         "saml",
         "cli",
         "managed_identity",
+        "ssh_key",
+        "token",
     ] = Field(description="Authentication method to use")
 
     # Method-specific configurations (only one should be populated based on method)
-    oauth2: Optional[OAuth2AuthenticationModel] = Field(None, description="OAuth2/Service Principal authentication")
-    aws: Optional[AWSAuthenticationModel] = Field(None, description="AWS access key authentication")
-    gcp: Optional[GCPAuthenticationModel] = Field(None, description="GCP service account authentication")
-    api_key: Optional[APIKeyAuthenticationModel] = Field(None, description="API key authentication")
-    certificate: Optional[CertificateAuthenticationModel] = Field(
+    oauth2: OAuth2AuthenticationModel | None = Field(None, description="OAuth2/Service Principal authentication")
+    aws: AWSAuthenticationModel | None = Field(None, description="AWS access key authentication")
+    gcp: GCPAuthenticationModel | None = Field(None, description="GCP service account authentication")
+    api_key: APIKeyAuthenticationModel | None = Field(None, description="API key authentication")
+    certificate: CertificateAuthenticationModel | None = Field(
         None, description="Certificate-based authentication (mTLS)"
     )
-    saml: Optional[SAMLAuthenticationModel] = Field(None, description="SAML 2.0 authentication")
-    cli: Optional[CLIAuthenticationModel] = Field(None, description="CLI-based authentication")
-    managed_identity: Optional[ManagedIdentityAuthenticationModel] = Field(
+    saml: SAMLAuthenticationModel | None = Field(None, description="SAML 2.0 authentication")
+    cli: CLIAuthenticationModel | None = Field(None, description="CLI-based authentication")
+    managed_identity: ManagedIdentityAuthenticationModel | None = Field(
         None, description="Managed/Workload Identity authentication"
     )
+    ssh_key: SSHKeyAuthenticationModel | None = Field(
+        None, description="SSH private key authentication (git deploy keys)"
+    )
+    token: TokenAuthenticationModel | None = Field(None, description="Bearer/PAT token authentication (git HTTPS)")
 
-    # Operator documentation fields (not used by the runtime — for human reference only)
-    description: Optional[str] = Field(
+    # Operator documentation field (not used by the runtime — for human reference only)
+    description: str | None = Field(
         None,
         description="Human-readable description of this authentication configuration and setup instructions",
     )
-    env_vars: Optional[List[str]] = Field(
-        None,
-        description="List of environment variable names that must be set for this authentication method",
-    )
-    env_var: Optional[str] = Field(
-        None,
-        description="Single environment variable name required for this authentication method",
-    )
+
+    @model_validator(mode="after")
+    def validate_method_matches_populated_config(self) -> "AuthenticationModel":
+        """Ensure exactly the config matching `method` is populated.
+
+        `method` selects which of the method-specific fields applies. The matching
+        field must be set, and no other method's field may be set at the same time
+        (that would be ambiguous about which credentials actually apply).
+        """
+        method_fields = (
+            "oauth2",
+            "aws",
+            "gcp",
+            "api_key",
+            "certificate",
+            "saml",
+            "cli",
+            "managed_identity",
+            "ssh_key",
+            "token",
+        )
+        populated = [name for name in method_fields if getattr(self, name) is not None]
+
+        if self.method not in populated:
+            raise ValueError(f"method is '{self.method}' but '{self.method}' configuration is not set")
+
+        extra = [name for name in populated if name != self.method]
+        if extra:
+            raise ValueError(f"method is '{self.method}' but unrelated configuration is also set: {', '.join(extra)}")
+
+        return self
+
+    def key_references(self) -> tuple[str, ...]:
+        """Every key reference the active method's block sets, for a caller to resolve before use.
+
+        docs/design/security-gates.md D2. Methods with no consumer yet return `()`; literal
+        fields (`token.username`) and flags are never key references.
+        """
+        names = _KEY_REFERENCE_FIELDS.get(self.method)
+        if names is None:
+            return ()
+        block = getattr(self, self.method)
+        return tuple(ref for ref in (getattr(block, name) for name in names) if ref)
+
+
+#: Key-reference fields per method, in declaration order. Extend when a consumer needs another method.
+_KEY_REFERENCE_FIELDS: dict[str, tuple[str, ...]] = {
+    "token": ("token",),
+    "ssh_key": ("private_key", "passphrase", "known_hosts"),
+    "api_key": ("api_key", "api_secret", "endpoint", "header_name"),
+    "oauth2": ("client_id", "client_secret", "tenant_id", "token_url", "authorization_url", "scope"),
+}

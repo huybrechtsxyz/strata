@@ -1,1148 +1,329 @@
-"""Tests for the `build` command group."""
+#!/usr/bin/env python3
+"""Tests for `strata build run`."""
 
+import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
-from strata.commands.builders.base_build_command import BaseBuildCommand
-from strata.commands.builders.clean_build_command import CleanBuildCommand
-from strata.commands.builders.plan_build_command import PlanBuildCommand
-from strata.commands.cli_builders import build
+from strata.commands.cli import cli
+from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE, EXIT_VALIDATION
+
+MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
+kind: solution
+meta:
+  name: test-solution
+spec: {}
+"""
+
+PROVIDER = """apiVersion: strata.huybrechts.xyz/v2
+kind: provider
+meta:
+  name: p1
+spec:
+  type: local
+  region: local
+"""
+
+RESOURCE = """apiVersion: strata.huybrechts.xyz/v2
+kind: resource
+meta:
+  name: r1
+spec:
+  provider_type: local
+  resource_type: server
+  category: compute
+  default_tags:
+    managed-by: strata
+"""
+
+WORKSPACE = """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  providers:
+    - p1
+  provisioners:
+    - name: tf_main
+      tool: terraform
+      source:
+        source_path: infra
+  execution:
+    - name: apply_infra
+      provisioner: tf_main
+      resources:
+        - r1
+  resources:
+    - name: r1
+      resource: r1
+"""
+
+ENVIRONMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec: {}
+"""
+
+DEPLOYMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: app
+spec:
+  workspace: main
+  environments:
+    - prd
+"""
 
 
-class TestBuildRun:
-    def test_run_basic(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.run_build_command.RunBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_with_file(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.run_build_command.RunBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["run", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_dry_run_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.run_build_command.RunBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["run", "--dry-run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.run_build_command.RunBuildCommand.execute", return_value=False):
-            result = runner.invoke(build, ["run", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
+@pytest.fixture
+def runner():
+    return CliRunner()
 
 
-# ---------------------------------------------------------------------------
-# config_fetch_before / config_fetch_after lifecycle phase wiring
-# ---------------------------------------------------------------------------
+def _write(root: Path, relative: str, content: str) -> None:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
 
 
-def _make_base_build_cmd(tmp_path: Path) -> BaseBuildCommand:
-    """Return a BaseBuildCommand-like instance with minimal state for unit testing."""
-    with patch.object(BaseBuildCommand, "_initialize", return_value=None):
-        # CleanBuildCommand is a concrete subclass — use it as the test vehicle.
-        cmd = CleanBuildCommand.__new__(CleanBuildCommand)
-    cmd._work_path = tmp_path
-    cmd._build_path = tmp_path / "build"
-    cmd._raw_file = "deploy.yaml"
-    cmd._file_path = tmp_path / "deploy.yaml"
-    cmd._errors = []
-    cmd._messages = []
-    cmd._configuration_service = None
-    cmd._deployment_service = None
-    cmd._solution_controller = MagicMock()
-    cmd._solution_controller.get_repo_map.return_value = {}
-    cmd._output_format = "json"
-    cmd.logger = MagicMock()
-    return cmd
-    """config_fetch_before and config_fetch_after are fired around _load_configuration_service()."""
+@pytest.fixture
+def solution(tmp_path):
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(root, "provider.yaml", PROVIDER)
+    _write(root, "resource.yaml", RESOURCE)
+    _write(root, "workspace.yaml", WORKSPACE)
+    _write(root, "environment.yaml", ENVIRONMENT)
+    _write(root, "deployment.yaml", DEPLOYMENT)
+    return root
 
-    def _make_cmd_with_file(self, tmp_path: Path) -> BaseBuildCommand:
-        cmd = _make_base_build_cmd(tmp_path)
-        # Write a minimal deploy YAML so the file-exists check passes
-        (tmp_path / "deploy.yaml").write_text(
-            "apiVersion: strata.huybrechts.xyz/v1\nkind: deployment\nmeta:\n  name: d1\nspec:\n",
-            encoding="utf-8",
-        )
-        return cmd
 
-    def test_config_fetch_before_called_before_load(self, tmp_path):
-        cmd = self._make_cmd_with_file(tmp_path)
-
-        call_order = []
-
-        def record_lifecycle(phase, context=None):
-            call_order.append(f"lifecycle:{phase}")
-            return True
-
-        def record_load():
-            call_order.append("load_config")
-            return MagicMock()
-
-        with (
-            patch.object(cmd, "_run_lifecycle_phase", side_effect=record_lifecycle),
-            patch.object(cmd, "_load_configuration_service", side_effect=record_load),
-            patch("strata.utils.system.resolve_path", return_value=tmp_path / "deploy.yaml"),
-            patch.object(BaseBuildCommand, "_before_execute", wraps=cmd._before_execute),
-        ):
-            # We call the parent's _before_execute which has the new lifecycle hooks
-            # Patch super()._before_execute to return True
-            with patch("strata.commands.base_command.BaseCommand._before_execute", return_value=True):
-                cmd._before_execute()
-
-        fetch_before_idx = next((i for i, v in enumerate(call_order) if v == "lifecycle:config_fetch_before"), None)
-        load_idx = next((i for i, v in enumerate(call_order) if v == "load_config"), None)
-        fetch_after_idx = next((i for i, v in enumerate(call_order) if v == "lifecycle:config_fetch_after"), None)
-
-        assert fetch_before_idx is not None, "config_fetch_before was never called"
-        assert load_idx is not None, "load_configuration_service was never called"
-        assert fetch_after_idx is not None, "config_fetch_after was never called"
-        assert fetch_before_idx < load_idx, "config_fetch_before must fire before load"
-        assert load_idx < fetch_after_idx, "config_fetch_after must fire after load"
-
-    def test_config_fetch_before_failure_aborts_load(self, tmp_path):
-        cmd = self._make_cmd_with_file(tmp_path)
-
-        def failing_lifecycle(phase, context=None):
-            if phase == "config_fetch_before":
-                return False
-            return True
-
-        with (
-            patch.object(cmd, "_run_lifecycle_phase", side_effect=failing_lifecycle),
-            patch.object(cmd, "_load_configuration_service") as mock_load,
-            patch("strata.utils.system.resolve_path", return_value=tmp_path / "deploy.yaml"),
-            patch("strata.commands.base_command.BaseCommand._before_execute", return_value=True),
-        ):
-            result = cmd._before_execute()
-
-        assert result is False
-        mock_load.assert_not_called()
-
-    def test_config_fetch_after_failure_aborts_before_execute(self, tmp_path):
-        cmd = self._make_cmd_with_file(tmp_path)
-
-        def failing_lifecycle(phase, context=None):
-            if phase == "config_fetch_after":
-                return False
-            return True
-
-        with (
-            patch.object(cmd, "_run_lifecycle_phase", side_effect=failing_lifecycle),
-            patch.object(cmd, "_load_configuration_service", return_value=MagicMock()),
-            patch("strata.utils.system.resolve_path", return_value=tmp_path / "deploy.yaml"),
-            patch("strata.commands.base_command.BaseCommand._before_execute", return_value=True),
-        ):
-            result = cmd._before_execute()
-
-        assert result is False
-
-    def test_config_fetch_context_includes_work_path_and_file(self, tmp_path):
-        cmd = self._make_cmd_with_file(tmp_path)
-
-        captured_contexts: dict = {}
-
-        def capture(phase, context=None):
-            captured_contexts[phase] = context or {}
-            return True
-
-        with (
-            patch.object(cmd, "_run_lifecycle_phase", side_effect=capture),
-            patch.object(cmd, "_load_configuration_service", return_value=MagicMock()),
-            patch("strata.utils.system.resolve_path", return_value=tmp_path / "deploy.yaml"),
-            patch("strata.commands.base_command.BaseCommand._before_execute", return_value=True),
-        ):
-            cmd._before_execute()
-
-        for phase in ("config_fetch_before", "config_fetch_after"):
-            assert phase in captured_contexts, f"{phase} context not captured"
-            ctx = captured_contexts[phase]
-            assert "work_path" in ctx, f"{phase} context missing work_path"
-            assert "file" in ctx, f"{phase} context missing file"
+def _run(runner, *args):
+    return runner.invoke(cli, ["build", "run", *[str(a) for a in args]])
 
 
 # ---------------------------------------------------------------------------
-# config_clean_before / config_clean_after lifecycle phase wiring
+# Exit codes
 # ---------------------------------------------------------------------------
 
 
-def _make_clean_cmd(tmp_path: Path) -> CleanBuildCommand:
-    """Return a CleanBuildCommand with state pre-set for unit testing."""
-    cmd = CleanBuildCommand.__new__(CleanBuildCommand)
-    cmd._work_path = tmp_path
-    cmd._build_path = tmp_path / "build"
-    cmd._dry_run = False
-    cmd._file_path = tmp_path / "deploy.yaml"
-    cmd._errors = []
-    cmd._messages = []
-    cmd._output_data = {}
-    cmd._output_format = "json"
-    cmd._configuration_service = None
-    cmd.logger = MagicMock()
-
-    svc = MagicMock()
-    svc.get_build_path.return_value = tmp_path / "build" / "d1"
-    cmd._deployment_service = svc
-    return cmd
+def test_successful_build_exits_zero(runner, solution):
+    result = _run(runner, "app", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
 
 
-class TestConfigCleanLifecyclePhase:
-    """config_clean_before and config_clean_after fire in CleanBuildCommand.execute()."""
-
-    def test_config_clean_phases_called_after_build_clean(self, tmp_path):
-        cmd = _make_clean_cmd(tmp_path)
-        (tmp_path / "build" / "d1").mkdir(parents=True)
-
-        call_order = []
-
-        def record_lifecycle(phase, context=None):
-            call_order.append(phase)
-            return True
-
-        with (
-            patch.object(cmd, "_initialize", return_value=True),
-            patch.object(cmd, "_before_execute", return_value=True),
-            patch.object(cmd, "_after_execute", return_value=True),
-            patch.object(cmd, "_finalize", return_value=True),
-            patch.object(cmd, "_run_lifecycle_phase", side_effect=record_lifecycle),
-            patch("strata.services.configuration_service.ConfigurationService.reset"),
-        ):
-            cmd.execute()
-
-        assert "build_clean_before" in call_order
-        assert "build_clean_after" in call_order
-        assert "config_clean_before" in call_order
-        assert "config_clean_after" in call_order
-
-        # config_clean phases must come AFTER build_clean phases
-        bc_after_idx = call_order.index("build_clean_after")
-        cc_before_idx = call_order.index("config_clean_before")
-        cc_after_idx = call_order.index("config_clean_after")
-        assert bc_after_idx < cc_before_idx, "config_clean_before must fire after build_clean_after"
-        assert cc_before_idx < cc_after_idx, "config_clean_after must fire after config_clean_before"
-
-    def test_config_clean_before_failure_aborts_execute(self, tmp_path):
-        cmd = _make_clean_cmd(tmp_path)
-
-        def failing_lifecycle(phase, context=None):
-            if phase == "config_clean_before":
-                return False
-            return True
-
-        with (
-            patch.object(cmd, "_initialize", return_value=True),
-            patch.object(cmd, "_before_execute", return_value=True),
-            patch.object(cmd, "_after_execute", return_value=True),
-            patch.object(cmd, "_finalize", return_value=True),
-            patch.object(cmd, "_run_lifecycle_phase", side_effect=failing_lifecycle),
-            patch("strata.services.configuration_service.ConfigurationService.reset") as mock_reset,
-        ):
-            result = cmd.execute()
-
-        assert result is False
-        mock_reset.assert_not_called()
-
-    def test_config_clean_after_failure_aborts_execute(self, tmp_path):
-        cmd = _make_clean_cmd(tmp_path)
-
-        def failing_lifecycle(phase, context=None):
-            if phase == "config_clean_after":
-                return False
-            return True
-
-        with (
-            patch.object(cmd, "_initialize", return_value=True),
-            patch.object(cmd, "_before_execute", return_value=True),
-            patch.object(cmd, "_after_execute", return_value=True),
-            patch.object(cmd, "_finalize", return_value=True),
-            patch.object(cmd, "_run_lifecycle_phase", side_effect=failing_lifecycle),
-            patch("strata.services.configuration_service.ConfigurationService.reset"),
-        ):
-            result = cmd.execute()
-
-        assert result is False
-
-    def test_config_service_reset_called_when_not_dry_run(self, tmp_path):
-        cmd = _make_clean_cmd(tmp_path)
-        cmd._dry_run = False
-
-        with (
-            patch.object(cmd, "_initialize", return_value=True),
-            patch.object(cmd, "_before_execute", return_value=True),
-            patch.object(cmd, "_after_execute", return_value=True),
-            patch.object(cmd, "_finalize", return_value=True),
-            patch.object(cmd, "_run_lifecycle_phase", return_value=True),
-            patch("strata.services.configuration_service.ConfigurationService.reset") as mock_reset,
-        ):
-            cmd.execute()
-
-        mock_reset.assert_called_once()
-
-    def test_config_service_reset_skipped_on_dry_run(self, tmp_path):
-        cmd = _make_clean_cmd(tmp_path)
-        cmd._dry_run = True
-
-        with (
-            patch.object(cmd, "_initialize", return_value=True),
-            patch.object(cmd, "_before_execute", return_value=True),
-            patch.object(cmd, "_after_execute", return_value=True),
-            patch.object(cmd, "_finalize", return_value=True),
-            patch.object(cmd, "_run_lifecycle_phase", return_value=True),
-            patch("strata.services.configuration_service.ConfigurationService.reset") as mock_reset,
-        ):
-            cmd.execute()
-
-        mock_reset.assert_not_called()
-
-    def test_config_clean_context_includes_work_path_and_dry_run(self, tmp_path):
-        cmd = _make_clean_cmd(tmp_path)
-        cmd._dry_run = True
-
-        captured: dict = {}
-
-        def capture(phase, context=None):
-            captured[phase] = context or {}
-            return True
-
-        with (
-            patch.object(cmd, "_initialize", return_value=True),
-            patch.object(cmd, "_before_execute", return_value=True),
-            patch.object(cmd, "_after_execute", return_value=True),
-            patch.object(cmd, "_finalize", return_value=True),
-            patch.object(cmd, "_run_lifecycle_phase", side_effect=capture),
-            patch("strata.services.configuration_service.ConfigurationService.reset"),
-        ):
-            cmd.execute()
-
-        for phase in ("config_clean_before", "config_clean_after"):
-            assert phase in captured, f"{phase} context not captured"
-            ctx = captured[phase]
-            assert "work_path" in ctx
-            assert "dry_run" in ctx
-
-    def test_run_basic(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.run_build_command.RunBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_with_file(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.run_build_command.RunBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["run", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_dry_run_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.run_build_command.RunBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["run", "--dry-run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_run_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.run_build_command.RunBuildCommand.execute", return_value=False):
-            result = runner.invoke(build, ["run", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
+def test_unknown_deployment_exits_two(runner, solution):
+    result = _run(runner, "ghost-deployment", "--path", solution)
+    assert result.exit_code == EXIT_USAGE
 
 
-class TestBuildClean:
-    def test_clean_basic(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.clean_build_command.CleanBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["clean", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_clean_dry_run_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.clean_build_command.CleanBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["clean", "--dry-run", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_clean_with_file(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.clean_build_command.CleanBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["clean", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
+def test_outside_a_solution_exits_two(runner, tmp_path):
+    result = _run(runner, "app", "--path", tmp_path)
+    assert result.exit_code == EXIT_USAGE
 
 
-class TestBuildPlan:
-    def test_plan_basic(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.plan_build_command.PlanBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["plan", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_plan_with_stage(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.plan_build_command.PlanBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["plan", "--stage", "production", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_plan_artifacts_only_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.plan_build_command.PlanBuildCommand.execute", return_value=True):
-            result = runner.invoke(build, ["plan", "--artifacts-only", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_plan_execute_false_returns_nonzero(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.builders.plan_build_command.PlanBuildCommand.execute", return_value=False):
-            result = runner.invoke(build, ["plan", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
+def test_invalid_solution_exits_three(runner, solution):
+    # A deployment naming a workspace that does not exist fails cross-document
+    # reference checks, so `require_valid()` raises before build_run() runs.
+    _write(solution, "deployment.yaml", DEPLOYMENT.replace("workspace: main", "workspace: ghost-workspace"))
+    result = _run(runner, "app", "--path", solution)
+    assert result.exit_code == EXIT_VALIDATION
 
 
 # ---------------------------------------------------------------------------
-# PlanBuildCommand._build_value_status_rows() unit tests
+# Rendered output
 # ---------------------------------------------------------------------------
 
 
-def _make_plan_cmd(tmp_path):
-    """Return a PlanBuildCommand with minimal state for unit testing."""
-    from unittest.mock import MagicMock
-
-    cmd = PlanBuildCommand.__new__(PlanBuildCommand)
-    cmd._work_path = tmp_path
-    cmd._build_path = tmp_path / "build"
-    cmd._file_path = tmp_path / "deploy.yaml"
-    cmd._stage = None
-    cmd._artifacts_only = False
-    cmd._ai = False
-    cmd._strict_ai_review = None
-    cmd._no_cache_warm = True
-    cmd._platform_model = None
-    cmd._errors = []
-    cmd._messages = []
-    cmd._output_data = {}
-    cmd._output_format = "console"
-    cmd._output_quiet = False
-    cmd._deployment_service = None
-    cmd._configuration_service = None
-    cmd._solution_controller = MagicMock()
-    cmd.logger = MagicMock()
-    return cmd
-
-
-class TestPlanBuildToTemp:
-    """Regression tests: PlanBuildCommand._build_to_temp() must pass repo_map to every
-    builder whose .build() signature accepts one, exactly like RunBuildCommand does.
-
-    Previously TerraformBuilder.build() was called with no repo_map argument at all,
-    silently defaulting to {} and breaking source-copy resolution for any workspace
-    whose Terraform provisioner used a non-local source.repository.
-    """
-
-    def test_terraform_builder_receives_repo_map(self, tmp_path):
-        cmd = _make_plan_cmd(tmp_path)
-        cmd._deployment_service = MagicMock()
-        cmd._output_verbose = False
-        expected_repo_map = {"iac-int": "/abs/path/to/iac-int-deployment"}
-        cmd._solution_controller.get_repo_map.return_value = expected_repo_map
-
-        with (
-            patch("strata.commands.builders.plan_build_command.PlatformBuilder") as mock_platform_builder,
-            patch("strata.commands.builders.plan_build_command.TerraformBuilder") as mock_terraform_builder,
-            patch("strata.commands.builders.plan_build_command.AnsibleBuilder") as mock_ansible_builder,
-        ):
-            for mock_cls in (mock_platform_builder, mock_terraform_builder, mock_ansible_builder):
-                instance = mock_cls.return_value
-                instance.before_build.return_value = True
-                instance.build.return_value = True
-                instance.after_build.return_value = True
-                instance.get_messages.return_value = []
-                instance.get_errors.return_value = []
-
-            result = cmd._build_to_temp(tmp_path / "build")
-
-        assert result is True
-        tb_instance = mock_terraform_builder.return_value
-        assert tb_instance.build.call_args.kwargs.get("repo_map") == expected_repo_map
-
-    def test_ansible_builder_receives_repo_map(self, tmp_path):
-        cmd = _make_plan_cmd(tmp_path)
-        cmd._deployment_service = MagicMock()
-        cmd._output_verbose = False
-        expected_repo_map = {"iac-int": "/abs/path/to/iac-int-deployment"}
-        cmd._solution_controller.get_repo_map.return_value = expected_repo_map
-
-        with (
-            patch("strata.commands.builders.plan_build_command.PlatformBuilder") as mock_platform_builder,
-            patch("strata.commands.builders.plan_build_command.TerraformBuilder") as mock_terraform_builder,
-            patch("strata.commands.builders.plan_build_command.AnsibleBuilder") as mock_ansible_builder,
-        ):
-            for mock_cls in (mock_platform_builder, mock_terraform_builder, mock_ansible_builder):
-                instance = mock_cls.return_value
-                instance.before_build.return_value = True
-                instance.build.return_value = True
-                instance.after_build.return_value = True
-                instance.get_messages.return_value = []
-                instance.get_errors.return_value = []
-
-            result = cmd._build_to_temp(tmp_path / "build")
-
-        assert result is True
-        ab_instance = mock_ansible_builder.return_value
-        assert ab_instance.build.call_args.kwargs.get("repo_map") == expected_repo_map
-
-
-def _make_variable(key, store, default=None):
-    from unittest.mock import MagicMock
-
-    item = MagicMock()
-    item.key = key
-    item.store = MagicMock()
-    item.store.value = store
-    item.default = default
-    return item
-
-
-def _make_secret(key, store, generate=None, rotate=None):
-    from unittest.mock import MagicMock
-
-    item = MagicMock()
-    item.key = key
-    item.store = MagicMock()
-    item.store.value = store
-    item.generate = generate
-    item.rotate = rotate
-    return item
-
-
-def _make_feature(key, store, default=None):
-    from unittest.mock import MagicMock
-
-    item = MagicMock()
-    item.key = key
-    item.store = MagicMock()
-    item.store.value = store
-    item.default = default
-    return item
-
-
-class TestPlanBuildValueStatus:
-    """Unit tests for PlanBuildCommand._build_value_status_rows()."""
-
-    def _cmd_with_env(self, tmp_path, variables=(), secrets=(), features=()):
-        from unittest.mock import MagicMock
-
-        cmd = _make_plan_cmd(tmp_path)
-        env_svc = MagicMock()
-        env_svc.get_variables.return_value = list(variables)
-        env_svc.get_secrets.return_value = list(secrets)
-        env_svc.get_features.return_value = list(features)
-        svc = MagicMock()
-        svc.get_environment_service.return_value = env_svc
-        cmd._deployment_service = svc
-        return cmd
-
-    def test_returns_empty_when_no_deployment_service(self, tmp_path):
-        cmd = _make_plan_cmd(tmp_path)
-        assert cmd._build_value_status_rows() == []
-
-    def test_returns_empty_when_no_env_service(self, tmp_path):
-        from unittest.mock import MagicMock
-
-        cmd = _make_plan_cmd(tmp_path)
-        svc = MagicMock()
-        svc.get_environment_service.return_value = None
-        cmd._deployment_service = svc
-        assert cmd._build_value_status_rows() == []
-
-    def test_constant_variable_is_ok(self, tmp_path):
-        cmd = self._cmd_with_env(tmp_path, variables=[_make_variable("WORKSPACE", "constant")])
-        rows = cmd._build_value_status_rows()
-        assert len(rows) == 1
-        assert rows[0] == {"type": "variable", "key": "WORKSPACE", "store": "constant", "status": "ok", "detail": None}
-
-    def test_environment_variable_is_ok(self, tmp_path):
-        cmd = self._cmd_with_env(tmp_path, variables=[_make_variable("LOG_LEVEL", "environment")])
-        rows = cmd._build_value_status_rows()
-        assert rows[0]["status"] == "ok"
-
-    def test_integration_variable_with_default_is_seeded(self, tmp_path):
-        cmd = self._cmd_with_env(tmp_path, variables=[_make_variable("LOG_LEVEL", "azure-appconfig", default="info")])
-        rows = cmd._build_value_status_rows()
-        assert rows[0]["status"] == "seeded"
-        assert rows[0]["detail"] == "default: info"
-
-    def test_integration_variable_without_default_is_required(self, tmp_path):
-        cmd = self._cmd_with_env(tmp_path, variables=[_make_variable("API_URL", "consul")])
-        rows = cmd._build_value_status_rows()
-        assert rows[0]["status"] == "required"
-        assert rows[0]["detail"] is None
-
-    def test_github_secret_is_ok(self, tmp_path):
-        cmd = self._cmd_with_env(tmp_path, secrets=[_make_secret("TOKEN", "github")])
-        rows = cmd._build_value_status_rows()
-        assert rows[0]["status"] == "ok"
-
-    def test_secret_with_generate_spec_is_generated(self, tmp_path):
-        from unittest.mock import MagicMock
-
-        gen = MagicMock()
-        gen.type = MagicMock()
-        gen.type.value = "password"
-        gen.length = 32
-        cmd = self._cmd_with_env(tmp_path, secrets=[_make_secret("DB_PASSWORD", "azure-keyvault", generate=gen)])
-        rows = cmd._build_value_status_rows()
-        assert rows[0]["status"] == "generated"
-        assert rows[0]["detail"] == "password/32"
-
-    def test_integration_secret_without_generate_is_required(self, tmp_path):
-        cmd = self._cmd_with_env(tmp_path, secrets=[_make_secret("API_KEY", "vault")])
-        rows = cmd._build_value_status_rows()
-        assert rows[0]["status"] == "required"
-
-    def test_feature_with_default_is_seeded(self, tmp_path):
-        cmd = self._cmd_with_env(tmp_path, features=[_make_feature("DARK_MODE", "flagsmith", default="false")])
-        rows = cmd._build_value_status_rows()
-        assert rows[0]["status"] == "seeded"
-        assert rows[0]["detail"] == "default: false"
-
-    def test_feature_constant_is_ok(self, tmp_path):
-        cmd = self._cmd_with_env(tmp_path, features=[_make_feature("FLAG", "constant")])
-        rows = cmd._build_value_status_rows()
-        assert rows[0]["status"] == "ok"
-
-    def test_mixed_types_all_present(self, tmp_path):
-        cmd = self._cmd_with_env(
-            tmp_path,
-            variables=[_make_variable("WORKSPACE", "constant"), _make_variable("LOG_LEVEL", "consul", default="info")],
-            secrets=[_make_secret("DB_PASS", "vault")],
-            features=[_make_feature("BETA", "flagsmith", default="true")],
-        )
-        rows = cmd._build_value_status_rows()
-        assert len(rows) == 4
-        assert [r["type"] for r in rows] == ["variable", "variable", "secret", "feature"]
-
-    def test_values_key_in_output_data(self, tmp_path):
-        from unittest.mock import MagicMock, patch
-
-        cmd = _make_plan_cmd(tmp_path)
-        env_svc = MagicMock()
-        env_svc.get_variables.return_value = [_make_variable("X", "constant")]
-        env_svc.get_secrets.return_value = []
-        env_svc.get_features.return_value = []
-        svc = MagicMock()
-        svc.model.meta.name = "test-deploy"
-        svc.get_build_path.return_value = tmp_path / "build"
-        svc.get_environment_service.return_value = env_svc
-        cmd._deployment_service = svc
-        cmd._artifacts_only = True
-
-        with (
-            patch.object(cmd, "_build_to_temp", return_value=True),
-            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
-            patch.object(cmd, "_print_console"),
-        ):
-            cmd._run_plan()
-
-        assert "values" in cmd._output_data
-        assert len(cmd._output_data["values"]) == 1
-
-
-class TestPlanBuildCacheWarm:
-    """ADR-0026: PlanBuildCommand warms the cache after a successful plan build."""
-
-    def _cmd(self, tmp_path):
-        from unittest.mock import MagicMock
-
-        cmd = _make_plan_cmd(tmp_path)
-        svc = MagicMock()
-        svc.model.meta.name = "test-deploy"
-        svc.get_build_path.return_value = tmp_path / "build"
-        svc.get_environment_service.return_value = None
-        cmd._deployment_service = svc
-        cmd._artifacts_only = True
-        return cmd
-
-    def test_warms_cache_when_not_disabled(self, tmp_path):
-        from unittest.mock import patch
-
-        cmd = self._cmd(tmp_path)
-        cmd._no_cache_warm = False
-
-        with (
-            patch.object(cmd, "_build_to_temp", return_value=True),
-            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
-            patch.object(cmd, "_print_console"),
-            patch.object(cmd, "_warm_model_cache") as mock_warm,
-        ):
-            cmd._run_plan()
-
-        mock_warm.assert_called_once()
-
-    def test_skips_warm_when_no_cache_warm_set(self, tmp_path):
-        from unittest.mock import patch
-
-        cmd = self._cmd(tmp_path)
-        cmd._no_cache_warm = True
-
-        with (
-            patch.object(cmd, "_build_to_temp", return_value=True),
-            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
-            patch.object(cmd, "_print_console"),
-            patch.object(cmd, "_warm_model_cache") as mock_warm,
-        ):
-            cmd._run_plan()
-
-        mock_warm.assert_not_called()
-
-
-class TestPlanStageHasChanges:
-    """Each plan row carries terraform's own change verdict.
-
-    The `build-plan` GitHub Action used to derive `has_changes` from
-    `.data.terraform_plan | length > 0` — row *presence*. Every stage that planned
-    produced a row, so the documented recipe (`if has_changes == 'true'`) fired on
-    every run, including runs where terraform found nothing to do. The verdict is
-    now taken from `-detailed-exitcode`, which terraform already computes.
-    """
-
-    def _cmd(self, tmp_path):
-        from unittest.mock import MagicMock
-
-        cmd = _make_plan_cmd(tmp_path)
-        cmd._deployment_service = MagicMock()
-        cmd._configuration_service = MagicMock()
-        return cmd
-
-    def _plan(self, tmp_path, *, has_changes, plan_ok=True):
-        from unittest.mock import MagicMock, patch
-
-        cmd = self._cmd(tmp_path)
-        deployer = MagicMock()
-        deployer.validate_workspace.return_value = (True, [])
-        deployer.validate_environment.return_value = (True, [])
-        deployer.setup.return_value = (True, [])
-        deployer.check.return_value = (True, [])
-        deployer.plan.return_value = (plan_ok, [])
-        deployer.plan_has_changes = has_changes
-
-        stage = MagicMock()
-        stage.name = "core"
-        stage.enabled = None
-
-        with patch("strata.commands.builders.plan_build_command.TerraformDeployer", return_value=deployer):
-            return cmd._plan_stage(stage, tmp_path, None)
-
-    def test_changes_present(self, tmp_path):
-        assert self._plan(tmp_path, has_changes=True)["has_changes"] is True
-
-    def test_no_changes(self, tmp_path):
-        """The case the old row-count logic got wrong."""
-        assert self._plan(tmp_path, has_changes=False)["has_changes"] is False
-
-    def test_failed_plan_reports_unknown_not_false(self, tmp_path):
-        """A stage that could not plan knows nothing about whether it would change
-        anything. Reporting False would claim knowledge it does not have."""
-        result = self._plan(tmp_path, has_changes=None, plan_ok=False)
-
-        assert result["has_changes"] is None
-        assert result["error"] is not None
-
-    def test_key_always_present(self, tmp_path):
-        """Consumers index this key directly; it must never be absent."""
-        assert "has_changes" in self._plan(tmp_path, has_changes=True)
-
-
-class TestTerraformDeployerPlanHasChanges:
-    def test_property_reflects_detailed_exitcode(self):
-        from strata.deployers.terraform_deployer import TerraformDeployer
-
-        deployer = TerraformDeployer.__new__(TerraformDeployer)
-        deployer._plan_has_changes = None
-        assert deployer.plan_has_changes is None
-
-        deployer._plan_has_changes = False
-        assert deployer.plan_has_changes is False
-
-        deployer._plan_has_changes = True
-        assert deployer.plan_has_changes is True
-
-
-class TestPlanBuildStrictAiReviewGate:
-    """`--strict-ai-review` is documented as failing non-interactively and sold for CI.
-
-    It appended to `self._errors` and `_run_ai_analysis`'s docstring claimed that made
-    the caller propagate a non-zero exit code — but build commands define no
-    `has_validation_errors()`, which is all `handle_command_exit` inspects, so the gate
-    printed "Plan blocked" and exited 0. A gate that does not gate is worse than no
-    gate: CI reports green on exactly the change someone asked to be stopped.
-    """
-
-    def _cmd(self, tmp_path):
-        from unittest.mock import MagicMock
-
-        cmd = _make_plan_cmd(tmp_path)
-        svc = MagicMock()
-        svc.model.meta.name = "test-deploy"
-        svc.get_build_path.return_value = tmp_path / "build"
-        svc.get_environment_service.return_value = None
-        cmd._deployment_service = svc
-        cmd._artifacts_only = True
-        cmd._no_cache_warm = True
-        return cmd
-
-    def _run(self, cmd, ai_side_effect):
-        from unittest.mock import patch
-
-        with (
-            patch.object(cmd, "_build_to_temp", return_value=True),
-            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
-            patch.object(cmd, "_print_console"),
-            patch.object(cmd, "_run_ai_analysis", side_effect=ai_side_effect),
-        ):
-            return cmd._run_plan()
-
-    def test_blocked_review_fails_the_command(self, tmp_path):
-        cmd = self._cmd(tmp_path)
-        cmd._strict_ai_review = "high"
-
-        def blocked(_plan_results):
-            cmd._errors.append("AI plan review: risk=CRITICAL ≥ threshold=HIGH (--strict-ai-review)")
-            return {"provider": "x", "content": "{}"}
-
-        assert self._run(cmd, blocked) is False
-
-    def test_blocked_review_exits_3_not_1(self, tmp_path):
-        """The flag's own help promises "Fail (exit 3)". Exit 3 means "fix the config,
-        block the PR"; exit 1 means "something is broken, alert". A pipeline that
-        retries on 1 must not retry a gate rejection."""
-        cmd = self._cmd(tmp_path)
-        cmd._strict_ai_review = "high"
-
-        def blocked(_plan_results):
-            cmd._errors.append("blocked")
-            return {"provider": "x", "content": "{}"}
-
-        self._run(cmd, blocked)
-
-        assert cmd.has_validation_errors() is True
-
-    def test_passing_review_still_succeeds(self, tmp_path):
-        cmd = self._cmd(tmp_path)
-        cmd._strict_ai_review = "high"
-
-        assert self._run(cmd, lambda _r: {"provider": "x", "content": "{}"}) is True
-
-    def test_plain_ai_flag_never_gates(self, tmp_path):
-        """`--ai` is advisory; only `--strict-ai-review` blocks."""
-        cmd = self._cmd(tmp_path)
-        cmd._ai = True
-        cmd._strict_ai_review = None
-
-        assert self._run(cmd, lambda _r: {"provider": "x", "content": "{}"}) is True
-
-    def test_no_ai_flags_leaves_the_command_unaffected(self, tmp_path):
-        from unittest.mock import patch
-
-        cmd = self._cmd(tmp_path)
-        cmd._ai = False
-        cmd._strict_ai_review = None
-
-        with (
-            patch.object(cmd, "_build_to_temp", return_value=True),
-            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
-            patch.object(cmd, "_print_console"),
-            patch.object(cmd, "_run_ai_analysis") as ai,
-        ):
-            ok = cmd._run_plan()
-
-        ai.assert_not_called()
-        assert ok is True
-
-
-class TestPlanBuildFailureSplit:
-    """Three outcomes that all used to exit 0, now split along what CI must do.
-
-    Changes found is **not** a failure — the shipped `build-plan` action reports it
-    as a `has_changes` output and its documented recipe branches on that. Only the
-    two real failures are non-zero, and they are kept apart: a gate rejection is
-    exit 3 (block the PR), a plan that could not run is exit 1 (alert).
-    """
-
-    def _cmd(self, tmp_path):
-        from unittest.mock import MagicMock
-
-        cmd = _make_plan_cmd(tmp_path)
-        svc = MagicMock()
-        svc.model.meta.name = "test-deploy"
-        svc.get_build_path.return_value = tmp_path / "build"
-        svc.get_environment_service.return_value = None
-        cmd._deployment_service = svc
-        cmd._artifacts_only = False
-        cmd._no_cache_warm = True
-        cmd._ai = False
-        cmd._strict_ai_review = None
-        return cmd
-
-    def _run(self, cmd, plan_results):
-        from unittest.mock import patch
-
-        with (
-            patch.object(cmd, "_build_to_temp", return_value=True),
-            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
-            patch.object(cmd, "_print_console"),
-            patch.object(cmd, "_resolve_values", return_value=None),
-            patch.object(cmd, "_run_terraform_plan", return_value=plan_results),
-        ):
-            return cmd._run_plan()
-
-    def _row(self, stage="core", error=None, ok=True):
-        return {
-            "stage": stage,
-            "ok": ok,
-            "error": error,
-            "messages": [],
-            "would_skip": False,
-            "skip_reason": None,
-        }
-
-    def test_failed_stage_fails_the_command(self, tmp_path):
-        cmd = self._cmd(tmp_path)
-
-        ok = self._run(cmd, [self._row(error="terraform plan failed")])
-
-        assert ok is False
-        assert any("core" in e for e in cmd._errors)
-
-    def test_failed_stage_exits_1_not_3(self, tmp_path):
-        """A broken toolchain is not a config-validation problem."""
-        cmd = self._cmd(tmp_path)
-
-        self._run(cmd, [self._row(error="terraform plan failed")])
-
-        assert cmd.has_validation_errors() is False
-
-    def test_successful_plan_succeeds(self, tmp_path):
-        cmd = self._cmd(tmp_path)
-
-        assert self._run(cmd, [self._row(), self._row(stage="api")]) is True
-
-    def test_changes_alone_are_not_a_failure(self, tmp_path):
-        """The whole reason the split exists: a plan full of pending changes is the
-        normal, successful case, and `has_changes` — not the exit code — reports it."""
-        from unittest.mock import patch
-
-        cmd = self._cmd(tmp_path)
-        with (
-            patch.object(cmd, "_build_to_temp", return_value=True),
-            patch.object(cmd, "_compute_artifact_diff", return_value=[{"status": "changed", "path": "main.tf"}]),
-            patch.object(cmd, "_print_console"),
-            patch.object(cmd, "_resolve_values", return_value=None),
-            patch.object(cmd, "_run_terraform_plan", return_value=[self._row()]),
-        ):
-            ok = cmd._run_plan()
-
-        assert ok is True
-        assert cmd.has_validation_errors() is False
-
-    def test_only_the_failing_stages_are_named(self, tmp_path):
-        cmd = self._cmd(tmp_path)
-
-        self._run(cmd, [self._row(stage="core"), self._row(stage="api", error="boom")])
-
-        joined = " ".join(cmd._errors)
-        assert "api" in joined
-        assert "core" not in joined
-
-    def test_broken_plan_wins_over_a_blocked_gate(self, tmp_path):
-        """If terraform never produced a plan, the AI reviewed nothing meaningful —
-        the broken toolchain is the finding worth surfacing, so exit 1 wins."""
-        from unittest.mock import patch
-
-        cmd = self._cmd(tmp_path)
-        cmd._strict_ai_review = "high"
-
-        def blocked(_plan_results):
-            cmd._errors.append("AI plan review: risk=CRITICAL (--strict-ai-review)")
-            return {"provider": "x", "content": "{}"}
-
-        with (
-            patch.object(cmd, "_build_to_temp", return_value=True),
-            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
-            patch.object(cmd, "_print_console"),
-            patch.object(cmd, "_resolve_values", return_value=None),
-            patch.object(cmd, "_run_ai_analysis", side_effect=blocked),
-            patch.object(cmd, "_run_terraform_plan", return_value=[self._row(error="boom")]),
-        ):
-            ok = cmd._run_plan()
-
-        assert ok is False
-        assert cmd.has_validation_errors() is False
+def test_build_writes_rendered_artifacts_under_the_default_build_path(runner, solution):
+    result = _run(runner, "app", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    materialised = solution / "build" / "app" / "infra"
+    assert (materialised / "main.tf").exists()
+    assert (materialised / "strata.auto.tfvars.json").exists()
+
+
+def test_build_path_option_overrides_the_default(runner, solution, tmp_path):
+    custom = tmp_path / "out"
+    result = _run(runner, "app", "--path", solution, "--build-path", custom)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert (custom / "infra" / "main.tf").exists()
+    assert not (solution / "build").exists()
 
 
 # ---------------------------------------------------------------------------
-# TestBuildRunNdjsonStreaming — NDJSON stage events emitted per build phase
+# --clean / --no-clean
 # ---------------------------------------------------------------------------
 
 
-class TestBuildRunNdjsonStreaming:
-    """stage_start / stage_end events emitted for each build phase in --output ndjson."""
+def test_default_build_path_is_always_cleaned(runner, solution):
+    """The default path is exclusively this build's own directory - always
+    safe to wipe, no flag needed."""
+    stale = solution / "build" / "app" / "stale.txt"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale")
 
-    _PHASES = [
-        "platform",
-        "terraform",
-        "ansible",
-        "bicep",
-        "compose",
-        "helm",
-        "sync",
-        "sbom",
-    ]
+    result = _run(runner, "app", "--path", solution)
 
-    def _make_cmd(self, tmp_path: Path):
-        from strata.commands.builders.run_build_command import RunBuildCommand
-
-        cmd = RunBuildCommand(work_path=str(tmp_path), dry_run=False)
-        cmd._work_path = tmp_path
-        cmd._build_path = tmp_path / "build"
-        cmd._output_format = "ndjson"
-        cmd._dry_run = False
-        cmd._require_lock = False
-        cmd._audit = False
-        cmd._deployment_service = MagicMock()
-        cmd._deployment_service.check_require_lock_mode.return_value = None
-        cmd._configuration_service = MagicMock()
-        cmd._configuration_service.model = None
-        cmd._solution_controller = MagicMock()
-        cmd._solution_controller.get_repo_map.return_value = {}
-        cmd._file_path = tmp_path / "deploy.yaml"
-        return cmd
-
-    def test_stage_start_and_end_emitted_for_all_phases(self, tmp_path):
-        import contextlib
-
-        cmd = self._make_cmd(tmp_path)
-        cmd.emit_ndjson = MagicMock()
-
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch.object(cmd, "_initialize", return_value=True))
-            stack.enter_context(patch.object(cmd, "_before_execute", return_value=True))
-            stack.enter_context(patch.object(cmd, "_after_execute", return_value=True))
-            stack.enter_context(patch.object(cmd, "_finalize"))
-            stack.enter_context(patch.object(cmd, "_run_lifecycle_phase", return_value=True))
-            stack.enter_context(patch.object(cmd, "_evaluate_build_policies", return_value=True))
-            stack.enter_context(patch.object(cmd, "_write_build_manifest", return_value=None))
-            for phase in self._PHASES:
-                stack.enter_context(patch.object(cmd, f"_execute_{phase}_build", return_value=True))
-            cmd.execute()
-
-        emitted = [call.args[0] for call in cmd.emit_ndjson.call_args_list]
-        stage_starts = [e["stage"] for e in emitted if e.get("event") == "stage_start"]
-        stage_ends = [e["stage"] for e in emitted if e.get("event") == "stage_end"]
-
-        for phase in self._PHASES:
-            assert f"{phase}_build" in stage_starts, f"Missing stage_start for {phase}"
-            assert f"{phase}_build" in stage_ends, f"Missing stage_end for {phase}"
-
-    def test_stage_end_success_false_on_phase_failure(self, tmp_path):
-        cmd = self._make_cmd(tmp_path)
-        cmd.emit_ndjson = MagicMock()
-
-        with (
-            patch.object(cmd, "_initialize", return_value=True),
-            patch.object(cmd, "_before_execute", return_value=True),
-            patch.object(cmd, "_after_execute", return_value=True),
-            patch.object(cmd, "_finalize"),
-            patch.object(cmd, "_run_lifecycle_phase", return_value=True),
-            patch.object(cmd, "_execute_platform_build", return_value=False),
-        ):
-            cmd.execute()
-
-        emitted = [call.args[0] for call in cmd.emit_ndjson.call_args_list]
-        platform_ends = [e for e in emitted if e.get("event") == "stage_end" and e.get("stage") == "platform_build"]
-        assert len(platform_ends) == 1
-        assert platform_ends[0]["success"] is False
-
-    def test_no_events_when_not_ndjson(self, tmp_path):
-        import contextlib
-
-        from strata.commands.builders.run_build_command import RunBuildCommand
-
-        cmd = RunBuildCommand(work_path=str(tmp_path), dry_run=False)
-        cmd._work_path = tmp_path
-        cmd._build_path = tmp_path / "build"
-        cmd._output_format = "console"
-        cmd._dry_run = False
-        cmd._require_lock = False
-        cmd._audit = False
-        cmd._deployment_service = MagicMock()
-        cmd._deployment_service.check_require_lock_mode.return_value = None
-        cmd._configuration_service = MagicMock()
-        cmd._configuration_service.model = None
-        cmd._solution_controller = MagicMock()
-        cmd._solution_controller.get_repo_map.return_value = {}
-        cmd._file_path = tmp_path / "deploy.yaml"
-        cmd.emit_ndjson = MagicMock()
-
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch.object(cmd, "_initialize", return_value=True))
-            stack.enter_context(patch.object(cmd, "_before_execute", return_value=True))
-            stack.enter_context(patch.object(cmd, "_after_execute", return_value=True))
-            stack.enter_context(patch.object(cmd, "_finalize"))
-            stack.enter_context(patch.object(cmd, "_run_lifecycle_phase", return_value=True))
-            stack.enter_context(patch.object(cmd, "_evaluate_build_policies", return_value=True))
-            stack.enter_context(patch.object(cmd, "_write_build_manifest", return_value=None))
-            for phase in self._PHASES:
-                stack.enter_context(patch.object(cmd, f"_execute_{phase}_build", return_value=True))
-            cmd.execute()
-
-        cmd.emit_ndjson.assert_not_called()
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert not stale.exists()
 
 
-class TestWarmModelCache:
-    """ADR-0026: RunBuildCommand._warm_model_cache() is best-effort and never raises."""
+def test_custom_build_path_is_not_cleaned_unless_requested(runner, solution, tmp_path):
+    custom = tmp_path / "out"
+    custom.mkdir()
+    (custom / "leftover.txt").write_text("still here")
 
-    def _make_cmd(self, tmp_path: Path):
-        from strata.commands.builders.run_build_command import RunBuildCommand
+    result = _run(runner, "app", "--path", solution, "--build-path", custom)
 
-        cmd = RunBuildCommand(work_path=str(tmp_path), dry_run=False)
-        cmd._work_path = tmp_path
-        cmd._file_path = tmp_path / "deploy.yaml"
-        cmd._deployment_service = MagicMock()
-        cmd._deployment_service.model.meta.name = "demo"
-        cmd._platform_model = MagicMock()
-        cmd._platform_model.model_dump.return_value = {"meta": {"name": "demo"}}
-        return cmd
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert (custom / "leftover.txt").read_text() == "still here"
 
-    def test_noop_when_no_platform_model(self, tmp_path):
-        cmd = self._make_cmd(tmp_path)
-        cmd._platform_model = None
-        with patch("strata.controllers.cache_controller.CacheController") as mock_controller_cls:
-            cmd._warm_model_cache()
-        mock_controller_cls.assert_not_called()
 
-    def test_warms_cache_with_built_model(self, tmp_path):
-        cmd = self._make_cmd(tmp_path)
-        mock_controller = MagicMock()
-        mock_controller.collect_input_paths.return_value = ["/a/deploy.yaml"]
-        mock_controller.cache.compute_cache_key.return_value = "abc123"
+def test_custom_build_path_is_cleaned_when_clean_flag_given(runner, solution, tmp_path):
+    custom = tmp_path / "out"
+    custom.mkdir()
+    (custom / "leftover.txt").write_text("still here")
 
-        with patch("strata.controllers.cache_controller.CacheController", return_value=mock_controller):
-            cmd._warm_model_cache()
+    result = _run(runner, "app", "--path", solution, "--build-path", custom, "--clean")
 
-        mock_controller.cache.warm.assert_called_once_with(
-            "demo", "deployment", "abc123", {"meta": {"name": "demo"}}, ["/a/deploy.yaml"]
-        )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert not (custom / "leftover.txt").exists()
 
-    def test_never_raises_when_cache_controller_fails(self, tmp_path):
-        cmd = self._make_cmd(tmp_path)
-        with patch("strata.controllers.cache_controller.CacheController", side_effect=RuntimeError("boom")):
-            cmd._warm_model_cache()  # must not raise
 
-    def test_skipped_when_cache_key_cannot_be_computed(self, tmp_path):
-        cmd = self._make_cmd(tmp_path)
-        mock_controller = MagicMock()
-        mock_controller.collect_input_paths.return_value = ["/missing.yaml"]
-        mock_controller.cache.compute_cache_key.return_value = None
+def test_no_clean_flag_disables_cleaning_even_for_the_default_path(runner, solution):
+    stale = solution / "build" / "app" / "stale.txt"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale")
 
-        with patch("strata.controllers.cache_controller.CacheController", return_value=mock_controller):
-            cmd._warm_model_cache()
+    result = _run(runner, "app", "--path", solution, "--no-clean")
 
-        mock_controller.cache.warm.assert_not_called()
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert stale.exists()
+
+
+# ---------------------------------------------------------------------------
+# --dry-run
+# ---------------------------------------------------------------------------
+
+
+def test_dry_run_writes_nothing(runner, solution):
+    result = _run(runner, "app", "--path", solution, "--dry-run")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert not (solution / "build").exists()
+
+
+def test_dry_run_reports_planned_steps_in_console_output(runner, solution):
+    result = _run(runner, "app", "--path", solution, "--dry-run")
+
+    assert "would materialise provisioner" in result.output
+    assert "would render provisioner" in result.output
+
+
+def test_real_run_reports_steps_in_console_output_too(runner, solution):
+    result = _run(runner, "app", "--path", solution)
+
+    assert "materialised provisioner" in result.output
+    assert "rendered provisioner" in result.output
+
+
+def test_dry_run_still_exits_two_for_an_unknown_deployment(runner, solution):
+    result = _run(runner, "ghost-deployment", "--path", solution, "--dry-run")
+    assert result.exit_code == EXIT_USAGE
+
+
+# ---------------------------------------------------------------------------
+# --pin (docs/work/version-lifecycle.md Phase 5)
+# ---------------------------------------------------------------------------
+
+
+def test_pin_overrides_spec_version_for_this_invocation_only(runner, solution):
+    _write(
+        solution,
+        "version.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+        "  pins:\n    remotes:\n      infra-remote: v2.0.0\n",
+    )
+    before = (solution / "deployment.yaml").read_text(encoding="utf-8")
+    assert "version" not in before
+
+    result = _run(runner, "app", "--path", solution, "--pin", "prd")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert (solution / "deployment.yaml").read_text(encoding="utf-8") == before
+
+
+def test_pin_names_an_unknown_version_exits_two(runner, solution):
+    result = _run(runner, "app", "--path", solution, "--pin", "ghost")
+    assert result.exit_code == EXIT_USAGE
+    assert "ghost" in result.output
+
+
+# ---------------------------------------------------------------------------
+# JSON
+# ---------------------------------------------------------------------------
+
+
+def test_json_reports_success(runner, solution):
+    payload = json.loads(_run(runner, "app", "--path", solution, "--output", "json").output)
+    assert payload["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# --resolve
+# ---------------------------------------------------------------------------
+
+
+def test_without_resolve_an_integration_backed_secret_is_never_touched(runner, solution):
+    _write(
+        solution,
+        "environment.yaml",
+        ENVIRONMENT.replace(
+            "spec: {}", "spec:\n  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"
+        ),
+    )
+    result = _run(runner, "app", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+
+def test_resolve_flag_reports_a_failed_integration_backed_secret(runner, solution):
+    _write(
+        solution,
+        "environment.yaml",
+        ENVIRONMENT.replace(
+            "spec: {}", "spec:\n  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"
+        ),
+    )
+    result = _run(runner, "app", "--path", solution, "--resolve")
+    assert result.exit_code == EXIT_VALIDATION
+    assert "no resolver implemented yet" in result.output
+
+
+# ---------------------------------------------------------------------------
+# --env-file
+# ---------------------------------------------------------------------------
+
+
+def test_env_file_supplies_an_environment_store_variable(runner, solution, monkeypatch):
+    monkeypatch.delenv("BUILD_CLI_PROBE_VAR", raising=False)
+    _write(
+        solution,
+        "environment.yaml",
+        ENVIRONMENT.replace(
+            "spec: {}",
+            "spec:\n  variables:\n    - key: GREETING\n      store: environment\n      value: BUILD_CLI_PROBE_VAR\n",
+        ),
+    )
+    env_file = solution / ".env"
+    env_file.write_text("BUILD_CLI_PROBE_VAR=hello-from-cli-test\n")
+
+    result = _run(runner, "app", "--path", solution, "--env-file", env_file)
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    manifest = (solution / "build" / "app" / "resolved.yaml").read_text()
+    assert "hello-from-cli-test" in manifest

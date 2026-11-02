@@ -1,699 +1,263 @@
 #!/usr/bin/env python3
-"""Unit tests for DeploymentService."""
+"""Tests for DeploymentService — extends merging and workspace cross-checks."""
 
-from pathlib import Path
-
-import pytest
-
-from strata.models.configuration_model import ConfigurationModel
-from strata.models.deployment_model import DeploymentModel
-from strata.services.deployment_service import DeploymentService
+from strata.models.workspace_model import WorkspaceModel
+from strata.services.deployment_service import DeploymentService, merge_deployment_specs
 
 
-def _make_config_with_integrations(integrations: list | None = None, remotes: list | None = None) -> ConfigurationModel:
-    """Build a ConfigurationModel with the given integrations and remotes."""
-    spec: dict = {}
-    if integrations:
-        spec["integrations"] = integrations
-    if remotes:
-        spec["remotes"] = remotes
-    data = {
-        "apiVersion": "strata.huybrechts.xyz/v1",
-        "kind": "configuration",
-        "meta": {"name": "test_config"},
-        "spec": spec,
-    }
-    return ConfigurationModel.model_validate(data)
-
-
-def _data(relative_path: str) -> str:
-    return str(Path(__file__).parent.parent.parent / "data" / relative_path)
-
-
-class TestDeploymentService:
-    @pytest.fixture
-    def service(self):
-        return DeploymentService(_data("deployments/deployment-standard.yaml"))
-
-    @pytest.fixture
-    def invalid_service(self):
-        return DeploymentService(_data("deployments/deployment-invalid.yaml"))
-
-    def test_get_model_class(self, service):
-        assert service._get_model_class() == DeploymentModel
-
-    def test_validate_standard(self, service):
-        is_valid, errors = service.validate()
-        assert is_valid, f"Validation failed: {errors}"
-        assert errors == []
-        assert service.is_validated()
-        assert service.model is not None
-
-    def test_validate_sets_model(self, service):
-        service.validate()
-        assert isinstance(service.model, DeploymentModel)
-
-    def test_get_kind_after_validate(self, service):
-        service.validate()
-        assert service.get_kind() == "deployment"
-
-    def test_get_name_after_validate(self, service):
-        service.validate()
-        assert service.get_name() == "valid_platform"
-
-    def test_validate_invalid_file(self, invalid_service):
-        is_valid, errors = invalid_service.validate()
-        assert not is_valid
-        assert len(errors) > 0
-
-    def test_validate_empty_data(self):
-        service = DeploymentService(data={})
-        is_valid, errors = service.validate()
-        assert not is_valid
-        assert len(errors) > 0
-
-    def test_validate_in_memory_data(self):
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "test_deploy"},
+def _workspace(*step_names) -> WorkspaceModel:
+    return WorkspaceModel.model_validate(
+        {
+            "meta": {"name": "control-workspace"},
             "spec": {
-                "workspace": {"name": "test_workspace", "file": "workspace.yaml"},
-                "environments": ["environment.yaml"],
-                "layers": {"segments": {"environment": "dev"}},
-                "stages": [{"name": "dev"}],
-            },
-        }
-        service = DeploymentService(data=data)
-        is_valid, errors = service.validate()
-        assert is_valid, f"Validation failed: {errors}"
-
-    def test_validate_dynamic_no_config_model(self, service):
-        """Phase 2 without configuration_model always passes."""
-        is_valid, errors = service._validate_dynamic()
-        assert is_valid
-        assert errors == []
-
-    def test_check_environment_refs_exist_before_validate_returns_empty(self):
-        """No model loaded yet (Phase 1 not run) -> no crash, empty list."""
-        svc = DeploymentService(data={})
-        assert svc.check_environment_refs_exist(work_path="/nonexistent") == []
-
-    def test_check_environment_refs_exist_no_environments_entries(self, tmp_path):
-        """Partial deployment with no environments[] at all -> nothing to check."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "base"},
-            "spec": {"partial": True},
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()
-        assert svc.check_environment_refs_exist(work_path=str(tmp_path)) == []
-
-    def test_check_environment_refs_exist_missing_file_reports_error(self, tmp_path):
-        """Partial deployment whose environments[] entry doesn't exist on disk."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "base"},
-            "spec": {"partial": True, "environments": ["missing.yaml"]},
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()
-        errors = svc.check_environment_refs_exist(work_path=str(tmp_path))
-        assert len(errors) == 1
-        assert "missing.yaml" in errors[0]
-
-    def test_check_environment_refs_exist_present_file_passes(self, tmp_path):
-        """Partial deployment whose environments[] entry exists on disk -> no errors."""
-        (tmp_path / "env.yaml").write_text("# placeholder\n")
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "base"},
-            "spec": {"partial": True, "environments": ["env.yaml"]},
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()
-        assert svc.check_environment_refs_exist(work_path=str(tmp_path)) == []
-
-    def test_tenant_field_absent_phase2_passes(self, tmp_path):
-        """When tenant is not set, Phase 2 adds no tenant-related errors."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "shared_deploy"},
-            "spec": {
-                "workspace": {"name": "ws", "file": "workspace.yaml"},
-                "environments": ["env.yaml"],
-            },
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()  # Phase 1
-        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path))
-        # Tenant is absent — no error should carry the "tenant:" label
-        assert not any(e.startswith("tenant:") for e in errors)
-
-    def test_tenant_file_missing_fails_phase2(self, tmp_path):
-        """Phase 2 fails when tenant file does not exist on disk."""
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "test_deploy"},
-            "spec": {
-                "workspace": {"name": "ws", "file": "workspace.yaml"},
-                "environments": ["env.yaml"],
-                "tenant": "acme",
-            },
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()  # Phase 1
-        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path))
-        assert not is_valid
-        assert any("acme" in e for e in errors)
-
-    def test_tenant_file_present_passes_phase2(self, tmp_path):
-        """Phase 2 passes when tenant file exists on disk."""
-        tenant_dir = tmp_path / "tenants"
-        tenant_dir.mkdir()
-        (tenant_dir / "acme.yaml").write_text("# placeholder\n")
-        env_file = tmp_path / "env.yaml"
-        env_file.write_text("# placeholder\n")
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "test_deploy"},
-            "spec": {
-                "workspace": {"name": "ws", "file": "workspace.yaml"},
-                "environments": ["env.yaml"],
-                "tenant": "acme",
-            },
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()  # Phase 1
-        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path))
-        # workspace.yaml is still missing, but no tenant error
-        assert not any("acme" in e for e in errors)
-
-    def test_tenant_file_resolved_via_custom_configured_convention(self, tmp_path):
-        """When configuration.spec.paths declares a resolves: tenant convention,
-        Phase 2 looks for the tenant file at that custom location instead of
-        the built-in tenants/{code}.yaml."""
-        from strata.models.configuration_model import ConfigurationModel
-
-        # Custom layout: customers/{code}/customer.yaml — NOT tenants/acme.yaml
-        customer_dir = tmp_path / "customers" / "acme"
-        customer_dir.mkdir(parents=True)
-        (customer_dir / "customer.yaml").write_text("# placeholder\n")
-        env_file = tmp_path / "env.yaml"
-        env_file.write_text("# placeholder\n")
-
-        config_model = ConfigurationModel.model_validate(
-            {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "configuration",
-                "meta": {"name": "cfg"},
-                "spec": {
-                    "paths": [
-                        {
-                            "name": "tenant-location",
-                            "resolves": "tenant",
-                            "scope": "customers/**",
-                            "pattern": "customers/{code}/customer.yaml",
-                        }
-                    ]
-                },
-            }
-        )
-
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "test_deploy"},
-            "spec": {
-                "workspace": {"name": "ws", "file": "workspace.yaml"},
-                "environments": ["env.yaml"],
-                "tenant": "acme",
-            },
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()  # Phase 1
-        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path), configuration_model=config_model)
-        # The tenant file exists at the CUSTOM location, so no tenant-file error
-        assert not any("acme" in e for e in errors)
-
-    def test_tenant_file_missing_at_custom_configured_location_fails(self, tmp_path):
-        """Custom convention declared but the file isn't at that custom location
-        (e.g. it's still sitting at the old tenants/acme.yaml) -> Phase 2 fails,
-        proving the built-in path is no longer consulted once a custom
-        convention is declared."""
-        from strata.models.configuration_model import ConfigurationModel
-
-        # File left at the OLD built-in location — should NOT be found.
-        tenant_dir = tmp_path / "tenants"
-        tenant_dir.mkdir()
-        (tenant_dir / "acme.yaml").write_text("# placeholder\n")
-
-        config_model = ConfigurationModel.model_validate(
-            {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "configuration",
-                "meta": {"name": "cfg"},
-                "spec": {
-                    "paths": [
-                        {
-                            "name": "tenant-location",
-                            "resolves": "tenant",
-                            "scope": "customers/**",
-                            "pattern": "customers/{code}/customer.yaml",
-                        }
-                    ]
-                },
-            }
-        )
-
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "test_deploy"},
-            "spec": {
-                "workspace": {"name": "ws", "file": "workspace.yaml"},
-                "environments": ["env.yaml"],
-                "tenant": "acme",
-            },
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()  # Phase 1
-        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path), configuration_model=config_model)
-        assert not is_valid
-        assert any("customers" in e and "acme" in e for e in errors)
-
-
-class TestLoadDeployServicesMissingWorkspace:
-    """`spec.workspace` absent (e.g. a partial base file loaded directly, without its
-    spec.extends chain resolved first) must surface as a validation error an
-    automated JSON-output consumer can see — not just a structlog line on stderr."""
-
-    def test_reports_validation_error_when_workspace_missing(self, tmp_path, monkeypatch):
-        from strata.services.configuration_service import ConfigurationService
-
-        monkeypatch.setattr(ConfigurationService, "get_remote_map", lambda self: {})
-
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "test_deploy"},
-            "spec": {"environments": ["env.yaml"]},
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()  # Phase 1 — spec.workspace is Optional, so this passes
-
-        ok = svc.load_deploy_services(str(tmp_path))
-
-        assert ok is False
-        errors = svc.get_validation_errors()
-        assert errors
-        assert any("workspace" in e.lower() for e in errors)
-
-
-class TestValidateLayers:
-    """Tests for DeploymentService.validate_layers() — public wrapper around
-    _validate_deployment_layers() (ADR-0072), used by PromoteController so a
-    layer-resolution failure can be checked without running full Phase 2
-    validation (see promote_controller.py's _load_registered_deployments())."""
-
-    def _config_with_hub_scheme(self) -> ConfigurationModel:
-        return ConfigurationModel.model_validate(
-            {
-                "apiVersion": "strata.huybrechts.xyz/v1",
-                "kind": "configuration",
-                "meta": {"name": "test_config"},
-                "spec": {
-                    "paths": [
-                        {
-                            "name": "hub-scheme",
-                            "scope": "deploy/hubs/*",
-                            "pattern": "deploy/hubs/{hub}/{ring}",
-                            "resolves": "layers",
-                            "segments": [{"name": "hub"}, {"name": "ring"}],
-                        }
-                    ]
-                },
-            }
-        )
-
-    def _deployment(self, path: str, follows: str = "hub-scheme") -> DeploymentService:
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "test_deploy"},
-            "spec": {"layers": {"follows": follows}},
-        }
-        svc = DeploymentService(path=path, data=data)
-        svc.validate()  # Phase 1
-        return svc
-
-    def test_no_configuration_model_returns_empty_list(self, tmp_path):
-        svc = self._deployment(str(tmp_path / "deploy" / "hubs" / "hub1" / "prd" / "deploy.yaml"))
-        assert svc.validate_layers(None, str(tmp_path)) == []
-
-    def test_valid_layers_returns_no_errors(self, tmp_path):
-        config = self._config_with_hub_scheme()
-        svc = self._deployment(str(tmp_path / "deploy" / "hubs" / "hub1" / "prd" / "deploy.yaml"))
-        assert svc.validate_layers(config, str(tmp_path)) == []
-
-    def test_unknown_follows_returns_error(self, tmp_path):
-        config = self._config_with_hub_scheme()
-        svc = self._deployment(
-            str(tmp_path / "deploy" / "hubs" / "hub1" / "prd" / "deploy.yaml"), follows="nonexistent-scheme"
-        )
-        errors = svc.validate_layers(config, str(tmp_path))
-        assert len(errors) == 1
-        assert "nonexistent-scheme" in errors[0]
-
-    def test_matches_private_method_directly(self, tmp_path):
-        """The public wrapper must not diverge from _validate_deployment_layers()
-        (ADR-0073's convention rule: one shared implementation, not a second copy)."""
-        config = self._config_with_hub_scheme()
-        svc = self._deployment(str(tmp_path / "deploy" / "hubs" / "hub1" / "prd" / "deploy.yaml"))
-        assert svc.validate_layers(config, str(tmp_path)) == svc._validate_deployment_layers(config, str(tmp_path))
-
-
-class TestValidateSyncStages:
-    """Tests for _validate_sync_stages Phase-6 cross-reference validation."""
-
-    def _make_deployment(self, stages=None, workspace_file="workspace.yaml"):
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "test_sync_deploy"},
-            "spec": {
-                "workspace": {"name": "ws", "file": workspace_file},
-                "environments": ["env.yaml"],
-                "stages": stages or [],
-            },
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()  # Phase 1 — populate self.model
-        return svc
-
-    # ------------------------------------------------------------------ #
-    # No sync fields → no errors regardless of what config provides       #
-    # ------------------------------------------------------------------ #
-
-    def test_no_sync_stages_passes(self):
-        svc = self._make_deployment(stages=[{"name": "infra", "provisioner": "platform_iac"}])
-        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
-        assert errors == []
-
-    def test_empty_stages_passes(self):
-        svc = self._make_deployment(stages=[])
-        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
-        assert errors == []
-
-    # ------------------------------------------------------------------ #
-    # backend.integration validation                                       #
-    # ------------------------------------------------------------------ #
-
-    def test_valid_integration_with_sync_capability_passes(self):
-        config = _make_config_with_integrations(
-            integrations=[{"name": "argocd", "type": "argocd", "capabilities": ["sync"]}]
-        )
-        svc = self._make_deployment(
-            stages=[
-                {
-                    "name": "gitops",
-                    "provisioner": "argocd",
-                    "backend": {"integration": "argocd", "remote": "gitops-repo"},
-                }
-            ]
-        )
-        svc._repo_map = {"gitops-repo": "/tmp/repo"}
-        errors = svc._validate_sync_stages(configuration_model=config, work_path=None)
-        assert errors == []
-
-    def test_missing_integration_reports_error(self):
-        config = _make_config_with_integrations(
-            integrations=[{"name": "argocd", "type": "argocd", "capabilities": ["sync"]}]
-        )
-        svc = self._make_deployment(
-            stages=[
-                {
-                    "name": "gitops",
-                    "provisioner": "flux",
-                    "backend": {"integration": "flux_int", "remote": "gitops-repo"},
-                }
-            ]
-        )
-        svc._repo_map = {"gitops-repo": "/tmp/repo"}
-        errors = svc._validate_sync_stages(configuration_model=config, work_path=None)
-        assert any("flux_int" in e and "not found" in e for e in errors), errors
-
-    def test_integration_without_sync_capability_reports_error(self):
-        config = _make_config_with_integrations(
-            integrations=[{"name": "argocd", "type": "argocd", "capabilities": ["api"]}]
-        )
-        svc = self._make_deployment(
-            stages=[
-                {
-                    "name": "gitops",
-                    "provisioner": "argocd",
-                    "backend": {"integration": "argocd", "remote": "gitops-repo"},
-                }
-            ]
-        )
-        svc._repo_map = {"gitops-repo": "/tmp/repo"}
-        errors = svc._validate_sync_stages(configuration_model=config, work_path=None)
-        assert any("sync" in e and "capability" in e for e in errors), errors
-
-    def test_no_config_model_skips_integration_check(self):
-        """When configuration_model is None integration cross-ref is not validated."""
-        svc = self._make_deployment(
-            stages=[
-                {
-                    "name": "gitops",
-                    "provisioner": "argocd",
-                    "backend": {"integration": "does_not_exist", "remote": "gitops-repo"},
-                }
-            ]
-        )
-        svc._repo_map = {"gitops-repo": "/tmp/repo"}
-        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
-        assert errors == []
-
-    # ------------------------------------------------------------------ #
-    # backend.remote validation                                            #
-    # ------------------------------------------------------------------ #
-
-    def test_valid_remote_passes(self):
-        svc = self._make_deployment(
-            stages=[
-                {
-                    "name": "gitops",
-                    "provisioner": "argocd",
-                    "backend": {"integration": "argocd", "remote": "my-repo"},
-                }
-            ]
-        )
-        svc._repo_map = {"my-repo": "/path/to/repo"}
-        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
-        assert errors == []
-
-    def test_unknown_remote_reports_error(self):
-        svc = self._make_deployment(
-            stages=[
-                {
-                    "name": "gitops",
-                    "provisioner": "argocd",
-                    "backend": {"integration": "argocd", "remote": "missing-repo"},
-                }
-            ]
-        )
-        svc._repo_map = {"other-repo": "/path/to/other"}
-        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
-        assert any("missing-repo" in e and "not a registered remote" in e for e in errors), errors
-
-    def test_remote_in_config_repo_map_passes(self):
-        """Remotes from configuration.get_remote_map() are valid too."""
-        config = _make_config_with_integrations(
-            integrations=[{"name": "argocd", "type": "argocd", "capabilities": ["sync"]}],
-            remotes=[
-                {
-                    "name": "config-repo",
-                    "type": "gitops",
-                    "repository": "https://example.com/cfg",
-                    "reference": "main",
-                    "source_path": "cfg",
-                    "deploy_path": "cfg",
-                }
-            ],
-        )
-        svc = self._make_deployment(
-            stages=[
-                {
-                    "name": "gitops",
-                    "provisioner": "argocd",
-                    "backend": {"integration": "argocd", "remote": "config-repo"},
-                }
-            ]
-        )
-        svc._repo_map = {}  # config provides the remote, not solution
-        errors = svc._validate_sync_stages(configuration_model=config, work_path=None)
-        assert errors == []
-
-    # ------------------------------------------------------------------ #
-    # namespace validation (best-effort)                                   #
-    # ------------------------------------------------------------------ #
-
-    def test_namespace_without_workspace_skips_gracefully(self, tmp_path):
-        """When workspace YAML is missing, namespace validation is silently skipped."""
-        svc = self._make_deployment(
-            stages=[{"name": "gitops", "provisioner": "argocd", "namespace": "backend"}],
-            workspace_file="workspace.yaml",
-        )
-        # workspace.yaml does NOT exist in tmp_path
-        errors = svc._validate_sync_stages(configuration_model=None, work_path=str(tmp_path))
-        assert errors == []
-
-    def test_valid_namespace_in_workspace_passes(self, tmp_path):
-        """When namespace is defined in workspace.spec.namespaces, no error is reported."""
-        ws_data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "workspace",
-            "meta": {"name": "test_ws"},
-            "spec": {
-                "namespaces": [
-                    {"name": "backend", "file": "namespaces/backend.yaml"},
-                    {"name": "frontend", "file": "namespaces/frontend.yaml"},
+                "providers": ["azure-main"],
+                "provisioners": [
+                    {
+                        "name": "terraform-main",
+                        "tool": "terraform",
+                        "source": {"remote": "infra", "source_path": "terraform/main"},
+                    }
                 ],
-                "provisioners": [],
+                "resources": [{"name": "aks", "resource": "aks-class"}],
+                "execution": [
+                    {"name": name, "provisioner": "terraform-main", "resources": ["aks"]} for name in step_names
+                ],
             },
         }
-        import yaml
-
-        ws_file = tmp_path / "workspace.yaml"
-        ws_file.write_text(yaml.dump(ws_data))
-
-        svc = self._make_deployment(
-            stages=[{"name": "gitops", "provisioner": "argocd", "namespace": "backend"}],
-            workspace_file=str(ws_file),
-        )
-        errors = svc._validate_sync_stages(configuration_model=None, work_path=str(tmp_path))
-        assert errors == []
-
-    def test_unknown_namespace_reports_error(self, tmp_path):
-        """When namespace is NOT in workspace.spec.namespaces, an error is reported."""
-        ws_data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "workspace",
-            "meta": {"name": "test_ws"},
-            "spec": {
-                "namespaces": [{"name": "backend", "file": "namespaces/backend.yaml"}],
-                "provisioners": [],
-            },
-        }
-        import yaml
-
-        ws_file = tmp_path / "workspace.yaml"
-        ws_file.write_text(yaml.dump(ws_data))
-
-        svc = self._make_deployment(
-            stages=[{"name": "gitops", "provisioner": "argocd", "namespace": "unknown-ns"}],
-            workspace_file=str(ws_file),
-        )
-        errors = svc._validate_sync_stages(configuration_model=None, work_path=str(tmp_path))
-        assert any("unknown-ns" in e and "not found" in e for e in errors), errors
+    )
 
 
-class TestValidateHelmStageNamespaces:
-    """Tests for _validate_helm_stage_namespaces — stage.helm_namespaces allowlist.
+def _deployment(**spec_overrides) -> DeploymentService:
+    spec = {"workspace": "control-workspace", "environments": ["core-env"]}
+    spec.update(spec_overrides)
+    service = DeploymentService(data={"meta": {"name": "control-dev"}, "spec": spec})
+    service.validate()
+    return service
 
-    Unrelated to TestValidateSyncStages' namespace checks above: this validates
-    the plural, helm-provisioner-only 'helm_namespaces' field, not the singular
-    sync-only 'namespace' field.
+
+def test_deployment_service_validates_from_data():
+    """A DeploymentService constructed from an in-memory dict validates."""
+    service = _deployment()
+    assert service.model is not None
+    assert service.model.spec.workspace == "control-workspace"
+
+
+# ---------------------------------------------------------------------------
+# Stage / workspace cross-check
+# ---------------------------------------------------------------------------
+
+
+def test_stages_matching_workspace_steps_pass():
+    """A stage naming a real provisioning step is accepted."""
+    service = _deployment(stages=[{"step": "control_infra"}])
+    result = service.validate_stages_against_workspace(_workspace("control_infra"))
+    assert result.ok
+    assert result.messages() == []
+
+
+def test_stage_naming_unknown_step_is_rejected():
+    """Parameters for a nonexistent step would silently apply to nothing."""
+    service = _deployment(stages=[{"step": "ghost_step"}])
+    result = service.validate_stages_against_workspace(_workspace("control_infra"))
+    assert not result.ok
+    message = result.messages()[0]
+    assert "ghost_step" in message
+    assert "control_infra" in message
+
+
+def test_deployment_without_stages_passes_the_cross_check():
+    """Stages are optional — a deployment may just run the recipe as declared."""
+    result = _deployment().validate_stages_against_workspace(_workspace("control_infra"))
+    assert result.ok
+    assert result.messages() == []
+
+
+# ---------------------------------------------------------------------------
+# extends merging
+# ---------------------------------------------------------------------------
+
+
+def test_merge_child_top_level_fields_replace_base():
+    """Child always wins on scalar/top-level fields."""
+    merged = merge_deployment_specs(
+        {"workspace": "base-ws", "locking": {"enabled": True, "strategy": "wrap"}},
+        {"workspace": "child-ws"},
+    )
+    assert merged["workspace"] == "child-ws"
+    assert merged["locking"] == {"enabled": True, "strategy": "wrap"}
+
+
+def test_merge_nested_blocks_per_leaf_key():
+    """Overriding one field of a block keeps the base's other fields.
+
+    A shallow merge dropped 'strategy' here, letting it fall back to its
+    schema default ('delegate') — a silent change to a value nobody wrote.
     """
+    merged = merge_deployment_specs(
+        {"workspace": "main", "locking": {"enabled": True, "strategy": "wrap", "wait_timeout": "10m"}},
+        {"locking": {"wait_timeout": "15m"}},
+    )
+    assert merged["locking"] == {"enabled": True, "strategy": "wrap", "wait_timeout": "15m"}
 
-    def _make_deployment(self, stages=None, workspace_file="workspace.yaml"):
-        data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "deployment",
-            "meta": {"name": "test_helm_ns_deploy"},
-            "spec": {
-                "workspace": {"name": "ws", "file": workspace_file},
-                "environments": ["env.yaml"],
-                "stages": stages or [],
-            },
-        }
-        svc = DeploymentService(data=data)
-        svc.validate()  # Phase 1 — populate self.model
-        return svc
 
-    def test_no_helm_namespaces_passes(self):
-        svc = self._make_deployment(stages=[{"name": "apps", "provisioner": "helm"}])
-        errors = svc._validate_helm_stage_namespaces(work_path=None, configuration_model=None)
-        assert errors == []
+def test_merge_nested_blocks_survive_validation():
+    """The deep-merged result validates with the base's settings intact."""
+    merged = merge_deployment_specs(
+        {
+            "partial": True,
+            "workspace": "main",
+            "locking": {"enabled": True, "strategy": "wrap", "wait_timeout": "10m"},
+        },
+        {"extends": "base", "environments": ["prd"], "locking": {"wait_timeout": "15m"}},
+    )
+    service = DeploymentService(data={"meta": {"name": "leaf"}, "spec": merged})
+    result = service.validate()
+    assert result.ok, result.messages()
+    assert service.model.spec.locking.strategy == "wrap"
+    assert service.model.spec.locking.wait_timeout == "15m"
 
-    def test_empty_stages_passes(self):
-        svc = self._make_deployment(stages=[])
-        errors = svc._validate_helm_stage_namespaces(work_path=None, configuration_model=None)
-        assert errors == []
 
-    def test_without_workspace_skips_gracefully(self, tmp_path):
-        """When workspace YAML is missing, namespace validation is silently skipped."""
-        svc = self._make_deployment(
-            stages=[{"name": "apps", "provisioner": "helm", "helm_namespaces": ["immich"]}],
-            workspace_file="workspace.yaml",
-        )
-        # workspace.yaml does NOT exist in tmp_path
-        errors = svc._validate_helm_stage_namespaces(work_path=str(tmp_path), configuration_model=None)
-        assert errors == []
+def test_merge_stage_timeouts_merge_per_leaf():
+    """A stage's nested timeouts block merges rather than being replaced."""
+    merged = merge_deployment_specs(
+        {"stages": [{"step": "infra", "timeouts": {"apply": 1800, "plan": 600}}]},
+        {"stages": [{"step": "infra", "timeouts": {"plan": 900}}]},
+    )
+    assert merged["stages"][0]["timeouts"] == {"apply": 1800, "plan": 900}
 
-    def test_valid_helm_namespaces_pass(self, tmp_path):
-        ws_data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "workspace",
-            "meta": {"name": "test_ws"},
-            "spec": {
-                "namespaces": [
-                    {"name": "immich", "file": "namespaces/immich.yaml"},
-                    {"name": "media", "file": "namespaces/media.yaml"},
-                ],
-                "provisioners": [],
-            },
-        }
-        import yaml
 
-        ws_file = tmp_path / "workspace.yaml"
-        ws_file.write_text(yaml.dump(ws_data))
+def test_merge_stages_are_merged_by_step():
+    """A child stage overrides the base's field-by-field; new steps append."""
+    merged = merge_deployment_specs(
+        {"stages": [{"step": "infra", "on_failure": "stop", "description": "base"}, {"step": "apps"}]},
+        {"stages": [{"step": "infra", "on_failure": "continue"}, {"step": "extra"}]},
+    )
+    steps = {s["step"]: s for s in merged["stages"]}
+    assert steps["infra"]["on_failure"] == "continue"
+    assert steps["infra"]["description"] == "base"
+    assert [s["step"] for s in merged["stages"]] == ["infra", "apps", "extra"]
 
-        svc = self._make_deployment(
-            stages=[{"name": "apps", "provisioner": "helm", "helm_namespaces": ["immich", "media"]}],
-            workspace_file=str(ws_file),
-        )
-        errors = svc._validate_helm_stage_namespaces(work_path=str(tmp_path), configuration_model=None)
-        assert errors == []
 
-    def test_unknown_helm_namespace_reports_error(self, tmp_path):
-        ws_data = {
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "workspace",
-            "meta": {"name": "test_ws"},
-            "spec": {
-                "namespaces": [{"name": "immich", "file": "namespaces/immich.yaml"}],
-                "provisioners": [],
-            },
-        }
-        import yaml
+def test_merge_providers_keeps_base_bindings_for_other_slots():
+    """Binding one slot in the child does not drop the base's other slots."""
+    merged = merge_deployment_specs(
+        {"providers": [{"slot": "azure", "provider": "azure-americas"}]},
+        {"providers": [{"slot": "dns", "provider": "dns-americas"}]},
+    )
+    assert merged["providers"] == [
+        {"slot": "azure", "provider": "azure-americas"},
+        {"slot": "dns", "provider": "dns-americas"},
+    ]
 
-        ws_file = tmp_path / "workspace.yaml"
-        ws_file.write_text(yaml.dump(ws_data))
 
-        svc = self._make_deployment(
-            stages=[{"name": "apps", "provisioner": "helm", "helm_namespaces": ["immich", "documents"]}],
-            workspace_file=str(ws_file),
-        )
-        errors = svc._validate_helm_stage_namespaces(work_path=str(tmp_path), configuration_model=None)
-        assert any("documents" in e and "not found" in e for e in errors), errors
-        # Only the unknown entry is reported, not the known-good "immich"
-        assert not any(e.startswith("Stage 'apps': helm_namespaces ['immich'") for e in errors), errors
+def test_merge_providers_child_wins_on_same_slot():
+    """Same slot in base and child: the child's binding wins, position kept."""
+    merged = merge_deployment_specs(
+        {"providers": [{"slot": "azure", "provider": "azure-americas"}, {"slot": "dns", "provider": "dns-base"}]},
+        {"providers": [{"slot": "azure", "provider": "azure-brazil"}]},
+    )
+    assert merged["providers"] == [
+        {"slot": "azure", "provider": "azure-brazil"},
+        {"slot": "dns", "provider": "dns-base"},
+    ]
+
+
+def test_merge_assets_keeps_base_bindings_for_other_slots():
+    merged = merge_deployment_specs(
+        {"assets": [{"slot": "api", "asset": "region-api"}]},
+        {"assets": [{"slot": "certs", "asset": "contoso-certs"}]},
+    )
+    assert merged["assets"] == [
+        {"slot": "api", "asset": "region-api"},
+        {"slot": "certs", "asset": "contoso-certs"},
+    ]
+
+
+def test_merge_assets_child_wins_on_same_slot():
+    merged = merge_deployment_specs(
+        {"assets": [{"slot": "api", "asset": "region-api"}, {"slot": "certs", "asset": "base-certs"}]},
+        {"assets": [{"slot": "api", "asset": "contoso-api"}]},
+    )
+    assert merged["assets"] == [
+        {"slot": "api", "asset": "contoso-api"},
+        {"slot": "certs", "asset": "base-certs"},
+    ]
+
+
+def test_merge_unkeyed_lists_are_replaced():
+    """A list not in the merge-key table is still replaced wholesale."""
+    merged = merge_deployment_specs(
+        {"configurations": ["base-config"]},
+        {"configurations": ["child-config"]},
+    )
+    assert merged["configurations"] == ["child-config"]
+
+
+def test_merge_keyed_list_never_merges_keyless_items():
+    """An item without its key has no identity, so it is kept as-is rather than collapsed into another."""
+    merged = merge_deployment_specs(
+        {"providers": [{"provider": "a"}]},
+        {"providers": [{"provider": "b"}, {"slot": "azure", "provider": "c"}]},
+    )
+    assert merged["providers"] == [{"provider": "a"}, {"provider": "b"}, {"slot": "azure", "provider": "c"}]
+
+
+def test_merge_tenant_defaults_layer_keeps_the_deployments_provider_bindings():
+    """Tenant defaults merge underneath a deployment via the same function; they carry no
+    `providers`, so the deployment's bindings must pass through untouched."""
+    merged = merge_deployment_specs(
+        {"environments": ["tenant-env"], "properties": {}, "custom": {}},
+        {"environments": ["prd"], "providers": [{"slot": "azure", "provider": "azure-north"}]},
+    )
+    assert merged["providers"] == [{"slot": "azure", "provider": "azure-north"}]
+    assert merged["environments"] == ["tenant-env", "prd"]
+
+
+def test_merge_environments_append_base_first():
+    """Base environments come first so the child's win at value resolution."""
+    merged = merge_deployment_specs(
+        {"environments": ["core-env"]},
+        {"environments": ["leaf-env"]},
+    )
+    assert merged["environments"] == ["core-env", "leaf-env"]
+
+
+def test_merge_environments_do_not_duplicate():
+    """A reference already in the base is not appended twice."""
+    merged = merge_deployment_specs(
+        {"environments": ["core-env", "shared-env"]},
+        {"environments": ["shared-env", "leaf-env"]},
+    )
+    assert merged["environments"] == ["core-env", "shared-env", "leaf-env"]
+
+
+def test_merge_strips_extends_control_fields():
+    """partial/extends are consumed by resolution, not carried into the result."""
+    merged = merge_deployment_specs(
+        {"partial": True, "workspace": "base-ws"},
+        {"extends": "base", "environments": ["core-env"]},
+    )
+    assert "partial" not in merged
+    assert "extends" not in merged
+
+
+def test_merged_result_validates_as_a_real_deployment():
+    """A partial base plus a child produce a valid, deployable document."""
+    merged = merge_deployment_specs(
+        {"partial": True, "workspace": "control-workspace", "stages": [{"step": "infra", "on_failure": "stop"}]},
+        {"extends": "deploy-base", "environments": ["core-env"]},
+    )
+    service = DeploymentService(data={"meta": {"name": "leaf"}, "spec": merged})
+    result = service.validate()
+    assert result.ok, result.messages()
+    assert service.model.spec.workspace == "control-workspace"
+    assert service.model.spec.stages[0].step == "infra"
+
+
+def test_merge_does_not_mutate_inputs():
+    """Merging is pure — callers may reuse the base for several children."""
+    base = {"stages": [{"step": "infra"}], "environments": ["core-env"]}
+    child = {"stages": [{"step": "extra"}], "environments": ["leaf-env"]}
+    merge_deployment_specs(base, child)
+    assert base == {"stages": [{"step": "infra"}], "environments": ["core-env"]}
+    assert child == {"stages": [{"step": "extra"}], "environments": ["leaf-env"]}

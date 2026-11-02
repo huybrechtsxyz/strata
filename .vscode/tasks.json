@@ -2,70 +2,25 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Run: strata",
-            "type": "shell",
-            "command": "uv run strata ${input:cliArgs}",
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "shared",
-                "clear": true
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Check: lint + format + types",
-            "type": "shell",
-            "command": "scripts/Check.ps1",
-            "options": {
-                "shell": {
-                    "executable": "pwsh",
-                    "args": [
-                        "-NoProfile",
-                        "-File"
-                    ]
-                }
-            },
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "shared",
-                "clear": true
-            },
-            "problemMatcher": []
-        },
-        {
             "label": "VS Code Extension: watch",
             "type": "npm",
             "script": "watch",
-            "path": "src/vscode/",
-            "problemMatcher": "$tsc-watch",
+            "path": "src/vscode",
             "isBackground": true,
+            "problemMatcher": "$tsc-watch",
             "presentation": {
                 "reveal": "never"
+            },
+            "group": {
+                "kind": "build"
             }
         },
         {
             "label": "VS Code Extension: compile",
             "type": "npm",
             "script": "compile",
-            "path": "src/vscode/",
-            "problemMatcher": "$tsc",
-            "presentation": {
-                "reveal": "silent"
-            }
-        }
-    ],
-    "inputs": [
-        {
-            "id": "cliArgs",
-            "type": "promptString",
-            "description": "CLI arguments (e.g. version, deploy platform.yaml)",
-            "default": "version"
+            "path": "src/vscode",
+            "problemMatcher": "$tsc"
         }
     ]
 }

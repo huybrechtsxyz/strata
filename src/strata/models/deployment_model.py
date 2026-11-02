@@ -1,14 +1,52 @@
 #!/usr/bin/env python3
-"""Pydantic model for deployment configuration validation."""
+"""Pydantic model for deployment configuration validation.
 
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+A `Deployment` is the "container instance" of ADR-0011's image/container
+framing: it executes a `Workspace`'s provisioning recipe against a specific
+`Environment`, for a specific `Tenant`. The Workspace says *what* runs and in
+what order; the Deployment says *where, with which values, and with what
+runtime behaviour*.
 
-from pydantic import (
-    Field,
-    StringConstraints,
-    field_validator,
-    model_validator,
-)
+Ported from the **15 real deployment documents** across two production repos.
+Spec field usage there:
+
+==================  =====
+field               uses
+==================  =====
+``environments``      15
+``locking``           12
+``layers``            10
+``stages``             9
+``workspace``          9
+``extends``            6
+``partial``            4
+``tenant``             4
+``configurations``     3
+``lifecycle``          3
+``properties``         3
+``versions``           0
+``promotion``          0
+``gates``              0
+==================  =====
+
+`versions`, `promotion` and `gates` are not ported — zero usage, same
+treatment Environment's unused subtree got.
+
+**Stages reference the recipe rather than redefining it.** v1's
+`DeploymentStageModel` carried `provisioner` and `topology`, i.e. it bound
+tools at deploy time — and v1's workspaces have no recipe at all, so stages
+*were* the recipe. v2 moved that to `Workspace.execution` (ADR-0011), and
+the real usage supports it: the stage list lives on the reusable
+`partial: true` base and never varies per leaf, while leaves supply only
+layers/environments/locking. So here a stage names a
+`ProvisioningStepModel` via `step` and carries only runtime knobs — the same
+class/instance split as `WorkspaceResourceModel.resource` and
+`ModuleReferenceModel.module`.
+"""
+
+from typing import Annotated, Any, ClassVar
+
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     CommonLifecycleModel,
@@ -17,676 +55,486 @@ from strata.models.common_models import (
     PlatformName,
     PlatformVersion,
     ScriptsModel,
-    check_unique_names,
+    validate_kind_matches,
 )
-from strata.models.gate_model import DeploymentGateModel
-from strata.models.promotion_model import DeploymentPromotionModel
+from strata.models.reference_fields import References
+from strata.utils.names import check_unique_names
 
 
-class DeploymentFileReference(PlatformBaseModel):
-    """Reference to a local deployment file that must exist."""
+class DeploymentHealthCheckModel(PlatformBaseModel):
+    """A reachability probe to run after a stage: an `http` check needs `url`, a `tcp` check needs `host`
+    and `port`. Accepted and validated, but strata does not use it yet.
 
-    name: Annotated[
-        str,
-        StringConstraints(min_length=1, pattern=r"^[a-z][a-z0-9_]*$", strip_whitespace=True),
-    ] = Field(description="Unique reference name")
-    file: str = Field(description="Path to the file (resolved and validated at load time)")
-    description: Optional[str] = Field(None, description="Optional description of the referenced file")
-
-
-class DeploymentConfigurationModel(DeploymentFileReference):
-    """Model for a deployment configuration file reference."""
-
-    pass
-
-
-class DeploymentEnvironmentModel(DeploymentFileReference):
-    """Model for a deployment environment file reference."""
-
-    pass
-
-
-class DeploymentEnvironmentRef(PlatformBaseModel):
-    """Entry in a deployment's ``spec.environments`` list.
-
-    Supports both shorthand (bare string path) and full object form.
-    A bare string is automatically coerced to ``DeploymentEnvironmentRef(file=<path>)``.
-
-    The optional ``scope`` annotation is used by the promotion system to identify
-    which file to edit during wave execution:
-
-    - ``"shared"`` — the environment file covers all deployments for this environment
-      (typically the shared ``environments/<name>.yaml``).  This is the file edited by
-      the final (all) wave.
-    - A layer name (e.g. ``"tenant"``) — the file is a per-layer override specific to
-      this deployment.  Promotion edits this file for canary/early waves.
-    - ``None`` (default) — no scope annotation; the promotion system treats this entry
-      as a regular environment file without wave-specific targeting.
-
-    Example — shorthand (backward-compatible)::
-
-        environments:
-          - environments/production.yaml
-
-    Example — full object with scope::
-
-        environments:
-          - file: environments/production.yaml
-            scope: shared
-          - file: environments/tenants/acme.yaml
-            scope: tenant
+    Design notes:
+    A post-stage reachability probe.
     """
 
-    file: str = Field(description="Path to the environment YAML file")
-    scope: Optional[str] = Field(
-        None,
-        description=(
-            "Promotion scope annotation. Use 'shared' for the shared environment file, "
-            "or a layer name (e.g. 'tenant') for per-layer override files. "
-            "Omit for unannotated entries."
-        ),
-    )
+    schema_rules: ClassVar[tuple[str, ...]] = ("An `http` check needs `url`; a `tcp` check needs `host` and `port`.",)
 
+    name: PlatformName = Field(description="Unique health check name within the stage")
+    type: str = Field(description="Check type: `http` or `tcp`.\n\nDesign notes: Check type: 'http' or 'tcp'")
+    url: str | None = Field(None, description="URL to GET (http type)")
+    expect_status: int = Field(default=200, description="Expected HTTP status code (http type)")
+    host: str | None = Field(None, description="Hostname or IP (tcp type)")
+    port: int | None = Field(None, ge=1, le=65535, description="TCP port (tcp type)")
+    timeout: int = Field(default=10, ge=1, description="Connection/request timeout in seconds")
 
-class DeploymentVersionRef(PlatformBaseModel):
-    """Entry in a deployment's ``spec.versions`` list.
-
-    Supports both shorthand (bare string path) and full object form.
-    A bare string is automatically coerced to ``DeploymentVersionRef(file=<path>)``.
-
-    Files are applied in list order — later entries win over earlier entries.
-    The convention is to list the human-edited manifest first and the machine-generated
-    lock file second, so the lock always takes precedence.
-
-    Example — shorthand::
-
-        versions:
-          - versions/dev.manifest.yaml
-          - versions/dev.yaml
-
-    Example — full object (reserved for future fields)::
-
-        versions:
-          - file: "@config/versions/prd.manifest.yaml"
-          - file: "@config/versions/prd.yaml"
-    """
-
-    file: str = Field(description="Path to the version-manifest or version-lock YAML file")
-
-
-class DeploymentWorkspaceModel(DeploymentFileReference):
-    """Model for deployment workspace file reference."""
-
-    pass
-
-
-class HealthCheckModel(PlatformBaseModel):
-    """A single health check applied to a deployment stage after provisioning.
-
-    Two check types:
-    - ``http``  — HTTP(S) GET; passes if response code matches ``expect_status``.
-    - ``tcp``   — TCP connect to ``host:port``; passes if connection succeeds.
-
-    Both types also support checking Terraform output values:
-    - ``output_key`` — name of a Terraform output whose value should be used as
-      the URL (http) or ``host:port`` (tcp).  Takes precedence over ``url`` /
-      ``host`` + ``port`` when present.
-
-    Examples (YAML)::
-
-        health_checks:
-          - name: api-endpoint
-            type: http
-            output_key: api_url
-            expect_status: 200
-            timeout: 10
-          - name: db-port
-            type: tcp
-            host: 10.0.0.5
-            port: 5432
-    """
-
-    name: Annotated[
-        str,
-        StringConstraints(min_length=1, strip_whitespace=True),
-    ] = Field(description="Unique check name within the stage")
-    type: Literal["http", "tcp"] = Field(description="Check type: 'http' or 'tcp'")
-
-    # --- HTTP fields ---
-    url: Optional[str] = Field(None, description="URL to GET (http type). Overridden by output_key.")
-    expect_status: int = Field(default=200, description="Expected HTTP status code (http type).")
-
-    # --- TCP fields ---
-    host: Optional[str] = Field(None, description="Hostname or IP (tcp type). Overridden by output_key.")
-    port: Optional[int] = Field(None, description="TCP port (tcp type).")
-
-    # --- Shared ---
-    output_key: Optional[str] = Field(
-        None,
-        description="Terraform output key whose value provides the URL or host:port target.",
-    )
-    timeout: int = Field(default=10, description="Connection / request timeout in seconds.")
+    @field_validator("type")
+    @classmethod
+    def validate_check_type(cls, v: str) -> str:
+        """Only http and tcp probes exist."""
+        if v not in ("http", "tcp"):
+            raise ValueError(f"Health check type must be 'http' or 'tcp', got '{v}'")
+        return v
 
     @model_validator(mode="after")
-    def validate_check_fields(self) -> "HealthCheckModel":
-        if self.type == "http" and not self.url and not self.output_key:
-            raise ValueError("Health check type 'http' requires 'url' or 'output_key'.")
-        if self.type == "tcp":
-            if not self.output_key and (not self.host or self.port is None):
-                raise ValueError("Health check type 'tcp' requires 'host'+'port' or 'output_key'.")
+    def validate_type_specific_fields(self) -> "DeploymentHealthCheckModel":
+        """An http check needs a url; a tcp check needs host and port."""
+        if self.type == "http" and self.url is None:
+            raise ValueError(f"Health check '{self.name}': 'url' is required for type 'http'.")
+        if self.type == "tcp" and (self.host is None or self.port is None):
+            raise ValueError(f"Health check '{self.name}': 'host' and 'port' are required for type 'tcp'.")
         return self
+
+    # v1 additionally had `output_key`, binding a check's url/host to a
+    # preceding stage's provisioner output. Not ported for the same reason
+    # as DnsRecordModel.output_key (ADR-0006): it needs the shared runtime
+    # Context store, which does not exist in v2.
 
 
 class DeploymentStageTimeoutsModel(PlatformBaseModel):
-    """Per-step subprocess timeouts for a deployment stage (all deployer types).
+    """Per-phase timeouts in seconds that override a provisioner's defaults. The environment variable
+    `STRATA_TIMEOUT_<STEP>_<PHASE>` overrides them for a single run.
 
-    Field names match deployer step names so the same schema works for
-    Terraform, Ansible, and script-based stages.  All fields are optional;
-    omitting a field keeps the deployer's built-in default.
-
-    Examples (YAML)::
-
-        stages:
-          - name: infrastructure
-            type: infrastructure
-            timeouts:
-              setup: 120   # fail fast if backend is unreachable
-              plan: 300
-              apply: 1200  # 20 min — tighter than the 30 min default
+    Design notes:
+    Per-phase timeouts in seconds, overriding provisioner defaults.
     """
 
-    setup: Optional[int] = Field(
-        None,
-        description="Timeout in seconds for the setup step (tf init / galaxy install / deploy_setup). Default varies by deployer.",
-    )
-    check: Optional[int] = Field(
-        None,
-        description="Timeout in seconds for the check step (tf validate / syntax-check / deploy_check). Default varies by deployer.",
-    )
-    plan: Optional[int] = Field(
-        None,
-        description="Timeout in seconds for the plan step. Default varies by deployer.",
-    )
-    apply: Optional[int] = Field(
-        None,
-        description="Timeout in seconds for the apply step. Default varies by deployer.",
-    )
-    destroy: Optional[int] = Field(
-        None,
-        description="Timeout in seconds for the destroy step. Default varies by deployer.",
-    )
-
-
-class SyncBackendModel(PlatformBaseModel):
-    """Backend configuration for a sync provisioner stage (argocd, flux).
-
-    Specifies which integration instance handles this stage and where rendered
-    output is committed. Analogous to the terraform backend block — the stage
-    decides where its output goes, not the integration itself.
-    """
-
-    integration: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description=(
-            "Integration name — references configuration.spec.integrations[].name. "
-            "The named integration must have the 'sync' capability. "
-            "Allows multiple instances of the same type (e.g., 'argocd-prod' vs 'argocd-staging')."
-        )
-    )
-    remote: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description=(
-            "Remote name — references a strata remote (strata repo add) where the "
-            "rendered controller input file is committed. The provisioner commits to "
-            "this remote during deploy."
-        )
-    )
+    setup: int | None = Field(None, ge=1, description="Timeout for the setup phase")
+    check: int | None = Field(None, ge=1, description="Timeout for the check/validate phase")
+    plan: int | None = Field(None, ge=1, description="Timeout for the plan phase")
+    apply: int | None = Field(None, ge=1, description="Timeout for the apply phase")
+    destroy: int | None = Field(None, ge=1, description="Timeout for the destroy phase")
 
 
 class DeploymentStageModel(PlatformBaseModel):
-    """Model for a deployment stage (pipeline execution step).
+    """Runtime parameters for one provisioning step of the workspace, named by `step`. A stage never
+    redefines what runs. Today strata applies only `timeouts`; the other fields are accepted and
+    validated but not used yet.
 
-    Stages enable:
-    - Sequential multi-step execution (e.g., provision → configure → verify)
-    - Execution ordering and dependency management (DAG execution via depends_on)
-    - Failure handling per stage
+    Design notes:
+    Runtime parameters for one provisioning step.
 
-    Provisioner Selection (mutually exclusive — exactly one required at runtime):
-    - 'provisioner': name of a workspace provisioner entry (explicit, no filtering)
-    - 'topology':    name of a workspace topology entry; derives the provisioner
-                     type from the topology definition and filters to its resources
-
-    Stages do NOT define environments or gates - those are deployment-level.
-    Stages do NOT affect artifact paths - use deployment.spec.deployment for layering.
+    Names a `ProvisioningStepModel` from the workspace's recipe via `step`;
+    it does not redefine what runs (see module docstring).
     """
 
-    name: PlatformName = Field(
-        description="Unique stage name - pipeline step identifier (e.g., 'provision', 'configure', 'verify')"
+    schema_rules: ClassVar[tuple[str, ...]] = ("Health check names must be unique within the stage.",)
+
+    step: PlatformName = Field(
+        description="Name of the workspace `execution` step these parameters apply to.\n\n"
+        "Design notes: Name of the workspace execution step these parameters apply to "
+        "(WorkspaceSpecModel.execution[].name)"
     )
-    description: Optional[str] = Field(
-        None,
-        description="Optional human-readable description of what this stage does (informational only — does not affect routing)",
+    description: str | None = Field(None, description="Optional description for documentation purposes")
+    enabled: bool | str = Field(
+        default=True,
+        description="Intended to switch the stage on or off. Accepted and validated, but strata "
+        "does not use it yet. Every step runs. A string is a conditional expression, "
+        "which is not evaluated either.\n\n"
+        "Design notes: Whether this stage runs. A bool is used directly; a string is a "
+        "conditional expression evaluated at deploy time. The expression engine is NOT "
+        "built in v2 — a string is accepted and carried, but nothing evaluates it yet, "
+        "so it must not be relied on for behaviour.",
     )
-    provisioner: Optional[str] = Field(
-        None,
-        description="Explicit provisioner name from workspace (required if multiple provisioners match type)",
+    on_failure: str = Field(
+        default="stop",
+        description="What a failed stage should do: `stop` (default), `rollback` or `continue`. "
+        "Accepted and validated, but strata does not use it yet.\n\n"
+        "Design notes: What to do when this stage fails: 'stop', 'rollback' or "
+        "'continue'",
     )
-    topology: Optional[str] = Field(
+    timeouts: DeploymentStageTimeoutsModel | None = Field(
         None,
-        description=(
-            "Topology name from workspace (mutually exclusive with 'provisioner'). "
-            "Derives the provisioner type from the topology definition and scopes "
-            "execution to that topology's resources."
-        ),
+        description="Per-phase timeout overrides, applied by `deploy run`.\n\n"
+        "Design notes: Per-phase timeout overrides for this stage",
     )
-    scope: Optional[str] = Field(
+    health_checks: list[DeploymentHealthCheckModel] | None = Field(
         None,
-        description=(
-            "Free-form label for CLI-level stage filtering. "
-            "Pass --scope <label> to strata deploy run to execute only stages "
-            "whose scope matches the supplied value. Omit to run all stages."
-        ),
+        description="Reachability probes to run after this stage succeeds. Accepted and validated, "
+        "but strata does not use it yet.\n\n"
+        "Design notes: Reachability probes run after this stage succeeds",
     )
-    enabled: Optional[Union[bool, str]] = Field(
+    scripts: ScriptsModel | None = Field(
         None,
-        description=(
-            "Whether this stage applies at all (ADR-0083). Accepts a literal boolean or a "
-            "'${feature:KEY}' / '${var:KEY}' expression resolved per-environment at deploy time. "
-            "Omit (the default) to always run. A disabled stage is recorded as skipped in the "
-            "deployment manifest and deploy-log — never silently omitted. "
-            "Gates 'deploy run' ONLY: 'deploy destroy' always considers every stage, so disabling "
-            "a stage never orphans infrastructure it already created. "
-            "Note 'enabled: false' means 'stop deploying this', NOT 'destroy this'. "
-            "'${secret:KEY}' is rejected — a gate's resolved value is persisted to the manifest."
-        ),
-        examples=[True, False, "${feature:enable_dispatcher_api}"],
+        description="Additional scripts for this stage. Accepted and validated, but strata does "
+        "not use it yet.\n\n"
+        "Design notes: Additional scripts to run for this stage",
+    )
+    secrets: list[str] | None = Field(
+        None,
+        description="Secret keys this stage needs injected from the Environment. Accepted and "
+        "validated, but strata does not use it yet.\n\n"
+        "Design notes: Secret keys this stage needs injected (resolved from the "
+        "Environment)",
+    )
+    namespace: PlatformName | None = Field(
+        None,
+        description="Restrict this stage to a single namespace. Accepted and validated, but strata "
+        "does not use it yet.\n\n"
+        "Design notes: Restrict this stage to a single namespace",
+    )
+    helm_namespaces: list[PlatformName] | None = Field(
+        None,
+        description="Restrict a Helm or sync stage to these namespaces. Accepted and validated, "
+        "but strata does not use it yet. A Helm step deploys every namespace of its "
+        "step.\n\n"
+        "Design notes: Restrict a Helm/sync stage to these namespaces. Omit to deploy "
+        "all of them.",
     )
 
-    @field_validator("enabled", mode="before")
+    @field_validator("on_failure")
     @classmethod
-    def validate_enabled(cls, v):
-        """Accept only a boolean or a non-blank string.
-
-        Rejecting other scalars (``enabled: 1``) at the schema boundary avoids
-        relying on Pydantic's union coercion for a field whose misreading would
-        silently skip a deployment stage. A blank string is rejected for the same
-        reason: it would otherwise coerce to False via ``parse_bool``, disabling a
-        stage by accident.
-        """
-        if v is None or isinstance(v, bool):
-            return v
-        if isinstance(v, str):
-            if not v.strip():
-                raise ValueError(
-                    "'enabled' is blank. Use a boolean (true/false) or an expression "
-                    "such as '${feature:KEY}'; remove the field entirely to always run."
-                )
-            return v.strip()
-        raise ValueError(
-            f"'enabled' must be a boolean or an expression string, got {type(v).__name__}. "
-            "Use true/false, or '${feature:KEY}' / '${var:KEY}'."
-        )
-
-    scripts: Optional[ScriptsModel] = Field(
-        None,
-        description="Additional scripts to execute for this stage (extends provisioner behavior)",
-    )
-    depends_on: Optional[List[str]] = Field(
-        None,
-        description="List of stage names this stage depends on (enables DAG execution)",
-    )
-
-    @field_validator("depends_on", mode="before")
-    @classmethod
-    def coerce_depends_on(cls, v):
-        if isinstance(v, str):
-            return [v]
+    def validate_on_failure(cls, v: str) -> str:
+        """Only three failure behaviours exist."""
+        allowed = ("stop", "rollback", "continue")
+        if v not in allowed:
+            raise ValueError(f"on_failure must be one of {allowed}, got '{v}'")
         return v
 
-    on_failure: Literal["stop", "rollback", "continue"] = Field(
-        default="stop",
-        description="Action to take on stage failure: 'stop' halts pipeline, 'rollback' reverts, 'continue' proceeds",
-    )
-    health_checks: Optional[List[HealthCheckModel]] = Field(
-        None,
-        description="Health checks to run against this stage after provisioning.",
-    )
-    timeouts: Optional[DeploymentStageTimeoutsModel] = Field(
-        None,
-        description="Per-operation subprocess timeouts. Overrides TerraformIntegration defaults "
-        "(init=300s, validate=60s, plan=600s, apply=1800s, destroy=1800s).",
-    )
-    secrets: Optional[List[str]] = Field(
-        None,
-        description=(
-            "Allowlist of secret keys this stage may access from STRATA_SENSITIVE. "
-            "Only these keys are passed to the deployer. "
-            "Omit or set to null for no secret access. "
-            "Use ['*'] to grant access to all secrets (escape hatch)."
-        ),
-    )
-    namespace: Optional[str] = Field(
-        None,
-        description=(
-            "Namespace name to scope this sync stage — references workspace.spec.namespaces[].name. "
-            "When set, the sync provisioner filters modules to those declared in this namespace "
-            "and injects 'namespace' as a single object into the Jinja2 template context. "
-            "Omit to include all namespaces (template is responsible for iteration). "
-            "Only meaningful for sync provisioners (argocd, flux). "
-            "Unrelated to 'helm_namespaces' below, which scopes the helm provisioner instead."
-        ),
-    )
-    helm_namespaces: Optional[List[str]] = Field(
-        None,
-        description=(
-            "Allowlist of namespace names (workspace.spec.namespaces[].name) this stage may deploy — "
-            "default-deny once set, same shape as the 'secrets' allowlist above. "
-            "Only meaningful for the helm provisioner, which otherwise loads every declared namespace "
-            "on every run. Omit for no filtering (deploy all namespaces — default, non-breaking). "
-            "Overridden per-run by 'strata deploy run --namespace NAME' (repeatable), which takes "
-            "precedence over this declarative list when supplied. "
-            "Unrelated to 'namespace' (singular) above, which scopes sync provisioners (argocd, flux) instead."
-        ),
-    )
-    backend: Optional[SyncBackendModel] = Field(
-        None,
-        description=(
-            "Sync backend configuration — specifies the integration instance and remote "
-            "for sync provisioners (argocd, flux). "
-            "Analogous to terraform backend: the stage controls where output is committed."
-        ),
-    )
+    @field_validator("enabled")
+    @classmethod
+    def validate_enabled_expression(cls, v: bool | str) -> bool | str:
+        """A string `enabled` must at least be non-empty.
+
+        Full expression validation needs the engine, which is deliberately
+        not built yet — this only catches an obviously-empty value.
+        """
+        if isinstance(v, str) and not v.strip():
+            raise ValueError("enabled: a conditional expression must not be empty")
+        return v
 
     @model_validator(mode="after")
-    def validate_provisioner_selection(self) -> "DeploymentStageModel":
-        """Validate provisioner/topology selection logic.
-
-        Rules:
-        1. Cannot specify both 'provisioner' and 'topology' (mutually exclusive)
-        2. Workspace-level existence checks happen at runtime in the deployer
-           (workspace context is not available inside the model validator)
-        """
-        if self.provisioner and self.topology:
-            raise ValueError(
-                f"Stage '{self.name}': 'provisioner' and 'topology' are mutually exclusive — "
-                "use 'topology' to derive the provisioner from the workspace topology definition, "
-                "or 'provisioner' to name a workspace provisioner entry directly."
-            )
+    def validate_unique_health_check_names(self) -> "DeploymentStageModel":
+        """Health check names must be unique within the stage."""
+        if self.health_checks:
+            check_unique_names([h.name for h in self.health_checks], f"health check names in stage '{self.step}'")
         return self
 
 
 class DeploymentLockingModel(PlatformBaseModel):
-    """Locking behaviour for spec.locking.
+    """Pipeline-level state locking, to stop concurrent runs from colliding. Accepted and validated, but
+    strata does not use it yet.
 
-    Connection config is not declared here — it is derived automatically from
-    ``provisioner.backend`` on the workspace IaC provisioner used by each stage.
-    The lock backend type is inferred from ``provisioner.backend.type``
-    (e.g. ``azurerm``, ``terraform_cloud``, ``s3``, ``consul``).
+    Design notes:
+    Pipeline-level state locking, preventing concurrent runs from colliding.
     """
 
     enabled: bool = Field(default=False, description="Enable pipeline-level state locking")
-    strategy: Literal["wrap", "delegate"] = Field(
-        default="wrap",
-        description=(
-            "wrap: strata acquires the lock before the first stage and holds it for the entire pipeline. "
-            "delegate: strata does not lock — relies on the backend's native locking "
-            "(TFC run queue, Terraform state lock). Only safe for pure-TFC remote execution pipelines."
-        ),
+    strategy: str = Field(
+        default="delegate",
+        description="'wrap' makes strata take its own lock around the whole run; 'delegate' leaves locking "
+        "to the provisioner's own state backend (e.g. Terraform's).",
     )
-    wait_timeout: str = Field(
-        default="30m",
-        description="How long to wait for a held lock before failing (e.g. 30m, 1h). Supports h/m/s suffixes.",
-    )
-    force_unlock_after: str = Field(
-        default="8h",
-        description="Stale lock TTL — auto-release a lock held longer than this duration (e.g. 8h). "
-        "Supports h/m/s suffixes.",
-    )
+    wait_timeout: str | None = Field(None, description="How long to wait for a held lock before failing (e.g. '10m')")
+    force_unlock_after: str | None = Field(None, description="Age after which a stale lock may be broken (e.g. '1h')")
+
+    @field_validator("strategy")
+    @classmethod
+    def validate_strategy(cls, v: str) -> str:
+        """Only two locking strategies exist."""
+        if v not in ("wrap", "delegate"):
+            raise ValueError(f"Locking strategy must be 'wrap' or 'delegate', got '{v}'")
+        return v
 
 
-class LayersModel(PlatformBaseModel):
-    """Deployment-side layer values (ADR-0072).
+class DeploymentLayersModel(PlatformBaseModel):
+    """Position of this deployment in a hierarchy. `follows` names a path convention from the
+    Configuration's `spec.paths`, and `segments` gives the values for that convention's segments.
 
-    Replaces the old flat ``Dict[str, str]`` shape. A deployment declares which
-    ``configuration.spec.paths`` convention (with ``resolves: layers``) it belongs
-    to, and — only where the path itself doesn't already say enough — explicit
-    segment values. Both explicit and path-derived values are resolved via
-    ``utils.path_convention.resolve_layers()``; an explicit value always wins.
+    Strata compares `segments` with the values captured from the directory the document lives in: an
+    unknown `follows` is an error, and a disagreeing value is a warning or an error depending on the
+    convention's `enforcement`. The segments also shape the audit output path. They are never filled in
+    from the directory when absent.
+
+    Design notes:
+    Position of this deployment in a hierarchy (v1 ADR-0072).
+
+    **Cross-checked in v2** (docs/design/path-conventions.md,
+    `semantic_checks.py`'s `_check_deployment_layers()`): `follows` names a
+    `Configuration.spec.paths` convention (`PathConventionModel`); when both
+    it and `segments` are declared, `segments` is compared against the
+    values captured from this deployment document's own real containing
+    directory (`PathConventionModel.pattern`) — an unknown `follows` name
+    is an error, a disagreeing segment value is a warning/error per that
+    convention's own `enforcement`. Validation only — `segments` is never
+    auto-populated from the real path when absent (no consumer of a
+    derived value exists yet).
     """
 
-    follows: Optional[PlatformName] = Field(
-        None,
-        description=(
-            "Name of a configuration.spec.paths convention (with resolves: layers) this "
-            "deployment follows. If omitted, the convention is auto-detected by matching "
-            "this deployment file's own path against every resolves: layers convention's "
-            "scope + pattern — ambiguous matches (more than one) are a hard validation error."
-        ),
+    follows: PlatformName | None = Field(
+        None, description="Name of the path convention this deployment's hierarchy follows"
     )
-    segments: Optional[Dict[str, str]] = Field(
-        None,
-        description=(
-            "Explicit segment values, keyed by segment name. Any name not present here "
-            "falls back to path-derivation (from this file's own location against the "
-            "resolved convention's pattern), then the segment's default, then 'not "
-            "applicable' — never an error. Declaring segments is not all-or-nothing; "
-            "individual keys are optional."
-        ),
+    segments: dict[str, str] | None = Field(
+        None, description="Resolved values for that convention's segments (e.g. {'control': 'dev'})"
+    )
+
+
+class DeploymentProviderBindingModel(PlatformBaseModel):
+    """Rebind one workspace provider slot to another Provider for this deployment, for example the same
+    workspace deployed to a second Azure region. The bound document is used as it is, never patched.
+    There is no bare-string shorthand, because a binding only matters when it differs from the
+    workspace's default.
+
+    Design notes:
+    Rebind one workspace provider slot to another Provider document for this
+    deployment (docs/design/provider-slots.md) — e.g. the same workspace
+    deployed to a second Azure region. Rebind only: the bound document is used
+    as-is, never field-patched. No bare-string shorthand: a binding is only
+    meaningful when it differs from the workspace's default.
+    """
+
+    slot: PlatformName = Field(description="Workspace provider slot to rebind (spec.providers[].slot)")
+    provider: Annotated[PlatformName, References(PlatformKind.PROVIDER)] = Field(
+        description="Provider document bound to the slot for this deployment"
+    )
+
+
+class DeploymentAssetBindingModel(PlatformBaseModel):
+    """Rebind one workspace asset slot to another Asset for this deployment, for example a customer's own
+    API definitions. The bound document is used as it is, never patched. There is no bare-string
+    shorthand.
+
+    Design notes:
+    Rebind one workspace asset slot to another Asset document for this
+    deployment (docs/design/asset-management.md) — e.g. a customer's own API
+    definitions. Rebind only: the bound document is used as-is, never
+    field-patched. No bare-string shorthand, same as provider bindings.
+    """
+
+    slot: PlatformName = Field(description="Workspace asset slot to rebind (spec.assets[].slot)")
+    asset: Annotated[PlatformName, References(PlatformKind.ASSET)] = Field(
+        description="Asset document bound to the slot for this deployment"
     )
 
 
 class DeploymentSpecModel(PlatformBaseModel):
-    """Model for deployment specification (properties, workspace, stages)."""
+    """What to deploy, where and how: the `workspace` whose recipe runs, the `environments` supplying
+    values, an optional `tenant` and `version` pins, provider and asset rebinding, and per-step runtime
+    `stages`. `partial` and `extends` share a base between deployments.
 
-    configurations: Optional[List[DeploymentConfigurationModel]] = Field(
-        None, description="Optional configuration list"
+    Design notes:
+    Deployment specification: what to deploy, where, and how it behaves at runtime.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A step may have `stages` parameters declared only once.",
+        "An environment may be listed only once, and a provider slot or asset slot may be bound only once.",
+        "A deployable document needs `workspace` and at least one entry in `environments`. A "
+        "`partial: true` document, or one with `extends`, is exempt because its missing fields "
+        "come from the base.",
     )
-    lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Deployment lifecycle phases")
-    properties: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Deployment-specific properties and configurations. "
-        "Validated against configuration.spec.deployment.properties schema if defined.",
-    )
-    custom: Optional[Dict[str, Any]] = Field(
-        None, description="Deployment-specific custom properties and configurations"
-    )
-    layers: Optional[LayersModel] = Field(
-        None,
-        description=(
-            "Deployment layer values (ADR-0072). 'follows' names a "
-            "configuration.spec.paths convention (resolves: layers); 'segments' supplies "
-            "explicit per-segment values, falling back to path-derivation then default. "
-            "Defines the artifact path location for this deployment."
-        ),
-    )
-    tenant: Optional[PlatformName] = Field(
-        None,
-        description=(
-            "Optional tenant code this deployment belongs to. "
-            "Must match a tenant YAML file in tenants/<code>.yaml. "
-            "Validated against the filesystem during Phase 2. "
-            "Omit for shared/platform deployments that serve all tenants."
-        ),
-    )
+
     partial: bool = Field(
-        False,
-        description=(
-            "When True, this file is a reusable base that is not deployable in isolation. "
-            "Phase 2 (semantic) validation is skipped; required fields such as "
-            "'workspace' and 'environments' need not be present. "
-            "strata deploy rejects partial files outright."
-        ),
+        default=False,
+        description="When true this is a reusable base that is not deployed on its own: required "
+        "fields may be absent and it is not checked against the rest of the solution. "
+        "Another deployment uses it through `extends`.\n\n"
+        "Design notes: When True this is a reusable base, not deployable on its own: "
+        "required fields may be absent and Phase 2 validation is skipped. Referenced "
+        "by another deployment's `extends`.",
     )
-    extends: Optional[str] = Field(
+    extends: Annotated[PlatformName, References(PlatformKind.DEPLOYMENT)] | None = Field(
         None,
-        description=(
-            "@repo/path reference to a base deployment file whose spec is merged into "
-            "this file before validation and execution. Top-level fields are replaced; "
-            "stages are merged by name; environments are appended after the base list. "
-            "Circular references are rejected at load time."
-        ),
+        description="Name of a base Deployment document whose spec is merged into this one before "
+        "validation. Child always wins: nested blocks deep-merge per leaf key, `stages` merge by `step`, "
+        "`environments` append after the base's, other lists are replaced. Circular chains are rejected. "
+        "Distinct from "
+        "`environments` layering, which composes *values*; this composes *structure*.",
     )
-    workspace: Optional[DeploymentWorkspaceModel] = Field(
-        None, description="Name of the associated workspace for this deployment"
+    workspace: Annotated[PlatformName, References(PlatformKind.WORKSPACE)] | None = Field(
+        None, description="Name of the Workspace document whose provisioning recipe this deployment runs"
     )
-    environments: Optional[
-        Annotated[
-            List[DeploymentEnvironmentRef],
-            Field(
-                min_length=1,
-                description="List of environment file paths (or scoped refs) for this deployment (later files override earlier ones)",
-            ),
-        ]
-    ] = None
-
-    @field_validator("environments", mode="before")
-    @classmethod
-    def coerce_environment_strings(cls, v: Any) -> Any:
-        """Coerce bare strings to DeploymentEnvironmentRef dicts for backward compatibility."""
-        if isinstance(v, list):
-            return [{"file": item} if isinstance(item, str) else item for item in v]
-        return v
-
-    versions: Optional[List[DeploymentVersionRef]] = Field(
+    environments: list[Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)]] | None = Field(
         None,
-        description=(
-            "Optional list of version file paths (version-manifest or version-lock) for this deployment. "
-            "Applied in list order — later entries win. Convention: manifest first, lock second. "
-            "Omit entirely for deployments that have not adopted the version system."
-        ),
+        description="Names of Environment documents supplying values, merged in order — later entries win. "
+        "A tenant's own `environments` merge in before these.",
     )
-
-    @field_validator("versions", mode="before")
-    @classmethod
-    def coerce_version_strings(cls, v: Any) -> Any:
-        """Coerce bare strings to DeploymentVersionRef dicts."""
-        if isinstance(v, list):
-            return [{"file": item} if isinstance(item, str) else item for item in v]
-        return v
-
-    locking: Optional[DeploymentLockingModel] = Field(
-        None, description="Pipeline locking behaviour for concurrent deploy protection"
-    )
-    promotion: Optional[DeploymentPromotionModel] = Field(
+    tenant: Annotated[PlatformName, References(PlatformKind.TENANT)] | None = Field(
         None,
-        description="Promotion wave assignment for this deployment (opt-in; defaults to last wave when absent)",
+        description="Name of the Tenant this deployment belongs to. Omit for shared/platform deployments "
+        "that serve all tenants.",
     )
-    stages: Optional[List[DeploymentStageModel]] = Field(
+    configurations: list[Annotated[PlatformName, References(PlatformKind.CONFIGURATION)]] | None = Field(
         None,
-        description="Optional deployment stages for multi-step execution (if not specified, single-step execution)",
+        description="Names of additional Configuration documents that apply to this deployment. "
+        "Accepted and validated, but strata does not use it yet.\n\n"
+        "Design notes: Names of additional Configuration documents that apply to this "
+        "deployment",
     )
-    gates: Optional[List[DeploymentGateModel]] = Field(
+    version: Annotated[PlatformName, References(PlatformKind.VERSION)] | None = Field(
         None,
-        description="Hand-off gates for this deployment (approval, cost_review, security_review, verify, "
-        "scheduled, incident, cab). See ADR-0057/ADR-0059.",
+        description="Name of the Version document supplying pins for this deployment. When a pinned target "
+        "(image, chart, remote ref, tool) is declared elsewhere, the pin wins. Omit to use each document's "
+        "own declared versions.",
+    )
+    layers: DeploymentLayersModel | None = Field(
+        None,
+        description="Hierarchy position: a path convention to follow and the segment values for "
+        "it.\n\n"
+        "Design notes: Hierarchy position (inert in v2 — see DeploymentLayersModel)",
+    )
+    locking: DeploymentLockingModel | None = Field(
+        None,
+        description="Pipeline-level state locking. Accepted and validated, but strata does not use "
+        "it yet.\n\n"
+        "Design notes: Pipeline-level state locking",
+    )
+    stages: list[DeploymentStageModel] | None = Field(
+        None, description="Runtime parameters per workspace provisioning step"
+    )
+    providers: list[DeploymentProviderBindingModel] | None = Field(
+        None,
+        description="Rebind workspace provider slots to other Provider documents for this deployment. "
+        "Merged by `slot` across `extends` (child wins), so a partial base can bind a region once.",
+    )
+    assets: list[DeploymentAssetBindingModel] | None = Field(
+        None,
+        description="Rebind workspace asset slots to other Asset documents for this deployment. "
+        "Merged by `slot` across `extends` (child wins), so a partial base can bind some slots and a "
+        "leaf others.",
+    )
+    lifecycle: CommonLifecycleModel | None = Field(
+        None,
+        description="Hook scripts per phase name. Accepted and validated, but strata does not run "
+        "lifecycle hooks yet.\n\n"
+        "Design notes: Deployment lifecycle phases",
+    )
+    properties: dict[str, Any] | None = Field(
+        None,
+        description="Deployment properties, the last merge layer over the tenant's and the "
+        "environments' properties, passed to Terraform as `strata.properties`. Add an "
+        "`attributeconfig` with `target.kind: deployment` to validate them.\n\n"
+        "Design notes: Deployment properties, the last merge layer over tenant and "
+        "environment properties",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form values merged over the tenant's and the environments' `custom` "
+        "values (the deployment wins), passed to Terraform as `strata.custom`. Strata "
+        "does not interpret them.\n\n"
+        "Design notes: Custom user-defined data for scripts or extensions. Merges "
+        "across the Tenant/Environment/Deployment chain like `properties`, delivered "
+        "as one JSON-encoded `TF_VAR_custom` env var for the whole merged dict — not "
+        "split into a separate env var per key.",
     )
 
     @model_validator(mode="after")
-    def validate_unique_names(self) -> "DeploymentSpecModel":
-        """Validate that stage, gate, and configuration names are unique."""
+    def validate_unique_stage_steps(self) -> "DeploymentSpecModel":
+        """Each provisioning step may have parameters declared only once."""
         if self.stages:
-            check_unique_names([stage.name for stage in self.stages], "stage names")
-
-        if self.gates:
-            check_unique_names([gate.name for gate in self.gates], "gate names")
-
-        if self.configurations:
-            check_unique_names([config.name for config in self.configurations], "configuration names")
-
+            check_unique_names([s.step for s in self.stages], "stage step references in deployment")
         return self
 
     @model_validator(mode="after")
-    def validate_gate_scope_refs(self) -> "DeploymentSpecModel":
-        """Validate that a gate's scope references declared stage names."""
-        if not self.gates:
-            return self
-        known_stages: set[str] = {stage.name for stage in self.stages} if self.stages else set()
-        for gate in self.gates:
-            if gate.scope == "all":
-                continue
-            for stage_name in gate.scope:
-                if stage_name not in known_stages:
-                    raise ValueError(
-                        f"Gate '{gate.name}' scope references unknown stage '{stage_name}'. "
-                        f"Known stages: {sorted(known_stages) or '(none declared)'}"
-                    )
+    def validate_unique_environments(self) -> "DeploymentSpecModel":
+        """A repeated environment reference would merge twice."""
+        if self.environments:
+            check_unique_names(self.environments, "environment references in deployment")
         return self
 
     @model_validator(mode="after")
-    def validate_stage_dependencies(self) -> "DeploymentSpecModel":
-        """Validate that stage dependencies form a valid DAG (no cycles, valid references)."""
-        if not self.stages:
+    def validate_unique_provider_slots(self) -> "DeploymentSpecModel":
+        """A slot bound twice would be ambiguous."""
+        if self.providers:
+            check_unique_names([b.slot for b in self.providers], "provider slot bindings in deployment")
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_asset_slots(self) -> "DeploymentSpecModel":
+        """A slot bound twice would be ambiguous."""
+        if self.assets:
+            check_unique_names([b.slot for b in self.assets], "asset slot bindings in deployment")
+        return self
+
+    @model_validator(mode="after")
+    def validate_complete_unless_partial(self) -> "DeploymentSpecModel":
+        """A deployable document needs a workspace and at least one environment.
+
+        Two kinds of document are exempt, because neither is deployable as
+        written:
+
+        - a `partial: true` base — that is exactly what the flag means;
+        - a document with `extends` — its missing fields are expected to come
+          from the base. The merged result is validated without `extends`
+          (`merge_deployment_specs` strips it), so the check still applies to
+          whatever is actually deployed.
+        """
+        if self.partial or self.extends:
             return self
-
-        stage_names = {stage.name for stage in self.stages}
-        errors = []
-
-        # Check that all depends_on references are valid
-        for stage in self.stages:
-            if stage.depends_on:
-                for dep in stage.depends_on:
-                    if dep not in stage_names:
-                        errors.append(f"Stage '{stage.name}' depends on undefined stage '{dep}'")
-                    if dep == stage.name:
-                        errors.append(f"Stage '{stage.name}' cannot depend on itself")
-
-        if errors:
-            raise ValueError("; ".join(errors))
-
-        # Check for circular dependencies (simple cycle detection)
-        visited = set()
-        rec_stack = set()
-
-        def has_cycle(stage_name: str) -> bool:
-            """DFS-based cycle detection."""
-            visited.add(stage_name)
-            rec_stack.add(stage_name)
-
-            # Find stage object
-            stage = next((s for s in self.stages or [] if s.name == stage_name), None)
-            if stage and stage.depends_on:
-                for dep in stage.depends_on:
-                    if dep not in visited:
-                        if has_cycle(dep):
-                            return True
-                    elif dep in rec_stack:
-                        return True
-
-            rec_stack.remove(stage_name)
-            return False
-
-        for stage in self.stages:
-            if stage.name not in visited:
-                if has_cycle(stage.name):
-                    raise ValueError(f"Circular dependency detected in stages involving '{stage.name}'")
-
+        missing = [
+            field for field, value in (("workspace", self.workspace), ("environments", self.environments)) if not value
+        ]
+        if missing:
+            raise ValueError(
+                f"Deployment is missing required field(s) {missing}. Set 'partial: true' if this is a "
+                "reusable base, or 'extends' if another document supplies them."
+            )
         return self
 
 
 class DeploymentMetaModel(PlatformBaseModel):
-    """Model for deployment metadata (name, annotations, labels, tags)."""
+    """Deployment metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique deployment name")
-    annotations: Optional[Dict[str, Any]] = Field(
+    annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
-    labels: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Optional labels (key-value pairs for classification/filtering)",
+    labels: dict[str, Any] | None = Field(
+        None, description="Optional labels (key-value pairs for classification/filtering)"
     )
-    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
+    tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
 
 
 class DeploymentModel(PlatformBaseModel):
-    """Root model for a deployment configuration file."""
+    """A deployment of a workspace: runs the workspace's recipe with the values of its environments, for an
+    optional tenant and pinned version. Create one per place a workspace is deployed, such as a
+    customer, a ring or a region, and share structure through a `partial: true` base and `extends`.
+
+    Design notes:
+    Root model for a deployment configuration file.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A deployment cannot extend itself; longer extends cycles are rejected when the chain is resolved.",
+    )
 
     apiVersion: PlatformVersion = Field(
-        default=PlatformVersion.v1,
+        default=PlatformVersion.v2,
         frozen=True,
-        description="API version for workspace configuration",
+        description="API version for deployment configuration",
     )
     kind: PlatformKind = Field(
         default=PlatformKind.DEPLOYMENT,
         frozen=True,
-        description="Platform kind (always 'Deployment')",
+        description="Platform kind (always 'deployment')",
     )
     meta: DeploymentMetaModel = Field(description="Deployment metadata (name, annotations, labels, tags)")
-    spec: DeploymentSpecModel = Field(description="Deployment specification (properties, workspace, environment)")
+    spec: DeploymentSpecModel = Field(description="Deployment specification (workspace, environments, stages)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.DEPLOYMENT)
+
+    @model_validator(mode="after")
+    def validate_not_self_extending(self) -> "DeploymentModel":
+        """A deployment cannot extend itself — the trivial cycle.
+
+        Longer chains need the document index and are checked by the
+        controller during extends resolution.
+        """
+        if self.spec.extends and self.spec.extends == self.meta.name:
+            raise ValueError(f"Deployment '{self.meta.name}' cannot extend itself.")
+        return self

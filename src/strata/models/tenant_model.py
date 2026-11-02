@@ -1,156 +1,180 @@
 #!/usr/bin/env python3
-"""Pydantic model for tenant configuration validation."""
+"""Pydantic model for tenant configuration validation.
+
+A `Tenant` is a customer/organisation identity: who they are, which data
+residency geographies they may deploy into, and the defaults every deployment
+on their behalf inherits. In real use there is one per customer directory
+(`customers/contoso/tenant.yaml`), and v1's `PathConventionModel` has a
+dedicated `resolves: tenant` mechanism just to locate them.
+
+Three deliberate differences from v1's `tenant_model.py`:
+
+1. **`spec.code` is not ported.** v1 required it to equal `meta.name` — the
+   same fact in two places. v1's own `validate_code_matches_name()` is a
+   no-op whose comment concedes the model "does not have access to meta", so
+   the real check had to live in the service layer. `meta.name` is the
+   tenant code; there is nothing to keep in sync.
+2. **`spec.name` renamed `display_name`.** It holds the human label ("GSK")
+   while `meta.name` holds the identifier (`contoso`) — two different things
+   called the same word. Matches `ProviderSpecModel.display_name`.
+3. **`spec.environments` names Environment documents, not file paths.**
+   v1 listed workspace-relative paths (`customers/contoso/tenant.env.yaml`);
+   documents are now resolved by identity (ADR-0015). The real tenant env
+   file already carries `meta.name: contoso-env`, so the name exists to
+   reference.
+4. **`spec.zones` renamed `spec.geographies`.** v1's "zones" and v2's
+   `ProviderConfigRegionModel.geography` are the same concept — a
+   compliance/deployment boundary grouping several regions, both using
+   'europe' as the example value. v1 validated zones against an unported
+   `configuration.spec.zones` section; v2 derives them from the region
+   registry that already exists, so the check is no longer blocked.
+
+No `spec.references` (ADR-0002): Value bindings are checked against a real
+Environment in Phase 2, not an internal declared-keys list.
+
+No cloud tags (ADR-0017): a tenant is an identity/grouping concept, not a
+provisioned resource.
+"""
 
 from datetime import date
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, ClassVar
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
-    FeatureRefs,
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    SecretRefs,
-    VariableRefs,
-    check_unique_names,
+    validate_kind_matches,
 )
-
-
-class TenantReferencesModel(PlatformBaseModel):
-    """References to variables, secrets, and features required by this tenant's deployments.
-
-    Lists the keys that must be defined in the environment configuration.
-    Actual values and store backends are defined at environment/workspace level.
-    """
-
-    variables: VariableRefs = Field(
-        None,
-        description="List of variable keys this tenant's deployments require from environment",
-    )
-    secrets: SecretRefs = Field(
-        None,
-        description="List of secret keys this tenant's deployments require from environment",
-    )
-    features: FeatureRefs = Field(
-        None,
-        description="List of feature flag keys this tenant's deployments require from environment",
-    )
+from strata.models.reference_fields import References
+from strata.utils.names import check_unique_names
 
 
 class TenantSpecModel(PlatformBaseModel):
-    """tenant specification: identity, data residency, environment composition, and runtime references."""
+    """A customer or organisation: its display name, the data-residency geographies it may deploy into, and
+    defaults (`environments`, `properties`, `custom`) that every deployment for it inherits.
 
-    # --- Identity ---
-    code: PlatformName = Field(
-        description="Short unique tenant identifier (e.g., 'acme'). Must match meta.name and the filename."
+    Design notes:
+    Tenant specification: identity, data residency, and deployment defaults.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Geographies must be unique.",
+        "Environment references must be unique, because a repeat would merge twice.",
     )
-    name: str = Field(description="Human-readable tenant display name (e.g., 'Acme Corporation')")
 
-    # --- Data residency ---
-    zones: List[str] = Field(
+    display_name: str = Field(
         min_length=1,
-        description=(
-            "Zone names this tenant is allowed to deploy into. Validated against configuration.spec.zones at load time."
-        ),
+        description="Human-readable tenant name (e.g. 'Acme Corporation'). The tenant's identifier/code is "
+        "meta.name (e.g. 'contoso').",
     )
-
-    # --- Onboarding ---
-    onboarded: Optional[date] = Field(
-        None,
-        description="ISO date the tenant was onboarded (e.g., 2025-03-15). Informational only.",
+    geographies: list[str] | None = Field(
+        default=None,
+        description="Data-residency boundaries this tenant may deploy into, for example `europe`. "
+        "Each must be the `geography` of some region in a ProviderConfig. A deployment "
+        "for this tenant is flagged when its provider's region lies in a geography "
+        "that is not listed here. Omit for no restriction.\n\n"
+        "Design notes: Data residency boundaries this tenant may deploy into (e.g. "
+        "'europe'). Each must appear as a `geography` on some region in a "
+        "ProviderConfig's spec.regions — checked by "
+        "`TenantService.validate_geographies_against_provider_configs()`. A tenant's "
+        "allowed set is what a zone-isolation policy tests a planned resource's region "
+        "against. None/omitted means this tenant has no data-residency constraint at "
+        "all — the real, common case (docs/design/tenant-zone-policy.md: no real "
+        "tenant in the one production consumer checked has this populated yet).",
     )
-
-    # --- Environment composition ---
-    environments: Optional[List[str]] = Field(
-        None,
-        description=(
-            "Base environment files merged in BEFORE the deployment's own environments, "
-            "so deployment values take precedence. "
-            "Use this to inject tenant-wide defaults (e.g. a tier file with shared variables, "
-            "feature flags, or secrets) without repeating them in every deployment. "
-            "Example: ['environments/tiers/enterprise.yaml']. "
-            "Validated against the filesystem during Phase 2."
-        ),
+    onboarded: date | None = Field(
+        None, description="ISO date the tenant was onboarded (e.g. 2026-03-15). Informational only."
     )
-
-    # --- Tenant-level deployment defaults ---
-    properties: Optional[Dict[str, Any]] = Field(
+    environments: list[Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)]] | None = Field(
         None,
-        description=(
-            "Tenant-wide deployment properties merged as a base layer into spec.properties "
-            "of every deployment that references this tenant. "
-            "Deployment properties take precedence over tenant properties. "
-            "Example: {'tier': 'enterprise', 'region_preference': 'eu'}"
-        ),
+        description="Names of Environment documents that merge before the deployment's own "
+        "environments, so the deployment's values win. Use for tenant-wide defaults "
+        "such as shared variables or feature flags.\n\n"
+        "Design notes: Names of Environment documents merged in BEFORE a deployment's "
+        "own environments, so deployment values win. Use for tenant-wide defaults "
+        "(shared variables, feature flags) without repeating them per deployment.",
     )
-    custom: Optional[Dict[str, Any]] = Field(
+    properties: dict[str, Any] | None = Field(
         None,
-        description=(
-            "Tenant-wide custom data merged as a base layer into spec.custom "
-            "of every deployment that references this tenant. "
-            "Deployment custom values take precedence over tenant custom values."
-        ),
+        description="Tenant-wide properties, merged as the base layer into the `properties` of "
+        "every deployment for this tenant. Deployment values win.\n\n"
+        "Design notes: Tenant-wide deployment properties, merged as a base layer into "
+        "spec.properties of every deployment referencing this tenant. Deployment "
+        "values take precedence.",
     )
-
-    # --- Tenant identity configuration ---
-    configuration: Optional[Dict[str, Any]] = Field(
+    configuration: dict[str, Any] | None = Field(
         None,
-        description=(
-            "Arbitrary key/value pairs for tenant-specific settings emitted verbatim "
-            "inside the strata_tenant tfvar object (not merged into deployment properties). "
-            "Use this for CRM IDs, billing codes, or other tenant metadata consumed "
-            "directly by Terraform/Ansible modules. "
-            "Example: {'crm_id': '42', 'invoice_prefix': 'ACM'}"
-        ),
+        description="Tenant-specific settings, for example a CRM id or billing code, passed to "
+        "Terraform as `strata.tenant.configuration`. Not merged into the deployment's "
+        "properties. Add an `attributeconfig` with `target.kind: tenant` and "
+        "`target.block: configuration` to validate them.\n\n"
+        "Design notes: Tenant-specific settings emitted verbatim to the provisioner "
+        "(e.g. CRM ID, billing code) — NOT merged into deployment properties, unlike "
+        "`properties` above.",
     )
-
-    # --- Runtime references ---
-    references: Optional[TenantReferencesModel] = Field(
+    custom: dict[str, Any] | None = Field(
         None,
-        description="Variables, secrets, and feature flags this tenant's deployments require.",
+        description="Tenant-wide custom values, merged as the base layer into the `custom` values "
+        "of every deployment for this tenant. Deployment values win.\n\n"
+        "Design notes: Tenant-wide custom data merged as a base layer into spec.custom "
+        "of every deployment referencing this tenant. Deployment values take "
+        "precedence.",
     )
 
     @model_validator(mode="after")
-    def validate_code_matches_name(self) -> "TenantSpecModel":
-        """Validate that spec.code matches meta.name (enforced by the service layer, not here)."""
-        # The actual cross-field check (spec.code == meta.name) lives in the service
-        # because this model does not have access to meta. Structural-only here.
+    def validate_unique_geographies(self) -> "TenantSpecModel":
+        """Geography entries must be unique, when declared at all."""
+        if self.geographies:
+            check_unique_names(self.geographies, "geography entries in tenant spec")
         return self
 
     @model_validator(mode="after")
-    def validate_unique_zones(self) -> "TenantSpecModel":
-        """Validate that the zones list contains no duplicates."""
-        check_unique_names(self.zones, "zone entries in tenant spec")
+    def validate_unique_environments(self) -> "TenantSpecModel":
+        """Environment references must be unique — a repeat would merge twice."""
+        if self.environments:
+            check_unique_names(self.environments, "environment references in tenant spec")
         return self
 
 
 class TenantMetaModel(PlatformBaseModel):
-    """Tenant metadata: name, annotations, labels, tags."""
+    """Tenant metadata (name, annotations, labels, tags)."""
 
-    name: PlatformName = Field(description="Unique tenant name (short code, e.g. 'acme')")
-    annotations: Optional[Dict[str, Any]] = Field(
+    name: PlatformName = Field(description="Tenant code — the unique identifier (e.g. 'contoso')")
+    annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
-    labels: Optional[Dict[str, Any]] = Field(
+    labels: dict[str, Any] | None = Field(
         None, description="Optional labels (key-value pairs for classification/filtering)"
     )
-    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
+    tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
 
 
 class TenantModel(PlatformBaseModel):
-    """Root model for a tenant configuration file (kind: tenant)."""
+    """A customer or organisation identity. `meta.name` is the tenant code, for example `contoso`. Create one
+    per customer and reference it from a deployment's `tenant`. Typically one per customer directory.
+
+    Design notes:
+    Root model for a tenant configuration file.
+    """
 
     apiVersion: PlatformVersion = Field(
-        default=PlatformVersion.v1,
+        default=PlatformVersion.v2,
         frozen=True,
         description="API version for tenant configuration",
     )
-    kind: Literal[PlatformKind.TENANT] = Field(
+    kind: PlatformKind = Field(
         default=PlatformKind.TENANT,
         frozen=True,
-        description="Resource kind (always 'Tenant')",
+        description="Platform kind (always 'tenant')",
     )
     meta: TenantMetaModel = Field(description="Tenant metadata (name, annotations, labels, tags)")
-    spec: TenantSpecModel = Field(description="tenant specification (identity, zones, environments, references)")
+    spec: TenantSpecModel = Field(description="Tenant specification (identity, geographies, environments, defaults)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.TENANT)

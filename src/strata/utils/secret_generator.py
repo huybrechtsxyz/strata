@@ -1,11 +1,15 @@
-"""Cryptographic secret generation utilities.
+#!/usr/bin/env python3
+"""Cryptographic secret generation and masking.
 
-This module is the single implementation used by both the CLI command
-(``strata secret generate``) and the ValueController seed-on-missing flow.
-Controllers must not import from commands/, so the function lives here.
+Ported from v1's `secret_generator.py` (same vocabulary, same algorithms).
+Pure functions, no I/O — used directly by `strata values generate`/`values
+mask`, and (once phases 5-8 of docs/design/values-secrets-command.md land)
+by `values set --generate`/`values rotate`, which read a key's own
+`SecretGenerateSpec` and call `generate_secret(spec.type.value, spec.length)`.
+
+Self-contained, like `dict_merge.py` — imports nothing from other
+`strata.utils` modules.
 """
-
-from __future__ import annotations
 
 import base64
 import secrets
@@ -14,10 +18,21 @@ import time
 import uuid
 
 _ALPHANUMERIC = string.ascii_letters + string.digits
-# Symbols commonly accepted by password policies; excludes ambiguous/shell-special chars
+#: Symbols commonly accepted by password policies; excludes ambiguous/shell-special chars.
 _SYMBOLS = "!@#$%^&*()-_=+"
 _PASSWORD_CHARS = _ALPHANUMERIC + _SYMBOLS
 _NUMERIC = string.digits
+
+#: Formats requiring an exact output length in `generate_secret()`'s `length` arg.
+_CHARACTER_COUNT_FORMATS = frozenset({"alphanumeric", "password", "numeric"})
+#: Formats where `length` is a byte count fed to an encoder (output is longer).
+_BYTE_COUNT_FORMATS = frozenset({"urlsafe", "hex", "base64"})
+#: Formats where `length` is ignored entirely.
+_UUID_FORMATS = frozenset({"uuid4", "uuid7"})
+
+#: Every recognized `generate_secret()` format — mirrors `SecretGenerateType`
+#: (`strata.models.store_model`) and `values generate --format`'s choices.
+FORMATS = _BYTE_COUNT_FORMATS | _CHARACTER_COUNT_FORMATS | _UUID_FORMATS
 
 
 def _uuid7() -> uuid.UUID:
@@ -37,19 +52,24 @@ def _uuid7() -> uuid.UUID:
     return uuid.UUID(int=int_val)
 
 
-def generate_secret(fmt: str, length: int) -> str:
+def generate_secret(fmt: str, length: int = 32) -> str:
     """Return a cryptographically secure secret in the requested format.
 
     Args:
-        fmt:    One of ``urlsafe``, ``hex``, ``alphanumeric``, ``password``,
-                ``numeric``, ``base64``, ``uuid4``, ``uuid7``.
-        length: For ``urlsafe`` / ``hex`` / ``base64``: number of random *bytes*
-                (the resulting string will be longer after encoding).
-                For ``alphanumeric`` / ``password`` / ``numeric``: exact character count.
-                Ignored for ``uuid4`` / ``uuid7``.
+        fmt: One of `urlsafe`, `hex`, `alphanumeric`, `password`, `numeric`,
+            `base64`, `uuid4`, `uuid7` (see `FORMATS`).
+        length: For `urlsafe`/`hex`/`base64`: number of random *bytes* (the
+            resulting string is longer after encoding). For
+            `alphanumeric`/`password`/`numeric`: exact character count.
+            Ignored for `uuid4`/`uuid7`.
 
     Returns:
         The generated secret as a plain string.
+
+    Raises:
+        ValueError: `fmt` is not one of `FORMATS`, or `fmt == "password"` and
+            `length < 4` (too short to guarantee one character from each
+            required class).
     """
     if fmt == "urlsafe":
         return secrets.token_urlsafe(length)
@@ -79,24 +99,24 @@ def generate_secret(fmt: str, length: int) -> str:
         return str(uuid.uuid4())
     if fmt == "uuid7":
         return str(_uuid7())
-    raise ValueError(f"Unknown secret format: {fmt!r}")
+    raise ValueError(f"Unknown secret format: {fmt!r}. Supported: {sorted(FORMATS)}")
 
 
 def mask_secret(value: str, show: int = 4, char: str = "*") -> str:
-    """Return a masked copy of *value* safe for display in logs or output.
+    """Return a masked copy of `value`, safe for display in logs or output.
 
-    The first *show* characters are kept in clear; the remainder are replaced
-    with *char*.  If the value is too short to safely reveal *show* characters
-    (i.e. ``len(value) <= show``), the entire value is masked so that short
-    secrets are never accidentally exposed in full.
+    The first `show` characters are kept in clear; the remainder are
+    replaced with `char`. If `value` is too short to safely reveal `show`
+    characters (`len(value) <= show`), the entire value is masked so a
+    short secret is never accidentally exposed in full.
 
     Args:
         value: The secret string to mask.
-        show:  Number of leading characters to keep visible.  Default 4.
-        char:  Replacement character for the masked portion.  Default ``*``.
+        show: Number of leading characters to keep visible.
+        char: Replacement character for the masked portion.
 
     Returns:
-        The masked string, always the same length as the input.
+        The masked string, always the same length as `value`.
     """
     if len(value) <= show:
         return char * len(value)

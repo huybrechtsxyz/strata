@@ -1,98 +1,103 @@
 #!/usr/bin/env python3
 """Service for loading and validating provider configurations."""
 
-from typing import List, Optional, Tuple
-
 from strata.models.configuration_model import ConfigurationModel
+from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.provider_model import ProviderModel
 from strata.services.base_service import BaseService
+from strata.utils.diagnostics import Diagnostics
 
 
-class ProviderService(BaseService["ProviderModel"]):
-    """Service for handling provider configurations."""
+class ProviderService(BaseService[ProviderModel]):
+    """Service for handling provider configurations.
 
-    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
-        """Initialize the ProviderService."""
-        super().__init__(path=path, data=data)
-        self.model = None
+    Phase 2 here only checks that `spec.type` is a *registered*
+    provider type name (a pointer existing in `configuration_model.spec.providers`)
+    — `configuration_model.spec.providers` entries are just `{name, file}`
+    pointers to standalone `ProviderConfigModel` documents now (ADR-0014), so
+    the deep region/resource check needs an actually-loaded `ProviderConfigModel`,
+    which `_validate_dynamic()`'s fixed signature has no slot for. That check
+    is `validate_against_provider_config()` below — a caller resolves the
+    pointer's file itself and calls it once loaded (same "assume the caller
+    already loaded it" shape as `WorkspaceService.validate_topology_components()`).
+    """
 
-    def _get_model_class(self):
+    def _get_model_class(self) -> type[ProviderModel]:
         """Return the ProviderModel class for validation."""
         return ProviderModel
 
-    def _validate_dynamic(
-        self,
-        configuration_model: Optional["ConfigurationModel"] = None,
-        work_path: Optional[str] = None,
-    ) -> Tuple[bool, List[str]]:
-        """
-        Phase 2: Dynamic validation against configuration.
+    def _validate_dynamic(self, configuration_model: ConfigurationModel | None = None) -> Diagnostics:
+        """Phase 2: check that `spec.type` is a registered provider type name.
 
-        This method performs business logic validation that requires dynamic configuration,
-        such as validating provider types and regions against the configuration model.
+        Skipped (no findings) when no `configuration_model` is supplied.
+        """
+        diagnostics = Diagnostics()
+        if configuration_model is None:
+            return diagnostics
+        if self.model is None:
+            diagnostics.error("Provider model is not initialized")
+            return diagnostics
+
+        provider_type = self.model.spec.type
+        registered_names = set(configuration_model.spec.providers or [])
+
+        if provider_type not in registered_names:
+            available = sorted(registered_names)
+            diagnostics.error(
+                f"Provider type '{provider_type}' not found in configuration. Available: {available}",
+                location="spec.type",
+                code="unregistered_provider_type",
+            )
+
+        return diagnostics
+
+    def validate_against_provider_config(self, provider_config: ProviderConfigModel) -> Diagnostics:
+        """Cross-check `spec.region` against a loaded ProviderConfig document's regions.
 
         Args:
-            configuration_model: Optional ConfigurationModel for cross-validation
-
-        Returns:
-            Tuple[bool, List[str]]: (success, list of error messages)
+            provider_config: The already-loaded `ProviderConfigModel` document
+                named by `configuration_model.spec.providers[]`.
         """
-        if configuration_model is None:
-            # No configuration provided, skip dynamic validation
-            return True, []
-
+        diagnostics = Diagnostics()
         if self.model is None:
-            return False, ["Provider model is not initialized"]
+            diagnostics.error("Provider model is not initialized")
+            return diagnostics
 
-        # Get provider type and region from this provider
-        provider_type = self.model.spec.properties.type
-        provider_region = self.model.spec.properties.region
+        provider_type = self.model.spec.type
+        provider_region = self.model.spec.region
+        spec = provider_config.spec
 
-        # Find matching provider configuration
-        config_provider = None
-        if configuration_model.spec.providers:
-            for provider in configuration_model.spec.providers:
-                if provider.name == provider_type:
-                    config_provider = provider
-                    break
+        if not spec.additional_regions:
+            if not spec.regions:
+                diagnostics.error(
+                    f"Provider '{provider_type}' has no regions defined in its provider config "
+                    f"and additional_regions is False",
+                    location="spec.region",
+                    code="no_regions_defined",
+                )
+                return diagnostics
 
-        if config_provider is None:
-            available = (
-                [p.name for p in configuration_model.spec.providers] if configuration_model.spec.providers else []
-            )
-            return False, [f"Provider type '{provider_type}' not found in configuration. Available: {available}"]
-
-        # Validate region when the provider does not allow arbitrary regions
-        if not config_provider.additional_regions:
-            if not config_provider.regions:
-                return False, [
-                    f"Provider '{provider_type}' has no regions defined in configuration "
-                    f"and additional_regions is False"
-                ]
-
-            valid_regions = [
-                r if isinstance(r, str) else r.get("name", str(r)) if isinstance(r, dict) else str(r)
-                for r in config_provider.regions
-            ]
+            valid_regions = [r.name for r in spec.regions]
 
             if provider_region not in valid_regions:
-                return False, [
+                diagnostics.error(
                     f"Region '{provider_region}' is not valid for provider '{provider_type}'. "
-                    f"Valid regions: {valid_regions}"
-                ]
+                    f"Valid regions: {valid_regions}",
+                    location="spec.region",
+                    code="invalid_region",
+                )
+                return diagnostics
 
-        return True, []
-
-    # Service methods for accessing provider details
+        return diagnostics
 
     def get_provider_type(self) -> str:
-        """Get the provider type."""
+        """Return the provider's cloud/infrastructure type."""
         self._ensure_validated()
         assert self.model is not None
-        return self.model.spec.properties.type
+        return self.model.spec.type
 
     def get_provider_region(self) -> str:
-        """Get the provider region."""
+        """Return the provider's region."""
         self._ensure_validated()
         assert self.model is not None
-        return self.model.spec.properties.region
+        return self.model.spec.region
