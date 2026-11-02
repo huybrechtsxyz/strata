@@ -254,7 +254,7 @@ class PromotionStatusRow:
     Not `PromotionView` itself re-shaped: a `Version` document may pin
     several targets at once (the real, evidenced case — `version_model.py`'s
     own docstring cites a 14-pin production file), so a row is per-pin, not
-    per-document. `target` is `f"{category}/{name}"` (e.g. `images/dspapi`),
+    per-document. `target` is `f"{category}/{name}"` (e.g. `images/api`),
     matching `check_version_pins()`'s own `location` convention. `category`/
     `target`/`value`/`status` are all `None` together exactly once per empty
     wave — a tagged document with no pins declared yet still gets one row,
@@ -279,7 +279,7 @@ def build_status_rows(view: PromotionView) -> list[PromotionStatusRow]:
     other") is computed **within one `(ring, order)` group, per pin target**
     — not across different orders. Worked example B's own "canary runs ahead
     of general" is exactly this: both share `(ring=prd, order=3)`, and only
-    `general`'s `images/dspapi` pin trails its sibling wave's value for the
+    `general`'s `images/api` pin trails its sibling wave's value for the
     same target. Comparing across different orders instead would not single
     out `general` the way the worked example shows.
 

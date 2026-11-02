@@ -4,7 +4,7 @@
 A `Tenant` is a customer/organisation identity: who they are, which data
 residency geographies they may deploy into, and the defaults every deployment
 on their behalf inherits. In real use there is one per customer directory
-(`customers/c0062/tenant.yaml`), and v1's `PathConventionModel` has a
+(`customers/contoso/tenant.yaml`), and v1's `PathConventionModel` has a
 dedicated `resolves: tenant` mechanism just to locate them.
 
 Three deliberate differences from v1's `tenant_model.py`:
@@ -15,12 +15,12 @@ Three deliberate differences from v1's `tenant_model.py`:
    the real check had to live in the service layer. `meta.name` is the
    tenant code; there is nothing to keep in sync.
 2. **`spec.name` renamed `display_name`.** It holds the human label ("GSK")
-   while `meta.name` holds the identifier (`c0062`) — two different things
+   while `meta.name` holds the identifier (`contoso`) — two different things
    called the same word. Matches `ProviderSpecModel.display_name`.
 3. **`spec.environments` names Environment documents, not file paths.**
-   v1 listed workspace-relative paths (`customers/c0062/tenant.env.yaml`);
+   v1 listed workspace-relative paths (`customers/contoso/tenant.env.yaml`);
    documents are now resolved by identity (ADR-0015). The real tenant env
-   file already carries `meta.name: c0062-env`, so the name exists to
+   file already carries `meta.name: contoso-env`, so the name exists to
    reference.
 4. **`spec.zones` renamed `spec.geographies`.** v1's "zones" and v2's
    `ProviderConfigRegionModel.geography` are the same concept — a
@@ -68,7 +68,7 @@ class TenantSpecModel(PlatformBaseModel):
     display_name: str = Field(
         min_length=1,
         description="Human-readable tenant name (e.g. 'Acme Corporation'). The tenant's identifier/code is "
-        "meta.name (e.g. 'c0062').",
+        "meta.name (e.g. 'contoso').",
     )
     geographies: list[str] | None = Field(
         default=None,
@@ -142,7 +142,7 @@ class TenantSpecModel(PlatformBaseModel):
 class TenantMetaModel(PlatformBaseModel):
     """Tenant metadata (name, annotations, labels, tags)."""
 
-    name: PlatformName = Field(description="Tenant code — the unique identifier (e.g. 'c0062')")
+    name: PlatformName = Field(description="Tenant code — the unique identifier (e.g. 'contoso')")
     annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
@@ -153,7 +153,7 @@ class TenantMetaModel(PlatformBaseModel):
 
 
 class TenantModel(PlatformBaseModel):
-    """A customer or organisation identity. `meta.name` is the tenant code, for example `c0062`. Create one
+    """A customer or organisation identity. `meta.name` is the tenant code, for example `contoso`. Create one
     per customer and reference it from a deployment's `tenant`. Typically one per customer directory.
 
     Design notes:

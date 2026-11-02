@@ -46,7 +46,7 @@ Exit codes: 0 success, 1 system failure, 2 usage error, 3 validation failure (th
 | `strata sln init NAME` / `strata sln update` | Create or refresh the scaffold files, including this skill. |
 
 Run `strata <command> --help` for the full option list. A deployment is always named positionally
-(`strata build run prd-c0062`); there is no `-f`/`--file`.
+(`strata build run prd-contoso`); there is no `-f`/`--file`.
 
 ## Documents
 
@@ -98,7 +98,7 @@ so. Write `$${...}` for a literal.
 | `${secret:KEY}` | A secret declared in an environment. Never written to disk. |
 | `${feature:KEY}` | A feature flag declared in an environment. |
 | `${output:STEP.KEY}` | An output of an earlier `deploy run` step. The producing step must be reachable through `depends_on`. |
-| `${value:kind.name.path}` | A literal field of another document, for example `${value:tenant.c0062.meta.name}`. The target must be a plain literal. |
+| `${value:kind.name.path}` | A literal field of another document, for example `${value:tenant.contoso.meta.name}`. The target must be a plain literal. |
 
 How values merge for a deployment:
 

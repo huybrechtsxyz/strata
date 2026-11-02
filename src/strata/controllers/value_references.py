@@ -208,7 +208,7 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
         # only, never a real ${value:...} source — excluded here the same way
         # and for the same reason as `unresolved_value_tokens()` (gap_fit_v1.md
         # gap #23). The TARGET side below (`_walk_value_reference_path()`)
-        # deliberately keeps full `meta` access — `${value:tenant.c0062.meta.name}`
+        # deliberately keeps full `meta` access — `${value:tenant.contoso.meta.name}`
         # is a real, working reference shape (this design's own "Problem"
         # example) — only the source-side scan for where a token is *written*
         # is narrowed.

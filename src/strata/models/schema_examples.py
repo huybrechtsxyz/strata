@@ -459,13 +459,13 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
         {
             "apiVersion": _API,
             "kind": "tenant",
-            "meta": {"name": "c0001"},
+            "meta": {"name": "contoso"},
             "spec": {"display_name": "Acme Corporation"},
         },
         {
             "apiVersion": _API,
             "kind": "tenant",
-            "meta": {"name": "c0001"},
+            "meta": {"name": "contoso"},
             "spec": {
                 "display_name": "Acme Corporation",
                 "geographies": ["europe"],
@@ -486,11 +486,11 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
         {
             "apiVersion": _API,
             "kind": "deployment",
-            "meta": {"name": "prd-c0001"},
+            "meta": {"name": "prd-contoso"},
             "spec": {
                 "extends": "prd-base",
-                "tenant": "c0001",
-                "environments": ["prd-c0001"],
+                "tenant": "contoso",
+                "environments": ["prd-contoso"],
                 "version": "prd",
                 "providers": [{"slot": "primary", "provider": "azure-north"}],
                 "stages": [{"step": "infra", "timeouts": {"apply": 3600}}],
@@ -556,9 +556,9 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
         {
             "apiVersion": _API,
             "kind": "asset",
-            "meta": {"name": "c0001-api"},
+            "meta": {"name": "contoso-api"},
             "spec": {
-                "location": {"url": "https://example.com/c0001/assets.git", "reference": "main"},
+                "location": {"url": "https://example.com/contoso/assets.git", "reference": "main"},
                 "source_path": "assets/{deploy_tier}/openapi/*.json",
             },
         },
