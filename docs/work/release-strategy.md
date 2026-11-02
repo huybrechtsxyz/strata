@@ -246,6 +246,16 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-02: **Built 2.0.0** - bumped `VERSION.txt` from `2.0.0-RC3` to `2.0.0` (normalizes to `2.0.0`; confirmed
+  via `packaging.version.Version` first; no trailing newline). First plain `vX.Y.Z` release of the v2 line, still cut
+  from `v2-beta`, so `ci-release` publishes it (the pre-release tags `v2.0.0-alpha*`/`-rc*` are to be removed once a
+  `2.0.1` follows). Contents since RC3: the example names in docs, schemas examples, `config/` and tests are neutral
+  (`contoso`, `acme`, `fabrikam`, `config-repo`, `iac-repo`); `scripts/Setup.ps1 -UseProGet` reads the package index
+  URL from `STRATA_PACKAGE_INDEX_URL` (environment or the git-ignored `scripts/setup.env`). No behavior change in
+  the CLI. Full check suite green (`scripts/Check.ps1`: 3922 passed, smoke test, Sphinx). `uv build` produced
+  `xyz_strata-2.0.0-py3-none-any.whl`/`.tar.gz`; a fresh isolated venv confirmed `strata version` -> `2.0.0`, the
+  command list and `strata validate` on `config/`. Verification venv removed after. The commit and the `v2.0.0` tag
+  are left to the maintainer.
 - 2026-11-02: **Built RC3** - bumped `VERSION.txt` from `2.0.0-RC2` to `2.0.0-RC3` (normalizes to `2.0.0rc3`;
   confirmed via `packaging.version.Version` first; no trailing newline). Still cut from `v2-beta`; RC1's note on the
   skipped Stage 2/4 gates applies unchanged. Contents since RC2 (`5c9def9`): the opt-in `image_tag_policy` workspace

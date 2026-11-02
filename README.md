@@ -21,7 +21,7 @@ v2 is a rebuild, not a fork. [docs/decisions/](docs/decisions/) holds the full t
 
 - [config/README.md](config/README.md): a real, working example solution used to dogfood the CLI end to end
 - [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md): dev environment setup and contribution workflow
-- [.github/CHANGELOG.md](.github/CHANGELOG.md) / [.github/HISTORY.md](.github/HISTORY.md): what's changed
+- [.github/CHANGELOG.md](.github/CHANGELOG.md): what's changed
 
 ## License
 
