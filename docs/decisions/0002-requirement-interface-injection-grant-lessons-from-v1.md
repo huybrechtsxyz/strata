@@ -331,7 +331,7 @@ defer `output_key`'s generalization.
 ### Translation: when the platform's name and the provisioner's name for the same concept differ
 
 Confirmed as a real (not hypothetical) case: a workspace composes a
-pre-existing, team-owned Terraform module (v1's `dispatcher_api`, per v1
+pre-existing, team-owned Terraform module (v1's `scheduler_api`, per v1
 ADR-0063 "team-owned-terraform-module-support"). The platform's canonical key
 for a concept is `region`; that team's `variables.tf` — written independently,
 without knowledge of platform naming conventions — calls the same concept
@@ -369,8 +369,8 @@ declaration, not yet built in v2), roughly:
 
 ```yaml
 topology:
-  - name: dispatcher
-    provisioner: dispatcher_api
+  - name: scheduler
+    provisioner: scheduler_api
     input_aliases:
       region: location   # canonical platform key -> this provisioner's local name
 ```
@@ -383,7 +383,7 @@ where it does *not* belong (not on the kind models), not a finished schema.
 Reconnecting Translation to the `Injection = Interface ∩ Environment` formula
 (designed after Translation was first written up) surfaces a real interaction:
 `Interface ∩ Environment` is a literal set intersection **by name**. For
-`dispatcher_api`, Interface says the module declares `location` (required, no
+`scheduler_api`, Interface says the module declares `location` (required, no
 default); Environment declares `region`. Same value, semantically — but as
 bare strings, `"location" != "region"`, so the intersection finds no match.
 
@@ -410,12 +410,12 @@ which stage invokes it. So `input_aliases` belongs on the provisioner/topology
 declaration, never on `stages[]` — this was already the conclusion above, now
 reinforced by the same axis that organizes the rest of this ADR.
 
-**Worked example**, extending `web_infra`/`dispatcher_api`:
+**Worked example**, extending `web_infra`/`scheduler_api`:
 
 ```yaml
 topology:
-  - name: dispatcher
-    provisioner: dispatcher_api
+  - name: scheduler
+    provisioner: scheduler_api
     input_aliases:
       region: location   # canonical platform key -> this module's local name
 ```
@@ -470,7 +470,7 @@ Injection = Interface ∩ Environment
 
 — give the provisioner exactly what it declares it consumes (Interface),
 filtered to what actually exists (Environment). That alone resolves v1's
-`dispatcher_api` case (22 keys force-injected, 2 declared) with **no manifest
+`scheduler_api` case (22 keys force-injected, 2 declared) with **no manifest
 required** — the platform author isn't asked to also maintain a list that just
 repeats what `variables.tf` already says. A `references` list here is a third
 restatement of a fact two other places already know, and — per v1's own
@@ -528,7 +528,7 @@ isn't declared, fail the build"), while `_save_terraform_vars()` — a
 *separate* loop over the same provisioners — writes the actual `.tfvars`
 files without ever consulting it. Two loops, one computes Interface, the
 other emits values, and they never talk to each other — the literal root
-cause of the over-injection bug (`dispatcher_api` gets 22 keys despite
+cause of the over-injection bug (`scheduler_api` gets 22 keys despite
 declaring 2). **Whatever builds the injected tfvars/env in v2 must be the
 same code path that computed Interface** — not a second pass that re-derives
 inputs from scratch.

@@ -22,7 +22,7 @@ vendor-specific (Splunk/ELK/Sentinel) class.
 ### The problem this design is reacting to
 
 v1 shipped **five** SIEM backends (`sentinel`, `elk`, `otel`, `splunk` HEC,
-`syslog`+CEF). Real usage, confirmed directly in `config-deploy`'s own
+`syslog`+CEF). Real usage, confirmed directly in `config-repo`'s own
 `config/audit.yaml`: **one** declared sink (`elk`), `enabled: false` — zero
 actually active. That is the exact "declared-but-unread machinery" failure
 [audit-trail.md](../work/audit-trail.md)'s own "Lessons from v1's own defects" #1

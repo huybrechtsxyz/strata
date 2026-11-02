@@ -74,7 +74,7 @@ object, and one `TF_VAR_strata_secrets` flat `map(string)` keyed by
 dotted path into that object** — replacing every per-category file,
 variable, and the `_REAL_VARIABLE_NAME`/`FLAT_CATEGORIES` machinery
 entirely. No compatibility mode, no dual-write: with two known consumers
-(`cfg-int-deployment`, `haven`), both owned by the same team, and a
+(`config-repo`, `haven`), both owned by the same team, and a
 pre-1.0 alpha version, a clean break is cheaper than a transitional shape
 nobody wants to live in.
 

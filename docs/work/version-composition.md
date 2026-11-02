@@ -9,10 +9,10 @@ A `kind: version` document today is one flat set of pins, bound to one workspace
 names exactly one. That is enough for one product per ring. It breaks down when a ring runs several
 products that share something:
 
-- **One release per ring across several workspaces.** cfg-int runs one workspace per product
-  (Staging, DataHub, Binocs, Dispatcher after ADR-0017 there). A release of four products in one ring
+- **One release per ring across several workspaces.** config-repo runs one workspace per product
+  (Staging, Catalog, Ledger, Scheduler after ADR-0017 there). A release of four products in one ring
   is four version documents edited in lockstep.
-- **A shared artifact in several versionings.** Anything every product uses (the `iac-int` remote the
+- **A shared artifact in several versionings.** Anything every product uses (the `iac-repo` remote the
   product roots come from, a shared image, the core modules) is pinned once per product document.
   Nothing says those pins must agree, so one ring can silently run two versions of the shared part.
 - **A customer that differs from its ring on a platform pin** needs a document repeating every
@@ -32,10 +32,10 @@ document, and every other document that needs it includes that document instead 
 
 | #   | Requirement                                                                                                                                     | Source                                  |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| R1  | One document per ring can carry the release of several workspaces                                                                               | cfg-int request                         |
+| R1  | One document per ring can carry the release of several workspaces                                                                               | config-repo request                         |
 | R2  | A shared artifact is pinned in one place and reused, never copied                                                                               | "configure once, reuse"                 |
 | R3  | A shared artifact can never run at two versions inside one ring without an explicit, visible act                                                | the core-in-several-versionings problem |
-| R4  | A product can still be promoted through rings on its own                                                                                        | cfg-int ADR-0006                        |
+| R4  | A product can still be promoted through rings on its own                                                                                        | config-repo ADR-0006                        |
 | R5  | A customer can still move on its own cadence (`promote apply --pin`)                                                                            | promotion.md S1-S10                     |
 | R6  | A deployment can differ from its ring on one pin without repeating the ring                                                                     | remotes-at-scale.md Q6                  |
 | R7  | Every applied pin is logged with the document it came from                                                                                      | ADR-0019 decision 7                     |
@@ -70,15 +70,15 @@ spec:
   include:                  # version documents whose pins this one adds, by name
     - core-2.1
     - staging-1.2
-    - datahub-1.4
-    - binocs-0.9
-    - dispatcher-3.0
+    - catalog-1.4
+    - ledger-0.9
+    - scheduler-3.0
   pins: {}                  # pins this document owns (unchanged meaning)
   overrides:                # deliberate changes to an included pin; same categories as pins
     images:
-      datahub-api:
-        version: acr.io/datahub:1.4.1
-        reason: "hotfix 4711, fold into datahub-1.5"
+      catalog-api:
+        version: acr.io/catalog:1.4.1
+        reason: "hotfix 4711, fold into catalog-1.5"
 ```
 
 ### Decisions
@@ -126,7 +126,7 @@ spec:
   `workload_controller`, `value_controller`, `effective_images`, `image_tag_policy`, `audit_run`)
   need no change beyond the lookup. A document without `include`/`overrides` resolves to itself (R9).
 - **C7 - `log_pin_applied` reports the owning document** from the origin map, and adds the
-  composing document when they differ (`version=datahub-1.4 via=prd`). Overrides log as
+  composing document when they differ (`version=catalog-1.4 via=prd`). Overrides log as
   `source=override` (R7).
 - **C8 - Workspace binding becomes a set.** `spec.workspace` stays a single optional name and still
   binds *that document*. A document's effective workspaces are its own plus those of everything it
@@ -141,7 +141,7 @@ spec:
   that declare them, and a customer document that includes the `prd` ring document does not claim
   the `prd` slot.
 - **C10 - Pins are not scoped per workspace.** Considered: a pin applies only to deployments of its
-  owning document's workspace, so DataHub and Binocs could pin `remotes.iac-int` to different refs in
+  owning document's workspace, so Catalog and Ledger could pin `remotes.iac-repo` to different refs in
   one ring. Rejected: that is precisely a shared artifact at two versions in one ring (R3). A
   product that must version independently needs its own pinnable target (Open question 1).
 - **C11 - Tooling writes to the owner.** `version set <doc> <category> <target>` edits the section
@@ -160,11 +160,11 @@ spec:
 - **C13 - The build writes the effective version as its own artifact.** `build run` writes
   `versions.json` next to `resolved.yaml` and `sbom.json`: the version document the deployment named
   (or `--pin` chose), its ring, and every effective pin with its value and owning document
-  (`remotes/iac-int: v2.1.0 from core-2.1`). `_manifest.json` references it by path and hash, the
+  (`remotes/iac-repo: v2.1.0 from core-2.1`). `_manifest.json` references it by path and hash, the
   pattern it already uses for `resolved.yaml` and `sbom.json`, and keeps its own effective
   repositories, images and charts. A build-time artifact rather than a `_` audit record, because the
   pins are applied at build time and a build without a deploy should carry it too. "What did
-  `c0062-prd` run, and which release file put it there" is then one file read (R10), and two runs
+  `contoso-prd` run, and which release file put it there" is then one file read (R10), and two runs
   diff as two files. Before a deploy, `version show NAME --effective` and `promote status` answer
   the same question for what *will* run.
 - **C14 - No lock file.** Considered: a generated, committed `<ring>.lock.yaml` holding the effective
@@ -179,7 +179,7 @@ spec:
   so three things change:
   - **Finding the ring document.** `promote status`, `promote apply` and `validate_promotions()`
     match on the effective workspace set (C8), not on the declared `spec.workspace` alone, so `prd`
-    appears for `datahub` because it includes `datahub-1.4`.
+    appears for `catalog` because it includes `catalog-1.4`.
   - **A ring-wide view.** `WORKSPACE` becomes optional on `promote status`, with a repeatable
     `--ring`, so "what is in `prd`" is one command instead of one per product. Every row gains an
     `owner` column. Without a workspace and without `--ring` it shows every ring.
@@ -187,51 +187,51 @@ spec:
     ```
     $ strata promote status --ring prd
       ring  order  target              version               owner
-      prd   3      remotes/iac-int     v2.1.0                core-2.1
+      prd   3      remotes/iac-repo     v2.1.0                core-2.1
       prd   3      images/staging-api  acr.io/staging:1.2.0  staging-1.2
-      prd   3      images/datahub-api  acr.io/datahub:1.4.1  prd (override of datahub-1.4)
-      prd   3      images/binocs-api   acr.io/binocs:0.9.0   binocs-0.9
+      prd   3      images/catalog-api  acr.io/catalog:1.4.1  prd (override of catalog-1.4)
+      prd   3      images/ledger-api   acr.io/ledger:0.9.0   ledger-0.9
     ```
 
   - **The workspace filter.** With a workspace, a row is shown when its owner is bound to that
-    workspace or is bound to none (`core-2.1`: DataHub runs on it too). Another product's pins in the
+    workspace or is bound to none (`core-2.1`: Catalog runs on it too). Another product's pins in the
     same ring document are left out.
   - **`promote apply` by ring.** On a ring document not bound to one workspace, the workspace
-    argument means nothing: you promote `prd`, not "DataHub's `prd`". `apply` accepts the ring
+    argument means nothing: you promote `prd`, not "Catalog's `prd`". `apply` accepts the ring
     alone there, and promoting one product is the include selector of Phase 6
-    (`promote apply prd --include 'datahub-*'`). The CLI shape is a loose end (Open question 6).
+    (`promote apply prd --include 'catalog-*'`). The CLI shape is a loose end (Open question 6).
 
 ### What R1-R10 look like
 
-**cfg-int, one ring release across four workspaces (R1, R2, R3).**
+**config-repo, one ring release across four workspaces (R1, R2, R3).**
 
 ```yaml
 # versions/core/core-2.1.yaml - the shared part, no workspace, owned once
 spec:
   pins:
-    remotes: { iac-int: v2.1.0 }
+    remotes: { iac-repo: v2.1.0 }
 
-# versions/products/datahub-1.4.yaml - built and tested against core-2.1
+# versions/products/catalog-1.4.yaml - built and tested against core-2.1
 spec:
-  workspace: datahub
+  workspace: catalog
   include: [core-2.1]
   pins:
-    images: { datahub-api: acr.io/datahub:1.4.0 }
+    images: { catalog-api: acr.io/catalog:1.4.0 }
 
 # versions/rings/prd.yaml - what deployments name
 spec:
   promotion: { ring: prd, order: 3 }
-  include: [staging-1.2, datahub-1.4, binocs-0.9, dispatcher-3.0]
+  include: [staging-1.2, catalog-1.4, ledger-0.9, scheduler-3.0]
 ```
 
-`iac-int` is pinned once. If `binocs-0.9` was built against `core-2.0`, the `prd` document fails
-validation with `version_pin_conflict: remotes/iac-int owned by core-2.1 (via datahub-1.4) and
-core-2.0 (via binocs-0.9)`.
+`iac-repo` is pinned once. If `ledger-0.9` was built against `core-2.0`, the `prd` document fails
+validation with `version_pin_conflict: remotes/iac-repo owned by core-2.1 (via catalog-1.4) and
+core-2.0 (via ledger-0.9)`.
 
 **Product promotion (R4).** Release files are named by release and never edited after they are
-included in a ring. Promoting DataHub to `prd` is one line in `rings/prd.yaml`: `datahub-1.3` becomes
-`datahub-1.4`. The same file moves through `dev`, `qas`, `prd`, so a release is configured once.
-(Per-ring mutable product files, `datahub-prd`, also work with the model; they give up the
+included in a ring. Promoting Catalog to `prd` is one line in `rings/prd.yaml`: `catalog-1.3` becomes
+`catalog-1.4`. The same file moves through `dev`, `qas`, `prd`, so a release is configured once.
+(Per-ring mutable product files, `catalog-prd`, also work with the model; they give up the
 "same file in every ring" property.)
 
 **Customer cadence (R5).** Unchanged: per-customer `assets` pins live in the ring document's own
@@ -240,28 +240,28 @@ included in a ring. Promoting DataHub to `prd` is one line in `rings/prd.yaml`: 
 **Customer differs on a platform pin (R6).**
 
 ```yaml
-# versions/customers/c0224-prd.yaml
+# versions/customers/fabrikam-prd.yaml
 spec:
   include: [prd]
   overrides:
     images:
-      datahub-api: { version: acr.io/datahub:1.4.2, reason: "c0224 needs fix 4711 before the ring" }
+      catalog-api: { version: acr.io/catalog:1.4.2, reason: "fabrikam needs fix 4711 before the ring" }
 ```
 
-**What ran (R10).** `build run` for `c0062-prd` writes `versions.json` next to `resolved.yaml` and
+**What ran (R10).** `build run` for `contoso-prd` writes `versions.json` next to `resolved.yaml` and
 `sbom.json` (C13):
 
 ```json
 {
-  "deployment": "c0062-prd",
+  "deployment": "contoso-prd",
   "version": "prd",
   "ring": "prd",
   "pinned_by": "spec.version",
   "pins": [
-    { "target": "remotes/iac-int",    "value": "v2.1.0",               "owner": "core-2.1",  "via": ["datahub-1.4", "binocs-0.9"] },
-    { "target": "images/datahub-api", "value": "acr.io/datahub:1.4.1", "owner": "prd",       "override_of": "datahub-1.4", "reason": "hotfix 4711" },
-    { "target": "images/binocs-api",  "value": "acr.io/binocs:0.9.0",  "owner": "binocs-0.9" },
-    { "target": "assets/c0062-api",   "value": "v1.5.0",               "owner": "prd" }
+    { "target": "remotes/iac-repo",    "value": "v2.1.0",               "owner": "core-2.1",  "via": ["catalog-1.4", "ledger-0.9"] },
+    { "target": "images/catalog-api", "value": "acr.io/catalog:1.4.1", "owner": "prd",       "override_of": "catalog-1.4", "reason": "hotfix 4711" },
+    { "target": "images/ledger-api",  "value": "acr.io/ledger:0.9.0",  "owner": "ledger-0.9" },
+    { "target": "assets/contoso-api",   "value": "v1.5.0",               "owner": "prd" }
   ]
 }
 ```
@@ -271,7 +271,7 @@ file by path and hash.
 
 ### What composition does not solve
 
-- **One remote carrying several products.** If every product root is fetched from `iac-int`, the
+- **One remote carrying several products.** If every product root is fetched from `iac-repo`, the
   product files cannot each pin it (C2), so infrastructure code for all products in a ring moves
   together while app images and artifacts move per product. That is the honest outcome of R3.
   Truly independent infrastructure code per product needs a pinnable target per product (Open
@@ -296,7 +296,7 @@ file by path and hash.
 - [ ] **Phase 5 - Tooling.** `version show NAME --effective` (merged pins, owner per pin), owner
   routing in `version set`/`update` (C11), `version new --include`.
 - [ ] **Phase 6 - Promotion of includes.** `promote apply` copies include entries forward, selectable
-  like pins (`--include 'datahub-*'`), with the same `--dry-run`.
+  like pins (`--include 'catalog-*'`), with the same `--dry-run`.
 - [ ] **Phase 7 - Example.** `config/versions/` split into a core, a product release and a ring
   document, dogfooded end to end.
 
@@ -309,7 +309,7 @@ file by path and hash.
 
 1. **A pinnable target per product root.** For products whose infrastructure code must move on its
    own: a remote per product root (same URL declared several times, against configure-once), or a
-   pin keyed by remote and path with product-scoped tags (`datahub/v1.4`). Needed only if cfg-int
+   pin keyed by remote and path with product-scoped tags (`catalog/v1.4`). Needed only if config-repo
    wants that independence; ask them.
 2. **Immutability of release files.** Should strata warn when a document included by a tagged ring
    changes after it was first included (needs git or a hash), or is that review policy only?
@@ -335,7 +335,7 @@ artifact, optional CLI arguments. Loose ends to settle first:
 
 - **Re-check the call sites in C6** against the RC3 code: every place that looks up a version
   document by name and reads `.spec.pins`.
-- **Open question 1 needs cfg-int's answer** (do product roots need their own infrastructure
+- **Open question 1 needs config-repo's answer** (do product roots need their own infrastructure
   version?). Ask them now so the answer is there when work resumes.
 - **Open question 6** if the CLI is frozen at 2.0.0.
 - **Open question 5** (unused documents) is not version-specific; it moves to its own work doc if
@@ -343,7 +343,7 @@ artifact, optional CLI arguments. Loose ends to settle first:
 
 ## Changelog
 
-- 2026-11-01: First draft, from the cfg-int request for one release document per ring across
+- 2026-11-01: First draft, from the config-repo request for one release document per ring across
   workspaces and the shared-core problem it exposes.
 - 2026-11-01: C2 decided: two owners with equal values are a warning (`version_pin_duplicate`), with
   different values an error (`version_pin_conflict`). Both keep R3; the warning lets today's copied

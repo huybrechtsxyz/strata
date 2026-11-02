@@ -16,13 +16,13 @@ strata itself deploys via Compose/Helm), `SourceModel.chart_version`, or a
 `fetch: strata` remote's `reference`. A variable holding a raw image string
 is invisible to it.
 
-Real evidence (`config-deploy`'s `stacks/ring/environment-dispatcher.
-yaml`/`environment-datahub.yaml`/`environment-sci.yaml`) shows at least 7
+Real evidence (`config-repo`'s `stacks/ring/environment-scheduler.
+yaml`/`environment-catalog.yaml`/`environment-sci.yaml`) shows at least 7
 distinct real image references declared this way, several explicitly
 meant to share one pin value, flowing into external Terraform provisioners
-(`dispatcher_api`/`datahub_api`) strata never models as a `resource`/
+(`scheduler_api`/`catalog_api`) strata never models as a `resource`/
 `topology` — there is no attachment point for a `Module` there. The
-target repo's own `adr-0013-external-app-dispatcher-api.md` independently
+target repo's own `adr-0013-external-app-scheduler-api.md` independently
 anticipates this exact gap, unprompted.
 
 ## Considered Options

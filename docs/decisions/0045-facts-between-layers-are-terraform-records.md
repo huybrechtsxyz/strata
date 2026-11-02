@@ -27,8 +27,8 @@ deployment. Should strata gain a way to pass one deployment's outputs into anoth
 
 ## Decision Outcome
 
-Chosen: **Terraform-written layer records**, as built by the consumer (cfg-int-deployment
-`docs/design/bootstrap-config-layering.md`, iac-int-deployment `components/layer-record`). No strata capability.
+Chosen: **Terraform-written layer records**, as built by the consumer (config-repo
+`docs/design/bootstrap-config-layering.md`, iac-repo `components/layer-record`). No strata capability.
 
 A record is published if and only if the apply that created the facts succeeded, is versioned atomically, carries a
 `schema` and `layer` the reader checks, and works for a root run without strata. A strata mechanism would sit outside

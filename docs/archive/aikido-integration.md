@@ -227,8 +227,8 @@ Still open, outside the design:
     findings for the same commit and compare check by check.
 - **Safe Chain** in consumer pipelines: the 48-hour package-age exclusion for `xyz-strata` and the
   private-feed `customRegistries` (see Gotchas above). Not a strata change; a recipe for haven and
-  cfg-int, and a candidate for the `project-gotchas` skill.
-- **Azure DevOps** (cfg-int) vs GitHub (haven): commit SHA resolution covers both
+  config-repo, and a candidate for the `project-gotchas` skill.
+- **Azure DevOps** (config-repo) vs GitHub (haven): commit SHA resolution covers both
   (`BUILD_SOURCEVERSION`, `GITHUB_SHA`). Registering the repositories in Aikido is the consumer's
   setup, not a strata task (2026-10-27).
 - ~~**Device Protection** may flag or block a sideloaded strata `.vsix`~~ - dropped 2026-10-27: after

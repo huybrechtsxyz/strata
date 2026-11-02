@@ -15,7 +15,7 @@ the home for `kind: version`'s lifecycle and tooling generally; `promotion.md`
 is just the ring/order/wave tagging and the `promote status`/`apply`
 commands built on top of it.
 
-Real, near-term context: `cfg-int-deployment` already has real deployments
+Real, near-term context: `config-repo` already has real deployments
 and is growing toward ~250 customers × 4 rings — it's why "release train"
 below is grounded in how that repo actually operates, not a hypothetical.
 
@@ -27,12 +27,12 @@ below is grounded in how that repo actually operates, not a hypothetical.
 apiVersion: strata.huybrechts.xyz/v2
 kind: version
 meta:
-  name: dspapi-prd
+  name: api-prd
 spec:
-  workspace: dspapi
+  workspace: api
   pins:
     images:
-      dspapi: "1.1.0"
+      api: "1.1.0"
 ```
 
 `spec.workspace` (Phase 2 validated against every real referrer) bounds the
@@ -173,7 +173,7 @@ separately if a real need for it shows up; not part of this group.
 "An app's CI/CD creates a new version — how does that get in here?" splits
 into two genuinely different scenarios, surfaced by asking specifically
 about Dependabot — and this is the part of the design most directly
-validated by `cfg-int-deployment`'s real, already-in-use release-train
+validated by `config-repo`'s real, already-in-use release-train
 workflow, not a hypothetical.
 
 **Real Dependabot can't touch `kind: version` at all** — it only parses
@@ -183,12 +183,12 @@ custom strata schema isn't one of them. Configuring `.github/dependabot.yml`
 to watch `versions/` would do nothing — not misbehave, just be unable to
 see it.
 
-**1. Our own app's release train** — CI builds `dspapi:1.2.0` and already
+**1. Our own app's release train** — CI builds `api:1.2.0` and already
 knows the exact tag with total certainty; it's the publisher, not a
 consumer, so there's no "is there something newer" question to poll for at
 all. The ephemeral `--pin` flag (below) covers the common "just deploy
 what I built" case with zero persisted mutation. Making that the new
-*committed* default is `strata version set dspapi-dev images dspapi 1.2.0`
+*committed* default is `strata version set api-dev images api 1.2.0`
 run by the pipeline, then ordinary git: commit, push a branch, open a PR —
 strata never touches git.
 
@@ -220,14 +220,14 @@ lives and doesn't get duplicated. Clone/branch/commit/push/PR stay outside
 strata entirely, done by whatever git/PR tooling fits the calling platform
 (GitHub Actions, Azure DevOps, a shell script with `gh`) — not strata's
 concern, and deliberately not forced into one shape across every CI
-platform. At `cfg-int-deployment`'s real scale (~250 customers × 4 rings),
+platform. At `config-repo`'s real scale (~250 customers × 4 rings),
 neither scenario needs a human-facing "set a pin's value" command invented
 just for this — both are a bot (or a human, equally) editing a file and
 opening a PR, reviewed like any other change.
 
 ### `--pin` — reviving ADR-0019's own design for the release train
 
-A release train (a new build every two weeks, `cfg-int-deployment`'s real
+A release train (a new build every two weeks, `config-repo`'s real
 cadence) needs *something* to mechanically say "use what was just built" —
 not a judgment call, but it doesn't need a new command either. ADR-0019
 already designed the right shape, and it was never built:
@@ -237,7 +237,7 @@ already designed the right shape, and it was never built:
 > overriding `Deployment.spec.version` for that invocation only... trivially
 > deprecatable."*
 
-`strata deploy run dspapi-dev --pin dspapi-1.2.0`, run by CI every two
+`strata deploy run api-dev --pin api-1.2.0`, run by CI every two
 weeks, with **zero persisted mutation** — an ephemeral, per-invocation
 override, not a write. Making an override *permanent* (committing a new
 default into `Deployment.spec.version`, or editing the referenced
@@ -262,7 +262,7 @@ re-trusting the `--pin` invocation after the fact.
 ### Where `version` is actually selected and applied
 
 ```
-Deployment.spec.version                               (a name, e.g. "dispatcher-prd")
+Deployment.spec.version                               (a name, e.g. "scheduler-prd")
   -> value_controller.resolve_version(context, deployment)    # index lookup by PlatformKind.VERSION
   -> VersionModel
   -> VersionService.from_model(version)
@@ -692,7 +692,7 @@ valuable, lower urgency.
   `--force`), not a restriction on who calls it. Reopened the file-lookup
   command's placement (previously settled on nesting under `sln`) as a
   genuinely undecided question, with three concrete options on the table
-  and none chosen. Folded in `cfg-int-deployment`'s real, already-in-use
+  and none chosen. Folded in `config-repo`'s real, already-in-use
   release-train workflow as the concrete grounding for the CI/CD section,
   replacing what had been purely hypothetical framing.
 - 2026-10-06: Settled the file-lookup command's placement — a dedicated

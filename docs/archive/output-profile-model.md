@@ -20,7 +20,7 @@
   neither `emits` nor the rename alternative addresses it — that's the
   root author's own documented trade-off for opting out (ADR-0035). Kept
   here as the full investigation record (the verified real-Terraform
-  auto-load-vs-env-var behavior, the real `cfg-deployment` evidence,
+  auto-load-vs-env-var behavior, the real `config-repo` evidence,
   ADR-0002's Interface/Injection dead-end) rather than deleted — nothing
   in it is wrong, it was simply written and refined against a shape of
   `terraform_projection.py` that ADR-0035 (landed 2026-10-10,
@@ -44,7 +44,7 @@ v1 solved this with an opt-in allowlist, `OutputProfileModel` (`output:
 {format, emits, files}` on a provisioner) — port its `format: custom` +
 `emits: [...]` combination, the only part with confirmed real usage.
 
-**Real, confirmed need** (not hypothetical): `cfg-deployment`'s
+**Real, confirmed need** (not hypothetical): `config-repo`'s
 `control/workspace.yaml` has a real, load-bearing
 
 ```yaml
@@ -130,11 +130,11 @@ Changelog records a deliberate v2 naming choice: the payload/filename key is
 `"flags"` (`flags.auto.tfvars.json`), never `"features"` — checked and
 applied specifically because `planned_files()` derives the filename
 directly from the dict key. v1's real `OutputProfileModel.emits` vocabulary
-uses `features` (confirmed: `cfg-deployment`'s real example is literally
+uses `features` (confirmed: `config-repo`'s real example is literally
 `emits: [features, variables, properties]`). These two facts collide:
 `EmitCategory` below uses v2's own `flags`, consistent with every other
 category name already being v2's own (not a v1 alias layer) — which means
-`cfg-deployment`'s real YAML would need `features` rewritten to `flags`
+`config-repo`'s real YAML would need `features` rewritten to `flags`
 when it actually migrates to v2. A deliberate breaking rename, not an
 oversight — flagged here so it isn't missed at migration time, and so
 nobody silently adds a `features = "features"` alias later assuming it's
@@ -389,7 +389,7 @@ applied to one file instead of all thirteen.
 
 **Worked example — option 1 end to end, both paths, verified directly.**
 `control_iac` provisioner, `build/<deployment>/control/variables.tfvars.json`
-contains the real resolved `{"customer_code": "c0062", "display_name":
+contains the real resolved `{"customer_code": "contoso", "display_name":
 "Acme Corp"}` (every key, no allowlist needed — `display_name` can be added
 freely, unlike the `emits` case in example 6a):
 
@@ -409,7 +409,7 @@ than hiding it.
 
 **Verified against both real consumers' actual CI — nothing depends on the
 auto-load convention.** Read `haven`'s real `.github/workflows/deploy-infra.yml`
-and `cfg-int-deployment`'s real `.github/workflows/deploy.yml` directly
+and `config-repo`'s real `.github/workflows/deploy.yml` directly
 (not assumed). Both share the identical shape:
 
 ```yaml
@@ -468,14 +468,14 @@ provisioners:
 `custom.auto.tfvars.json` (fewer if a category is genuinely empty for this
 workspace — e.g. no `tenant` reference).
 
-**2. `cfg-deployment`'s real case, translated to v2 naming.** A provisioner
+**2. `config-repo`'s real case, translated to v2 naming.** A provisioner
 pointed at foreign `.tf` code that only declares three variables:
 
 ```yaml
 provisioners:
   - name: control_iac
     tool: terraform
-    source: {repository: iac-deployment, source_path: control}
+    source: {repository: iac-repo, source_path: control}
     output:
       format: custom
       emits: [flags, variables, properties]   # v1 wrote "features", see naming note above
@@ -556,7 +556,7 @@ than per-key is deliberate, not incidental: `workspace`'s six keys
 
 **2d. Wiring point 2 in detail — the `merged_resources` call site (the
 fourth, previously missed even by this doc's own first pass).** `emits:
-[resources]` (example 3 below) gates it; the `cfg-deployment`-translated
+[resources]` (example 3 below) gates it; the `config-repo`-translated
 example (2/2a-c) has no `resources` in its `emits` list, so for that
 provisioner specifically:
 
@@ -628,7 +628,7 @@ spec:
   variables:
     - key: customer_code
       store: constant
-      value: c0062
+      value: contoso
 ```
 
 The workspace's provisioner references it two different ways — `backend.
@@ -672,21 +672,21 @@ through:
 
 - **Build time (`build run`):** `emits` includes `variables`, so
   `variables.auto.tfvars.json` is written containing `{"customer_code":
-  "c0062"}` (wiring point 1). `backend.configuration`'s `${var:customer_code}`
+  "contoso"}` (wiring point 1). `backend.configuration`'s `${var:customer_code}`
   token is **not** touched here at all — build never resolves backend
   tokens (that's Phase 3's whole point, ADR-0022 D4).
 - **Deploy time (`deploy run`):** two independent things happen with the
   *same* resolved value, neither aware of the other:
   1. `resolve_value_tokens_in_mapping(provisioner.backend.configuration,
      tokens)` resolves `key: int-${var:customer_code}-${var:environment}.tfstate`
-     to `key: int-c0062-prd.tfstate`, passed to `terraform init
-     -backend-config=key=int-c0062-prd.tfstate` — this always happens,
+     to `key: int-contoso-prd.tfstate`, passed to `terraform init
+     -backend-config=key=int-contoso-prd.tfstate` — this always happens,
      `emits` plays no part in it (`backend.configuration` is a different
      field, gated by nothing in this design).
   2. `is_emitted(EmitCategory.VARIABLES, provisioner.output)` is checked
      separately (wiring point 2) — `variables` is in `emits`, so
      `TF_VAR_variables` (actually delivered per-key, `FLAT_CATEGORIES`) is
-     also set, redundantly re-stating `customer_code=c0062` the env already
+     also set, redundantly re-stating `customer_code=contoso` the env already
      has written to disk since build time.
 
 The two mechanisms can disagree, and that's fine, not a bug: setting
@@ -710,7 +710,7 @@ spec:
   variables:
     - key: customer_code
       store: constant
-      value: c0062
+      value: contoso
     - key: display_name
       store: constant
       value: Acme Corp
@@ -761,7 +761,7 @@ mechanism, built or planned, that closes this gap for `emits` specifically.
 
 - [ADR-0023](../decisions/0023-build-output-rendering.md) — D2 originally
   decided not to port `OutputProfileModel` ("zero usage"), later corrected
-  once `cfg-deployment` was checked; D3's `OutputModel`/`template` is the
+  once `config-repo` was checked; D3's `OutputModel`/`template` is the
   field this design extends rather than duplicates.
 - [build-time-value-categories.md](build-time-value-categories.md) — built
   the `flags`/`variables`/`properties`/`custom` categories this design's
@@ -803,7 +803,7 @@ mechanism, built or planned, that closes this gap for `emits` specifically.
     ownership concept) — not reasoned through yet.
 2. **`format: strata|script|none` and `files: [...]` are not scoped here —
    deliberately.** Zero confirmed usage across all real workspaces checked
-   (haven, `cfg-deployment` spoke/instance/control, `iac-deployment`); only
+   (haven, `config-repo` spoke/instance/control, `iac-repo`); only
    `format: custom` + `emits` has real evidence. Build only that, same
    "evidence over assumption" call D2 itself already made once — narrowed
    this time, not reversed. Revisit if a real need for a script-generated or
@@ -867,7 +867,7 @@ mechanism, built or planned, that closes this gap for `emits` specifically.
       into `InfraIntegration.prepare()`'s `default_output()` branch (wiring
       point 1). Tests: all 13 categories present without `emits` (unchanged
       default), a 3-category `emits` list suppressing the other 10, and
-      `cfg-deployment`'s real example *translated* to v2's own naming
+      `config-repo`'s real example *translated* to v2's own naming
       (`emits: [flags, variables, properties]` — not `features`, see the
       confirmed naming-mismatch note above).
 - [ ] **Decide between `emits` and env-var-only delivery (see "Alternative"
@@ -876,7 +876,7 @@ mechanism, built or planned, that closes this gap for `emits` specifically.
       zero warnings with no schema field at all, while `emits` reaches
       partial warnings permanently. The one prerequisite check (whether
       either real consumer's CI depends on auto-loading) is now **done** —
-      verified against both `haven`'s and `cfg-int-deployment`'s real
+      verified against both `haven`'s and `config-repo`'s real
       workflows directly: neither depends on it, `upload-artifact` operates
       on the whole `build/` directory, and `deploy run` already delivers via
       `TF_VAR_*` regardless. Nothing left blocking this decision.
@@ -965,7 +965,7 @@ mechanism, built or planned, that closes this gap for `emits` specifically.
   verification to option 1's description.
 - 2026-10-05: Closed the remaining "Unverified" item blocking the
   `emits`-vs-alternative decision — read `haven`'s real
-  `.github/workflows/deploy-infra.yml` and `cfg-int-deployment`'s real
+  `.github/workflows/deploy-infra.yml` and `config-repo`'s real
   `.github/workflows/deploy.yml` directly. Both pipelines: `strata build
   run` → `upload-artifact`/`download-artifact` on the whole `build/`
   directory (no filename pattern) → `strata deploy run` (already injects

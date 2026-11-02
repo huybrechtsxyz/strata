@@ -150,7 +150,7 @@ class EnvironmentService(BaseService[EnvironmentModel]):
 
     def validate_allowed_stores(self, security: ConfigurationSecurityModel) -> Diagnostics:
         """Check every variable/secret/feature's `store` against the platform's
-        allow-lists (`docs/design/gap_fit_v1.md` gap #7, real usage: config-deploy's
+        allow-lists (`docs/design/gap_fit_v1.md` gap #7, real usage: config-repo's
         `config/stores.yaml`).
 
         Each of `security`'s three fields is independently optional — `None`

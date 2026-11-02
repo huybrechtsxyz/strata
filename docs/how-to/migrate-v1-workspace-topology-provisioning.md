@@ -28,7 +28,7 @@ grouping itself reverted to inline), [docs/work/gap_fit_v1.md](../work/gap_fit_v
 (where this migration effort is tracked), and the real worked example this
 guide is built from:
 [`.v2-cfg/workspaces/spoke.yaml`](../../.v2-cfg/workspaces/spoke.yaml)
-— a real, hand-migrated `config-deploy` stack, chosen for that ADR's
+— a real, hand-migrated `config-repo` stack, chosen for that ADR's
 own coverage-check pass specifically because it exercises this exact gap.
 (Note: `.v2-cfg`'s own fixture still uses the pre-ADR-0028 standalone-document
 shape as of this update — it was not migrated to inline when Topology

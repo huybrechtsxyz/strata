@@ -13,9 +13,9 @@
   applies here), [solution-loading-and-phase2-validation.md](../work/solution-loading-and-phase2-validation.md)
   (the Phase 2 check registry this adds one more entry to)
 
-## Problem — real, concrete evidence from `config-deploy`
+## Problem — real, concrete evidence from `config-repo`
 
-Read directly (`e:\sources\config-deploy\config\paths.yaml`, 2026-09-29):
+Read directly (`e:\sources\config-repo\config\paths.yaml`, 2026-09-29):
 v1 declares one "path convention" per real directory family —
 `tenant-path`, `provider-path`, `control-path`, `hub-path` — each a
 `pattern` template (`"deploy/hubs/{hub}/{spoke}/{customer}/{ring}/{environment}"`)
@@ -193,7 +193,7 @@ there is no "closed universe" concept here the way there is for
 
 ### Worked examples — one per `resolves` value
 
-All three converted directly from the real `config-deploy/config/
+All three converted directly from the real `config-repo/config/
 paths.yaml` entries (minus the dropped `validate:` sub-block).
 
 **`resolves: tenant`** — one directory capture, cross-checked against the

@@ -11,7 +11,7 @@
 ## Overview
 
 **Premise.** Strata deploys a shared platform (e.g. Azure API Management) from an infra repo
-(`iac-int-deployment`: Terraform, Ansible, pipelines). A *separate* concern — each customer's own
+(`iac-repo`: Terraform, Ansible, pipelines). A *separate* concern — each customer's own
 API definitions (OpenAPI contracts, APIM policies, schemas) — lives in **one repository per
 customer**, and has to stay that way (customer separation is a hard requirement, not a
 preference). At realistic scale that is **~300 customer repositories**, each consumed by exactly
@@ -111,7 +111,7 @@ So R2 is not only a remotes question: it is equally a **version-composition** qu
 **Caveat (found in the Option 3b deep dive):** V1 and V3 only bite if R2 is read as "one
 *version document* per customer". If each customer's source has its **own name** (Options 1,
 3b), the pin *keys* are already per customer — so one shared version document per ring can hold
-all 300 customer pins side by side (`pins.<category>.c0062-api: v1.4.0`, `...c0063-api: v2.0.1`).
+all 300 customer pins side by side (`pins.<category>.contoso-api: v1.4.0`, `...acme-api: v2.0.1`).
 Each customer still has its own version; no platform-pin duplication (V1), no promotion-slot
 collision (V3). Whether that reading of R2 is acceptable is Q4.
 
@@ -120,7 +120,7 @@ collision (V3). Whether that reading of R2 is acceptable is Q4.
 ### Option 1 — New `kind: remote` document
 
 Same fields as `SolutionRemoteModel`, as a standalone discovered document — one file per customer
-repo (e.g. `customers/c0062/remote.yaml`), added like any other kind.
+repo (e.g. `customers/contoso/remote.yaml`), added like any other kind.
 
 - **+** Fits the existing "standalone kind, referenced by name" pattern exactly (asset, artifact,
   tenant). Onboarding = add a file, never touch `strata.yaml`.
@@ -179,13 +179,13 @@ and credentials key on — no manifest entry, no templating (Option 4), no tenan
 apiVersion: strata.huybrechts.xyz/v2
 kind: asset
 meta:
-  name: c0062-api
+  name: contoso-api
 spec:
-  description: "API definitions for customer c0062"
+  description: "API definitions for customer contoso"
   location:                     # mutually exclusive with spec.remote
     type: git
-    url: https://git.example.com/customers/c0062-api.git
-    reference: v1.4.0           # overridable by pins.assets[c0062-api]
+    url: https://git.example.com/customers/contoso-api.git
+    reference: v1.4.0           # overridable by pins.assets[contoso-api]
     fetch: strata               # or external
     integration: customer-git   # optional, 'sources' capability
   source_path: "openapi/**/*.json"
@@ -231,7 +231,7 @@ field at all. With 300 per-customer asset documents, something must say which on
 step's slot for *this* deployment. Candidates:
 
 - **S1 — Deployment binds a slot.** Workspace step declares a slot name (`assets: [api]`); the
-  deployment maps it: `spec.assets: {api: c0062-api}`. Deployments are already per customer
+  deployment maps it: `spec.assets: {api: contoso-api}`. Deployments are already per customer
   (`spec.tenant`, `spec.properties`), so this is where per-customer facts live today. The
   binding is on the deployment, not the remote/asset — the asset stays customer-agnostic, so
   Option 5's "no customer link" decision is not reopened. Needs: new deployment field, Phase 2
@@ -271,7 +271,7 @@ step's slot for *this* deployment. Candidates:
     overrides:
       assets:
         - asset: api
-          use: c0062-api
+          use: contoso-api
   ```
 
   - **+** Real v1 precedent for exactly this "same workspace, different binding per deployment"
@@ -296,7 +296,7 @@ S1 and S4 were the candidates consistent with the decisions so far (S2/S3 reject
 
 - Default: the asset's own `location.reference` *is* that customer's version — bump = edit that
   customer's asset file. Per-customer by construction (R2), no version document needed.
-- Per ring (dev/qas/prd at different refs): ring version documents pin `pins.assets[c0062-api]`.
+- Per ring (dev/qas/prd at different refs): ring version documents pin `pins.assets[contoso-api]`.
   One shared `prd` version document holds every customer's key — no V1 duplication, no V3 slot
   collision (see caveat under V1–V3).
 
@@ -349,7 +349,7 @@ remotes:
 **Decision (2026-10-19):** no customer link on remotes. A remote is not owned by, or resolved
 through, a tenant.
 
-`kind: tenant` is already one document per customer (`customers/c0062.yaml`). Let a tenant
+`kind: tenant` is already one document per customer (`customers/contoso.yaml`). Let a tenant
 declare its own source(s) (`tenant.spec.remotes`), and let a consumer refer to "the deploying
 tenant's remote `<name>`" rather than a global name.
 
@@ -523,8 +523,8 @@ sequenceDiagram
   The GitOps and audit runtime lookups themselves are unchanged.
 - [x] **C5 — Docs + dogfood.** `config/integrations/git-customers.yaml` (token read from the
   `CUSTOMER_GIT_TOKEN` secret, an `environment`-store secret in `environments/prd.yaml`) is used by
-  `assets/c0062-api.yaml`; `strata validate` passes (32 documents) and `strata graph` shows the
-  edge. `build run --dry-run` of `prd-c0062-deployment` resolves nothing. User docs:
+  `assets/contoso-api.yaml`; `strata validate` passes (32 documents) and `strata graph` shows the
+  edge. `build run --dry-run` of `prd-contoso-deployment` resolves nothing. User docs:
   [integrations/git.md](../integrations/git.md) (new), `asset.md`, `solution.md`, `integration.md`,
   `remotes.md`, and the `build run` help text. The finished design is folded into
   `asset-management.md` ("Credentials", the validation table, the out-of-scope list) and the
@@ -557,7 +557,7 @@ belongs to the per-customer story.
 ### The gap
 
 Pins keyed by customer in one shared version document per ring need no customer dimension in the
-model: the customer is already the pin key (`pins.assets.c0062-api`). With 250 customers in three
+model: the customer is already the pin key (`pins.assets.contoso-api`). With 250 customers in three
 ring documents, `promote apply qas` copied all 251 common keys (250 customers and a platform pin)
 and rewrote every one with `reviewed: today`, 240 of them unchanged, because `--wave` is the only
 selector. `promote status` printed 753 rows. A single customer can only be moved by hand-editing
@@ -566,7 +566,7 @@ its pin in the target ring document.
 ### Decisions
 
 - **One selector.** `--pin PATTERN`, repeatable, a case-sensitive glob on `category/target`, the
-  spelling `promote status` prints (`assets/c0062-api`, `assets/c10*`, `remotes/*`). A category
+  spelling `promote status` prints (`assets/contoso-api`, `assets/c10*`, `remotes/*`). A category
   typo is an error, not a silent no-match. Without `--pin` nothing changes.
 - **A selection only narrows.** It picks among keys both ring documents already declare, so
   promotion still never creates a key. A pattern matching no source pin, or only pins absent from the
@@ -578,16 +578,16 @@ its pin in the target ring document.
 - **`--changed-only`** (opt-in) skips keys whose target value already matches, so untouched pins are
   not re-stamped.
 - **`promote status --pin / --ring`** uses the same matcher and filters after the `behind` marker is
-  computed, so `promote status main --pin assets/c0062-api` shows one customer across rings.
+  computed, so `promote status main --pin assets/contoso-api` shows one customer across rings.
 - **Waves work unchanged** inside `--wave`; a canary customer is
-  `promote apply prd --wave canary --pin assets/c0224-api`.
+  `promote apply prd --wave canary --pin assets/fabrikam-api`.
 - **Rejected:** a wave per customer (one version document per customer per ring brings back V1 and
   V3), `--exclude`, regex patterns.
 
 ```text
-$ strata promote apply main qas --pin 'assets/c0062-api' --dry-run
+$ strata promote apply main qas --pin 'assets/contoso-api' --dry-run
   'qas' <- 'ring-dev' in versions/ring-qas.yaml (dry run, nothing written)
-  ~  assets.c0062-api  v1.4.0 -> v1.5.0
+  ~  assets.contoso-api  v1.4.0 -> v1.5.0
 ```
 
 ### Plan
@@ -649,7 +649,7 @@ rule).
   to the structured form with `reviewed: today`, including the 240 whose value did not change (a
   250-entry diff for 10 real changes; `promotion.md` chose "every common key" deliberately).
   `promote status` printed 753 rows for 250 customers x 3 rings. The mechanisms for an independent
-  customer, cheapest first: key-scoped promotion (`promote apply ... --pin assets/c0062-api`,
+  customer, cheapest first: key-scoped promotion (`promote apply ... --pin assets/contoso-api`,
   repeatable) with no model change; a `wave` per customer (one version document per customer per ring,
   which brings back V1/V3, so not recommended); editing that customer's pin in the target ring
   document directly (works now). **Decided 2026-10-20: customers do need to promote on their own
@@ -666,7 +666,7 @@ rule).
 - ~~**Q10 — Revive v2 environment `overrides`?**~~ Answered 2026-10-19: no — bindings go on the
   deployment, see [workspace-overrides.md](workspace-overrides.md).
 - **Q9 — Option 1 has the same selection gap.** A per-customer `kind: remote` is still named
-  statically by an asset (`spec.remote: c0062-api`) — so Option 1 also needs either 300 asset
+  statically by an asset (`spec.remote: contoso-api`) — so Option 1 also needs either 300 asset
   documents or a binding like S1. The selection problem is independent of where the location is
   declared.
 

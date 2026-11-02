@@ -12,7 +12,7 @@
 
 ## Context and Problem Statement
 
-A real CI pipeline (`cfg-int-deployment`, xyz-strata 2.0.0a6) mapped its
+A real CI pipeline (`config-repo`, xyz-strata 2.0.0a6) mapped its
 `mode: plan` stage to `strata deploy run --force --dry-run --verbose`,
 expecting a real Terraform/Helm/Compose preview. It got none: `--dry-run`
 short-circuited the whole step loop before `init`/`validate`/`plan` were

@@ -94,7 +94,7 @@ Nothing is built. Proposed decisions:
 
 - The JSON envelope is already the stable contract (`{ok, command, version, context, summary,
   diagnostics, data}`); the extension relies on it.
-- `--to`/`--from`/`--depth` keep a query small, so a model asks "what uses artifact datahub" and gets a
+- `--to`/`--from`/`--depth` keep a query small, so a model asks "what uses artifact catalog" and gets a
   few edges instead of the whole graph.
 - Absolute `source_path` values tie an edge to a file. Consider also emitting the path relative to the
   solution root, which is stable across machines and what an AI should quote.

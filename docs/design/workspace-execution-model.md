@@ -179,7 +179,7 @@ step's own directly-declared fields.
   where a dependency is pure library code with no independent
   `apply`/state (e.g. `primitives`/`components` composed into a `stack`
   via relative Terraform `source` paths) — confirmed against a real
-  workspace (`config-deploy`'s `stacks/spoke/workspace.yaml`). No new
+  workspace (`config-repo`'s `stacks/spoke/workspace.yaml`). No new
   execution step is needed for the dependency itself, only for whatever
   actually gets `apply`'d. The alternative shape — a dependency with its
   own real `apply`/state whose *outputs* (not just its source) are
@@ -225,4 +225,4 @@ step's own directly-declared fields.
   shape. Not yet observed in this repo's own `config/` (its one
   workspace has a single execution step with no sharing), but flag it
   explicitly before migrating any real multi-step/multi-topology
-  consumer workspace (`haven`/`config-deploy`).
+  consumer workspace (`haven`/`config-repo`).

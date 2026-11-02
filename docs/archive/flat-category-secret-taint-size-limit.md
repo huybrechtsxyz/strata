@@ -26,7 +26,7 @@ tainted = {path.split(".", 1)[0] for path in secrets}
 ```
 
 So if even one leaf deep inside a large nested value (e.g.
-`tenant_gateway.c0062.some_secret_field`) is secret-shaped, the **entire**
+`tenant_gateway.contoso.some_secret_field`) is secret-shaped, the **entire**
 top-level key — however large, however many entries — is omitted from the
 `*.auto.tfvars.json` file and pushed whole through its `TF_VAR_<key>` env
 var instead, JSON-encoded as one blob.
@@ -58,7 +58,7 @@ and ADR-0022/ADR-0031 from scratch:
 - **How `TF_VAR_strata_tenant` is used downstream**: a real consuming
   Terraform module would declare `variable "strata_tenant" {}` and read
   `var.strata_tenant.configuration`. No such declaration exists in this
-  repo — that lives in a real consumer repo (haven/cfg-int-deployment),
+  repo — that lives in a real consumer repo (haven/config-repo),
   outside strata-v2 itself.
 - **The file is always the primary channel; the env var is the
   secret-safety fallback**, not a competing mechanism — both are
@@ -511,7 +511,7 @@ spec:
 spec:
   workspace: my-workspace
   environments: [base-env, prd-env]  # merge chain -> properties/custom
-  tenant: c0062                      # -> tenant.auto.tfvars.json, and
+  tenant: contoso                      # -> tenant.auto.tfvars.json, and
                                       #    folds into properties/custom too
   configurations: [...]
 ```
@@ -627,7 +627,7 @@ v1-parity framing that motivated it has been explicitly questioned.
 
 The `.tf`-side convention now has a concrete shape to validate (main
 variable + per-category `_secrets` lookup map, merged via `merge()`) —
-next is checking it against a real consumer root (e.g. `cfg-int-deployment`'s
+next is checking it against a real consumer root (e.g. `config-repo`'s
 `customer/terraform`/`spoke/terraform`) to confirm `merge()`-ing in an
 empty map really is a no-op for every real usage of `var.platform_providers`
 (and the other broadcast categories) there, before committing to this
@@ -681,7 +681,7 @@ sense if per-category is actually the chosen shape.
   (promoted out of a since-removed "Parked" tangent, moved up next to
   "Overview" since it directly explains this doc's own mechanism).
 - 2026-10-08: Reviewed the one real v2 consumer repo
-  (`cfg-int-deployment`) directly — no `${secret:}` tokens found anywhere
+  (`config-repo`) directly — no `${secret:}` tokens found anywhere
   inside any `properties`/`custom`/`configuration` block across every
   file checked; this consumer's own authoring convention already keeps
   secrets out of these fields entirely (dedicated `variables:`/`store:`
@@ -744,7 +744,7 @@ top-level variable:
 {
   "strata": {
     "workspace":  { "name": "my-workspace", "environment": "prd", "...": "..." },
-    "tenant":     { "code": "c0062", "name": "GSK", "...": "..." },
+    "tenant":     { "code": "contoso", "name": "GSK", "...": "..." },
     "providers":  { "azure": {"type": "azurerm", "...": "..."},
                     "kamatera": {"type": "kamatera", "...": "..."} },
     "resources":  { "compute":    { "vm1": {"...": "..."} },
@@ -757,7 +757,7 @@ top-level variable:
     "properties": { "deploy_tier": "standard" },
     "custom":     { "cost_center": "1234" },
     "flags":      { "enable_x": true },
-    "variables":  { "customer_code": "c0062" }
+    "variables":  { "customer_code": "contoso" }
   }
 }
 ```

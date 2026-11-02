@@ -42,7 +42,7 @@ v1 evidence (read from v1 source `commands/cli_tools.py`, `controllers/tools_con
   `--missing` exits 3 when a required one is unavailable.
 - `tools check NAME`: one type by name - available, version, setup info. No credentials, no network.
 - `tools install NAME`: setup guidance, optionally AI-generated.
-- Neither real consumer's CI calls any of them (haven, cfg-int): debugging aids, not critical path.
+- Neither real consumer's CI calls any of them (haven, config-repo): debugging aids, not critical path.
 
 ## Proposal
 

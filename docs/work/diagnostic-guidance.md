@@ -76,7 +76,7 @@ ndjson, `ndjson-output.md`'s own scope): it's about the *content* of a
    into the real convention)?
 5. **Real-usage evidence — not yet gathered.** Is this a felt need by a
    real consumer (a support request, a confused CI run, something in
-   `haven`/`cfg-int-deployment`), or an internal nice-to-have noticed in
+   `haven`/`config-repo`), or an internal nice-to-have noticed in
    passing while reviewing an unrelated doc? Same "evidence over
    assumption" discipline this repo applies everywhere else — worth
    checking before investing in a design, not assumed just because the

@@ -31,7 +31,7 @@ own Phase 7 placeholder, which this document replaces:
 
 `strata build run` is proven, critical-path v1 functionality (per
 `/memories/repo/v1-consumer-usage.md`'s Tier 1 census: renders **both**
-Terraform and Helm artifacts, depended on by every real haven/config-deploy
+Terraform and Helm artifacts, depended on by every real haven/config-repo
 workflow).
 
 **v1's real pipeline is much larger than this document builds.**
@@ -196,7 +196,7 @@ machinery, with one real gap found while checking cross-repo evidence.**
 uniformly (ADR-0018). "Materialise `source` into `build_path/<step>/`" is
 the same operation regardless of what's inside (Terraform `.tf`, an Ansible
 playbook, Bicep templates, a Helm chart directory). **The gap**: a real
-workspace (`config-deploy`'s `stacks/spoke/workspace.yaml`) declares a
+workspace (`config-repo`'s `stacks/spoke/workspace.yaml`) declares a
 second, "copy-only" provisioner (`core_modules`) that is never planned or
 deployed - it exists solely to stage a shared Terraform module library at a
 fixed relative path, because the real provisioner's `.tf` code composes it

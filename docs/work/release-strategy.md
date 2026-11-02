@@ -121,7 +121,7 @@ PyPI/GHCR/Docker Hub, a shared-system action, not a local/reversible one).
    (becoming the real, released line — superseding v1) the moment v2 can
    stand in for v1 against both real consumers tracked in
    [`v1-consumer-usage`](../../.github/copilot-instructions.md) repo memory —
-   **haven** and **config-deploy** — i.e. `strata build run` +
+   **haven** and **config-repo** — i.e. `strata build run` +
    `strata deploy run` work end-to-end for both repos' real deployment
    files, not just `validate`/`values get`. That milestone is what
    `v2.0.0-beta1` marks; alpha tags (`v2.0.0-alphaN`) are cut before that,
@@ -163,14 +163,14 @@ out for early/internal testing — "installable and internally coherent," not
 
 **Entry bar (all required, per Decision 7):** `strata build run` +
 `strata deploy run` work end-to-end against **both** haven's and
-config-deploy's real deployment files — not just `config/`'s shipped
+config-repo's real deployment files — not just `config/`'s shipped
 example or synthetic tests. Concretely, before the first beta:
 
 1. `.v2-haven/` (already migrated per repo memory, 2026-09-28) needs a real
    `build run` + `deploy run --dry-run` pass — today it has only been
    proven against `validate`.
-2. An equivalent `.v2-cfgint/` fixture needs to be created the same way
-   (hand-migrated from config-deploy's real config) — does not exist
+2. An equivalent `.v2-config-repo/` fixture needs to be created the same way
+   (hand-migrated from config-repo's real config) — does not exist
    yet.
 3. Build output rendering's remaining phases — token substitution, the
    Jinja2 escape hatch, Compose/Helm rendering, `modules`/`tenant`
@@ -191,10 +191,10 @@ be created; sequence that rename/cutover deliberately, not as an afterthought.
 
 ### Stage 3 — `v2.0.0-rcN`
 
-**Entry bar:** beta is feature-complete for the haven/config-deploy
+**Entry bar:** beta is feature-complete for the haven/config-repo
 bar above; only bugfixes land from here, no new capability. Requires an
 actual trial run against one real consumer's real CI (not just the fixture
-copies) — e.g. a side-by-side/opt-in run of haven's or config-deploy's
+copies) — e.g. a side-by-side/opt-in run of haven's or config-repo's
 real pipeline against a `v2.0.0-beta*` build, not merely the local fixture.
 **Exit bar:** no P0/P1 bug found during the trial period (length TBD —
 revisit once beta is actually reached; premature to fix a number now).
@@ -235,13 +235,13 @@ Execution order (each its own small, checked phase per repo convention —
    `v2` may be simpler than building tooling for a not-yet-repeated case —
    revisit once a second/third alpha is needed.
 6. **Resolved (see Decision 7): merge `v2` → `main` at beta**, defined as
-   "can deploy both haven and config-deploy." Still genuinely open:
+   "can deploy both haven and config-repo." Still genuinely open:
    what happens to v1's moving major tag (`v0`) and its existing stable
    `xyz-strata` release line at that point — does `main` post-merge start
    cutting `v2.x` stable releases immediately, or does a `v1` maintenance
    branch get cut off first so v1 patches remain possible after the merge?
    Revisit once beta is actually in sight (`build run`/`deploy run` both
-   proven against haven and config-deploy) — per repo memory, `build
+   proven against haven and config-repo) — per repo memory, `build
    run` is the current next step, `deploy run` after that.
 
 ## Changelog
@@ -285,7 +285,7 @@ Execution order (each its own small, checked phase per repo convention —
   removed after. The commit and the `v2.0.0-rc2` tag are left to the maintainer.
 - 2026-10-25: **Built RC1** - bumped `VERSION.txt` from `2.0.0-Alpha27` to `2.0.0-RC1` (normalizes to `2.0.0rc1`, a
   PEP 440 pre-release; confirmed via `packaging.version.Version` first; no trailing newline, as before). **A maintainer
-  decision that skips this doc's own gates:** no beta was cut, Stage 2's entry bar is not met (`.v2-haven` and cfg-int
+  decision that skips this doc's own gates:** no beta was cut, Stage 2's entry bar is not met (`.v2-haven` and config-repo
   `origin/v2` build, but `deploy run` against both is unproven), and `v2` is not merged into `main`, so this RC is cut
   from `v2-beta`, not `main`. Stage 4's entry bar (clean RC trial, gap_fit_v1 resolved, v1-maintenance decision) still
   stands before a plain `v2.0.0`. Asked first, and the pre-release suffix was chosen deliberately: a `v2.0.0-rc1` tag
@@ -489,7 +489,7 @@ Execution order (each its own small, checked phase per repo convention —
   No files changed yet; this doc is the plan only.
 - 2026-09-30: Added Decision 7 — `v2` merges into `main` at beta, defined as
   the moment `strata build run` + `strata deploy run` can stand in for v1
-  against both real tracked consumers (haven, config-deploy), not on a
+  against both real tracked consumers (haven, config-repo), not on a
   fixed calendar/feature-count basis. Left the v1-maintenance-branch
   question open (item 6) since it only matters once beta is actually near.
 - 2026-09-30: Added `## Release Plan` — the 4-stage version-line roadmap
@@ -574,7 +574,7 @@ Execution order (each its own small, checked phase per repo convention —
   `v2.0.0-beta1`** — user asked about it directly; checked this doc's own
   Decision 7 entry bar first rather than assuming it was met. It is not:
   `.v2-haven/` is only proven against `validate` (not `build run`/
-  `deploy run`), an equivalent `.v2-cfgint/` fixture for config-deploy
+  `deploy run`), an equivalent `.v2-config-repo/` fixture for config-repo
   does not exist yet, build output rendering's remaining phases haven't
   landed, and `deploy run`'s `store: artifact`-at-deploy-time gap is still
   open — plus a beta tag requires actually merging `v2` into `main`

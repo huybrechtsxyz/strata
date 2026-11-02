@@ -290,7 +290,7 @@ dry_run or smoke_test`.
   doc; unrelated concerns (locking, SIEM, whole-run timeout) remain
   deliberately deferred there.
 - [cli-output-mode-interactions.md](../archive/cli-output-mode-interactions.md) —
-  the real cfgint bug report and fix (`--follow` silently inert under
+  the real config-repo bug report and fix (`--follow` silently inert under
   `--output json`), plus the general `--output`/`--quiet`/`--verbose`
   interaction survey that motivated it.
 - [ndjson-output.md](../archive/ndjson-output.md) — the full NDJSON design
@@ -340,7 +340,7 @@ dry_run or smoke_test`.
   discarded (pre-existing, predates this feature) — now checked for
   `.is_successful`, each a hard failure on error, matching `plan`/
   `deploy`'s existing pattern.
-- 2026-10-07: A real external bug report (cfgint team, `xyz-strata`
+- 2026-10-07: A real external bug report (config-repo team, `xyz-strata`
   2.0.0a8): `--follow` really was "silently inert with `--output json`"
   exactly as documented above — but silent, with zero warning, caused an
   11-minute real `terraform apply` to look completely hung with no

@@ -34,9 +34,9 @@ design effort; `tenant_zone` — the one real, active-by-declaration
 into `audit-trail.md`, which is about deployment evidence/traceability,
 a genuinely different concern from data-residency enforcement.
 
-## Problem — real, concrete evidence from `config-deploy`
+## Problem — real, concrete evidence from `config-repo`
 
-Read directly (`e:\sources\config-deploy\config\policies.yaml`,
+Read directly (`e:\sources\config-repo\config\policies.yaml`,
 2026-09-30):
 
 ```yaml
@@ -59,7 +59,7 @@ The file's own comment states the mechanism precisely:
 > tenants exist.**
 
 **Real-usage check, same discipline as every other gap in this repo**:
-grepped every real YAML document in `config-deploy` for a populated
+grepped every real YAML document in `config-repo` for a populated
 `zones:`/`geographies:` field on any tenant document — **none exists**.
 Only `config/zones.yaml` (the zone→region mapping table) and a merged
 `.strata/configuration.yaml` cache declare `zones` at all. This confirms
@@ -96,7 +96,7 @@ needs and returns "skipped" gracefully when absent (`on_missing_data`,
 ADR-0082).
 
 **Confirms gap #7's own real-usage finding independently**: only 2 of
-these 18 documented types are actually enabled in `config-deploy` —
+these 18 documented types are actually enabled in `config-repo` —
 `tenant_zone` (this doc) and `path_convention` (already resolved in v2 via
 `PathConventionModel.enforcement`, no generic engine ported). The other 16
 are real code, never configured by the one real consumer checked so far.
@@ -121,7 +121,7 @@ matters for this specific type). Sequence, each a graceful early return
 4. **Tenant has no zone constraints** —
    `tenant_value["zones"]`/`tenant_value` itself (dict or list shape both
    handled) is empty → skip (this is the exact branch the real
-   `config-deploy` config hits today, per the finding above).
+   `config-repo` config hits today, per the finding above).
 5. **Build the allowed-regions set** — union of `zone_regions[z]` for
    every zone name `z` the tenant is permitted into.
 6. **Walk `plan_data["resource_changes"]`** — for each entry whose
@@ -242,7 +242,7 @@ stops a resource block from specifying its own `location` that disagrees)
 — that's exactly the gap the real plan-JSON check exists to close, and
 why v1 built it at `plan` time against actual resource attributes rather
 than only at config time. The static check catches the overwhelmingly
-common case (and the exact real `config-deploy` example: providers
+common case (and the exact real `config-repo` example: providers
 declare one `region` each) for a fraction of the implementation cost; the
 plan-time check catches the rest. **Not mutually exclusive — the static
 check is worth having regardless of whether the full plan-time version is
@@ -350,7 +350,7 @@ tier above is the cheaper alternative/complement, not a prerequisite:
    yet?** The "ahead of a concrete need" concern below applies much less
    to the static tier — it's cheap (one new `semantic_checks.py`
    function, no new machinery), catches the real common case
-   (`config-deploy`'s providers each declare one `region`), and
+   (`config-repo`'s providers each declare one `region`), and
    costs little even if no tenant has `geographies` populated yet (same
    "no constraints declared -> nothing to check" graceful skip the
    existing `validate_geographies_against_provider_configs()` already
@@ -415,7 +415,7 @@ this subsystem in the files read so far.
   Terraform plan-JSON access, which exists as an unused primitive
   — `TerraformIntegration.show()` — but is wired nowhere in v2 today).
   Found and recorded a real, load-bearing discrepancy the design must
-  weigh: `config-deploy`'s real `zone-isolation` policy is declared
+  weigh: `config-repo`'s real `zone-isolation` policy is declared
   with `enforcement: deny` but is currently a structural no-op (no real
   tenant has zone constraints populated yet), confirmed by grepping every
   real YAML document in that repo. Five open questions recorded,

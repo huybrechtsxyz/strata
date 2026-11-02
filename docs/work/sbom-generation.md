@@ -411,7 +411,7 @@ have anywhere else.
    wiring looks correct on inspection; the real defect is most likely
    either already fixed upstream (candidate commits `9705ecde`/`f8f5f842`,
    not yet read in detail) or environmental (this repo's own memory
-   already flags haven vs. config-deploy using different build-output
+   already flags haven vs. config-repo using different build-output
    paths, `build/` vs `.strata/build/`, which could mean a CI
    `upload-artifact` step simply isn't pointed at wherever `sbom.json`
    actually lands). Not required to block this design (v2's own output

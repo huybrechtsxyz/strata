@@ -162,7 +162,7 @@ yet... relies entirely on whatever git already has configured"; the same is
 true for push by construction. Both are "ambient only" — whatever SSH
 agent/credential helper/`~/.gitconfig` the process already has — which has
 quietly been sufficient so far because every real fetch remote checked
-(haven, config-deploy) is either public or already reachable via the
+(haven, config-repo) is either public or already reachable via the
 operator's/CI runner's own pre-configured git auth. **Push is different in
 kind**: a write to a remote repo essentially never works anonymously, so a
 real GitOps push is the first case that forces the question to actually be

@@ -46,7 +46,7 @@ never re-derived independently.
 - **Native Python evaluator, not OPA/a generic engine** — matches every
   other bucket-C policy shipped so far ([policy-engine-architecture.md](../work/policy-engine-architecture.md)'s
   own Open Question 1: bespoke, indefinitely, no generic `PolicyModel`/
-  dispatcher planned).
+  scheduler planned).
 - **A dedicated `checkov_model.py` module**, not folded into
   `sbom_model.py` the way CVE's models were — Checkov never touches an
   SBOM, it scans rendered IaC directly, so the SBOM-specific grouping
@@ -169,7 +169,7 @@ never re-derived independently.
 ## Resolved Open Questions
 
 - **Real-usage evidence**: checked directly against both real consumer
-  repos. `haven` has no policy infrastructure at all; `cfg-int-deployment`
+  repos. `haven` has no policy infrastructure at all; `config-repo`
   has `checkov` present only as a commented-out example in
   `config/policies.yaml` (identical pattern to every other inactive
   example policy there) and is never invoked in any real Azure Pipelines

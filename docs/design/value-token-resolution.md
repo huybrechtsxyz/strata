@@ -132,8 +132,8 @@ secret."
 
 ### Real-world evidence this is genuinely needed, not just theoretical (2026-09-25)
 
-Checked haven and cfg-deployment directly rather than assuming. haven
-has no `kind: dns`/`kind: network` documents at all. cfg-deployment's
+Checked haven and config-repo directly rather than assuming. haven
+has no `kind: dns`/`kind: network` documents at all. config-repo's
 only real ones (`stacks/spoke/dns.yaml`/`network.yaml`) use **zero**
 `${var:}`/`${secret:}`/`${feature:}` tokens today — every value is a literal
 placeholder (`"10.0.0.0/22"`, `"TODO-agw-public-fqdn.placeholder.azure.com"`).
@@ -304,7 +304,7 @@ string mixing a `${var:}` and a `${secret:}` token (e.g. a connection
 string) is secret-shaped as a whole and must go through the CLI-arg/env-var
 path in full, never partially rewritten into a file. No real example found
 yet of a non-scalar secret leaf (every real secret-shaped value checked —
-haven, config-deploy — is a plain scalar string), so a non-scalar
+haven, config-repo — is a plain scalar string), so a non-scalar
 `--set-string` target is out of scope until evidenced.
 
 ### This also substantially resolves gap #10
@@ -959,7 +959,7 @@ real, working, live example in the repo's own coverage-check fixture.
 
 - `DnsRecordModel.name` has no Value-token union at all (only `.value`
   does) — a real, narrow, not-yet-designed schema gap, found via real
-  `cfg-deployment` evidence. Revisit if a real need to parametrize a
+  `config-repo` evidence. Revisit if a real need to parametrize a
   record's name shows up.
 - `${step:step_name.output_key}` (a fourth token kind, reading Context)
   waits on Context itself ([ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md))

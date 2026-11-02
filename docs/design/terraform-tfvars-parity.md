@@ -28,7 +28,7 @@ output and diffed it against **real**, committed v1 output for the exact
 same repository:
 
 1. `.v2-cfg` (this workspace's own hand-migrated slice of
-   `config-deploy`) has no local checkout of `iac-repo`
+   `config-repo`) has no local checkout of `iac-repo`
    (the real Terraform source repo, `fetch: external`, a private GHE
    remote). Created a minimal placeholder checkout at the exact path
    `layout.remote_checkout_path()` expects (`spoke/terraform/main.tf`,
@@ -39,7 +39,7 @@ same repository:
    .v2-cfg --build-path .v2-cfg\build\deploy-spoke`. Succeeded, produced 8
    real `*.auto.tfvars.json` files.
 3. Diffed those files' actual JSON content against
-   `e:\sources\config-deploy\build\deploy-hub-hub1-spoke-spoke1-customer-fabrikam-1.0.0\core\terraform\*.auto.tfvars.json`
+   `e:\sources\config-repo\build\deploy-hub-hub1-spoke-spoke1-customer-fabrikam-1.0.0\core\terraform\*.auto.tfvars.json`
    — v1's real, committed output for a real deployment in the same repo
    (a different deployment level — customer-scoped vs. `.v2-cfg`'s
    spoke-scoped — so exact values differ, but every *category's shape
@@ -134,7 +134,7 @@ Resolution" below for exactly what shipped.
 None yet — no v2 ADR exists for Terraform tfvars projection shape.
 Source material: v1's real `builders/terraform_builder.py` (external, not
 part of this workspace, read in full this pass) and
-`e:\sources\config-deploy`'s real, committed build output (also
+`e:\sources\config-repo`'s real, committed build output (also
 external).
 
 ## Fix Design and Resolution — build-time file wrapping

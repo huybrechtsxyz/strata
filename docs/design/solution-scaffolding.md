@@ -20,7 +20,7 @@
 
 [audit-trail.md](../work/audit-trail.md)'s real-usage scoping (2026-09-30) found
 Layer 1 (PR template + issue template scaffolding) is real and active in
-`config-deploy` today — `.github/pull_request_template.md` and
+`config-repo` today — `.github/pull_request_template.md` and
 `.github/ISSUE_TEMPLATE/deployment-change-request.yml` both exist,
 matching v1's design exactly. v2 has **no scaffolding command at all**
 today — `src/strata/commands/` is 4 flat command files (`validate`/

@@ -1,7 +1,7 @@
 # Lifecycle Hooks — Design
 
 - Status: draft — gate question 1 answered (2026-10-14): **zero real
-  demand**, both haven and `cfg-int-deployment` grepped directly for
+  demand**, both haven and `config-repo` grepped directly for
   `lifecycle:`/hook usage, nothing found. Per this doc's own "a 'no' answer
   closes most of what follows" framing, items 2-9 are not being pursued.
   The real need that prompted this investigation ("run a script at a
@@ -169,7 +169,7 @@ others — **answered 2026-10-14, see Status above: no evidence, not pursued.**
 
 1. **Does v2 want script-based lifecycle hooks at all? — Answered: no,
    not today.** Grepped both real tracked consumers directly (haven, both
-   v1 source and the migrated `.v2-haven` fixture; `cfg-int-deployment`)
+   v1 source and the migrated `.v2-haven` fixture; `config-repo`)
    for any `lifecycle:`/hook declaration — zero matches in either. Per
    this item's own stated criterion, a "no" closes items 2-9 below; they
    are left recorded for their research value (the real v1 mechanism, the

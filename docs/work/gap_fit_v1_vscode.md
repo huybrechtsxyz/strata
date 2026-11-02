@@ -178,9 +178,9 @@ schema.
 - **v2 today:** nothing wired; CLI has `promote status` / `promote apply` / `promote view`.
 - **Status:** `Undecided` — deferred 2026-10-24. The CLI is ready, but no real data exercises it:
   zero `kind: version` documents with `spec.promotion` in `config/`, `.v2-cfg`, `.v2-haven` or
-  cfg-int's `origin/v2`, and `promote view`/`status` return an empty rollout for `config/`. A view
+  config-repo's `origin/v2`, and `promote view`/`status` return an empty rollout for `config/`. A view
   would render an empty tree everywhere and could only be shaped against synthetic data. Revisit when
-  a consumer (cfg-int v3's rings are the expected first) tags its version documents.
+  a consumer (config-repo v3's rings are the expected first) tags its version documents.
 
 ### 13. Chat participant (`@strata`) and AI-assisted commands
 
@@ -191,7 +191,7 @@ schema.
   wrappers (`aiPromptBuilder.ts`).
 - **v2 today:** no chat participant, by decision (below).
 - **Status:** `Decided 2026-10-24 - no chat participant, MCP server or language-model tools`.
-  v1's MCP server exposed 13 tools and no consumer (haven, cfg-int) used any of them; the agents
+  v1's MCP server exposed 13 tools and no consumer (haven, config-repo) used any of them; the agents
   people actually use (Claude Code, VS Code Copilot agent mode) already run the CLI in a terminal
   and read `--output json`. What they lack is strata knowledge, so v2 scaffolds
   [Agent Skills](https://agentskills.io) instead: `sln init`/`sln update` write a strata-generated

@@ -9,7 +9,7 @@
 ## Overview
 
 A gap found while validating `build run`/`kind: version` against real
-cfg-deployment evidence: **a container image (or chart) reference that
+config-repo evidence: **a container image (or chart) reference that
 lives on a plain `constant`/`environment` variable has no way to be
 version-pinned** — `kind: version`'s `VersionPinsModel` only targets
 `ModuleServiceModel.image` (a workload strata itself deploys via
@@ -26,34 +26,34 @@ into a variable's value.
 
 ## Real evidence motivating this
 
-- `E:\Sources\cfg-deployment\stacks\ring\environment-dispatcher.yaml`
-  declares `dspapi_container_image_name`/`dspapi_container_image_tag` as
+- `E:\Sources\config-repo\stacks\ring\environment-scheduler.yaml`
+  declares `api_container_image_name`/`api_container_image_tag` as
   plain `store: constant` variables (tag blank in the base, overridden per
   concrete ring deployment) — no lock, no audit trail, no `reason`/
   `reviewed` tracking, unlike everything `kind: version` already covers.
-- **Not an isolated case.** `stacks/ring/environment-datahub.yaml` alone
-  declares five more: `datahub_api_container_image_name`/`_tag`,
+- **Not an isolated case.** `stacks/ring/environment-catalog.yaml` alone
+  declares five more: `catalog_api_container_image_name`/`_tag`,
   `staging_api_container_image_name`/`_tag`,
   `adminapp_container_image_name_with_tag` (combined name+tag in one string
   — that Terraform root's own variable shape), and a commented-out-but-
-  recorded `binocs_api_container_image_name`/`_tag` ("known and recorded
+  recorded `ledger_api_container_image_name`/`_tag` ("known and recorded
   here for when it's turned on"). `stacks/ring/environment-sci.yaml` adds a
   seventh, `sci_container_image_name`/`_tag`, for a separate real product
   estate (SCI). That file's own comment: *"all four images publish under
-  the same feed/prefix and share one tag per build"* — i.e. dspapi/
-  datahub_api/staging_api/adminapp are meant to be pinned **together, to
+  the same feed/prefix and share one tag per build"* — i.e. api/
+  catalog_api/staging_api/adminapp are meant to be pinned **together, to
   one shared value**. A real, growing registry of named, pinnable image
   references, several of which are meant to share one pin value — not a
   single one-off case.
 - These flow into `variables.auto.tfvars.json`, consumed by the
-  `dispatcher_api`/`datahub_api` **provisioners** — whole external Terraform
-  roots (`source: {repository: iac-int, source_path: "products/dispatcher/terraform"}`).
+  `scheduler_api`/`catalog_api` **provisioners** — whole external Terraform
+  roots (`source: {repository: iac-repo, source_path: "products/scheduler/terraform"}`).
   The Web App/Function App they manage is never declared as a `resource`/
   `topology` in this solution at all, so there's no attachment point for a
   `Module` (which is only ever reachable via `Namespace.spec.modules` or
   `TopologyComponentModel.modules`).
-- cfg-deployment's own `docs/decisions/adr-0013-external-app-dispatcher-api.md`
-  anticipates this exact gap, unprompted: onboarding Dispatcher is meant to
+- config-repo's own `docs/decisions/adr-0013-external-app-scheduler-api.md`
+  anticipates this exact gap, unprompted: onboarding Scheduler is meant to
   write "the first real strategy: `type: image` for the container artifact,
   plus a remote strategy for the IaC version" — i.e. they expect the
   artifact itself to be directly pinnable, not wrapped in a workload
@@ -152,13 +152,13 @@ needs to cover, see the 2026-09-27 fixture-check correction below):
 apiVersion: strata.huybrechts.xyz/v2
 kind: artifact
 meta:
-  name: dspapi_container
+  name: api_container
 spec:
-  image_name: "int-docker-test/src/acme.dispatcher.api"
+  image_name: "example/scheduler-api"
   image_tag: ""                    # blank until known, same pattern as today's variable
   registry: "cdn-feeds.acme.com"    # free text, documentation only
   integration: null                # optional Integration (capability: sources) for registry auth
-  description: "Dispatcher API container image (ADR-0013)"
+  description: "Scheduler API container image (ADR-0013)"
   properties: null                 # free-form descriptive data (e.g. owning team, cost center) — never merged anywhere
   configuration: null              # raw passthrough data for whatever consumes this artifact
   custom: null                     # custom user-defined data for scripts/extensions
@@ -187,7 +187,7 @@ concern, not a schema field** — whatever mechanism references this
 artifact from a variable picks which sub-value it wants (`image_name`
 alone, `image_tag` alone, or a synthesised `image_name:image_tag`), since
 real Terraform roots disagree on the shape they want (split for
-dispatcher/datahub_api/staging_api, combined for adminapp). That has to be
+scheduler/catalog_api/staging_api, combined for adminapp). That has to be
 a per-variable choice at the reference site, not baked into the artifact
 itself.
 
@@ -201,23 +201,23 @@ consumption paths above), plus a version pin overlaying its tag:
 apiVersion: strata.huybrechts.xyz/v2
 kind: artifact
 meta:
-  name: dspapi_container
+  name: api_container
 spec:
-  image_name: "int-docker-test/src/acme.dispatcher.api"
+  image_name: "example/scheduler-api"
   image_tag: "env_sbx11006400201_20260907.10"
   registry: "cdn-feeds.acme.com"
-  description: "Dispatcher API container image (ADR-0013)"
+  description: "Scheduler API container image (ADR-0013)"
 ```
 
 ```yaml
 # environment.yaml: a variable sourced from the artifact (Path 2 — no
-# strata-owned field exists on the external dispatcher_api provisioner)
+# strata-owned field exists on the external scheduler_api provisioner)
 spec:
   variables:
-    - key: dspapi_container_image_tag
+    - key: api_container_image_tag
       store: artifact
-      value: dspapi_container   # ArtifactModel.meta.name
-      field: image_tag           # -> variables.auto.tfvars.json's dspapi_container_image_tag
+      value: api_container   # ArtifactModel.meta.name
+      field: image_tag           # -> variables.auto.tfvars.json's api_container_image_tag
 ```
 
 ```yaml
@@ -225,8 +225,8 @@ spec:
 # directly (Path 1 — ModuleServiceModel owns its own image field)
 spec:
   services:
-    - name: dispatcher
-      artifact: dspapi_container   # References(PlatformKind.ARTIFACT), not a literal image string
+    - name: scheduler
+      artifact: api_container   # References(PlatformKind.ARTIFACT), not a literal image string
 ```
 
 ```yaml
@@ -238,14 +238,14 @@ meta:
 spec:
   pins:
     artifacts:
-      dspapi_container:
+      api_container:
         version: "env_sbx11006400201_20260907.11"
         status: current
         reviewed: 2026-09-25
 ```
 
 Resolution for both consumption paths checks `deployment.spec.version` →
-`pins.artifacts.dspapi_container` first; only when no pin exists does
+`pins.artifacts.api_container` first; only when no pin exists does
 either path fall back to the artifact document's own declared
 `image_tag`.
 
@@ -281,7 +281,7 @@ in Open questions below for the full reasoning.
      | None`), validated as "only valid when `store == artifact`" — the
      exact same pattern `default`/`generate`/`rotate` already use
      (`_validate_field_not_on_builtin`). Deliberately **not** a dotted
-     string packed into `value` (e.g. `"dspapi_container.image_tag"`):
+     string packed into `value` (e.g. `"api_container.image_tag"`):
      that would need inventing parsing/escaping rules (what if an artifact
      name itself contains a `.`?) and would give up real schema-level
      validation (`field` as a `Literal` is typo-checked at load time by
@@ -339,11 +339,11 @@ in Open questions below for the full reasoning.
      relationship word only when the bare kind name would be ambiguous
      (`extends`→DEPLOYMENT, `workspace`→WORKSPACE, `dns_zones`→DNS) —
      never a `_ref` suffix.
-  2. **The real motivating case — dispatcher_api/datahub_api's images**
+  2. **The real motivating case — scheduler_api/catalog_api's images**
      — has **no strata-owned field to attach a reference to at all**. The
      consuming thing is an opaque *external* Terraform module strata has
      no model for; its inputs are arbitrary variables the module itself
-     defines (`dspapi_container_image_name`,
+     defines (`api_container_image_name`,
      `adminapp_container_image_name_with_tag`, ...). There is no
      `ProvisionerModel.image`-shaped field to add, because strata has no
      opinion about what that module needs — which is exactly why
@@ -365,8 +365,8 @@ in Open questions below for the full reasoning.
   full reasoning.
 - **Identity/reuse — resolved (2026-09-25)**: dedicated top-level
   `kind: artifact`. Real-multiplicity evidence tipped this: at least 7
-  distinct real image references exist already across dispatcher/datahub/
-  staging/adminapp/binocs/sci (see Real evidence above), several
+  distinct real image references exist already across scheduler/catalog/
+  staging/adminapp/ledger/sci (see Real evidence above), several
   explicitly meant to share one pin value — a real, growing registry, not
   a single embedded one-off. `pins.artifacts` (below) needs a flat,
   globally-unique name to key against, which only a real `DocumentIndex`
@@ -395,7 +395,7 @@ in Open questions below for the full reasoning.
 
   `iter_pins()` (already a generic loop over `PIN_CATEGORIES`) picks this
   up automatically — no change needed there beyond the tuple. The "four
-  images share one build tag" real case (dispatcher/datahub_api/
+  images share one build tag" real case (scheduler/catalog_api/
   staging_api/adminapp) is expressed as four separate `pins.artifacts`
   entries with the identical `version` value — visible/auditable
   duplication (each can still carry its own `status`/`reason`/`reviewed`
@@ -679,8 +679,8 @@ test call sites needed updating.
 ## Changelog
 
 - 2026-09-25: Created. Triggered by validating `build-command.md`'s
-  `tenant`/`modules` gap-table rediscovery against cfg-deployment's
-  real `dspapi_container_image_name`/`_tag` variables — found `kind:
+  `tenant`/`modules` gap-table rediscovery against config-repo's
+  real `api_container_image_name`/`_tag` variables — found `kind:
   version`'s pin categories can't reach a plain variable's value, `Module`
   doesn't fit (no attachment point, wrong field shape), and a
   pin-overlays-a-variable-directly mechanism was rejected as inconsistent
@@ -698,10 +698,10 @@ test call sites needed updating.
   evidence yet shows the *same* image shared across workspaces) and
   whether `pins.images`/`pins.charts` should collapse into one category.
 - 2026-09-25: **Correction — this is not a one-off case.** Re-checked
-  `stacks/ring/environment-datahub.yaml` and `environment-sci.yaml`
+  `stacks/ring/environment-catalog.yaml` and `environment-sci.yaml`
   directly: at least 7 distinct real image references exist today
-  (dispatcher, datahub_api, staging_api, adminapp, binocs_api — recorded
-  but disabled, sci), not just dispatcher_api. One file's own comment
+  (scheduler, catalog_api, staging_api, adminapp, ledger_api — recorded
+  but disabled, sci), not just scheduler_api. One file's own comment
   confirms four of them are meant to share exactly one pin value ("all
   four images publish under the same feed/prefix and share one tag per
   build"). This retires the earlier "arguably over-engineered for one
@@ -765,7 +765,7 @@ test call sites needed updating.
   | None` field instead (mutually exclusive with `image: str | None`), no
   variable/store involved at all, since Compose/Helm's own image field is
   strata-owned. `store: artifact` remains necessary — and is the *only*
-  option — for the real motivating case (dispatcher_api/datahub_api),
+  option — for the real motivating case (scheduler_api/catalog_api),
   since those images are consumed by an opaque external Terraform module
   with no strata-owned field to attach a reference to; that's exactly why
   `variables:` exists as a generic escape hatch. Both mechanisms are

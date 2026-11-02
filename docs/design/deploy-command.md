@@ -66,9 +66,9 @@ Read directly from `.github/workflows/*.yml` in both reference repos
   wiring needed here."* Cloud auth (`TERRAFORM_API_TOKEN`, Infisical
   machine identity, Azure OIDC) flows through plain env vars the
   workflow itself sets — a **different** channel from strata-resolved
-  secrets, never confused with them. config-deploy's real (non-template)
+  secrets, never confused with them. config-repo's real (non-template)
   workflow has **zero** manual `TF_VAR_*`/secret wiring at all.
-- **`--scope` is real but haven-specific** — config-deploy's workflows
+- **`--scope` is real but haven-specific** — config-repo's workflows
   use `--stage`/`--dry-run`/`--force` only (pure-Terraform workspace, no
   Helm/apps stage to separate from infra). Both flags are real CLI
   surface; `--scope` just has a narrower real user base.

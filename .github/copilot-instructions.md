@@ -3,7 +3,7 @@
 `strata-v2` is a ground-up rebuild of the `strata` CLI (an infrastructure-as-code
 platform layered over Terraform/Helm/Compose). It is **not** a straight port of
 v1 — every feature is rebuilt only after being justified by real evidence (v1's
-own source, and real consumer CI in `haven`/`config-deploy`), not by
+own source, and real consumer CI in `haven`/`config-repo`), not by
 assumption. Read [docs/design/v2-schema-overview.md](../docs/design/v2-schema-overview.md)
 for the current one-page status of every kind/feature.
 

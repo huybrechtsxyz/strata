@@ -8,7 +8,7 @@
 ## Context and Problem Statement
 
 AI coding agents (Claude Code, GitHub Copilot) work in strata solutions and need to know the v2 CLI and document
-rules. Both real consumers already carry this guidance, hand-written or generated once by v1's `sln init`: cfg-int
+rules. Both real consumers already carry this guidance, hand-written or generated once by v1's `sln init`: config-repo
 has 8 strata skills, 2 instruction files, an agent and 4 prompts; haven has a 384-line instructions file. Because
 v1 wrote them once and never again, they still teach v1 commands (`-f`/`--file`, `validate --deep`, `env status`)
 that fail against v2.

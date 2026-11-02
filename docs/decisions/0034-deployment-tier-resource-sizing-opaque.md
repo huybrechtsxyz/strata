@@ -70,7 +70,7 @@ vocabulary.** `deploy_tier` (or whatever name a given workspace chooses)
 is just another `properties` key, carried through the merge chain that
 already exists for exactly this purpose — zero implementation needed, and
 already proven working end to end in this repo's own `config/` dogfooding
-solution (`customers/c0062.yaml`'s `properties.deploy_tier: standard`,
+solution (`customers/contoso.yaml`'s `properties.deploy_tier: standard`,
 `environments/prd.yaml`'s `properties.deploy_tier: production`). The
 tier→SKU table, and the decision of which resources a tier actually
 affects, stay entirely inside the Terraform module's own code — strata

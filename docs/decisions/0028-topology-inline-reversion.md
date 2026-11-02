@@ -31,7 +31,7 @@ topology — existence-checking was deferred to a future Workspace Phase 2
 check (`WorkspaceService.validate_topology_references()`, since built).
 
 Reassessing (2) specifically, prompted by reading a second, independent real
-v2 migration (`cfg-int-deployment-v2`'s `control` stack) alongside this
+v2 migration (`config-repo-v2`'s `control` stack) alongside this
 project's own `.v2-cfg`/`.v2-haven` fixtures and the shipped example
 solution in `config/`:
 
@@ -77,7 +77,7 @@ for) while the structural cost (inverted reference direction, Phase 2
 cross-document validation for what is, in every real case, same-document
 data) is real, current, and self-admitted in ADR-0011's own original text.
 Option B would avoid breaking the one real external migration that already
-uses the standalone form (`cfg-int-deployment-v2`'s `control` stack), but
+uses the standalone form (`config-repo-v2`'s `control` stack), but
 was rejected: it keeps every structural cost of Option C (the standalone
 branch still has the inverted-reference problem) for a reuse case with no
 confirmed real demand, in exchange for avoiding a one-time, already-scoped
@@ -93,7 +93,7 @@ migration cost.
   `WorkspaceResourceModel` already establishes — one fewer standalone kind,
   one fewer file, for what is in every real case examined a 1:1 pairing with
   a single workspace.
-- Bad: breaks `cfg-int-deployment-v2`'s `control` stack migration (already
+- Bad: breaks `config-repo-v2`'s `control` stack migration (already
   authored against the standalone form) the moment it is reconciled back
   into this repo's fixtures — a known, accepted, one-time cost.
 - Bad: no longer directly supports "define a topology once, reference it

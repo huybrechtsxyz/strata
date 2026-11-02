@@ -21,8 +21,8 @@
 
 A `kind: environment` document says *what* a value is (key, store, value, type) but nothing *about* it.
 Everything else a maintainer needs to know to edit it safely lives in YAML comments, where no tool can read it.
-Found reading `cfg-int-deployment` (branch `v3`, still v1/v2-shaped config, not yet converted): its
-`deploy/hubs/z00/s01/c0224/dev/environment.yaml` is 718 lines, and most of those lines are prose carrying four
+Found reading `config-repo` (branch `v3`, still v1/v2-shaped config, not yet converted): its
+`deploy/hubs/hub1/spoke1/fabrikam/dev/environment.yaml` is 718 lines, and most of those lines are prose carrying four
 kinds of metadata strata has no field for:
 
 1. **Requirements** — a value is only valid in combination with another value, or must match a pattern.
@@ -33,7 +33,7 @@ kinds of metadata strata has no field for:
 This doc exists to scope those four before any schema work. It is not in `docs/design/` because nothing is decided.
 These are four separate problems that share one cause (a value has no metadata), and they may not share one solution.
 
-## Evidence (cfg-int, 12 environment files, 2026-10-21)
+## Evidence (config-repo, 12 environment files, 2026-10-21)
 
 Approximate counts of regex line matches over the 12 `*environment*.yaml` files, not hand-verified individually:
 
@@ -49,7 +49,7 @@ Approximate counts of regex line matches over the 12 `*environment*.yaml` files,
 
 Specific cases worth keeping in view:
 
-- **Requirement that already caused a defect.** `vnet_private_endpoints_subnet_name` was left blank. The Dispatcher
+- **Requirement that already caused a defect.** `vnet_private_endpoints_subnet_name` was left blank. The Scheduler
   estate gates its private endpoints on `vnet_name != "" && vnet_private_endpoints_subnet_name != ""`, so none were
   created, silently, while the matching DNS zone values were already real. Found by reading Terraform (2026-09-29),
   not by any check. Other instances: `aks_cluster_id` may be blank only while `enable_aks` is false; the four `sci_*`
@@ -62,9 +62,9 @@ Specific cases worth keeping in view:
 - **Provenance.** Values such as `api_management_id`, `vnet_id` and `agw_subnet_id` are copied from applied upstream
   layers on purpose (the audit trail requires the value to be visible in the reviewed diff; App Configuration is
   private-endpoint-only). Each carries "confirmed via `az apim show`, 2026-09-23" or similar, plus "re-read if the VNet
-  is recreated". `dispatcher_product_name` is "PLACEHOLDER pending a naming decision ... changing it later forces a
+  is recreated". `scheduler_product_name` is "PLACEHOLDER pending a naming decision ... changing it later forces a
   destroy/recreate".
-- **Naming budget.** "dev + intdsp + c0224dev2 + kv = 20 characters. Four to spare. Re-check that sum before changing
+- **Naming budget.** "dev + intsch + acmedev02 + kv = 20 characters. Four to spare. Re-check that sum before changing
   any of the three." Key Vault caps at 24; node pool names at 12; tenant codes are held to 5 (AKS pool budget).
 
 ## What exists in v2 today
@@ -162,26 +162,26 @@ conflict-check change and the declared-vs-resolved limitation are documented in
 [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)'s "Evaluation semantics" and
 "Known limits" sections and its History — not repeated here. Covers the two recorded cross-block cases
 (`enable_aks` gating `aks_cluster_id`, `enable_sci` gating four `sci_*`/`aci_subnet_name` variables), both verified
-against `E:\Sources\cfg-int-deployment` and reproduced end-to-end against a base + leaf environment chain. Value
+against `E:\Sources\config-repo` and reproduced end-to-end against a base + leaf environment chain. Value
 equality between fields remains out of scope (topic 2; design doc "Known limits" #4).
 
 ### 2. Alias or copy-of — analysed 2026-10-24: no strata feature needed
 
-**What the duplicates actually are** (re-checked in `E:\Sources\cfg-int-deployment` and the product repo). The
+**What the duplicates actually are** (re-checked in `E:\Sources\config-repo` and the product repo). The
 Evidence table's "12" counted matching *lines*, including generated `build/` output and wrapped descriptions. In the
-source there are **4 duplicate keys, all in the c0224/dev leaf**:
+source there are **4 duplicate keys, all in the fabrikam/dev leaf**:
 
-| Duplicate key                        | Copy of                         | Variable declared by                                                                                             |
-| ------------------------------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `vnet_default_subnet_name`           | `web_apps_subnet_name`          | Dispatcher root (`deploy_dsp/terraform`) and DataHub root (`deploy/terraform`), both in `IntegrationApi.DataHub` |
-| `vnet_private_endpoints_subnet_name` | `private_endpoints_subnet_name` | Dispatcher root                                                                                                  |
-| `vnet_event_grid_subnet_name`        | `private_endpoints_subnet_name` | DataHub root                                                                                                     |
-| `log_workspace_daily_quota_gb`       | `daily_quota_gb`                | DataHub and Dispatcher roots                                                                                     |
+| Duplicate key                        | Copy of                         | Variable declared by                                                                                            |
+| ------------------------------------ | ------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `vnet_default_subnet_name`           | `web_apps_subnet_name`          | Scheduler root (`deploy_dsp/terraform`) and Catalog root (`deploy/terraform`), both in `IntegrationApi.Catalog` |
+| `vnet_private_endpoints_subnet_name` | `private_endpoints_subnet_name` | Scheduler root                                                                                                  |
+| `vnet_event_grid_subnet_name`        | `private_endpoints_subnet_name` | Catalog root                                                                                                    |
+| `log_workspace_daily_quota_gb`       | `daily_quota_gb`                | Catalog and Scheduler roots                                                                                     |
 
-The originals (`web_apps_subnet_name`, `private_endpoints_subnet_name`, `daily_quota_gb`) are the names cfg-int's own
+The originals (`web_apps_subnet_name`, `private_endpoints_subnet_name`, `daily_quota_gb`) are the names config-repo's own
 ring root declares.
 
-**Why they exist.** One environment feeds three Terraform roots (ring, DataHub, Dispatcher) that name the same thing
+**Why they exist.** One environment feeds three Terraform roots (ring, Catalog, Scheduler) that name the same thing
 differently, and two of them live in another repository. v1 delivered every environment key as a flat Terraform
 variable of the same name, so the only way to give a root an input under its own name was a second key with the same
 value. The duplication is a naming difference at the consumer boundary, not a configuration need.
@@ -194,7 +194,7 @@ layer's value wins *for the same key*; here one value is needed *under two names
 every consumer root to be rewritten to read `local.strata.*`. During that rewrite a product root maps the value to
 its own name in its own `locals` (e.g. `vnet_default_subnet_name = local.strata.variables.web_apps_subnet_name`), so
 the rename lives in HCL, next to the code that has the different name, and the four duplicate keys are deleted. If a
-product root cannot be changed, a thin wrapper root in cfg-int calls it as a module with renamed arguments; still HCL,
+product root cannot be changed, a thin wrapper root in config-repo calls it as a module with renamed arguments; still HCL,
 still no strata feature.
 
 **Decision: no alias field, no copy-of assertion, no merge strategy.** Reopen only if a duplicate turns up that is not
@@ -216,20 +216,20 @@ Open questions:
 - Relationship to the audit trail ([audit-trail.md](../work/audit-trail.md)): that records what a *deploy* did. This records
   where a *config value* came from. Related, but the two should not be merged.
 - If a pinned value has a recorded origin, a drift check against the upstream output becomes possible. That is a
-  separate feature layered on this one, and cfg-int rules out resolving such values at deploy time, so it would have
+  separate feature layered on this one, and config-repo rules out resolving such values at deploy time, so it would have
   to be an explicit check or a refresh command that produces a diff.
 
 **Re-counted 2026-10-24 against the v3-shaped config** (`.v2-cfg`, 83 YAML files, 5286 lines, excluding the converted
 v1 leaf). 239 lines match the provenance patterns (a date, "copied", "confirmed", "verified", `az`, `terraform
 output`, placeholder/pending). A rough first-match classification, enough to see the shape:
 
-| Kind                                                                                                                 | Lines | Where it goes                                                                                                                                                                                                                                        |
-| -------------------------------------------------------------------------------------------------------------------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Change history ("Added 2026-10-07 to unblock...", "apply failed")                                                    |  ~41+ | Not value metadata: git history and the consumer's ADRs. Most of the 107 "other" lines are continuation lines of these narratives.                                                                                                                   |
-| Subscription onboarding facts (tenant, subscription, SPN, state storage, service connection, hub VNet, project code) |   ~44 | cfg-int's `scripts/New-BootstrapEnv.ps1` renders them into a generated environment file, reading Azure with `-Discover` and printing each value's source (given, azure, convention); the file is never hand-edited, and re-rendering is the refresh. |
-| A layer's outputs copied by hand (`terraform output`, "read from Azure", the ring's own first apply)                 |   ~21 | Leaves the config through layer records (item 6). Still hand-copied today only where that layer has not switched over yet (ring, products).                                                                                                          |
-| Pins and placeholders                                                                                                |   ~21 | Almost all are explanations of *why* a blank base default is fine. Genuinely pending: 2 image tags ("smoke-test value, NOT a stable pin") and one `application_id` "not recorded".                                                                   |
-| `az` query cited as source                                                                                           |     5 | The onboarding generator or a layer record, as above.                                                                                                                                                                                                |
+| Kind                                                                                                                 | Lines | Where it goes                                                                                                                                                                                                                                            |
+| -------------------------------------------------------------------------------------------------------------------- | ----: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Change history ("Added 2026-10-07 to unblock...", "apply failed")                                                    |  ~41+ | Not value metadata: git history and the consumer's ADRs. Most of the 107 "other" lines are continuation lines of these narratives.                                                                                                                       |
+| Subscription onboarding facts (tenant, subscription, SPN, state storage, service connection, hub VNet, project code) |   ~44 | config-repo's `scripts/New-BootstrapEnv.ps1` renders them into a generated environment file, reading Azure with `-Discover` and printing each value's source (given, azure, convention); the file is never hand-edited, and re-rendering is the refresh. |
+| A layer's outputs copied by hand (`terraform output`, "read from Azure", the ring's own first apply)                 |   ~21 | Leaves the config through layer records (item 6). Still hand-copied today only where that layer has not switched over yet (ring, products).                                                                                                              |
+| Pins and placeholders                                                                                                |   ~21 | Almost all are explanations of *why* a blank base default is fine. Genuinely pending: 2 image tags ("smoke-test value, NOT a stable pin") and one `application_id` "not recorded".                                                                       |
+| `az` query cited as source                                                                                           |     5 | The onboarding generator or a layer record, as above.                                                                                                                                                                                                    |
 
 **Decision: no strata feature.** Every kind of provenance that matters already has an owner that is better placed
 than a strata field: generated onboarding facts carry their source in the generator and are refreshed by
@@ -242,7 +242,7 @@ if one is, or if placeholders start reaching production deployments.
 ### 4. Naming budgets — decided 2026-10-24: no strata feature
 
 Narrow by design: *length* (and the charset that goes with it), not naming. Composing names is Terraform's job:
-cfg-int's `docs/design/apim-name-primitive.md` (draft, 2026-10-19) puts the rules in a `primitives/` lookup that fails at
+config-repo's `docs/design/apim-name-primitive.md` (draft, 2026-10-19) puts the rules in a `primitives/` lookup that fails at
 plan time, and deliberately avoids a second rule set. The real question here is only whether strata should catch an
 over-length composed name earlier, at `strata validate` on the pull request, instead of at plan.
 
@@ -263,9 +263,9 @@ would have caught.
 
 ### Adjacent: an upstream step's output as a downstream step's input
 
-Same hand-copy symptom as the alias topic, different cause, so it is kept out of the four above. cfg-int's product
+Same hand-copy symptom as the alias topic, different cause, so it is kept out of the four above. config-repo's product
 estates need the ring's resource group, key vault and subnet facts. `.v2-cfg` copies them in by hand
-(`stacks/ring/environment-datahubapi.yaml`, the `ring_*` properties) even though the estate's execution step already
+(`stacks/ring/environment-catalogapi.yaml`, the `ring_*` properties) even though the estate's execution step already
 `depends_on` the ring's.
 
 **Where `${output:step.key}` resolves today** (checked in `deploy_controller.py` and its tests, 2026-10-21):
@@ -291,8 +291,8 @@ estates need the ring's resource group, key vault and subnet facts. `.v2-cfg` co
 invocations (`DeploymentOutputStore`, ADR-0036). It did not change *where* the token may be written, so the limit
 above still applies after it.
 
-**cfg-int status (maintainer, 2026-10-21):** worked around for now by keeping the values in the existing Key Vault;
-expected to be fixed properly later. Not verified against the cfg-int repo from here. Open question: how this squares
+**config-repo status (maintainer, 2026-10-21):** worked around for now by keeping the values in the existing Key Vault;
+expected to be fixed properly later. Not verified against the config-repo repo from here. Open question: how this squares
 with the "value visible in the reviewed diff" stance recorded under Provenance, since a Key Vault read is a runtime
 lookup.
 
@@ -301,12 +301,12 @@ lookup.
 - *No other strata doc covers this.* The archived cross-run doc and ADR-0036 cover `${output:}` availability across
   runs of **one** deployment; `output-declarations.md` checks `${output:}` keys; `key-value-store-integration.md` is
   the store backends. This section is the only place the question lives.
-- *The real problem is across deployments, not across steps.* In cfg-int v3, bootstrap, spoke, ingress, customer and
+- *The real problem is across deployments, not across steps.* In config-repo v3, bootstrap, spoke, ingress, customer and
   ring are separate deployments. `${output:}` resolves only within one deployment's graph, so none of the candidate
-  directions above (step-level input mapping, widening claiming) would have reached it. cfg-int's own alternatives
+  directions above (step-level input mapping, widening claiming) would have reached it. config-repo's own alternatives
   table rejects `${output:}` for exactly this reason.
-- *What cfg-int built instead* (`docs/design/bootstrap-config-layering.md`, decided 2026-10-21, untracked files in
-  `E:\Sources\cfg-int-deployment`; iac-int `v3`, `components/layer-record`). Each layer's own Terraform writes one
+- *What config-repo built instead* (`docs/design/bootstrap-config-layering.md`, decided 2026-10-21, untracked files in
+  `E:\Sources\config-repo`; iac-repo `v3`, `components/layer-record`). Each layer's own Terraform writes one
   JSON secret, `<layer>-outputs` (`schema`, `layer`, then IDs/names/addresses only), into the per-subscription
   Terraform-state Key Vault that was bootstrapped at onboarding, in the same apply. The next layer reads it at plan
   time through `layer-record`, which fails the plan if the secret is not JSON, has an unknown `schema`, names another
@@ -329,7 +329,7 @@ record):
 - *Snapshot or refresh command*: write the upstream output into the leaf as a constant. Keeps the audit-diff property
   and gives provenance (topic 3) a natural origin; still a manual step.
 - *Widen claiming to more categories*: smallest change for topologies and resources, but cannot reach the singleton
-  categories, which is where cfg-int's values live.
+  categories, which is where config-repo's values live.
 
 ## Remaining Work / Open Questions
 
@@ -354,15 +354,15 @@ Evidence first, per repo convention; nothing below is a commitment.
      JSON Schema `if`/`then` can express it.
    - Still out of reach: "these two keys are equal". JSON Schema has no cross-property equality, so copy-of (topic 2)
      stays a separate mechanism whichever way topic 1 goes.
-3. ~~Convert one real cfg-int leaf (c0224/dev) to v2 and recount~~ — done 2026-10-24, in
+3. ~~Convert one real config-repo leaf (fabrikam/dev) to v2 and recount~~ — done 2026-10-24, in
    `.v2-cfg/stacks/ring/dev/` (local fixture, gitignored): `environment.yaml` (the converted leaf), `deployment.yaml`
-   (`ring-dev-c0224`, extends `ring_deployment_base`, `tenant: c0224`) and `attributes.yaml` (three
-   `block: composite` rules). Note this is the v1 tree's leaf (sub-zone0-c0224-004, Dispatcher + DataHub forks), not
-   the different c0224 ring already in `.v2-cfg/deploy/hubs/z00/s01/c0224/dev` (sub-zone0-c0224-003). `.v2-cfg`
+   (`ring-dev-fabrikam`, extends `ring_deployment_base`, `tenant: fabrikam`) and `attributes.yaml` (three
+   `block: composite` rules). Note this is the v1 tree's leaf (sub-zone0-fabrikam-004, Scheduler + Catalog forks), not
+   the different fabrikam ring already in `.v2-cfg/deploy/hubs/hub1/spoke1/fabrikam/dev` (sub-zone0-fabrikam-003). `.v2-cfg`
    validates with 87 documents (82 + 5) and the same 24 warnings.
 
    **Conversion rules.** Values unchanged. Blocks unchanged except where the v2 merge chain forced it: `ring` moved
-   to `properties` (the ring base declares it there); `customer_code` dropped (the tenant's `c0224-env` supplies
+   to `properties` (the ring base declares it there); `customer_code` dropped (the tenant's `fabrikam-env` supplies
    it); `spoke` dropped (it only fed v1's templated backend key, now an explicit `tf_state_key`); the four duplicates
    dropped (topic 2), with a note on the original key saying which root renames it in HCL. `daily_quota_gb` added,
    since v1 carried it in `stacks/core` and `.v2-cfg`'s `core-env` does not. Comments kept only if they still carry
@@ -387,20 +387,20 @@ Evidence first, per repo convention; nothing below is a commitment.
      `inputs_from`, the undeclared-input check), change history, or design rationale that belongs in the consumer
      repo's ADRs. v2 removes the mechanics outright.
    - *Topic 1 (requirements):* all three recorded requirements are now checks, not prose — `enable_aks` needs
-     `aks_cluster_id` and a non-empty `worker_pools`; `enable_sci` needs its four inputs; `enable_dispatcher_api` needs
+     `aks_cluster_id` and a non-empty `worker_pools`; `enable_sci` needs its four inputs; `enable_scheduler_api` needs
      `vnet_name` and `private_endpoints_subnet_name`. Proven against a scratch copy with the values broken: all 7
      expected findings fire, none on the other four ring deployments. The 5 blanks remain, but each is now guarded
      by a rule instead of a comment. The recorded defect itself was on the duplicate key
      (`vnet_private_endpoints_subnet_name` blank while `private_endpoints_subnet_name` was set), so dropping the
      duplicate removes that exact failure; the rule still guards the remaining single key.
-   - *Topic 2 (duplicates):* 4 to 0. Not verified on the consumer side: the Dispatcher and DataHub fork roots are not
-     in `.v2-cfg` (its `datahubapi_infra` is a later, rewritten root), so the HCL renames are still untried.
+   - *Topic 2 (duplicates):* 4 to 0. Not verified on the consumer side: the Scheduler and Catalog fork roots are not
+     in `.v2-cfg` (its `catalogapi_infra` is a later, rewritten root), so the HCL renames are still untried.
    - *Topic 3 (provenance):* the largest survivor. 8 provenance notes remain, covering 17 of the 47 variables, and
      almost all are the same shape: a value copied by hand from an applied upstream layer's output (spoke VNet,
      subnets, AGW, APIM) or an `az` query, with a date and "re-read if X is recreated". That is the adjacent
      upstream-output problem (item 6) seen from the other side; a snapshot/refresh command would answer both.
-     Two placeholders remain (`application_id`, `dispatcher_product_name`). **Corrected 2026-10-24:** this overstates
-     topic 3. The converted leaf is the v1 tree; in cfg-int v3 those upstream values come from layer records read by
+     Two placeholders remain (`application_id`, `scheduler_product_name`). **Corrected 2026-10-24:** this overstates
+     topic 3. The converted leaf is the v1 tree; in config-repo v3 those upstream values come from layer records read by
      Terraform (item 6), so they leave the config entirely. What topic 3 still has is the placeholders and the few
      values sourced from an `az` query rather than from a layer.
    - *Topic 4 (naming budgets):* 2 notes remain: the Key Vault 24-character sum across four keys (two estates) and
@@ -416,7 +416,7 @@ Evidence first, per repo convention; nothing below is a commitment.
 5. ~~Decide whether naming budgets belong in strata at all (topic 4)~~ — decided 2026-10-24: no, Terraform composes
    the names and enforces the limits; see topic 4.
 6. ~~Decide whether, and how, an upstream step's output reaches a downstream step's inputs~~ — decided 2026-10-24:
-   no strata capability. cfg-int v3 passes facts between layers (separate deployments) as Terraform-written records
+   no strata capability. config-repo v3 passes facts between layers (separate deployments) as Terraform-written records
    in the bootstrapped state Key Vault; see the adjacent section.
 7. ~~Only then pick a first slice~~ — picked: cross-key requirements (topic 1), on the strength of the recorded defect
    (blank value that silently disabled private endpoints) — now built for `properties`/`custom`, `variables`/
@@ -425,7 +425,7 @@ Evidence first, per repo convention; nothing below is a commitment.
 
 ## Changelog
 
-- 2026-10-21: created from a read of `cfg-int-deployment`'s `v3` branch (unchanged from `main`; only the uncommitted
+- 2026-10-21: created from a read of `config-repo`'s `v3` branch (unchanged from `main`; only the uncommitted
   APIM naming-primitive draft differs). Counts in the Evidence table taken the same day.
 - 2026-10-21: open item 1 tested. `${var:KEY}` in a variable value is accepted by `validate` but fails at resolution;
   `${value:}` addresses a variable by position only, not by `key`.
@@ -511,7 +511,7 @@ Evidence first, per repo convention; nothing below is a commitment.
   sub-designs under topic 1 are now fully built and documented — nothing left to implement under topic 1 except the
   cross-block case and the two genuinely open questions (default view, provenance attribution).
 - 2026-10-23: designed cross-block conditional rules as `block: composite` (all four merged blocks in one object,
-  `view: effective` only, `secrets` excluded). Re-verified the evidence directly in `E:\Sources\cfg-int-deployment`
+  `view: effective` only, `secrets` excluded). Re-verified the evidence directly in `E:\Sources\config-repo`
   rather than relying on the earlier summary: `enable_aks`/`enable_sci` are features, their dependents are variables,
   the base stack defaults `enable_aks` to a boolean `true` that a leaf overrides, and Terraform already enforces the
   same rule at plan. Value equality stays out (topic 2). Found that the conflict check would misfire on `composite`
@@ -525,7 +525,7 @@ Evidence first, per repo convention; nothing below is a commitment.
   always. Added a limitation that applies to the shipped blocks too: rules see declared `value`s, which are real
   values only for `store: constant` (missed findings, never false ones). Merged the model and evaluator phases so no
   temporary guard is needed; 3 phases now.
-- 2026-10-23: composite Phase 1 implemented (model + evaluator together, no temporary guard). Both real cfg-int cases
+- 2026-10-23: composite Phase 1 implemented (model + evaluator together, no temporary guard). Both real config-repo cases
   reproduce end-to-end against a base + leaf chain, including the leaf override and the boolean feature value. 12 new
   tests, full check suite clean (3057 passed). Remaining: Phase 2 (conflict check), Phase 3 (docs).
 - 2026-10-23: composite Phase 2 implemented. The conflict check compares `(sub_block, key)` pairs for `composite`
@@ -546,12 +546,12 @@ Evidence first, per repo convention; nothing below is a commitment.
 - 2026-10-24: built the required `target.view` in one phase: field default removed, `view: document` added to the
   3 `config/` schemas and every test fixture, a missing-`view` model test, docs (`attributeconfig.md`, `resource.md`,
   design doc shape, evaluation semantics and History). Full check suite clean (3061 passed); `config/` validates.
-- 2026-10-24: open item 3 done. Converted cfg-int's c0224/dev leaf into `.v2-cfg/stacks/ring/dev/` with a deployment
+- 2026-10-24: open item 3 done. Converted config-repo's fabrikam/dev leaf into `.v2-cfg/stacks/ring/dev/` with a deployment
   and three `composite` rules, and recounted: 779 to 338 lines, 465 to 51 comment lines, duplicates 4 to 0, v1-mechanics
   notes 11 to 0. All three requirements are now checks (7 findings proven on a broken scratch copy). Provenance is
   what survives (8 notes over 17 values, nearly all hand-copied upstream outputs, tying topic 3 to item 6); naming
   budgets shrink to 2 notes. Consumer-side HCL renames remain untried (the fork roots are not in `.v2-cfg`).
-- 2026-10-24: item 6 decided: no strata capability. No other strata doc covered it. Checked cfg-int and iac-int v3:
+- 2026-10-24: item 6 decided: no strata capability. No other strata doc covered it. Checked config-repo and iac-repo v3:
   facts travel between layers, which are separate deployments (out of `${output:}`'s reach), as Terraform-written
   JSON records in the bootstrapped per-subscription state Key Vault, read at plan time by `layer-record` with schema
   and key checks. That also answers the reviewed-diff question (changes show as plan diffs) and removes most of
@@ -560,7 +560,7 @@ Evidence first, per repo convention; nothing below is a commitment.
   plan; a strata copy of the composition would drift. Also marked the adjacent section's candidate directions as
   superseded and refreshed the status line and item 7.
 - 2026-10-24: topic 3 decided: no strata feature. Re-counted against the v3-shaped config rather than the v1 leaf:
-  the provenance lines are change history (git), subscription onboarding facts (rendered by cfg-int's
+  the provenance lines are change history (git), subscription onboarding facts (rendered by config-repo's
   `New-BootstrapEnv.ps1`, which records each value's source), and layer outputs (layer records, item 6). The only
   genuinely pending values are 2 smoke-test image tags, which `kind: version` already covers, and one "not recorded"
   `application_id`.

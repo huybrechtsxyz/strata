@@ -1,4 +1,4 @@
-# v1 Feature Priority — What haven and config-deploy Actually Depend On
+# v1 Feature Priority — What haven and config-repo Actually Depend On
 
 - Status: accepted
 - Date: 2026-09-23
@@ -15,7 +15,7 @@ CLI surface is large (13 command groups, ~40 subcommands per
 `.github/strata.instructions.md`). Building all of it before any real
 consumer can cut over is the wrong order if most of that surface is never
 exercised. The two production consumers of v1 —
-`haven` (Hetzner Hearth/Forge platform) and `config-deploy` (Azure
+`haven` (Hetzner Hearth/Forge platform) and `config-repo` (Azure
 integration landscape) — already have a large body of real, working CI that
 shows exactly which commands, flags, config schema fields, and provisioner
 behaviors are load-bearing today.
@@ -29,8 +29,8 @@ Read the REAL CI workflows (not just documentation) in both repos:
 
 - `haven/.github/workflows/*.yml` (11 workflows: infra, hearth init/config/
   deploy/restore, forge init/config/deploy/maintenance/restore, ci-build)
-- `config-deploy/.github/workflows/*.yml` (deploy.yml — a
-  `strata new pipeline`-generated template — and deploy-spoke-z01-s01.yml,
+- `config-repo/.github/workflows/*.yml` (deploy.yml — a
+  `strata new pipeline`-generated template — and deploy-spoke-hub2-spoke1.yml,
   its one real wired instance)
 - Both repos' `.strata/{cli.yaml,configuration.yaml,logging.yaml,solution.json}`
   and `.github/strata.instructions.md` (haven's AI-agent operating doc, which
@@ -74,7 +74,7 @@ of routing through `strata deploy run`. Not proven depended upon by either
 consumer.
 
 `ref env/config/data/secret` (`@repo_name/path` cross-repo file notation) —
-implied by config-deploy's `spec.remotes` block (`env-int`, `iac-int`
+implied by config-repo's `spec.remotes` block (`env-repo`, `iac-repo`
 repositories) but no direct invocation of the `ref` command group was found
 in either repo's workflows.
 
@@ -91,9 +91,9 @@ all yet.
 ### Open discrepancy (unresolved, flagged for whoever builds `build run`)
 
 Build output path differs between the two repos: haven uses `build/` at the
-repo root; config-deploy uses `.strata/build/`. Likely a strata version
+repo root; config-repo uses `.strata/build/`. Likely a strata version
 drift — haven pins `strata-version: "==1.9.3"` explicitly via the
-`setup-strata` action everywhere; config-deploy's workflows just
+`setup-strata` action everywhere; config-repo's workflows just
 `pip install xyz-strata` unpinned. Needs a decision (not just a port) once
 `build run` is designed: v2 should pick one, not silently inherit whichever
 version happened to produce the observed behavior.
@@ -109,7 +109,7 @@ above:
 2. **`validate --deep`** — Phase 2 dynamic validation wired to controllers
    (Phase 1 pydantic validation already exists for every kind).
 3. **`build run`** — Terraform provisioner first (used by more of haven's
-   workflows and by config-deploy), then the Helm provisioner (Forge
+   workflows and by config-repo), then the Helm provisioner (Forge
    only, with the two 1.8.2 substitution/rendering fixes carried forward as
    requirements, not optional polish).
 4. **`deploy run`** — Terraform (`plan`/`apply`, `--scope`/`--stage`

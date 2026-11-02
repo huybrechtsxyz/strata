@@ -104,7 +104,7 @@ which kind/concept.
   implemented" overall since unrelated concerns (locking, SIEM, whole-run
   timeout) are still open in `deploy-command.md`.
 - 2026-10-07: `strata deploy run` row touched again — a real external
-  bug report (cfgint team) found `--follow` genuinely was silently inert
+  bug report (config-repo team) found `--follow` genuinely was silently inert
   under `--output json`, exactly as 2026-10-06's own design doc entry
   described (that description was accurate to what was decided, not to
   what should have shipped); fixed to reroute to stderr instead, and

@@ -35,9 +35,9 @@ both worth restating since they're easy to re-litigate by accident:
    wrong thing.
 2. **Customisation is real, but not for the reason "check real usage"
    first suggested.** Checked against all three real workspaces available
-   (haven's single-repo terraform provisioner, and `cfg-deployment`'s
+   (haven's single-repo terraform provisioner, and `config-repo`'s
    two workspaces referencing a genuinely separate dedicated Terraform repo,
-   `iac-deployment`) and found **zero** use of v1's `OutputProfileModel`
+   `iac-repo`) and found **zero** use of v1's `OutputProfileModel`
    (`format`/`emits`/`files`/`script`). That's real evidence the *emit-
    suppression* mechanism is over-built, same pattern as Ring/Promotion and
    `pins.tools` elsewhere in this project. But both real repos were authored
@@ -48,8 +48,8 @@ both worth restating since they're easy to re-litigate by accident:
    them, because neither ever had foreign code to reconcile with. That
    question matters because of strata's own stated promise: *"you can layer
    strata over your deployments, and take it away again."*
-   `cfg-deployment` already violated that promise once - product
-   Terraform had to move into a separate `iac-deployment` repo instead
+   `config-repo` already violated that promise once - product
+   Terraform had to move into a separate `iac-repo` repo instead
    of living next to the application code, which was never the intention.
    The default projection is part of why: it requires `.tf` code to either
    declare strata's own vocabulary (coupling it to strata) or tolerate a
@@ -93,7 +93,7 @@ safe to over-emit without a suppression mechanism. The real cross-repo-
 variation mechanism that *is* kept: `${var:KEY}`/`${secret:KEY}`/
 `${feature:KEY}` typed-expression substitution (v1 ADR-0075) inside a
 provisioner's own `configuration`/`backend` dicts - confirmed directly in
-`cfg-deployment`'s real `ProvisionerBackendModel.configuration`:
+`config-repo`'s real `ProvisionerBackendModel.configuration`:
 
 ```yaml
 backend:
@@ -336,7 +336,7 @@ emission and deploy-time substitution still need their own design pass.
   actually checking - corrected once real usage was checked.
 - **Correction (found while grounding Phase 2, not at D2's original
   writing):** the "zero usage" check above was incomplete - it only
-  covered `spoke`/`instance`, not `config-deploy`'s `control/workspace.yaml`,
+  covered `spoke`/`instance`, not `config-repo`'s `control/workspace.yaml`,
   which has a real, load-bearing `output: {format: custom, emits: [features,
   variables, properties]}` block, complete with a real strata bug it hit and
   the fix that shipped for it (PR #309, "track written files by provisioner

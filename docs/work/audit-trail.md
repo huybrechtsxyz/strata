@@ -788,7 +788,7 @@ conflict, bad credentials. Neither extreme is right: always failing
 already succeeded gets reported as a failure; always swallowing it
 silently reintroduces exactly the "declared real, but doesn't actually
 work" problem this whole Layer 2 effort exists to fix (the real,
-load-bearing `env-int-deployment` push).
+load-bearing `env-repo` push).
 
 **Resolution — reuse `Diagnostics`' existing three-tier `Severity`, plus
 one field v2 already has a name and default for.** `Integration.required:
@@ -842,15 +842,15 @@ declares `layers.follows`/`layers.segments` (already validated against a
 `spec.paths` convention by `semantic_checks.py`), the audit directory is
 built by joining those *resolved* segment values, in the order that
 convention's own `PathConventionModel.segments[]` list declares them —
-e.g. `layers.segments == {hub: z00, spoke: s01, customer: c0224, ring:
+e.g. `layers.segments == {hub: hub1, spoke: spoke1, customer: fabrikam, ring:
 dev}` under a convention ordering `[hub, spoke, customer, ring]` produces
-`z00/s01/c0224/dev`, matching the deployment's real hierarchy for free.
+`hub1/spoke1/fabrikam/dev`, matching the deployment's real hierarchy for free.
 Where no `layers` block exists, fall back to a fixed `f"{workspace}/
 {deployment}"`. No template engine, no config field, either way.
 
 **`journal` is deferred out of this pass entirely — no evidenced
 consumer.** Checked against the same real-usage bar that justified
-building Layer 2 next: in `config-deploy` it runs "always on, local,
+building Layer 2 next: in `config-repo` it runs "always on, local,
 gitignored," but nothing reads it, nothing forwards it, and it played no
 part in the finding that justified this work (deploy-log + manifest
 git-push durability). Same "declared-but-unread machinery" caution this
@@ -906,7 +906,7 @@ off by a model that doesn't know about it yet).
    completed`, `deployment.destroyed`, `deployment.measured`. Grows only
    when a new producer lands, same discipline as `Capability`.
 
-**Real-usage tension, named rather than hidden:** `config-deploy`'s
+**Real-usage tension, named rather than hidden:** `config-repo`'s
 actual overrides are `secret.accessed`/`policy.violated`/
 `workitem.rejected` — all three **outside** this scoped set. Expected,
 not a problem: none of those producers exist in v2 yet, so that config
@@ -1152,7 +1152,7 @@ see "The audit files" above).
 so a future aggregation consumer has an offline corpus to read, since
 per-execution build directories get cleaned. Caught on review, walking the
 full end-to-end loop with real usage in mind: **~90% of real deploys run
-in ephemeral CI** (`config-deploy`'s own is Azure Pipelines) — a
+in ephemeral CI** (`config-repo`'s own is Azure Pipelines) — a
 runner checks out fresh, writes exactly one line to a local-only file,
 then the runner and that file are both destroyed. The series would never
 actually accumulate where most runs happen, which is backwards from its
@@ -1438,9 +1438,9 @@ This doc is capability catalog only — no v2 decisions are made here. Before
 a v2 ADR/implementation:
 
 - **Scope to real usage first, same as v1 should have.** **Answered
-  2026-09-30**, per direct request ("lets look at what config-deploy
+  2026-09-30**, per direct request ("lets look at what config-repo
   actually needs from v2") — read the real, current
-  `e:\sources\config-deploy\config\audit.yaml` and `.github/` directly:
+  `e:\sources\config-repo\config\audit.yaml` and `.github/` directly:
   - **Layer 1 (PR template + extraction) — REAL, active.**
     `.github/pull_request_template.md` (before/after table, business
     justification, risk level, rollback plan, author/reviewer checklists)
@@ -1448,9 +1448,9 @@ a v2 ADR/implementation:
     and are populated, matching v1's design exactly.
   - **Layer 2 (deploy-log + manifest) — REAL, actively durable, not just
     local.** `spec.audit.deploy_log_path`/`structure: by-tenant` write
-    locally, but `spec.audit.repository: {push: true, name: env-int, path:
+    locally, but `spec.audit.repository: {push: true, name: env-repo, path:
     deploys}` git-pushes every deploy-log to a real remote
-    (`env-int-deployment`) on every deploy — this is the opposite of "local
+    (`env-repo`) on every deploy — this is the opposite of "local
     only, unexercised"; it is the one piece of this whole subsystem that is
     both real and durable today. `spec.deployment.manifest` (resolved
     versions/resources/outputs) is pushed the same way, to the same remote,
@@ -1475,14 +1475,14 @@ a v2 ADR/implementation:
   scaffolding) is cheap and real, a reasonable close second — **and is
   now done** (2026-09-30, see [solution-scaffolding.md](solution-scaffolding.md)):
   `strata sln init`/`update` scaffold both files, matching real
-  `config-deploy` usage exactly; only the `gh`-based PR-extraction
+  `config-repo` usage exactly; only the `gh`-based PR-extraction
   half remains unbuilt (needs Layer 2's deploy-log/manifest to exist
   first). Layers 3 and 4 have no CI evidence of use and should wait for
   a concrete need.
 - **Does v2 need all four layers, or fewer? — Decided (2026-09-30).**
   Build Layer 1 (done) and Layer 2 (next) fully. Layer 2 itself only
   needs the **`git` sink arm** (durable push — the one real, active
-  need `config-deploy` already exercises); the **`integration` sink
+  need `config-repo` already exercises); the **`integration` sink
   arm** (siem/webhook/syslog, CloudEvents+ECS rendering) is modeled
   (cheap — the `AuditSinkModel` shape already supports it) but its
   dispatch is **not implemented in this first pass** — building a full
@@ -1499,7 +1499,7 @@ a v2 ADR/implementation:
   a bare `user.name` string; v2 has no identity/AuthN model at all.
   Waiting for one would block Layer 2 entirely for a dependency with no
   committed timeline. Resolution order, each a plain env-var/OS read, no
-  new plumbing: real CI's own identity var first (`config-deploy`'s
+  new plumbing: real CI's own identity var first (`config-repo`'s
   actual pipeline is Azure Pipelines — `BUILD_REQUESTEDFOR`, falling back
   to `BUILD_REQUESTEDFOREMAIL`; a future GitHub Actions consumer would
   add `GITHUB_ACTOR` to the same chain), then the OS user
@@ -1517,7 +1517,7 @@ a v2 ADR/implementation:
   a whole OIDC login/RBAC server v2 doesn't have) and the signed-in cloud
   CLI identity (az/aws/gcloud, whichever is configured — checked in that
   fixed order). The cloud-CLI step is a **future enhancement, not a gap**:
-  `config-deploy` runs on Azure (every provider declares
+  `config-repo` runs on Azure (every provider declares
   `authentication.method: managed_identity`) but authenticates through
   Azure Pipelines' own service connection, not a strata-owned `azure_cli`
   integration — v2 has no `azure_cli`/`aws_cli`/`gcloud_cli` integrations
@@ -1992,7 +1992,7 @@ auditor actually tests them:
   thing to build.
 - **Full `gh`-based PR *approver* extraction** (fixing v1's own
   never-populated `approvers`) — only worth it once a real pipeline
-  actually has `gh` available (confirmed not true for `config-deploy`
+  actually has `gh` available (confirmed not true for `config-repo`
   today: zero evidence of `gh` CLI/`GITHUB_TOKEN` anywhere in its real
   Azure Pipelines YAML). The commit-message PR-number recovery above
   covers most of the compliance value at none of this cost.
@@ -2078,7 +2078,7 @@ real invocations. Shipping that would be worse than not shipping anything
 **What a correct version needs instead:** read from wherever the data
 actually survives — the `git` sink's pushed remote destination (the one
 real, durable mechanism already confirmed load-bearing for
-`cfg-int-deployment`), not the local filesystem. That is a materially
+`config-repo`), not the local filesystem. That is a materially
 bigger design than "walk a directory": it needs a fetch/checkout step
 (plausibly reusing `audit_push_checkout_path()`'s existing layout
 convention in reverse, as a pull instead of a push), a decision about
@@ -2169,7 +2169,7 @@ approvals, GitHub Actions protection rules)."* v1's authors had already
 reasoned through exactly this proposal.
 
 **Real-usage check, same discipline as every other feature in this doc:**
-grepped every real YAML in `cfg-int-deployment` for `gates:`/`type:
+grepped every real YAML in `config-repo` for `gates:`/`type:
 cab`/`type: approval` — one hit, a different and unrelated field
 (`promotions.yaml`'s rollout-ordering `gates:`, itself commented out,
 "not adopted yet"). **Zero evidence this system is used anywhere.** Same
@@ -2237,7 +2237,7 @@ in two:
   same honest limit already recorded against the PR-number regex above)
   — not the right mechanism for structured data.
 - **The right mechanism for the structured half is a queue-time pipeline
-  parameter, not the approval step.** `cfg-int-deployment`'s real
+  parameter, not the approval step.** `config-repo`'s real
   pipelines already use YAML `parameters:` (confirmed: `stack`,
   `deploymentPath`, `dryRun`, ...) — a `changeTicket` parameter, typed by
   whoever *queues* the run, is a genuinely structured, already-proven ADO
@@ -2262,7 +2262,7 @@ complicate it.**
   the "most of the work is outside strata's own repo" reservation below
   concrete and larger than first scoped: adopting this gate means
   restructuring whichever job currently calls `strata deploy run` into a
-  deployment job, a real pipeline-shape change in `cfg-int-deployment`,
+  deployment job, a real pipeline-shape change in `config-repo`,
   not just adding a check to an existing job.
 - **There is no way for a script to correlate "the approval that just
   passed" back to that approval's own `comment`.** Checked both real
@@ -2323,11 +2323,11 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   as the evidence base for a future v2 audit-trail ADR. No v2 decisions
   made in this doc.
 - 2026-09-30: Resolved Open Question #1, per request ("lets look at what
-  config-deploy actually needs from v2"). Read the real, current
+  config-repo actually needs from v2"). Read the real, current
   `config/audit.yaml` and `.github/` directly: Layer 1 (PR template +
   extraction) and Layer 2 (deploy-log + manifest) are both real and
   actively load-bearing — Layer 2 specifically git-pushes to a real
-  durable remote (`env-int-deployment`) on every deploy, not just local.
+  durable remote (`env-repo`) on every deploy, not just local.
   Layer 3 (CLI reporting) has zero CI evidence; Layer 4 (policy + sinks)
   has real policy config but the one declared sink is disabled. Also
   corrected a stale blocker: this doc originally said v2 had no `deploy
@@ -2456,7 +2456,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
 - 2026-09-30: Resolved the remaining open questions, per request ("lets
   get back to the previous topic" -> "resolve remaining open questions
   first"). (1) Actor/identity: ship a weak, best-effort actor now (real
-  CI identity env var — `BUILD_REQUESTEDFOR` for `config-deploy`'s
+  CI identity env var — `BUILD_REQUESTEDFOR` for `config-repo`'s
   actual Azure Pipelines CI — falling back to the OS user, falling back
   to `"unknown"`; never an exception), revisit once v2 has a real
   identity model. (2) Config location: `ConfigurationSpecModel.audit`,
@@ -2481,7 +2481,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   already-adopted CI-env-var/OS-user chain is exactly v1's own bottom two
   precedence steps, not a gap — the two steps above it (control-plane
   session; signed-in cloud CLI identity) need infrastructure v2 lacks.
-  Verified no real consumer need: `config-deploy` runs on Azure
+  Verified no real consumer need: `config-repo` runs on Azure
   (`authentication.method: managed_identity` on every provider) but
   authenticates via Azure Pipelines' own service connection, not a
   strata-owned `azure_cli` integration, and configures no identity-
@@ -2527,7 +2527,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   describe a directory shape `spec.paths` may already declare once —
   falls back to a fixed `workspace/deployment` when no `layers` block
   exists. (3) `journal` deferred out of this pass entirely — checked
-  against real usage and found no evidenced consumer (`config-deploy`
+  against real usage and found no evidenced consumer (`config-repo`
   runs it "always on, local, gitignored" but nothing reads or forwards
   it), the same "declared-but-unread machinery" caution already applied
   to `Capability.AUDIT`. (4) `policy`/event-overrides intentionally left
@@ -2548,7 +2548,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   closed set to only the three events v2 actually produces
   (`deployment.completed`/`destroyed`/`measured`), not v1's full 20-type
   list spanning workitem/lock/drift/cost/secret producers v2 doesn't have
-  — named explicitly that `config-deploy`'s real overrides
+  — named explicitly that `config-repo`'s real overrides
   (`secret.accessed`/`policy.violated`/`workitem.rejected`) all fall
   outside this scoped set, expected given none of those producers exist
   in v2 yet. Also dropped the word "policy" itself — no field or model
@@ -2722,7 +2722,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   DevOps environment approvals" as the intended external-enforcement
   case — record, don't re-implement. Checked real usage the same way as
   every other feature in this doc: zero evidence anywhere in
-  `cfg-int-deployment` (`gates:` has exactly one unrelated, commented-out
+  `config-repo` (`gates:` has exactly one unrelated, commented-out
   hit in `promotions.yaml`) — a third "declared but unread machinery"
   instance, alongside the SIEM sinks and the journal. Right-sized the
   idea rather than taking it as proposed: no new `kind: changerequest`
@@ -2817,7 +2817,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   `comment`; `id`/`system`/`classification` have no equivalent in the
   approval step and would need a queue-time pipeline `parameters:` entry
   instead (confirmed as a real, already-used mechanism in
-  `cfg-int-deployment`'s actual pipelines) rather than parsing structure
+  `config-repo`'s actual pipelines) rather than parsing structure
   out of an approver's free text. Folded into the ADO-gate addendum. No
   code changed.
 - 2026-10-05: **Implemented `change_reference` CLI wiring.** Six new
@@ -2842,7 +2842,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   references side by side: only `jobs.deployment` has an `environment:`
   property at all, so Environment approval checks can only gate
   deployment jobs — adopting this gate requires restructuring whichever
-  job in `cfg-int-deployment` currently calls `strata deploy run` into a
+  job in `config-repo` currently calls `strata deploy run` into a
   deployment job, a real pipeline-shape change, not just adding a check.
   (2) Checked both candidate mechanisms for a script to read back "the
   approval that just passed" and found neither exists: the documented

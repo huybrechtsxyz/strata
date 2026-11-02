@@ -24,7 +24,7 @@ firewall you now sometimes have a lot [of] parts coming together where you
 can only have one really big TF declaration so all customer paths on agw are
 in one block — that is not really a manageable solution."*
 
-**The real Terraform shape, confirmed directly** (`iac_aks_core`'s
+**The real Terraform shape, confirmed directly** (`iac-core`'s
 `src/modules/az-platform-core/_components/agw/agw.tf`, vendored again into
 `iac-repo/core/terraform/components/agw/agw.tf`): one
 `resource "azurerm_application_gateway" "main"`, built entirely from

@@ -23,7 +23,7 @@
 
 ## Overview
 
-A real bug report from the cfgint team (`xyz-strata` 2.0.0a8, Azure
+A real bug report from the config-repo team (`xyz-strata` 2.0.0a8, Azure
 DevOps/Ubuntu 24.04): `strata deploy run --follow` silently had no effect
 whenever output was JSON — whether via `--output json` or the
 `STRATA_OUTPUT=json` env var — with nothing emitted to say so. An
@@ -40,7 +40,7 @@ since `--follow` was unlikely to be the last flag of this shape.
 
 ## Real evidence motivating this
 
-Verbatim from the cfgint-reported issue:
+Verbatim from the config-repo-reported issue:
 
 > **Title:** `deploy run --follow` silently has no effect under JSON output
 > (incl. via `STRATA_OUTPUT` env var) — no warning emitted

@@ -11,7 +11,7 @@
 
 ## Context and Problem Statement
 
-A real consumer's environment files (cfg-int-deployment, a 779-line leaf among 12 files) carried four kinds of
+A real consumer's environment files (config-repo, a 779-line leaf among 12 files) carried four kinds of
 knowledge about values only as YAML comments:
 
 1. **Requirements**: a value is only valid together with another one (`enable_aks` on needs `aks_cluster_id`). A

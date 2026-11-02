@@ -120,9 +120,9 @@ work:
   can gate on the risk level the LLM *returns*, but can't replace making
   the call.
 
-The genuine architectural win from a generic `opa`/`script` dispatcher is
+The genuine architectural win from a generic `opa`/`script` scheduler is
 narrower than "covers everything for free": it replaces N bespoke Python
-`BasePolicy` subclasses with one dispatcher + a library of versioned
+`BasePolicy` subclasses with one scheduler + a library of versioned
 `.rego` files, so adding a new check becomes a policy-bundle change instead
 of a strata code change and release. That's real, but it's an evaluation-
 layer simplification, not a data-source one.
@@ -160,7 +160,7 @@ likely a single combined doc or direct implementation when picked up),
 `tenant_zone`'s full tier — worth building alongside it, not separately),
 `cost_threshold` (needs an Infracost integration), `ai_review` (needs an
 `ai_agent` integration — a materially bigger, separate concern given it's
-not rule-based at all), `script`/`opa` (generic dispatchers — only useful
+not rule-based at all), `script`/`opa` (generic schedulers — only useful
 once at least one real policy type exists to compare against).
 
 ## Open Questions
@@ -169,7 +169,7 @@ once at least one real policy type exists to compare against).
    the "model the one real check directly" precedent extend to every
    policy type v2 ever builds? Decided (2026-10-07): bespoke,
    indefinitely — no generic engine planned.** Checked against real usage
-   first, not assumed: `cfg-int-deployment`'s real `config/policies.yaml`
+   first, not assumed: `config-repo`'s real `config/policies.yaml`
    (the one real consumer repo with any policy infrastructure at all —
    `haven` has none, confirmed by direct `Get-ChildItem` search, zero
    `policies.yaml` anywhere) has exactly two **live, uncommented**
@@ -181,7 +181,7 @@ once at least one real policy type exists to compare against).
    Pipelines YAML (`.azure/**`) for `type: opa`/`type: script`/`opa eval`/
    `OPA_ENDPOINT` returned zero matches — not configured, and never
    invoked. This is decisive: v1 already ships a working `opa`/`script`
-   dispatcher at zero marginal build cost to this consumer, and it is
+   scheduler at zero marginal build cost to this consumer, and it is
    **exactly as unused** as the bespoke types it would supposedly make
    unnecessary. There is no real evidence anywhere that genericness
    itself is a felt need — only that the *specific, still-unconfigured*
@@ -202,7 +202,7 @@ once at least one real policy type exists to compare against).
    v2's own real track record now has 3 shipped instances of the bespoke
    pattern (`tenant_zone`'s static tier, `path_convention`, `cve_policy`),
    each a small, independent model field + inline evaluator function, no
-   shared dispatcher, no reported friction. Checkov will be a 4th — not
+   shared scheduler, no reported friction. Checkov will be a 4th — not
    evidence the pattern is straining, since each instance costs the same
    small, fixed amount regardless of how many came before it; a generic
    engine would still have to accommodate Checkov's own genuinely
@@ -213,7 +213,7 @@ once at least one real policy type exists to compare against).
 
    **Decision: no generic `PolicyModel`/engine is planned.** Continue the
    established "model the one real check directly" precedent for Checkov
-   and every future policy type. Building a dispatcher now, before any
+   and every future policy type. Building a scheduler now, before any
    real adopter has asked for the one thing it would uniquely provide
    (next paragraph), would be exactly the "declared-but-unread machinery"
    anti-pattern [audit-trail.md](audit-trail.md)'s own "Lessons from v1's
@@ -261,8 +261,8 @@ once at least one real policy type exists to compare against).
   next open item in [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
   own `## Remaining Work` checklist (which pointed back here). Checked
   real usage directly rather than reasoning
-  from precedent alone: `cfg-int-deployment`'s real `config/policies.yaml`
-  has both of v1's own generic dispatchers, `script` and `opa`, commented
+  from precedent alone: `config-repo`'s real `config/policies.yaml`
+  has both of v1's own generic schedulers, `script` and `opa`, commented
   out as inert examples — identically to every unused bespoke bucket-C
   type — and a direct search of that repo's real Azure Pipelines YAML
   found zero invocations of either. `haven` has no policy infrastructure

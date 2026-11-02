@@ -105,7 +105,7 @@ def resolve_remote(
     if remote.type == RemoteType.LOCAL:
         # A 'local' remote is never materialised under .strata/remotes/ —
         # its `url` already *is* the solution-relative location (matches the
-        # real `config` remote in config-deploy's remotes.yaml: `type:
+        # real `config` remote in config-repo's remotes.yaml: `type:
         # bundled` in v1 terms, `url: "."`).
         return (root / remote.url).resolve()
 

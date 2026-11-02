@@ -3,7 +3,7 @@
 - Status: **Archived (2026-10-12) — superseded, never built.** The four
   candidate kinds below (`identity`/`role`/`grant`/`accesspackage`) are a
   dead direction. Checking the brainstorm against the real consumer
-  (`cfg-int-deployment` + `iac-int-deployment`) showed access management is
+  (`config-repo` + `iac-repo`) showed access management is
   *already solved there* as an ordinary strata `properties` blob, and that
   what the blob actually lacks is **validation**, not kinds — see
   "2026-10-12 Evidence Review" below. The live follow-on is
@@ -34,7 +34,7 @@ strata's schema and validation.
 
 No v1 precedent exists either (checked — v1 has no `identity`/`rbac`/
 `access_package`/`pim` concept), and no real consumer (haven,
-cfg-int-deployment) currently expresses access requirements in strata at
+config-repo) currently expresses access requirements in strata at
 all. This is forward design, not a port — treat every shape below as
 untested against a real customer's actual role/grant set until it is.
 
@@ -232,15 +232,15 @@ responsibility:
 ## 2026-10-12 Evidence Review — why this direction was abandoned
 
 Pressure-tested the brainstorm above against the real consumers
-(`e:\Sources\cfg-int-deployment`, `e:\Sources\iac-int-deployment`,
-`e:\Sources\env-int-deployment`) rather than against the azure-certificates
+(`e:\Sources\config-repo`, `e:\Sources\iac-repo`,
+`e:\Sources\env-repo`) rather than against the azure-certificates
 gap alone. The finding inverts the premise of this whole doc: **this repo's
 real consumer already does workload-identity access management today, and
 does it without a single new kind.**
 
 ### It is already modeled — as an opaque `properties` blob
 
-`cfg-int-deployment/stacks/customer/environment.yaml` declares it as an
+`config-repo/stacks/customer/environment.yaml` declares it as an
 ordinary strata property plus a feature flag:
 
 ```yaml
@@ -254,8 +254,8 @@ spec:
       value: false
 ```
 
-A concrete customer fills it in (`cfg-int-deployment/customers/README.md`),
-and it rides into `iac-int-deployment/core/terraform/components/workload-identity/`,
+A concrete customer fills it in (`config-repo/customers/README.md`),
+and it rides into `iac-repo/core/terraform/components/workload-identity/`,
 which creates `azurerm_user_assigned_identity` +
 `azurerm_federated_identity_credential` + `azurerm_role_assignment`. So
 "identity", "grant" and "federation" — three of the four candidate kinds —
@@ -271,7 +271,7 @@ are all three *already expressed and working* as passthrough.
 | **D** | no                                 | no                             | pure HCL, strata never sees it                                     |
 
 Population D is the product-level `role_assignments.tf` files
-(`principal_id = azurerm_linux_function_app.datahub.identity[0].principal_id`,
+(`principal_id = azurerm_linux_function_app.catalog.identity[0].principal_id`,
 `scope = var.key_vault_id`) — both ends are resources in the same module.
 **Strata has no business modeling these and never will**; that is a scope
 boundary, not a gap.

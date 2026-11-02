@@ -5,7 +5,7 @@
 
 ## Overview
 
-Real, near-term evidence, not hypothetical: `cfg-int-deployment` already has
+Real, near-term evidence, not hypothetical: `config-repo` already has
 a handful of real deployments today and is expected to reach roughly 250
 customers across 4 rings each (plus however many instances per ring). This
 is a real, named adopter coming at real scale — not the "zero real usage"
@@ -61,16 +61,16 @@ mode, no mutual-exclusivity validator, no conditional-reference chain for
 apiVersion: strata.huybrechts.xyz/v2
 kind: version
 meta:
-  name: dspapi-prd-canary
+  name: api-prd-canary
 spec:
-  workspace: dspapi
+  workspace: api
   promotion:
     ring: prd       # which ring this document represents
     order: 3        # sequence position in the rollout (dev=1, qas=2, prd=3)
     wave: canary    # optional — distinguishes documents sharing the same (ring, order)
   pins:
     images:
-      dspapi: "1.1.0"
+      api: "1.1.0"
 ```
 
 All three fields are optional, grouped under one small sub-model
@@ -158,7 +158,7 @@ group by `spec.promotion.(order, ring)`, list by `wave` within a group,
 resolve each pin:
 
 ```
-$ strata promote status dspapi
+$ strata promote status api
 ring  order  wave     version       status
 dev   1      -        1.3.0-rc2     unverified
 qas   2      -        1.2.0         current
@@ -247,9 +247,9 @@ moved by hand-editing its pin in the target ring document.
 - **S1 — One selector, `--pin PATTERN`, repeatable.** A pattern is matched, case-sensitively with
   `fnmatch.fnmatchcase` (`*`, `?`, `[...]`), against `category/target` — the spelling `promote status`
   already prints and `check_version_pins()` already uses as a location, so a row can be pasted
-  straight into the flag. `assets/c0062-api` is one customer, `assets/c10*` a cohort, `remotes/*`
+  straight into the flag. `assets/contoso-api` is one customer, `assets/c10*` a cohort, `remotes/*`
   the platform's remotes. A pattern whose category part has no wildcard must be one of
-  `PIN_CATEGORIES` (a typo such as `asset/c0062-api` is an error naming the valid categories, not a
+  `PIN_CATEGORIES` (a typo such as `asset/contoso-api` is an error naming the valid categories, not a
   silent no-match). Glob rather than regex or a customer-aware shorthand: the pin key is already
   the customer name, and a `--tenant` shorthand would need deployment-to-asset resolution that is
   not a pin concept.
@@ -276,13 +276,13 @@ moved by hand-editing its pin in the target ring document.
   whole-ring promotion, where the point is that the ring now matches its predecessor.
 - **S7 — Waves work as today.** The pattern applies inside the wave documents `--wave` selects, and
   the source ring is chosen as Phase 5 does: an early customer in a split ring is
-  `promote apply prd --wave canary --pin assets/c0224-api`.
+  `promote apply prd --wave canary --pin assets/fabrikam-api`.
 - **S8 — Skew is the caller's choice.** Nothing cross-checks a customer pin against the platform
   pins. Promotion remains a mechanical copy-forward with no gating (still deferred, see Remaining Work).
 - **S9 — `promote status` takes the same filters.** `--pin PATTERN` (repeatable, same grammar) and
   `--ring RING` (repeatable). The `← behind` marker is computed on the whole view and the rows are
   filtered afterwards, so a filter never changes what a row means. `promote status main --pin
-  assets/c0062-api` answers "where is this customer?" across rings. A filter matching nothing
+  assets/contoso-api` answers "where is this customer?" across rings. A filter matching nothing
   prints a note and still exits 0 (status shows, it does not fail).
 - **S10 — One matcher.** `select_pins(patterns, keys)` in `promotion_controller.py` owns the
   grammar, the category check and the error text; `apply_promotion()` and `promote status` both
@@ -299,18 +299,18 @@ moved by hand-editing its pin in the target ring document.
 **User-facing shape**
 
 ```text
-$ strata promote status main --pin 'assets/c0062-api'
+$ strata promote status main --pin 'assets/contoso-api'
   ring  order  wave  target            version  status
-  dev   1      -     assets/c0062-api  v1.5.0   current
-  qas   2      -     assets/c0062-api  v1.4.0   current
-  prd   3      -     assets/c0062-api  v1.4.0   current
+  dev   1      -     assets/contoso-api  v1.5.0   current
+  qas   2      -     assets/contoso-api  v1.4.0   current
+  prd   3      -     assets/contoso-api  v1.4.0   current
 
-$ strata promote apply main qas --pin 'assets/c0062-api' --dry-run
+$ strata promote apply main qas --pin 'assets/contoso-api' --dry-run
   'qas' <- 'ring-dev' in versions/ring-qas.yaml (dry run, nothing written)
-  ~  assets.c0062-api  v1.4.0 -> v1.5.0
+  ~  assets.contoso-api  v1.4.0 -> v1.5.0
 
-$ strata promote apply main qas --pin 'assets/c0062-api'
-  ~  assets.c0062-api  v1.4.0 -> v1.5.0  (status: current)
+$ strata promote apply main qas --pin 'assets/contoso-api'
+  ~  assets.contoso-api  v1.4.0 -> v1.5.0  (status: current)
 ```
 
 `~` is a changed value, `=` one that already matched (only shown without `--changed-only`), `-` a
@@ -424,11 +424,11 @@ secrets: {...}
 properties: {...}
 custom: {...}
 promotion:                     # only present when spec.version resolved through a tagged document
-  workspace: dspapi
+  workspace: api
   ring: prd
   order: 3
   wave: canary
-  version: dspapi-prd-canary    # which Version document this deployment actually resolved to
+  version: api-prd-canary    # which Version document this deployment actually resolved to
 ```
 
 Catches a different mistake than the Phase 2 checks above: those catch
@@ -444,13 +444,13 @@ this new optional key.
 deliberately not part of the audit trail.** `build run` operates on one
 deployment; computing and writing the entire workspace's `PromotionView`
 as a side effect of building one deployment would be scope leakage
-(building `dspapi-c0224-prd` shouldn't have a side effect touching
+(building `api-fabrikam-prd` shouldn't have a side effect touching
 information about every *other* tenant's deployments too) — so this isn't
 a `build run`/`deploy run` side effect at all. It's its own command,
 invoked deliberately:
 
 ```
-$ strata promote view dspapi --output promotion-view.yaml
+$ strata promote view api --output promotion-view.yaml
 ```
 
 Reuses the exact same `build_promotion_view()` from above — same data
@@ -532,117 +532,117 @@ value — nothing else changes.
 
 ### Worked example B — multi-ring, with real wave divergence
 
-`dspapi` across three rings, with `prd` split into a canary wave
+`api` across three rings, with `prd` split into a canary wave
 (genuinely ahead) and a general wave — the scenario ring/wave tagging
 exists for. Every version reference lives on the `Version` document
 itself; deployments just reference one by name, same as example A.
 
 ```yaml
-# versions/dspapi-dev.yaml
+# versions/api-dev.yaml
 apiVersion: strata.huybrechts.xyz/v2
 kind: version
 meta:
-  name: dspapi-dev
+  name: api-dev
 spec:
-  workspace: dspapi
+  workspace: api
   promotion:
     ring: dev
     order: 1
   pins:
     images:
-      dspapi: "1.3.0-rc2"
+      api: "1.3.0-rc2"
 
-# versions/dspapi-qas.yaml
+# versions/api-qas.yaml
 apiVersion: strata.huybrechts.xyz/v2
 kind: version
 meta:
-  name: dspapi-qas
+  name: api-qas
 spec:
-  workspace: dspapi
+  workspace: api
   promotion:
     ring: qas
     order: 2
   pins:
     images:
-      dspapi: "1.2.0"
+      api: "1.2.0"
 
-# versions/dspapi-prd-canary.yaml — canary genuinely runs ahead of general
+# versions/api-prd-canary.yaml — canary genuinely runs ahead of general
 apiVersion: strata.huybrechts.xyz/v2
 kind: version
 meta:
-  name: dspapi-prd-canary
+  name: api-prd-canary
 spec:
-  workspace: dspapi
+  workspace: api
   promotion:
     ring: prd
     order: 3
     wave: canary
   pins:
     images:
-      dspapi: "1.1.0"
+      api: "1.1.0"
 
-# versions/dspapi-prd.yaml — general's shared file, same ring/order, different wave
+# versions/api-prd.yaml — general's shared file, same ring/order, different wave
 apiVersion: strata.huybrechts.xyz/v2
 kind: version
 meta:
-  name: dspapi-prd
+  name: api-prd
 spec:
-  workspace: dspapi
+  workspace: api
   promotion:
     ring: prd
     order: 3
     wave: general
   pins:
     images:
-      dspapi: "1.0.0"
+      api: "1.0.0"
 ```
 
 ```yaml
-# deployments/dspapi-dev.yaml
+# deployments/api-dev.yaml
 apiVersion: strata.huybrechts.xyz/v2
 kind: deployment
 meta:
-  name: dspapi-dev
+  name: api-dev
 spec:
-  workspace: dspapi
+  workspace: api
   environments: [dev]
-  version: dspapi-dev
+  version: api-dev
 
-# deployments/dspapi-qas.yaml
+# deployments/api-qas.yaml
 apiVersion: strata.huybrechts.xyz/v2
 kind: deployment
 meta:
-  name: dspapi-qas
+  name: api-qas
 spec:
-  workspace: dspapi
+  workspace: api
   environments: [qas]
-  version: dspapi-qas
+  version: api-qas
 
-# deployments/dspapi-c0224-prd.yaml — the sandbox tenant, canary wave
+# deployments/api-fabrikam-prd.yaml — the sandbox tenant, canary wave
 apiVersion: strata.huybrechts.xyz/v2
 kind: deployment
 meta:
-  name: dspapi-c0224-prd
+  name: api-fabrikam-prd
 spec:
-  workspace: dspapi
+  workspace: api
   environments: [prd]
-  tenant: c0224
-  version: dspapi-prd-canary
+  tenant: fabrikam
+  version: api-prd-canary
 
-# deployments/dspapi-c0062-prd.yaml — an ordinary tenant, general wave
+# deployments/api-contoso-prd.yaml — an ordinary tenant, general wave
 apiVersion: strata.huybrechts.xyz/v2
 kind: deployment
 meta:
-  name: dspapi-c0062-prd
+  name: api-contoso-prd
 spec:
-  workspace: dspapi
+  workspace: api
   environments: [prd]
-  tenant: c0062
-  version: dspapi-prd
+  tenant: contoso
+  version: api-prd
 ```
 
 ```
-$ strata promote status dspapi
+$ strata promote status api
 ring  order  wave     version       status
 dev   1      -        1.3.0-rc2     unverified
 qas   2      -        1.2.0         current
@@ -653,10 +653,10 @@ prd   3      general  1.0.0         current   ← behind
 Canary (`1.1.0`) genuinely runs ahead of general (`1.0.0`) — an actual
 version difference, not deploy-order theater, because each wave is its own
 document. Promoting `general` by hand (a direct edit to
-`versions/dspapi-prd.yaml`'s `pins.images.dspapi`) can set it to whatever
+`versions/api-prd.yaml`'s `pins.images.api`) can set it to whatever
 value an operator has actually decided on — including matching `canary`'s
 own `1.1.0`, if that is the judgment call being made. **`strata promote
-apply dspapi prd --wave general`** (Phase 5) is a narrower, purely
+apply api prd --wave general`** (Phase 5) is a narrower, purely
 mechanical version of that same edit: it does not read `canary` at all —
 waves carry no ordering field of their own (only `(ring, order)` is
 sortable; a `wave` name is just a disambiguating label, "no inference
@@ -672,7 +672,7 @@ second, wave-level ordering concept this schema deliberately does not
 have. Zero deployment documents change either way, and it applies to
 every tenant referencing that one file at once. Adding customer #251 to
 `general` is one new deployment document pointing at the existing
-`dspapi-prd` version document — nothing else changes.
+`api-prd` version document — nothing else changes.
 
 ## Implementation Plan
 
@@ -800,7 +800,7 @@ doc's own Phase 1 can start.
   Phase 2 wiring, shipped last phase). Two real design decisions made
   during implementation, beyond this doc's own illustrative table:
   - **A row is per-*pin*, not per-document** — the table gained a `target`
-    column (`category/name`, e.g. `images/dspapi`) beyond the doc's
+    column (`category/name`, e.g. `images/api`) beyond the doc's
     illustrative 5-column example. Necessary, not a scope-creep: the one
     real production `kind: version` document this whole model was
     designed around (`version_model.py`'s own docstring) carries **14**
@@ -950,7 +950,7 @@ doc's own Phase 1 can start.
 - **Shipped as**: `strata promote view WORKSPACE [--output-path PATH]` in
   [promote_command.py](../../src/strata/commands/promote_command.py).
   **One real naming conflict surfaced and resolved during implementation**:
-  the doc's own literal invocation (`strata promote view dspapi --output
+  the doc's own literal invocation (`strata promote view api --output
   promotion-view.yaml`) reuses `--output` as a *file path* — but every
   other command in this CLI (including `promote status`/`apply`, already
   shipped) already gives `-o/--output` a different, established meaning
@@ -1106,7 +1106,7 @@ doc's own Phase 1 can start.
   `update`/`set`, `--pin`, the file-lookup command, CI/CD/Dependabot
   automation, the audit-provenance gap) into
   [version-lifecycle.md](version-lifecycle.md). Updated the Overview with
-  real evidence: `cfg-int-deployment` is already live and growing toward
+  real evidence: `config-repo` is already live and growing toward
   ~250 customers × 4 rings — the motivating need is no longer purely
   hypothetical, even though this specific schema remains unproven against
   a second real rollout.
