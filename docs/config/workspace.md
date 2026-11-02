@@ -163,6 +163,12 @@ Where it runs:
 The result is recorded in `policy_results.json` as `image_tag_policy` and ends up in the audit manifest. The
 `deploy run` entry replaces the one `build run` wrote.
 
+The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
+module, strata does not write a service's `image` into the chart's values, so the chart decides what runs: the
+policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
+the module's `configuration`, in the chart's own key shape. See
+[helm-image-delivery.md](../work/helm-image-delivery.md).
+
 ## Provider slots
 
 A `spec.providers[]` entry is a named **slot** with a default provider document:

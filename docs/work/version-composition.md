@@ -1,7 +1,7 @@
 # Version Composition - Work
 
-- Status: draft
-- Last updated: 2026-11-01
+- Status: draft - parked until after 2.0.0-RC3, then re-checked against the released code
+- Last updated: 2026-11-02
 
 ## Overview
 
@@ -173,6 +173,33 @@ spec:
   in the audit record (C13), and what will run is computed on demand; a generated file adds merge
   conflicts and a regeneration step for a review aid. v1's lock (pointer, `previous`, tamper hash)
   stays unported for the reasons in ADR-0019.
+- **C15 - Promotion commands work per ring, not only per workspace.** Today `promote status
+  WORKSPACE` and `promote apply WORKSPACE RING` only see version documents whose own `spec.workspace`
+  equals the argument. A ring document that composes several products has no workspace of its own,
+  so three things change:
+  - **Finding the ring document.** `promote status`, `promote apply` and `validate_promotions()`
+    match on the effective workspace set (C8), not on the declared `spec.workspace` alone, so `prd`
+    appears for `datahub` because it includes `datahub-1.4`.
+  - **A ring-wide view.** `WORKSPACE` becomes optional on `promote status`, with a repeatable
+    `--ring`, so "what is in `prd`" is one command instead of one per product. Every row gains an
+    `owner` column. Without a workspace and without `--ring` it shows every ring.
+
+    ```
+    $ strata promote status --ring prd
+      ring  order  target              version               owner
+      prd   3      remotes/iac-int     v2.1.0                core-2.1
+      prd   3      images/staging-api  acr.io/staging:1.2.0  staging-1.2
+      prd   3      images/datahub-api  acr.io/datahub:1.4.1  prd (override of datahub-1.4)
+      prd   3      images/binocs-api   acr.io/binocs:0.9.0   binocs-0.9
+    ```
+
+  - **The workspace filter.** With a workspace, a row is shown when its owner is bound to that
+    workspace or is bound to none (`core-2.1`: DataHub runs on it too). Another product's pins in the
+    same ring document are left out.
+  - **`promote apply` by ring.** On a ring document not bound to one workspace, the workspace
+    argument means nothing: you promote `prd`, not "DataHub's `prd`". `apply` accepts the ring
+    alone there, and promoting one product is the include selector of Phase 6
+    (`promote apply prd --include 'datahub-*'`). The CLI shape is a loose end (Open question 6).
 
 ### What R1-R10 look like
 
@@ -263,9 +290,9 @@ file by path and hash.
 - [ ] **Phase 3 - Consumers.** Switch every version lookup to the resolver (C6), origin in
   `log_pin_applied` (C7), `resolved.yaml` records the composing and owning documents, `build run`
   writes `versions.json` and the audit manifest references it (C13).
-- [ ] **Phase 4 - Workspace and promotion.** Effective workspace set (C8); `build_promotion_view()`
-  and `promote status` use the effective pins and show the owning document per row; tags not
-  inherited (C9).
+- [ ] **Phase 4 - Workspace and promotion.** Effective workspace set (C8); tags not inherited (C9);
+  `promote status` with optional `WORKSPACE`, `--ring` and an `owner` column, the workspace filter
+  by owner, `validate_promotions()` over effective sets (C15).
 - [ ] **Phase 5 - Tooling.** `version show NAME --effective` (merged pins, owner per pin), owner
   routing in `version set`/`update` (C11), `version new --include`.
 - [ ] **Phase 6 - Promotion of includes.** `promote apply` copies include entries forward, selectable
@@ -288,14 +315,31 @@ file by path and hash.
    changes after it was first included (needs git or a hash), or is that review policy only?
 3. ~~**Equal values from two owners (C2).**~~ Decided: a warning when equal, an error when different.
    See C2.
-4. **`promote status` without a workspace.** A ring document spanning workspaces suggests
-   `promote status --ring prd` across all of them; decide with Phase 4.
+4. ~~**`promote status` without a workspace.**~~ Decided: C15.
 5. **Unused release files.** Not version-specific: a generic `strata validate` warning,
    `document_unreferenced`, for any document not reachable from a deployment through the reference
    graph (`build_reference_graph()` already has every edge). Reachability, not "zero inbound edges",
    so a release file included only by an unused ring document is reported too. Open: which kinds
    are roots or are bound by type rather than name (exempt), and version documents used only
    through `--pin` in CI, which strata cannot see.
+6. **`promote apply` CLI shape.** `promote apply WORKSPACE RING` has two positional arguments, so
+   "ring alone" (C15) cannot simply drop the first one. Options: a `--ring` form beside the
+   positional one, a separate verb, or reading one argument as the ring when it names a ring document
+   not bound to a workspace. Decide before 2.0.0 is final if the CLI is frozen there, so composition
+   can land later as an additive change.
+
+### Before resuming (after RC3)
+
+Composition is meant to land after 2.0.0 as an additive change: two optional fields, a new build
+artifact, optional CLI arguments. Loose ends to settle first:
+
+- **Re-check the call sites in C6** against the RC3 code: every place that looks up a version
+  document by name and reads `.spec.pins`.
+- **Open question 1 needs cfg-int's answer** (do product roots need their own infrastructure
+  version?). Ask them now so the answer is there when work resumes.
+- **Open question 6** if the CLI is frozen at 2.0.0.
+- **Open question 5** (unused documents) is not version-specific; it moves to its own work doc if
+  it is picked up.
 
 ## Changelog
 
@@ -318,3 +362,7 @@ file by path and hash.
 - 2026-11-01: C13 moved from a section in `_manifest.json` to a `versions.json` build artifact the
   manifest references by hash, like `sbom.json`: it exists for a build without a deploy, and two runs
   compare as two files.
+- 2026-11-02: C15 decided (promotion commands per ring, owner column, workspace filter by owner),
+  closing open question 4; `promote apply`'s CLI shape is open question 6. Parked until after
+  2.0.0-RC3, with the loose ends listed under "Before resuming". promotion.md's forward note and
+  remotes-at-scale.md Q6 now point here.

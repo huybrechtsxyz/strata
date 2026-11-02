@@ -143,3 +143,7 @@ is nothing honest to seed it with.
   artifacts alone are now reported as `needs_value`.
 - Not built: itemised `policy findings` for this policy (the diagnostics already name every image), and tag
   checks in `strata validate`.
+- Out of scope: the images a Helm chart deploys by itself. strata does not write a Helm module's service `image`
+  into the chart values (v1 did not either), so for a Helm module the policy judges the declared image and cannot
+  see an image only the chart knows. How to treat that is tracked in
+  [helm-image-delivery.md](../work/helm-image-delivery.md).

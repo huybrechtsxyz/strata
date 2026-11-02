@@ -146,6 +146,9 @@ ever needs to span multiple workspaces, `spec.workspace` on `Version`
 would become a list too — the link-back validation logic doesn't change
 shape, just checks membership in a list instead of equality.
 
+Superseded by [version-composition.md](version-composition.md) C8: `spec.workspace` stays single,
+and a version document that includes others covers the union of their workspaces.
+
 ### `strata promote status <workspace>` — ship visibility before enforcement
 
 The valuable half of v1 was never the gates — it was answering "where is

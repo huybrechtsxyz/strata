@@ -271,12 +271,12 @@ Deployment.spec.version                               (a name, e.g. "dispatcher-
 
 Real consumer sites per category, confirmed by reading each directly:
 
-| Category    | Real call site                                                                              | What it overlays                |
-| ----------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
-| `artifacts` | `value_controller.resolve_artifact_field()` (`image_tag` field only)                        | `ArtifactSpecModel.image_tag`   |
-| `remotes`   | `build_controller.py`'s remote-overlay step (runs before `source_sync.py` fetches anything) | `SolutionRemoteModel.reference` |
-| `images`    | `compose.py`/`helm.py` service-rendering (build time)                                       | `ModuleServiceModel.image`      |
-| `charts`    | `helm.py`'s `_render_meta()` (build time, writes `meta.yaml`'s `chartVersion`)              | `SourceModel.chart_version`     |
+| Category    | Real call site                                                                                                                                     | What it overlays                |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `artifacts` | `value_controller.resolve_artifact_field()` (`image_tag` field only)                                                                               | `ArtifactSpecModel.image_tag`   |
+| `remotes`   | `build_controller.py`'s remote-overlay step (runs before `source_sync.py` fetches anything)                                                        | `SolutionRemoteModel.reference` |
+| `images`    | `compose.py` service-rendering (build time); a Helm service's image is not written to the chart ([helm-image-delivery.md](helm-image-delivery.md)) | `ModuleServiceModel.image`      |
+| `charts`    | `helm.py`'s `_render_meta()` (build time, writes `meta.yaml`'s `chartVersion`)                                                                     | `SourceModel.chart_version`     |
 
 Every application is logged via `log_pin_applied()` (ADR-0019 decision 7)
 — but only to the run's own log output, nowhere an audit could re-read it
