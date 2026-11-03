@@ -1328,8 +1328,10 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
         declared = _merged_declared_keys(index, deployment)
-        # A partial base is judged only once merged into a deployable deployment, which is where its tenant is known.
-        check_deployment_tokens = not deployment.spec.partial
+        # A partial base is judged once merged into a deployable deployment, where its tenant is known. A chain that
+        # could not be merged is reported as such, and judging its unmerged document would add a false finding.
+        unresolved_chain = entry.ref.name not in resolved and bool(deployment.spec.extends)
+        check_deployment_tokens = not deployment.spec.partial and not unresolved_chain
         if declared is None and not check_deployment_tokens:
             continue  # no resolvable environment — nothing to check tokens against
 

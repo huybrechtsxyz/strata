@@ -4254,3 +4254,17 @@ def test_a_tenant_inherited_through_extends_counts(tmp_path):
 
     context = _resolve(root)
     assert context.ok, context.diagnostics.messages()
+
+
+def test_a_broken_extends_chain_does_not_also_report_a_missing_tenant(tmp_path):
+    """The tenant is on the base of a cycle: only `circular_extends` is the real problem."""
+    root = _backend_key_solution(tmp_path, "${deployment:tenant}.tfstate")
+    _remove_deployment_tenant(root)
+    _partial_base(root, "loop-base", "  extends: prd-deployment\n  tenant: contoso\n")
+    _extend_deployment(root, "loop-base")
+
+    context = _resolve(root)
+
+    codes = {d.code for d in context.diagnostics.errors}
+    assert "circular_extends" in codes
+    assert "unavailable_deployment_token" not in codes
