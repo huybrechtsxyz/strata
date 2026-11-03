@@ -23,7 +23,7 @@ dots, no regex redesign needed); resolving `kind.name.path` against a real
 not this module's — same kind-agnostic split `output` already established.
 
 A 6th kind, ``${deployment:KEY}`` (``KEY`` is ``name`` or ``tenant``), is a
-built-in for the deployment being run (docs/work/deployment-tokens.md): a
+built-in for the deployment being run (docs/design/deployment-tokens.md): a
 workspace is shared by every deployment, so nothing declared in a document
 can say which one is running. Its flat-map key is ``deployment:<KEY>``, not
 ``KEY``: the map is otherwise indifferent to kind, and a declared variable
@@ -69,7 +69,7 @@ _RESOLVE_VALUE_TOKEN_PATTERN = re.compile(
 )
 
 
-#: The keys ``${deployment:KEY}`` accepts (docs/work/deployment-tokens.md).
+#: The keys ``${deployment:KEY}`` accepts (docs/design/deployment-tokens.md).
 DEPLOYMENT_TOKEN_KEYS = ("name", "tenant")
 
 _DEPLOYMENT_PREFIX = "deployment"

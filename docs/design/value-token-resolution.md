@@ -231,7 +231,7 @@ against the deployment's resolved environment) is achieved a different way.
 `${deployment:name}` is the running deployment's `meta.name` and `${deployment:tenant}` its `spec.tenant`. A
 workspace is shared by every deployment, and the other kinds all read something declared in a document, so a
 Terraform state backend could only get a per-deployment key from a variable typed into each deployment. The design
-record and its decisions are in [deployment-tokens.md](../work/deployment-tokens.md).
+record and its decisions are in [deployment-tokens.md](deployment-tokens.md).
 
 - **Syntax.** `deployment` is in `VALUE_TOKEN_KINDS` and both regexes (`utils/value_tokens.py`); only the keys
   `name` and `tenant` exist (`DEPLOYMENT_TOKEN_KEYS`).

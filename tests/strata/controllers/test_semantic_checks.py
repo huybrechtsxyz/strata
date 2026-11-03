@@ -4132,7 +4132,7 @@ def test_attributeconfig_conflict_composite_ignores_a_malformed_sub_block(tmp_pa
 
 
 # ---------------------------------------------------------------------------
-# ${deployment:KEY} (docs/work/deployment-tokens.md Phase 2) - end to end through
+# ${deployment:KEY} (docs/design/deployment-tokens.md Phase 2) - end to end through
 # `strata validate`: judged per deployment, in every document it reaches
 # ---------------------------------------------------------------------------
 

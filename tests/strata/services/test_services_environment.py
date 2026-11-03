@@ -543,7 +543,7 @@ def test_no_fields_set_on_security_means_fully_unrestricted():
 
 
 # ---------------------------------------------------------------------------
-# ${deployment:KEY} (docs/work/deployment-tokens.md): skipped by the declared-keys
+# ${deployment:KEY} (docs/design/deployment-tokens.md): skipped by the declared-keys
 # check, judged by `unresolved_deployment_tokens()` against the deployment
 # ---------------------------------------------------------------------------
 

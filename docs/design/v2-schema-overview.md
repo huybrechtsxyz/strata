@@ -122,5 +122,5 @@ which kind/concept.
 - 2026-10-28: Security gates graduated from `docs/work/` to [security-gates.md](security-gates.md); the Aikido
   index, implementation plan and API reference moved to `docs/archive/`.
 - 2026-11-03: Value tokens gained a 6th kind, `${deployment:name}`/`${deployment:tenant}`
-  ([value-token-resolution.md](value-token-resolution.md)).
+  ([deployment-tokens.md](deployment-tokens.md), [value-token-resolution.md](value-token-resolution.md)).
 

@@ -460,7 +460,7 @@ def test_renaming_secrets_raises_on_unresolvable_key():
 
 # ---------------------------------------------------------------------------
 # ${deployment:KEY} - built-in tokens for the deployment being run
-# (docs/work/deployment-tokens.md)
+# (docs/design/deployment-tokens.md)
 # ---------------------------------------------------------------------------
 
 

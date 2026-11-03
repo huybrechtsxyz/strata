@@ -178,6 +178,8 @@ Things to know:
   `$${deployment:name}`.
 - The tokens are not limited to the backend: any field strata resolves at deploy time (a module's values, Terraform
   variables) can use them. They are not allowed in an [`environment`](environment.md) store's own `value`.
+  The design, and why it is a token rather than a default key, is in
+  [deployment-tokens.md](../design/deployment-tokens.md).
 
 ## Image tag policy
 

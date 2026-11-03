@@ -3982,7 +3982,7 @@ def test_deploy_run_does_not_leak_tf_var_env_into_container_capable_steps(tmp_pa
 
 
 # ---------------------------------------------------------------------------
-# ${deployment:KEY} (docs/work/deployment-tokens.md Phase 3): the deployment's own
+# ${deployment:KEY} (docs/design/deployment-tokens.md Phase 3): the deployment's own
 # name and tenant are in the deploy-time token map
 # ---------------------------------------------------------------------------
 
