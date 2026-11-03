@@ -22,6 +22,14 @@ dots, no regex redesign needed); resolving `kind.name.path` against a real
 `DocumentIndex` is `value_references.py`'s job (`resolve_document_value_references()`),
 not this module's — same kind-agnostic split `output` already established.
 
+A 6th kind, ``${deployment:KEY}`` (``KEY`` is ``name`` or ``tenant``), is a
+built-in for the deployment being run (docs/work/deployment-tokens.md): a
+workspace is shared by every deployment, so nothing declared in a document
+can say which one is running. Its flat-map key is ``deployment.<KEY>``, not
+``KEY``: the map is otherwise indifferent to kind, and a declared variable
+named ``name`` would share one slot with it. `deployment_token_values()`
+builds those entries.
+
 Lives in `strata.utils` (below `strata.models` in the layered architecture,
 ADR-0003): pure regex/string logic, no Pydantic dependency, reused across
 many model files (dns, module, network, firewall...) — same reasoning as
@@ -32,9 +40,9 @@ import ipaddress
 import re
 from typing import Any
 
-VALUE_TOKEN_KINDS = ("var", "secret", "feature", "output", "value")
+VALUE_TOKEN_KINDS = ("var", "secret", "feature", "output", "value", "deployment")
 
-VALUE_TOKEN_PATTERN = re.compile(r"\$\{(?P<kind>var|secret|feature|output|value):(?P<key>[A-Za-z0-9_.-]+)\}")
+VALUE_TOKEN_PATTERN = re.compile(r"\$\{(?P<kind>var|secret|feature|output|value|deployment):(?P<key>[A-Za-z0-9_.-]+)\}")
 
 _VALUE_TOKEN_CANDIDATE_PATTERN = re.compile(r"\$\{[^}]*\}")
 
@@ -55,8 +63,33 @@ _ESCAPED_VALUE_TOKEN_PATTERN = re.compile(r"\$\$(\{[^}]*\})")
 #: stray literal "$" prepended to the resolved value).
 _RESOLVE_VALUE_TOKEN_PATTERN = re.compile(
     r"\$\$(?P<escaped>\{[^}]*\})"
-    r"|\$\{(?P<kind>var|secret|feature|output|value):(?P<key>[A-Za-z0-9_.-]+)\}"
+    r"|\$\{(?P<kind>var|secret|feature|output|value|deployment):(?P<key>[A-Za-z0-9_.-]+)\}"
 )
+
+
+#: The keys ``${deployment:KEY}`` accepts (docs/work/deployment-tokens.md).
+DEPLOYMENT_TOKEN_KEYS = ("name", "tenant")
+
+_DEPLOYMENT_PREFIX = "deployment"
+
+
+def deployment_token_values(name: str, tenant: str | None) -> dict[str, str]:
+    """The ``deployment.<key>`` entries of the flat token map for one deployment.
+
+    `tenant` is left out when the deployment has none, so ``${deployment:tenant}``
+    then fails like any other unresolved token instead of substituting an empty
+    string into, say, a state key. One function builds the entries so deploy-time
+    resolution and `strata validate` cannot disagree about what exists.
+    """
+    values = {f"{_DEPLOYMENT_PREFIX}.name": name}
+    if tenant:
+        values[f"{_DEPLOYMENT_PREFIX}.tenant"] = tenant
+    return values
+
+
+def _lookup_key(kind: str, key: str) -> str:
+    """The flat-map key a token resolves against: `key` itself, except for ``deployment``."""
+    return f"{_DEPLOYMENT_PREFIX}.{key}" if kind == _DEPLOYMENT_PREFIX else key
 
 
 def strip_escaped_value_tokens(value: str) -> str:
@@ -213,7 +246,9 @@ def resolve_value_tokens(value: str, values: dict[str, str]) -> str:
     upstream, in `value_references.py`.
 
     `kind` (`var`/`secret`/`feature`/`output`/`value`) only matters to the
-    token's author, not to resolution: callers (`resolve_values()`/
+    token's author, not to resolution (``deployment`` is the one exception:
+    its key is looked up as ``deployment.<key>``, see `_lookup_key()`):
+    callers (`resolve_values()`/
     `build_value_references()`/`deploy_controller.py`'s per-step output
     context) already merge every source into one flat `key -> value` mapping
     before this function ever runs — it reads `key` only, indifferent to
@@ -241,13 +276,14 @@ def resolve_value_tokens(value: str, values: dict[str, str]) -> str:
             # "Escape syntax") — not a strata token at all, unescape to a
             # single '$' and stop, never look up `key` for this match.
             return f"${escaped}"
+        kind = match.group("kind")
         key = match.group("key")
-        if key not in values:
+        lookup = _lookup_key(kind, key)
+        if lookup not in values:
             raise ValueError(
-                f"Value token '${{{match.group('kind')}:{key}}}' references key '{key}', "
-                "which did not resolve to a value."
+                f"Value token '${{{kind}:{key}}}' references key '{lookup}', which did not resolve to a value."
             )
-        return values[key]
+        return values[lookup]
 
     return _RESOLVE_VALUE_TOKEN_PATTERN.sub(_substitute, value)
 
@@ -439,14 +475,15 @@ def resolve_value_tokens_renaming_secrets(
             return f"${escaped}"
         kind = match.group("kind")
         key = match.group("key")
-        if key not in values:
+        lookup = _lookup_key(kind, key)
+        if lookup not in values:
             raise ValueError(
-                f"Value token '${{{kind}:{key}}}' references key '{key}', which did not resolve to a value."
+                f"Value token '${{{kind}:{key}}}' references key '{lookup}', which did not resolve to a value."
             )
         if kind == "secret":
             secrets[key] = values[key]
             return f"${{{key}}}"
-        return values[key]
+        return values[lookup]
 
     def _walk(node: Any) -> Any:
         if isinstance(node, str):

@@ -6,6 +6,8 @@ docs/design/deploy-command.md)."""
 import pytest
 
 from strata.utils.value_tokens import (
+    DEPLOYMENT_TOKEN_KEYS,
+    deployment_token_values,
     escape_path_segment,
     extract_value_tokens,
     find_malformed_value_tokens,
@@ -453,3 +455,106 @@ def test_renaming_secrets_raises_on_unresolvable_key():
     data = {"environment": {"DB_PASSWORD": "${secret:missing}"}}
     with pytest.raises(ValueError, match="did not resolve to a value"):
         resolve_value_tokens_renaming_secrets(data, {})
+
+
+# ---------------------------------------------------------------------------
+# ${deployment:KEY} - built-in tokens for the deployment being run
+# (docs/work/deployment-tokens.md)
+# ---------------------------------------------------------------------------
+
+
+def test_deployment_token_values_has_the_name_and_the_tenant():
+    assert deployment_token_values("prd-contoso", "contoso") == {
+        "deployment.name": "prd-contoso",
+        "deployment.tenant": "contoso",
+    }
+
+
+def test_deployment_token_values_leaves_the_tenant_out_when_there_is_none():
+    assert deployment_token_values("prd-shared", None) == {"deployment.name": "prd-shared"}
+    assert deployment_token_values("prd-shared", "") == {"deployment.name": "prd-shared"}
+
+
+def test_deployment_token_keys_are_exactly_the_keys_the_values_carry():
+    built = {key.removeprefix("deployment.") for key in deployment_token_values("prd-contoso", "contoso")}
+    assert built == set(DEPLOYMENT_TOKEN_KEYS)
+
+
+def test_extract_value_tokens_returns_the_deployment_kind():
+    assert extract_value_tokens("${deployment:tenant}/${deployment:name}.tfstate") == [
+        ("deployment", "tenant"),
+        ("deployment", "name"),
+    ]
+
+
+def test_a_deployment_token_is_well_formed():
+    validate_value_tokens("${deployment:name}.tfstate")
+    assert find_malformed_value_tokens("${deployment:name}.tfstate") == []
+    assert has_value_tokens("${deployment:name}.tfstate")
+
+
+def test_a_deployment_token_without_a_key_is_malformed():
+    assert find_malformed_value_tokens("${deployment:}") == ["${deployment:}"]
+
+
+def test_resolve_value_tokens_reads_the_prefixed_deployment_key():
+    values = deployment_token_values("prd-contoso", "contoso")
+    assert resolve_value_tokens("${deployment:name}.tfstate", values) == "prd-contoso.tfstate"
+    assert resolve_value_tokens("${deployment:tenant}", values) == "contoso"
+
+
+def test_resolve_value_tokens_combines_deployment_with_other_kinds():
+    values = {"prefix": "state", **deployment_token_values("prd-contoso", "contoso")}
+    result = resolve_value_tokens("${var:prefix}/${deployment:tenant}/${deployment:name}.tfstate", values)
+    assert result == "state/contoso/prd-contoso.tfstate"
+
+
+def test_a_declared_key_named_name_does_not_collide_with_the_deployment_name():
+    values = {"name": "declared", **deployment_token_values("prd-contoso", None)}
+    assert resolve_value_tokens("${deployment:name}", values) == "prd-contoso"
+    assert resolve_value_tokens("${var:name}", values) == "declared"
+
+
+def test_resolve_value_tokens_raises_when_the_deployment_has_no_tenant():
+    with pytest.raises(ValueError, match="'\\$\\{deployment:tenant\\}' references key 'deployment.tenant'"):
+        resolve_value_tokens("${deployment:tenant}", deployment_token_values("prd-shared", None))
+
+
+def test_a_deployment_token_does_not_fall_back_to_a_bare_key():
+    """Only `deployment.<key>` counts: a declared `name` must not stand in for the deployment's name."""
+    with pytest.raises(ValueError, match="did not resolve to a value"):
+        resolve_value_tokens("${deployment:name}", {"name": "declared"})
+
+
+def test_an_escaped_deployment_token_stays_literal():
+    assert resolve_value_tokens("$${deployment:name}", {}) == "${deployment:name}"
+
+
+def test_resolve_value_tokens_in_mapping_resolves_a_deployment_token():
+    data = {"key": "${deployment:name}.tfstate", "nested": ["${deployment:tenant}"]}
+    resolved = resolve_value_tokens_in_mapping(data, deployment_token_values("prd-contoso", "contoso"))
+    assert resolved == {"key": "prd-contoso.tfstate", "nested": ["contoso"]}
+
+
+def test_tracking_secrets_resolves_a_deployment_token_without_treating_it_as_a_secret():
+    resolved, secrets = resolve_value_tokens_tracking_secrets(
+        {"image": "app:${deployment:name}"}, deployment_token_values("prd-contoso", None)
+    )
+    assert resolved == {"image": "app:prd-contoso"}
+    assert secrets == {}
+
+
+def test_renaming_secrets_resolves_a_deployment_token_in_place():
+    resolved, secrets = resolve_value_tokens_renaming_secrets(
+        {"image": "app:${deployment:name}", "password": "${secret:DB_PASS}"},
+        {"DB_PASS": "hunter2", **deployment_token_values("prd-contoso", None)},
+    )
+    assert resolved == {"image": "app:prd-contoso", "password": "${DB_PASS}"}
+    assert secrets == {"DB_PASS": "hunter2"}
+
+
+def test_renaming_secrets_raises_when_the_deployment_has_no_tenant():
+    with pytest.raises(ValueError, match="references key 'deployment.tenant'"):
+        resolve_value_tokens_renaming_secrets(
+            {"label": "${deployment:tenant}"}, deployment_token_values("prd-shared", None)
+        )

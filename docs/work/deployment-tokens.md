@@ -153,11 +153,11 @@ backend:
     key: ${deployment:name}.tfstate
 ```
 
-| Deployment    | State key                  |
-| ------------- | -------------------------- |
-| `prd-contoso` | `prd-contoso.tfstate`      |
-| `prd-acme`    | `prd-acme.tfstate`         |
-| `prd-shared`  | `prd-shared.tfstate`       |
+| Deployment    | State key             |
+| ------------- | --------------------- |
+| `prd-contoso` | `prd-contoso.tfstate` |
+| `prd-acme`    | `prd-acme.tfstate`    |
+| `prd-shared`  | `prd-shared.tfstate`  |
 
 **A folder per tenant.** A blob name may contain `/`, so the tenant becomes a folder. This workspace can then only
 be used by deployments that have a tenant: `prd-shared` fails `strata validate` with a message that it has no
@@ -173,10 +173,10 @@ backend:
     key: ${deployment:tenant}/${deployment:name}.tfstate
 ```
 
-| Deployment    | State key                          |
-| ------------- | ---------------------------------- |
-| `prd-contoso` | `contoso/prd-contoso.tfstate`      |
-| `prd-acme`    | `acme/prd-acme.tfstate`            |
+| Deployment    | State key                     |
+| ------------- | ----------------------------- |
+| `prd-contoso` | `contoso/prd-contoso.tfstate` |
+| `prd-acme`    | `acme/prd-acme.tfstate`       |
 
 **S3.** A shared prefix from a variable, the deployment name as the folder.
 
@@ -211,11 +211,11 @@ backend:
 
 **Rejected by `strata validate`**
 
-| Written                                              | Why                                                              |
-| ---------------------------------------------------- | ---------------------------------------------------------------- |
-| `${deployment:workspace}`                            | only `name` and `tenant` exist (a general path is a later step)  |
-| `${deployment:tenant}` on a tenant-less deployment   | no tenant to substitute; reported before any deploy              |
-| `${deployment:name}` in an environment store `value` | a store value resolves before a deployment is chosen             |
+| Written                                              | Why                                                             |
+| ---------------------------------------------------- | --------------------------------------------------------------- |
+| `${deployment:workspace}`                            | only `name` and `tenant` exist (a general path is a later step) |
+| `${deployment:tenant}` on a tenant-less deployment   | no tenant to substitute; reported before any deploy             |
+| `${deployment:name}` in an environment store `value` | a store value resolves before a deployment is chosen            |
 
 To keep the text `${deployment:name}` as-is (for a tool that has its own `${...}` syntax), write
 `$${deployment:name}`.
@@ -307,7 +307,8 @@ Done when: a real `deploy run` against the fake runner passes `-backend-config k
 - `docs/config/workspace.md` (backend section), `docs/config/deployment.md` (one note that its name and tenant are
   available as tokens), `docs/design/value-token-resolution.md` (the kind list and a short section for the new
   kind), `docs/design/v2-schema-overview.md` (value token row).
-- The token table in `src/strata/templates/agent/strata/SKILL.md` and `.github/CHANGELOG.md` under
+- The token table in `src/strata/templates/agent/strata/SKILL.md` (done in Phase 1: a drift test requires a row for
+  every kind in `VALUE_TOKEN_KINDS`) and `.github/CHANGELOG.md` under
   `[Unreleased]` (Added).
 - Move the backend examples from this doc into `docs/config/workspace.md`.
 - Run the schema export tests (`tests/strata/models/test_schema_quality.py` and the exporter tests) and a strict
@@ -343,7 +344,7 @@ Done when: a real `deploy run` against the fake runner passes `-backend-config k
 ## Remaining work
 
 - [x] Decide the open questions above (see Decisions).
-- [ ] Phase 1: grammar and resolution.
+- [x] Phase 1: grammar and resolution.
 - [ ] Phase 2: validation.
 - [ ] Phase 3: deploy-time injection.
 - [ ] Phase 4: docs, schema and skill.
@@ -352,6 +353,11 @@ Done when: a real `deploy run` against the fake runner passes `-backend-config k
 
 ## Changelog
 
+- 2026-11-03: Phase 1 built (`utils/value_tokens.py`): the `deployment` kind in `VALUE_TOKEN_KINDS` and both
+  regexes, `DEPLOYMENT_TOKEN_KEYS`, `deployment_token_values()`, and one `_lookup_key()` used by both substituting
+  resolvers. 16 new tests in `test_utils_value_tokens.py`. `test_skill_explains_every_value_token_kind` failed
+  until the skill's token table got a `deployment` row, so that row moved forward from Phase 4. Full suite
+  3938 passed; ruff, mypy and import-linter clean.
 - 2026-11-03: Added the implementation plan (six phases, risks), checked against the call sites of the token
   resolvers, the validation entry points and the deploy-time token map.
 - 2026-11-03: Decisions taken (two fixed keys, error on an empty tenant, any deploy-time field, token rather
