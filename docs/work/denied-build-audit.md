@@ -20,12 +20,12 @@ Verified against the source on 2026-11-03.
 
 ### What is recorded, and where
 
-| Step                                                   | Records a result in `policy_results.json` when it denies?                                          |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `build run`, `image_tag_policy`                        | No. It runs before anything is cleaned or written and returns on a breach, before the file is written. |
-| `build run`, `cve_policy` and `checkov_policy`         | Yes. Both are evaluated after the SBOM, their results are written together at the end, even when a breach already failed the build. Skipped under `--dry-run`. |
-| `deploy run`, `image_tag_policy`                       | Yes. The result is appended to the sidecar before the run returns on a breach.                     |
-| `strata policy check`                                  | Yes, appended when the build path exists.                                                          |
+| Step                                           | Records a result in `policy_results.json` when it denies?                                                                                                      |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `build run`, `image_tag_policy`                | No. It runs before anything is cleaned or written and returns on a breach, before the file is written.                                                         |
+| `build run`, `cve_policy` and `checkov_policy` | Yes. Both are evaluated after the SBOM, their results are written together at the end, even when a breach already failed the build. Skipped under `--dry-run`. |
+| `deploy run`, `image_tag_policy`               | Yes. The result is appended to the sidecar before the run returns on a breach.                                                                                 |
+| `strata policy check`                          | Yes, appended when the build path exists.                                                                                                                      |
 
 `policy_results.json` is a local sidecar under the build path. `strata policy list` reads it back, so a denied
 `cve_policy` build shows its last result locally; a denied `image_tag_policy` one shows none.

@@ -23,15 +23,15 @@ Verified against the source on 2026-11-03.
   index or `name` match) and the scalar rule (`value_reference_not_scalar`) used by `${value:kind.name.path}`.
 - What a deployment can supply, and how each source behaves:
 
-| Source                        | Inherited through `extends` and the tenant?               | Note                                                          |
-| ----------------------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
-| `meta.name`                   | n/a                                                       | already `${deployment:name}`                                  |
-| `spec.tenant`                 | yes (a base can set it)                                   | already `${deployment:tenant}`                                |
-| `spec.workspace`, `spec.version` | yes                                                    | `version` changes on promotion: unsuitable in a state key     |
-| `spec.layers.segments.<name>` | per deployment; checked against the document's directory  | strings; the one source that names a place in a hierarchy     |
-| `spec.properties.<key>`       | yes: merged over the tenant, environments and `extends`   | any type; a shared default with a per-deployment override     |
-| `spec.custom.<key>`           | yes: same chain                                           | same, not validated by `attributeconfig` unless one targets it |
-| `meta.labels.<key>`           | no: `meta` is not merged                                  | costs the per-deployment typing the tokens exist to avoid     |
+| Source                           | Inherited through `extends` and the tenant?              | Note                                                           |
+| -------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
+| `meta.name`                      | n/a                                                      | already `${deployment:name}`                                   |
+| `spec.tenant`                    | yes (a base can set it)                                  | already `${deployment:tenant}`                                 |
+| `spec.workspace`, `spec.version` | yes                                                      | `version` changes on promotion: unsuitable in a state key      |
+| `spec.layers.segments.<name>`    | per deployment; checked against the document's directory | strings; the one source that names a place in a hierarchy      |
+| `spec.properties.<key>`          | yes: merged over the tenant, environments and `extends`  | any type; a shared default with a per-deployment override      |
+| `spec.custom.<key>`              | yes: same chain                                          | same, not validated by `attributeconfig` unless one targets it |
+| `meta.labels.<key>`              | no: `meta` is not merged                                 | costs the per-deployment typing the tokens exist to avoid      |
 
 ## Sketch
 
