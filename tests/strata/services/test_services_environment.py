@@ -6,7 +6,7 @@ import pytest
 from strata.models.configuration_model import ConfigurationSecurityModel
 from strata.models.dns_model import DnsModel
 from strata.models.network_model import NetworkModel
-from strata.services.environment_service import EnvironmentService
+from strata.services.environment_service import EnvironmentService, unresolved_deployment_tokens
 
 
 def _environment() -> EnvironmentService:
@@ -460,6 +460,7 @@ def _environment_with_variable_value(value: object, *, section: str = "variables
         ("secrets", "${secret:DB_PASSWORD}", "${secret:DB_PASSWORD}"),
         ("features", "${feature:ENABLE_X}", "${feature:ENABLE_X}"),
         ("variables", "${output:step.key}", "${output:step.key}"),
+        ("variables", "${deployment:name}", "${deployment:name}"),
         ("variables", "prefix-${var:REGION}-suffix", "${var:REGION}"),
     ],
 )
@@ -539,3 +540,53 @@ def test_no_fields_set_on_security_means_fully_unrestricted():
     result = _environment().validate_allowed_stores(_security())
     assert result.ok
     assert result.messages() == []
+
+
+# ---------------------------------------------------------------------------
+# ${deployment:KEY} (docs/work/deployment-tokens.md): skipped by the declared-keys
+# check, judged by `unresolved_deployment_tokens()` against the deployment
+# ---------------------------------------------------------------------------
+
+
+def test_deployment_token_is_not_judged_by_the_declared_keys_check():
+    """Not an environment key: `unresolved_value_tokens()` leaves it to `unresolved_deployment_tokens()`."""
+    result = _environment().validate_document_tokens(_dns("${deployment:name}"))
+    assert result.ok, result.messages()
+
+
+@pytest.mark.parametrize("token", ["${deployment:name}", "${deployment:tenant}", "a-${deployment:name}-b"])
+def test_a_deployment_token_the_deployment_can_supply_passes(token):
+    assert unresolved_deployment_tokens(_dns(token), "prd-contoso", "contoso").ok
+
+
+def test_the_name_token_needs_no_tenant():
+    assert unresolved_deployment_tokens(_dns("${deployment:name}"), "prd-shared", None).ok
+
+
+def test_the_tenant_token_on_a_tenant_less_deployment_is_rejected():
+    result = unresolved_deployment_tokens(_dns("${deployment:tenant}"), "prd-shared", None)
+    assert [d.code for d in result.errors] == ["unavailable_deployment_token"]
+    message = result.messages()[0]
+    assert "prd-shared" in message
+    assert "tenant" in message
+    assert "records" in (result.errors[0].location or "")
+
+
+def test_an_unknown_deployment_key_is_rejected_with_the_valid_keys():
+    result = unresolved_deployment_tokens(_dns("${deployment:workspace}"), "prd-contoso", "contoso")
+    assert [d.code for d in result.errors] == ["unknown_deployment_token"]
+    message = result.messages()[0]
+    assert "workspace" in message
+    assert "name" in message
+    assert "tenant" in message
+
+
+def test_other_token_kinds_are_not_this_functions_business():
+    """A `${var:}` key that is undeclared is `unresolved_value_tokens()`'s finding, not this one's."""
+    assert unresolved_deployment_tokens(_dns("${var:GHOST_IP}"), "prd-contoso", "contoso").ok
+    assert unresolved_deployment_tokens(_dns("$${deployment:name}"), "prd-contoso", None).ok
+
+
+def test_every_deployment_token_in_one_document_is_checked():
+    result = unresolved_deployment_tokens(_dns("${deployment:tenant}/${deployment:bogus}"), "prd-shared", None)
+    assert sorted(d.code for d in result.errors) == ["unavailable_deployment_token", "unknown_deployment_token"]

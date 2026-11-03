@@ -271,17 +271,24 @@ Files: `src/strata/services/environment_service.py`, `src/strata/controllers/sem
 `tests/strata/controllers/test_semantic_checks.py` and the environment service tests.
 
 1. Add `deployment` to `_UNSUPPORTED_STORE_VALUE_TOKEN_KINDS`, so an environment store's `value` rejects it.
-2. Give `unresolved_value_tokens()` a keyword `deployment_values: Mapping[str, str] | None = None` (the plain
-   `name` / `tenant` view of `deployment_token_values()`), and handle the `deployment` kind before the
-   `kind not in declared` branch:
-   - `None` (an environment checked on its own): the existing `unsupported_value_token_kind` error;
-   - a key that is not `name` or `tenant`: error naming the two valid keys;
-   - `tenant` with no tenant: error saying deployment `<name>` has no tenant (code `undeclared_deployment_token`).
-3. In `_check_deployment_value_tokens()`, pass `deployment_values` built from the resolved deployment
-   (`resolved[entry.ref.name]`, so a tenant set by an `extends` base counts).
-4. Tests: valid `name`; valid `tenant`; tenant-less deployment; unknown key; the same token in an environment
-   store `value`; a workspace used by a `partial: true` base that sets the tenant; the finding is reported with the
-   workspace document's own path (existing attribution behavior).
+2. Skip the `deployment` kind in `unresolved_value_tokens()` (as it already skips `value`): it is not an
+   environment key, so the declared-keys check has no opinion. A new `unresolved_deployment_tokens(model,
+   deployment_name, tenant)` judges it instead, against `deployment_token_values()` (the entries `deploy run` will
+   use, so the two cannot disagree):
+   - a key that is not `name` or `tenant`: `unknown_deployment_token`, naming the valid keys;
+   - `tenant` on a deployment with no tenant: `unavailable_deployment_token`, naming the deployment.
+3. In `_check_deployment_value_tokens()`, run the new check on every document the deployment reaches, using the
+   resolved deployment (`resolved[entry.ref.name]`, so a tenant set by an `extends` base counts). Two deviations
+   from the first draft, both found while reading the loop:
+   - it ran only when the deployment had a resolvable environment (`declared is None` skipped everything), but a
+     deployment token needs no environment, so the two checks are now independent;
+   - a `partial: true` base is skipped for this check, like the other per-deployment checks: it is judged once
+     merged, which is where its tenant is known.
+4. Tests: valid `name` and `tenant`; `name` on a tenant-less deployment; the tenant token on a tenant-less one;
+   an unknown key; the token in an environment `properties` value (accepted) and in an environment store `value`
+   (`store_value_token_unsupported`); a partial base without a tenant (not judged); a tenant inherited through
+   `extends`; a deployment with no resolvable environment. The partial-base and no-environment tests were checked
+   red-green by removing each guard in turn.
 
 Done when: `strata validate` on a copy of `config/` reports each broken case and nothing else changes.
 
@@ -345,7 +352,7 @@ Done when: a real `deploy run` against the fake runner passes `-backend-config k
 
 - [x] Decide the open questions above (see Decisions).
 - [x] Phase 1: grammar and resolution.
-- [ ] Phase 2: validation.
+- [x] Phase 2: validation.
 - [ ] Phase 3: deploy-time injection.
 - [ ] Phase 4: docs, schema and skill.
 - [ ] Phase 5: dogfood and a negative check.
@@ -353,6 +360,11 @@ Done when: a real `deploy run` against the fake runner passes `-backend-config k
 
 ## Changelog
 
+- 2026-11-03: Phase 2 built: `unresolved_deployment_tokens()` in `environment_service.py`, wired into
+  `_check_deployment_value_tokens()` in `semantic_checks.py`, and `deployment` added to the kinds an environment
+  store `value` rejects. 20 new tests. Full suite 3958 passed; ruff, mypy and import-linter clean. On a copy of
+  `config/`, `${deployment:tenant}` in the backend is reported for `prd-acme-deployment`, which has no tenant:
+  the Phase 5 dogfood must use `${deployment:name}` only.
 - 2026-11-03: Phase 1 built (`utils/value_tokens.py`): the `deployment` kind in `VALUE_TOKEN_KINDS` and both
   regexes, `DEPLOYMENT_TOKEN_KEYS`, `deployment_token_values()`, and one `_lookup_key()` used by both substituting
   resolvers. 16 new tests in `test_utils_value_tokens.py`. `test_skill_explains_every_value_token_kind` failed

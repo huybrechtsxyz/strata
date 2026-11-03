@@ -4129,3 +4129,128 @@ def test_attributeconfig_conflict_composite_ignores_a_malformed_sub_block(tmp_pa
 
     context = _resolve(root)  # must not raise
     assert not any(d.code == "attributeconfig_conflict" for d in context.diagnostics.errors)
+
+
+# ---------------------------------------------------------------------------
+# ${deployment:KEY} (docs/work/deployment-tokens.md Phase 2) - end to end through
+# `strata validate`: judged per deployment, in every document it reaches
+# ---------------------------------------------------------------------------
+
+_DEPLOYMENT_TOKEN_CODES = {"unknown_deployment_token", "unavailable_deployment_token"}
+
+
+def _backend_key_solution(tmp_path: Path, key: str) -> Path:
+    """The base solution with a Terraform backend whose `key` is `key` on its one provisioner."""
+    root = _base_solution(tmp_path)
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "      source: {source_path: terraform/main}\n",
+            "      source: {source_path: terraform/main}\n"
+            f'      backend:\n        type: azurerm\n        configuration:\n          key: "{key}"\n',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    return root
+
+
+def _deployment_token_codes(context) -> list[str]:
+    return [d.code for d in context.diagnostics.errors if d.code in _DEPLOYMENT_TOKEN_CODES]
+
+
+def _remove_deployment_tenant(root: Path) -> None:
+    path = root / "deployment.yaml"
+    path.write_text(path.read_text(encoding="utf-8").replace("  tenant: contoso\n", "", 1), encoding="utf-8")
+
+
+def test_deployment_name_in_a_backend_passes_validate(tmp_path):
+    context = _resolve(_backend_key_solution(tmp_path, "${deployment:name}.tfstate"))
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_deployment_tenant_in_a_backend_passes_when_the_deployment_has_a_tenant(tmp_path):
+    context = _resolve(_backend_key_solution(tmp_path, "${deployment:tenant}/${deployment:name}.tfstate"))
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_deployment_tenant_on_a_tenant_less_deployment_is_caught(tmp_path):
+    root = _backend_key_solution(tmp_path, "${deployment:tenant}/${deployment:name}.tfstate")
+    _remove_deployment_tenant(root)
+
+    context = _resolve(root)
+    assert not context.ok
+    assert _deployment_token_codes(context) == ["unavailable_deployment_token"]
+    assert any("prd-deployment" in m for m in context.diagnostics.messages())
+
+
+def test_the_name_token_is_fine_on_a_tenant_less_deployment(tmp_path):
+    root = _backend_key_solution(tmp_path, "${deployment:name}.tfstate")
+    _remove_deployment_tenant(root)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_an_unknown_deployment_key_is_caught(tmp_path):
+    context = _resolve(_backend_key_solution(tmp_path, "${deployment:workspace}.tfstate"))
+    assert not context.ok
+    assert _deployment_token_codes(context) == ["unknown_deployment_token"]
+
+
+def test_the_deployment_check_does_not_need_a_resolvable_environment(tmp_path):
+    """A deployment naming no real environment has nothing to check `${var:}` against, but its
+    `${deployment:}` tokens still need judging."""
+    root = _backend_key_solution(tmp_path, "${deployment:tenant}.tfstate")
+    _remove_deployment_tenant(root)
+    path = root / "deployment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("environments: [prd]", "environments: [ghost]"), encoding="utf-8"
+    )
+
+    context = _resolve(root)
+    assert _deployment_token_codes(context) == ["unavailable_deployment_token"]
+
+
+def test_a_deployment_token_in_an_environment_property_passes(tmp_path):
+    """Any document the deployment reaches may use it, not only the workspace backend."""
+    root = _base_solution(tmp_path)
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + '  properties:\n    label: "${deployment:name}"\n', encoding="utf-8"
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_a_deployment_token_in_an_environment_store_value_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace('value: "1.2.3.4"', 'value: "${deployment:name}"'), encoding="utf-8"
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "store_value_token_unsupported" for d in context.diagnostics.errors)
+
+
+def test_a_partial_base_is_not_judged_for_a_tenant_it_does_not_have(tmp_path):
+    """The base names the workspace but no tenant; only the deployment extending it is deployable."""
+    root = _backend_key_solution(tmp_path, "${deployment:tenant}.tfstate")
+    _partial_base(root, "base", "  workspace: main\n  environments: [prd]\n")
+    _extend_deployment(root, "base")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_a_tenant_inherited_through_extends_counts(tmp_path):
+    root = _backend_key_solution(tmp_path, "${deployment:tenant}.tfstate")
+    _partial_base(root, "base", "  workspace: main\n  environments: [prd]\n  tenant: contoso\n")
+    _remove_deployment_tenant(root)
+    _extend_deployment(root, "base")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()

@@ -77,6 +77,7 @@ from strata.services.environment_service import (
     EnvironmentService,
     merge_environment_models,
     merge_workspace_environment_deployment_properties,
+    unresolved_deployment_tokens,
     unresolved_value_tokens,
 )
 from strata.services.provider_service import ProviderService
@@ -1323,7 +1324,9 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
         declared = _merged_declared_keys(index, deployment)
-        if declared is None:
+        # A partial base is judged only once merged into a deployable deployment, which is where its tenant is known.
+        check_deployment_tokens = not deployment.spec.partial
+        if declared is None and not check_deployment_tokens:
             continue  # no resolvable environment — nothing to check tokens against
 
         owner = "+".join(deployment.spec.environments or []) or "(none)"
@@ -1341,9 +1344,16 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
                 documents.append((env_entry.model, False, env_entry.source))
 
         for document, claimed, doc_source in documents:
-            diagnostics.extend(
-                unresolved_value_tokens(document, declared, owner, output_claimed=claimed), source=str(doc_source)
-            )
+            if declared is not None:
+                diagnostics.extend(
+                    unresolved_value_tokens(document, declared, owner, output_claimed=claimed),
+                    source=str(doc_source),
+                )
+            if check_deployment_tokens:
+                diagnostics.extend(
+                    unresolved_deployment_tokens(document, deployment.meta.name, deployment.spec.tenant),
+                    source=str(doc_source),
+                )
     return diagnostics
 
 
