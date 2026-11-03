@@ -7,6 +7,7 @@ import pytest
 
 from strata.utils.value_tokens import (
     DEPLOYMENT_TOKEN_KEYS,
+    VALUE_TOKEN_PATTERN,
     deployment_token_values,
     escape_path_segment,
     extract_value_tokens,
@@ -465,18 +466,18 @@ def test_renaming_secrets_raises_on_unresolvable_key():
 
 def test_deployment_token_values_has_the_name_and_the_tenant():
     assert deployment_token_values("prd-contoso", "contoso") == {
-        "deployment.name": "prd-contoso",
-        "deployment.tenant": "contoso",
+        "deployment:name": "prd-contoso",
+        "deployment:tenant": "contoso",
     }
 
 
 def test_deployment_token_values_leaves_the_tenant_out_when_there_is_none():
-    assert deployment_token_values("prd-shared", None) == {"deployment.name": "prd-shared"}
-    assert deployment_token_values("prd-shared", "") == {"deployment.name": "prd-shared"}
+    assert deployment_token_values("prd-shared", None) == {"deployment:name": "prd-shared"}
+    assert deployment_token_values("prd-shared", "") == {"deployment:name": "prd-shared"}
 
 
 def test_deployment_token_keys_are_exactly_the_keys_the_values_carry():
-    built = {key.removeprefix("deployment.") for key in deployment_token_values("prd-contoso", "contoso")}
+    built = {key.removeprefix("deployment:") for key in deployment_token_values("prd-contoso", "contoso")}
     assert built == set(DEPLOYMENT_TOKEN_KEYS)
 
 
@@ -516,12 +517,12 @@ def test_a_declared_key_named_name_does_not_collide_with_the_deployment_name():
 
 
 def test_resolve_value_tokens_raises_when_the_deployment_has_no_tenant():
-    with pytest.raises(ValueError, match="'\\$\\{deployment:tenant\\}' references key 'deployment.tenant'"):
+    with pytest.raises(ValueError, match="'\\$\\{deployment:tenant\\}' references key 'deployment:tenant'"):
         resolve_value_tokens("${deployment:tenant}", deployment_token_values("prd-shared", None))
 
 
 def test_a_deployment_token_does_not_fall_back_to_a_bare_key():
-    """Only `deployment.<key>` counts: a declared `name` must not stand in for the deployment's name."""
+    """Only `deployment:<key>` counts: a declared `name` must not stand in for the deployment's name."""
     with pytest.raises(ValueError, match="did not resolve to a value"):
         resolve_value_tokens("${deployment:name}", {"name": "declared"})
 
@@ -554,7 +555,14 @@ def test_renaming_secrets_resolves_a_deployment_token_in_place():
 
 
 def test_renaming_secrets_raises_when_the_deployment_has_no_tenant():
-    with pytest.raises(ValueError, match="references key 'deployment.tenant'"):
+    with pytest.raises(ValueError, match="references key 'deployment:tenant'"):
         resolve_value_tokens_renaming_secrets(
             {"label": "${deployment:tenant}"}, deployment_token_values("prd-shared", None)
         )
+
+
+def test_a_deployment_entry_cannot_collide_with_a_key_of_any_other_kind():
+    """The flat key holds a colon, which the token regex never lets into a var/secret/feature/output key."""
+    assert all(":" in key for key in deployment_token_values("prd-contoso", "contoso"))
+    assert VALUE_TOKEN_PATTERN.fullmatch("${var:deployment:name}") is None
+    assert VALUE_TOKEN_PATTERN.fullmatch("${output:deployment:name}") is None

@@ -80,7 +80,12 @@ from strata.services.workspace_service import effective_assets
 from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError
-from strata.utils.value_tokens import extract_value_tokens, referenced_output_keys, resolve_value_tokens_in_mapping
+from strata.utils.value_tokens import (
+    deployment_token_values,
+    extract_value_tokens,
+    referenced_output_keys,
+    resolve_value_tokens_in_mapping,
+)
 
 #: Minimum length a resolved secret value must have before `_redact()`
 #: will replace it out of streamed subprocess output — a short secret
@@ -805,7 +810,12 @@ def deploy_run(
             output_store, upstream, step_outputs, visible_outputs, step_name=step.name, diagnostics=diagnostics
         ):
             return diagnostics
-        tokens = {**resolved.values, **visible_outputs}
+        # The deployment's own entries go last and cannot collide: their keys hold a colon (value_tokens.py).
+        tokens = {
+            **resolved.values,
+            **visible_outputs,
+            **deployment_token_values(deployment.meta.name, deployment.spec.tenant),
+        }
 
         # Helm/Compose dispatch (docs/design/gap_fit_v1.md gap #13): a
         # container-capable step never goes through Terraform's

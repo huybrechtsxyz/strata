@@ -63,9 +63,11 @@ Changes, in the order they would be built:
 1. **Grammar.** Add `deployment` to `VALUE_TOKEN_KINDS`, `VALUE_TOKEN_PATTERN` and
    `_RESOLVE_VALUE_TOKEN_PATTERN` in `utils/value_tokens.py`, and to the `_UNSUPPORTED_STORE_VALUE_TOKEN_KINDS`
    set in `services/environment_service.py` (an environment store's own `value` must not use it).
-2. **Lookup key.** Store the two values in the token map under `deployment.name` and `deployment.tenant`, and have
-   `_substitute()` look up `deployment.<key>` for this kind. Without a prefix, a variable named `name` and
-   `${deployment:name}` would share one slot in the flat map.
+2. **Lookup key.** Store the two values in the token map under `deployment:name` and `deployment:tenant`, and have
+   `_substitute()` look up `deployment:<key>` for this kind. Without a prefix, a variable named `name` and
+   `${deployment:name}` would share one slot in the flat map. The separator is a colon, not a dot, because the
+   token regex never allows a colon in a key: no variable, secret, feature or step output (`step.key`) can then
+   equal one of these entries, which a dot prefix would not guarantee.
 3. **Injection.** One place: where `tokens` is built in `deploy_controller.py`, add the two entries from the
    `deployment` document that `resolve_deployment_workspace()` already returned.
 4. **Validation.** In `unresolved_value_tokens()`, accept only the keys `name` and `tenant` for this kind
@@ -252,13 +254,13 @@ Files: `src/strata/utils/value_tokens.py`, `tests/strata/utils/test_utils_value_
 1. Add `deployment` to `VALUE_TOKEN_KINDS`, `VALUE_TOKEN_PATTERN` and `_RESOLVE_VALUE_TOKEN_PATTERN`.
 2. Add `DEPLOYMENT_TOKEN_KEYS = ("name", "tenant")` and
    `deployment_token_values(name: str, tenant: str | None) -> dict[str, str]`, returning
-   `{"deployment.name": name}` plus `{"deployment.tenant": tenant}` only when a tenant is set. One function builds the
+   `{"deployment:name": name}` plus `{"deployment:tenant": tenant}` only when a tenant is set. One function builds the
    entries, so deploy and validation cannot disagree.
-3. Add a private `_lookup_key(kind, key)` returning `deployment.<key>` for the `deployment` kind and `key`
+3. Add a private `_lookup_key(kind, key)` returning `deployment:<key>` for the `deployment` kind and `key`
    otherwise. Use it in both `_substitute()` functions (`resolve_value_tokens()` and
    `resolve_value_tokens_renaming_secrets()`). A third copy of the lookup would repeat the bug class where one
    wrapper is missed.
-4. Tests: `name` and `tenant` resolve; a missing `deployment.tenant` raises the existing "did not resolve" error;
+4. Tests: `name` and `tenant` resolve; a missing `deployment:tenant` raises the existing "did not resolve" error;
    a variable named `name` does not change `${deployment:name}`; `$${deployment:name}` stays literal;
    `extract_value_tokens()` returns `("deployment", "name")`; `${deployment:}` is still malformed;
    `resolve_value_tokens_in_mapping()` and `resolve_value_tokens_renaming_secrets()` both resolve it.
@@ -297,15 +299,21 @@ Done when: `strata validate` on a copy of `config/` reports each broken case and
 Files: `src/strata/controllers/deploy_controller.py`, `tests/strata/controllers/test_deploy_controller.py`.
 
 1. Where `tokens` is built, append `**deployment_token_values(deployment.meta.name, deployment.spec.tenant)`
-   last, so a declared variable can never shadow the built-in entries.
-2. Tests, modelled on `test_deploy_run_resolves_backend_configuration_tokens`: `key=<name>.tfstate` reaches
-   `terraform init`; `${deployment:tenant}` with a tenant; a tenant-less deployment returns a diagnostic, not a
-   traceback (deploy does not run `validate`, so the resolver error handling must hold); one Compose or Helm
-   module value using the token, to pin the "works everywhere" decision.
-3. Confirm the existing `try/except ValueError` call sites still cover every path that now sees the new kind
-   (backend, Helm, Compose, script, Terraform projection).
+   last. The entries cannot be shadowed or shadow anything: their keys hold a colon, so no declared key or step
+   output can equal them. The earlier `deployment.<key>` form could have collided with a step named `deployment`
+   producing an output `name` (`${output:deployment.name}`), which is why Phase 3 changed the separator.
+2. Nothing else changes: the same `tokens` map already reaches the backend, Terraform projection, Helm, Compose
+   and script resolvers. It is deliberately not added to `resolved.values`, which feeds `TF_VAR_*`, secret
+   redaction and the GitOps path, so none of those see a `deployment:*` entry.
+3. Tests (`test_deploy_controller.py`): `key=<name>.tfstate` and `key=<tenant>/<name>.tfstate` reach `terraform
+   init`; a tenant-less deployment returns a diagnostic naming the token and runs nothing (deploy does not run
+   `validate`); a Compose module value `label-${deployment:name}` is resolved in the rewritten compose file. The
+   utils tests gained a case that a `${var:deployment:name}` token cannot exist. Removing the injection makes the
+   name, tenant and Compose tests fail.
+4. The existing `try/except ValueError` call sites already cover the new kind (backend, Terraform projection,
+   Helm, Compose, script); the tenant-less test pins that.
 
-Done when: a real `deploy run` against the fake runner passes `-backend-config key=<name>.tfstate`.
+Done when: a `deploy run` against the fake runner passes `-backend-config key=<name>.tfstate`.
 
 ### Phase 4: docs, schema and skill
 
@@ -353,13 +361,17 @@ Done when: a real `deploy run` against the fake runner passes `-backend-config k
 - [x] Decide the open questions above (see Decisions).
 - [x] Phase 1: grammar and resolution.
 - [x] Phase 2: validation.
-- [ ] Phase 3: deploy-time injection.
+- [x] Phase 3: deploy-time injection.
 - [ ] Phase 4: docs, schema and skill.
 - [ ] Phase 5: dogfood and a negative check.
 - [ ] Phase 6: close out and release.
 
 ## Changelog
 
+- 2026-11-03: Phase 3 built: the deployment entries are appended to the deploy-time token map in
+  `deploy_controller.py`. While planning it, the flat-map separator changed from `.` to `:` (`deployment:name`),
+  since a step called `deployment` with an output `name` would have collided with the dotted form; Phase 1's helper
+  and tests were updated. 5 new tests. Full suite 3963 passed; ruff, mypy and import-linter clean.
 - 2026-11-03: Phase 2 built: `unresolved_deployment_tokens()` in `environment_service.py`, wired into
   `_check_deployment_value_tokens()` in `semantic_checks.py`, and `deployment` added to the kinds an environment
   store `value` rejects. 20 new tests. Full suite 3958 passed; ruff, mypy and import-linter clean. On a copy of

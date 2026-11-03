@@ -3979,3 +3979,102 @@ def test_deploy_run_does_not_leak_tf_var_env_into_container_capable_steps(tmp_pa
     assert terraform_env is not None and terraform_env.get("TF_VAR_db_password") == "hunter2"
     helm_env = next(env for command, env in calls if command == "helm")
     assert not helm_env
+
+
+# ---------------------------------------------------------------------------
+# ${deployment:KEY} (docs/work/deployment-tokens.md Phase 3): the deployment's own
+# name and tenant are in the deploy-time token map
+# ---------------------------------------------------------------------------
+
+
+def _backend_key_solution(tmp_path: Path, key: str, *, tenant: str | None = None) -> Path:
+    """`_terraform_solution()` with a backend whose `key` is `key`, and optionally a tenant."""
+    root = _terraform_solution(tmp_path)
+    workspace = root / "workspace.yaml"
+    workspace.write_text(
+        workspace.read_text(encoding="utf-8").replace(
+            "        source_path: infra\n",
+            "        source_path: infra\n"
+            f'      backend:\n        type: azurerm\n        configuration:\n          key: "{key}"\n',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    if tenant is not None:
+        _write(
+            root,
+            "tenant.yaml",
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: "
+            f"{tenant}\nspec:\n  display_name: Example\n  geographies:\n    - europe\n",
+        )
+        deployment = root / "deployment.yaml"
+        deployment.write_text(
+            deployment.read_text(encoding="utf-8").replace(
+                "  workspace: main\n", f"  workspace: main\n  tenant: {tenant}\n", 1
+            ),
+            encoding="utf-8",
+        )
+    return root
+
+
+def _init_call(calls: list[list[str]]) -> list[str]:
+    return next(call for call in calls if call[1] == "init")
+
+
+def test_deploy_run_resolves_the_deployment_name_in_a_backend(tmp_path: Path, _capture):
+    root = _backend_key_solution(tmp_path, "${deployment:name}.tfstate")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "key=app.tfstate" in _init_call(_capture)
+
+
+def test_deploy_run_resolves_the_deployment_tenant_in_a_backend(tmp_path: Path, _capture):
+    root = _backend_key_solution(tmp_path, "${deployment:tenant}/${deployment:name}.tfstate", tenant="contoso")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "key=contoso/app.tfstate" in _init_call(_capture)
+
+
+def test_deploy_run_reports_a_missing_tenant_as_a_diagnostic_before_running_anything(tmp_path: Path, _capture):
+    """`deploy run` does not run `validate`, so a tenant-less deployment must fail here, cleanly."""
+    root = _backend_key_solution(tmp_path, "${deployment:tenant}.tfstate")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert "${deployment:tenant}" in diagnostics.messages()[0]
+    assert _capture == []
+
+
+def test_deploy_run_resolves_a_deployment_token_in_a_compose_module(tmp_path: Path, _capture):
+    """The token map is shared, so a container module sees it too, not only the backend."""
+    root = _compose_solution(tmp_path)
+    module = root / "module.yaml"
+    module.write_text(
+        module.read_text(encoding="utf-8").replace(
+            "image: portainer/portainer-ce\n",
+            "image: portainer/portainer-ce\n"
+            "      environment:\n        - key: DEPLOYMENT_LABEL\n          value: label-${deployment:name}\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    compose_text = (build_path / "apps" / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "label-app" in compose_text
+    assert "${deployment:name}" not in compose_text
