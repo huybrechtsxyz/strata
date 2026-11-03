@@ -13,13 +13,20 @@ from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.dict_merge import deep_merge
-from strata.utils.value_tokens import VALUE_TOKEN_KINDS, extract_value_tokens, find_malformed_value_tokens
+from strata.utils.value_tokens import (
+    DEPLOYMENT_TOKEN_KEYS,
+    VALUE_TOKEN_KINDS,
+    deployment_token_values,
+    extract_value_tokens,
+    find_malformed_value_tokens,
+    resolve_value_tokens,
+)
 
 #: Maps a Value token's kind to the environment store that declares it.
 _STORE_BY_TOKEN_KIND = {"var": "variables", "secret": "secrets", "feature": "features"}
 
 #: Token kinds a store's own `value` is never resolved against (only `${value:}` is).
-_UNSUPPORTED_STORE_VALUE_TOKEN_KINDS = frozenset({"var", "secret", "feature", "output"})
+_UNSUPPORTED_STORE_VALUE_TOKEN_KINDS = frozenset({"var", "secret", "feature", "output", "deployment"})
 
 
 class EnvironmentService(BaseService[EnvironmentModel]):
@@ -277,6 +284,8 @@ def unresolved_value_tokens(
                 code="malformed_value_token",
             )
         for kind, key in extract_value_tokens(text):
+            if kind == "deployment":
+                continue  # judged per deployment by `unresolved_deployment_tokens()`
             if kind == "value":
                 # Existence/path/scalar/target-is-literal checks for this
                 # kind are a `DocumentIndex` lookup
@@ -319,6 +328,53 @@ def unresolved_value_tokens(
                     f"'{owner_name}' spec.{store}. Declared: {known}",
                     location=path,
                     code="undeclared_value_token",
+                )
+    return diagnostics
+
+
+def unresolved_deployment_tokens(model: PlatformBaseModel, deployment_name: str, tenant: str | None) -> Diagnostics:
+    """Check every ``${deployment:KEY}`` token in `model` against the deployment being validated.
+
+    The counterpart of `unresolved_value_tokens()`, which skips this kind: a
+    deployment token is not declared in an environment, so it needs no
+    environment to be judged. It is judged against the deployment (`name`, and
+    `tenant` when it has one) that reaches `model`, the same entries
+    `deploy run` puts in its token map (`deployment_token_values()`).
+
+    Args:
+        model: Any already-validated strata document reachable from the deployment.
+        deployment_name: The deployment's `meta.name`.
+        tenant: The deployment's resolved `spec.tenant`, or `None`.
+
+    Returns:
+        One error per unknown key (`unknown_deployment_token`) and one per
+        `${deployment:tenant}` on a deployment with no tenant
+        (`unavailable_deployment_token`), each located at the field path
+        where the token was written.
+    """
+    diagnostics = Diagnostics()
+    values = deployment_token_values(deployment_name, tenant)
+    dumped = model.model_dump(by_alias=True, mode="json")
+    dumped.pop("meta", None)
+    for path, text in _iter_strings(dumped):
+        for kind, key in extract_value_tokens(text):
+            if kind != "deployment":
+                continue
+            if key not in DEPLOYMENT_TOKEN_KEYS:
+                diagnostics.error(
+                    f"'${{deployment:{key}}}' is not a deployment token. Available: {sorted(DEPLOYMENT_TOKEN_KEYS)}",
+                    location=path,
+                    code="unknown_deployment_token",
+                )
+                continue
+            try:
+                resolve_value_tokens(f"${{deployment:{key}}}", values)
+            except ValueError:
+                diagnostics.error(
+                    f"'${{deployment:{key}}}' needs a {key}, but deployment '{deployment_name}' has none. Set "
+                    f"`spec.{key}` on it (or on a base it extends), or do not use this token in the workspace.",
+                    location=path,
+                    code="unavailable_deployment_token",
                 )
     return diagnostics
 

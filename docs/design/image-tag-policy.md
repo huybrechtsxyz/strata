@@ -127,6 +127,8 @@ is nothing honest to seed it with.
   replaces the build's for the same policy, so the audit record shows what was in effect at deploy.
 - `build run` judges before it cleans or writes so a breach fails fast with nothing changed. The cost is that a
   denied build records no result in `policy_results.json`, since `build run` writes that file once at the end.
+  Whether a denied build should reach the audit trail at all is tracked in
+  [denied-build-audit.md](../work/denied-build-audit.md).
 - `deploy images` used to only warn on a missing tag and said nothing about `latest`. With the policy set it now
   fails on `deny`; without the policy it behaves as before.
 - Both origins are covered by default, so an untagged third-party module image such as `redis` is flagged, which is

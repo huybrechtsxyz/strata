@@ -2,7 +2,7 @@
 
 You already have Terraform. The problem is you have eight environment folders: `dev`, `staging`, `prd`, `prd-eu`, `prd-us`, `dr`, `sandbox`, `perf` and they are 90% identical. Every change gets applied to one folder, forgotten in three others, and you only find out when production drifts. `strata` is a YAML layer over Terraform, Helm, and Compose that treats your environments as data, not copy-pasted folders. One source of truth, one command to validate it, one command to deploy it.
 
-**This is v2**. A ground-up, evidence-driven rebuild of strata: every feature here is justified by v1's real source or a real consumer's real CI, not by assumption. It's alpha, so schemas and the CLI surface are still moving. See [docs/design/v2-schema-overview.md](docs/design/v2-schema-overview.md) for what's actually implemented today.
+**This is v2**. A ground-up, evidence-driven rebuild of strata: every feature here is justified by v1's real source or a real consumer's real CI, not by assumption. It follows [Semantic Versioning](https://semver.org/); [.github/CHANGELOG.md](.github/CHANGELOG.md) lists what changed in each release. See [docs/design/v2-schema-overview.md](docs/design/v2-schema-overview.md) for what's actually implemented today.
 
 ---
 

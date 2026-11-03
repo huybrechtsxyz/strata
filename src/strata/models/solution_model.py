@@ -161,7 +161,7 @@ class SolutionRemoteModel(PlatformBaseModel):
           - name: infra
             type: git
             url: https://github.com/org/infra.git
-            reference: v2.1.0
+            reference: v1.8.0
             integration: corp-git
     """
 

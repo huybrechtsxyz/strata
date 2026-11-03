@@ -99,6 +99,7 @@ so. Write `$${...}` for a literal.
 | `${feature:KEY}` | A feature flag declared in an environment. |
 | `${output:STEP.KEY}` | An output of an earlier `deploy run` step. The producing step must be reachable through `depends_on`. |
 | `${value:kind.name.path}` | A literal field of another document, for example `${value:tenant.contoso.meta.name}`. The target must be a plain literal. |
+| `${deployment:KEY}` | The deployment being run: `name` is its `meta.name`, `tenant` its `spec.tenant` (an error when it has none). For example `key: ${deployment:name}.tfstate` in a Terraform backend. |
 
 How values merge for a deployment:
 

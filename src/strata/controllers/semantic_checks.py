@@ -77,6 +77,7 @@ from strata.services.environment_service import (
     EnvironmentService,
     merge_environment_models,
     merge_workspace_environment_deployment_properties,
+    unresolved_deployment_tokens,
     unresolved_value_tokens,
 )
 from strata.services.provider_service import ProviderService
@@ -1318,12 +1319,20 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     (docs/design/gap_fit_v1.md gap #20) — every finding used to report
     `entry.source` (this deployment's own path) regardless of which
     document actually held the token.
+
+    `${deployment:}` tokens are judged here too, by `unresolved_deployment_tokens()`, in the same documents but
+    separately: they need no environment, so they are checked even when the deployment resolves none, and a
+    `partial: true` base is skipped because its tenant is only known once a deployment extends it.
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
         declared = _merged_declared_keys(index, deployment)
-        if declared is None:
+        # A partial base is judged once merged into a deployable deployment, where its tenant is known. A chain that
+        # could not be merged is reported as such, and judging its unmerged document would add a false finding.
+        unresolved_chain = entry.ref.name not in resolved and bool(deployment.spec.extends)
+        check_deployment_tokens = not deployment.spec.partial and not unresolved_chain
+        if declared is None and not check_deployment_tokens:
             continue  # no resolvable environment — nothing to check tokens against
 
         owner = "+".join(deployment.spec.environments or []) or "(none)"
@@ -1341,9 +1350,16 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
                 documents.append((env_entry.model, False, env_entry.source))
 
         for document, claimed, doc_source in documents:
-            diagnostics.extend(
-                unresolved_value_tokens(document, declared, owner, output_claimed=claimed), source=str(doc_source)
-            )
+            if declared is not None:
+                diagnostics.extend(
+                    unresolved_value_tokens(document, declared, owner, output_claimed=claimed),
+                    source=str(doc_source),
+                )
+            if check_deployment_tokens:
+                diagnostics.extend(
+                    unresolved_deployment_tokens(document, deployment.meta.name, deployment.spec.tenant),
+                    source=str(doc_source),
+                )
     return diagnostics
 
 

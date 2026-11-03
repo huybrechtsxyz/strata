@@ -246,6 +246,17 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-03: **Built 2.1.0** - bumped `VERSION.txt` from `2.0.0` to `2.1.0` (normalizes to `2.1.0`; confirmed via
+  `packaging.version.Version` first; no trailing newline). A minor release: one additive feature and no change to
+  existing behavior (before it, `${deployment:...}` was a malformed-token error, so no document can already use
+  it). Built on `feature/deployment-tokens`, for a pull request to `main` (the v2 line since
+  the 2026-11-02 branch switch), which is then the tagged branch. Contents since 2.0.0: the `${deployment:name}` and
+  `${deployment:tenant}` value tokens (design: `docs/design/deployment-tokens.md`), usable in any field resolved at
+  deploy time, validated per deployment, and used by the `config/` example's Terraform backend key; the exported
+  schema description of `backend.configuration`. Full check suite green (`scripts/Check.ps1`). `uv build` produced
+  `xyz_strata-2.1.0-py3-none-any.whl`/`.tar.gz`; a fresh isolated venv confirmed `strata version` -> `2.1.0` and
+  `strata validate` on `config/`. The commit and the `v2.1.0` tag are left to the maintainer: `ci-build` must
+  succeed on the merge commit on `main` first.
 - 2026-11-02: **Built 2.0.0** - bumped `VERSION.txt` from `2.0.0-RC3` to `2.0.0` (normalizes to `2.0.0`; confirmed
   via `packaging.version.Version` first; no trailing newline). First plain `vX.Y.Z` release of the v2 line, still cut
   from `v2-beta`, so `ci-release` publishes it (the pre-release tags `v2.0.0-alpha*`/`-rc*` are to be removed once a
