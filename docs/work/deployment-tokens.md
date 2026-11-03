@@ -138,93 +138,8 @@ these. The reasoning:
 
 ## Backend examples
 
-With the proposed tokens. A step passes `backend.configuration` to `terraform init` as `-backend-config`
-settings; the backend block itself (`backend "azurerm" {}`) stays in the Terraform code, and `backend.type` is not
-sent to Terraform. The examples assume deployments `prd-contoso` (tenant `contoso`), `prd-acme` (tenant `acme`)
-and `prd-shared` (no tenant).
-
-**One rule for every deployment (Azure blob).** The only per-deployment part is the token.
-
-```yaml
-backend:
-  type: azurerm
-  configuration:
-    resource_group_name: ${var:tf_state_resource_group}
-    storage_account_name: ${var:tf_state_storage_account}
-    container_name: tfstate
-    key: ${deployment:name}.tfstate
-```
-
-| Deployment    | State key             |
-| ------------- | --------------------- |
-| `prd-contoso` | `prd-contoso.tfstate` |
-| `prd-acme`    | `prd-acme.tfstate`    |
-| `prd-shared`  | `prd-shared.tfstate`  |
-
-**A folder per tenant.** A blob name may contain `/`, so the tenant becomes a folder. This workspace can then only
-be used by deployments that have a tenant: `prd-shared` fails `strata validate` with a message that it has no
-tenant, instead of getting a key such as `/prd-shared.tfstate`.
-
-```yaml
-backend:
-  type: azurerm
-  configuration:
-    resource_group_name: ${var:tf_state_resource_group}
-    storage_account_name: ${var:tf_state_storage_account}
-    container_name: tfstate
-    key: ${deployment:tenant}/${deployment:name}.tfstate
-```
-
-| Deployment    | State key                     |
-| ------------- | ----------------------------- |
-| `prd-contoso` | `contoso/prd-contoso.tfstate` |
-| `prd-acme`    | `acme/prd-acme.tfstate`       |
-
-**S3.** A shared prefix from a variable, the deployment name as the folder.
-
-```yaml
-backend:
-  type: s3
-  configuration:
-    bucket: ${var:tf_state_bucket}
-    region: ${var:tf_state_region}
-    key: ${var:tf_state_prefix}/${deployment:name}/terraform.tfstate
-    dynamodb_table: ${var:tf_lock_table}
-```
-
-**GCS.** The backend takes a `prefix`, not a `key`.
-
-```yaml
-backend:
-  type: gcs
-  configuration:
-    bucket: ${var:tf_state_bucket}
-    prefix: ${deployment:name}
-```
-
-**Local state (a development workspace).**
-
-```yaml
-backend:
-  type: local
-  configuration:
-    path: .state/${deployment:name}.tfstate
-```
-
-**Rejected by `strata validate`**
-
-| Written                                              | Why                                                             |
-| ---------------------------------------------------- | --------------------------------------------------------------- |
-| `${deployment:workspace}`                            | only `name` and `tenant` exist (a general path is a later step) |
-| `${deployment:tenant}` on a tenant-less deployment   | no tenant to substitute; reported before any deploy             |
-| `${deployment:name}` in an environment store `value` | a store value resolves before a deployment is chosen            |
-
-To keep the text `${deployment:name}` as-is (for a tool that has its own `${...}` syntax), write
-`$${deployment:name}`.
-
-**Booleans in `backend.configuration`.** A non-string value is converted with Python's `str()` before it reaches
-`-backend-config` (`deploy_controller.py`), so a YAML `true` becomes `True`. Write a boolean setting as a quoted
-string (`"true"`). This is independent of the tokens.
+Moved to [Terraform backend in docs/config/workspace.md](../config/workspace.md) (Phase 4): the Azure blob rule,
+a folder per tenant, S3, GCS and local, the rejected forms and the boolean caveat.
 
 ## Consequences to accept
 
@@ -317,17 +232,19 @@ Done when: a `deploy run` against the fake runner passes `-backend-config key=<n
 
 ### Phase 4: docs, schema and skill
 
-- `ProvisionerBackendModel.configuration` description in `models/provisioning_model.py` (mentions only `var`,
-  `secret` and `feature`).
-- `docs/config/workspace.md` (backend section), `docs/config/deployment.md` (one note that its name and tenant are
-  available as tokens), `docs/design/value-token-resolution.md` (the kind list and a short section for the new
-  kind), `docs/design/v2-schema-overview.md` (value token row).
-- The token table in `src/strata/templates/agent/strata/SKILL.md` (done in Phase 1: a drift test requires a row for
-  every kind in `VALUE_TOKEN_KINDS`) and `.github/CHANGELOG.md` under
-  `[Unreleased]` (Added).
-- Move the backend examples from this doc into `docs/config/workspace.md`.
-- Run the schema export tests (`tests/strata/models/test_schema_quality.py` and the exporter tests) and a strict
-  Sphinx build.
+- `ProvisionerBackendModel.configuration` description in `models/provisioning_model.py`: it listed only `var`,
+  `secret` and `feature`; it now lists `output` and the two deployment tokens, says each value is one
+  `-backend-config`, and warns that a non-string value goes through `str()`. The workspace schema example gained
+  `key: ${deployment:name}.tfstate`.
+- `docs/config/workspace.md`: a "Terraform backend" section (the tokens, the examples moved from this doc, the
+  rejected forms, the boolean caveat) and the example's `key`. `docs/config/deployment.md`: a short "Tokens from the
+  deployment" section. `docs/config/environment.md`: `${deployment:}` joins the tokens a store `value` rejects.
+  `docs/design/value-token-resolution.md`: a section for the 6th kind. `docs/design/v2-schema-overview.md`: a History
+  line (the table row names no kinds, so it needed no edit).
+- The skill table row (done in Phase 1) and `.github/CHANGELOG.md` under `[Unreleased]` (Added).
+- The backend examples moved out of this doc, which keeps a pointer.
+- Checked: schema quality tests, the full suite (3963 passed) and a strict Sphinx build. The design doc links back
+  to this work doc; Phase 6 must repoint it when this graduates.
 
 ### Phase 5: dogfood and a negative check
 
@@ -362,12 +279,14 @@ Done when: a `deploy run` against the fake runner passes `-backend-config key=<n
 - [x] Phase 1: grammar and resolution.
 - [x] Phase 2: validation.
 - [x] Phase 3: deploy-time injection.
-- [ ] Phase 4: docs, schema and skill.
+- [x] Phase 4: docs, schema and skill.
 - [ ] Phase 5: dogfood and a negative check.
 - [ ] Phase 6: close out and release.
 
 ## Changelog
 
+- 2026-11-03: Phase 4 built (docs, exported schema description and example, changelog). Full suite 3963 passed;
+  strict Sphinx build clean.
 - 2026-11-03: Phase 3 built: the deployment entries are appended to the deploy-time token map in
   `deploy_controller.py`. While planning it, the flat-map separator changed from `.` to `:` (`deployment:name`),
   since a step called `deployment` with an output `name` would have collided with the dotted form; Phase 1's helper

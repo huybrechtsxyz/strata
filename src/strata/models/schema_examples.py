@@ -352,7 +352,10 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
                         "source": {"source_path": "terraform/main"},
                         "backend": {
                             "type": "azurerm",
-                            "configuration": {"storage_account_name": "${var:state_account}"},
+                            "configuration": {
+                                "storage_account_name": "${var:state_account}",
+                                "key": "${deployment:name}.tfstate",
+                            },
                         },
                     },
                     {

@@ -82,6 +82,7 @@ spec:
         type: azurerm
         configuration:
           resource_group_name: tfstate-rg
+          key: ${deployment:name}.tfstate
   resources:
     - name: web-storage
       resource: storage-account
@@ -105,6 +106,78 @@ spec:
   default_tags:
     managed-by: strata
 ```
+
+## Terraform backend
+
+`spec.provisioners[].backend` (Terraform and OpenTofu only) holds the settings strata passes to `terraform init`,
+one `-backend-config key=value` each. The `backend "azurerm" {}` block itself stays in the Terraform code, and
+`type` is not sent to Terraform.
+
+The values are resolved when `deploy run` starts the step, so they may contain `${var:}`, `${secret:}`,
+`${feature:}` and `${output:STEP.KEY}` tokens, and two tokens for the deployment being run. A workspace is shared
+by every deployment, so these are the way to give each deployment its own state without typing a key into every
+deployment's environment:
+
+| Token                  | Value                                                         |
+| ---------------------- | ------------------------------------------------------------- |
+| `${deployment:name}`   | the deployment's `meta.name`                                  |
+| `${deployment:tenant}` | the deployment's `spec.tenant`, from the deployment or a base |
+
+`${deployment:tenant}` on a deployment that has no tenant is an error (`strata validate` reports it, and so does
+`deploy run`), not an empty string. Any other key, such as `${deployment:workspace}`, is rejected too. A
+`partial: true` base is not judged: only the deployment that extends it is.
+
+One rule for every deployment (Azure blob), with deployments `prd-contoso` and `prd-acme`:
+
+```yaml
+backend:
+  type: azurerm
+  configuration:
+    resource_group_name: ${var:tf_state_resource_group}
+    storage_account_name: ${var:tf_state_storage_account}
+    container_name: tfstate
+    key: ${deployment:name}.tfstate     # prd-contoso.tfstate, prd-acme.tfstate
+```
+
+A folder per tenant: a blob name may contain `/`. This workspace then only suits deployments that have a tenant.
+
+```yaml
+    key: ${deployment:tenant}/${deployment:name}.tfstate   # contoso/prd-contoso.tfstate
+```
+
+Other backends:
+
+```yaml
+backend:                                  # S3
+  type: s3
+  configuration:
+    bucket: ${var:tf_state_bucket}
+    region: ${var:tf_state_region}
+    key: ${var:tf_state_prefix}/${deployment:name}/terraform.tfstate
+    dynamodb_table: ${var:tf_lock_table}
+---
+backend:                                  # GCS takes a prefix, not a key
+  type: gcs
+  configuration:
+    bucket: ${var:tf_state_bucket}
+    prefix: ${deployment:name}
+---
+backend:                                  # local state, for a development workspace
+  type: local
+  configuration:
+    path: .state/${deployment:name}.tfstate
+```
+
+Things to know:
+
+- **Renaming a deployment moves its state.** The new name gives a new, empty state, so a rename becomes a
+  migration (`terraform state` commands) or is never done.
+- **Booleans.** A non-string value is converted with Python's `str()` before it reaches `-backend-config`, so a
+  YAML `true` becomes `True`. Write a boolean setting as a quoted string (`"true"`).
+- **Literal text.** To keep `${deployment:name}` as written, for a tool with its own `${...}` syntax, write
+  `$${deployment:name}`.
+- The tokens are not limited to the backend: any field strata resolves at deploy time (a module's values, Terraform
+  variables) can use them. They are not allowed in an [`environment`](environment.md) store's own `value`.
 
 ## Image tag policy
 

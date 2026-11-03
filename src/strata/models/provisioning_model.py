@@ -43,7 +43,10 @@ class ProvisionerBackendModel(PlatformBaseModel):
         ..., min_length=1, description="Backend type (e.g. 'terraform_cloud', 's3', 'azurerm', 'gcs', 'local')"
     )
     configuration: dict[str, Any] = Field(
-        description="Backend-specific configuration (supports '${var:}'/'${secret:}'/'${feature:}' tokens)"
+        description="Backend settings, each passed to `terraform init` as one `-backend-config key=value`. Values "
+        "may contain `${var:}`, `${secret:}`, `${feature:}`, `${output:STEP.KEY}` and the deployment's own "
+        "`${deployment:name}` / `${deployment:tenant}` tokens, resolved when `deploy run` starts the step. A "
+        'non-string value is converted with Python\'s `str()`, so write a boolean as a quoted string (`"true"`).'
     )
 
 

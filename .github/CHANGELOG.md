@@ -8,6 +8,13 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- `${deployment:name}` and `${deployment:tenant}` value tokens: the name and tenant of the deployment being run, so a
+  workspace's Terraform backend can build every deployment's state key from one rule
+  (`key: ${deployment:name}.tfstate`) instead of a per-deployment variable. `${deployment:tenant}` on a deployment
+  without a tenant is an error, reported by `strata validate` and by `deploy run`.
+
 ## [2.0.0] - 2026-11-02
 
 v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVersion: strata.huybrechts.xyz/v2` and the CLI surface is new. Every feature was built from what v1 and real consumer pipelines actually do. See [docs/decisions/README.md](../docs/decisions/README.md) for the ADR index.

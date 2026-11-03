@@ -226,6 +226,29 @@ against the deployment's resolved environment) is achieved a different way.
 | Deployment  | `DeploymentSpecModel.properties`/`.custom` (Phase 7)                                                          | Done (generic walk)                                                     | Done (Phase 7)                  |
 | Tenant      | `TenantSpecModel.configuration` (Phase 6/7)                                                                   | Done (generic walk)                                                     | Done (Phase 7)                  |
 
+## The 6th kind: `${deployment:KEY}` (2026-11-03)
+
+`${deployment:name}` is the running deployment's `meta.name` and `${deployment:tenant}` its `spec.tenant`. A
+workspace is shared by every deployment, and the other kinds all read something declared in a document, so a
+Terraform state backend could only get a per-deployment key from a variable typed into each deployment. The design
+record and its decisions are in [deployment-tokens.md](../work/deployment-tokens.md).
+
+- **Syntax.** `deployment` is in `VALUE_TOKEN_KINDS` and both regexes (`utils/value_tokens.py`); only the keys
+  `name` and `tenant` exist (`DEPLOYMENT_TOKEN_KEYS`).
+- **Resolution.** Resolution reads the token's key from one flat map and ignores the kind, so the entries are
+  stored as `deployment:name` and `deployment:tenant` (`deployment_token_values()`). The token regex never allows a
+  colon in a key, so no variable, secret, feature or step output (`step.key`) can equal one. `deploy_controller.py`
+  adds them to the same `tokens` map `${output:}` uses, which reaches the backend, the Terraform projection, Helm,
+  Compose and script resolvers. They are not added to `ValueResolution.values`, which feeds `TF_VAR_*`, secret
+  redaction and the GitOps path.
+- **Validation.** `unresolved_value_tokens()` skips the kind, as it skips `value`.
+  `unresolved_deployment_tokens()` judges it for every document a deployment reaches, whether or not the deployment
+  resolves an environment: `unknown_deployment_token` for another key, `unavailable_deployment_token` for
+  `${deployment:tenant}` on a deployment with no tenant. A `partial: true` base is not judged. The kind is also
+  rejected in an environment store's own `value`.
+- **A missing tenant is an error**, not an empty string, in line with the rule that an unknown reference never
+  becomes an empty substitution.
+
 ## Decision: unify `docs/work/gap_fit_v1.md` gaps #8/#9/#10 into one deploy-time resolver, general-scope, per-integration delivery (2026-09-28)
 
 Triggered by reviewing the `.v2-haven` coverage-check migration (`docs/work/gap_fit_v1.md`

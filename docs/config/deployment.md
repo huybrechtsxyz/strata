@@ -136,6 +136,19 @@ grow. Put a binding shared by many deployments in a `partial` base, as for provi
 - `strata deploy run` reports the bound document in `strata.assets.<slot>.asset`; it needs the
   directories `strata build run` produced for the same deployment.
 
+## Tokens from the deployment
+
+A workspace is shared by every deployment, so nothing written in it can say which one is running. Two tokens read
+it from the deployment that is:
+
+- `${deployment:name}`: this document's `meta.name`
+- `${deployment:tenant}`: its `spec.tenant`, including one inherited through `extends`
+
+The usual use is a Terraform state key, `key: ${deployment:name}.tfstate`, in the workspace's backend (see
+"Terraform backend" in [workspace](workspace.md)). `strata validate` checks them for every deployment that
+reaches the document: `${deployment:tenant}` on a deployment without a tenant is an error, as is any other key. A
+`partial: true` base is judged only once a deployment extends it.
+
 ## Notes
 
 - `extends` composes *structure* (stages, workspace, provider bindings); `environments` composes
