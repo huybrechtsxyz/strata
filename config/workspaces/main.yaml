@@ -33,6 +33,8 @@ spec:
         type: azurerm
         configuration:
           resource_group_name: tfstate-rg
+          # One state per deployment, named after it: a single rule serves every deployment of this workspace.
+          key: ${deployment:name}.tfstate
   resources:
     # `name` is the workspace-local instance; `resource` names the Resource
     # document it is built from (ADR-0015).

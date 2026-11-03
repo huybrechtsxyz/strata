@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from strata.controllers.build_controller import build_run
+from strata.controllers.deploy_controller import deploy_run
 from strata.controllers.deployment_resolution import resolve_deployment_chains
 from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import (
@@ -18,6 +19,7 @@ from strata.controllers.solution_controller import (
 from strata.models.common_models import PlatformKind
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.workspace_service import effective_assets, effective_providers
+from strata.utils.value_tokens import deployment_token_values, resolve_value_tokens_in_mapping
 
 MANIFEST = """\
 apiVersion: strata.huybrechts.xyz/v2
@@ -510,3 +512,96 @@ def test_shipped_example_takes_the_artifact_tag_from_the_version_pin_or_its_own_
         tags[name] = (row.image_tag, row.tag_source)
         assert check_image_tag_policy(context, deployment, workspace).ok
     assert tags == {"prd-deployment": ("1.4.2", "pin"), "prd-acme-deployment": ("1.0.0", "declared")}
+
+
+def _example_backend_configuration(controller: SolutionController) -> dict:
+    workspace_entry = controller.index.get(PlatformKind.WORKSPACE, "main")
+    assert workspace_entry is not None
+    workspace = workspace_entry.model
+    assert isinstance(workspace, WorkspaceModel)
+    provisioner = next(p for p in workspace.spec.provisioners or [] if p.name == "terraform-main")
+    assert provisioner.backend is not None
+    return provisioner.backend.configuration
+
+
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_gives_every_deployment_its_own_state_key():
+    """One backend rule, `key: ${deployment:name}.tfstate`, is unique per deployment, tenant or not."""
+    controller = SolutionController(_repo_config_dir())
+    assert controller.load().ok
+    resolved, diagnostics = resolve_deployment_chains(controller.index)
+    assert diagnostics.ok, diagnostics.messages()
+    configuration = _example_backend_configuration(controller)
+
+    keys = {
+        name: resolve_value_tokens_in_mapping(configuration, deployment_token_values(name, deployment.spec.tenant))[
+            "key"
+        ]
+        for name, deployment in resolved.items()
+    }
+    assert keys == {name: f"{name}.tfstate" for name in resolved}
+    assert len(set(keys.values())) == len(resolved) > 1
+    assert resolved["prd-acme-deployment"].spec.tenant is None  # a deployment with no tenant still gets a key
+
+
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_passes_its_state_key_to_terraform_init(tmp_path):
+    """The real `build run` then `deploy run` path over the example: `init` receives the generated key."""
+    import strata.controllers.deploy_controller as deploy_module
+    import strata.integrations.base as base_module
+    from strata.integrations.resolved_context import ValueResolution
+    from strata.utils.transport import CommandResult
+
+    calls: list[list[str]] = []
+
+    def _run(args, **kwargs):
+        calls.append([Path(args[0]).stem, *args[1:]])
+        return CommandResult(returncode=0, stdout="Terraform v1.9.2" if args[1:2] == ["version"] else "ok", stderr="")
+
+    root = tmp_path / "config"
+    shutil.copytree(_repo_config_dir(), root, ignore=shutil.ignore_patterns(".strata", "build"))
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(base_module, "run_command", _run)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+        real_resolve_values = deploy_module.resolve_values
+
+        def _resolve_values(context, name, keys, **kwargs):
+            # The example's secrets come from Key Vault and the environment, which is not under test; the
+            # `${value:}` references still resolve because they are merged whatever keys are asked for.
+            resolution = real_resolve_values(context, name, [], **kwargs)
+            return ValueResolution(name, {**{key: "x" for key in keys}, **resolution.values}, resolution.diagnostics)
+
+        monkeypatch.setattr(deploy_module, "resolve_values", _resolve_values)
+        context = open_solution(root)
+        assert context.ok, context.diagnostics.messages()
+        build_path = tmp_path / "build"
+        assert build_run(context, "prd-deployment", build_path).ok
+        diagnostics = deploy_run(open_solution(root), "prd-deployment", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    init_call = next(call for call in calls if call[:2] == ["terraform", "init"])
+    assert "key=prd-deployment.tfstate" in init_call
+    assert "resource_group_name=tfstate-rg" in init_call
+
+
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_flags_only_the_tenant_less_deployment_when_the_key_uses_the_tenant(tmp_path):
+    """On a copy: a backend key that needs `${deployment:tenant}` is valid for the three deployments with a tenant
+    and an error for `prd-acme-deployment`, which has none."""
+    root = tmp_path / "config"
+    shutil.copytree(_repo_config_dir(), root, ignore=shutil.ignore_patterns(".strata", "build"))
+    workspace = root / "workspaces" / "main.yaml"
+    text = workspace.read_text(encoding="utf-8")
+    assert "key: ${deployment:name}.tfstate" in text
+    workspace.write_text(
+        text.replace("key: ${deployment:name}.tfstate", "key: ${deployment:tenant}/${deployment:name}.tfstate"),
+        encoding="utf-8",
+    )
+
+    context = open_solution(root)
+    context.resolve()
+
+    errors = [d for d in context.diagnostics.errors if d.code == "unavailable_deployment_token"]
+    assert len(errors) == 1, context.diagnostics.messages()
+    assert "prd-acme-deployment" in errors[0].message
+    assert not [d for d in context.diagnostics.errors if d.code != "unavailable_deployment_token"]

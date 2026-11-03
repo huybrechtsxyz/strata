@@ -248,10 +248,19 @@ Done when: a `deploy run` against the fake runner passes `-backend-config key=<n
 
 ### Phase 5: dogfood and a negative check
 
-1. In `config/workspaces/main.yaml`, add `key: ${deployment:name}.tfstate` to the backend.
-2. `strata validate` in `config/` passes; `strata build run` for one deployment still works.
-3. On a copy in `$env:TEMP` (never edit `config/` for a negative test), remove a deployment's tenant and use
-   `${deployment:tenant}`: `validate` must fail with the tenant message.
+1. `config/workspaces/main.yaml` now has `key: ${deployment:name}.tfstate` in the `terraform-main` backend, with
+   a one-line comment. `strata validate` in `config/` passes with no warnings.
+2. Three tests in `tests/strata/controllers/test_solution_controller.py`, next to the other shipped-example tests:
+   - every deployable deployment (`prd`, `prd-contoso`, `prd-acme`, `prd-north`) resolves the backend `key` to its
+     own `<name>.tfstate`, `prd-acme-deployment` included although it has no tenant;
+   - the real `build run` then `deploy run` path over a copy of the example passes
+     `key=prd-deployment.tfstate` to `terraform init`. Secret resolution is stubbed (the example's secrets live in
+     Key Vault and the environment) but `${value:}` references still resolve, because the stub wraps the real
+     function; only `prd-deployment` builds offline, since the customer deployments need their own repositories;
+   - on a copy, a backend key using `${deployment:tenant}` is reported for `prd-acme-deployment` only
+     (`unavailable_deployment_token`) and nothing else is wrong; `config/` itself is never edited for a negative case.
+3. Reverting the example's `key` line makes all three tests fail. The tests also pass with no terraform on `PATH` and
+   `GITHUB_SHA` set, the CI conditions.
 
 ### Phase 6: close out
 
@@ -280,11 +289,12 @@ Done when: a `deploy run` against the fake runner passes `-backend-config key=<n
 - [x] Phase 2: validation.
 - [x] Phase 3: deploy-time injection.
 - [x] Phase 4: docs, schema and skill.
-- [ ] Phase 5: dogfood and a negative check.
+- [x] Phase 5: dogfood and a negative check.
 - [ ] Phase 6: close out and release.
 
 ## Changelog
 
+- 2026-11-03: Phase 5 built: the example's backend uses the token and three tests pin it. Full suite 3966 passed.
 - 2026-11-03: Phase 4 built (docs, exported schema description and example, changelog). Full suite 3963 passed;
   strict Sphinx build clean.
 - 2026-11-03: Phase 3 built: the deployment entries are appended to the deploy-time token map in
