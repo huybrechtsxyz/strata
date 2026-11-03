@@ -1319,6 +1319,10 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     (docs/design/gap_fit_v1.md gap #20) — every finding used to report
     `entry.source` (this deployment's own path) regardless of which
     document actually held the token.
+
+    `${deployment:}` tokens are judged here too, by `unresolved_deployment_tokens()`, in the same documents but
+    separately: they need no environment, so they are checked even when the deployment resolves none, and a
+    `partial: true` base is skipped because its tenant is only known once a deployment extends it.
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
