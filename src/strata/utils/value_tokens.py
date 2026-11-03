@@ -94,6 +94,16 @@ def deployment_token_values(name: str, tenant: str | None) -> dict[str, str]:
     return values
 
 
+def _unresolved_message(kind: str, key: str, lookup: str) -> str:
+    """Why a token did not resolve; a deployment token says what is missing instead of naming the internal key."""
+    token = f"${{{kind}:{key}}}"
+    if kind == _DEPLOYMENT_PREFIX:
+        if key in DEPLOYMENT_TOKEN_KEYS:
+            return f"Value token '{token}' needs a {key}, but the deployment being run has none."
+        return f"Value token '{token}' is not a deployment token. Available: {sorted(DEPLOYMENT_TOKEN_KEYS)}"
+    return f"Value token '{token}' references key '{lookup}', which did not resolve to a value."
+
+
 def _lookup_key(kind: str, key: str) -> str:
     """The flat-map key a token resolves against: `key` itself, except for ``deployment``."""
     return _deployment_key(key) if kind == _DEPLOYMENT_PREFIX else key
@@ -287,9 +297,7 @@ def resolve_value_tokens(value: str, values: dict[str, str]) -> str:
         key = match.group("key")
         lookup = _lookup_key(kind, key)
         if lookup not in values:
-            raise ValueError(
-                f"Value token '${{{kind}:{key}}}' references key '{lookup}', which did not resolve to a value."
-            )
+            raise ValueError(_unresolved_message(kind, key, lookup))
         return values[lookup]
 
     return _RESOLVE_VALUE_TOKEN_PATTERN.sub(_substitute, value)
@@ -484,9 +492,7 @@ def resolve_value_tokens_renaming_secrets(
         key = match.group("key")
         lookup = _lookup_key(kind, key)
         if lookup not in values:
-            raise ValueError(
-                f"Value token '${{{kind}:{key}}}' references key '{lookup}', which did not resolve to a value."
-            )
+            raise ValueError(_unresolved_message(kind, key, lookup))
         if kind == "secret":
             secrets[key] = values[key]
             return f"${{{key}}}"

@@ -517,13 +517,13 @@ def test_a_declared_key_named_name_does_not_collide_with_the_deployment_name():
 
 
 def test_resolve_value_tokens_raises_when_the_deployment_has_no_tenant():
-    with pytest.raises(ValueError, match="'\\$\\{deployment:tenant\\}' references key 'deployment:tenant'"):
+    with pytest.raises(ValueError, match="'\\$\\{deployment:tenant\\}' needs a tenant"):
         resolve_value_tokens("${deployment:tenant}", deployment_token_values("prd-shared", None))
 
 
 def test_a_deployment_token_does_not_fall_back_to_a_bare_key():
     """Only `deployment:<key>` counts: a declared `name` must not stand in for the deployment's name."""
-    with pytest.raises(ValueError, match="did not resolve to a value"):
+    with pytest.raises(ValueError, match="needs a name"):
         resolve_value_tokens("${deployment:name}", {"name": "declared"})
 
 
@@ -555,7 +555,7 @@ def test_renaming_secrets_resolves_a_deployment_token_in_place():
 
 
 def test_renaming_secrets_raises_when_the_deployment_has_no_tenant():
-    with pytest.raises(ValueError, match="references key 'deployment:tenant'"):
+    with pytest.raises(ValueError, match="needs a tenant"):
         resolve_value_tokens_renaming_secrets(
             {"label": "${deployment:tenant}"}, deployment_token_values("prd-shared", None)
         )
@@ -566,3 +566,15 @@ def test_a_deployment_entry_cannot_collide_with_a_key_of_any_other_kind():
     assert all(":" in key for key in deployment_token_values("prd-contoso", "contoso"))
     assert VALUE_TOKEN_PATTERN.fullmatch("${var:deployment:name}") is None
     assert VALUE_TOKEN_PATTERN.fullmatch("${output:deployment:name}") is None
+
+
+def test_resolve_value_tokens_names_an_unknown_deployment_key_and_the_valid_ones():
+    with pytest.raises(ValueError, match=r"is not a deployment token. Available: \['name', 'tenant'\]"):
+        resolve_value_tokens("${deployment:workspace}", deployment_token_values("prd-contoso", "contoso"))
+
+
+def test_the_missing_tenant_message_does_not_expose_the_internal_key():
+    with pytest.raises(ValueError) as excinfo:
+        resolve_value_tokens("${deployment:tenant}", deployment_token_values("prd-shared", None))
+    assert "deployment:tenant'" not in str(excinfo.value)
+    assert "needs a tenant" in str(excinfo.value)

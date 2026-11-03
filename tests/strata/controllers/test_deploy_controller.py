@@ -3987,6 +3987,15 @@ def test_deploy_run_does_not_leak_tf_var_env_into_container_capable_steps(tmp_pa
 # ---------------------------------------------------------------------------
 
 
+def _write_tenant(root: Path, name: str) -> None:
+    _write(
+        root,
+        "tenant.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: "
+        f"{name}\nspec:\n  display_name: Example\n  geographies:\n    - europe\n",
+    )
+
+
 def _backend_key_solution(tmp_path: Path, key: str, *, tenant: str | None = None) -> Path:
     """`_terraform_solution()` with a backend whose `key` is `key`, and optionally a tenant."""
     root = _terraform_solution(tmp_path)
@@ -4001,12 +4010,7 @@ def _backend_key_solution(tmp_path: Path, key: str, *, tenant: str | None = None
         encoding="utf-8",
     )
     if tenant is not None:
-        _write(
-            root,
-            "tenant.yaml",
-            "apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: "
-            f"{tenant}\nspec:\n  display_name: Example\n  geographies:\n    - europe\n",
-        )
+        _write_tenant(root, tenant)
         deployment = root / "deployment.yaml"
         deployment.write_text(
             deployment.read_text(encoding="utf-8").replace(
@@ -4053,6 +4057,7 @@ def test_deploy_run_reports_a_missing_tenant_as_a_diagnostic_before_running_anyt
 
     assert not diagnostics.ok
     assert "${deployment:tenant}" in diagnostics.messages()[0]
+    assert "needs a tenant" in diagnostics.messages()[0]
     assert _capture == []
 
 
@@ -4078,3 +4083,48 @@ def test_deploy_run_resolves_a_deployment_token_in_a_compose_module(tmp_path: Pa
     compose_text = (build_path / "apps" / "docker-compose.yml").read_text(encoding="utf-8")
     assert "label-app" in compose_text
     assert "${deployment:name}" not in compose_text
+
+
+def test_deploy_run_resolves_a_tenant_that_only_a_base_deployment_sets(tmp_path: Path, _capture):
+    """The tenant comes through `extends`, as `strata validate` already allows."""
+    root = _backend_key_solution(tmp_path, "${deployment:tenant}.tfstate")
+    _write_tenant(root, "contoso")
+    _write(
+        root,
+        "base.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: base\nspec:\n"
+        "  partial: true\n  tenant: contoso\n",
+    )
+    deployment = root / "deployment.yaml"
+    deployment.write_text(
+        deployment.read_text(encoding="utf-8").replace(
+            "  workspace: main\n", "  extends: base\n  workspace: main\n", 1
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "key=contoso.tfstate" in _init_call(_capture)
+
+
+def test_deploy_run_resolves_a_deployment_token_in_the_terraform_variables_file(tmp_path: Path, _capture):
+    """Not only a backend: a workspace `custom` value reaches Terraform through the rewritten `strata.auto.tfvars.json`,
+    which `build run` leaves unresolved and `deploy run` rewrites."""
+    root = _terraform_solution(tmp_path)
+    workspace = root / "workspace.yaml"
+    workspace.write_text(
+        workspace.read_text(encoding="utf-8") + "  custom:\n    state_label: lbl-${deployment:name}\n", encoding="utf-8"
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    tfvars = build_path / "infra" / "strata.auto.tfvars.json"
+    assert json.loads(tfvars.read_text())["strata"]["custom"]["state_label"] == "lbl-${deployment:name}"
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert json.loads(tfvars.read_text())["strata"]["custom"]["state_label"] == "lbl-app"
