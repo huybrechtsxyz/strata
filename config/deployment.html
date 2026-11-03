@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deployment (kind: deployment) &mdash; strata 2.0.0 documentation</title>
+  <title>Deployment (kind: deployment) &mdash; strata 2.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=51b770b3"></script>
+      <script src="../_static/documentation_options.js?v=20623aea"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -87,6 +87,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#rebinding-a-provider">Rebinding a provider</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#rebinding-an-asset">Rebinding an asset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tokens-from-the-deployment">Tokens from the deployment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
@@ -268,6 +269,19 @@ and <code class="docutils literal notranslate"><span class="pre">extends</span><
 <li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code> reports the bound document in <code class="docutils literal notranslate"><span class="pre">strata.assets.&lt;slot&gt;.asset</span></code>; it needs the
 directories <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> produced for the same deployment.</p></li>
 </ul>
+</section>
+<section id="tokens-from-the-deployment">
+<h2>Tokens from the deployment<a class="headerlink" href="#tokens-from-the-deployment" title="Link to this heading"></a></h2>
+<p>A workspace is shared by every deployment, so nothing written in it can say which one is running. Two tokens read
+it from the deployment that is:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">${deployment:name}</span></code>: this document’s <code class="docutils literal notranslate"><span class="pre">meta.name</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">${deployment:tenant}</span></code>: its <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code>, including one inherited through <code class="docutils literal notranslate"><span class="pre">extends</span></code></p></li>
+</ul>
+<p>The usual use is a Terraform state key, <code class="docutils literal notranslate"><span class="pre">key:</span> <span class="pre">${deployment:name}.tfstate</span></code>, in the workspace’s backend (see
+“Terraform backend” in <a class="reference internal" href="workspace.html"><span class="std std-doc">workspace</span></a>). <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks them for every deployment that
+reaches the document: <code class="docutils literal notranslate"><span class="pre">${deployment:tenant}</span></code> on a deployment without a tenant is an error, as is any other key. A
+<code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> base is judged only once a deployment extends it.</p>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>

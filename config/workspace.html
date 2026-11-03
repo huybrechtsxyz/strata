@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workspace (kind: workspace) &mdash; strata 2.0.0 documentation</title>
+  <title>Workspace (kind: workspace) &mdash; strata 2.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=51b770b3"></script>
+      <script src="../_static/documentation_options.js?v=20623aea"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -80,6 +80,7 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#terraform-backend">Terraform backend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#image-tag-policy">Image tag policy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#provider-slots">Provider slots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#asset-slots">Asset slots</a></li>
@@ -218,6 +219,7 @@ reads only the solution. <code class="docutils literal notranslate"><span class=
 <span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azurerm</span>
 <span class="w">        </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">resource_group_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tfstate-rg</span>
+<span class="w">          </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${deployment:name}.tfstate</span>
 <span class="w">  </span><span class="nt">resources</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-storage</span>
 <span class="w">      </span><span class="nt">resource</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage-account</span>
@@ -242,6 +244,82 @@ reads only the solution. <code class="docutils literal notranslate"><span class=
 <span class="w">    </span><span class="nt">managed-by</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata</span>
 </pre></div>
 </div>
+</section>
+<section id="terraform-backend">
+<h2>Terraform backend<a class="headerlink" href="#terraform-backend" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">spec.provisioners[].backend</span></code> (Terraform and OpenTofu only) holds the settings strata passes to <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">init</span></code>,
+one <code class="docutils literal notranslate"><span class="pre">-backend-config</span> <span class="pre">key=value</span></code> each. The <code class="docutils literal notranslate"><span class="pre">backend</span> <span class="pre">&quot;azurerm&quot;</span> <span class="pre">{}</span></code> block itself stays in the Terraform code, and
+<code class="docutils literal notranslate"><span class="pre">type</span></code> is not sent to Terraform.</p>
+<p>The values are resolved when <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> starts the step, so they may contain <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>, <code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>,
+<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code> and <code class="docutils literal notranslate"><span class="pre">${output:STEP.KEY}</span></code> tokens, and two tokens for the deployment being run. A workspace is shared
+by every deployment, so these are the way to give each deployment its own state without typing a key into every
+deployment’s environment:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Token</p></th>
+<th class="head"><p>Value</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">${deployment:name}</span></code></p></td>
+<td><p>the deployment’s <code class="docutils literal notranslate"><span class="pre">meta.name</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">${deployment:tenant}</span></code></p></td>
+<td><p>the deployment’s <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code>, from the deployment or a base</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">${deployment:tenant}</span></code> on a deployment that has no tenant is an error (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> reports it, and so does
+<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>), not an empty string. Any other key, such as <code class="docutils literal notranslate"><span class="pre">${deployment:workspace}</span></code>, is rejected too. A
+<code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> base is not judged: only the deployment that extends it is.</p>
+<p>One rule for every deployment (Azure blob), with deployments <code class="docutils literal notranslate"><span class="pre">prd-contoso</span></code> and <code class="docutils literal notranslate"><span class="pre">prd-acme</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">backend</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azurerm</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">resource_group_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${var:tf_state_resource_group}</span>
+<span class="w">    </span><span class="nt">storage_account_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${var:tf_state_storage_account}</span>
+<span class="w">    </span><span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tfstate</span>
+<span class="w">    </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${deployment:name}.tfstate</span><span class="w">     </span><span class="c1"># prd-contoso.tfstate, prd-acme.tfstate</span>
+</pre></div>
+</div>
+<p>A folder per tenant: a blob name may contain <code class="docutils literal notranslate"><span class="pre">/</span></code>. This workspace then only suits deployments that have a tenant.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${deployment:tenant}/${deployment:name}.tfstate</span><span class="w">   </span><span class="c1"># contoso/prd-contoso.tfstate</span>
+</pre></div>
+</div>
+<p>Other backends:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">backend</span><span class="p">:</span><span class="w">                                  </span><span class="c1"># S3</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">s3</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">bucket</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${var:tf_state_bucket}</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${var:tf_state_region}</span>
+<span class="w">    </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${var:tf_state_prefix}/${deployment:name}/terraform.tfstate</span>
+<span class="w">    </span><span class="nt">dynamodb_table</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${var:tf_lock_table}</span>
+<span class="nn">---</span>
+<span class="nt">backend</span><span class="p">:</span><span class="w">                                  </span><span class="c1"># GCS takes a prefix, not a key</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gcs</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">bucket</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${var:tf_state_bucket}</span>
+<span class="w">    </span><span class="nt">prefix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${deployment:name}</span>
+<span class="nn">---</span>
+<span class="nt">backend</span><span class="p">:</span><span class="w">                                  </span><span class="c1"># local state, for a development workspace</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.state/${deployment:name}.tfstate</span>
+</pre></div>
+</div>
+<p>Things to know:</p>
+<ul class="simple">
+<li><p><strong>Renaming a deployment moves its state.</strong> The new name gives a new, empty state, so a rename becomes a
+migration (<code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">state</span></code> commands) or is never done.</p></li>
+<li><p><strong>Booleans.</strong> A non-string value is converted with Python’s <code class="docutils literal notranslate"><span class="pre">str()</span></code> before it reaches <code class="docutils literal notranslate"><span class="pre">-backend-config</span></code>, so a
+YAML <code class="docutils literal notranslate"><span class="pre">true</span></code> becomes <code class="docutils literal notranslate"><span class="pre">True</span></code>. Write a boolean setting as a quoted string (<code class="docutils literal notranslate"><span class="pre">&quot;true&quot;</span></code>).</p></li>
+<li><p><strong>Literal text.</strong> To keep <code class="docutils literal notranslate"><span class="pre">${deployment:name}</span></code> as written, for a tool with its own <code class="docutils literal notranslate"><span class="pre">${...}</span></code> syntax, write
+<code class="docutils literal notranslate"><span class="pre">$${deployment:name}</span></code>.</p></li>
+<li><p>The tokens are not limited to the backend: any field strata resolves at deploy time (a module’s values, Terraform
+variables) can use them. They are not allowed in an <a class="reference internal" href="environment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">environment</span></code></span></a> store’s own <code class="docutils literal notranslate"><span class="pre">value</span></code>.
+The design, and why it is a token rather than a default key, is in
+<span class="xref myst">deployment-tokens.md</span>.</p></li>
+</ul>
 </section>
 <section id="image-tag-policy">
 <h2>Image tag policy<a class="headerlink" href="#image-tag-policy" title="Link to this heading"></a></h2>
