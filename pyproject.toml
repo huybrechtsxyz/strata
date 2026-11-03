@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "xyz-strata"
 dynamic = ["version"]
 description = "Strata v2 - Infrastructure as Code Platform"
+readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "click>=8.0",
@@ -26,6 +27,11 @@ dependencies = [
     "azure-storage-blob>=12.19",
     "ruamel.yaml>=0.18",
 ]
+
+[project.urls]
+Repository = "https://github.com/huybrechtsxyz/strata"
+Documentation = "https://github.com/huybrechtsxyz/strata/tree/main/docs"
+Changelog = "https://github.com/huybrechtsxyz/strata/blob/main/.github/CHANGELOG.md"
 
 [project.optional-dependencies]
 otel = [

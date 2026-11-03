@@ -112,9 +112,6 @@ jobs:
     needs: release
 
     steps:
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-
       - name: Download dist artifact
         uses: actions/download-artifact@v8
         with:
@@ -123,8 +120,11 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ needs.release.outputs.run_id }}
 
+      # Signs and uploads PEP 740 attestations (the PyPI provenance badge).
       - name: Publish to PyPI
-        run: uv publish --trusted-publishing always
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
 
   # ---------------------------------------------------------------------------
   # Job 3: Publish VS Code extension to the Marketplace
