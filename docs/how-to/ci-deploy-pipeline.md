@@ -252,7 +252,7 @@ Things to know:
 
 `strata deploy destroy D` removes what `deploy run` created: Terraform-managed resources, Helm releases, Compose
 stacks and GitOps files, last step first. It cannot be undone, so it needs exactly one of `--dry-run` (preview,
-changes nothing) or `--force` (destroy, no prompt). Neither, or both, exits 2. Preview in one job and destroy in a
+changes nothing), `--smoke-test` (report only) or `--force` (destroy, no prompt). Anything else exits 2. Preview in one job and destroy in a
 job behind a protected environment, so a person approves exactly what the preview showed.
 
 ```yaml
@@ -277,6 +277,9 @@ jobs:
 Things to know:
 
 - A destroy reads the build directory like a deploy does: run `build run` first, with the same `--pin`.
+- `--smoke-test` calls no tool and reads no store, like `deploy run --smoke-test`: values still resolve, then each
+  step is reported as "would destroy step X", last first. It catches a step that cannot be destroyed and a filter
+  that selects nothing, but not a missing output record or a state problem; `--dry-run` does.
 - `--dry-run` streams its preview without `--follow`. Terraform runs `plan -destroy` (it takes the state lock and
   needs credentials) and never writes `<step>.tfplan`, so a reviewed apply plan is left untouched. Helm lists
   `Kind/name` per resource, never Secret data; Compose lists the stack's running services; GitOps says whether the

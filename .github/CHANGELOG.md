@@ -31,6 +31,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   cannot (not a git checkout, or `git` failed). A `path` remote cannot
   take an `integration`, be pinned by a `version` document, or be pushed to by a GitOps provisioner or audit sink
   (`strata validate` reports the last as `path_remote_not_pushable`).
+- `strata deploy destroy --smoke-test`: the zero-contact mode of `deploy run --smoke-test` for a teardown. It reports
+  "would destroy step X" per step, last first, without calling any tool or reading the output store. Values must still
+  resolve. It reports a step that cannot be destroyed, a filter that selects no step and an `${output:}` reference
+  that nothing could serve. `deploy destroy` now needs exactly one of `--force`, `--dry-run` or `--smoke-test`.
 
 ### Changed
 

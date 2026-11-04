@@ -130,7 +130,8 @@ equivalent), per provisioning step, in dependency order. Never renders anything 
 ### `strata deploy destroy`
 
 Tears down what `deploy run` created, per provisioning step, in reverse dependency order. Irreversible, so it
-requires exactly one of `--force` (destroy) or `--dry-run` (preview what would be removed).
+requires exactly one of `--force` (destroy), `--dry-run` (preview what would be removed) or `--smoke-test` (report
+only, no tool contact).
 
 ### Diagnostics
 

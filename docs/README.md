@@ -117,14 +117,14 @@ Full, current kind list and implementation status:
 
 ## CLI Reference
 
-| Command                               | Purpose                                                                         |
-| ------------------------------------- | ------------------------------------------------------------------------------- |
-| `strata validate [PATH]`              | Schema + cross-document validation for the whole solution                       |
-| `strata values get DEPLOYMENT KEY...` | Resolve one or more variables/secrets/feature flags for a deployment            |
-| `strata build run DEPLOYMENT`         | Render a deployment's workspace into on-disk artifacts                          |
-| `strata deploy run DEPLOYMENT`        | Execute `build run`'s output (`plan`/`apply`, or the Helm/Compose equivalent)   |
-| `strata deploy destroy DEPLOYMENT`    | Tear down what `deploy run` created, last step first (`--force` or `--dry-run`) |
-| `strata version`                      | Show the strata version                                                         |
+| Command                               | Purpose                                                                                         |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `strata validate [PATH]`              | Schema + cross-document validation for the whole solution                                       |
+| `strata values get DEPLOYMENT KEY...` | Resolve one or more variables/secrets/feature flags for a deployment                            |
+| `strata build run DEPLOYMENT`         | Render a deployment's workspace into on-disk artifacts                                          |
+| `strata deploy run DEPLOYMENT`        | Execute `build run`'s output (`plan`/`apply`, or the Helm/Compose equivalent)                   |
+| `strata deploy destroy DEPLOYMENT`    | Tear down what `deploy run` created, last step first (`--force`, `--dry-run` or `--smoke-test`) |
+| `strata version`                      | Show the strata version                                                                         |
 
 Common options accepted by most commands:
 

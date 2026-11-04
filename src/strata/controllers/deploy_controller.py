@@ -418,10 +418,14 @@ def _destroy_preflight(
     topologies_by_name: dict[str, TopologySpecModel],
     output_store: DeploymentOutputStore | None,
     dry_run: bool,
+    smoke_test: bool,
     diagnostics: Diagnostics,
 ) -> dict[str, dict[str, str]]:
     """Everything a destroy can refuse or warn about, found before the first step is touched, so a run stops
     clean instead of midway with its dependents already gone (docs/design/deploy-destroy.md, D2, D5 and D6).
+
+    A smoke test makes no contact, so it does not read the output store: it still reports every problem that can
+    be found offline (an unsupported step, a reference nothing could serve).
 
     Returns the recorded outputs it read, keyed by producing step, for the steps' tokens.
     """
@@ -491,6 +495,8 @@ def _destroy_preflight(
 
         sources = sorted({key.partition(".")[0] for key in referenced})
         where = "the output store" if output_store is not None else "an output store, but the workspace configures none"
+        if smoke_test and output_store is not None:
+            where += " (not read in a smoke test)"
         diagnostics.warning(
             f"Step '{step.name}' references the outputs of {', '.join(repr(name) for name in sources)}; "
             f"a destroy reads them from {where}.",
@@ -501,6 +507,8 @@ def _destroy_preflight(
             upstream_name, _, output_key = key.partition(".")
             if upstream_name not in upstream_by_step[step.name]:
                 reason = f"'{upstream_name}' is not an upstream step of '{step.name}'"
+            elif smoke_test and output_store is not None:
+                continue  # reading the record is contact
             else:
                 values, reason = _read(upstream_name)
                 if values is not None:
@@ -760,9 +768,9 @@ def deploy_run(
             (docs/design/deploy-destroy.md): the image tag policy and the security gates are skipped, a
             Terraform-style step runs `init` then `destroy(auto_approve=force)` (or `plan_destroy()` under
             `dry_run`), a container-capable step calls `destroy_namespace()`, and after a fully successful
-            real run the destroyed steps' recorded outputs are cleared. Needs `force` (destroy) or `dry_run`
-            (preview), and cannot be combined with
-            `smoke_test`, `stop_after` or `use_saved_plan`.
+            real run the destroyed steps' recorded outputs are cleared. Needs `force` (destroy), `dry_run`
+            (preview) or `smoke_test` (report what would be destroyed with no tool or output store contact), and
+            cannot be combined with `stop_after` or `use_saved_plan`.
 
     Returns:
         Diagnostics accumulated while resolving values, preflight-
@@ -781,10 +789,12 @@ def deploy_run(
         if on_step is not None:
             on_step(message)
 
-    if destroy and (smoke_test or stop_after is not None or use_saved_plan):
-        raise UsageError("destroy cannot be combined with smoke_test, stop_after or use_saved_plan.")
-    if destroy and not (force or dry_run):
-        raise UsageError("destroy needs force=True to destroy or dry_run=True to preview; neither was given.")
+    if destroy and (stop_after is not None or use_saved_plan):
+        raise UsageError("destroy cannot be combined with stop_after or use_saved_plan.")
+    if destroy and not (force or dry_run or smoke_test):
+        raise UsageError(
+            "destroy needs force=True to destroy, dry_run=True to preview or smoke_test=True to check; none was given."
+        )
 
     # Helm runs with `cwd` set to a module directory, so a relative `--build-path` would resolve twice.
     build_path = build_path.absolute()
@@ -1064,6 +1074,7 @@ def deploy_run(
             topologies_by_name=topologies_by_name,
             output_store=output_store,
             dry_run=dry_run,
+            smoke_test=smoke_test,
             diagnostics=diagnostics,
         )
         if not diagnostics.ok:
@@ -1109,7 +1120,7 @@ def deploy_run(
         # a successful plan — it is intentionally absent from this
         # condition.
         if smoke_test:
-            _step(f"would deploy step '{step.name}' via {integration_type}")
+            _step(f"would {'destroy' if destroy else 'deploy'} step '{step.name}' via {integration_type}")
             continue
 
         env = tf_var_env(resolved, integration.ENV_VAR_PREFIX)
