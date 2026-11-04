@@ -76,6 +76,7 @@ Every document has `apiVersion`, `kind`, `meta.name` and `spec`. Documents refer
 | A container image strata does not deploy itself | an `artifact` document |
 | Input files that are not code | an `asset` document, listed in `workspace.spec.assets` |
 | Type-checking a free-form `properties`, `custom` or `configuration` block | an `attributeconfig` document |
+| Organisation-specific structured data that Terraform consumes (for example a secret request, an owner, a cost centre) | do not look for a new kind: put it in `properties` as a map keyed by name (lists are replaced, not merged, across layers) and enforce its shape with an `attributeconfig`. Never put secret values in `properties` |
 
 ### Reading a schema
 
