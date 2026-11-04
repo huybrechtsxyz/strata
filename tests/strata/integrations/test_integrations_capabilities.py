@@ -860,6 +860,47 @@ def test_prepare_namespace_base_default_raises_for_a_class_that_does_not_overrid
         _Bare().prepare_namespace(namespace, [], resolved=ValueResolution(deployment="d"))
 
 
+# ---------------------------------------------------------------------------
+# InfraIntegration destroy contract (docs/design/deploy-destroy.md)
+# ---------------------------------------------------------------------------
+
+
+def test_plan_destroy_base_default_raises(tmp_path: Path):
+    import pytest
+
+    from strata.integrations.errors import IntegrationError
+
+    with pytest.raises(IntegrationError, match="does not support a destroy preview"):
+        _Bare().plan_destroy(tmp_path)
+
+
+def test_destroy_namespace_base_default_raises():
+    import pytest
+
+    from strata.integrations.errors import IntegrationError
+    from strata.models.common_models import ModuleReferenceModel
+    from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
+
+    namespace = NamespaceModel(
+        meta=NamespaceMetaModel(name="apps"),
+        spec=NamespaceSpecModel(default_labels={}, modules=[ModuleReferenceModel(name="x", module="x")]),
+    )
+
+    with pytest.raises(IntegrationError, match="does not support namespace-scoped module destruction"):
+        _Bare().destroy_namespace(namespace, [], dry_run=False)
+
+
+def test_only_the_script_integration_cannot_destroy():
+    from strata.integrations.registry import _KNOWN, get
+
+    cannot = {
+        integration_type
+        for integration_type in _KNOWN
+        if isinstance(get(integration_type), InfraIntegration) and not get(integration_type).SUPPORTS_DESTROY
+    }
+    assert cannot == {"script"}
+
+
 def test_every_registered_class_is_compliant():
     """The first real exercise of this checker (Phase 3 could only test it against
     fakes — `_KNOWN` didn't exist yet). Every class Phase 4 registers must comply."""

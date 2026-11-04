@@ -79,14 +79,14 @@ every other command does. **No `--sink` flag in this first cut** — see
 
 ```console
 $ strata audit status
-DEPLOYMENT        STATUS   VERSION  DEPLOYED BY        COMPLETED AT          CHANGE REF
-web-frontend       success  2.4.1    svc-pipeline-ado   2026-10-05T14:02:11Z  OPS-1234
-api-backend        failed   2.4.1    svc-pipeline-ado   2026-10-05T13:47:02Z  -
-db-migrations      success  2.3.0    jsmith             2026-10-04T09:12:55Z  -
+DEPLOYMENT        ACTION   STATUS   VERSION  DEPLOYED BY        COMPLETED AT          CHANGE REF
+web-frontend      deploy   success  2.4.1    svc-pipeline-ado   2026-10-05T14:02:11Z  OPS-1234
+api-backend       deploy   failed   2.4.1    svc-pipeline-ado   2026-10-05T13:47:02Z  -
+db-migrations     destroy  success  2.3.0    jsmith             2026-10-04T09:12:55Z  -
 
 $ strata audit status api-backend
-DEPLOYMENT    STATUS   VERSION  DEPLOYED BY       COMPLETED AT          CHANGE REF
-api-backend   failed   2.4.1    svc-pipeline-ado  2026-10-05T13:47:02Z  -
+DEPLOYMENT    ACTION  STATUS   VERSION  DEPLOYED BY       COMPLETED AT          CHANGE REF
+api-backend   deploy  failed   2.4.1    svc-pipeline-ado  2026-10-05T13:47:02Z  -
 ```
 
 `changes` is now fully designed (not merely deferred) — see "`strata audit
@@ -170,8 +170,8 @@ spec:
 
 ```console
 $ strata audit status
-DEPLOYMENT    STATUS   VERSION  DEPLOYED BY  COMPLETED AT          CHANGE REF
-web-frontend  success  2.4.1    jsmith       2026-10-05T14:02:11Z  OPS-1234
+DEPLOYMENT    ACTION  STATUS   VERSION  DEPLOYED BY  COMPLETED AT          CHANGE REF
+web-frontend  deploy  success  2.4.1    jsmith       2026-10-05T14:02:11Z  OPS-1234
 ```
 
 A solution with one `git`-arm sink and one `integration`-arm sink (the
@@ -268,9 +268,10 @@ found manifest's own JSON says.
 
 Group the glob-and-parse result (above) by `deployment`, keep only the
 max-`started_at` manifest per group (or just the named `DEPLOYMENT`'s
-latest, when given). Console: one line per deployment (name, status,
+latest, when given). Console: one line per deployment (name, action, status,
 version, `deployed_by`, `completed_at`, whether `change_reference` is
-present). JSON: `run.reporter.data = {"deployments": [...]}"`, matching
+present). The action is `deploy` or `destroy`, so a deployment that was torn
+down reads as `destroy`, never as a healthy deploy. JSON: `run.reporter.data = {"deployments": [...]}"`, matching
 `graph_command.py`'s existing `isinstance(run.reporter, JsonReporter)`
 convention exactly — no new output convention invented.
 
@@ -293,6 +294,7 @@ part specific to this one):
     "deployments": [
       {
         "deployment": "web-frontend",
+        "action": "deploy",
         "status": "success",
         "version": "2.4.1",
         "deployed_by": "svc-pipeline-ado",
@@ -301,6 +303,7 @@ part specific to this one):
       },
       {
         "deployment": "api-backend",
+        "action": "deploy",
         "status": "failed",
         "version": "2.4.1",
         "deployed_by": "svc-pipeline-ado",
@@ -374,6 +377,7 @@ class AuditReadError(SystemError):
 @dataclass(frozen=True)
 class DeploymentStatusRecord:
     deployment: str
+    action: str
     status: str
     version: str
     deployed_by: str
@@ -476,9 +480,9 @@ genuinely new failure mode (`--since`/`--until` can be malformed, which
 
 ```console
 $ strata audit changes --since 2026-10-01 --status failed
-DEPLOYMENT    STATUS   STARTED AT                 EXECUTION ID
-api-backend   failed   2026-10-03T08:15:40+00:00  7e2f1234-5678-4abc-9def-0123456789ab
-api-backend   failed   2026-10-05T13:44:50+00:00  a81d5678-1234-4abc-9def-0123456789cd
+DEPLOYMENT    ACTION  STATUS   STARTED AT                 EXECUTION ID
+api-backend   deploy  failed   2026-10-03T08:15:40+00:00  7e2f1234-5678-4abc-9def-0123456789ab
+api-backend   deploy  failed   2026-10-05T13:44:50+00:00  a81d5678-1234-4abc-9def-0123456789cd
 
 $ strata audit changes web-frontend --since 2026-10-01 --until 2026-10-04
   (no audit records found)
@@ -542,6 +546,7 @@ class DeploymentChangeRecord:
 
     execution_id: str
     deployment: str
+    action: str
     status: str
     started_at: str
     completed_at: str
@@ -662,6 +667,7 @@ unchanged.
 
 ## History
 
+- Both commands show each record's `action`. `audit status` keeps the latest manifest per deployment, and a `deploy destroy` writes a manifest like any other, so without the action a torn-down deployment would read as a successful deploy. There is no `--action` filter yet; add one when a pipeline asks for it.
 - Multi-sink reads (a `--sink NAME` flag, merge+dedup across more than one `git`-arm sink) are deliberately out of scope - no real config (this repo's dogfood example or the one real consumer) configures even a single audit sink today, so zero or multiple configured sinks both fail loudly rather than building a disambiguation UI for a need nothing has hit yet.
 - No retention/pruning - a sink's remote branch only grows; revisit once a real remote has actually accumulated enough history to be a problem, not a hypothetical one.
 - `audit changes` deliberately shares `audit status`'s entire mechanism and was built as a second phase of the same design rather than a separate one.

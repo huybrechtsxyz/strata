@@ -151,7 +151,7 @@ mean different things elsewhere.
   (their `**kwargs: Any` catch-alls do **not** reach `self.run()`, so this
   is real plumbing, not free): `TerraformIntegration` (`init`/`validate`/
   `plan`/`deploy`/`destroy`/`output`/`show`), `HelmIntegration`/
-  `ComposeIntegration` (`plan`/`deploy`). `GitOpsIntegration.plan()` also
+  `ComposeIntegration` (`plan`/`deploy`/`destroy`). `GitOpsIntegration.plan()` also
   streams (its one direct `run_command()` call, `git diff`) — its
   `deploy()`/`destroy()` do not yet, since both delegate to `git_push.py`
   helpers that make several internal `run_command()` calls needing their

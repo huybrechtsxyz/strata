@@ -71,7 +71,12 @@ from strata.models.deployment_model import DeploymentStageModel
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
-from strata.models.workspace_model import claimed_names, effective_resources_and_namespaces
+from strata.models.workspace_model import (
+    TopologySpecModel,
+    WorkspaceResourceModel,
+    claimed_names,
+    effective_resources_and_namespaces,
+)
 from strata.services.environment_service import (
     merge_environment_models,
     merge_workspace_environment_deployment_properties,
@@ -79,7 +84,7 @@ from strata.services.environment_service import (
 from strata.services.workspace_service import effective_assets
 from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.errors import SystemError
+from strata.utils.errors import SystemError, UsageError
 from strata.utils.value_tokens import (
     deployment_token_values,
     extract_value_tokens,
@@ -323,6 +328,201 @@ def _merge_durable_outputs(
     return True
 
 
+def _step_payload(
+    payload: Mapping[str, Any], step_claimed: set[str], claimed_by_category: Mapping[str, set[str]]
+) -> dict[str, Any]:
+    """This step's own view of the workspace payload: dns/networks/firewalls documents filtered to what it
+    claims plus whatever nobody claims (docs/design/gap_fit_v1.md gap #12); every other category broadcasts as is."""
+    return {
+        category: (
+            {
+                name: doc
+                for name, doc in docs.items()
+                if name in step_claimed or name not in claimed_by_category[category]
+            }
+            if category in claimed_by_category
+            else docs
+        )
+        for category, docs in payload.items()
+    }
+
+
+def _destroy_preflight(
+    resolved_steps: list[tuple[ProvisioningStepModel, ProvisionerModel, InfraIntegration]],
+    *,
+    all_steps: list[ProvisioningStepModel],
+    upstream_by_step: Mapping[str, set[str]],
+    payload: Mapping[str, Any],
+    claimed_by_category: Mapping[str, set[str]],
+    resources_by_name: dict[str, WorkspaceResourceModel],
+    topologies_by_name: dict[str, TopologySpecModel],
+    output_store: DeploymentOutputStore | None,
+    dry_run: bool,
+    diagnostics: Diagnostics,
+) -> dict[str, dict[str, str]]:
+    """Everything a destroy can refuse or warn about, found before the first step is touched, so a run stops
+    clean instead of midway with its dependents already gone (docs/design/deploy-destroy.md, D2, D5 and D6).
+
+    Returns the recorded outputs it read, keyed by producing step, for the steps' tokens.
+    """
+    selected = {step.name for step, _, _ in resolved_steps}
+
+    for step, _, integration in resolved_steps:
+        if not integration.SUPPORTS_DESTROY:
+            message = (
+                f"Step '{step.name}': {integration.name} cannot destroy what it created. Leave the step out with "
+                "--stage or --scope; skipping it silently would strand what it created."
+            )
+            if dry_run:
+                diagnostics.warning(message, location=step.name, code="destroy_unsupported")
+            else:
+                diagnostics.error(message, location=step.name, code="destroy_unsupported")
+
+    for step, _, _ in resolved_steps:
+        dependents = sorted(
+            other.name
+            for other in all_steps
+            if step.name in upstream_by_step[other.name] and other.name not in selected
+        )
+        if dependents:
+            diagnostics.warning(
+                f"Step '{step.name}' is destroyed, but {', '.join(repr(name) for name in dependents)} depend on it "
+                "and are not part of this run; if they are still deployed they are left without what they need.",
+                location=step.name,
+                code="destroy_leaves_dependents",
+            )
+
+    recorded: dict[str, dict[str, str]] = {}
+    unusable: dict[str, str] = {}
+
+    def _read(upstream_name: str) -> tuple[dict[str, str] | None, str]:
+        if upstream_name in recorded:
+            return recorded[upstream_name], ""
+        if upstream_name not in unusable:
+            if output_store is None:
+                unusable[upstream_name] = "the workspace configures no output_store"
+            else:
+                try:
+                    recorded[upstream_name] = output_store.read(upstream_name)
+                    return recorded[upstream_name], ""
+                except OutputRecordNotFoundError:
+                    unusable[upstream_name] = "none is recorded"
+                except OutputRecordStaleError as exc:
+                    unusable[upstream_name] = f"{exc} (--output-max-age accepts an older record)"
+                except IntegrationError as exc:
+                    unusable[upstream_name] = f"the output store could not be read - {exc}"
+        return None, unusable[upstream_name]
+
+    for step, provisioner, integration in resolved_steps:
+        if Capability.CONTAINER in integration.CAPABILITIES or not integration.SUPPORTS_DESTROY:
+            continue
+        backend_configuration = provisioner.backend.configuration if provisioner.backend is not None else {}
+        step_payload = _step_payload(
+            payload, claimed_names(step, resources_by_name, topologies_by_name), claimed_by_category
+        )
+        referenced = sorted(referenced_output_keys(backend_configuration) | referenced_output_keys(step_payload))
+        if not referenced:
+            continue
+
+        sources = sorted({key.partition(".")[0] for key in referenced})
+        where = "the output store" if output_store is not None else "an output store, but the workspace configures none"
+        diagnostics.warning(
+            f"Step '{step.name}' references the outputs of {', '.join(repr(name) for name in sources)}; "
+            f"a destroy reads them from {where}.",
+            location=step.name,
+            code="destroy_uses_outputs",
+        )
+        for key in referenced:
+            upstream_name, _, output_key = key.partition(".")
+            if upstream_name not in upstream_by_step[step.name]:
+                reason = f"'{upstream_name}' is not an upstream step of '{step.name}'"
+            else:
+                values, reason = _read(upstream_name)
+                if values is not None:
+                    if output_key in values:
+                        continue
+                    reason = f"its record has no output '{output_key}' (a sensitive output is never recorded)"
+            diagnostics.error(
+                f"Step '{step.name}': '${{output:{key}}}' cannot be resolved for a destroy - {reason}. A destroy "
+                "reads a step's outputs from the output store: configure `output_store` on the workspace and run "
+                "'deploy run' once so they are recorded (a no-op apply still records them).",
+                location=step.name,
+                code="destroy_output_unavailable",
+            )
+    return recorded
+
+
+def _destroy_step(
+    integration: InfraIntegration,
+    step: ProvisioningStepModel,
+    path: Path,
+    env: Mapping[str, str],
+    *,
+    auth: AuthenticationModel | None,
+    resolved_values: Mapping[str, str] | None,
+    stage: DeploymentStageModel | None,
+    force: bool,
+    dry_run: bool,
+    line_callback: Callable[[str, str], None],
+    on_step: Callable[[str], None],
+    diagnostics: Diagnostics,
+) -> bool:
+    """Destroy one Terraform-style step, or preview it under `--dry-run`. `False` means the run must stop.
+
+    A preview never writes `<step>.tfplan` (that file is what `deploy apply` applies) and never destroys. A
+    preview the integration does not stream (GitOps) is shown through `on_step`, so it needs no `--follow`.
+    """
+    integration_type = type(integration).__name__
+    if dry_run:
+        streamed = False
+
+        def _watching(stream: str, text: str) -> None:
+            nonlocal streamed
+            streamed = True
+            line_callback(stream, text)
+
+        try:
+            preview = integration.plan_destroy(
+                path,
+                env=env,
+                auth=auth,
+                resolved_values=resolved_values,
+                line_callback=_watching,
+                **_timeout_kwargs(step, stage, "plan"),
+            )
+        except IntegrationError as exc:
+            diagnostics.warning(
+                f"Step '{step.name}': no destroy preview available for '{integration_type}' - {exc}",
+                location=step.name,
+                code="destroy_preview_unavailable",
+            )
+            return True
+        if not preview.is_successful:
+            diagnostics.error(f"Step '{step.name}': destroy plan failed - {preview.stderr}", location=step.name)
+            return False
+        if not streamed:
+            for line in preview.stdout.splitlines():
+                if line.strip():
+                    on_step(line)
+        on_step(f"planned destroy of step '{step.name}' via {integration_type} (dry-run, nothing destroyed)")
+        return True
+
+    result = integration.destroy(
+        path,
+        auto_approve=force,
+        env=env,
+        auth=auth,
+        resolved_values=resolved_values,
+        line_callback=line_callback,
+        **_timeout_kwargs(step, stage, "destroy"),
+    )
+    if not result.is_successful:
+        diagnostics.error(f"Step '{step.name}': destroy failed - {result.stderr}", location=step.name)
+        return False
+    on_step(f"destroyed step '{step.name}' via {integration_type}")
+    return True
+
+
 def _chart_registry_credentials(
     index: DocumentIndex,
     remotes: Mapping[str, SolutionRemoteModel],
@@ -391,6 +591,7 @@ def deploy_run(
     on_line: Callable[[str, str, str], None] | None = None,
     pin: str | None = None,
     output_max_age: int | None = None,
+    destroy: bool = False,
 ) -> Diagnostics:
     """Execute `deployment_name`'s workspace provisioners against `build_path`
     (already rendered by a prior `build run` — this never re-renders it).
@@ -490,6 +691,13 @@ def deploy_run(
             override precedence as `pin` over `spec.version`). `None`
             (default) falls back to the workspace's own setting, itself
             `None` by default (no staleness enforcement).
+        destroy: Tear the filtered steps down instead of deploying them, last step first
+            (docs/design/deploy-destroy.md): the image tag policy and the security gates are skipped, a
+            Terraform-style step runs `init` then `destroy(auto_approve=force)` (or `plan_destroy()` under
+            `dry_run`), a container-capable step calls `destroy_namespace()`, and after a fully successful
+            real run the destroyed steps' recorded outputs are cleared. Needs `force` (destroy) or `dry_run`
+            (preview), and cannot be combined with
+            `smoke_test`, `stop_after` or `use_saved_plan`.
 
     Returns:
         Diagnostics accumulated while resolving values, preflight-
@@ -507,6 +715,11 @@ def deploy_run(
     def _step(message: str) -> None:
         if on_step is not None:
             on_step(message)
+
+    if destroy and (smoke_test or stop_after is not None or use_saved_plan):
+        raise UsageError("destroy cannot be combined with smoke_test, stop_after or use_saved_plan.")
+    if destroy and not (force or dry_run):
+        raise UsageError("destroy needs force=True to destroy or dry_run=True to preview; neither was given.")
 
     # Helm runs with `cwd` set to a module directory, so a relative `--build-path` would resolve twice.
     build_path = build_path.absolute()
@@ -539,7 +752,7 @@ def deploy_run(
     # tag in effect here can differ from the build's (`--pin` given only to `deploy run`), so the deploy result
     # replaces the build's entry for the same policy. It runs under `smoke_test` too (nothing is contacted), but
     # a smoke test records nothing.
-    if workspace.spec.image_tag_policy is not None:
+    if workspace.spec.image_tag_policy is not None and not destroy:
         tag_diagnostics = check_image_tag_policy(context, deployment, workspace, pinned_by_flag=pin is not None)
         diagnostics.extend(tag_diagnostics)
         result = image_tag_policy_result(workspace, tag_diagnostics, "deploy")
@@ -575,7 +788,7 @@ def deploy_run(
         return text
 
     # Security gates (docs/design/security-gates.md D5): after values resolve, before any step.
-    if workspace.spec.release_gate_policy is not None or workspace.spec.image_gate_policy is not None:
+    if not destroy and (workspace.spec.release_gate_policy is not None or workspace.spec.image_gate_policy is not None):
         if smoke_test:
             _step("would run security gates (release_gate_policy / image_gate_policy)")
         else:
@@ -702,12 +915,21 @@ def deploy_run(
         return diagnostics
 
     steps = ordered_by_depends_on(all_steps)
+    if destroy:
+        steps = list(reversed(steps))
     if stage is not None:
         steps = [s for s in steps if s.name == stage]
     if scope is not None:
         steps = [s for s in steps if s.scope == scope]
 
     if not steps:
+        if destroy:
+            # Exiting 0 here would audit a successful destroy that touched nothing, e.g. after a mistyped --stage.
+            diagnostics.error(
+                "No step matches the given --stage/--scope filter, so there is nothing to destroy.",
+                code="destroy_no_steps",
+            )
+            return diagnostics
         _step("no steps match the given --stage/--scope filter")
         return diagnostics
 
@@ -750,6 +972,24 @@ def deploy_run(
     step_sensitive_outputs: dict[str, set[str]] = {}
     stage_by_step = {s.step: s for s in (deployment.spec.stages or [])}
 
+    destroyed: list[str] = []
+    recorded_outputs: dict[str, dict[str, str]] = {}
+    if destroy:
+        recorded_outputs = _destroy_preflight(
+            resolved_steps,
+            all_steps=all_steps,
+            upstream_by_step=upstream_by_step,
+            payload=payload,
+            claimed_by_category=claimed_by_category,
+            resources_by_name=resources_by_name,
+            topologies_by_name=topologies_by_name,
+            output_store=output_store,
+            dry_run=dry_run,
+            diagnostics=diagnostics,
+        )
+        if not diagnostics.ok:
+            return diagnostics
+
     for step, provisioner, integration in resolved_steps:
         # Matches `build_run()`'s own `source_path` resolution exactly
         # (`source_sync.sync_source()`'s `destination = build_path /
@@ -771,6 +1011,8 @@ def deploy_run(
             path = build_path / relative
         integration_type = type(integration).__name__
         deployment_stage = stage_by_step.get(step.name)
+        if destroy and not integration.SUPPORTS_DESTROY:
+            continue  # already reported by the pre-flight
 
         # `_tool` is bound as a default argument, not read from the
         # enclosing scope at call time (ruff B023) — `integration` is a
@@ -806,7 +1048,16 @@ def deploy_run(
             if upstream_step in upstream
             for key in keys
         }
-        if not _merge_durable_outputs(
+        if destroy:
+            visible_outputs.update(
+                {
+                    f"{upstream_step}.{key}": value
+                    for upstream_step, outputs in recorded_outputs.items()
+                    if upstream_step in upstream
+                    for key, value in outputs.items()
+                }
+            )
+        elif not _merge_durable_outputs(
             output_store, upstream, step_outputs, visible_outputs, step_name=step.name, diagnostics=diagnostics
         ):
             return diagnostics
@@ -851,6 +1102,23 @@ def deploy_run(
                 if (modules := resolve_namespace_modules(index, namespace, build_path).get(integration.TYPE, []))
             ]
             _step(f"running step '{step.name}' via {integration_type}")
+            if destroy:
+                for namespace, modules in reversed(container_targets):
+                    diagnostics.extend(
+                        integration.destroy_namespace(
+                            namespace,
+                            modules,
+                            dry_run=dry_run,
+                            env=env,
+                            line_callback=_line,
+                            on_step=_step,
+                            **_timeout_kwargs(step, deployment_stage, "destroy"),
+                        )
+                    )
+                if not diagnostics.ok:
+                    return diagnostics
+                destroyed.append(step.name)
+                continue
             if not use_saved_plan:
                 # The container counterpart to Terraform's `validate()` (ADR-0043);
                 # `deploy apply` skips it, as it skips `validate()`.
@@ -924,18 +1192,7 @@ def deploy_run(
         # after it can scan this step's real payload regardless of which
         # delivery mechanism the tool uses.
         step_claimed = claimed_names(step, resources_by_name, topologies_by_name)
-        step_payload = {
-            category: (
-                {
-                    name: doc
-                    for name, doc in docs.items()
-                    if name in step_claimed or name not in claimed_by_category[category]
-                }
-                if category in claimed_by_category
-                else docs
-            )
-            for category, docs in payload.items()
-        }
+        step_payload = _step_payload(payload, step_claimed, claimed_by_category)
 
         # Output pre-flight (docs/design/output-declarations.md) — every
         # '${output:STEP.KEY}' this step's own payload references must
@@ -1010,7 +1267,7 @@ def deploy_run(
             (path / "strata.auto.tfvars.json").write_text(json.dumps({"strata": resolved_payload}))
             env[f"{integration.ENV_VAR_PREFIX}strata_secrets"] = json.dumps(strata_secrets)
 
-        if provisioner.output and provisioner.output.template:
+        if provisioner.output and provisioner.output.template and not destroy:
             template_path = context.root / provisioner.output.template
             try:
                 rendered_output_path = integration.render_output_template(
@@ -1053,7 +1310,7 @@ def deploy_run(
                     location=step.name,
                 )
                 return diagnostics
-        else:
+        elif not destroy:
             validate = getattr(integration, "validate", None)
             if validate is not None:
                 validate_result = validate(
@@ -1096,6 +1353,25 @@ def deploy_run(
             # visible to this step via `${output:...}` (docs/design/
             # script-provisioner.md).
             step_resolved_values = tokens
+
+        if destroy:
+            if not _destroy_step(
+                integration,
+                step,
+                path,
+                env,
+                auth=auth,
+                resolved_values=step_resolved_values,
+                stage=deployment_stage,
+                force=force,
+                dry_run=dry_run,
+                line_callback=_line,
+                on_step=_step,
+                diagnostics=diagnostics,
+            ):
+                return diagnostics
+            destroyed.append(step.name)
+            continue
 
         if not use_saved_plan:
             plan_result = integration.plan_or_warn(
@@ -1175,5 +1451,17 @@ def deploy_run(
                 )
 
         _step(f"deployed step '{step.name}' via {integration_type}")
+
+    # Only after the whole run succeeded: a retry re-runs the steps already destroyed, and those still need
+    # their upstream steps' recorded outputs (docs/design/deploy-destroy.md, D8).
+    if destroy and not dry_run and diagnostics.ok and output_store is not None and destroyed:
+        try:
+            output_store.clear(destroyed)
+        except (SystemError, IntegrationError) as exc:
+            diagnostics.warning(
+                f"Could not clear the destroyed steps' recorded outputs - {exc}. Stale records may remain, and a "
+                "later 'deploy run' could read them.",
+                code="output_store_clear_failed",
+            )
 
     return diagnostics

@@ -315,6 +315,37 @@ class BaseGitOpsIntegration(InfraIntegration):
             return CommandResult(returncode=1, stdout="", stderr=result.detail)
         return CommandResult(returncode=0, stdout=result.detail, stderr="")
 
+    def plan_destroy(self, path: Path, **kwargs: Any) -> CommandResult:
+        """What `destroy()` would remove: the rendered file, when the config repo holds it.
+
+        A report, never `plan()`'s diff (that previews an apply) and never a change. Streams nothing; the
+        caller shows `stdout`.
+        """
+        env = kwargs.get("env")
+        auth = kwargs.get("auth")
+        resolved_values = kwargs.get("resolved_values")
+        sidecar = _read_sidecar(path)
+        if sidecar is None:
+            return CommandResult(
+                returncode=1, stdout="", stderr=f"{self.name}: no GitOps sidecar at {path} - was prepare() run?"
+            )
+        remote = SolutionRemoteModel.model_validate(sidecar["remote"])
+        root = Path(sidecar["root"])
+        try:
+            ensured = ensure_checkout(root, remote, env=env, auth=auth, resolved_values=resolved_values)
+        except IntegrationError as exc:
+            return CommandResult(returncode=1, stdout="", stderr=str(exc))
+        if not ensured.success:
+            return CommandResult(returncode=1, stdout="", stderr=ensured.detail)
+
+        output_file = sidecar["output_file"]
+        existing_file = layout.gitops_push_checkout_path(root, remote.name, remote.reference or "") / output_file
+        if existing_file.is_file():
+            return CommandResult(returncode=0, stdout=f"would remove {output_file} from {remote.name}", stderr="")
+        return CommandResult(
+            returncode=0, stdout=f"{output_file} is not present in {remote.name}, nothing to remove", stderr=""
+        )
+
     def destroy(self, path: Path, **kwargs: Any) -> CommandResult:
         """Remove the rendered file from the config repo and push the
         removal (`git_push.remove_file()`) — v1's `destroy` step."""

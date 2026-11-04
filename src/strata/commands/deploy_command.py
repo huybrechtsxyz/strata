@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""`strata deploy run`/`setup`/`check` — execute (or partially execute) a
+"""`strata deploy run`/`setup`/`check`/`plan`/`apply`/`destroy` — execute (or partially execute) a
 deployment's workspace provisioners (Terraform plan/apply, the Compose/Helm
 equivalents) against `build run`'s already-rendered output
-(docs/design/deploy-command.md, docs/design/deploy-pipeline-stage-commands.md).
+(docs/design/deploy-command.md, docs/design/deploy-pipeline-stage-commands.md,
+docs/design/deploy-destroy.md).
 
 No `-f FILE` — same reasoning as `build_command`/`validate_command`/
 `values_command`: v2 addresses documents by `(kind, name)`, so the argument
@@ -780,6 +781,148 @@ def deploy_apply_command(
             change_approved_at=change_approved_at,
         )
         diagnostics.extend(audit_diagnostics)
+
+        run.report(diagnostics, root=context.root)
+        run.ok = diagnostics.ok
+
+
+@deploy_command.command("destroy")
+@click.argument("deployment")
+@_shared_deploy_options()
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Destroy for real, without a confirmation prompt (Terraform's '-auto-approve'). IRREVERSIBLE. "
+    "Exactly one of --force or --dry-run is required.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Preview what would be destroyed and change nothing ('terraform plan -destroy', or the tool's "
+    "equivalent); streams the preview unless --follow says otherwise. Exactly one of --force or --dry-run "
+    "is required.",
+)
+@_change_reference_options
+@output_option
+@quiet_option
+@verbose_option
+def deploy_destroy_command(
+    deployment: str,
+    path: Path | None,
+    build_path: Path | None,
+    force: bool,
+    dry_run: bool,
+    follow: str | None,
+    stage: str | None,
+    scope: str | None,
+    pin: str | None,
+    output_max_age: int | None,
+    change_system: str | None,
+    change_id: str | None,
+    change_reason: str | None,
+    change_classification: str | None,
+    change_title: str | None,
+    change_url: str | None,
+    change_approved_by: str | None,
+    change_approved_at: str | None,
+    output: str,
+    quiet: bool,
+    verbose: bool,
+) -> None:
+    """Destroy the infrastructure DEPLOYMENT's workspace provisioners created. IRREVERSIBLE.
+
+    \b
+    Exit codes:
+      0  every filtered step was destroyed (or, with --dry-run, previewed)
+      2  neither or both of --force and --dry-run, bad arguments, DEPLOYMENT
+         does not exist, --pin names an unknown version document, or not
+         inside a solution
+      3  a declared value failed to resolve, a filtered step's tool is not
+         available on PATH, a step cannot be destroyed (a script step, or a
+         '${output:}' it needs has no usable record), or a destroy failed
+
+    Steps are destroyed in reverse dependency order. Use --stage/--scope to
+    destroy part of a deployment; steps that depend on what is destroyed are
+    reported, never blocked. The image tag policy and the security gates do not
+    run. Run 'strata build run DEPLOYMENT' first, and preview with --dry-run.
+    A successful destroy clears the deployment's stored step outputs.
+    """
+    # --dry-run previews, so it streams by default, like 'deploy plan'.
+    if dry_run and follow is None:
+        follow = "console"
+
+    with command_run(
+        "deploy destroy", output=output, quiet=quiet, verbose=verbose, compact=(follow == "ndjson")
+    ) as run:
+        if force == dry_run:
+            raise UsageError("Exactly one of --force or --dry-run is required: --dry-run previews, --force destroys.")
+
+        if follow == "ndjson" and output != "json":
+            raise UsageError("--follow ndjson requires --output json.")
+
+        _validate_change_reference_flags(
+            change_system=change_system,
+            change_id=change_id,
+            change_reason=change_reason,
+            change_approved_by=change_approved_by,
+            change_approved_at=change_approved_at,
+        )
+
+        context = open_solution(resolve_work_path(path)).require_valid()
+        solution = context.controller.solution
+        target = build_path or build_dir(context.root, deployment)
+
+        run.describe(
+            solution=solution.meta.name if solution else "(unnamed)",
+            root=context.root,
+            deployment=deployment,
+            build_path=target,
+        )
+
+        execution_id = str(uuid.uuid4())
+        started_at = datetime.now(timezone.utc)
+
+        on_step, on_line = _line_follow_callbacks(follow, output, run.step)
+
+        diagnostics = deploy_run(
+            context,
+            deployment,
+            target,
+            destroy=True,
+            force=force,
+            dry_run=dry_run,
+            stage=stage,
+            scope=scope,
+            on_step=on_step,
+            on_line=on_line,
+            pin=pin,
+            output_max_age=output_max_age,
+        )
+
+        # A preview changes nothing, so only a real destroy gets an audit record.
+        if not dry_run:
+            audit_diagnostics = finalize_and_distribute_deploy_audit(
+                context,
+                deployment,
+                target,
+                execution_id=execution_id,
+                started_at=started_at,
+                run_diagnostics=diagnostics,
+                dry_run=False,
+                action="destroy",
+                pin=pin,
+                change_system=change_system,
+                change_id=change_id,
+                change_reason=change_reason,
+                change_classification=change_classification,
+                change_title=change_title,
+                change_url=change_url,
+                change_approved_by=change_approved_by,
+                change_approved_at=change_approved_at,
+            )
+            diagnostics.extend(audit_diagnostics)
 
         run.report(diagnostics, root=context.root)
         run.ok = diagnostics.ok

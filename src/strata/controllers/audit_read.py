@@ -59,6 +59,7 @@ class DeploymentStatusRecord:
 
     deployment: str
     status: str
+    action: str
     version: str
     deployed_by: str
     completed_at: str
@@ -76,6 +77,7 @@ class DeploymentChangeRecord:
     execution_id: str
     deployment: str
     status: str
+    action: str
     started_at: str
     completed_at: str
     deployed_by: str
@@ -265,6 +267,7 @@ def list_latest_per_deployment(
         DeploymentStatusRecord(
             deployment=manifest.deployment,
             status=manifest.status,
+            action=manifest.action,
             version=manifest.version or "unknown",
             deployed_by=manifest.deployed_by or "unknown",
             completed_at=manifest.completed_at or manifest.started_at,
@@ -329,6 +332,7 @@ def list_manifests_in_range(
             execution_id=manifest.execution_id,
             deployment=manifest.deployment,
             status=manifest.status,
+            action=manifest.action,
             started_at=manifest.started_at,
             completed_at=manifest.completed_at or manifest.started_at,
             deployed_by=manifest.deployed_by or "unknown",

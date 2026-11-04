@@ -25,10 +25,10 @@ through from the earlier `build run` process, since the two are separate
 CLI invocations with no in-memory value to carry between them. Optional,
 unlike `artifacts.platform`: a missing SBOM raises no diagnostic.
 
-Only wired for `deploy` in this pass — no `destroy` command exists in v2
-yet (the design doc's own Phase 5 checklist said "and the equivalent
-destroy path" before this was checked against real code; there is no such
-path to wire yet). Extend when `deploy destroy` is built.
+`action="destroy"` (docs/design/deploy-destroy.md) records a `deploy destroy` run the same way, with three
+differences: the manifest and metrics say `destroy`; the event admitted is `deployment.destroyed` instead of
+`deployment.completed`, so a sink has to list it to receive it; and the manifest carries no `policy_results`,
+because a destroy evaluates no policy and the file in the build directory is left over from the earlier deploy.
 
 Both sink arms now really dispatch: `git` pushes the written files
 (Phase 4), and `integration` renders a CloudEvents+ECS envelope per
@@ -105,6 +105,7 @@ def finalize_and_distribute_deploy_audit(
     started_at: datetime,
     run_diagnostics: Diagnostics,
     dry_run: bool = False,
+    action: Literal["deploy", "destroy"] = "deploy",
     pin: str | None = None,
     change_system: str | None = None,
     change_id: str | None = None,
@@ -134,6 +135,7 @@ def finalize_and_distribute_deploy_audit(
             never `datetime.now()` called from inside this function.
         run_diagnostics: What `deploy_run()` itself returned.
         dry_run: Same flag passed to `deploy_run()`.
+        action: `"destroy"` for a `deploy destroy` run; see the module docstring for what changes.
         pin: The same `--pin` passed to `deploy_run()` (docs/work/
             version-lifecycle.md Phase 5) — forwarded to `resolve_deployment()`
             here too, so the manifest's `artifacts.repositories`/`.images`/
@@ -199,7 +201,7 @@ def finalize_and_distribute_deploy_audit(
 
     manifest = DeploymentManifestModel(
         execution_id=execution_id,
-        action="deploy",
+        action=action,
         version=str(__version__),
         deployment=deployment_name,
         workspace=deployment.spec.workspace,
@@ -215,7 +217,7 @@ def finalize_and_distribute_deploy_audit(
         ),
         sbom=_sbom_reference(build_path),
         change_reference=change_reference,
-        policy_results=read_policy_results(build_path),
+        policy_results=None if action == "destroy" else read_policy_results(build_path),
         errors=run_diagnostics.messages(Severity.ERROR) or None,
     )
     metrics = DeploymentMetricsModel(
@@ -223,7 +225,7 @@ def finalize_and_distribute_deploy_audit(
         deployment=deployment_name,
         workspace=deployment.spec.workspace,
         timestamp=started_at.isoformat(),
-        dimensions=MetricsDimensionsModel(outcome=status, action="deploy", environment=environment, actor=actor),
+        dimensions=MetricsDimensionsModel(outcome=status, action=action, environment=environment, actor=actor),
         measures=MetricsMeasuresModel(
             duration_seconds=duration_seconds, stages_total=1, stages_failed=0 if status == "success" else 1
         ),
@@ -242,7 +244,8 @@ def finalize_and_distribute_deploy_audit(
         return diagnostics
 
     event_enabled = {**EVENT_DEFAULTS, **(audit_config.event_overrides or {})}
-    admitted_types = [t for t in ("deployment.completed", "deployment.measured") if event_enabled.get(t, True)]
+    completion_event = "deployment.destroyed" if action == "destroy" else "deployment.completed"
+    admitted_types = [t for t in (completion_event, "deployment.measured") if event_enabled.get(t, True)]
 
     # Deploy-time values a `git` sink's `remote.integration` credentials may
     # reference (docs/design/gitops-integration.md's credential pattern,

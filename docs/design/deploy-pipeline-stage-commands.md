@@ -24,8 +24,7 @@ strata deploy apply DEPLOYMENT   # init -> applies the saved <step>.tfplan exact
 `deploy run` is **not replaced or deprecated** — it remains the one-shot
 convenience path for the common case; these four are strictly additive.
 `deploy destroy` is a fully separate, independently designed command —
-see [deploy-command.md](deploy-command.md)'s "`deploy destroy` —
-designed, not implemented" section.
+see [deploy-destroy.md](deploy-destroy.md).
 
 **Internal evidence this split follows an existing seam, not a foreign
 one**: `DeploymentStageTimeoutsModel` (`deployment_model.py`) already
@@ -184,9 +183,10 @@ something strata can paper over.
 ## Related Decisions
 
 - [deploy-command.md](deploy-command.md) — `deploy run`'s own full
-  design (plus `deploy destroy`'s design and a survey of v1's other
+  design (plus a survey of v1's other
   `deploy` subcommands); this doc only adds phase-level granularity on
-  top of the same orchestrator, never redesigning it.
+  top of the same orchestrator, never redesigning it. `deploy destroy`
+  has its own doc, [deploy-destroy.md](deploy-destroy.md).
 - [deploy-plan-preview.md](deploy-plan-preview.md) — `--smoke-test`/
   `--dry-run`/real-apply execution modes `deploy run` itself still has;
   `deploy plan` reuses `--dry-run`'s own computation under the hood.

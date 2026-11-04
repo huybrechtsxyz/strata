@@ -291,16 +291,89 @@ class ComposeIntegration(InfraIntegration):
         namespace: str | None = None,
         timeout: int = 300,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
-        """`docker stack rm namespace`.
+        """`docker stack rm --detach=false namespace`.
+
+        `--detach=false` makes a successful destroy mean the stack's tasks have stopped, not only that removal
+        was requested (docs/design/deploy-destroy.md, D7). A stack that does not exist is not an error for Docker.
 
         Raises:
             IntegrationError: `namespace` was not given.
         """
         if namespace is None:
             raise IntegrationError(f"{self.name}: 'namespace' is required to remove a stack.")
-        return self.run("stack", "rm", namespace, cwd=path.parent, env=env, timeout=timeout)
+        return self.run(
+            "stack",
+            "rm",
+            "--detach=false",
+            namespace,
+            cwd=path.parent,
+            env=env,
+            timeout=timeout,
+            line_callback=line_callback,
+        )
+
+    def destroy_namespace(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        dry_run: bool,
+        env: dict[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
+        on_step: Callable[[str], None] | None = None,
+        timeout: int | None = None,
+        **kwargs: Any,
+    ) -> Diagnostics:
+        """Remove the namespace's stack (docs/design/deploy-destroy.md).
+
+        Like `deploy_namespace()`, one Swarm stack per namespace, so `modules` only says whether there is
+        anything to do. No compose file is read: a stack is removed by name.
+
+        `dry_run` lists the stack's running services (`docker stack services`) to `on_step`, since Docker has no
+        removal preview of its own. A stack Docker does not have lists nothing and is reported as nothing to
+        remove; a listing that fails (for example, not a swarm manager) is a warning, because the preview is
+        best effort. A real removal that fails is an error.
+        """
+        del kwargs
+        diagnostics = Diagnostics()
+        if not modules:
+            return diagnostics
+        say = on_step or (lambda message: None)
+        stack = str(namespace.meta.name)
+        compose_file = modules[0].source_path.parent / "docker-compose.yml"
+
+        if dry_run:
+            listing = self.output(compose_file, namespace=stack, env=env)
+            if not listing.is_successful:
+                diagnostics.warning(
+                    f"Namespace '{stack}': could not list the services of stack '{stack}' to preview its removal"
+                    f" - {listing.stderr.strip()}",
+                    location=stack,
+                )
+            elif not listing.stdout.strip():
+                say(f"stack '{stack}' not found, nothing to remove")
+            else:
+                say(f"would remove stack '{stack}':")
+                for line in listing.stdout.splitlines():
+                    if line.strip():
+                        say(f"  {line.rstrip()}")
+            return diagnostics
+
+        result = self.destroy(
+            compose_file,
+            namespace=stack,
+            env=env,
+            line_callback=line_callback,
+            **({} if timeout is None else {"timeout": timeout}),
+        )
+        if result.is_successful:
+            say(f"removed stack '{stack}'")
+        else:
+            diagnostics.error(f"Namespace '{stack}': docker stack rm failed - {result.stderr.strip()}", location=stack)
+        return diagnostics
 
     def output(
         self, path: Path, *, namespace: str, timeout: int = 60, env: Mapping[str, str] | None = None

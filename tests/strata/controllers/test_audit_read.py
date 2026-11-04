@@ -47,11 +47,12 @@ def _manifest_json(
     execution_id: str = "11111111-1111-1111-1111-111111111111",
     started_at: str,
     status: str = "success",
+    action: str = "deploy",
 ) -> str:
     return json.dumps(
         {
             "execution_id": execution_id,
-            "action": "deploy",
+            "action": action,
             "deployment": deployment,
             "workspace": "main",
             "started_at": started_at,
@@ -633,3 +634,46 @@ def test_real_audit_status_round_trip(tmp_path: Path):
     # records DO exist in this sink — 'since' just excluded all of them, so the
     # message must say "no match for the filters", not "nothing in this sink"
     assert any(d.code == "audit_read_no_records_for_filters" for d in no_match_diagnostics.items)
+
+
+# ---------------------------------------------------------------------------
+# action (docs/design/deploy-destroy.md) - a destroy must not read as a deploy
+# ---------------------------------------------------------------------------
+
+
+def test_the_latest_record_reports_its_action(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-01T00:00:00+00:00")
+    _write_manifest(
+        tmp_path / "records", "app/run2", deployment="app", started_at="2026-10-05T00:00:00+00:00", action="destroy"
+    )
+
+    records = list_latest_per_deployment(tmp_path, sink, deployment=None, diagnostics=Diagnostics())
+
+    assert [(record.status, record.action) for record in records] == [("success", "destroy")]
+
+
+def test_a_deploy_record_reports_the_deploy_action(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-01T00:00:00+00:00")
+
+    records = list_latest_per_deployment(tmp_path, sink, deployment=None, diagnostics=Diagnostics())
+
+    assert [record.action for record in records] == ["deploy"]
+
+
+def test_changes_report_each_records_action_oldest_to_newest(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(
+        tmp_path / "records", "app/run2", deployment="app", started_at="2026-10-05T00:00:00+00:00", action="destroy"
+    )
+    _write_manifest(tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-01T00:00:00+00:00")
+
+    records = list_manifests_in_range(
+        tmp_path, sink, deployment=None, since=None, until=None, status=None, diagnostics=Diagnostics()
+    )
+
+    assert [record.action for record in records] == ["deploy", "destroy"]

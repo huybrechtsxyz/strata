@@ -19,6 +19,7 @@ from strata.integrations.helm import (
     credentials_from_authentication,
     read_chart_values,
     resolve_module_values,
+    summarise_manifest,
 )
 from strata.integrations.registry import get
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
@@ -1656,3 +1657,218 @@ def test_deploy_namespace_dry_run_plan_failure_is_reported_as_an_error(monkeypat
 
     assert not diagnostics.ok
     assert "helm plan (dry-run) failed" in diagnostics.errors[0].message
+
+
+# ---------------------------------------------------------------------------
+# summarise_manifest()/destroy()/destroy_namespace() (docs/design/deploy-destroy.md)
+# ---------------------------------------------------------------------------
+
+_MANIFEST = """---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-svc
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-secret
+data:
+  token: c3VwZXJzZWNyZXQ=
+"""
+
+
+def test_summarise_manifest_lists_kind_and_name_and_never_the_data():
+    lines = summarise_manifest(_MANIFEST)
+    assert lines == ["Service/demo-svc", "Secret/demo-secret"]
+    assert "c3VwZXJzZWNyZXQ=" not in " ".join(lines)
+
+
+def test_summarise_manifest_skips_empty_and_nameless_documents():
+    assert summarise_manifest("---\n---\nkind: List\n---\nkind: Pod\nmetadata:\n  name: p\n") == ["Pod/p"]
+
+
+def test_summarise_manifest_of_nothing_is_empty():
+    assert summarise_manifest("") == []
+
+
+def test_summarise_manifest_never_returns_unparseable_text():
+    lines = summarise_manifest("kind: [unclosed\nsecret: hunter2")
+    assert lines == ["(manifest could not be summarised)"]
+    assert "hunter2" not in " ".join(lines)
+
+
+def test_destroy_forwards_line_callback_and_timeout(monkeypatch):
+    seen: dict[str, object] = {}
+
+    def _fake(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        seen["timeout"] = timeout
+        seen["line_callback"] = line_callback
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake)
+
+    def callback(stream: str, text: str) -> None:
+        return None
+
+    HelmIntegration().destroy(
+        Path("/work/values.yaml"), release="app", namespace="apps", timeout=42, line_callback=callback
+    )
+    assert seen["timeout"] == 42
+    assert seen["line_callback"] is callback
+
+
+def _destroy_modules(tmp_path: Path, specs: list[tuple[str, dict | None]]) -> list[ResolvedModule]:
+    """Modules whose build directory holds `meta.yaml` (`None` leaves it out)."""
+    items = []
+    for reference_name, meta in specs:
+        module_dir = tmp_path / "apps" / reference_name
+        module_dir.mkdir(parents=True)
+        if meta is not None:
+            (module_dir / "meta.yaml").write_text(yaml.safe_dump(meta))
+        items.append(_resolved_module(reference_name, _module(reference_name), module_dir))
+    return items
+
+
+def _script_helm(monkeypatch, responder):
+    """Stub `run_command`, recording every call; `responder(args)` returns the `CommandResult`."""
+    calls: list[dict] = []
+
+    def _fake(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append({"args": list(args), "timeout": timeout, "line_callback": line_callback})
+        return responder(list(args))
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake)
+    return calls
+
+
+def _ok(stdout: str = "") -> CommandResult:
+    return CommandResult(returncode=0, stdout=stdout, stderr="")
+
+
+def _failed(stderr: str) -> CommandResult:
+    return CommandResult(returncode=1, stdout="", stderr=stderr)
+
+
+def test_destroy_namespace_uninstalls_each_release_in_reverse_order(tmp_path: Path, monkeypatch):
+    items = _destroy_modules(
+        tmp_path,
+        [("a", {"releaseName": "rel-a", "namespace": "ns-a"}), ("b", {"releaseName": "rel-b", "namespace": "ns-b"})],
+    )
+    calls = _script_helm(monkeypatch, lambda args: _ok())
+    steps: list[str] = []
+
+    diagnostics = HelmIntegration().destroy_namespace(_namespace(), items, dry_run=False, on_step=steps.append)
+
+    assert diagnostics.ok
+    assert [call["args"] for call in calls] == [
+        ["helm", "uninstall", "--namespace", "ns-b", "rel-b"],
+        ["helm", "uninstall", "--namespace", "ns-a", "rel-a"],
+    ]
+    assert any("rel-b" in step for step in steps)
+
+
+def test_destroy_namespace_falls_back_to_the_module_and_namespace_names(tmp_path: Path, monkeypatch):
+    items = _destroy_modules(tmp_path, [("a", {})])
+    calls = _script_helm(monkeypatch, lambda args: _ok())
+
+    assert HelmIntegration().destroy_namespace(_namespace("apps"), items, dry_run=False).ok
+    assert calls[0]["args"] == ["helm", "uninstall", "--namespace", "apps", "a"]
+
+
+def test_destroy_namespace_reports_a_missing_meta_file_and_still_destroys_the_rest(tmp_path: Path, monkeypatch):
+    items = _destroy_modules(tmp_path, [("a", None), ("b", {"releaseName": "rel-b", "namespace": "apps"})])
+    calls = _script_helm(monkeypatch, lambda args: _ok())
+
+    diagnostics = HelmIntegration().destroy_namespace(_namespace(), items, dry_run=False)
+
+    assert not diagnostics.ok
+    assert "run 'strata build run' first" in diagnostics.errors[0].message
+    assert [call["args"][-1] for call in calls] == ["rel-b"]
+
+
+def test_destroy_namespace_treats_release_not_found_as_already_uninstalled(tmp_path: Path, monkeypatch):
+    items = _destroy_modules(tmp_path, [("a", {"releaseName": "rel-a", "namespace": "apps"})])
+    _script_helm(monkeypatch, lambda args: _failed("Error: uninstall: Release not loaded: rel-a: release: not found"))
+    steps: list[str] = []
+
+    diagnostics = HelmIntegration().destroy_namespace(_namespace(), items, dry_run=False, on_step=steps.append)
+
+    assert diagnostics.ok
+    assert any("already uninstalled" in step for step in steps)
+
+
+def test_destroy_namespace_reports_other_failures_and_continues(tmp_path: Path, monkeypatch):
+    items = _destroy_modules(
+        tmp_path,
+        [("a", {"releaseName": "rel-a", "namespace": "apps"}), ("b", {"releaseName": "rel-b", "namespace": "apps"})],
+    )
+    calls = _script_helm(monkeypatch, lambda args: _failed("Error: forbidden") if args[-1] == "rel-b" else _ok())
+
+    diagnostics = HelmIntegration().destroy_namespace(_namespace(), items, dry_run=False)
+
+    assert not diagnostics.ok
+    assert "rel-b" in diagnostics.errors[0].message
+    assert "forbidden" in diagnostics.errors[0].message
+    assert len(calls) == 2  # rel-a was still attempted
+
+
+def test_destroy_namespace_forwards_timeout_and_line_callback(tmp_path: Path, monkeypatch):
+    items = _destroy_modules(tmp_path, [("a", {"releaseName": "rel-a", "namespace": "apps"})])
+    calls = _script_helm(monkeypatch, lambda args: _ok())
+
+    def callback(stream: str, text: str) -> None:
+        return None
+
+    HelmIntegration().destroy_namespace(_namespace(), items, dry_run=False, timeout=42, line_callback=callback)
+
+    assert calls[0]["timeout"] == 42
+    assert calls[0]["line_callback"] is callback
+
+
+def test_destroy_namespace_dry_run_previews_resources_and_never_the_secret_data(tmp_path: Path, monkeypatch):
+    items = _destroy_modules(tmp_path, [("a", {"releaseName": "rel-a", "namespace": "apps"})])
+    calls = _script_helm(monkeypatch, lambda args: _ok(_MANIFEST))
+    steps: list[str] = []
+
+    def callback(stream: str, text: str) -> None:
+        raise AssertionError("a manifest holds Secret data and must never be streamed")
+
+    diagnostics = HelmIntegration().destroy_namespace(
+        _namespace(), items, dry_run=True, on_step=steps.append, line_callback=callback
+    )
+
+    assert diagnostics.ok
+    assert [call["args"] for call in calls] == [["helm", "get", "manifest", "--namespace", "apps", "rel-a"]]
+    assert calls[0]["line_callback"] is None
+    text = "\n".join(steps)
+    assert "Service/demo-svc" in text
+    assert "Secret/demo-secret" in text
+    assert "c3VwZXJzZWNyZXQ=" not in text
+
+
+def test_destroy_namespace_dry_run_says_a_missing_release_has_nothing_to_remove(tmp_path: Path, monkeypatch):
+    items = _destroy_modules(tmp_path, [("a", {"releaseName": "rel-a", "namespace": "apps"})])
+    _script_helm(monkeypatch, lambda args: _failed("Error: release: not found"))
+    steps: list[str] = []
+
+    diagnostics = HelmIntegration().destroy_namespace(_namespace(), items, dry_run=True, on_step=steps.append)
+
+    assert diagnostics.ok
+    assert diagnostics.warnings == []
+    assert any("not installed, nothing to remove" in step for step in steps)
+
+
+def test_destroy_namespace_dry_run_warns_when_the_preview_cannot_be_read(tmp_path: Path, monkeypatch):
+    items = _destroy_modules(tmp_path, [("a", {"releaseName": "rel-a", "namespace": "apps"})])
+    _script_helm(monkeypatch, lambda args: _failed("Error: Kubernetes cluster unreachable"))
+
+    diagnostics = HelmIntegration().destroy_namespace(_namespace(), items, dry_run=True)
+
+    assert diagnostics.ok
+    assert len(diagnostics.warnings) == 1
+    assert "unreachable" in diagnostics.warnings[0].message

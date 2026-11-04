@@ -771,3 +771,210 @@ def test_deploy_plan_plan_failure_exits_three(runner, solution, monkeypatch):
 
     result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
     assert result.exit_code == EXIT_VALIDATION
+
+
+# ---------------------------------------------------------------------------
+# `deploy destroy` (docs/design/deploy-destroy.md)
+# ---------------------------------------------------------------------------
+
+
+def _destroy(runner, solution, *args):
+    return runner.invoke(cli, ["deploy", "destroy", "app", "--path", str(solution), *[str(a) for a in args]])
+
+
+def _has_manifest(solution: Path) -> bool:
+    from strata.utils import layout
+
+    audit = layout.audit_dir(solution)
+    return audit.is_dir() and any(audit.rglob("_manifest.json"))
+
+
+def test_deploy_destroy_requires_force_or_dry_run(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _destroy(runner, solution)
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert "--force" in result.output and "--dry-run" in result.output
+    assert _stub_terraform == []
+
+
+def test_deploy_destroy_rejects_force_with_dry_run(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--force", "--dry-run")
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert _stub_terraform == []
+
+
+def test_deploy_destroy_force_runs_init_then_destroy_with_auto_approve(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--force")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert [call[1] for call in _stub_terraform] == ["init", "destroy"]
+    assert "-auto-approve" in next(call for call in _stub_terraform if call[1] == "destroy")
+
+
+def test_deploy_destroy_dry_run_previews_without_destroying_or_saving_a_plan(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--dry-run")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert [call[1] for call in _stub_terraform] == ["init", "plan"]
+    plan_call = next(call for call in _stub_terraform if call[1] == "plan")
+    assert "-destroy" in plan_call
+    assert "-out" not in plan_call
+
+
+def test_deploy_destroy_dry_run_leaves_an_existing_apply_plan_untouched(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    plan_file = solution / "build" / "app" / "infra" / "apply_infra.tfplan"
+    plan_file.write_text("reviewed apply plan", encoding="utf-8")
+
+    result = _destroy(runner, solution, "--dry-run")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert plan_file.read_text(encoding="utf-8") == "reviewed apply plan"
+
+
+def test_deploy_destroy_dry_run_streams_the_preview_without_follow(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--dry-run")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" in result.output
+
+
+def test_deploy_destroy_force_does_not_stream_without_follow(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--force")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" not in result.output
+
+
+def test_deploy_destroy_dry_run_json_output_reroutes_the_stream_to_stderr(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--dry-run", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" in result.stderr
+    assert "terraform │" not in result.stdout
+    assert json.loads(result.stdout)["command"] == "deploy destroy"
+
+
+def test_deploy_destroy_follow_ndjson_requires_output_json(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--force", "--follow", "ndjson")
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert _stub_terraform == []
+
+
+def test_deploy_destroy_follow_ndjson_streams_events(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--force", "--follow", "ndjson", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert any(entry.get("event") == "line" and entry["tool"] == "terraform" for entry in events[:-1])
+    assert events[-1]["command"] == "deploy destroy"
+
+
+def test_deploy_destroy_failure_exits_three(runner, solution, monkeypatch):
+    _build(runner, solution)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "destroy":
+            return CommandResult(returncode=1, stdout="", stderr="destroy exploded")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    result = _destroy(runner, solution, "--force")
+    assert result.exit_code == EXIT_VALIDATION, result.output
+
+
+def test_deploy_destroy_unknown_deployment_exits_two(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = runner.invoke(cli, ["deploy", "destroy", "ghost", "--path", str(solution), "--force"])
+    assert result.exit_code == EXIT_USAGE, result.output
+
+
+def test_deploy_destroy_outside_a_solution_exits_two(runner, tmp_path, _stub_terraform):
+    result = runner.invoke(cli, ["deploy", "destroy", "app", "--path", str(tmp_path), "--force"])
+    assert result.exit_code == EXIT_USAGE, result.output
+
+
+def test_deploy_destroy_partial_change_reference_exits_two_before_anything_runs(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--force", "--change-system", "jira")
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert _stub_terraform == []
+
+
+def test_deploy_destroy_forwards_stage(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--force", "--stage", "apply_infra")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert [call[1] for call in _stub_terraform] == ["init", "destroy"]
+
+
+@pytest.mark.parametrize("filters", [["--stage", "ghost-stage"], ["--scope", "ghost-scope"]])
+def test_deploy_destroy_that_selects_no_step_exits_three(runner, solution, _stub_terraform, filters):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--force", *filters)
+    assert result.exit_code == EXIT_VALIDATION, result.output
+    assert _stub_terraform == []
+
+
+def test_deploy_destroy_real_run_writes_a_destroy_audit_manifest_with_the_change_reference(
+    runner, solution, _stub_terraform
+):
+    from strata.utils import layout
+
+    _build(runner, solution)
+    result = _destroy(
+        runner,
+        solution,
+        "--force",
+        "--change-system",
+        "jira",
+        "--change-id",
+        "OPS-1234",
+        "--change-reason",
+        "decommission",
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    manifest = json.loads(next(layout.audit_dir(solution).rglob("_manifest.json")).read_text())
+    assert manifest["action"] == "destroy"
+    assert manifest["change_reference"]["id"] == "OPS-1234"
+
+
+def test_deploy_destroy_dry_run_writes_no_audit_manifest(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--dry-run")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert not _has_manifest(solution)
+
+
+def test_deploy_destroy_failed_real_run_is_still_audited(runner, solution, monkeypatch):
+    _build(runner, solution)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        code = 1 if args[1] == "destroy" else 0
+        return CommandResult(returncode=code, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    result = _destroy(runner, solution, "--force")
+    assert result.exit_code == EXIT_VALIDATION, result.output
+    assert _has_manifest(solution)
+
+
+def test_deploy_destroy_help_stresses_irreversibility_and_is_listed(runner):
+    listing = runner.invoke(cli, ["deploy", "--help"])
+    assert any(line.strip().startswith("destroy") for line in listing.output.splitlines())
+
+    result = runner.invoke(cli, ["deploy", "destroy", "--help"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "IRREVERSIBLE" in result.output
+    assert "--force" in result.output and "--dry-run" in result.output
+    assert "--smoke-test" not in result.output

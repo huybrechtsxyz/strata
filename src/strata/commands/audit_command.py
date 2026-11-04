@@ -84,7 +84,7 @@ def status_command(deployment: str | None, path: Path | None, output: str, quiet
 
 
 def _print_status_table(records: list[DeploymentStatusRecord]) -> None:
-    """Render one line per deployment: name, status, version, deployed_by,
+    """Render one line per deployment: name, action, status, version, deployed_by,
     completed_at, and whether a change_reference is present.
 
     Mirrors `values_command.py`'s `_print_declared_list()` convention
@@ -95,25 +95,27 @@ def _print_status_table(records: list[DeploymentStatusRecord]) -> None:
         click.echo("  (no audit records found)")
         return
 
-    headers = ("DEPLOYMENT", "STATUS", "VERSION", "DEPLOYED BY", "COMPLETED AT")
+    headers = ("DEPLOYMENT", "ACTION", "STATUS", "VERSION", "DEPLOYED BY", "COMPLETED AT")
     deployment_w = max(len(headers[0]), max(len(r.deployment) for r in records))
-    status_w = max(len(headers[1]), max(len(r.status) for r in records))
-    version_w = max(len(headers[2]), max(len(r.version) for r in records))
-    deployed_by_w = max(len(headers[3]), max(len(r.deployed_by) for r in records))
-    completed_at_w = max(len(headers[4]), max(len(r.completed_at) for r in records))
+    action_w = max(len(headers[1]), max(len(r.action) for r in records))
+    status_w = max(len(headers[2]), max(len(r.status) for r in records))
+    version_w = max(len(headers[3]), max(len(r.version) for r in records))
+    deployed_by_w = max(len(headers[4]), max(len(r.deployed_by) for r in records))
+    completed_at_w = max(len(headers[5]), max(len(r.completed_at) for r in records))
 
     click.echo(
-        f"  {headers[0].ljust(deployment_w)}  {headers[1].ljust(status_w)}  {headers[2].ljust(version_w)}  "
-        f"{headers[3].ljust(deployed_by_w)}  {headers[4].ljust(completed_at_w)}  CHANGE REF"
+        f"  {headers[0].ljust(deployment_w)}  {headers[1].ljust(action_w)}  {headers[2].ljust(status_w)}  "
+        f"{headers[3].ljust(version_w)}  {headers[4].ljust(deployed_by_w)}  {headers[5].ljust(completed_at_w)}  "
+        "CHANGE REF"
     )
     for record in records:
         change_ref = (
             f"{record.change_reference.system}:{record.change_reference.id}" if record.change_reference else "-"
         )
         click.echo(
-            f"  {record.deployment.ljust(deployment_w)}  {record.status.ljust(status_w)}  "
-            f"{record.version.ljust(version_w)}  {record.deployed_by.ljust(deployed_by_w)}  "
-            f"{record.completed_at.ljust(completed_at_w)}  {change_ref}"
+            f"  {record.deployment.ljust(deployment_w)}  {record.action.ljust(action_w)}  "
+            f"{record.status.ljust(status_w)}  {record.version.ljust(version_w)}  "
+            f"{record.deployed_by.ljust(deployed_by_w)}  {record.completed_at.ljust(completed_at_w)}  {change_ref}"
         )
 
 
@@ -127,6 +129,7 @@ def _to_json(record: DeploymentStatusRecord) -> dict[str, Any]:
     """
     return {
         "deployment": record.deployment,
+        "action": record.action,
         "status": record.status,
         "version": record.version,
         "deployed_by": record.deployed_by,
@@ -221,7 +224,7 @@ def changes_command(
 
 
 def _print_changes_table(records: list[DeploymentChangeRecord]) -> None:
-    """Render one line per record, oldest to newest: deployment, status,
+    """Render one line per record, oldest to newest: deployment, action, status,
     started_at, execution_id.
 
     Deliberately narrower than `_print_status_table()`'s column set —
@@ -233,19 +236,20 @@ def _print_changes_table(records: list[DeploymentChangeRecord]) -> None:
         click.echo("  (no audit records found)")
         return
 
-    headers = ("DEPLOYMENT", "STATUS", "STARTED AT")
+    headers = ("DEPLOYMENT", "ACTION", "STATUS", "STARTED AT")
     deployment_w = max(len(headers[0]), max(len(r.deployment) for r in records))
-    status_w = max(len(headers[1]), max(len(r.status) for r in records))
-    started_at_w = max(len(headers[2]), max(len(r.started_at) for r in records))
+    action_w = max(len(headers[1]), max(len(r.action) for r in records))
+    status_w = max(len(headers[2]), max(len(r.status) for r in records))
+    started_at_w = max(len(headers[3]), max(len(r.started_at) for r in records))
 
     click.echo(
-        f"  {headers[0].ljust(deployment_w)}  {headers[1].ljust(status_w)}  "
-        f"{headers[2].ljust(started_at_w)}  EXECUTION ID"
+        f"  {headers[0].ljust(deployment_w)}  {headers[1].ljust(action_w)}  {headers[2].ljust(status_w)}  "
+        f"{headers[3].ljust(started_at_w)}  EXECUTION ID"
     )
     for record in records:
         click.echo(
-            f"  {record.deployment.ljust(deployment_w)}  {record.status.ljust(status_w)}  "
-            f"{record.started_at.ljust(started_at_w)}  {record.execution_id}"
+            f"  {record.deployment.ljust(deployment_w)}  {record.action.ljust(action_w)}  "
+            f"{record.status.ljust(status_w)}  {record.started_at.ljust(started_at_w)}  {record.execution_id}"
         )
 
 
@@ -260,6 +264,7 @@ def _change_to_json(record: DeploymentChangeRecord) -> dict[str, Any]:
     return {
         "execution_id": record.execution_id,
         "deployment": record.deployment,
+        "action": record.action,
         "status": record.status,
         "started_at": record.started_at,
         "completed_at": record.completed_at,

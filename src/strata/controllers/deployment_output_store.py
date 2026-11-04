@@ -28,6 +28,7 @@ Key naming: `strata/deployment-outputs/<deployment-name>` (settled convention,
 """
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -168,4 +169,55 @@ class DeploymentOutputStore:
         raise SystemError(
             f"Step '{step}': could not durably record output after {_MAX_CAS_RETRIES} conflicting writes in a "
             "row — the backend is under heavier concurrent write contention than expected."
+        )
+
+    def clear(self, steps: Iterable[str]) -> None:
+        """Remove `steps`' entries from this deployment's shared durable record, so a later `deploy run` of
+        what was just destroyed cannot read the outputs of infrastructure that no longer exists
+        (docs/design/deploy-destroy.md, D8).
+
+        Same read-modify-write with compare-and-swap retry as `record()`: a concurrent writer's update to
+        another step is kept, never overwritten. The record is rewritten once for all the steps, and not at all
+        when none of them is in it. The last step leaves `{}` behind, because the key-value capability has no
+        delete; a read of any step then reports "no durable output recorded", exactly as before it ran.
+
+        Args:
+            steps: Step names to forget. Read once up front, so a generator is fine.
+
+        Raises:
+            strata.utils.errors.SystemError: the stored record is not a JSON object, or
+                `_MAX_CAS_RETRIES` conflicting writes in a row.
+            strata.integrations.errors.IntegrationError: the backend itself is unreachable or unauthenticated.
+        """
+        names = set(steps)
+        if not names:
+            return
+
+        for _ in range(_MAX_CAS_RETRIES):
+            entry = self._backend.get(self._key)
+            if entry is None:
+                return
+            try:
+                record = json.loads(entry.value)
+            except json.JSONDecodeError:
+                record = None
+            if not isinstance(record, dict):
+                raise SystemError(
+                    f"The durable output record (key '{self._key}') is not a valid JSON object, so it cannot be "
+                    "cleared; inspect or delete that key in the output store."
+                )
+
+            remaining = {step: value for step, value in record.items() if step not in names}
+            if len(remaining) == len(record):
+                return
+
+            try:
+                self._backend.put(self._key, json.dumps(remaining).encode("utf-8"), if_version=entry.version)
+                return
+            except KeyValueConflictError:
+                continue
+
+        raise SystemError(
+            f"Steps {sorted(names)}: could not durably clear their output after {_MAX_CAS_RETRIES} conflicting "
+            "writes in a row - the backend is under heavier concurrent write contention than expected."
         )

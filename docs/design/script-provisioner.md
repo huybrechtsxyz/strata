@@ -28,11 +28,12 @@ zero-real-demand finding).
   `deploy_namespace()`; the base class's "not supported" raise reports
   this safely. Revisit if a real namespace-attached script-module need
   shows up.
-- `strata deploy destroy` — doesn't exist for any tool yet
-  ([deploy-command.md](deploy-command.md)'s "`deploy destroy` — designed,
-  not implemented" section);
-  `ScriptIntegration.destroy()` raises `IntegrationError`, matching every
-  other integration's "not supported" precedent.
+- `strata deploy destroy` — a script step cannot be destroyed:
+  `ScriptIntegration.SUPPORTS_DESTROY` is false and `destroy()` raises
+  `IntegrationError`, so a destroy refuses the step before touching
+  anything and suggests `--stage`/`--scope` to leave it out
+  ([deploy-destroy.md](deploy-destroy.md), D5). A script has no state to
+  tear down.
 - `.js`/`.mjs`/`.go` (in the general `SCRIPT_EXTENSIONS` constant, used by
   lifecycle hooks' `ScriptPathModel`) — a narrower, dedicated extension
   set for this tool (`ps1`/`sh`/`bash`/`py`/`bat`), not the shared one.
@@ -229,7 +230,7 @@ not applicable rather than silently absent:
 | `validate` | syntax-check the HCL, no state/credentials touched | **Real** — a per-interpreter no-exec syntax check (below)                                                                                                                                              |
 | `plan`     | preview the diff, no apply                         | **Real** — confirms the file exists and the interpreter resolves; no true diff is possible for an imperative script, same honesty level as Compose's own `docker stack config` (renders, doesn't diff) |
 | `deploy`   | apply the plan                                     | **Real** — actually executes the script                                                                                                                                                                |
-| `destroy`  | tear down                                          | Deferred — raises (out of scope above)                                                                                                                                                                 |
+| `destroy`  | tear down                                          | **Unsupported** — raises, and `SUPPORTS_DESTROY` is false so `deploy destroy` refuses the step up front (out of scope above)                                                                           |
 
 `plan()` cannot be a bare "not supported" raise — a missing plan preview
 is a **hard error on a real (non-dry-run) apply**, not a graceful skip
@@ -275,7 +276,7 @@ def validate(
     return self.run(*argv[1:], cwd=path, env=env, line_callback=line_callback)
 
     def destroy(self, path: Path, **kwargs: Any) -> CommandResult:
-        raise IntegrationError(f"{self.name} does not support destroy (docs/design/deploy-command.md)")
+        raise IntegrationError(f"{self.name} does not support destroy (docs/design/deploy-destroy.md, D5)")
 ```
 
 `plan()`/`deploy()` are covered together with value delivery below, since
@@ -472,9 +473,8 @@ Two small, additive controller changes:
   of; its gate-question finding (zero real lifecycle-hook demand) is why
   this doc doesn't port v1's phase-hook executor, only the plain "run a
   script" primitive.
-- [deploy-command.md](deploy-command.md) — why `destroy()` raises rather
-  than attempting anything (its "`deploy destroy` — designed, not
-  implemented" section).
+- [deploy-destroy.md](deploy-destroy.md) — why `destroy()` raises and
+  `SUPPORTS_DESTROY` is false rather than attempting anything.
 
 ## History
 

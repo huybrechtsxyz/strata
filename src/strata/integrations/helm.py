@@ -51,6 +51,10 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
 from strata.utils.value_tokens import referenced_output_keys, resolve_value_tokens_tracking_secrets
 
+#: What Helm prints when asked about a release it does not have (`uninstall` and `get manifest` both end this
+#: way), matched instead of `--ignore-not-found`, whose first Helm version was not verified.
+_RELEASE_NOT_FOUND = "release: not found"
+
 
 class HelmIntegration(InfraIntegration):
     """Helm — installs/upgrades/uninstalls chart releases on Kubernetes."""
@@ -431,6 +435,7 @@ class HelmIntegration(InfraIntegration):
         namespace: str | None = None,
         timeout: int = 300,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
         """`helm uninstall --namespace ns release`.
@@ -440,7 +445,83 @@ class HelmIntegration(InfraIntegration):
         """
         if release is None or namespace is None:
             raise IntegrationError(f"{self.name}: 'release' and 'namespace' are required to uninstall a release.")
-        return self.run("uninstall", "--namespace", namespace, release, env=env, timeout=timeout)
+        return self.run(
+            "uninstall", "--namespace", namespace, release, env=env, timeout=timeout, line_callback=line_callback
+        )
+
+    def destroy_namespace(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        dry_run: bool,
+        env: dict[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
+        on_step: Callable[[str], None] | None = None,
+        timeout: int | None = None,
+        **kwargs: Any,
+    ) -> Diagnostics:
+        """Uninstall every Helm module in `modules`, last module first (docs/design/deploy-destroy.md).
+
+        The release and namespace names come from each module's `meta.yaml`, exactly as `deploy_namespace()`
+        reads them; nothing else is read, so no value is resolved and no registry login is made.
+
+        `dry_run` previews with `helm get manifest` and sends one `Kind/name` line per resource to `on_step`.
+        The manifest itself is never streamed or printed: it embeds Secret `data`, which redaction cannot mask.
+        A release Helm does not have is reported as nothing to remove, not as a failure, on both paths, so a
+        retry after a partial failure can finish.
+        """
+        del kwargs
+        diagnostics = Diagnostics()
+        say = on_step or (lambda message: None)
+        for item in reversed(modules):
+            label = f"Namespace '{namespace.meta.name}', module '{item.reference.name}'"
+            meta_file = item.source_path / "meta.yaml"
+            if not meta_file.exists():
+                diagnostics.error(
+                    f"{label}: meta.yaml not found - run 'strata build run' first.", location=item.reference.name
+                )
+                continue
+            meta = yaml.safe_load(meta_file.read_text()) or {}
+            release = str(meta.get("releaseName") or item.reference.name)
+            release_namespace = str(meta.get("namespace") or namespace.meta.name)
+            where = f"release '{release}' (namespace '{release_namespace}')"
+
+            if dry_run:
+                preview = self.get_manifest(release=release, namespace=release_namespace, env=env)
+                if preview.is_successful:
+                    resources = summarise_manifest(preview.stdout)
+                    say(f"would uninstall {where}: {len(resources)} resource(s)")
+                    for resource in resources:
+                        say(f"  {resource}")
+                elif _RELEASE_NOT_FOUND in preview.stderr:
+                    say(f"{where} is not installed, nothing to remove")
+                else:
+                    diagnostics.warning(
+                        f"{label}: could not read {where} to preview its removal - {preview.stderr.strip()}",
+                        location=item.reference.name,
+                    )
+                continue
+
+            result = self.destroy(
+                item.source_path,
+                release=release,
+                namespace=release_namespace,
+                env=env,
+                line_callback=line_callback,
+                **({} if timeout is None else {"timeout": timeout}),
+            )
+            if result.is_successful:
+                say(f"uninstalled {where}")
+            elif _RELEASE_NOT_FOUND in result.stderr:
+                say(f"{where} is already uninstalled")
+            else:
+                diagnostics.error(
+                    f"{label}: helm uninstall failed for {where} - {result.stderr.strip()}",
+                    location=item.reference.name,
+                    code="helm_uninstall_failed",
+                )
+        return diagnostics
 
     def _require(self, *, release: str | None, namespace: str | None, chart: str | None) -> tuple[str, str, str]:
         """Narrow the three optional-but-really-required params, or raise naming
@@ -489,6 +570,27 @@ class HelmIntegration(InfraIntegration):
 # prepare_namespace() rendering — pure, so it's testable without touching
 # disk (same split `default_output()`/`prepare()` already draw).
 # ----------------------------------------------------------------------
+
+
+def summarise_manifest(text: str) -> list[str]:
+    """`Kind/name` for every resource in a rendered release manifest, and never the manifest itself.
+
+    A manifest embeds Secret `data`, which the output redaction cannot mask, so a destroy preview shows only
+    what would be removed (docs/design/deploy-destroy.md, D7). Text that is not YAML is not echoed either.
+    """
+    try:
+        documents = list(yaml.safe_load_all(text))
+    except yaml.YAMLError:
+        return ["(manifest could not be summarised)"]
+    lines: list[str] = []
+    for document in documents:
+        if not isinstance(document, dict):
+            continue
+        metadata = document.get("metadata")
+        name = metadata.get("name") if isinstance(metadata, dict) else None
+        if document.get("kind") and name:
+            lines.append(f"{document['kind']}/{name}")
+    return lines
 
 
 def read_chart_values(chart_dir: Path) -> dict[str, Any]:

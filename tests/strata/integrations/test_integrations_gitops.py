@@ -182,6 +182,12 @@ def test_destroy_fails_cleanly_without_a_sidecar(tmp_path: Path):
     assert "no GitOps sidecar" in result.stderr
 
 
+def test_plan_destroy_fails_cleanly_without_a_sidecar(tmp_path: Path):
+    result = ArgoCDIntegration().plan_destroy(tmp_path)
+    assert not result.is_successful
+    assert "no GitOps sidecar" in result.stderr
+
+
 def test_output_fails_cleanly_without_a_sidecar(tmp_path: Path):
     result = ArgoCDIntegration().output(tmp_path)
     assert not result.is_successful
@@ -439,3 +445,88 @@ def test_real_end_to_end_cycle(tmp_path: Path):
     assert destroy_result.is_successful, destroy_result.stderr
     subprocess.run(["git", "-C", str(verify_dir), "pull"], check=True, capture_output=True)
     assert not pushed_file.exists()
+
+
+# ---------------------------------------------------------------------------
+# plan_destroy() (docs/design/deploy-destroy.md) — the destroy preview
+# ---------------------------------------------------------------------------
+
+
+def test_plan_destroy_forwards_auth_and_resolved_values_to_ensure_checkout(tmp_path: Path, monkeypatch):
+    from strata.integrations import gitops as gitops_module
+    from strata.integrations.git_push import PushResult
+    from strata.models.auth_models import AuthenticationModel, CLIAuthenticationModel
+
+    path = _prepared(tmp_path)
+    captured: dict[str, object] = {}
+
+    def _fake_ensure_checkout(root, remote, *, env=None, auth=None, resolved_values=None):
+        captured["auth"] = auth
+        captured["resolved_values"] = resolved_values
+        return PushResult(True)
+
+    monkeypatch.setattr(gitops_module, "ensure_checkout", _fake_ensure_checkout)
+    auth = AuthenticationModel(method="cli", cli=CLIAuthenticationModel())
+
+    result = ArgoCDIntegration().plan_destroy(path, env={}, auth=auth, resolved_values={"k": "v"})
+
+    assert result.is_successful, result.stderr
+    assert captured["auth"] is auth
+    assert captured["resolved_values"] == {"k": "v"}
+    assert "not present" in result.stdout  # the fake checkout holds no file
+
+
+def test_plan_destroy_converts_integration_error_to_failed_result_not_a_crash(tmp_path: Path):
+    path = _prepared(tmp_path)
+    result = ArgoCDIntegration().plan_destroy(path, env={}, auth=_misconfigured_auth(), resolved_values={})
+    assert not result.is_successful
+    assert "did not resolve to a value" in result.stderr
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_real_plan_destroy_previews_the_removal_and_never_an_apply_diff(tmp_path: Path):
+    bare_repo = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
+
+    root = tmp_path / "solution"
+    root.mkdir()
+    build_path = root / "build" / "forge_sync"
+    build_path.mkdir(parents=True)
+    provisioner = _provisioner()
+    template_path = root / "templates" / "forge-values.yaml.j2"
+    template_path.parent.mkdir(parents=True)
+    template_path.write_text("replicas: {{ provisioner.name }}\n")
+
+    integration = ArgoCDIntegration()
+    integration.prepare(
+        build_path,
+        resolved=ValueResolution(deployment="d"),
+        provisioner=provisioner,
+        graph=_graph(provisioner),
+        template_path=template_path,
+        remotes={"gitops-config": _remote(str(bare_repo))},
+        root=root,
+    )
+    (build_path / "forge-values.yaml").write_text("replicas: forge_sync\n")
+
+    before = integration.plan_destroy(build_path)
+    assert before.is_successful, before.stderr
+    assert "apps/forge/values.yaml is not present in gitops-config, nothing to remove" in before.stdout
+
+    assert integration.deploy(build_path).is_successful
+
+    # The rendered file differs from the repo copy once edited: an apply preview would show a diff.
+    (build_path / "forge-values.yaml").write_text("replicas: changed\n")
+    preview = integration.plan_destroy(build_path)
+    assert preview.is_successful, preview.stderr
+    assert "would remove apps/forge/values.yaml from gitops-config" in preview.stdout
+    assert "diff --git" not in preview.stdout
+    assert "changed" not in preview.stdout
+
+    verify_dir = tmp_path / "verify"
+    subprocess.run(["git", "clone", str(bare_repo), str(verify_dir)], check=True, capture_output=True)
+    assert (verify_dir / "apps" / "forge" / "values.yaml").read_text() == "replicas: forge_sync\n"  # untouched
+
+    assert integration.destroy(build_path).is_successful
+    after = integration.plan_destroy(build_path)
+    assert "is not present in gitops-config, nothing to remove" in after.stdout
