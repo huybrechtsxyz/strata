@@ -96,7 +96,8 @@ def test_deploy_argv_without_registry_auth(monkeypatch):
 def test_destroy_argv(monkeypatch):
     captured = _capture(monkeypatch)
     ComposeIntegration().destroy(Path("/work/ns/docker-compose.yml"), namespace="ns")
-    assert captured["args"] == ["docker", "stack", "rm", "ns"]
+    # --detach=false: a successful destroy means the tasks have stopped, not just that removal was requested.
+    assert captured["args"] == ["docker", "stack", "rm", "--detach=false", "ns"]
 
 
 def test_output_argv(monkeypatch):
@@ -625,3 +626,137 @@ def test_deploy_namespace_dry_run_plan_failure_is_reported_as_an_error(monkeypat
 def test_deploy_namespace_does_nothing_for_an_empty_group():
     diagnostics = ComposeIntegration().deploy_namespace(_namespace("hearth"), [], tokens={}, dry_run=False)
     assert diagnostics.ok
+
+
+# ---------------------------------------------------------------------------
+# destroy()/destroy_namespace() (docs/design/deploy-destroy.md)
+# ---------------------------------------------------------------------------
+
+
+def test_destroy_forwards_line_callback_and_timeout(monkeypatch):
+    seen: dict[str, object] = {}
+
+    def _fake(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        seen["timeout"] = timeout
+        seen["line_callback"] = line_callback
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake)
+
+    def callback(stream: str, text: str) -> None:
+        return None
+
+    ComposeIntegration().destroy(
+        Path("/work/ns/docker-compose.yml"), namespace="ns", timeout=42, line_callback=callback
+    )
+    assert seen["timeout"] == 42
+    assert seen["line_callback"] is callback
+
+
+def _script_docker(monkeypatch, responder):
+    """Stub `run_command`, recording every call; `responder(args)` returns the `CommandResult`."""
+    calls: list[dict] = []
+
+    def _fake(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append({"args": list(args), "timeout": timeout, "line_callback": line_callback})
+        return responder(list(args))
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake)
+    return calls
+
+
+def _ok(stdout: str = "") -> CommandResult:
+    return CommandResult(returncode=0, stdout=stdout, stderr="")
+
+
+def _destroy_group(tmp_path: Path) -> list[ResolvedModule]:
+    return [_resolved("caddy", _module("caddy"), tmp_path / "hearth" / "caddy")]
+
+
+def test_destroy_namespace_removes_the_stack_and_waits_for_it(tmp_path: Path, monkeypatch):
+    calls = _script_docker(monkeypatch, lambda args: _ok())
+    steps: list[str] = []
+
+    diagnostics = ComposeIntegration().destroy_namespace(
+        _namespace("hearth"), _destroy_group(tmp_path), dry_run=False, on_step=steps.append
+    )
+
+    assert diagnostics.ok
+    assert [call["args"] for call in calls] == [["docker", "stack", "rm", "--detach=false", "hearth"]]
+    assert any("hearth" in step for step in steps)
+
+
+def test_destroy_namespace_reports_a_failed_removal_with_its_stderr(tmp_path: Path, monkeypatch):
+    _script_docker(
+        monkeypatch,
+        lambda args: CommandResult(returncode=1, stdout="", stderr="This node is not a swarm manager."),
+    )
+
+    diagnostics = ComposeIntegration().destroy_namespace(_namespace("hearth"), _destroy_group(tmp_path), dry_run=False)
+
+    assert not diagnostics.ok
+    assert "docker stack rm failed" in diagnostics.errors[0].message
+    assert "not a swarm manager" in diagnostics.errors[0].message
+
+
+def test_destroy_namespace_forwards_timeout_and_line_callback(tmp_path: Path, monkeypatch):
+    calls = _script_docker(monkeypatch, lambda args: _ok())
+
+    def callback(stream: str, text: str) -> None:
+        return None
+
+    ComposeIntegration().destroy_namespace(
+        _namespace("hearth"), _destroy_group(tmp_path), dry_run=False, timeout=42, line_callback=callback
+    )
+
+    assert calls[0]["timeout"] == 42
+    assert calls[0]["line_callback"] is callback
+
+
+def test_destroy_namespace_does_nothing_for_an_empty_group(monkeypatch):
+    calls = _script_docker(monkeypatch, lambda args: _ok())
+
+    assert ComposeIntegration().destroy_namespace(_namespace("hearth"), [], dry_run=False).ok
+    assert calls == []
+
+
+def test_destroy_namespace_dry_run_lists_the_running_services_and_removes_nothing(tmp_path: Path, monkeypatch):
+    calls = _script_docker(monkeypatch, lambda args: _ok("ID   NAME           MODE\nabc  hearth_caddy  replicated\n"))
+    steps: list[str] = []
+
+    diagnostics = ComposeIntegration().destroy_namespace(
+        _namespace("hearth"), _destroy_group(tmp_path), dry_run=True, on_step=steps.append
+    )
+
+    assert diagnostics.ok
+    assert [call["args"] for call in calls] == [["docker", "stack", "services", "hearth"]]
+    assert any("hearth_caddy" in step for step in steps)
+
+
+def test_destroy_namespace_dry_run_says_a_missing_stack_has_nothing_to_remove(tmp_path: Path, monkeypatch):
+    _script_docker(monkeypatch, lambda args: _ok(""))
+    steps: list[str] = []
+
+    diagnostics = ComposeIntegration().destroy_namespace(
+        _namespace("hearth"), _destroy_group(tmp_path), dry_run=True, on_step=steps.append
+    )
+
+    assert diagnostics.ok
+    assert any("not found, nothing to remove" in step for step in steps)
+
+
+def test_destroy_namespace_dry_run_warns_when_the_stack_cannot_be_listed(tmp_path: Path, monkeypatch):
+    _script_docker(
+        monkeypatch,
+        lambda args: CommandResult(returncode=1, stdout="", stderr="This node is not a swarm manager."),
+    )
+
+    diagnostics = ComposeIntegration().destroy_namespace(_namespace("hearth"), _destroy_group(tmp_path), dry_run=True)
+
+    assert diagnostics.ok
+    assert len(diagnostics.warnings) == 1
+    assert "not a swarm manager" in diagnostics.warnings[0].message

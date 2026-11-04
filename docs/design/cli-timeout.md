@@ -18,16 +18,16 @@ fixed at their hardcoded defaults (see "Other CLI integrations" below).
 
 ### Terraform (`src/strata/integrations/terraform.py`)
 
-| Method                                                   | Default timeout | Notes                                                                                               |
-| -------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------- |
-| `version` (via `Integration.get_version()` in `base.py`) | 10s             |                                                                                                     |
-| `init`                                                   | 300s (5 min)    | overridable — stage phase `setup`                                                                   |
-| `validate`                                               | 60s             | overridable — stage phase `check`                                                                   |
-| `plan`                                                   | 600s (10 min)   | overridable — stage phase `plan`; also backs v1's `plan_destroy`/`drift`, not separate methods      |
-| `deploy` (`terraform apply`)                             | 1800s (30 min)  | overridable — stage phase `apply`                                                                   |
-| `output`                                                 | 60s             | not overridable                                                                                     |
-| `show`                                                   | 60s             | not overridable                                                                                     |
-| `destroy`                                                | 1800s (30 min)  | schema field exists (phase `destroy`) but `deploy_run()` has no destroy call site yet — no consumer |
+| Method                                                   | Default timeout | Notes                                                                                                    |
+| -------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------- |
+| `version` (via `Integration.get_version()` in `base.py`) | 10s             |                                                                                                          |
+| `init`                                                   | 300s (5 min)    | overridable — stage phase `setup`                                                                        |
+| `validate`                                               | 60s             | overridable — stage phase `check`                                                                        |
+| `plan`                                                   | 600s (10 min)   | overridable — stage phase `plan`; also backs v1's `plan_destroy`/`drift`, not separate methods           |
+| `deploy` (`terraform apply`)                             | 1800s (30 min)  | overridable — stage phase `apply`                                                                        |
+| `output`                                                 | 60s             | not overridable                                                                                          |
+| `show`                                                   | 60s             | not overridable                                                                                          |
+| `destroy`                                                | 1800s (30 min)  | overridable — stage phase `destroy`, used by `deploy destroy`; its `--dry-run` preview uses phase `plan` |
 
 ### Overriding a timeout
 

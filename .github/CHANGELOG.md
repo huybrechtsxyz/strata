@@ -8,6 +8,35 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-04
+
+### Added
+
+- `strata deploy destroy DEPLOYMENT`: tears down what `deploy run` created (Terraform, Helm, Compose and GitOps
+  steps), last step first. It needs exactly one of `--force` (destroy, no prompt) or `--dry-run` (preview, changes
+  nothing). Image tag policy and security gates are skipped, so a `deny` never blocks a teardown. A `script` step
+  cannot be destroyed and stops a `--force` run before anything is removed. A step that uses `${output:}` needs the
+  workspace's `output_store`. See [docs/design/deploy-destroy.md](../docs/design/deploy-destroy.md) and
+  [docs/how-to/ci-deploy-pipeline.md](../docs/how-to/ci-deploy-pipeline.md).
+- A destroy preview for every tool that can show one: `terraform plan -destroy` (never saves a plan file), the
+  resources of a Helm release (never Secret data), a Compose stack's running services, and whether a GitOps file is
+  in the config repo.
+- `strata audit status` and `strata audit changes` show an `action` (`deploy` or `destroy`) in the table and the JSON.
+  A real destroy is audited like a deploy and sends `deployment.destroyed` to audit sinks, so a sink that filters
+  `events` must list it.
+- Integrations gain `SUPPORTS_DESTROY`, `plan_destroy()` and `destroy_namespace()`, all with defaults.
+
+### Changed
+
+- `docker stack rm` now runs with `--detach=false`, so a Compose destroy returns once the stack's tasks have stopped.
+- A rendered `output.template` now ends exactly as its template does. It used to lose one final newline, so a file
+  pushed to a GitOps repo had no newline at end of file.
+
+### Fixed
+
+- `strata build run` crashed with a raw `FileNotFoundError` for any ArgoCD or Flux provisioner (one with no `source`),
+  because the step's build directory was never created before its GitOps sidecar was written.
+
 ## [2.1.0] - 2026-11-03
 
 ### Added
@@ -59,6 +88,7 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/huybrechtsxyz/strata/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/huybrechtsxyz/strata/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/huybrechtsxyz/strata/releases/tag/v2.0.0

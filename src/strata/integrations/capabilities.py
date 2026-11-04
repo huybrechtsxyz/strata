@@ -193,6 +193,10 @@ class InfraIntegration(Integration):
     Helm) for a human reading the document; the contract is identical.
     """
 
+    #: `False` when `destroy()` can only raise (`ScriptIntegration`). Lets `deploy destroy` refuse such a step
+    #: before anything is destroyed without naming a tool (docs/design/deploy-destroy.md, D5).
+    SUPPORTS_DESTROY: ClassVar[bool] = True
+
     def prepare(
         self,
         path: Path,
@@ -448,6 +452,34 @@ class InfraIntegration(Integration):
             f"{self.name} does not support namespace-scoped module checking (check_namespace)."
         )
 
+    def destroy_namespace(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        dry_run: bool,
+        env: dict[str, str] | None = None,
+        on_step: Callable[[str], None] | None = None,
+        **kwargs: Any,
+    ) -> Diagnostics:
+        """Remove every module in `modules` (all attached to `namespace`, all of this integration's own type) —
+        the destroy counterpart to `deploy_namespace()`, same not-abstract/raise-by-default shape.
+
+        Takes no `tokens`: a destroy reads only release/stack names, never a value (docs/design/deploy-destroy.md,
+        D6). `dry_run` previews what would be removed and changes nothing; the preview goes to `on_step`, one line
+        per message, because it is not subprocess output and must show without `--follow`.
+
+        Removing something that is already gone is a success, so a retry after a partial failure can finish.
+
+        Returns:
+            One error per module that failed — never raises for a single module, so the rest still run.
+
+        Raises:
+            IntegrationError: This integration does not support namespace-scoped module destruction.
+        """
+        del namespace, modules, dry_run, env, on_step, kwargs
+        raise IntegrationError(f"{self.name} does not support namespace-scoped module destruction (destroy_namespace).")
+
     @abstractmethod
     def plan(self, path: Path, **kwargs: Any) -> CommandResult:
         """Preview the change `path`'s code would make, without applying it."""
@@ -491,6 +523,20 @@ class InfraIntegration(Integration):
         except IntegrationError as exc:
             diagnostics.warning(f"no plan preview available for '{self.name}' — {exc}", location=location)
             return None
+
+    def plan_destroy(self, path: Path, **kwargs: Any) -> CommandResult:
+        """Preview what `destroy()` would remove from `path`, changing nothing and writing no file.
+
+        A separate method, not `plan(destroy=True)`: `plan(**kwargs)` swallows unknown arguments, so an
+        integration that ignored the flag would silently show its *apply* preview as a destroy preview
+        (docs/design/deploy-destroy.md, D7). Not abstract: an integration with nothing to show raises, and the
+        caller degrades to a warning.
+
+        Raises:
+            IntegrationError: This integration has no destroy preview.
+        """
+        del path, kwargs
+        raise IntegrationError(f"{self.name} does not support a destroy preview (plan_destroy).")
 
     @abstractmethod
     def deploy(self, path: Path, **kwargs: Any) -> CommandResult:

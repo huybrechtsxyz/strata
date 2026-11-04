@@ -36,15 +36,16 @@ for a read-only status check (`health`), never to trigger anything.
 Shared step sequence for both ArgoCD and Flux (only `get_deployer_name()`
 differs between the two subclasses):
 
-| Step      | What it actually does                                                                             |
-| --------- | ------------------------------------------------------------------------------------------------- |
-| `setup`   | No-op — nothing to initialise                                                                     |
-| `check`   | `git -C <repo> fetch --dry-run` — confirms the local clone of the config repo is reachable        |
-| `plan`    | `git -C <repo> diff --no-index -- <existing> <rendered>` — shows what would change, or "new file" |
-| `apply`   | Copy the rendered file into the config repo -> `git add` -> `git commit` -> `git push`            |
-| `destroy` | Remove the file from the config repo -> `git add` -> `git commit` -> `git push`                   |
-| `health`  | Queries the GitOps controller's own API for reconciliation status — **read-only**, optional       |
-| `output`  | Returns the commit SHA + the file's path in the remote repo                                       |
+| Step           | What it actually does                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------ |
+| `setup`        | No-op — nothing to initialise                                                                          |
+| `check`        | `git -C <repo> fetch --dry-run` — confirms the local clone of the config repo is reachable             |
+| `plan`         | `git -C <repo> diff --no-index -- <existing> <rendered>` — shows what would change, or "new file"      |
+| `apply`        | Copy the rendered file into the config repo -> `git add` -> `git commit` -> `git push`                 |
+| `destroy`      | Remove the file from the config repo -> `git add` -> `git commit` -> `git push`                        |
+| `plan_destroy` | Report whether the file is in the config repo checkout ("would remove" or "not present"); never a diff |
+| `health`       | Queries the GitOps controller's own API for reconciliation status — **read-only**, optional            |
+| `output`       | Returns the commit SHA + the file's path in the remote repo                                            |
 
 Configuration v1 needs per stage: `stage.backend.integration` (names an
 `Integration` document whose `properties.output_file` says which file to
@@ -463,9 +464,7 @@ deploy-time-only" (ADR-0022 D4).
   `BaseGitOpsIntegration`'s methods/`_git_clone()` completely uncaught
   (crashing with a raw traceback instead of a clean diagnostic) — all
   three converted/fixed at the source.
-- **Explicitly out of scope, not a gap**: no `deploy destroy`/`strata
-  destroy run` command exists yet for *any* tool (pre-existing, not
-  created here); a full `SourceIntegration` capability class (ADR-0021 D9)
+- **Explicitly out of scope, not a gap**: a full `SourceIntegration` capability class (ADR-0021 D9)
   remains unbuilt — `push_file()`/the credential helpers were written to
   work standalone so they don't block on it; and there is no locking
   around a shared GitOps push checkout for concurrent `deploy run`s

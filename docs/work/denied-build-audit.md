@@ -36,8 +36,8 @@ Verified against the source on 2026-11-03.
   returns, whatever it returned, reads the sidecar into `policy_results` and writes and distributes the manifest
   (not under `--dry-run` or `--smoke-test`). A `deploy run` denied by the tag policy therefore does appear in the
   manifest, with a failed status.
-- `DeploymentManifestModel.action` allows `build`, `deploy` and `destroy`, but the only producer sets `deploy`.
-  Nothing writes a `build` manifest.
+- `DeploymentManifestModel.action` allows `build`, `deploy` and `destroy`; `deploy run`/`deploy apply` set `deploy` and
+  `deploy destroy` sets `destroy`. Nothing writes a `build` manifest.
 - So a denied `build run` never reaches any sink, for any policy: the sidecar holds the result locally for
   `cve_policy` and `checkov_policy`, and nothing at all for `image_tag_policy`. A pipeline that stops at the denied
   build produces no manifest, since no `deploy run` follows.

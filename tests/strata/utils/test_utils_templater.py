@@ -3,6 +3,8 @@
 value-token-resolution.md, Value Supply Mechanisms option C — static
 reference validation only, no rendering)."""
 
+import pytest
+
 from strata.utils.templater import render_template, validate_template_references
 
 KNOWN_NAMES = {
@@ -84,6 +86,13 @@ def test_render_template_substitutes_real_values():
     source = '{"region": "{{ variables.REGION }}", "flag": {{ flags.NEW_UI }}}'
     context = {"variables": {"REGION": "westeurope"}, "flags": {"NEW_UI": "true"}}
     assert render_template(source, context) == '{"region": "westeurope", "flag": true}'
+
+
+@pytest.mark.parametrize("ending", ["", "\n"])
+def test_render_template_keeps_the_templates_own_trailing_newline(ending):
+    assert render_template("region: {{ variables.REGION }}" + ending, {"variables": {"REGION": "x"}}) == (
+        "region: x" + ending
+    )
 
 
 def test_render_template_raises_on_undefined_reference():

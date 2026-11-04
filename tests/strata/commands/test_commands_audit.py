@@ -91,11 +91,11 @@ def _git_available() -> bool:
         return False
 
 
-def _manifest_json(*, deployment: str, started_at: str, status: str = "success") -> str:
+def _manifest_json(*, deployment: str, started_at: str, status: str = "success", action: str = "deploy") -> str:
     return json.dumps(
         {
             "execution_id": "11111111-1111-1111-1111-111111111111",
-            "action": "deploy",
+            "action": action,
             "deployment": deployment,
             "workspace": "main",
             "started_at": started_at,
@@ -116,14 +116,16 @@ def _solution_with_sink(tmp_path: Path, remote_url: str, configuration_yaml: str
     return root
 
 
-def _push_manifest(root: Path, *, deployment: str, started_at: str, relative: str, status: str = "success") -> None:
+def _push_manifest(
+    root: Path, *, deployment: str, started_at: str, relative: str, status: str = "success", action: str = "deploy"
+) -> None:
     context = open_solution(root).require_valid()
     solution = context.controller.solution
     assert solution is not None
     sink = AuditGitSinkTargetModel(remote="audit-repo", branch="main", path="records")
     manifest_src = root / "_manifest_src.json"
     manifest_src.write_text(
-        _manifest_json(deployment=deployment, started_at=started_at, status=status), encoding="utf-8"
+        _manifest_json(deployment=deployment, started_at=started_at, status=status, action=action), encoding="utf-8"
     )
     result = push_audit_files(root, sink, solution, {"_manifest.json": manifest_src}, Path(relative), "actor")
     assert result.success, result.detail
@@ -393,3 +395,64 @@ def test_changes_bare_date_until_includes_the_whole_day(runner, tmp_path):
     assert result.exit_code == EXIT_SUCCESS, result.output
     assert "app" in result.output
     assert "no audit records found" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# action (docs/design/deploy-destroy.md) - a destroy must not read as a deploy
+# ---------------------------------------------------------------------------
+
+
+def _sink_with_a_deploy_then_a_destroy(tmp_path):
+    bare_repo = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
+    root = _solution_with_sink(tmp_path, str(bare_repo))
+    _push_manifest(root, deployment="web-frontend", started_at="2026-10-05T14:02:11+00:00", relative="run1")
+    _push_manifest(
+        root, deployment="web-frontend", started_at="2026-10-06T09:00:00+00:00", relative="run2", action="destroy"
+    )
+    return root
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_status_console_shows_a_destroy_as_the_latest_action(runner, tmp_path):
+    root = _sink_with_a_deploy_then_a_destroy(tmp_path)
+
+    result = runner.invoke(cli, ["audit", "status", "--path", str(root)])
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    header, row = [line for line in result.output.splitlines() if "web-frontend" in line or "DEPLOYMENT" in line][:2]
+    assert "ACTION" in header
+    assert "destroy" in row
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_status_json_carries_the_action(runner, tmp_path):
+    root = _sink_with_a_deploy_then_a_destroy(tmp_path)
+
+    result = runner.invoke(cli, ["audit", "status", "--path", str(root), "--output", "json"])
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert json.loads(result.output)["data"]["deployments"][0]["action"] == "destroy"
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_changes_console_has_an_action_column(runner, tmp_path):
+    root = _sink_with_a_deploy_then_a_destroy(tmp_path)
+
+    result = runner.invoke(cli, ["audit", "changes", "--path", str(root)])
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    lines = [line for line in result.output.splitlines() if "web-frontend" in line or "DEPLOYMENT" in line]
+    assert "ACTION" in lines[0]
+    assert "deploy" in lines[1]
+    assert "destroy" in lines[2]
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_changes_json_carries_the_action_oldest_to_newest(runner, tmp_path):
+    root = _sink_with_a_deploy_then_a_destroy(tmp_path)
+
+    result = runner.invoke(cli, ["audit", "changes", "--path", str(root), "--output", "json"])
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert [change["action"] for change in json.loads(result.output)["data"]["changes"]] == ["deploy", "destroy"]

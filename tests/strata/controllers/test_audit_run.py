@@ -8,6 +8,7 @@ local bare git repository for the `git` sink dispatch tests, and mocked
 `terraform`/`run_command` so no real binaries are needed.
 """
 
+import json
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,9 +19,11 @@ from strata.controllers import audit_run as audit_run_module
 from strata.controllers.audit_push import PushResult
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.build_controller import build_run
+from strata.controllers.policy_results import write_policy_results
 from strata.controllers.solution_context import open_solution
 from strata.integrations.capabilities import AuditSinkIntegration
 from strata.integrations.errors import IntegrationError
+from strata.models.audit_manifest_model import ManifestPolicyResultModel
 from strata.models.integration_model import Capability
 from strata.utils import layout
 from strata.utils.diagnostics import Diagnostics
@@ -871,3 +874,192 @@ def test_disabled_integration_document_dispatches_nothing(tmp_path: Path, _terra
     assert diagnostics.ok
     assert not diagnostics.warnings
     assert _fake_sink.sent == []
+
+
+# ---------------------------------------------------------------------------
+# action="destroy" (docs/design/deploy-destroy.md)
+# ---------------------------------------------------------------------------
+
+
+def _audit_json(root: Path, filename: str) -> dict:
+    return json.loads(next(layout.audit_dir(root).rglob(filename)).read_text())
+
+
+def _policy_result() -> ManifestPolicyResultModel:
+    return ManifestPolicyResultModel(
+        policy_name="image_tag_policy",
+        policy_type="image_tag",
+        phase="deploy",
+        enforcement="deny",
+        passed=True,
+        violations=[],
+    )
+
+
+def test_a_deploy_records_the_deploy_action_by_default(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    assert _audit_json(root, "_manifest.json")["action"] == "deploy"
+    assert _audit_json(root, "_metrics.json")["dimensions"]["action"] == "deploy"
+
+
+def test_a_destroy_records_the_destroy_action_in_the_manifest_and_the_metrics(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    diagnostics = _finalize(root, build_path, action="destroy")
+
+    assert diagnostics.ok
+    assert _audit_json(root, "_manifest.json")["action"] == "destroy"
+    assert _audit_json(root, "_metrics.json")["dimensions"]["action"] == "destroy"
+
+
+def test_a_failed_destroy_is_recorded_as_failed(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path, run_ok=False, action="destroy")
+
+    manifest = _audit_json(root, "_manifest.json")
+    assert (manifest["action"], manifest["status"]) == ("destroy", "failed")
+
+
+def test_a_destroy_dry_run_writes_nothing(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    diagnostics = _finalize(root, build_path, dry_run=True, action="destroy")
+
+    assert diagnostics.ok
+    assert not layout.audit_dir(root).exists()
+
+
+def test_a_deploy_manifest_carries_the_policy_results_a_build_recorded(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    write_policy_results(build_path, [_policy_result()])
+
+    _finalize(root, build_path)
+
+    assert _audit_json(root, "_manifest.json")["policy_results"][0]["policy_name"] == "image_tag_policy"
+
+
+def test_a_destroy_manifest_claims_no_policy_evaluation(tmp_path: Path, _terraform_stub):
+    """A destroy skips every policy, so the results left in the build directory by the earlier deploy are
+    not this run's and must not be attached to its record."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    write_policy_results(build_path, [_policy_result()])
+
+    _finalize(root, build_path, action="destroy")
+
+    assert "policy_results" not in _audit_json(root, "_manifest.json")
+
+
+_SIEM = "  audit:\n    sinks:\n      - name: prod-siem\n        integration: audit-hook\n"
+
+
+def test_a_destroy_sends_destroyed_and_measured_to_an_unfiltered_integration_sink(
+    tmp_path: Path, _terraform_stub, _fake_sink
+):
+    root = _solution_root(tmp_path)
+    _add_webhook_integration(root)
+    _add_configuration(root, _SIEM)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path, action="destroy")
+
+    assert sorted(e["type"] for e in _fake_sink.sent) == [
+        "xyz.huybrechts.strata.deployment.destroyed",
+        "xyz.huybrechts.strata.deployment.measured",
+    ]
+
+
+def test_a_destroy_sends_only_destroyed_to_a_sink_that_lists_it(tmp_path: Path, _terraform_stub, _fake_sink):
+    root = _solution_root(tmp_path)
+    _add_webhook_integration(root)
+    _add_configuration(root, _SIEM + "        events: [deployment.destroyed]\n")
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path, action="destroy")
+
+    assert [e["type"] for e in _fake_sink.sent] == ["xyz.huybrechts.strata.deployment.destroyed"]
+    assert _fake_sink.sent[0]["data"]["event"]["action"] == "deployment-destroyed"
+
+
+def test_a_destroy_sends_nothing_to_a_sink_that_lists_only_completed(tmp_path: Path, _terraform_stub, _fake_sink):
+    root = _solution_root(tmp_path)
+    _add_webhook_integration(root)
+    _add_configuration(root, _SIEM + "        events: [deployment.completed]\n")
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path, action="destroy")
+
+    assert _fake_sink.sent == []
+
+
+def test_a_deploy_sends_nothing_to_a_sink_that_lists_only_destroyed(tmp_path: Path, _terraform_stub, _fake_sink):
+    root = _solution_root(tmp_path)
+    _add_webhook_integration(root)
+    _add_configuration(root, _SIEM + "        events: [deployment.destroyed]\n")
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    assert _fake_sink.sent == []
+
+
+def test_disabling_the_destroyed_event_stops_a_destroy_from_being_sent(tmp_path: Path, _terraform_stub, _fake_sink):
+    root = _solution_root(tmp_path)
+    _add_webhook_integration(root)
+    _add_configuration(
+        root,
+        "  audit:\n    event_overrides:\n      deployment.destroyed: false\n"
+        "    sinks:\n      - name: prod-siem\n        integration: audit-hook\n",
+    )
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path, action="destroy")
+
+    assert [e["type"] for e in _fake_sink.sent] == ["xyz.huybrechts.strata.deployment.measured"]
+    assert len(list(layout.audit_dir(root).rglob("_manifest.json"))) == 1  # the local write is not gated
+
+
+def _git_sink_config(events: str) -> str:
+    return (
+        "  audit:\n    sinks:\n      - name: config-repo\n        git:\n          remote: config-repo\n"
+        f"          branch: main\n          path: audit\n        events: [{events}]\n"
+    )
+
+
+def test_a_destroy_pushes_the_manifest_to_a_git_sink_that_lists_destroyed(tmp_path: Path, _terraform_stub, monkeypatch):
+    root = _solution_root(tmp_path, remote_url="https://example.invalid/does-not-matter.git")
+    _add_configuration(root, _git_sink_config("deployment.destroyed"))
+    build_path = _run_deploy_and_build(root, tmp_path)
+    pushed: list[dict] = []
+
+    def _fake_push(root_arg, sink, solution, files, relative_path, actor, **kwargs):
+        pushed.append(dict(files))
+        return PushResult(True)
+
+    monkeypatch.setattr(audit_run_module, "push_audit_files", _fake_push)
+
+    _finalize(root, build_path, action="destroy")
+
+    assert len(pushed) == 1
+    assert set(pushed[0]) == {"_manifest.json"}
+
+
+def test_a_destroy_pushes_nothing_to_a_git_sink_that_lists_only_completed(tmp_path: Path, _terraform_stub, monkeypatch):
+    root = _solution_root(tmp_path, remote_url="https://example.invalid/does-not-matter.git")
+    _add_configuration(root, _git_sink_config("deployment.completed"))
+    build_path = _run_deploy_and_build(root, tmp_path)
+    pushed: list[dict] = []
+    monkeypatch.setattr(audit_run_module, "push_audit_files", lambda *a, **k: pushed.append(k) or PushResult(True))
+
+    _finalize(root, build_path, action="destroy")
+
+    assert pushed == []

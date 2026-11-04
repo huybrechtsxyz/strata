@@ -238,7 +238,55 @@ Things to know:
 - `deploy setup` and `deploy check` run only init, or init and validate, if you want those as
   separate stages.
 
-## 6. Exit codes
+## 6. Tear a deployment down
+
+`strata deploy destroy D` removes what `deploy run` created: Terraform-managed resources, Helm releases, Compose
+stacks and GitOps files, last step first. It cannot be undone, so it needs exactly one of `--dry-run` (preview,
+changes nothing) or `--force` (destroy, no prompt). Neither, or both, exits 2. Preview in one job and destroy in a
+job behind a protected environment, so a person approves exactly what the preview showed.
+
+```yaml
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      # checkout, install strata and Terraform, validate, build run, as in section 4
+      - run: strata deploy destroy "$DEPLOYMENT" --dry-run   # streams what would be removed
+
+  destroy:
+    needs: preview
+    runs-on: ubuntu-latest
+    environment: production-destroy                         # required reviewers
+    steps:
+      # checkout, install strata and Terraform, validate, build run
+      - run: |
+          strata deploy destroy "$DEPLOYMENT" --force \
+            --change-system jira --change-id "$TICKET" --change-reason "decommission"
+```
+
+Things to know:
+
+- A destroy reads the build directory like a deploy does: run `build run` first, with the same `--pin`.
+- `--dry-run` streams its preview without `--follow`. Terraform runs `plan -destroy` (it takes the state lock and
+  needs credentials) and never writes `<step>.tfplan`, so a reviewed apply plan is left untouched. Helm lists
+  `Kind/name` per resource, never Secret data; Compose lists the stack's running services; GitOps says whether the
+  file is in the config repo.
+- A destroy does not run `image_tag_policy` or the security gates: a `deny` never blocks a teardown.
+- To destroy part of a deployment, use `--stage` or `--scope`. Run `--scope apps` before `--scope infra`. A destroyed
+  step that other steps depend on, and that are not in the run, is a warning, not an error, so the second run stays
+  possible.
+- A `script` step cannot be destroyed. `--force` refuses before anything is removed, and names the step; leave it
+  out with `--stage` or `--scope`. Under `--dry-run` it is a warning.
+- A Terraform step that reads another step's output with `${output:...}` needs the workspace's `output_store`: a
+  destroy collects no outputs, so it reads the ones `deploy run` recorded. Without a usable record the run stops
+  before destroying anything. Pass `--output-max-age` when the record is stale. A successful destroy clears the
+  destroyed steps' records.
+- Re-running after a partial failure is safe: a Helm release that is already gone counts as removed.
+- A real destroy records the audit trail with `action: destroy`, including the `--change-*` flags, and `strata audit
+  status` shows it. A sink receives `deployment.destroyed` rather than `deployment.completed`, so list that event
+  type in the sink's `events`. A dry run records nothing.
+
+## 7. Exit codes
 
 Every command uses the same four codes, so a pipeline can react without parsing output.
 

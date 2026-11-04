@@ -441,6 +441,38 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
     assert not (materialised / "resx_server.auto.tfvars.json").exists()
 
 
+def test_build_run_creates_the_step_directory_of_a_source_less_gitops_provisioner(tmp_path: Path):
+    """A GitOps provisioner has no source to copy, but `prepare()` still writes its sidecar into the step directory."""
+    root = _terraform_solution(tmp_path)
+    _write(
+        root,
+        "strata.yaml",
+        MANIFEST.replace(
+            "spec: {}",
+            "spec:\n  remotes:\n    - name: gitops-config\n      type: git\n"
+            "      url: https://example.com/org/gitops-config.git\n      reference: main",
+        ),
+    )
+    _write(root, "templates/forge.yaml.j2", "replicas: {{ provisioner.name }}\n")
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: forge_sync\n      tool: argocd\n      gitops:\n"
+        "        remote: gitops-config\n        output_file: apps/forge/values.yaml\n"
+        "      output:\n        template: templates/forge.yaml.j2\n"
+        "  execution:\n    - name: sync\n      provisioner: forge_sync\n      resources:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert (build_path / "sync" / ".gitops-push.json").is_file()
+
+
 # ---------------------------------------------------------------------------
 # Assets (docs/design/asset-management.md Phase 3) — sync_asset(), resolved
 # once up front from the deployment's own graph.properties, before the step

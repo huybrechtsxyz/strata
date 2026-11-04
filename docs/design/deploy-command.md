@@ -5,12 +5,12 @@
   tested). Locking, SIEM/audit-sink ingestion, whole-run timeout, and
   `--force`'s real advisory-gate consumption are deliberately deferred scope
   boundaries (no critical-path evidence from either real consumer repo), not
-  open questions. `deploy destroy` is **fully designed but not implemented**
-  — tracked explicitly in its own Remaining Work section below, not hidden.
+  open questions. `deploy destroy` is built and has its own design doc,
+  [deploy-destroy.md](deploy-destroy.md).
   The other ten v1 `deploy` subcommands (`status`/`history`/`health`/`lock`/
   `output`/`show`/`list`/`plan`-viewer/`drift`/`drift_history`/
   `acknowledge_drift`) are surveyed, none implemented.
-- Last updated: 2026-10-16
+- Last updated: 2026-11-04
 
 ## Overview
 
@@ -25,7 +25,8 @@ runs plan/apply."*
 This doc consolidates what were three separate, scattered work docs
 (`deploy run`'s own design, `deploy destroy`'s design, and a survey of
 v1's ten other `deploy` subcommands) into one: `deploy run` is finished
-and is the bulk of this doc's durable content; `deploy destroy` and the
+and is the bulk of this doc's durable content; `deploy destroy` has since
+moved to its own doc, [deploy-destroy.md](deploy-destroy.md); the
 surveyed subcommands are real, tracked, **not yet implemented** work,
 kept here rather than scattered across separate work docs now that
 `deploy run` itself has nothing left pending.
@@ -281,7 +282,7 @@ Read directly from v1's real installed source
 (`terraform apply <stage>.tfplan`) — Terraform never prompts to apply a
 saved plan regardless of any flag, so `self.force` is never even read
 inside `apply()`. `-auto-approve` only appears for `destroy` (see
-below), which has no saved-plan-file equivalent. For `deploy run`,
+[deploy-destroy.md](deploy-destroy.md), D10). For `deploy run`,
 v1's real `--force` instead overrides *advisory* approval gates (AI
 plan review, a promotion-override guard) — neither of which v2 has
 built (Tier 2, no critical-path evidence). **v2 conclusion**:
@@ -293,127 +294,13 @@ the call shape.
 
 ---
 
-## `deploy destroy` — designed, not implemented
+## `deploy destroy`
 
-`strata deploy destroy` would tear down what `deploy run` created — v1's
-real command, Tier 2 (`/memories/repo/v1-consumer-usage.md`: neither
-real consumer repo's CI invokes it). **No such command exists in v2
-today.** This section is fully designed, evidence-based, but genuinely
-unbuilt — see "Remaining Work" below for the concrete gap list.
-
-### Real evidence
-
-- **`-auto-approve` only appears for `destroy`.**
-  `TerraformDeployer.destroy()` passes `auto_approve=self.force` —
-  unlike `apply()`, `terraform destroy` has no saved-plan-file
-  equivalent and genuinely prompts interactively unless told not to.
-- **`deploy destroy`'s CLI is the only one of the two commands that
-  enforces "exactly one of `--force`/`--dry-run` required"** — stricter
-  than `deploy run`, matching the higher blast radius of an
-  irreversible teardown.
-- **v1's real `stage_selection.py`** (shared between `deploy run`/
-  `deploy destroy` for "which stages run, and why the others do not"):
-  `StageSelectionMode.DESTROY` **never gates on `enabled`** — its own
-  docstring: *"gating a teardown would strand infrastructure created
-  while the flag was on."* It also **never reverses step order** — its
-  own docstring admits this is a gap: *"Declaration order, because a
-  correct teardown needs the reverse order and that is a decision
-  ADR-0083 does not make."* v2's design below does not copy that
-  acknowledged gap — it reverses `ordered_by_depends_on()`'s output,
-  tearing down a step's dependents before the step itself.
-- **v1's real Helm/Compose destroy shape**: `HelmDeployer.destroy()`
-  loops `helm uninstall --namespace <ns> <release>` once per module/
-  release; `ComposeDeployer.destroy()` is one `docker stack rm
-  <namespace>` call (Compose already merges per-namespace at build
-  time, nothing to loop over).
-
-### Current Design — what's already built, destroy-aware
-
-- **`InfraIntegration.destroy()`** — `@abstractmethod`, real
-  implementations in all four integrations already (`terraform destroy
-  -auto-approve`, `docker stack rm`, `helm uninstall`,
-  `BaseGitOpsIntegration.destroy()` via `git_push.remove_file()`).
-- **`DeploymentStageTimeoutsModel.destroy: int | None`** — the schema
-  field already exists (ADR-0032), with a hardcoded default on
-  `TerraformIntegration.destroy()` itself — wired for *timeout*, just
-  never reached because nothing calls `destroy()` yet.
-- **Audit models already treat `destroy` as first-class**:
-  `AuditManifestModel.action: Literal["build", "deploy", "destroy"]`,
-  and `audit_event_rendering.py`'s renderer already branches on it
-  (`"destroyed"` vs. `"completed"`) — only `audit_run.py`'s glue (which
-  action to pass, when to call it) is the real gap.
-- **No `destroy_namespace()` equivalent exists** for the
-  `Capability.CONTAINER` path — the real, concrete gap for Helm/Compose.
-
-### Orchestrator shape (proposed)
-
-A deliberate variant of `deploy_run()`'s own shape, not an independent
-design:
-
-```
-strata deploy destroy DEPLOYMENT [--path PATH] [--build-path PATH]
-  (--force | --dry-run)   # exactly one required — stricter than deploy run
-  [--stage NAME] [--scope LABEL]
-
-destroy_run(...)
-  ├─ deployment, workspace, environments, resolved = <identical setup to deploy_run()>
-  ├─ steps = list(reversed(ordered_by_depends_on(workspace.spec.execution)))
-  ├─ steps = filter by --stage/--scope only — NO `enabled` filtering
-  │     (matches v1's real StageSelectionMode.DESTROY exactly)
-  └─ for step in steps:
-       if Capability.CONTAINER in integration.CAPABILITIES:
-           integration.destroy_namespace(namespace, modules, tokens=..., dry_run=dry_run)  # NEW method
-       else:
-           integration.init(...); integration.validate(...)   # still needed — must target the real state
-           if not dry_run:
-               integration.destroy(path, auto_approve=force, env=env)   # NO saved-plan-file step
-           else:
-               integration.plan_or_warn(path, destroy=True, ...)         # terraform plan -destroy preview
-
-  if diagnostics.ok and not dry_run:
-      output_store.clear(s.name for s in steps)   # NEW method — same CAS loop record() uses,
-                                                    # popping destroyed steps' keys instead of adding one
-```
-
-Deliberately **not** carried over from `deploy_run()`: no saved-plan-file
-mechanism (`destroy()` has no two-phase plan-then-apply shape in any
-integration — `--force` maps directly to `auto_approve`, the one case
-`force` is NOT inert); no output-context collection (nothing meaningful
-to collect post-teardown); no `output.template` render (no "final
-state" to describe).
-
-### Remaining Work — `deploy destroy` (not yet implemented)
-
-1. **`InfraIntegration.destroy_namespace()`** — new ABC method, same
-   non-abstract/raise-by-default base shape as `deploy_namespace()`.
-   `HelmIntegration` loops `destroy()` per module; `ComposeIntegration`
-   does one `destroy(namespace=...)` call.
-2. **`destroy_run()` controller function** — the orchestrator above,
-   reusing every `deploy_run()` resolution helper unchanged.
-3. **`--force`/`--dry-run` mutual-exclusion + required-one-of** — a
-   `UsageError` in the command layer, stricter than `deploy run`'s own
-   handling.
-4. **CLI command** — `strata deploy destroy`, a subcommand on the
-   existing `deploy` group (decided — matches v1's own CLI shape,
-   avoids a second top-level command group for one verb), same
-   `--path`/`--build-path`/`--stage`/`--scope` plus the audit
-   change-reference flags.
-5. **Audit wiring** — extend `audit_run.py`'s
-   `finalize_and_distribute_deploy_audit()` for `action="destroy"`; the
-   renderer is already destroy-aware, this is glue work only.
-6. **Timeout wiring** — `_timeout_kwargs(step, stage, "destroy")`
-   extends with zero new code once `destroy()` has a real call site.
-7. **`DeploymentOutputStore.clear()`** — new method, same CAS
-   read-modify-write loop `record()` already uses, popping destroyed
-   steps' keys. Called once after the whole run succeeds (not per
-   step), so a partial failure leaves every already-recorded output
-   intact for a retry — prevents a later `deploy run` of new
-   infrastructure from reading stale pre-destroy outputs still inside
-   the trust window.
-8. **Not yet investigated**: whether a partial-scope destroy (tearing
-   down only `apps` while leaving `infra` standing) has real-world
-   demand — no evidence either way from either reference consumer
-   (neither uses `deploy destroy` at all today).
+`strata deploy destroy DEPLOYMENT (--force | --dry-run)` tears down what `deploy run` created, last step first, by
+running `deploy_run(destroy=True)`: the same value resolution, pre-flight and backend setup as an apply, with a
+different tail per step (`destroy`, or a preview under `--dry-run`). The image tag policy and security gates are
+skipped, and a real run is audited with `action: destroy`. Its design, the per-tool preview, the integration
+contract and the diagnostic codes are in [deploy-destroy.md](deploy-destroy.md).
 
 ---
 
@@ -474,14 +361,13 @@ subcommand.
   never re-renders.
 - [ADR-0027](../decisions/0027-strata-deploy-run.md) — the point-in-time
   decision record summarizing `deploy run`'s settled orchestrator shape.
-  `destroy_run()` is a deliberate variant of it, not an independent
+  `deploy destroy` is a deliberate variant of it, not an independent
   decision — no separate ADR needed for destroy.
 - [ADR-0030](../decisions/0030-deploy-run-plan-preview-and-streaming.md)
   / [deploy-plan-preview.md](deploy-plan-preview.md) — `--smoke-test`/
   `--dry-run`/`--follow`, the current, full execution-mode behavior.
 - [ADR-0032](../decisions/0032-deploy-time-step-timeout-overrides.md) —
-  the `destroy` timeout phase/field this doc's destroy section would
-  finally give a real call site.
+  the `destroy` timeout phase/field that `deploy destroy` uses.
 - [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md) —
   `DeploymentOutputStore`, the durable cross-invocation output mechanism.
 - [deploy-pipeline-stage-commands.md](deploy-pipeline-stage-commands.md)
@@ -490,11 +376,12 @@ subcommand.
 - [value-token-resolution.md](value-token-resolution.md) — the Value
   Supply Mechanisms A/B/C taxonomy; Mechanism B is the deploy-time-only
   resolver this doc's token substitution uses.
-- [docs/design/audit-trail.md](audit-trail.md) — Layer 2's audit
-  manifest/metrics models, already `destroy`-aware; `deploy destroy`'s
-  Remaining Work item 5 extends the existing glue, not the models.
+- [docs/work/audit-trail.md](../work/audit-trail.md) — Layer 2's audit
+  manifest/metrics models, already `destroy`-aware; `deploy destroy`
+  extends the existing glue, not the models
+  ([deploy-destroy.md](deploy-destroy.md)).
 - [docs/design/gitops-integration.md](gitops-integration.md) — first
-  flagged the `deploy destroy` gap, explicitly out of scope there.
+  flagged the `deploy destroy` gap, since built.
 - `/memories/repo/v1-consumer-usage.md` — the real-CI-usage census both
   the destroy and other-subcommands sections ground their Tier 2
   classification in.
@@ -526,15 +413,17 @@ subcommand.
   wired into deploy-time resolution — fixed via a `claimed_document_
   names()`/`output_claimed` parameter, independent of either output-
   access design.
-- `deploy destroy`'s reverse-dependency-order and never-gate-on-`enabled`
-  decisions are both grounded directly in v1's own `stage_selection.py`
-  — notably, v1's own docstring admits it never decided reverse order
-  at all (its real `order_stages()` runs unreversed for destroy); v2
-  deliberately does not copy that acknowledged gap.
+- `deploy destroy`'s reverse-dependency-order decision is grounded in
+  v1's own `stage_selection.py` — notably, v1's own docstring admits it
+  never decided reverse order at all (its real `order_stages()` runs
+  unreversed for destroy); v2 deliberately does not copy that
+  acknowledged gap. Its never-gate-on-`enabled` rule turned out to be a
+  no-op in v2 (no step-level `enabled` exists).
 - This doc consolidates three previously separate work docs
   (`deploy-command.md`, `deploy-destroy-command.md`,
   `deploy-operational-commands.md`) now that `deploy run` itself has
-  nothing left pending — `deploy destroy` and the other-subcommands
-  survey remain real, tracked, unimplemented work, kept in this doc's
-  own Remaining Work sections rather than scattered across separate
-  files.
+  nothing left pending. `deploy destroy` moved to
+  [deploy-destroy.md](deploy-destroy.md) once it was built; the
+  other-subcommands survey remains real, tracked, unimplemented work,
+  kept in this doc's own Remaining Work section rather than scattered
+  across separate files.

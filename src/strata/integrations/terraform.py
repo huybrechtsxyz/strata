@@ -20,7 +20,7 @@ Beyond the three `InfraIntegration` methods, this class also has `init`,
 itself has all seven; only `init`/`plan`/`apply` were in its own declared
 `IInfrastructureTool` Protocol, the rest are called directly by the deployer
 holding a concrete reference). Two v1 *deployer steps* are not new methods at
-all: `plan_destroy` is `plan(destroy=True)`, and `drift` is
+all: `plan_destroy` is `plan(destroy=True)` (never saving a plan file), and `drift` is
 `plan(detailed_exitcode=True)` run without applying — exit code 2 means
 "changes present", not failure. Callers of `detailed_exitcode=True` must
 inspect `result.returncode` directly, not `.is_successful` (which stays
@@ -196,6 +196,22 @@ class TerraformIntegration(InfraIntegration):
         for resource in target or []:
             args.extend(["-target", resource])
         return self.run(*args, cwd=path, env=env, timeout=timeout, line_callback=line_callback)
+
+    def plan_destroy(
+        self,
+        path: Path,
+        *,
+        timeout: int = 600,
+        env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
+        **kwargs: Any,
+    ) -> CommandResult:
+        """`terraform plan -destroy`: lists every resource that would be destroyed and changes nothing.
+
+        Never saves a plan file, even if a caller passes `out_file`: `<step>.tfplan` is what `deploy apply`
+        applies, and a destroy plan must never replace it (docs/design/deploy-destroy.md, D10).
+        """
+        return self.plan(path, destroy=True, timeout=timeout, env=env, line_callback=line_callback)
 
     def deploy(
         self,

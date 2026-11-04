@@ -34,6 +34,7 @@ Exit codes: 0 success, 1 system failure, 2 usage error, 3 validation failure (th
 | `strata deploy images DEPLOYMENT` | The container images a deployment runs, with the tag after any version pin and where the tag came from (`--pin`, a version document, the artifact, nowhere). Offline; no build needed. With `workspace.spec.image_tag_policy` set it also judges them and exits 3 on `deny`. |
 | `strata build run DEPLOYMENT` | Render a deployment into `build/` (never executes anything). `--dry-run` reports only. |
 | `strata deploy setup / check / plan / apply / run DEPLOYMENT` | init, validate, plan, apply a saved plan, or all of it. |
+| `strata deploy destroy DEPLOYMENT` | Tear a deployment down in reverse order. Irreversible: needs exactly one of `--force` (destroy) or `--dry-run` (preview). |
 | `strata values list / resolve / status DEPLOYMENT` | Inspect variables, secrets and features without revealing values. |
 | `strata values get DEPLOYMENT KEY...` | Full values, secrets included. Not for inspection. |
 | `strata values set / rotate / generate / mask` | Write or generate secret values. |
@@ -75,6 +76,7 @@ Every document has `apiVersion`, `kind`, `meta.name` and `spec`. Documents refer
 | A container image strata does not deploy itself | an `artifact` document |
 | Input files that are not code | an `asset` document, listed in `workspace.spec.assets` |
 | Type-checking a free-form `properties`, `custom` or `configuration` block | an `attributeconfig` document |
+| Organisation-specific structured data that Terraform consumes (for example a secret request, an owner, a cost centre) | do not look for a new kind: put it in `properties` as a map keyed by name (lists are replaced, not merged, across layers) and enforce its shape with an `attributeconfig`. Never put secret values in `properties` |
 
 ### Reading a schema
 
@@ -119,6 +121,8 @@ How values merge for a deployment:
   merged on top of them.
 - `deploy run --dry-run` runs a real `init`/`validate`/`plan`: it needs credentials and takes the state lock.
 - `deploy run --force` has no effect.
+- `deploy destroy` needs exactly one of `--force` or `--dry-run`. A workspace whose steps use `${output:}` needs an
+  `output_store` to destroy them, and a `script` step cannot be destroyed (exclude it with `--stage`/`--scope`).
 - A remote with `fetch: external` must already be checked out at `.strata/remotes/<name>/<reference>` before
   `build run`; strata will not clone it.
 - A version pin on a `type: local` remote is accepted but changes nothing.

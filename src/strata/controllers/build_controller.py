@@ -739,6 +739,8 @@ def build_run(
             # Sync/GitOps provisioner (argocd/flux) — renders from the
             # resolved graph directly, nothing to materialise first.
             source_path = build_path / step.name
+            # Nothing is copied here, but prepare() writes into this directory (the GitOps sidecar).
+            source_path.mkdir(parents=True, exist_ok=True)
         else:
             source_path = sync_source(context.root, build_path, provisioner.source, remotes, credentials=credentials)
             _step(f"materialised provisioner '{step.name}' source at {source_path}")

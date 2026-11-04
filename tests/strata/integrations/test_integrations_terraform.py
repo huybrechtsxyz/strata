@@ -94,10 +94,40 @@ def test_plan_argv_with_variables_and_target(monkeypatch):
 
 
 def test_plan_destroy_is_plan_with_destroy_flag(monkeypatch):
-    """v1's 'plan_destroy' deployer step — not a separate method."""
+    """v1's 'plan_destroy' deployer step: `plan_destroy()` is `plan(destroy=True)`."""
     captured = _capture(monkeypatch)
     TerraformIntegration().plan(Path("/work"), destroy=True)
     assert captured["args"] == ["terraform", "plan", "-destroy"]
+
+
+def test_plan_destroy_argv_never_saves_a_plan_file(monkeypatch):
+    """A saved `<step>.tfplan` is what `deploy apply` applies; a destroy preview must never overwrite it."""
+    captured = _capture(monkeypatch)
+    TerraformIntegration().plan_destroy(Path("/work"), out_file="app.tfplan", plan_file="app.tfplan")
+    assert captured["args"] == ["terraform", "plan", "-destroy"]
+    assert captured["cwd"] == Path("/work")
+
+
+def test_plan_destroy_forwards_env_timeout_and_line_callback(monkeypatch):
+    captured = _capture(monkeypatch)
+    seen: list[tuple[str, str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        captured["env"] = env
+        captured["timeout"] = timeout
+        if line_callback is not None:
+            line_callback("stdout", "Plan: 0 to add, 0 to change, 2 to destroy.")
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    TerraformIntegration().plan_destroy(
+        Path("/work"), env={"TF_VAR_x": "1"}, timeout=42, line_callback=lambda stream, text: seen.append((stream, text))
+    )
+    assert captured["env"] == {"TF_VAR_x": "1"}
+    assert captured["timeout"] == 42
+    assert seen == [("stdout", "Plan: 0 to add, 0 to change, 2 to destroy.")]
 
 
 def test_drift_is_plan_with_detailed_exitcode(monkeypatch):
