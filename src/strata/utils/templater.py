@@ -29,7 +29,9 @@ from jinja2.meta import find_undeclared_variables
 #: `resolve_value_tokens()`'s own "unknown reference is always an error"
 #: precedent. Has no effect on `validate_template_references()`'s own
 #: `_ENV.parse()` call, which never evaluates Undefined access at all.
-_ENV = Environment(undefined=StrictUndefined)
+#: `keep_trailing_newline` so a rendered file ends exactly as its template does (Jinja drops one final newline
+#: by default, which leaves a pushed GitOps file without one).
+_ENV = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
 
 
 def validate_template_references(source: str, known_names: dict[str, set[str] | None]) -> list[str]:

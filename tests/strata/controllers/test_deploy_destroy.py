@@ -932,7 +932,7 @@ def test_a_gitops_step_goes_from_build_to_deploy_to_destroy_against_a_real_repo(
     verify_dir = tmp_path / "verify"
     subprocess.run(["git", "clone", str(bare_repo), str(verify_dir)], check=True, capture_output=True)
     pushed_file = verify_dir / "apps" / "forge" / "values.yaml"
-    assert pushed_file.read_text().strip() == "replicas: forge_sync"
+    assert pushed_file.read_text() == "replicas: forge_sync\n"
 
     preview, steps = _destroy(root, build_path, dry_run=True)
     assert preview.ok, preview.messages()

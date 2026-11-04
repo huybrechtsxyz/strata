@@ -8,6 +8,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-04
+
 ### Added
 
 - `strata deploy destroy DEPLOYMENT`: tears down what `deploy run` created (Terraform, Helm, Compose and GitOps
@@ -27,6 +29,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 ### Changed
 
 - `docker stack rm` now runs with `--detach=false`, so a Compose destroy returns once the stack's tasks have stopped.
+- A rendered `output.template` now ends exactly as its template does. It used to lose one final newline, so a file
+  pushed to a GitOps repo had no newline at end of file.
 
 ### Fixed
 
@@ -84,6 +88,7 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/huybrechtsxyz/strata/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/huybrechtsxyz/strata/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/huybrechtsxyz/strata/releases/tag/v2.0.0

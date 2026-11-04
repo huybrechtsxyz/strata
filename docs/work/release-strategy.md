@@ -246,6 +246,17 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-04: **Built 2.2.0** - bumped `VERSION.txt` from `2.1.0` to `2.2.0` (normalizes to `2.2.0`; confirmed via
+  `packaging.version.Version` first; no trailing newline). A minor release: one additive command and no breaking
+  change. Built on `feature/deploy-destroy`, for a pull request to `main`. Contents since 2.1.0: `strata deploy
+  destroy` with the per-tool `--dry-run` preview (design: `docs/design/deploy-destroy.md`), the `SUPPORTS_DESTROY` /
+  `plan_destroy()` / `destroy_namespace()` integration contract, the audit `action` shown by `audit status` and
+  `audit changes`; `docker stack rm --detach=false`; a rendered `output.template` keeps its final newline; and a fix
+  for `build run` crashing on any ArgoCD or Flux provisioner without a `source`. One behavior to call out: an audit
+  sink that filters `events` must list `deployment.destroyed` to receive a destroy record. Full check suite green.
+  `uv build` produced `xyz_strata-2.2.0-py3-none-any.whl`/`.tar.gz`; a fresh isolated venv confirmed `strata version`
+  -> `2.2.0`, `strata deploy --help` lists `destroy`, and `strata validate` on `config/` passes. The commit and the
+  `v2.2.0` tag are left to the maintainer: `ci-build` must succeed on the merge commit on `main` first.
 - 2026-11-03: **Built 2.1.0** - bumped `VERSION.txt` from `2.0.0` to `2.1.0` (normalizes to `2.1.0`; confirmed via
   `packaging.version.Version` first; no trailing newline). A minor release: one additive feature and no change to
   existing behavior (before it, `${deployment:...}` was a malformed-token error, so no document can already use
