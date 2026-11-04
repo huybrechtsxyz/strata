@@ -349,7 +349,7 @@ class HelmIntegration(InfraIntegration):
             if not result.is_successful:
                 lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
                 # Without `[ERROR]` lines (a missing Chart.yaml, say) lint's own message is on stdout, not stderr.
-                findings = [line for line in lines if "[ERROR]" in line] or [
+                findings = _error_findings(lines) or [
                     line for line in lines if not line.startswith(("==>", "[INFO]", "[WARNING]"))
                 ]
                 detail = " | ".join(findings) or result.stderr.strip() or result.stdout.strip()
@@ -627,6 +627,26 @@ def check_configuration_keys(configuration: Mapping[str, Any], chart_values: Map
         default = chart_values[key]
         if isinstance(value, dict) and isinstance(default, dict) and default:
             findings.extend(_unknown(child, default, f"{key}.{child}") for child in value if child not in default)
+    return findings
+
+
+def _error_findings(lines: "Sequence[str]") -> list[str]:
+    """The `[ERROR]` findings from `helm lint` stdout, each with the lines that continue it.
+
+    Newer helm puts the cause of a template error (`nil pointer evaluating ...`) on lines after the
+    `[ERROR]` one, without a marker of their own; keeping only the marked line leaves a location and no reason.
+    A continuation ends at the next marker or at lint's closing `Error ...` summary.
+    """
+    findings: list[str] = []
+    continuing = False
+    for line in lines:
+        if "[ERROR]" in line:
+            findings.append(line)
+            continuing = True
+        elif line.startswith(("==>", "[INFO]", "[WARNING]", "Error")):
+            continuing = False
+        elif continuing:
+            findings[-1] = f"{findings[-1]} {line}"
     return findings
 
 

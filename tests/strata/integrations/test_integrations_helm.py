@@ -962,6 +962,31 @@ def test_check_namespace_reports_only_error_findings_and_keeps_checking_other_mo
     assert error.message.endswith("helm lint failed \u2014 [ERROR] templates/: nil pointer")
 
 
+def test_check_namespace_keeps_the_lines_that_continue_an_error_finding(monkeypatch, tmp_path: Path):
+    """Newer helm prints the cause of a template error on lines after `[ERROR]`, with no marker of their own."""
+    _record_lint(
+        monkeypatch,
+        returncode_for=lambda args: 1,
+        stdout=(
+            "==> Linting build/apps/x\n"
+            "[INFO] Chart.yaml: icon is recommended\n"
+            "[ERROR] templates/: real/templates/cm.yaml:6:18\n"
+            '    executing "real/templates/cm.yaml" at <.Values.cfg.name>:\n'
+            "    nil pointer evaluating interface {}.name\n"
+            "[WARNING] templates/: a later warning\n"
+            "Error: 1 chart(s) linted, 1 chart(s) failed\n"
+        ),
+    )
+    item, _ = _check_fixture(tmp_path)
+
+    [error] = HelmIntegration().check_namespace(_namespace(), [item], tokens={}).items
+
+    assert error.message.endswith(
+        "helm lint failed — [ERROR] templates/: real/templates/cm.yaml:6:18"
+        ' executing "real/templates/cm.yaml" at <.Values.cfg.name>: nil pointer evaluating interface {}.name'
+    )
+
+
 def test_check_namespace_reports_a_missing_meta_file_and_an_unresolvable_token(monkeypatch, tmp_path: Path):
     calls = _record_lint(monkeypatch)
     no_meta, module_dir = _check_fixture(tmp_path, name="nometa")
