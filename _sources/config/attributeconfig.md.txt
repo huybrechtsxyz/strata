@@ -7,7 +7,9 @@ every kind carries, enforced automatically against every matching document the m
 (no opt-in required on the target document's side).
 
 See [docs/design/dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md)
-for the full design rationale.
+for the full design rationale, and
+[How To: model your own structured data in `properties`](../how-to/structured-properties-with-attributeconfig.md)
+for a worked example.
 
 ## Schema
 

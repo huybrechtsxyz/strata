@@ -127,6 +127,11 @@ values, Compose files). Never executes anything — no `plan`, `apply`, or `depl
 Executes what `build run` already rendered: `terraform plan`/`apply` (or the Helm/Compose
 equivalent), per provisioning step, in dependency order. Never renders anything itself.
 
+### `strata deploy destroy`
+
+Tears down what `deploy run` created, per provisioning step, in reverse dependency order. Irreversible, so it
+requires exactly one of `--force` (destroy) or `--dry-run` (preview what would be removed).
+
 ### Diagnostics
 
 The structured findings a validation or run produces — errors, warnings, and info messages, each

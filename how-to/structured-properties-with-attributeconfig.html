@@ -1,0 +1,284 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Model your own structured data in properties and enforce its shape &mdash; strata 2.2.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=b21de401"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Configuration Files" href="../config/readme.html" />
+    <link rel="prev" title="How To: Gate deploys on security findings" href="security-gates.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-case">The case</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#put-the-data-in-properties">1. Put the data in <code class="docutils literal notranslate"><span class="pre">properties</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#declare-the-contract">2. Declare the contract</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#choosing-view">Choosing <code class="docutils literal notranslate"><span class="pre">view</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-this-does-not-do">What this does not do</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#checklist">Checklist</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/attributeconfig.html">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/chart-registries.html">Chart registries (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/structured-properties-with-attributeconfig.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-model-your-own-structured-data-in-properties-and-enforce-its-shape">
+<h1>How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape<a class="headerlink" href="#how-to-model-your-own-structured-data-in-properties-and-enforce-its-shape" title="Link to this heading"></a></h1>
+<p>Strata has no kind for every organisation-specific concept (a secret request, a change ticket, a
+cost centre). You do not need one. <code class="docutils literal notranslate"><span class="pre">properties</span></code> is a free-form block that merges across
+layers and reaches Terraform as <code class="docutils literal notranslate"><span class="pre">strata.properties</span></code>; an <a class="reference internal" href="../config/attributeconfig.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">attributeconfig</span></code></span></a>
+document turns it into a typed, validated contract. Strata stays out of the domain; your
+Terraform does the work.</p>
+<p>This guide uses one worked case: <strong>secret requests</strong> for an app registration whose secret is
+created by a separate Terraform state.</p>
+<section id="the-case">
+<h2>The case<a class="headerlink" href="#the-case" title="Link to this heading"></a></h2>
+<p>Terraform creates an app registration. A second state, with its own CI/CD run, creates the
+secret for it. Each secret must say:</p>
+<ul class="simple">
+<li><p>what it is for (the description written on the credential)</p></li>
+<li><p>who asked for it</p></li>
+<li><p>which Key Vault stores it</p></li>
+<li><p>which integration is used for the handover</p></li>
+</ul>
+</section>
+<section id="put-the-data-in-properties">
+<h2>1. Put the data in <code class="docutils literal notranslate"><span class="pre">properties</span></code><a class="headerlink" href="#put-the-data-in-properties" title="Link to this heading"></a></h2>
+<p>Use a <strong>map keyed by name, not a list</strong>. Properties are deep-merged tenant, then environment,
+then deployment, and the merge replaces lists wholesale (<code class="docutils literal notranslate"><span class="pre">strata.utils.dict_merge.deep_merge</span></code>).
+With a list, a deployment that adds one request would silently discard the environment’s.
+With a map, each request merges per key.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">secret_requests</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">contoso-web-client</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Client</span><span class="nv"> </span><span class="s">secret</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">contoso-web</span><span class="nv"> </span><span class="s">(prd)"</span>
+<span class="w">        </span><span class="nt">requested_by</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">jane.doe@example.com</span>
+<span class="w">        </span><span class="nt">keyvault</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kv-contoso-prd</span>
+<span class="w">        </span><span class="nt">handover</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mail-handover</span>
+<span class="w">        </span><span class="nt">expires_in_days</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">180</span>
+</pre></div>
+</div>
+<p>Terraform reads <code class="docutils literal notranslate"><span class="pre">strata.properties.secret_requests</span></code> and uses <code class="docutils literal notranslate"><span class="pre">for_each</span></code> over it in the secret
+state. Strata does not interpret the values.</p>
+</section>
+<section id="declare-the-contract">
+<h2>2. Declare the contract<a class="headerlink" href="#declare-the-contract" title="Link to this heading"></a></h2>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">attributeconfig</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment-secret-requests</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="w">    </span><span class="nt">block</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">properties</span>
+<span class="w">    </span><span class="nt">view</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">document</span>
+<span class="w">  </span><span class="nt">schema</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">object</span>
+<span class="w">    </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">secret_requests</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">object</span>
+<span class="w">        </span><span class="nt">additionalProperties</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">object</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">description</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">requested_by</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">keyvault</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">handover</span><span class="p p-Indicator">]</span>
+<span class="w">          </span><span class="nt">additionalProperties</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">          </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">description</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">              </span><span class="nt">minLength</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">            </span><span class="nt">requested_by</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"</span>
+<span class="w">            </span><span class="nt">keyvault</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^kv-[a-z0-9-]+$"</span>
+<span class="w">            </span><span class="nt">handover</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">string</span>
+<span class="w">            </span><span class="nt">expires_in_days</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integer</span>
+<span class="w">              </span><span class="nt">minimum</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">              </span><span class="nt">maximum</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">730</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> now fails on a request with no <code class="docutils literal notranslate"><span class="pre">requested_by</span></code>, an unknown field, or a vault
+name outside your convention. The schema is verbatim JSON Schema, so <code class="docutils literal notranslate"><span class="pre">enum</span></code>, <code class="docutils literal notranslate"><span class="pre">pattern</span></code> and
+<code class="docutils literal notranslate"><span class="pre">if</span></code>/<code class="docutils literal notranslate"><span class="pre">then</span></code> all work.</p>
+</section>
+<section id="choosing-view">
+<h2>Choosing <code class="docutils literal notranslate"><span class="pre">view</span></code><a class="headerlink" href="#choosing-view" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">document</span></code> checks each environment document’s own block. Use it when the shape must hold
+wherever the data is written.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">effective</span></code> (target <code class="docutils literal notranslate"><span class="pre">deployment</span></code> only) checks the merged result per deployment. Use it for
+rules that need the final picture, such as “every deployment of <code class="docutils literal notranslate"><span class="pre">prd</span></code> has at least one request”.</p></li>
+</ul>
+</section>
+<section id="what-this-does-not-do">
+<h2>What this does not do<a class="headerlink" href="#what-this-does-not-do" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>It checks the <strong>shape</strong>, not whether <code class="docutils literal notranslate"><span class="pre">handover:</span> <span class="pre">mail-handover</span></code> names a real integration or
+<code class="docutils literal notranslate"><span class="pre">kv-contoso-prd</span></code> exists. Your Terraform or pipeline must check that.</p></li>
+<li><p>It never validates <code class="docutils literal notranslate"><span class="pre">secrets</span></code>. <code class="docutils literal notranslate"><span class="pre">target.block</span></code> cannot be <code class="docutils literal notranslate"><span class="pre">secrets</span></code>, and a secret <em>value</em> does
+not belong in <code class="docutils literal notranslate"><span class="pre">properties</span></code>: properties are plain, unmasked values, unlike <code class="docutils literal notranslate"><span class="pre">${secret:KEY}</span></code>
+which is never written to disk. Keep only the request metadata here and let the secret
+itself live in the vault.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">additionalProperties:</span> <span class="pre">false</span></code> closes the subtree. Leave it out where other teams may add keys.</p></li>
+</ul>
+</section>
+<section id="checklist">
+<h2>Checklist<a class="headerlink" href="#checklist" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Data goes in a map keyed by name, not a list.</p></li>
+<li><p>One <code class="docutils literal notranslate"><span class="pre">attributeconfig</span></code> per <code class="docutils literal notranslate"><span class="pre">(kind,</span> <span class="pre">block,</span> <span class="pre">view)</span></code> for a given top-level key. Two documents
+declaring the same key, with overlapping selectors, fail with <code class="docutils literal notranslate"><span class="pre">attributeconfig_conflict</span></code>.</p></li>
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--verbose</span></code> to see which documents each schema was applied to. A schema
+matching nothing warns with <code class="docutils literal notranslate"><span class="pre">attributeconfig_unused</span></code>.</p></li>
+</ol>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="security-gates.html" class="btn btn-neutral float-left" title="How To: Gate deploys on security findings" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../config/readme.html" class="btn btn-neutral float-right" title="Configuration Files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

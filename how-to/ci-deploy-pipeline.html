@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Run strata in a CI pipeline &mdash; strata 2.1.0 documentation</title>
+  <title>How To: Run strata in a CI pipeline &mdash; strata 2.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=20623aea"></script>
+      <script src="../_static/documentation_options.js?v=b21de401"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -62,7 +62,8 @@
 <li class="toctree-l2"><a class="reference internal" href="#give-the-pipeline-its-credentials">3. Give the pipeline its credentials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#a-complete-workflow">4. A complete workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#plan-in-one-job-apply-in-another">5. Plan in one job, apply in another</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#exit-codes">6. Exit codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tear-a-deployment-down">6. Tear a deployment down</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#exit-codes">7. Exit codes</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
@@ -71,6 +72,7 @@
 <li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
 <ul>
@@ -401,8 +403,54 @@ plan. Apply dependent steps in dependency order.</p></li>
 separate stages.</p></li>
 </ul>
 </section>
+<section id="tear-a-deployment-down">
+<h2>6. Tear a deployment down<a class="headerlink" href="#tear-a-deployment-down" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">destroy</span> <span class="pre">D</span></code> removes what <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> created: Terraform-managed resources, Helm releases, Compose
+stacks and GitOps files, last step first. It cannot be undone, so it needs exactly one of <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> (preview,
+changes nothing) or <code class="docutils literal notranslate"><span class="pre">--force</span></code> (destroy, no prompt). Neither, or both, exits 2. Preview in one job and destroy in a
+job behind a protected environment, so a person approves exactly what the preview showed.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">jobs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">preview</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># checkout, install strata and Terraform, validate, build run, as in section 4</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata deploy destroy "$DEPLOYMENT" --dry-run</span><span class="w">   </span><span class="c1"># streams what would be removed</span>
+
+<span class="w">  </span><span class="nt">destroy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">needs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">preview</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production-destroy</span><span class="w">                         </span><span class="c1"># required reviewers</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># checkout, install strata and Terraform, validate, build run</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">strata deploy destroy "$DEPLOYMENT" --force \</span>
+<span class="w">            </span><span class="no">--change-system jira --change-id "$TICKET" --change-reason "decommission"</span>
+</pre></div>
+</div>
+<p>Things to know:</p>
+<ul class="simple">
+<li><p>A destroy reads the build directory like a deploy does: run <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> first, with the same <code class="docutils literal notranslate"><span class="pre">--pin</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> streams its preview without <code class="docutils literal notranslate"><span class="pre">--follow</span></code>. Terraform runs <code class="docutils literal notranslate"><span class="pre">plan</span> <span class="pre">-destroy</span></code> (it takes the state lock and
+needs credentials) and never writes <code class="docutils literal notranslate"><span class="pre">&lt;step&gt;.tfplan</span></code>, so a reviewed apply plan is left untouched. Helm lists
+<code class="docutils literal notranslate"><span class="pre">Kind/name</span></code> per resource, never Secret data; Compose lists the stack’s running services; GitOps says whether the
+file is in the config repo.</p></li>
+<li><p>A destroy does not run <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> or the security gates: a <code class="docutils literal notranslate"><span class="pre">deny</span></code> never blocks a teardown.</p></li>
+<li><p>To destroy part of a deployment, use <code class="docutils literal notranslate"><span class="pre">--stage</span></code> or <code class="docutils literal notranslate"><span class="pre">--scope</span></code>. Run <code class="docutils literal notranslate"><span class="pre">--scope</span> <span class="pre">apps</span></code> before <code class="docutils literal notranslate"><span class="pre">--scope</span> <span class="pre">infra</span></code>. A destroyed
+step that other steps depend on, and that are not in the run, is a warning, not an error, so the second run stays
+possible.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">script</span></code> step cannot be destroyed. <code class="docutils literal notranslate"><span class="pre">--force</span></code> refuses before anything is removed, and names the step; leave it
+out with <code class="docutils literal notranslate"><span class="pre">--stage</span></code> or <code class="docutils literal notranslate"><span class="pre">--scope</span></code>. Under <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> it is a warning.</p></li>
+<li><p>A Terraform step that reads another step’s output with <code class="docutils literal notranslate"><span class="pre">${output:...}</span></code> needs the workspace’s <code class="docutils literal notranslate"><span class="pre">output_store</span></code>: a
+destroy collects no outputs, so it reads the ones <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> recorded. Without a usable record the run stops
+before destroying anything. Pass <code class="docutils literal notranslate"><span class="pre">--output-max-age</span></code> when the record is stale. A successful destroy clears the
+destroyed steps’ records.</p></li>
+<li><p>Re-running after a partial failure is safe: a Helm release that is already gone counts as removed.</p></li>
+<li><p>A real destroy records the audit trail with <code class="docutils literal notranslate"><span class="pre">action:</span> <span class="pre">destroy</span></code>, including the <code class="docutils literal notranslate"><span class="pre">--change-*</span></code> flags, and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">status</span></code> shows it. A sink receives <code class="docutils literal notranslate"><span class="pre">deployment.destroyed</span></code> rather than <code class="docutils literal notranslate"><span class="pre">deployment.completed</span></code>, so list that event
+type in the sink’s <code class="docutils literal notranslate"><span class="pre">events</span></code>. A dry run records nothing.</p></li>
+</ul>
+</section>
 <section id="exit-codes">
-<h2>6. Exit codes<a class="headerlink" href="#exit-codes" title="Link to this heading"></a></h2>
+<h2>7. Exit codes<a class="headerlink" href="#exit-codes" title="Link to this heading"></a></h2>
 <p>Every command uses the same four codes, so a pipeline can react without parsing output.</p>
 <table class="docutils align-default">
 <thead>

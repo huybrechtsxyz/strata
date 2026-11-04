@@ -24,6 +24,7 @@ strata-v2
    how-to/migrate-v1-workspace-topology-provisioning
    how-to/sbom-generation
    how-to/security-gates
+   how-to/structured-properties-with-attributeconfig
 
 .. toctree::
    :maxdepth: 1
