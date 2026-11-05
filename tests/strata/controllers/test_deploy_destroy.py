@@ -433,22 +433,22 @@ def test_destroy_does_not_evaluate_the_security_gates(tmp_path: Path, tools, mon
     assert evaluated == ["evaluated"]
 
 
-@pytest.mark.parametrize("flag", [{"smoke_test": True}, {"stop_after": "setup"}, {"use_saved_plan": True}])
+@pytest.mark.parametrize("flag", [{"stop_after": "setup"}, {"use_saved_plan": True}])
 def test_destroy_cannot_be_combined_with_the_other_modes(tmp_path: Path, tools, flag):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
     with pytest.raises(UsageError, match="cannot be combined"):
-        deploy_run(_context(root), "app", build_path, destroy=True, **flag)
+        deploy_run(_context(root), "app", build_path, destroy=True, force=True, **flag)
 
     assert tools.terraform() == []
 
 
-def test_destroy_needs_force_or_dry_run(tmp_path: Path, tools):
+def test_destroy_needs_force_dry_run_or_smoke_test(tmp_path: Path, tools):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    with pytest.raises(UsageError, match="force=True to destroy or dry_run=True"):
+    with pytest.raises(UsageError, match="force=True to destroy, dry_run=True to preview or smoke_test=True"):
         deploy_run(_context(root), "app", build_path, destroy=True)
 
     assert tools.terraform() == []
@@ -655,6 +655,89 @@ def test_a_container_step_never_reads_the_output_store(tmp_path: Path, tools, mo
 
     assert diagnostics.ok, diagnostics.messages()
     assert backend.get_calls == 0
+
+
+# ---------------------------------------------------------------------------
+# Smoke test: what would be destroyed, with no tool and no output store contact
+# ---------------------------------------------------------------------------
+
+
+def test_a_smoke_test_reports_each_step_last_first_and_calls_no_tool(tmp_path: Path, tools):
+    root = _tf_two(tmp_path)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, steps = _destroy(root, build_path, smoke_test=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [s for s in steps if s.startswith("would ")] == [
+        "would destroy step 'apply_apps' via TerraformIntegration",
+        "would destroy step 'apply_infra' via TerraformIntegration",
+    ]
+    assert tools.calls == []  # not even a version probe
+
+
+def test_a_smoke_test_covers_a_container_step_without_calling_its_tool(tmp_path: Path, tools):
+    root = _helm_solution(tmp_path)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, steps = _destroy(root, build_path, smoke_test=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "would destroy step 'deploy_apps' via HelmIntegration" in steps
+    assert tools.of("helm") == []
+
+
+def test_a_smoke_test_still_refuses_a_step_that_cannot_destroy(tmp_path: Path, tools):
+    root = _with_a_script_step(tmp_path)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, smoke_test=True)
+
+    assert _codes(diagnostics, "errors") == ["destroy_unsupported"]  # a real destroy would stop here too
+    assert tools.terraform() == []
+
+
+def test_a_smoke_test_warns_about_dependents_it_would_leave(tmp_path: Path, tools):
+    root = _tf_two(tmp_path)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stage="apply_infra")
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert _codes(diagnostics, "warnings") == ["destroy_leaves_dependents"]
+
+
+def test_a_smoke_test_that_selects_no_step_fails(tmp_path: Path, tools):
+    root = _tf_two(tmp_path)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stage="no_such_stage")
+
+    assert _codes(diagnostics, "errors") == ["destroy_no_steps"]
+
+
+def test_a_smoke_test_does_not_read_or_clear_the_output_store(tmp_path: Path, tools, monkeypatch):
+    backend = _register_output_store(monkeypatch)
+    _seed(backend, {"apply_infra": {"vm_ip": "10.0.0.5"}, "apply_apps": {"k": "v"}})
+    root, build_path = _chained(tmp_path, workspace_extra=_STORE)
+    before = backend.shared_data[STORE_KEY]
+
+    diagnostics, _ = _destroy(root, build_path, smoke_test=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert _codes(diagnostics, "warnings") == ["destroy_uses_outputs"]
+    assert "not read in a smoke test" in diagnostics.warnings[0].message
+    assert backend.get_calls == 0
+    assert backend.shared_data[STORE_KEY] == before
+
+
+def test_a_smoke_test_still_finds_a_reference_no_output_store_could_serve(tmp_path: Path, tools):
+    root, build_path = _chained(tmp_path)  # references an output, configures no output_store
+
+    diagnostics, _ = _destroy(root, build_path, smoke_test=True)
+
+    assert _codes(diagnostics, "errors") == ["destroy_output_unavailable"]
+    assert "no output_store" in diagnostics.errors[0].message
 
 
 # ---------------------------------------------------------------------------

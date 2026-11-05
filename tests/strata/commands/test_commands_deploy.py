@@ -789,17 +789,20 @@ def _has_manifest(solution: Path) -> bool:
     return audit.is_dir() and any(audit.rglob("_manifest.json"))
 
 
-def test_deploy_destroy_requires_force_or_dry_run(runner, solution, _stub_terraform):
+def test_deploy_destroy_requires_a_mode(runner, solution, _stub_terraform):
     _build(runner, solution)
     result = _destroy(runner, solution)
     assert result.exit_code == EXIT_USAGE, result.output
-    assert "--force" in result.output and "--dry-run" in result.output
+    assert all(flag in result.output for flag in ("--force", "--dry-run", "--smoke-test"))
     assert _stub_terraform == []
 
 
-def test_deploy_destroy_rejects_force_with_dry_run(runner, solution, _stub_terraform):
+@pytest.mark.parametrize(
+    "flags", [["--force", "--dry-run"], ["--force", "--smoke-test"], ["--dry-run", "--smoke-test"]]
+)
+def test_deploy_destroy_rejects_more_than_one_mode(runner, solution, _stub_terraform, flags):
     _build(runner, solution)
-    result = _destroy(runner, solution, "--force", "--dry-run")
+    result = _destroy(runner, solution, *flags)
     assert result.exit_code == EXIT_USAGE, result.output
     assert _stub_terraform == []
 
@@ -952,6 +955,30 @@ def test_deploy_destroy_dry_run_writes_no_audit_manifest(runner, solution, _stub
     assert not _has_manifest(solution)
 
 
+def test_deploy_destroy_smoke_test_reports_without_calling_a_tool_or_writing_an_audit_record(
+    runner, solution, _stub_terraform
+):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--smoke-test")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "would destroy step 'apply_infra'" in result.output
+    assert _stub_terraform == []
+    assert not _has_manifest(solution)
+
+
+def test_deploy_destroy_smoke_test_does_not_stream_by_default(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--smoke-test")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" not in result.output
+
+
+def test_deploy_destroy_smoke_test_that_selects_no_step_exits_three(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _destroy(runner, solution, "--smoke-test", "--stage", "ghost-stage")
+    assert result.exit_code == EXIT_VALIDATION, result.output
+
+
 def test_deploy_destroy_failed_real_run_is_still_audited(runner, solution, monkeypatch):
     _build(runner, solution)
 
@@ -976,5 +1003,4 @@ def test_deploy_destroy_help_stresses_irreversibility_and_is_listed(runner):
     result = runner.invoke(cli, ["deploy", "destroy", "--help"])
     assert result.exit_code == EXIT_SUCCESS, result.output
     assert "IRREVERSIBLE" in result.output
-    assert "--force" in result.output and "--dry-run" in result.output
-    assert "--smoke-test" not in result.output
+    assert "--force" in result.output and "--dry-run" in result.output and "--smoke-test" in result.output

@@ -8,6 +8,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-05
+
 ### Added
 
 - A `script` provisioner can set `plan_args` and `destroy_args`. `plan_args` run the script when a preview is
@@ -31,6 +33,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   cannot (not a git checkout, or `git` failed). A `path` remote cannot
   take an `integration`, be pinned by a `version` document, or be pushed to by a GitOps provisioner or audit sink
   (`strata validate` reports the last as `path_remote_not_pushable`).
+- `strata deploy destroy --smoke-test`: the zero-contact mode of `deploy run --smoke-test` for a teardown. It reports
+  "would destroy step X" per step, last first, without calling any tool or reading the output store. Values must still
+  resolve. It reports a step that cannot be destroyed, a filter that selects no step and an `${output:}` reference
+  that nothing could serve. `deploy destroy` now needs exactly one of `--force`, `--dry-run` or `--smoke-test`.
 
 ### Changed
 
@@ -136,7 +142,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/huybrechtsxyz/strata/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/huybrechtsxyz/strata/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/huybrechtsxyz/strata/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/huybrechtsxyz/strata/releases/tag/v2.0.0

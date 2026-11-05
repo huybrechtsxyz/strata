@@ -7,8 +7,8 @@
 
 `strata deploy destroy DEPLOYMENT` tears down what `deploy run` created: Terraform state, Helm releases, Compose
 stacks and GitOps files, last step first. It is the v1 command of the same name, rebuilt on the v2 orchestrator.
-`--dry-run` previews what would be removed and changes nothing; `--force` removes it. Exactly one of the two is
-required.
+`--dry-run` previews what would be removed and changes nothing; `--smoke-test` only reports which steps would be
+removed, with no tool or output store contact; `--force` removes it. Exactly one of the three is required.
 
 It is a variant of `deploy run`, not a second orchestrator: `deploy_run(..., destroy=True)` shares value resolution,
 integration pre-flight, the `strata.auto.tfvars.json` rewrite and backend configuration with an apply, and only the
@@ -20,23 +20,27 @@ tail of each step differs. The original design lived in [deploy-command.md](depl
 ### Command
 
 ```
-strata deploy destroy DEPLOYMENT (--force | --dry-run)
+strata deploy destroy DEPLOYMENT (--force | --dry-run | --smoke-test)
   [--path PATH] [--build-path PATH] [--stage NAME] [--scope LABEL] [--pin VERSION]
   [--output-max-age SECONDS] [--follow [console|ndjson]] [--change-* ...] [--output console|json]
 ```
 
 - `--force` destroys for real and maps to Terraform's `-auto-approve`. It is the one place `deploy`'s `--force` is
-  not inert. `--dry-run` previews. Neither, or both, is a usage error (v1 only refused neither).
+  not inert. `--dry-run` previews. Zero, or more than one, of the three modes is a usage error (v1 only refused
+  neither).
 - `--dry-run` defaults `--follow` to `console`, like `deploy plan`, so the preview is visible.
-- No `--smoke-test`: `destroy` cannot be combined with `smoke_test`, `stop_after` or `use_saved_plan`.
+- `--smoke-test` mirrors `deploy run --smoke-test`: values still resolve, then it reports "would destroy step X via
+  Y" per step, last first, and stops. See D11.
+- `destroy` cannot be combined with `stop_after` or `use_saved_plan`.
 - Same `--path`, `--build-path`, `--stage`, `--scope`, `--pin`, `--output-max-age`, `--follow` and change-reference
   flags as `deploy run`, and the same exit codes: 0 success, 2 bad arguments or an unknown deployment, 3 a value
   that failed to resolve, a missing tool, a step that cannot be destroyed, or a failed destroy.
 - Run `build run` first: a destroy reads what is already on disk and renders nothing.
 - A filter that selects no step fails with `destroy_no_steps` (exit 3). `deploy run` only reports that no step
   matched, but a destroy that exits 0 would be audited as a successful teardown that touched nothing.
-- `deploy_run()` itself also refuses a destroy that has neither `force` nor `dry_run`, so a library caller cannot
-  remove a Helm release or Compose stack without the explicit flag (only Terraform needs `-auto-approve`).
+- `deploy_run()` itself also refuses a destroy that has none of `force`, `dry_run` and `smoke_test`, so a library
+  caller cannot remove a Helm release or Compose stack without an explicit mode (only Terraform needs
+  `-auto-approve`).
 
 ### Flow
 
@@ -47,6 +51,7 @@ deploy_run(destroy=True)
   |- tool readiness, then _destroy_preflight(): unsupported steps, dependents left behind, ${output:} references
   |- for each step, last first
   |    |- container step (Helm, Compose): destroy_namespace() per namespace, reverse sorted order; no tokens
+  |    |- --smoke-test: "would destroy step X", nothing else (D11)
   |    `- other step: tfvars rewrite, backend config, init, GitOps auth, then _destroy_step():
   |         --dry-run -> plan_destroy()    --force -> destroy(auto_approve=True)
   `- real run, fully successful, output store configured: clear the destroyed steps' recorded outputs (D8)
@@ -147,6 +152,15 @@ The labels are stable: code comments cite them.
   an approval gate across two invocations; no consumer calls `deploy destroy`, v1 has no such gate, and a re-plan
   on the second run is the safer behavior for something irreversible. If a pipeline ever wants one: `--dry-run`
   saves `<step>.destroy.tfplan` and a `--use-saved-plan` flag applies it, mirroring `deploy apply`.
+- **D11 - Smoke test.** `--smoke-test` mirrors `deploy run --smoke-test`: the command stays zero-contact with every
+  tool, so a pipeline can check a teardown's wiring before it has state access. Values still resolve first (a missing
+  secret fails it, exactly as it does `deploy run --smoke-test`), then the offline pre-flight runs and each step is
+  reported as "would destroy step X via Y", last first, and nothing else happens. It finds what a real run would
+  refuse for reasons that need no contact: an unsupported step (an error, because a real destroy would stop there too,
+  unlike `--dry-run`, where it is a warning), a filter that selects no step, and a `${output:}` reference nothing
+  could serve (no `output_store`, or a step that is not upstream). It warns about dependents left behind. It does not
+  read the output store, so whether a record exists and is fresh is only known by `--dry-run` or a real run; the
+  `destroy_uses_outputs` warning says so. It never clears the store and writes no audit record.
 
 ### Integration contract
 

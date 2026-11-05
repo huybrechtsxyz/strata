@@ -794,15 +794,22 @@ def deploy_apply_command(
     is_flag=True,
     default=False,
     help="Destroy for real, without a confirmation prompt (Terraform's '-auto-approve'). IRREVERSIBLE. "
-    "Exactly one of --force or --dry-run is required.",
+    "Exactly one of --force, --dry-run or --smoke-test is required.",
 )
 @click.option(
     "--dry-run",
     is_flag=True,
     default=False,
     help="Preview what would be destroyed and change nothing ('terraform plan -destroy', or the tool's "
-    "equivalent); streams the preview unless --follow says otherwise. Exactly one of --force or --dry-run "
-    "is required.",
+    "equivalent); streams the preview unless --follow says otherwise. Exactly one of --force, --dry-run "
+    "or --smoke-test is required.",
+)
+@click.option(
+    "--smoke-test",
+    is_flag=True,
+    default=False,
+    help="Report which steps would be destroyed, last first, without calling any tool or reading the output "
+    "store. Values must still resolve. Exactly one of --force, --dry-run or --smoke-test is required.",
 )
 @_change_reference_options
 @output_option
@@ -814,6 +821,7 @@ def deploy_destroy_command(
     build_path: Path | None,
     force: bool,
     dry_run: bool,
+    smoke_test: bool,
     follow: str | None,
     stage: str | None,
     scope: str | None,
@@ -835,13 +843,14 @@ def deploy_destroy_command(
 
     \b
     Exit codes:
-      0  every filtered step was destroyed (or, with --dry-run, previewed)
-      2  neither or both of --force and --dry-run, bad arguments, DEPLOYMENT
-         does not exist, --pin names an unknown version document, or not
-         inside a solution
+      0  every filtered step was destroyed (or, with --dry-run, previewed, or with --smoke-test, reported)
+      2  not exactly one of --force, --dry-run and --smoke-test, bad arguments,
+         DEPLOYMENT does not exist, --pin names an unknown version document,
+         or not inside a solution
       3  a declared value failed to resolve, a filtered step's tool is not
-         available on PATH, a step cannot be destroyed (a script step, or a
-         '${output:}' it needs has no usable record), or a destroy failed
+         available on PATH, a step cannot be destroyed (a script step without
+         'destroy_args', or a '${output:}' it needs has no usable record), or
+         a destroy failed
 
     Steps are destroyed in reverse dependency order. Use --stage/--scope to
     destroy part of a deployment; steps that depend on what is destroyed are
@@ -856,8 +865,11 @@ def deploy_destroy_command(
     with command_run(
         "deploy destroy", output=output, quiet=quiet, verbose=verbose, compact=(follow == "ndjson")
     ) as run:
-        if force == dry_run:
-            raise UsageError("Exactly one of --force or --dry-run is required: --dry-run previews, --force destroys.")
+        if force + dry_run + smoke_test != 1:
+            raise UsageError(
+                "Exactly one of --force, --dry-run or --smoke-test is required: --dry-run previews, "
+                "--smoke-test only checks, --force destroys."
+            )
 
         if follow == "ndjson" and output != "json":
             raise UsageError("--follow ndjson requires --output json.")
@@ -893,6 +905,7 @@ def deploy_destroy_command(
             destroy=True,
             force=force,
             dry_run=dry_run,
+            smoke_test=smoke_test,
             stage=stage,
             scope=scope,
             on_step=on_step,
@@ -901,8 +914,8 @@ def deploy_destroy_command(
             output_max_age=output_max_age,
         )
 
-        # A preview changes nothing, so only a real destroy gets an audit record.
-        if not dry_run:
+        # A preview or a smoke test changes nothing, so only a real destroy gets an audit record.
+        if force:
             audit_diagnostics = finalize_and_distribute_deploy_audit(
                 context,
                 deployment,
