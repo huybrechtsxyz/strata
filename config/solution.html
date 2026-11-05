@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Solution (kind: solution) &mdash; strata 2.3.0 documentation</title>
+  <title>Solution (kind: solution) &mdash; strata 2.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=c3c8ae58"></script>
+      <script src="../_static/documentation_options.js?v=67b02a41"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -149,8 +149,9 @@ loader’s built-in ignores (<code class="docutils literal notranslate"><span cl
 <li><p><code class="docutils literal notranslate"><span class="pre">url</span></code> — the source location; must not embed a password or token (use an integration for credentials)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">reference</span></code> — the branch, tag or commit SHA the remote is taken at. A <code class="docutils literal notranslate"><span class="pre">git</span></code> remote needs this
 or <code class="docutils literal notranslate"><span class="pre">path</span></code>, never both</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">path</span></code> — <code class="docutils literal notranslate"><span class="pre">git</span></code> only: where a pipeline already checked the repository out, relative to the solution
-root and inside it. Strata reads it there and never clones it; see
+<li><p><code class="docutils literal notranslate"><span class="pre">path</span></code> — <code class="docutils literal notranslate"><span class="pre">git</span></code> only: where a pipeline or developer already checked the repository out. Relative to
+the solution root (the folder holding <code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code>), <code class="docutils literal notranslate"><span class="pre">..</span></code> allowed, or absolute. Strata reads it
+there and never clones it; see
 <a class="reference internal" href="#a-repository-your-pipeline-checked-out">A repository your pipeline checked out</a></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">fetch</span></code> — <code class="docutils literal notranslate"><span class="pre">strata</span></code> (strata materializes it) or <code class="docutils literal notranslate"><span class="pre">external</span></code> (already placed by CI/elsewhere).
 <code class="docutils literal notranslate"><span class="pre">path</span></code> implies <code class="docutils literal notranslate"><span class="pre">external</span></code></p></li>
@@ -200,12 +201,23 @@ strata where that checkout is:</p>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iac</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git</span>
 <span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/org/iac.git</span>
-<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repos/iac</span><span class="w">          </span><span class="c1"># the pipeline's checkout path, inside the solution</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../iac</span><span class="w">             </span><span class="c1"># a checkout beside the solution, in CI and on a workstation</span>
 </pre></div>
 </div>
-<p>Exclude that folder from discovery (<code class="docutils literal notranslate"><span class="pre">discovery.exclude:</span> <span class="pre">[&quot;repos/**&quot;]</span></code>) so its YAML is not read as
-strata documents. When the folder is a git checkout, the deploy’s audit manifest records its commit
-under <code class="docutils literal notranslate"><span class="pre">artifacts.repositories.&lt;name&gt;.commit</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">path</span></code> is resolved from the solution root, not from the directory strata was started in, so the
+same <code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code> means the same folder wherever it is run. Use the layout your pipeline and your
+workstations share:</p>
+<ul class="simple">
+<li><p><strong>Beside the solution</strong> (<code class="docutils literal notranslate"><span class="pre">../iac</span></code>): an Azure DevOps pipeline with several <code class="docutils literal notranslate"><span class="pre">checkout:</span></code> steps puts each
+repository in its own folder next to the others, which is also how developers usually clone them.</p></li>
+<li><p><strong>Inside the solution</strong> (<code class="docutils literal notranslate"><span class="pre">repos/iac</span></code>): exclude that folder from discovery
+(<code class="docutils literal notranslate"><span class="pre">discovery.exclude:</span> <span class="pre">[&quot;repos/**&quot;]</span></code>) so its YAML is not read as strata documents.</p></li>
+<li><p><strong>Absolute</strong>: used as it is. It only helps where every machine has the same layout.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> warns (<code class="docutils literal notranslate"><span class="pre">path_remote_outside_solution</span></code>) when the path leaves the solution, so a
+change that points a build at another folder is visible in review. When the folder is a git
+checkout, the deploy’s audit manifest records its commit under
+<code class="docutils literal notranslate"><span class="pre">artifacts.repositories.&lt;name&gt;.commit</span></code>.</p>
 </li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">reference</span></code> with <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">external</span></code></strong>. Strata expects the checkout at
 <code class="docutils literal notranslate"><span class="pre">.strata/remotes/&lt;name&gt;/&lt;reference&gt;</span></code>, so the pipeline must repeat the ref and place or link its
