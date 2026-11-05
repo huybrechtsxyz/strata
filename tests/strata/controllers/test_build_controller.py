@@ -473,6 +473,48 @@ def test_build_run_creates_the_step_directory_of_a_source_less_gitops_provisione
     assert (build_path / "sync" / ".gitops-push.json").is_file()
 
 
+def _script_workspace_solution(tmp_path: Path, *, file: str) -> Path:
+    root = _terraform_solution(tmp_path)
+    _write(root, "scripts/present.py", "print('hi')\n")
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: script_main\n      tool: script\n      source:\n        source_path: scripts\n"
+        f"      script:\n        file: {file}\n"
+        "  execution:\n    - name: run_script\n      provisioner: script_main\n      resources:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    return root
+
+
+def test_build_run_fails_when_the_script_file_is_not_in_the_materialised_source(tmp_path: Path):
+    root = _script_workspace_solution(tmp_path, file="ghost.py")
+
+    with pytest.raises(UsageError, match="ghost.py") as raised:
+        build_run(_context(root), "app", tmp_path / "build")
+
+    assert "script_main" in str(raised.value)
+
+
+def test_build_run_accepts_a_script_file_that_is_in_the_materialised_source(tmp_path: Path):
+    root = _script_workspace_solution(tmp_path, file="present.py")
+
+    diagnostics = build_run(_context(root), "app", tmp_path / "build")
+
+    assert diagnostics.ok, diagnostics.messages()
+
+
+def test_a_dry_run_does_not_check_for_the_script_file(tmp_path: Path):
+    """Nothing is materialised under `--dry-run`, so there is nothing to look in."""
+    root = _script_workspace_solution(tmp_path, file="ghost.py")
+
+    diagnostics = build_run(_context(root), "app", tmp_path / "build", dry_run=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+
+
 # ---------------------------------------------------------------------------
 # Assets (docs/design/asset-management.md Phase 3) — sync_asset(), resolved
 # once up front from the deployment's own graph.properties, before the step

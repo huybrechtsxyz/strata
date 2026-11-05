@@ -235,6 +235,16 @@ Things to know:
 - A step that reads another step's output with `${output:...}` may show "(known after apply)" in the
   plan. Apply dependent steps in dependency order.
 - `deploy apply` records the audit trail like `deploy run`, including the `--change-*` flags.
+- `deploy apply` only works for tools that save a plan. A `script` or ArgoCD/Flux step is refused before anything
+  runs; use `deploy run` for those, or leave them out with `--stage` / `--scope`.
+- A `script` step runs in a preview (`--dry-run`, `deploy plan`) only when its provisioner sets `plan_args`;
+  otherwise the preview prints `would run: ...`. The script sees `STRATA_PHASE` (`plan`, `apply` or `destroy`), so
+  guard anything that changes state with it. A preview that executes the script streams its output with `--follow`.
+- A `script` step receives every resolved value in `STRATA_VALUES` unless its provisioner lists `values`; then it
+  gets only those keys (plus `deployment:name` and `deployment:tenant`), so an unrelated secret never reaches it.
+- A `script` step passes values to the steps after it by writing a JSON object to the file named by
+  `STRATA_OUTPUT_FILE`; they become `${output:<step>.<key>}`. List secret keys in `"_sensitive"` so they are used in
+  the run but never recorded in the `output_store`.
 - `deploy setup` and `deploy check` run only init, or init and validate, if you want those as
   separate stages.
 
@@ -275,8 +285,10 @@ Things to know:
 - To destroy part of a deployment, use `--stage` or `--scope`. Run `--scope apps` before `--scope infra`. A destroyed
   step that other steps depend on, and that are not in the run, is a warning, not an error, so the second run stays
   possible.
-- A `script` step cannot be destroyed. `--force` refuses before anything is removed, and names the step; leave it
-  out with `--stage` or `--scope`. Under `--dry-run` it is a warning.
+- A `script` step can be destroyed only when its provisioner sets `destroy_args`; `--force` then runs the script with
+  them and `STRATA_PHASE=destroy`. Without `destroy_args`, `--force` refuses before anything is removed, and names
+  the step; leave it out with `--stage` or `--scope`. Under `--dry-run` it is a warning, or, with `destroy_args`,
+  the line `would run: ...`: a destroy preview never executes the script.
 - A Terraform step that reads another step's output with `${output:...}` needs the workspace's `output_store`: a
   destroy collects no outputs, so it reads the ones `deploy run` recorded. Without a usable record the run stops
   before destroying anything. Pass `--output-max-age` when the record is stale. A successful destroy clears the

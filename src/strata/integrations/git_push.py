@@ -474,11 +474,12 @@ def _validate_remote(remote: SolutionRemoteModel) -> PushResult | None:
             False, f"remote '{remote.name}' has type '{remote.type.value}', but a GitOps push needs 'git'"
         )
     if remote.reference is None:
-        # Unreachable in practice — git remotes already require `reference`
-        # (`SolutionRemoteModel.validate_reference_for_type()`) — guarded here
-        # anyway so a future schema change fails loudly, not with a confusing
-        # git error three steps down.
-        return PushResult(False, f"remote '{remote.name}' has no reference (branch) to push to")
+        # Reachable only for a remote with a `path` instead of a `reference`,
+        # which `validate` already rejects as a push target
+        # (`semantic_checks._check_path_remote_pushes()`).
+        return PushResult(
+            False, f"remote '{remote.name}' has no reference (branch) to push to; a remote with a 'path' is read-only"
+        )
     return None
 
 

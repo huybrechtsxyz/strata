@@ -89,11 +89,13 @@ from strata.services.environment_service import merge_environment_models
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
 from strata.utils.diagnostics import Diagnostics, Severity
+from strata.utils.transport import run_command
 
 #: Public — `controllers/audit_read.py` (docs/design/audit-commands.md) reads
 #: this back and must glob for the exact same filename this module writes.
 MANIFEST_FILENAME = "_manifest.json"
 _METRICS_FILENAME = "_metrics.json"
+_GIT_REV_PARSE_TIMEOUT = 30
 
 
 def finalize_and_distribute_deploy_audit(
@@ -197,7 +199,7 @@ def finalize_and_distribute_deploy_audit(
         actor=actor,
         supplied_at=completed_at.isoformat(),
     )
-    repositories, images, charts = _collect_artifacts_bom(context, deployment)
+    repositories, images, charts = _collect_artifacts_bom(context, deployment, diagnostics)
 
     manifest = DeploymentManifestModel(
         execution_id=execution_id,
@@ -475,7 +477,7 @@ def _single_environment(deployment: DeploymentModel) -> str | None:
 
 
 def _collect_artifacts_bom(
-    context: SolutionContext, deployment: DeploymentModel
+    context: SolutionContext, deployment: DeploymentModel, diagnostics: Diagnostics
 ) -> tuple[dict[str, ManifestRepositoryModel] | None, list[ManifestImageModel] | None, list[ManifestChartModel] | None]:
     """The effective (pin-resolved) repositories/images/charts this
     deployment's workspace actually reaches — the fix for ADR-0019's own
@@ -549,9 +551,35 @@ def _collect_artifacts_bom(
         all_remotes = {remote.name: remote for remote in (solution.spec.remotes or [])}
         scoped_remotes = {name: all_remotes[name] for name in remote_names if name in all_remotes}
         for name, remote in apply_remote_version_pins(scoped_remotes, version).items():
-            repositories[name] = ManifestRepositoryModel(url=remote.url, ref=remote.reference, commit=None)
+            commit = _checkout_commit(name, context.root / remote.path, diagnostics) if remote.path else None
+            repositories[name] = ManifestRepositoryModel(url=remote.url, ref=remote.reference, commit=commit)
 
     return (repositories or None, images or None, charts or None)
+
+
+def _checkout_commit(name: str, checkout: Path, diagnostics: Diagnostics) -> str | None:
+    """The commit a path remote's checkout is at, or `None` (with a warning) when it cannot be read.
+
+    A path remote has no `reference`, so this is the only record of which tree a deploy used
+    (docs/work/remote-external-path.md). Requires `.git` in the directory itself: otherwise `git
+    rev-parse` would walk up and report the solution repository's own commit for a plain folder.
+    It never fails a deploy.
+    """
+    if not (checkout / ".git").exists():
+        diagnostics.warning(
+            f"Remote '{name}': '{checkout}' is not a git checkout, so the audit manifest records no commit for it.",
+            code="audit_remote_commit_unavailable",
+        )
+        return None
+    result = run_command(["git", "rev-parse", "HEAD"], cwd=checkout, timeout=_GIT_REV_PARSE_TIMEOUT)
+    if not result.is_successful:
+        diagnostics.warning(
+            f"Remote '{name}': 'git rev-parse HEAD' failed in '{checkout}', so the audit manifest records no commit "
+            f"for it: {result.stderr.strip()}",
+            code="audit_remote_commit_unavailable",
+        )
+        return None
+    return result.stdout.strip() or None
 
 
 def _platform_reference(build_path: Path) -> tuple[ManifestPlatformReferenceModel | None, Diagnostics]:

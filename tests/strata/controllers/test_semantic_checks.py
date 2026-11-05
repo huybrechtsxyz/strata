@@ -4268,3 +4268,172 @@ def test_a_broken_extends_chain_does_not_also_report_a_missing_tenant(tmp_path):
     codes = {d.code for d in context.diagnostics.errors}
     assert "circular_extends" in codes
     assert "unavailable_deployment_token" not in codes
+
+
+# ---------------------------------------------------------------------------
+# script.values (docs/design/script-provisioner.md): the listed keys exist
+# ---------------------------------------------------------------------------
+
+
+def _script_values_solution(tmp_path: Path, values: str) -> Path:
+    """The base solution with its one provisioner turned into a script listing `values` (a YAML flow list)."""
+    root = _base_solution(tmp_path)
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "      tool: terraform\n      source: {source_path: terraform/main}\n",
+            f"      tool: script\n      source: {{source_path: scripts}}\n      script:\n        file: run.py\n"
+            f"        values: {values}\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    return root
+
+
+def _script_value_errors(context) -> list:
+    return [d for d in context.diagnostics.errors if d.code == "undeclared_script_value"]
+
+
+def test_a_script_value_the_environment_declares_passes(tmp_path):
+    context = _resolve(_script_values_solution(tmp_path, "[PUBLIC_IP]"))
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_an_empty_script_value_list_passes(tmp_path):
+    context = _resolve(_script_values_solution(tmp_path, "[]"))
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_a_script_value_may_be_a_secret_the_environment_declares(tmp_path):
+    root = _script_values_solution(tmp_path, "[PUBLIC_IP, API_TOKEN]")
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  secrets:\n    - key: API_TOKEN\n      store: constant\n      value: x\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_a_script_value_nobody_declares_is_caught(tmp_path):
+    context = _resolve(_script_values_solution(tmp_path, "[PUBLIC_IP, PUBLIC_API]"))
+
+    [finding] = _script_value_errors(context)
+    assert "PUBLIC_API" in finding.message
+    assert "PUBLIC_IP" in finding.message  # what is declared, so a typo is easy to fix
+    assert "prd-deployment" in finding.message
+    assert finding.location == "spec.provisioners.0.script.values.1"
+
+
+def test_a_script_value_may_be_an_output_of_a_step_in_the_workspace(tmp_path):
+    context = _resolve(_script_values_solution(tmp_path, "[provision-infra.address]"))
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_a_script_value_that_looks_like_an_output_of_no_step_is_caught(tmp_path):
+    context = _resolve(_script_values_solution(tmp_path, "[ghost-step.address]"))
+    assert [d for d in _script_value_errors(context)]
+
+
+def test_script_values_need_no_resolvable_environment_to_be_checked_without_crashing(tmp_path):
+    root = _script_values_solution(tmp_path, "[PUBLIC_API]")
+    path = root / "deployment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("environments: [prd]", "environments: [ghost]"), encoding="utf-8"
+    )
+
+    context = _resolve(root)
+    assert _script_value_errors(context) == []  # nothing to check against, as for `${var:}` tokens
+
+
+# ---------------------------------------------------------------------------
+# A path remote is read-only: GitOps and audit sinks cannot push to it
+# (docs/work/remote-external-path.md)
+# ---------------------------------------------------------------------------
+
+_PATH_REMOTE_MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
+kind: solution
+meta:
+  name: test-solution
+spec:
+  remotes:
+    - name: config-repo
+      type: git
+      url: https://host/config.git
+      {locator}
+"""
+
+
+def _solution_pushing_to(tmp_path: Path, *, locator: str, pusher: str) -> Path:
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", _PATH_REMOTE_MANIFEST.format(locator=locator))
+    if pusher == "audit":
+        _write(
+            root,
+            "configuration.yaml",
+            """apiVersion: strata.huybrechts.xyz/v2
+kind: configuration
+meta:
+  name: cfg
+spec:
+  audit:
+    sinks:
+      - name: archive
+        git:
+          remote: config-repo
+          branch: main
+          path: records
+""",
+        )
+    else:
+        _write(
+            root,
+            "provider.yaml",
+            """apiVersion: strata.huybrechts.xyz/v2
+kind: provider
+meta:
+  name: azure-main
+spec:
+  type: azure
+  region: westeurope
+""",
+        )
+        _write(
+            root,
+            "workspace.yaml",
+            """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  providers: [azure-main]
+  provisioners:
+    - name: sync
+      tool: argocd
+      gitops:
+        remote: config-repo
+        output_file: apps/values.yaml
+""",
+        )
+    return root
+
+
+def _push_errors(context) -> list:
+    return [e for e in context.diagnostics.errors if e.code == "path_remote_not_pushable"]
+
+
+@pytest.mark.parametrize("pusher", ["audit", "gitops"])
+def test_a_path_remote_cannot_be_pushed_to(tmp_path, pusher):
+    root = _solution_pushing_to(tmp_path, locator="path: repos/config", pusher=pusher)
+    errors = _push_errors(_resolve(root))
+    assert len(errors) == 1
+    assert "'config-repo'" in errors[0].message
+    assert "reference" in errors[0].message
+
+
+@pytest.mark.parametrize("pusher", ["audit", "gitops"])
+def test_a_reference_remote_can_still_be_pushed_to(tmp_path, pusher):
+    root = _solution_pushing_to(tmp_path, locator="reference: main", pusher=pusher)
+    assert _push_errors(_resolve(root)) == []

@@ -18,6 +18,7 @@ in v1 with nothing arbitrating between them; see that ADR for the evidence
 and the reasoning for which one won.
 """
 
+import re
 from typing import Annotated, Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
@@ -117,17 +118,69 @@ class ProvisionerGitOpsModel(PlatformBaseModel):
 #: lifecycle-hook set's .js/.mjs/.go (docs/design/script-provisioner.md).
 SCRIPT_PROVISIONER_EXTENSIONS = frozenset({".ps1", ".sh", ".bash", ".py", ".bat"})
 
+#: The characters a `${var:KEY}` token key may hold (utils/value_tokens.py), so a listed key can name any value.
+_VALUE_KEY = re.compile(r"[A-Za-z0-9_.-]+")
+
 
 class ProvisionerScriptModel(PlatformBaseModel):
-    """What a `script` provisioner runs: a `file` relative to the provisioner's `source` directory, and
-    optional `args`.
+    """What a `script` provisioner runs: a `file` relative to the provisioner's `source` directory, and the
+    arguments for each phase it can run in.
+
+    Rules:
+    - `args` are used by `deploy run` (the apply). `plan_args` are used only when a preview is requested
+      (`--dry-run`, `deploy plan`), and `destroy_args` only by `deploy destroy`.
+    - Without `plan_args`, a preview never executes the script; it only prints what would run.
+    - Without `destroy_args`, the step cannot be destroyed.
+    - strata cannot check that the script is free of side effects when it runs with `plan_args`. Every run sets
+      `STRATA_PHASE` to `plan`, `apply` or `destroy`, so the script can refuse an action that does not fit the phase.
+    - Without `values`, `STRATA_VALUES` holds every resolved value. With it, only the listed keys (and the
+      `deployment:` entries). `args`, `plan_args` and `destroy_args` still resolve any token.
 
     Design notes:
     Only valid when a Provisioner's `tool` is 'script' (docs/design/script-provisioner.md).
     """
 
     file: str = Field(description="Script path, relative to this provisioner's 'source' directory")
-    args: list[str] | None = Field(None, description="Arguments passed to the script")
+    args: list[str] | None = Field(
+        None,
+        description="Arguments passed to the script by `deploy run` (the apply). Value tokens are resolved. "
+        "The rendered `output.template` path, if any, is appended as the last argument.",
+    )
+    plan_args: list[str] | None = Field(
+        None,
+        description="Arguments for a preview run (`--dry-run`, `deploy plan`). When set, a preview runs the script "
+        "with these arguments, so the script must not change anything in that mode; the environment variable "
+        "`STRATA_PHASE` is `plan`. A real `deploy run` never runs them. When unset, a preview only prints what "
+        "would run.",
+    )
+    destroy_args: list[str] | None = Field(
+        None,
+        description="Arguments for `deploy destroy --force`. When set, the step can be destroyed and the script runs "
+        "with these arguments and `STRATA_PHASE=destroy`; `deploy destroy --dry-run` only prints what would run. "
+        "When unset, the step cannot be destroyed.",
+    )
+    values: list[str] | None = Field(
+        None,
+        description="Keys the script may read from the environment variable `STRATA_VALUES`: variable, secret and "
+        "feature keys, and `<step>.<key>` outputs of earlier steps. When unset, the script receives every resolved "
+        "value; when set (an empty list is allowed), only these, plus the `deployment:name` and `deployment:tenant` "
+        "entries. It limits `STRATA_VALUES` only: arguments can still use any token, and a secret in an argument is "
+        "visible in the process list. A listed key that does not resolve fails the step.",
+    )
+
+    @field_validator("values")
+    @classmethod
+    def validate_values(cls, v: list[str] | None) -> list[str] | None:
+        """Plain keys only, each once: `deployment:` entries are always delivered, so they are not listed."""
+        if v is None:
+            return v
+        for key in v:
+            if not _VALUE_KEY.fullmatch(key):
+                raise ValueError(f"'{key}' is not a value key: use letters, digits, '_', '-' and '.' only")
+        duplicates = sorted({key for key in v if v.count(key) > 1})
+        if duplicates:
+            raise ValueError(f"listed more than once: {duplicates}")
+        return v
 
     @field_validator("file")
     @classmethod

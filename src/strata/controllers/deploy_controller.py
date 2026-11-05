@@ -85,6 +85,7 @@ from strata.services.workspace_service import effective_assets
 from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
+from strata.utils.transport import CommandResult
 from strata.utils.value_tokens import (
     deployment_token_values,
     extract_value_tokens,
@@ -98,6 +99,44 @@ from strata.utils.value_tokens import (
 #: unrelated, innocuous output. Same accepted tradeoff tools like GitHub
 #: Actions' own log masking make.
 _MIN_REDACT_LENGTH = 6
+
+#: How many trailing lines of a failed command's stdout and stderr go into its error message.
+_FAILURE_TAIL_LINES = 10
+
+
+def _tail(text: str, redact: Callable[[str], str]) -> str:
+    """The last `_FAILURE_TAIL_LINES` lines of `text`, redacted, saying how many earlier ones were left out."""
+    lines = redact(text).strip().splitlines()
+    if len(lines) <= _FAILURE_TAIL_LINES:
+        return "\n".join(lines)
+    omitted = len(lines) - _FAILURE_TAIL_LINES
+    return f"({omitted} earlier lines omitted)\n" + "\n".join(lines[-_FAILURE_TAIL_LINES:])
+
+
+def _failure_detail(result: CommandResult, redact: Callable[[str], str]) -> str:
+    """Why a command failed: how it ended, then the end of what it wrote.
+
+    The exit code (or that it timed out and was killed) comes first, because a script that prints its error to
+    stdout and exits non-zero would otherwise leave an error message with nothing in it. Output is redacted like
+    streamed lines are.
+    """
+    head = "timed out and was killed" if result.timed_out else f"exit code {result.returncode}"
+    err, out = _tail(result.stderr, redact), _tail(result.stdout, redact)
+    if err and out:
+        return f"{head}\nstderr:\n{err}\nstdout:\n{out}"
+    body = err or out
+    return f"{head}: {body}" if body else head
+
+
+def _show_unstreamed(
+    result: CommandResult, streamed: bool, show: Callable[[str], None], redact: Callable[[str], str]
+) -> None:
+    """Send a preview's stdout through `show` when the tool did not stream it, so it needs no `--follow`."""
+    if streamed:
+        return
+    for line in redact(result.stdout).splitlines():
+        if line.strip():
+            show(line)
 
 
 def _contains_output_token(node: object) -> bool:
@@ -176,6 +215,7 @@ def collect_step_outputs(
     *,
     auth: AuthenticationModel | None = None,
     resolved_values: Mapping[str, str] | None = None,
+    on_warning: Callable[[str], None] | None = None,
 ) -> tuple[dict[str, str], set[str]]:
     """Collect a just-deployed step's outputs (`terraform output -json`) for
     later, dependent steps to reference via `${output:step.key}` tokens
@@ -205,6 +245,9 @@ def collect_step_outputs(
     `None`/`None` for every other tool keeps this call textually identical
     to before Phase 5.
 
+    `on_warning`, when given, receives why a failed `output()` call lost the step's outputs (its stderr), so the
+    caller can say so instead of leaving a later `${output:}` reference to fail with no explanation.
+
     Returns:
         `(values, sensitive_keys)` — `values` is every output's real value
         (never redacted; real Terraform returns it unredacted in `-json`
@@ -233,6 +276,8 @@ def collect_step_outputs(
         # understood here; anything else contributes nothing.
         return {}, set()
     if not result.is_successful:
+        if on_warning is not None and result.stderr.strip():
+            on_warning(result.stderr.strip())
         return {}, set()
     try:
         parsed = json.loads(result.stdout)
@@ -347,6 +392,21 @@ def _step_payload(
     }
 
 
+def _script_output_values(provisioner: ProvisionerModel, step_names: set[str]) -> set[str]:
+    """The `<step>.<key>` entries of `script.values`: a listed key is an output when its first segment names a step."""
+    listed = provisioner.script.values if provisioner.script is not None else None
+    return {key for key in listed or [] if "." in key and key.partition(".")[0] in step_names}
+
+
+def _script_referenced_outputs(provisioner: ProvisionerModel, step_names: set[str], dry_run: bool) -> set[str]:
+    """The outputs a script step needs to run its next phase: the arguments of that phase, and its listed values."""
+    script = provisioner.script
+    if script is None:
+        return set()
+    arguments = script.plan_args if dry_run and script.plan_args is not None else script.args
+    return referenced_output_keys(arguments) | _script_output_values(provisioner, step_names)
+
+
 def _destroy_preflight(
     resolved_steps: list[tuple[ProvisioningStepModel, ProvisionerModel, InfraIntegration]],
     *,
@@ -368,7 +428,7 @@ def _destroy_preflight(
     selected = {step.name for step, _, _ in resolved_steps}
 
     for step, _, integration in resolved_steps:
-        if not integration.SUPPORTS_DESTROY:
+        if not integration.supports_destroy:
             message = (
                 f"Step '{step.name}': {integration.name} cannot destroy what it created. Leave the step out with "
                 "--stage or --scope; skipping it silently would strand what it created."
@@ -414,13 +474,18 @@ def _destroy_preflight(
         return None, unusable[upstream_name]
 
     for step, provisioner, integration in resolved_steps:
-        if Capability.CONTAINER in integration.CAPABILITIES or not integration.SUPPORTS_DESTROY:
+        if Capability.CONTAINER in integration.CAPABILITIES or not integration.supports_destroy:
             continue
         backend_configuration = provisioner.backend.configuration if provisioner.backend is not None else {}
         step_payload = _step_payload(
             payload, claimed_names(step, resources_by_name, topologies_by_name), claimed_by_category
         )
-        referenced = sorted(referenced_output_keys(backend_configuration) | referenced_output_keys(step_payload))
+        referenced = sorted(
+            referenced_output_keys(backend_configuration)
+            | referenced_output_keys(step_payload)
+            | referenced_output_keys(provisioner.script.destroy_args if provisioner.script is not None else None)
+            | _script_output_values(provisioner, {s.name for s in all_steps})
+        )
         if not referenced:
             continue
 
@@ -465,6 +530,7 @@ def _destroy_step(
     dry_run: bool,
     line_callback: Callable[[str, str], None],
     on_step: Callable[[str], None],
+    redact: Callable[[str], str],
     diagnostics: Diagnostics,
 ) -> bool:
     """Destroy one Terraform-style step, or preview it under `--dry-run`. `False` means the run must stop.
@@ -498,12 +564,11 @@ def _destroy_step(
             )
             return True
         if not preview.is_successful:
-            diagnostics.error(f"Step '{step.name}': destroy plan failed - {preview.stderr}", location=step.name)
+            diagnostics.error(
+                f"Step '{step.name}': destroy plan failed - {_failure_detail(preview, redact)}", location=step.name
+            )
             return False
-        if not streamed:
-            for line in preview.stdout.splitlines():
-                if line.strip():
-                    on_step(line)
+        _show_unstreamed(preview, streamed, on_step, redact)
         on_step(f"planned destroy of step '{step.name}' via {integration_type} (dry-run, nothing destroyed)")
         return True
 
@@ -517,7 +582,7 @@ def _destroy_step(
         **_timeout_kwargs(step, stage, "destroy"),
     )
     if not result.is_successful:
-        diagnostics.error(f"Step '{step.name}': destroy failed - {result.stderr}", location=step.name)
+        diagnostics.error(f"Step '{step.name}': destroy failed - {_failure_detail(result, redact)}", location=step.name)
         return False
     on_step(f"destroyed step '{step.name}' via {integration_type}")
     return True
@@ -967,6 +1032,20 @@ def deploy_run(
     if not diagnostics.ok:
         return diagnostics
 
+    # `deploy apply` applies a saved `<step>.tfplan`. A tool whose `plan()` writes none can never be applied that way,
+    # so say so before anything runs instead of failing with advice ("run 'deploy plan' first") that cannot work.
+    if use_saved_plan:
+        for step, _, integration in resolved_steps:
+            if Capability.CONTAINER not in integration.CAPABILITIES and not integration.SUPPORTS_SAVED_PLAN:
+                diagnostics.error(
+                    f"Step '{step.name}': {integration.name} writes no saved plan, so 'deploy apply' cannot apply it. "
+                    "Use 'deploy run' for it, or leave it out with --stage or --scope.",
+                    location=step.name,
+                    code="saved_plan_unsupported",
+                )
+        if not diagnostics.ok:
+            return diagnostics
+
     upstream_by_step = {s.name: _upstream_step_names(s.name, all_steps) for s in all_steps}
     step_outputs: dict[str, dict[str, str]] = {}
     step_sensitive_outputs: dict[str, set[str]] = {}
@@ -1011,7 +1090,7 @@ def deploy_run(
             path = build_path / relative
         integration_type = type(integration).__name__
         deployment_stage = stage_by_step.get(step.name)
-        if destroy and not integration.SUPPORTS_DESTROY:
+        if destroy and not integration.supports_destroy:
             continue  # already reported by the pre-flight
 
         # `_tool` is bound as a default argument, not read from the
@@ -1201,16 +1280,26 @@ def deploy_run(
         # attempted below. Reports every missing key in one pass, not
         # just the first `resolve_value_tokens()` happens to hit.
         backend_configuration = provisioner.backend.configuration if provisioner.backend is not None else {}
-        referenced = referenced_output_keys(backend_configuration) | referenced_output_keys(step_payload)
+        referenced = (
+            referenced_output_keys(backend_configuration)
+            | referenced_output_keys(step_payload)
+            | _script_referenced_outputs(provisioner, {s.name for s in all_steps}, dry_run)
+        )
         missing = sorted(key for key in referenced if key not in tokens)
         if missing:
             for key in missing:
                 upstream_step, _, output_key = key.partition(".")
                 available = sorted(k.split(".", 1)[1] for k in tokens if k.startswith(f"{upstream_step}."))
+                preview_hint = (
+                    f" A preview does not apply '{upstream_step}', so its outputs exist only if an earlier real run "
+                    "recorded them in the workspace's `output_store`."
+                    if dry_run
+                    else ""
+                )
                 diagnostics.error(
                     f"Step '{step.name}': '${{output:{key}}}' references step '{upstream_step}', but "
                     f"'{output_key}' was not produced by it (or any durable record). "
-                    f"Available from '{upstream_step}': {available}",
+                    f"Available from '{upstream_step}': {available}.{preview_hint}",
                     location=step.name,
                 )
             return diagnostics
@@ -1293,7 +1382,9 @@ def deploy_run(
                 **_timeout_kwargs(step, deployment_stage, "setup"),
             )
             if not init_result.is_successful:
-                diagnostics.error(f"Step '{step.name}': init failed — {init_result.stderr}", location=step.name)
+                diagnostics.error(
+                    f"Step '{step.name}': init failed — {_failure_detail(init_result, _redact)}", location=step.name
+                )
                 return diagnostics
         if stop_after == "setup":
             _step(f"setup complete for step '{step.name}' via {integration_type} (stop-after-setup)")
@@ -1318,7 +1409,8 @@ def deploy_run(
                 )
                 if not validate_result.is_successful:
                     diagnostics.error(
-                        f"Step '{step.name}': validate failed — {validate_result.stderr}", location=step.name
+                        f"Step '{step.name}': validate failed — {_failure_detail(validate_result, _redact)}",
+                        location=step.name,
                     )
                     return diagnostics
             if stop_after == "check":
@@ -1367,6 +1459,7 @@ def deploy_run(
                 dry_run=dry_run,
                 line_callback=_line,
                 on_step=_step,
+                redact=_redact,
                 diagnostics=diagnostics,
             ):
                 return diagnostics
@@ -1374,6 +1467,17 @@ def deploy_run(
             continue
 
         if not use_saved_plan:
+            plan_seen: list[bool] = []
+
+            def _watching_plan(
+                stream: str,
+                text: str,
+                _forward: Callable[[str, str], None] = _line,
+                _seen: list[bool] = plan_seen,
+            ) -> None:
+                _seen.append(True)
+                _forward(stream, text)
+
             plan_result = integration.plan_or_warn(
                 path,
                 diagnostics=diagnostics,
@@ -1383,7 +1487,8 @@ def deploy_run(
                 auth=auth,
                 resolved_values=step_resolved_values,
                 output_path=rendered_output_path,
-                line_callback=_line,
+                line_callback=_watching_plan,
+                dry_run=dry_run,
                 **_timeout_kwargs(step, deployment_stage, "plan"),
             )
             if plan_result is None:
@@ -1408,10 +1513,14 @@ def deploy_run(
                 )
                 return diagnostics
             if not plan_result.is_successful:
-                diagnostics.error(f"Step '{step.name}': plan failed — {plan_result.stderr}", location=step.name)
+                diagnostics.error(
+                    f"Step '{step.name}': plan failed — {_failure_detail(plan_result, _redact)}", location=step.name
+                )
                 return diagnostics
 
             if dry_run:
+                # A tool that does not stream its preview (a script's `would run: ...`) would otherwise show nothing.
+                _show_unstreamed(plan_result, bool(plan_seen), _step, _redact)
                 _step(f"planned step '{step.name}' via {integration_type} (dry-run, no apply)")
                 continue
 
@@ -1426,11 +1535,22 @@ def deploy_run(
             **_timeout_kwargs(step, deployment_stage, "apply"),
         )
         if not deploy_result.is_successful:
-            diagnostics.error(f"Step '{step.name}': deploy failed — {deploy_result.stderr}", location=step.name)
+            diagnostics.error(
+                f"Step '{step.name}': deploy failed — {_failure_detail(deploy_result, _redact)}", location=step.name
+            )
             return diagnostics
 
+        def _outputs_lost(why: str, _name: str = step.name) -> None:
+            diagnostics.warning(f"Step '{_name}': could not collect outputs — {_tail(why, _redact)}", location=_name)
+
         step_outputs[step.name], step_sensitive_outputs[step.name] = collect_step_outputs(
-            integration, path, env, auth=auth, resolved_values=step_resolved_values
+            integration, path, env, auth=auth, resolved_values=step_resolved_values, on_warning=_outputs_lost
+        )
+        # A sensitive output reaches later steps as an argument or env value, so it is masked like a secret from here on.
+        secret_values.update(
+            value
+            for key, value in step_outputs[step.name].items()
+            if key in step_sensitive_outputs[step.name] and len(value) >= _MIN_REDACT_LENGTH
         )
         if output_store is not None:
             # Per step, immediately after collection — not batched to the

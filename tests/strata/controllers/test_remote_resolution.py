@@ -69,6 +69,43 @@ def test_git_remote_fetch_external_missing_checkout_raises(tmp_path: Path):
         resolve_remote(tmp_path, remote)
 
 
+def _path_remote(path: str = "repos/iac") -> SolutionRemoteModel:
+    return SolutionRemoteModel(name="iac", type=RemoteType.GIT, url="https://example.com/org/iac.git", path=path)
+
+
+def test_path_remote_resolves_to_its_path_without_a_checkout_dir(tmp_path: Path, monkeypatch):
+    captured = _capture(monkeypatch)
+    (tmp_path / "repos" / "iac").mkdir(parents=True)
+
+    result = resolve_remote(tmp_path, _path_remote())
+
+    assert result == tmp_path / "repos" / "iac"
+    assert captured == []
+    assert not layout.remotes_dir(tmp_path).exists()
+
+
+def test_path_remote_missing_directory_names_the_remote_and_the_path(tmp_path: Path, monkeypatch):
+    captured = _capture(monkeypatch)
+    with pytest.raises(RemoteResolutionError, match=r"Remote 'iac'.*repos[\\/]iac"):
+        resolve_remote(tmp_path, _path_remote())
+    assert captured == []
+
+
+def test_path_remote_that_is_a_file_is_an_error(tmp_path: Path):
+    (tmp_path / "repos").mkdir()
+    (tmp_path / "repos" / "iac").write_text("not a checkout")
+    with pytest.raises(RemoteResolutionError, match="not a directory"):
+        resolve_remote(tmp_path, _path_remote())
+
+
+def test_path_remote_ignores_a_checkout_path_override(tmp_path: Path):
+    """The path is the checkout: an asset-style override cannot move it."""
+    (tmp_path / "repos" / "iac").mkdir(parents=True)
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    assert resolve_remote(tmp_path, _path_remote(), checkout_path=other) == tmp_path / "repos" / "iac"
+
+
 def test_git_remote_fetch_strata_clones_and_checks_out(tmp_path: Path, monkeypatch):
     captured = _capture(monkeypatch)
     remote = _remote()

@@ -94,6 +94,11 @@ def deployment_token_values(name: str, tenant: str | None) -> dict[str, str]:
     return values
 
 
+def is_deployment_entry(key: str) -> bool:
+    """Whether a flat token-map key is one of `deployment_token_values()`'s entries."""
+    return key.startswith(f"{_DEPLOYMENT_PREFIX}:")
+
+
 def _unresolved_message(kind: str, key: str, lookup: str) -> str:
     """Why a token did not resolve; a deployment token says what is missing instead of naming the internal key."""
     token = f"${{{kind}:{key}}}"

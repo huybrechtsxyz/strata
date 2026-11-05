@@ -8,6 +8,54 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- A `script` provisioner can set `plan_args` and `destroy_args`. `plan_args` run the script when a preview is
+  requested (`deploy run --dry-run`, `deploy plan`); a real `deploy run` never runs them, so the script is not executed
+  twice. `destroy_args` make the step destroyable: `deploy destroy --force` runs the script with them, and
+  `deploy destroy --dry-run` prints `would run: ...` without executing it. Without `destroy_args` a destroy still
+  refuses the step. strata cannot check that a script is free of side effects when run with `plan_args`.
+- Every script run sets `STRATA_PHASE` (`plan`, `apply` or `destroy`), so one script can tell which phase it is in.
+- A `script` provisioner can set `values`, a list of keys, to limit what the script receives in `STRATA_VALUES`: only
+  those keys plus `deployment:name` and `deployment:tenant`. Unset, the script still receives every resolved value. A
+  listed key that does not resolve fails the step, and `strata validate` reports a key no environment declares
+  (`undeclared_script_value`). Arguments are not limited by it.
+- A `script` step can produce outputs: it writes a JSON object to the file named by the environment variable
+  `STRATA_OUTPUT_FILE`, and later steps use the keys as `${output:<step>.<key>}`. The `_sensitive` key lists the keys
+  that are secret; those are never recorded in the `output_store`. A file that is not valid is ignored with a warning;
+  the step does not fail.
+- A `git` remote in `strata.yaml` can name a `path` instead of a `reference`: the folder where a pipeline already
+  checked the repository out, inside the solution. strata reads it there and never clones it, so the ref is stated
+  only in the pipeline and the pipeline no longer has to link its checkout to `.strata/remotes/<name>/<reference>`.
+  `path` implies `fetch: external`. The deploy's audit manifest records the checkout's commit, and warns when it
+  cannot (not a git checkout, or `git` failed). A `path` remote cannot
+  take an `integration`, be pinned by a `version` document, or be pushed to by a GitOps provisioner or audit sink
+  (`strata validate` reports the last as `path_remote_not_pushable`).
+
+### Changed
+
+- A `script` step's `${output:}` references (its arguments, and `<step>.<key>` entries of `values`) are now checked
+  before the step runs, like a Terraform step's, and a preview says why one is missing: a preview applies no step, so
+  an upstream output exists only if an earlier real run recorded it in the workspace's `output_store`.
+- When a step's outputs cannot be collected after a successful deploy, the run now warns with the reason. Before, a
+  Terraform or GitOps step whose output command failed said nothing, and a later `${output:}` failed with no
+  explanation.
+- A failed `init`, `validate`, `plan`, `deploy` or `destroy` now says how the command ended (`exit code N`, or `timed
+  out and was killed`) and shows the last 10 lines of its stdout and stderr, with resolved secrets redacted. Before, only
+  stderr was shown, so a script that printed its error to stdout gave an empty message, and a timeout looked like any
+  other failure.
+- `deploy apply` now refuses a `script` or ArgoCD/Flux step before running anything, and says to use `deploy run`.
+  These tools write no saved plan, so it used to fail with "run 'deploy plan' first", advice that could not work.
+
+### Fixed
+
+- A sensitive output (a Terraform output marked `sensitive`, or a key a script lists in `_sensitive`) is now masked in
+  the streamed output and error messages of the steps that run after it, like a secret is.
+- `deploy run --dry-run` and `deploy plan` now show what a `script` step would run (`would run: ...`, secrets
+  redacted). The preview was computed and then dropped.
+- `build run` now fails when a `script` provisioner's `file` is not in its materialised source. It used to pass, and
+  `deploy run` failed later with a raw `[Errno 2]`.
+
 ## [2.2.0] - 2026-11-04
 
 ### Added

@@ -126,6 +126,7 @@ class BaseGitOpsIntegration(InfraIntegration):
     CAPABILITIES = frozenset({Capability.INFRASTRUCTURE})
     TRANSPORTS = frozenset({"cli"})
     COMMAND = "git"
+    SUPPORTS_SAVED_PLAN = False
 
     def parse_version(self, raw: str) -> str:
         """Extract `X.Y.Z` from `"git version X.Y.Z"`."""

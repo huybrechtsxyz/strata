@@ -356,6 +356,7 @@ def sync_asset(
                 type=location.type,
                 url=location.url,
                 reference=location.reference,
+                path=None,
                 fetch=location.fetch,
                 integration=None,
                 description=None,

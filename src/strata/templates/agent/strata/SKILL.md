@@ -119,12 +119,17 @@ How values merge for a deployment:
   one flat variable per key.
 - A Helm module's `configuration` becomes the chart's `values.yaml`. It replaces the chart's own values, it is not
   merged on top of them.
-- `deploy run --dry-run` runs a real `init`/`validate`/`plan`: it needs credentials and takes the state lock.
+- `deploy run --dry-run` runs a real `init`/`validate`/`plan`: it needs credentials and takes the state lock. A
+  `script` step runs in a preview only when its provisioner sets `plan_args`, and the script must not change
+  anything then (it can read `STRATA_PHASE`); otherwise the preview only prints `would run: ...`.
 - `deploy run --force` has no effect.
 - `deploy destroy` needs exactly one of `--force` or `--dry-run`. A workspace whose steps use `${output:}` needs an
-  `output_store` to destroy them, and a `script` step cannot be destroyed (exclude it with `--stage`/`--scope`).
+  `output_store` to destroy them, and a `script` step can be destroyed only if its provisioner sets `destroy_args` (otherwise exclude it with
+  `--stage`/`--scope`).
 - A remote with `fetch: external` must already be checked out at `.strata/remotes/<name>/<reference>` before
-  `build run`; strata will not clone it.
+  `build run`; strata will not clone it. When a pipeline does the checkout, give the remote `path: <checkout dir>`
+  instead of `reference`: strata reads it there and the ref stays in the pipeline. A `path` remote cannot be
+  pinned or pushed to (GitOps, audit sinks).
 - A version pin on a `type: local` remote is accepted but changes nothing.
 - An `attributeconfig` must set `target.view` (`document` or `effective`); there is no default.
 
