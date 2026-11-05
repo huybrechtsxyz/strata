@@ -16,8 +16,9 @@ not by discovery itself.
   - `url` — the source location; must not embed a password or token (use an integration for credentials)
   - `reference` — the branch, tag or commit SHA the remote is taken at. A `git` remote needs this
     or `path`, never both
-  - `path` — `git` only: where a pipeline already checked the repository out, relative to the solution
-    root and inside it. Strata reads it there and never clones it; see
+  - `path` — `git` only: where a pipeline or developer already checked the repository out. Relative to
+    the solution root (the folder holding `strata.yaml`), `..` allowed, or absolute. Strata reads it
+    there and never clones it; see
     [A repository your pipeline checked out](#a-repository-your-pipeline-checked-out)
   - `fetch` — `strata` (strata materializes it) or `external` (already placed by CI/elsewhere).
     `path` implies `external`
@@ -66,12 +67,23 @@ strata where that checkout is:
     - name: iac
       type: git
       url: https://github.com/org/iac.git
-      path: repos/iac          # the pipeline's checkout path, inside the solution
+      path: ../iac             # a checkout beside the solution, in CI and on a workstation
   ```
 
-  Exclude that folder from discovery (`discovery.exclude: ["repos/**"]`) so its YAML is not read as
-  strata documents. When the folder is a git checkout, the deploy's audit manifest records its commit
-  under `artifacts.repositories.<name>.commit`.
+  `path` is resolved from the solution root, not from the directory strata was started in, so the
+  same `strata.yaml` means the same folder wherever it is run. Use the layout your pipeline and your
+  workstations share:
+
+  - **Beside the solution** (`../iac`): an Azure DevOps pipeline with several `checkout:` steps puts each
+    repository in its own folder next to the others, which is also how developers usually clone them.
+  - **Inside the solution** (`repos/iac`): exclude that folder from discovery
+    (`discovery.exclude: ["repos/**"]`) so its YAML is not read as strata documents.
+  - **Absolute**: used as it is. It only helps where every machine has the same layout.
+
+  `strata validate` warns (`path_remote_outside_solution`) when the path leaves the solution, so a
+  change that points a build at another folder is visible in review. When the folder is a git
+  checkout, the deploy's audit manifest records its commit under
+  `artifacts.repositories.<name>.commit`.
 - **`reference` with `fetch: external`**. Strata expects the checkout at
   `.strata/remotes/<name>/<reference>`, so the pipeline must repeat the ref and place or link its
   checkout there.

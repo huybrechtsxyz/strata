@@ -85,7 +85,7 @@ from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
 from strata.services.workspace_service import WorkspaceService, effective_assets, effective_providers
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.layout import manifest_path
+from strata.utils.layout import is_inside_solution, manifest_path, path_remote_location
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 
 log = get_logger(__name__)
@@ -140,6 +140,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_asset_locations(index))
     diagnostics.extend(_check_remote_integrations(index, solution, root))
     diagnostics.extend(_check_path_remote_pushes(index, solution))
+    diagnostics.extend(_check_path_remote_location(solution, root))
     diagnostics.extend(_check_value_references(index))
     diagnostics.extend(_check_paths(index, root))
     diagnostics.extend(_check_version_workspace(index, resolved))
@@ -1651,6 +1652,32 @@ def _check_remote_integrations(index: DocumentIndex, solution: SolutionModel | N
                 location=location,
                 code=f"remote_integration_{suffix}",
             )
+    return diagnostics
+
+
+def _check_path_remote_location(solution: SolutionModel | None, root: Path | None) -> Diagnostics:
+    """Warn when a `path` remote's checkout is outside the solution tree.
+
+    Allowed on purpose: a pipeline checks repositories out beside the solution, so one committed value
+    (`../iac`) works in CI and on a workstation. But a changed `strata.yaml` could then point `build run` at
+    any folder the agent can read, so the choice is made visible here, where a reviewer sees it.
+    """
+    diagnostics = Diagnostics()
+    if solution is None or root is None:
+        return diagnostics
+    for position, remote in enumerate(solution.spec.remotes or []):
+        if remote.path is None:
+            continue
+        located = path_remote_location(root, remote.path)
+        if is_inside_solution(root, located):
+            continue
+        diagnostics.warning(
+            f"Remote '{remote.name}': path '{remote.path}' is outside the solution, at '{located}'. strata will read "
+            f"it there. Check that this is intended: a changed 'path' makes a build read that folder.",
+            source=str(manifest_path(root)),
+            location=f"spec.remotes.{position}.path",
+            code="path_remote_outside_solution",
+        )
     return diagnostics
 
 

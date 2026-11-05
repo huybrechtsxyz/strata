@@ -48,10 +48,10 @@ Phases 1 to 4 and the strata half of Phase 5 are built (see the plan). The cfg-i
 
 For `type: git`, a remote states **exactly one** of:
 
-| Mode | Fields | What strata does |
-| --- | --- | --- |
-| Ref | `reference` (and `fetch: strata` or `external`) | Exactly today: clone at the ref, or for `external` expect a checkout at `.strata/remotes/<name>/<reference>`. |
-| Path | `path` | Read the repository at that path. No ref, no clone, no `.strata/remotes` entry. |
+| Mode | Fields                                          | What strata does                                                                                              |
+| ---- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Ref  | `reference` (and `fetch: strata` or `external`) | Exactly today: clone at the ref, or for `external` expect a checkout at `.strata/remotes/<name>/<reference>`. |
+| Path | `path`                                          | Read the repository at that path. No ref, no clone, no `.strata/remotes` entry.                               |
 
 ```yaml
 remotes:
@@ -72,9 +72,10 @@ remotes:
 2. `path` is only valid for `type: git`. (`local` already is a path; `oci` and `helm` have none.)
 3. `path` **implies `fetch: external`**: nobody fetches into a path strata was told to read. An explicit
    `fetch: strata` together with `path` is an error. Writing `fetch: external` alongside is allowed but redundant.
-4. `path` is relative to the solution root and uses the same safety check as a `local` remote's `url`
-   (`validate_relative_path`: no absolute path, no `..`, not option-like). It may be a symlink or live outside git's
-   view of the solution; it is only required to be a directory at resolve time.
+4. `path` is relative to the solution root (the folder holding `strata.yaml`, not the directory strata was started in)
+   and may use `..`, or be absolute. Only an option-like value (`-x`) and an empty one are rejected. It may be a
+   symlink; it is only required to be a directory at resolve time. `strata validate` warns
+   (`path_remote_outside_solution`) when the resolved location is outside the solution tree.
 5. `integration` is rejected with `path`: strata never talks to the network for it, so credentials have no use.
 6. `url` stays required. It is no longer used to find anything; it is provenance, recorded in the audit manifest. (A
    later change could make it optional in path mode. Not now: it keeps the manifest and `strata.yaml` honest about
@@ -111,14 +112,14 @@ This turns "which iac-int did this deploy use?" from a question for the pipeline
 
 A path remote has no `reference`. Each user of the field must either cope or refuse clearly:
 
-| Consumer | Behaviour in path mode |
-| --- | --- |
-| Remote version pins | Already an error for `fetch: external`; covers path mode. Message mentions path. |
-| `audit_run.py:552` (manifest) | `ref=None`, `commit` filled as above. |
-| `version_controller.py:80` | Only reads `fetch: strata` remotes. No change. |
+| Consumer                                                       | Behaviour in path mode                                                                                                                                                                                         |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Remote version pins                                            | Already an error for `fetch: external`; covers path mode. Message mentions path.                                                                                                                               |
+| `audit_run.py:552` (manifest)                                  | `ref=None`, `commit` filled as above.                                                                                                                                                                          |
+| `version_controller.py:80`                                     | Only reads `fetch: strata` remotes. No change.                                                                                                                                                                 |
 | GitOps / audit push (`reference` is the **branch to push to**) | A push target needs a branch, so a path remote cannot be one. Semantic check (`validate`) errors: "remote 'X' is a path remote; GitOps and audit sinks need `reference`". Found at `git_push.py`, `gitops.py`. |
-| `audit_read.py` / `audit_push.py` | They keep their own checkout under `.strata/audit` and use `sink.branch`; they are not affected, but must not be pointed at a path remote either (same semantic check). |
-| `semantic_checks.py:477` | Skips `fetch: external` remotes already; path mode is external. Re-check when implementing. |
+| `audit_read.py` / `audit_push.py`                              | They keep their own checkout under `.strata/audit` and use `sink.branch`; they are not affected, but must not be pointed at a path remote either (same semantic check).                                        |
+| `semantic_checks.py:477`                                       | Skips `fetch: external` remotes already; path mode is external. Re-check when implementing.                                                                                                                    |
 
 ### What the pipeline looks like afterwards (cfg-int)
 
@@ -127,11 +128,12 @@ A path remote has no `reference`. Each user of the field must either cope or ref
 - `checkout-repos.yml` keeps the two `checkout:` steps and drops `rm -rf .strata/remotes` (there is nothing left under
   it); it still removes `build`.
 - The ref lives in exactly one place: `deploy-base.yml` (`main` for env-int) and each pipeline's `iacRef`.
-- `discovery.exclude: repos/**` stays: the checkouts are still inside the solution root.
+- `discovery.exclude: repos/**` stays when the checkouts are inside the solution root; a checkout beside it needs no exclusion.
 
-Developer workstations: the CI path `repos/iac-int-deployment` must exist locally as well (clone or symlink a sibling
-repository there). Allowing `..` would let `path: ../iac-int-deployment` work locally but fail in CI, which is the
-reverse problem; see Q1.
+Developer workstations: with `path: ../iac-int-deployment` both sides use the layout they already have, because a
+multi-`checkout:` Azure DevOps job puts each repository beside the others and developers clone siblings. A pipeline
+that checks out into the solution (`repos/iac-int-deployment`) can keep that value, and a developer then links or
+clones the repository there. The value is the same in both places only when both layouts match; see Q1.
 
 ## Decisions
 
@@ -144,9 +146,11 @@ reverse problem; see Q1.
 
 ## Open questions
 
-- **Q1 - Different paths in CI and on a workstation.** Recommend: do nothing now. A developer places the repository at
-  the same relative path. Trigger to revisit: a second solution needing a sibling checkout. The likely answer then is
-  an environment override (`STRATA_REMOTE_<NAME>_PATH`, like `STRATA_TIMEOUT_<STEP>_APPLY`), not `..` in the schema.
+- **Q1 - Different paths in CI and on a workstation. Decided 2026-11-05: allow `..` and absolute paths, warn outside the
+  solution.** The first answer was to do nothing and keep the path inside the solution, with an environment override
+  (`STRATA_REMOTE_<NAME>_PATH`) as the later option. Allowing `..` needs no new mechanism and fits the layout
+  Azure DevOps and developers already share (sibling folders). The guard moved from the schema to a `validate`
+  warning. The environment override is still open for a layout where no single value works, with no evidence for it yet.
 - **Q2 - Record the commit for ref-mode `fetch: external` remotes too?** Recommend: yes, in a follow-up, after path
   mode proves the lookup.
 - **Q3 - Should a ref-mode external checkout be checked against its `reference`?** Not part of this change (D4).
@@ -193,3 +197,7 @@ Out of scope: verifying ref-mode checkouts (Q3); an environment override for the
   `.git` in the folder itself, so a plain folder inside the solution's own repository does not report the
   solution's commit; audit pushes refuse a path remote at run time too, not only in `validate`. Branch: built on
   `feature/script-provisioner`'s working tree, not a branch of its own.
+- 2026-11-05: Q1 decided and built as a patch (2.3.1) on `fix/path-remote-outside-solution`: `path` may use `..` or be
+  absolute, resolved from the solution root by one helper (`layout.path_remote_location()`) that the resolver and the
+  audit manifest both call; the schema no longer rejects them, and `strata validate` warns
+  (`path_remote_outside_solution`) when the location is outside the solution. The environment override stays open.

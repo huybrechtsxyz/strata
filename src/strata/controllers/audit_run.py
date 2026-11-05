@@ -551,7 +551,11 @@ def _collect_artifacts_bom(
         all_remotes = {remote.name: remote for remote in (solution.spec.remotes or [])}
         scoped_remotes = {name: all_remotes[name] for name in remote_names if name in all_remotes}
         for name, remote in apply_remote_version_pins(scoped_remotes, version).items():
-            commit = _checkout_commit(name, context.root / remote.path, diagnostics) if remote.path else None
+            commit = (
+                _checkout_commit(name, layout.path_remote_location(context.root, remote.path), diagnostics)
+                if remote.path
+                else None
+            )
             repositories[name] = ManifestRepositoryModel(url=remote.url, ref=remote.reference, commit=commit)
 
     return (repositories or None, images or None, charts or None)

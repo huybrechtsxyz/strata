@@ -79,9 +79,34 @@ def test_path_remote_resolves_to_its_path_without_a_checkout_dir(tmp_path: Path,
 
     result = resolve_remote(tmp_path, _path_remote())
 
-    assert result == tmp_path / "repos" / "iac"
+    assert result == (tmp_path / "repos" / "iac").resolve()
     assert captured == []
     assert not layout.remotes_dir(tmp_path).exists()
+
+
+def test_path_remote_can_be_a_sibling_of_the_solution(tmp_path: Path):
+    """`path` is resolved from the solution root, so `..` reaches a repository checked out next to it."""
+    root = tmp_path / "cfg"
+    root.mkdir()
+    (tmp_path / "iac").mkdir()
+
+    assert resolve_remote(root, _path_remote("../iac")) == (tmp_path / "iac").resolve()
+
+
+def test_path_remote_can_be_absolute(tmp_path: Path):
+    root = tmp_path / "cfg"
+    root.mkdir()
+    elsewhere = tmp_path / "elsewhere" / "iac"
+    elsewhere.mkdir(parents=True)
+
+    assert resolve_remote(root, _path_remote(str(elsewhere))) == elsewhere.resolve()
+
+
+def test_path_remote_outside_the_solution_that_is_missing_says_where_it_looked(tmp_path: Path):
+    root = tmp_path / "cfg"
+    root.mkdir()
+    with pytest.raises(RemoteResolutionError, match=r"path '\.\./iac'.*nothing is at"):
+        resolve_remote(root, _path_remote("../iac"))
 
 
 def test_path_remote_missing_directory_names_the_remote_and_the_path(tmp_path: Path, monkeypatch):
@@ -103,7 +128,7 @@ def test_path_remote_ignores_a_checkout_path_override(tmp_path: Path):
     (tmp_path / "repos" / "iac").mkdir(parents=True)
     other = tmp_path / "elsewhere"
     other.mkdir()
-    assert resolve_remote(tmp_path, _path_remote(), checkout_path=other) == tmp_path / "repos" / "iac"
+    assert resolve_remote(tmp_path, _path_remote(), checkout_path=other) == (tmp_path / "repos" / "iac").resolve()
 
 
 def test_git_remote_fetch_strata_clones_and_checks_out(tmp_path: Path, monkeypatch):

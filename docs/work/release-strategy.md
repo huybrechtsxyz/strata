@@ -246,6 +246,22 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-05: **Built 2.3.1** - bumped `VERSION.txt` from `2.3.0` to `2.3.1` (normalizes to `2.3.1`; confirmed via
+  `packaging.version.Version` first; no trailing newline). A patch: a `git` remote's `path` is resolved from the
+  solution root and may use `..` or be absolute (before, it had to stay inside the solution), with a
+  `path_remote_outside_solution` warning from `strata validate`; nothing else changes. Built on
+  `fix/path-remote-outside-solution`, for a pull request to `main`. `uv build` produced
+  `xyz_strata-2.3.1-py3-none-any.whl`/`.tar.gz`; a fresh isolated venv confirmed `strata version` -> `2.3.1` and
+  `strata validate` on `config/`. The commit and the `v2.3.1` tag are left to the maintainer. Lesson from 2.3.0:
+  `ci-build` is `cancel-in-progress` per ref, so the run for the merge commit on `main` can be cancelled by a newer
+  run; the tag must wait for a green `ci-build` on that exact commit (re-run it if it was cancelled), or
+  `ci-release` fails with "No successful ci-build run found".
+- 2026-11-05: **Built 2.3.0** - bumped `VERSION.txt` from `2.2.0` to `2.3.0` (normalizes to `2.3.0`). A minor release
+  built on `feature/destroy-smoke-test` after #322. Contents since 2.2.0: the `script` provisioner's `plan_args`,
+  `destroy_args`, `values`, `STRATA_PHASE` and outputs through `STRATA_OUTPUT_FILE`; a `git` remote's `path`; clearer
+  failure messages and the output pre-flight for script steps; `deploy destroy --smoke-test`. `ci-release` #80 first
+  failed because the `ci-build` run for the merge commit had been cancelled; re-running the builds solved it.
+
 - 2026-11-04: **Built 2.2.0** - bumped `VERSION.txt` from `2.1.0` to `2.2.0` (normalizes to `2.2.0`; confirmed via
   `packaging.version.Version` first; no trailing newline). A minor release: one additive command and no breaking
   change. Built on `feature/deploy-destroy`, for a pull request to `main`. Contents since 2.1.0: `strata deploy

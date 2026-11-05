@@ -8,6 +8,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-11-05
+
+### Changed
+
+- The `path` of a `git` remote is now resolved from the solution root (the folder holding `strata.yaml`) and may use
+  `..` or be absolute. Before, it had to stay inside the solution. A pipeline that checks repositories out beside
+  each other, which is what an Azure DevOps job with several `checkout:` steps does, can now use `path: ../iac` and
+  keep one value for CI and a workstation. `strata validate` warns (`path_remote_outside_solution`) when the path
+  leaves the solution, so a changed `path` that makes a build read another folder is visible in review.
+
 ## [2.3.0] - 2026-11-05
 
 ### Added
@@ -142,7 +152,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.3.1...HEAD
+[2.3.1]: https://github.com/huybrechtsxyz/strata/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/huybrechtsxyz/strata/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/huybrechtsxyz/strata/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/huybrechtsxyz/strata/compare/v2.0.0...v2.1.0
