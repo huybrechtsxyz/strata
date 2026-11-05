@@ -1,7 +1,7 @@
 # `script` Provisioner Type — Design
 
 - Status: current
-- Last updated: 2026-10-14
+- Last updated: 2026-11-05
 
 ## Overview
 
@@ -18,6 +18,11 @@ phase-hook subsystem — see [lifecycle.md](../work/lifecycle.md), the doc
 this one was split out of, for that investigation's own
 zero-real-demand finding).
 
+Beyond running the file, a script step has a phase per command (`args`, `plan_args`, `destroy_args`, with
+`STRATA_PHASE`), can be limited to the values it needs (`values`), and can hand values to later steps
+(`STRATA_OUTPUT_FILE`). Each is described below. A walkthrough for users is
+[how-to/script-provisioner.md](../how-to/script-provisioner.md).
+
 **Deliberately out of scope:**
 
 - `Module.spec.type: "script"` (the namespace/workload-deployer path,
@@ -28,22 +33,25 @@ zero-real-demand finding).
   `deploy_namespace()`; the base class's "not supported" raise reports
   this safely. Revisit if a real namespace-attached script-module need
   shows up.
-- `strata deploy destroy` — a script step cannot be destroyed:
-  `ScriptIntegration.SUPPORTS_DESTROY` is false and `destroy()` raises
-  `IntegrationError`, so a destroy refuses the step before touching
-  anything and suggests `--stage`/`--scope` to leave it out
-  ([deploy-destroy.md](deploy-destroy.md), D5). A script has no state to
-  tear down.
 - `.js`/`.mjs`/`.go` (in the general `SCRIPT_EXTENSIONS` constant, used by
   lifecycle hooks' `ScriptPathModel`) — a narrower, dedicated extension
   set for this tool (`ps1`/`sh`/`bash`/`py`/`bat`), not the shared one.
 - Resolved-value delivery into `script.args`/env does not distinguish a
   secret from a non-secret value (see Value delivery below) — accepted,
   not a gap: the same risk profile Terraform's own `TF_VAR_*` delivery
-  already carries.
+  already carries. `values` narrows what is delivered; it is not a sandbox.
 - A `strata validate`-time existence check for `script.file` — deliberately
   not checked, matching `ScriptPathModel`'s own "may live in a remote not
-  yet materialised" precedent.
+  yet materialised" precedent. `build run` checks it once the source is
+  materialised (see Reporting).
+- A richer `script:` block: an executable or interpreter of the author's choice (`ansible-playbook`, `kubectl`, a
+  compiled program), a per-step `env`, a working directory. No real step needs one yet; add it when one does.
+  Until then `.py` runs with the first `python3`/`python` on `PATH`.
+- Idempotence or change detection: a script owns its own state, and strata does not guess whether it changed
+  anything.
+- Destroying through a saved plan: a script writes none.
+- `--follow` on a non-UTF-8 pipe on Windows loses the streamed lines because the box-drawing prefix cannot be
+  encoded. It affects every tool's `--follow`, not only scripts.
 
 ## Current Design
 
@@ -64,7 +72,10 @@ class ProvisionerScriptModel(PlatformBaseModel):
     """Only valid when a Provisioner's `tool` is 'script'."""
 
     file: str = Field(description="Script path, relative to this provisioner's 'source' directory")
-    args: list[str] | None = Field(None, description="Arguments passed to the script")
+    args: list[str] | None = Field(None, description="Arguments for `deploy run` (the apply)")
+    plan_args: list[str] | None = Field(None, description="Arguments for a requested preview")
+    destroy_args: list[str] | None = Field(None, description="Arguments for `deploy destroy --force`")
+    values: list[str] | None = Field(None, description="Keys `STRATA_VALUES` carries; unset means all")
 
     @field_validator("file")
     @classmethod
@@ -184,14 +195,21 @@ class ScriptIntegration(InfraIntegration):
     TYPE = "script"
     CAPABILITIES = frozenset({Capability.INFRASTRUCTURE})
     TRANSPORTS = frozenset({"cli"})
+    SUPPORTS_DESTROY = False  # the class default; the instance answers from `destroy_args`
+    SUPPORTS_SAVED_PLAN = False
     # No class-level COMMAND — resolved per-instance from the bound script's extension.
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
         super().__init__(config)
         self._script: ProvisionerScriptModel | None = None
+        self._outputs: CommandResult | None = None  # what the last apply wrote, for `output()`
 
     def bind(self, provisioner: ProvisionerModel) -> None:
         self._script = provisioner.script
+
+    @property
+    def supports_destroy(self) -> bool:
+        return self._script is not None and self._script.destroy_args is not None
 
     @property
     def command(self) -> str | None:
@@ -223,14 +241,14 @@ four stages in order — `init` (optional), `validate` (optional), `plan`
 vocabulary, to be explicit about which are real and which are genuinely
 not applicable rather than silently absent:
 
-| Stage      | Terraform does                                     | Script does                                                                                                                                                                                            |
-| ---------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| preflight  | `which terraform`                                  | `is_available()` — already generic, resolves via the bound script's extension                                                                                                                          |
-| `init`     | download providers, set up backend/state           | **N/A — omitted.** No providers/backend/state exist for a script; there is nothing to initialize                                                                                                       |
-| `validate` | syntax-check the HCL, no state/credentials touched | **Real** — a per-interpreter no-exec syntax check (below)                                                                                                                                              |
-| `plan`     | preview the diff, no apply                         | **Real** — confirms the file exists and the interpreter resolves; no true diff is possible for an imperative script, same honesty level as Compose's own `docker stack config` (renders, doesn't diff) |
-| `deploy`   | apply the plan                                     | **Real** — actually executes the script                                                                                                                                                                |
-| `destroy`  | tear down                                          | **Unsupported** — raises, and `SUPPORTS_DESTROY` is false so `deploy destroy` refuses the step up front (out of scope above)                                                                           |
+| Stage      | Terraform does                                     | Script does                                                                                                                                                                                     |
+| ---------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| preflight  | `which terraform`                                  | `is_available()` — already generic, resolves via the bound script's extension                                                                                                                   |
+| `init`     | download providers, set up backend/state           | **N/A — omitted.** No providers/backend/state exist for a script; there is nothing to initialize                                                                                                |
+| `validate` | syntax-check the HCL, no state/credentials touched | **Real** — a per-interpreter no-exec syntax check (below)                                                                                                                                       |
+| `plan`     | preview the diff, no apply                         | **Real, opt-in** - runs the script with `plan_args` when a preview was asked for and `plan_args` is set; otherwise only confirms the file exists and prints `would run: ...` (see Phases below) |
+| `deploy`   | apply the plan                                     | **Real** — actually executes the script and collects its outputs (below)                                                                                                                                                        |
+| `destroy`  | tear down                                          | **Real, opt-in** - runs the script with `destroy_args`; a script without them cannot be destroyed (see Phases below)                                                                            |
 
 `plan()` cannot be a bare "not supported" raise — a missing plan preview
 is a **hard error on a real (non-dry-run) apply**, not a graceful skip
@@ -274,13 +292,90 @@ def validate(
         )
         argv = [interpreter, "-NoProfile", "-Command", parse]
     return self.run(*argv[1:], cwd=path, env=env, line_callback=line_callback)
-
-    def destroy(self, path: Path, **kwargs: Any) -> CommandResult:
-        raise IntegrationError(f"{self.name} does not support destroy (docs/design/deploy-destroy.md, D5)")
 ```
 
-`plan()`/`deploy()` are covered together with value delivery below, since
-both accept the same two value-delivery kwargs.
+`plan()`/`deploy()`/`destroy()` are covered under Phases and Value delivery
+below, since they share the value-delivery kwargs.
+
+### Phases - `plan_args`, `destroy_args` and `STRATA_PHASE`
+
+A script has one file and no idea which strata command started it, so each phase it can run in gets its own
+arguments, and an environment variable names the phase. `args` stays what it always was: the apply.
+
+| Command                                        | Method           | What runs                                                                | `STRATA_PHASE` |
+| ---------------------------------------------- | ---------------- | ------------------------------------------------------------------------ | -------------- |
+| `deploy run`                                   | `deploy()`       | the script with `args`                                                   | `apply`        |
+| `deploy run --dry-run`, `deploy plan`          | `plan()`         | the script with `plan_args`, if set; else only `would run: ...`          | `plan`         |
+| `deploy run` (real), the step before the apply | `plan()`         | nothing: only the `would run: ...` line, which a real run does not print | -              |
+| `deploy destroy --force`                       | `destroy()`      | the script with `destroy_args`                                           | `destroy`      |
+| `deploy destroy --dry-run`                     | `plan_destroy()` | nothing: `would run: <destroy_args>`                                     | -              |
+| any command with `--smoke-test`                | -                | nothing: no tool is contacted                                            | -              |
+
+- **`plan_args` run only when a preview was requested.** A real `deploy run` always calls `plan()` before `deploy()`.
+  If `plan()` executed the script there, every real run would execute it twice. The controller passes `dry_run` to
+  `plan()`; the script integration executes only when it is true and `plan_args` is set. `deploy apply` is refused for
+  a script (it writes no saved plan), so `deploy run` is the one real command.
+- **`destroy_args` makes a step destroyable.** `SUPPORTS_DESTROY` is a class constant, so an integration whose answer
+  depends on its provisioner exposes the `supports_destroy` property instead (the class constant is its default).
+  `ScriptIntegration` answers `destroy_args is not None`. The destroy pre-flight reads the property, and also scans
+  `destroy_args` for `${output:}` references, which it serves from the output store like a Terraform backend's.
+- **`deploy destroy --dry-run` never executes the script.** `plan_args` previews an apply, not a removal, and there
+  is no mode of an arbitrary script that shows what a destroy would remove. The honest preview is the command line.
+- **The output path.** `args` and `plan_args` get the rendered `output.template` path appended as the last argument,
+  as before. `destroy_args` do not: a destroy renders nothing.
+- **A token that cannot be resolved** (an `${output:}` nobody produced) fails the call with a message naming it,
+  instead of raising.
+- **Visibility.** A preview that executes the script streams its output through `--follow`, which `deploy plan` turns
+  on by default and `deploy run --dry-run` does not. The `would run: ...` lines print without `--follow`.
+
+**What strata cannot verify.** That a script is free of side effects when run with `plan_args` rests on its author,
+as Ansible's `--check` rests on its modules. strata makes the mistake harder to make and easier to see:
+
+1. `plan_args` is opt-in. Unset, a preview never executes anything.
+2. `STRATA_PHASE` tells the script which phase it is in, independently of its arguments, so a script that changes
+   things can refuse an action that does not fit. For example:
+
+   ```python
+   import os, sys
+   if os.environ.get("STRATA_PHASE") == "plan" and action != "plan":
+       sys.exit(f"refusing '{action}' during a preview")
+   ```
+
+3. `--smoke-test` runs nothing, so a pipeline can check a script's wiring before it is trusted.
+4. The exact command line is shown (resolved secrets redacted) before a preview executes.
+
+A new script should go through `--smoke-test`, then `--dry-run` in a test environment, before it is scheduled.
+
+**Example** - one script, three actions, chosen by the phase and not by a variable:
+
+```yaml
+script:
+  file: secrets.py
+  args:         [--action, reload, --records, "${var:secrets_records}"]
+  plan_args:    [--action, plan,   --records, "${var:secrets_records}"]
+  destroy_args: [--action, revoke, --records, "${var:secrets_records}"]
+```
+
+### Reporting — previews, failures and `deploy apply`
+
+What a user sees when a script step runs, and where it differs from a tool with a native preview:
+
+- **A preview is shown.** A tool that does not stream its preview has its stdout printed through the step callback
+  under `--dry-run` and `deploy plan`: for a script that is `would run: <argv>`, with resolved secrets redacted. A
+  preview that was streamed is not printed twice. A real `deploy run` prints no `would run:` line.
+- **A successful script is silent without `--follow`**, like every tool: the run prints "deployed step" and nothing
+  else. Making scripts the exception was rejected; `--follow` shows the output, and a failure shows its tail.
+- **A failure says how it ended.** For every tool, a failed `init`, `validate`, `plan`, `deploy` or `destroy` reports
+  `exit code N`, or `timed out and was killed`, then the last 10 lines of stderr and stdout, redacted like streamed
+  lines. A script prints its error to stdout as often as to stderr, and a timeout looked like any other failure.
+  The limit that was hit is not named: the defaults live in each integration, and the controller only knows a
+  configured override.
+- **`deploy apply` needs a saved plan.** `InfraIntegration.SUPPORTS_SAVED_PLAN` is true by default and false for a
+  script and for GitOps, whose `plan()` writes no file. `deploy apply` refuses such a step in pre-flight, with code
+  `saved_plan_unsupported`, naming the step and pointing at `deploy run`. Container steps are exempt, as before.
+- **A missing script file** fails `build run`, once the source is materialised, with a usage error naming the
+  provisioner and the path. It is not a `validate` check because the source may live in a remote that is not
+  materialised yet, and a dry run materialises nothing.
 
 ### Value delivery — build-time skeleton + `STRATA_VALUES` env var + `args` resolution
 
@@ -317,9 +412,10 @@ too) was the entire controller change needed for this half.
 
 `ScriptIntegration` uses `resolved_values` for two things:
 
-- **`STRATA_VALUES`** — an env var carrying the *entire* resolved `tokens`
-  map (vars, secrets, features, upstream outputs alike), JSON-encoded,
-  built fresh in `deploy()`/`plan()`. A flat `tokens` dict carries no
+- **`STRATA_VALUES`** — an env var carrying the resolved `tokens` map
+  (vars, secrets, features, upstream outputs alike; all of it, or the
+  subset `script.values` lists, see Value scoping below), JSON-encoded,
+  built fresh in `deploy()`/`plan()`/`destroy()`. A flat `tokens` dict carries no
   secret-vs-non-secret distinction by the time it reaches an integration
   (that knowledge lives in `graph.secret_refs`, never passed to
   `deploy()`), so delivering the whole map via one env var — never a file
@@ -347,6 +443,10 @@ def _resolved_args(self, tokens: Mapping[str, str] | None) -> list[str]:
     args = self._script.args or []
     return args if tokens is None else [resolve_value_tokens(a, dict(tokens)) for a in args]
 
+def _delivered(self, tokens: Mapping[str, str] | None) -> Mapping[str, str] | None:
+    """All of `tokens`, or with `script.values` only the listed keys and the `deployment:` entries.
+    Raises ValueError for a listed key that is not in `tokens`."""
+
 @staticmethod
 def _values_env(tokens: Mapping[str, str] | None) -> dict[str, str]:
     """`{}` when `tokens` is `None` — no mechanism to deliver, nothing
@@ -371,49 +471,82 @@ def default_output(
         "custom": graph.custom,
     }
     return {"strata.auto.json": json.dumps(payload)}
-
-def plan(
-    self,
-    path: Path,
-    *,
-    env: Mapping[str, str] | None = None,
-    resolved_values: Mapping[str, str] | None = None,
-    output_path: Path | None = None,
-    line_callback: Callable[[str, str], None] | None = None,
-    **kwargs: Any,
-) -> CommandResult:
-    """Dry preview: confirms the script exists and its interpreter
-    resolves — no execution. Closest real analog available, same honesty
-    level as Compose's own `docker stack config` (renders, doesn't diff)."""
-    assert self._script is not None
-    script_path = path / self._script.file
-    if not script_path.exists():
-        return CommandResult(returncode=1, stdout="", stderr=f"script not found: {script_path}")
-    argv = _interpreter_argv(script_path.suffix, script_path) + self._resolved_args(resolved_values)
-    if output_path is not None:
-        argv = [*argv, str(output_path)]
-    return CommandResult(returncode=0, stdout=f"would run: {' '.join(argv)}", stderr="")
-
-def deploy(
-    self,
-    path: Path,
-    *,
-    env: Mapping[str, str] | None = None,
-    resolved_values: Mapping[str, str] | None = None,
-    output_path: Path | None = None,
-    line_callback: Callable[[str, str], None] | None = None,
-    timeout: int = 300,
-    **kwargs: Any,
-) -> CommandResult:
-    assert self._script is not None
-    script_path = path / self._script.file
-    argv = _interpreter_argv(script_path.suffix, script_path) + self._resolved_args(resolved_values)
-    if output_path is not None:
-        argv = [*argv, str(output_path)]
-    run_env = {**(env or {}), **self._values_env(resolved_values)}
-    return self.run(*argv[1:], cwd=path, env=run_env, timeout=timeout, line_callback=line_callback)
-    # self.run() prepends self.command - argv[0] already equals that by construction
 ```
+
+`plan()`, `deploy()` and `destroy()` are covered under Phases above; their
+source is `integrations/script.py`.
+
+### Value scoping - `script.values`
+
+By default `STRATA_VALUES` carries every resolved value, so a script that
+needs one API token also receives every unrelated secret of the deployment.
+`values` is an allow-list that lets a script take only what it needs.
+
+- **Unset** (the default): everything, as before. Nothing existing changes.
+- **Set**: `STRATA_VALUES` holds the listed keys, plus the `deployment:name`
+  and `deployment:tenant` entries, which identify the run and carry nothing
+  secret. They are not listed (the model rejects a key with a colon), they
+  are always there. An empty list is valid: only those entries.
+- **Keys** are the names in the flat token map: a variable, secret or feature
+  key, or `<step>.<key>` for an output of an earlier step. A key follows the
+  same character set as a token key.
+- **It limits `STRATA_VALUES` only.** `args`, `plan_args` and `destroy_args`
+  still resolve any token, so a script can be given one secret as an argument
+  and still receive none through the environment. An argument is visible in
+  the process list to every user of the machine, an environment variable
+  generally only to the same user; prefer `STRATA_VALUES` for a secret.
+- **Every phase** gets the same subset, including a preview that executes the
+  script and a destroy.
+- **A listed key that does not resolve fails the call**, naming the key and
+  the step, in `plan()` too, so a real `deploy run` stops before the apply.
+  Nothing is delivered partially. An output key of a step the run did not
+  reach (a destroy with no `output_store`, say) fails the same way.
+- **`strata validate`** checks each listed key per deployment: it must be
+  declared by one of the deployment's environments, or be `<step>.<key>`
+  where `<step>` is an execution step of the workspace (an output only exists
+  at deploy time, so only its step can be checked). Without a resolvable
+  environment there is nothing to check against, as for `${var:}` tokens.
+  Code: `undeclared_script_value`.
+- **What it does not do.** The process still inherits the pipeline's own
+  environment, and a script can read any file it can reach. It narrows what
+  strata hands over; it is not a sandbox.
+
+### Outputs - `STRATA_OUTPUT_FILE`
+
+A script step can hand values to the steps after it, as a Terraform step does: they become `${output:<step>.<key>}`
+for every step that depends on it, and are recorded in the workspace's `output_store` for later invocations.
+
+The script writes one JSON object to the file named by the environment variable `STRATA_OUTPUT_FILE`:
+
+```json
+{ "address": "10.0.0.5", "count": 3, "token": "abc", "_sensitive": ["token"] }
+```
+
+- **Values** may be any JSON. A string is used as it is; anything else is stored as its JSON text (`3` becomes
+  `"3"`, a list becomes `'["a", "b"]'`), exactly as for Terraform outputs.
+- **`_sensitive`** is a reserved key listing the keys that are secret. A sensitive output can be used by the steps
+  after it in the same run, as a `${secret:}` can, and is never recorded in the output store (ADR-0036 D4). Unlisted
+  keys are not sensitive, as in Terraform. The marker is a key inside the file, not a second file, so the two
+  cannot get out of step. A key that is not in the file is ignored.
+- **Keys** use the characters of a token key (`A-Z a-z 0-9 _ . -`).
+- **Nothing written** (no file, an empty file, `{}`) means no outputs and no warning.
+- **A file that is not valid** (not JSON, not an object, a `_sensitive` that is not a list of strings, a key a token
+  cannot name) yields no outputs at all and a warning naming the step. The step does not fail: it already succeeded,
+  as when `terraform output` fails after an apply. It fails closed because a half-read file could lose the
+  `_sensitive` marker and put a secret in the store.
+- **A script that exits non-zero** produces no outputs.
+- **The file is private.** It lives in a new directory made by the operating system for the run, outside the build
+  directory, and is removed when the script ends, so a secret output is never left on disk.
+- **Every phase sets the variable**, so a script can write its outputs without checking `STRATA_PHASE`. Only the
+  apply's file is read: a preview and a destroy collect nothing (a destroy collects no outputs for any tool,
+  [deploy-destroy.md](deploy-destroy.md)).
+- **How it is wired.** `ScriptIntegration.deploy()` reads the file after a successful run and keeps the result;
+  `output()` returns it in the `terraform output -json` shape that `collect_step_outputs()` already reads, so the
+  controller, the output store and the token resolution needed no change for scripts. The one controller change is
+  that a failed `output()` call now produces a warning with its stderr, for every tool: before, a Terraform or GitOps
+  step that lost its outputs said nothing, and a later `${output:}` failed with no explanation.
+- **Limits.** The script cannot read another step's outputs from the file; it receives them through
+  `STRATA_VALUES` (listed in `values` if scoped) or `args`.
 
 ### Registration
 
@@ -473,8 +606,13 @@ Two small, additive controller changes:
   of; its gate-question finding (zero real lifecycle-hook demand) is why
   this doc doesn't port v1's phase-hook executor, only the plain "run a
   script" primitive.
-- [deploy-destroy.md](deploy-destroy.md) — why `destroy()` raises and
-  `SUPPORTS_DESTROY` is false rather than attempting anything.
+- [deploy-destroy.md](deploy-destroy.md) — `SUPPORTS_DESTROY` and the destroy preview rules that `destroy_args`
+  and `plan_destroy()` follow.
+- [deploy-pipeline-stage-commands.md](deploy-pipeline-stage-commands.md) — why `deploy apply` needs a saved plan.
+- [ADR-0032](../decisions/0032-deploy-time-step-timeout-overrides.md) — the per-phase timeouts (`plan`, `apply`,
+  `destroy`) a script honours.
+- [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md) — the output store, and why a sensitive output
+  is never recorded.
 
 ## History
 
@@ -519,3 +657,38 @@ Two small, additive controller changes:
   PowerShell. Found on code review (not exploited, not reported) — fixed
   by doubling embedded single quotes before interpolating, PowerShell's
   own escaping convention for a single-quoted string.
+- A script has no way to show what it would do, so `plan()` could only ever print the command line. Rather than make
+  every dry run execute the script, execution is opt-in through `plan_args` and happens only when a preview was
+  requested: a real `deploy run` calls `plan()` first, and would have run the script twice. The three alternatives
+  considered were an `actions` map (a second way to say what `args` says) and a `${phase}` token in `args` (tooling
+  cannot see that a preview executes the script); both were rejected.
+- A destroy dry run does not execute the script either. `plan_args` shows an apply, and no mode of an arbitrary script
+  shows a removal, so the only honest preview is the command line.
+- Whether a script is safe in `plan` cannot be checked, so `STRATA_PHASE` exists as a second signal that does not
+  depend on the arguments being right. It makes a wrong `plan_args` fail inside the script instead of changing things.
+- Every script got every resolved value, and a script that needs one token had no way to ask for less. An allow-list
+  (`values`) was chosen over flipping the default to none, which would break every existing script. The `deployment:`
+  entries stay in even when a list is set: they are not secret and a script rarely works without knowing which
+  deployment it runs for. The check runs in `plan()` as well as the apply, because a real run only previews before the
+  apply and a typo should stop it there.
+- Outputs follow the shape Terraform already established rather than a new mechanism: the integration's `output()`
+  returns `terraform output -json` JSON, which `collect_step_outputs()` reads for any tool, so the controller, the
+  output store and `${output:}` resolution needed nothing new. A file (read after the run) was chosen over parsing
+  stdout, which breaks with `--follow` and with a script that prints anything else. The sensitive marker is a reserved
+  `_sensitive` key in the same file, not a sibling file: one write, one read, no way for the two to disagree. The
+  default is not sensitive, as in Terraform, because failing closed would make every output unusable for a dependent
+  step; the cost of a wrong default is the author's, as for `plan_args`.
+- The gaps behind the preview, failure and `deploy apply` behavior were found by running a real script step through
+  `build run`, `deploy run` (`--dry-run`, `--follow`, `--smoke-test`, a stage timeout), `deploy plan` and `deploy apply`,
+  not by reading this doc: the preview was computed and then dropped by the controller, a timeout looked like any
+  other failure, and `deploy apply` told the user to run `deploy plan` forever. Unit tests that stub `run_command` had
+  passed all along. A new tool should be driven through the CLI modes the same way, and the script now has tests that
+  run a real interpreter (pinned to the test's own, because a bare `python3` on a Windows `PATH` can be a Store stub).
+- `SUPPORTS_SAVED_PLAN` is a class flag, the same device as `SUPPORTS_DESTROY`, rather than a check on the tool's name,
+  so the controller stays tool-agnostic. GitOps turned out to need it too.
+- `SUPPORTS_DESTROY` could not say "this script can be destroyed and that one cannot", so an integration may answer
+  per bound provisioner through the `supports_destroy` property, which defaults to the class constant.
+- Every script was found to receive every secret of the deployment (a probe with an unrelated secret showed it in a
+  script that needed one token), which is why `values` exists.
+- A richer `script:` block was not built: nothing real needs an interpreter choice or a per-step environment, and
+  every other gap here had a real symptom behind it.

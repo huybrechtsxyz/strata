@@ -233,6 +233,79 @@ def test_solution_local_remote_rejects_external_fetch():
         SolutionModel.model_validate(data)
 
 
+def _path_remote(**overrides) -> dict:
+    remote = {"name": "iac", "type": "git", "url": "https://host/iac.git", "path": "repos/iac"}
+    remote.update(overrides)
+    return remote
+
+
+def test_solution_git_remote_accepts_a_path_instead_of_a_reference():
+    """A path remote has no reference: the pipeline that checked it out owns the ref."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote()]
+    remote = SolutionModel.model_validate(data).spec.remotes[0]
+    assert remote.path == "repos/iac"
+    assert remote.reference is None
+
+
+def test_solution_path_remote_is_fetch_external():
+    """`path` means someone else put the repository there, so `fetch` is external without saying so."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote()]
+    assert SolutionModel.model_validate(data).spec.remotes[0].fetch.value == "external"
+
+
+def test_solution_path_remote_accepts_an_explicit_external_fetch():
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote(fetch="external")]
+    assert SolutionModel.model_validate(data).spec.remotes[0].fetch.value == "external"
+
+
+def test_solution_path_remote_rejects_fetch_strata():
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote(fetch="strata")]
+    with pytest.raises(ValidationError, match="'fetch: strata' is not valid with 'path'"):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_git_remote_rejects_both_reference_and_path():
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote(reference="dev")]
+    with pytest.raises(ValidationError, match="either 'reference' or 'path', not both"):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_git_remote_without_reference_or_path_names_both():
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "infra", "type": "git", "url": "https://host/infra.git"}]
+    with pytest.raises(ValidationError, match="'reference' is required.*unless it gives a 'path'"):
+        SolutionModel.model_validate(data)
+
+
+@pytest.mark.parametrize("remote_type", ["oci", "helm", "local"])
+def test_solution_path_is_only_valid_for_git(remote_type):
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "x", "type": remote_type, "url": "charts", "path": "repos/x"}]
+    with pytest.raises(ValidationError, match="'path' is only valid for type 'git'"):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_path_remote_rejects_integration():
+    """Strata never clones a path remote, so it has no use for credentials."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote(integration="corp-git")]
+    with pytest.raises(ValidationError, match="'integration' is not valid with 'path'"):
+        SolutionModel.model_validate(data)
+
+
+@pytest.mark.parametrize("bad_path", ["../iac", "/srv/iac", "C:\\iac", "repos/../../iac"])
+def test_solution_path_remote_rejects_a_path_outside_the_solution(bad_path):
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote(path=bad_path)]
+    with pytest.raises(ValidationError):
+        SolutionModel.model_validate(data)
+
+
 def test_solution_rejects_duplicate_remote_names():
     """Remote names are the '@<name>' resolution key — duplicates are rejected."""
     data = _minimal_solution()

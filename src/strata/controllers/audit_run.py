@@ -66,6 +66,7 @@ from strata.controllers.workload_controller import apply_version_pins, resolve_m
 from strata.integrations import registry
 from strata.integrations.capabilities import AuditSinkIntegration
 from strata.integrations.errors import IntegrationError
+from strata.logging.config import get_logger
 from strata.models.audit_manifest_model import (
     ChangeReferenceModel,
     DeploymentManifestModel,
@@ -89,11 +90,15 @@ from strata.services.environment_service import merge_environment_models
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
 from strata.utils.diagnostics import Diagnostics, Severity
+from strata.utils.transport import run_command
 
 #: Public — `controllers/audit_read.py` (docs/design/audit-commands.md) reads
 #: this back and must glob for the exact same filename this module writes.
 MANIFEST_FILENAME = "_manifest.json"
 _METRICS_FILENAME = "_metrics.json"
+_GIT_REV_PARSE_TIMEOUT = 30
+
+log = get_logger(__name__)
 
 
 def finalize_and_distribute_deploy_audit(
@@ -549,9 +554,27 @@ def _collect_artifacts_bom(
         all_remotes = {remote.name: remote for remote in (solution.spec.remotes or [])}
         scoped_remotes = {name: all_remotes[name] for name in remote_names if name in all_remotes}
         for name, remote in apply_remote_version_pins(scoped_remotes, version).items():
-            repositories[name] = ManifestRepositoryModel(url=remote.url, ref=remote.reference, commit=None)
+            commit = _checkout_commit(context.root / remote.path) if remote.path is not None else None
+            repositories[name] = ManifestRepositoryModel(url=remote.url, ref=remote.reference, commit=commit)
 
     return (repositories or None, images or None, charts or None)
+
+
+def _checkout_commit(checkout: Path) -> str | None:
+    """The commit a path remote's checkout is at, or `None` when it is not a git work tree of its own.
+
+    A path remote has no `reference`, so this is the only record of which tree a deploy used
+    (docs/work/remote-external-path.md). Requires `.git` in the directory itself: otherwise `git
+    rev-parse` would walk up and report the solution repository's own commit for a plain folder.
+    """
+    if not (checkout / ".git").exists():
+        log.warning("Remote checkout '%s' is not a git work tree; no commit recorded.", checkout)
+        return None
+    result = run_command(["git", "rev-parse", "HEAD"], cwd=checkout, timeout=_GIT_REV_PARSE_TIMEOUT)
+    if not result.is_successful:
+        log.warning("'git rev-parse HEAD' failed in '%s': %s", checkout, result.stderr.strip())
+        return None
+    return result.stdout.strip() or None
 
 
 def _platform_reference(build_path: Path) -> tuple[ManifestPlatformReferenceModel | None, Diagnostics]:

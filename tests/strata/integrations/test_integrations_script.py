@@ -49,12 +49,20 @@ def _platform(monkeypatch, os_name: str) -> None:
     monkeypatch.setattr(script_module, "os", SimpleNamespace(name=os_name))
 
 
-def _bound(file: str, args: list[str] | None = None) -> ScriptIntegration:
+def _bound(
+    file: str,
+    args: list[str] | None = None,
+    plan_args: list[str] | None = None,
+    destroy_args: list[str] | None = None,
+    values: list[str] | None = None,
+) -> ScriptIntegration:
     provisioner = ProvisionerModel(
         name="script-step",
         tool="script",
         source=SourceModel(source_path="scripts"),
-        script=ProvisionerScriptModel(file=file, args=args),
+        script=ProvisionerScriptModel(
+            file=file, args=args, plan_args=plan_args, destroy_args=destroy_args, values=values
+        ),
     )
     integration = ScriptIntegration()
     integration.bind(provisioner)
@@ -468,4 +476,464 @@ def test_deploy_appends_output_path_as_the_final_argument(monkeypatch, tmp_path:
 def test_deploy_without_resolved_values_has_no_strata_values_env(monkeypatch, tmp_path: Path):
     captured = _capture(monkeypatch)
     _bound("deploy.sh").deploy(tmp_path)
-    assert captured["env"] == {}
+    assert "STRATA_VALUES" not in captured["env"]
+    assert captured["env"]["STRATA_PHASE"] == "apply"
+
+
+# ---------------------------------------------------------------------------
+# plan_args / destroy_args / STRATA_PHASE (docs/design/script-provisioner.md)
+# ---------------------------------------------------------------------------
+
+
+def _script_in(tmp_path: Path, name: str = "deploy.py") -> None:
+    (tmp_path / name).write_text("print('hi')")
+
+
+def test_plan_runs_the_script_with_plan_args_when_previewing(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    _script_in(tmp_path, "deploy.sh")
+    integration = _bound("deploy.sh", args=["--apply"], plan_args=["--action", "${var:mode}"])
+
+    result = integration.plan(tmp_path, dry_run=True, resolved_values={"mode": "plan"})
+
+    assert result.is_successful
+    assert captured["args"] == ["bash", str(tmp_path / "deploy.sh"), "--action", "plan"]
+    assert captured["env"]["STRATA_PHASE"] == "plan"
+    assert "STRATA_VALUES" in captured["env"]
+
+
+def test_plan_streams_and_honours_the_timeout_when_it_runs_the_script(monkeypatch, tmp_path: Path):
+    seen: dict[str, object] = {}
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        seen["timeout"] = timeout
+        seen["line_callback"] = line_callback
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(shutil, "which", lambda name: name)
+    _script_in(tmp_path, "deploy.sh")
+    callback = lambda stream, text: None  # noqa: E731
+
+    _bound("deploy.sh", plan_args=["--check"]).plan(tmp_path, dry_run=True, timeout=7, line_callback=callback)
+
+    assert seen == {"timeout": 7, "line_callback": callback}
+
+
+def test_plan_appends_the_output_path_to_plan_args_too(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    _script_in(tmp_path, "deploy.sh")
+    output_path = tmp_path / "strata.auto.json"
+
+    _bound("deploy.sh", plan_args=["--check"]).plan(tmp_path, dry_run=True, output_path=output_path)
+
+    assert captured["args"][-2:] == ["--check", str(output_path)]
+
+
+def test_plan_does_not_run_plan_args_unless_previewing(monkeypatch, tmp_path: Path):
+    def _fail_if_called(*a, **k):
+        raise AssertionError("a real run must not execute plan_args")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fail_if_called)
+    monkeypatch.setattr(shutil, "which", lambda name: name)
+    _script_in(tmp_path, "deploy.sh")
+
+    result = _bound("deploy.sh", args=["--apply"], plan_args=["--check"]).plan(tmp_path)
+
+    assert result.is_successful
+    assert result.stdout.startswith("would run:")
+    assert "--apply" in result.stdout
+
+
+def test_plan_without_plan_args_never_executes_even_when_previewing(monkeypatch, tmp_path: Path):
+    def _fail_if_called(*a, **k):
+        raise AssertionError("no plan_args, nothing to execute")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fail_if_called)
+    monkeypatch.setattr(shutil, "which", lambda name: name)
+    _script_in(tmp_path, "deploy.sh")
+
+    result = _bound("deploy.sh", args=["--apply"]).plan(tmp_path, dry_run=True)
+
+    assert result.stdout.startswith("would run:")
+
+
+def test_plan_with_plan_args_still_reports_a_missing_script(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+
+    result = _bound("deploy.sh", plan_args=["--check"]).plan(tmp_path, dry_run=True)
+
+    assert not result.is_successful
+    assert "not found" in result.stderr
+    assert "args" not in captured
+
+
+def test_deploy_sets_the_apply_phase_next_to_strata_values(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+
+    _bound("deploy.sh").deploy(tmp_path, resolved_values={"k": "v"})
+
+    assert captured["env"]["STRATA_PHASE"] == "apply"
+    assert "STRATA_VALUES" in captured["env"]
+
+
+def test_destroy_runs_destroy_args_in_the_destroy_phase(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    _script_in(tmp_path, "deploy.sh")
+    integration = _bound("deploy.sh", args=["--apply"], destroy_args=["--action", "${var:mode}"])
+
+    result = integration.destroy(tmp_path, resolved_values={"mode": "revoke"})
+
+    assert result.is_successful
+    assert captured["args"] == ["bash", str(tmp_path / "deploy.sh"), "--action", "revoke"]
+    assert captured["env"]["STRATA_PHASE"] == "destroy"
+    assert captured["cwd"] == tmp_path
+
+
+def test_destroy_does_not_append_the_output_path(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    _script_in(tmp_path, "deploy.sh")
+
+    _bound("deploy.sh", destroy_args=["--action", "revoke"]).destroy(tmp_path, output_path=tmp_path / "out.json")
+
+    assert captured["args"][-1] == "revoke"
+
+
+def test_plan_destroy_reports_what_would_run_and_never_executes(monkeypatch, tmp_path: Path):
+    def _fail_if_called(*a, **k):
+        raise AssertionError("a destroy preview must not execute the script")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fail_if_called)
+    monkeypatch.setattr(shutil, "which", lambda name: name)
+    _script_in(tmp_path, "deploy.sh")
+    integration = _bound("deploy.sh", destroy_args=["--action", "${var:mode}"])
+
+    result = integration.plan_destroy(tmp_path, resolved_values={"mode": "revoke"})
+
+    assert result.is_successful
+    assert result.stdout == f"would run: bash {tmp_path / 'deploy.sh'} --action revoke"
+
+
+def test_plan_destroy_without_destroy_args_raises(tmp_path: Path):
+    with pytest.raises(IntegrationError, match="does not support destroy"):
+        _bound("deploy.sh").plan_destroy(tmp_path)
+
+
+def test_plan_destroy_reports_a_missing_script(tmp_path: Path):
+    result = _bound("deploy.sh", destroy_args=["--action", "revoke"]).plan_destroy(tmp_path)
+
+    assert not result.is_successful
+    assert "not found" in result.stderr
+
+
+def test_supports_destroy_follows_destroy_args():
+    assert _bound("deploy.sh").supports_destroy is False
+    assert _bound("deploy.sh", plan_args=["--check"]).supports_destroy is False
+    assert _bound("deploy.sh", destroy_args=["--action", "revoke"]).supports_destroy is True
+    assert ScriptIntegration().supports_destroy is False  # nothing bound yet
+
+
+def test_the_class_constant_stays_false_so_an_unbound_script_cannot_destroy():
+    assert ScriptIntegration.SUPPORTS_DESTROY is False
+
+
+@pytest.mark.parametrize("method", ["plan", "deploy", "destroy", "plan_destroy"])
+def test_an_unresolvable_token_fails_the_call_instead_of_raising(monkeypatch, tmp_path: Path, method):
+    _capture(monkeypatch)
+    _script_in(tmp_path, "deploy.sh")
+    integration = _bound(
+        "deploy.sh",
+        args=["${output:ghost.key}"],
+        plan_args=["${output:ghost.key}"],
+        destroy_args=["${output:ghost.key}"],
+    )
+    kwargs = {"dry_run": True} if method == "plan" else {}
+
+    result = getattr(integration, method)(tmp_path, resolved_values={"x": "y"}, **kwargs)
+
+    assert not result.is_successful
+    assert "ghost.key" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# script.values: which resolved values reach STRATA_VALUES (docs/design/script-provisioner.md)
+# ---------------------------------------------------------------------------
+
+_TOKENS = {
+    "API_TOKEN": "tok-1",
+    "UNRELATED_DB_PASSWORD": "hunter2",
+    "REGION": "westeurope",
+    "build.url": "https://example.test",
+    "deployment:name": "app",
+    "deployment:tenant": "acme",
+}
+
+
+def _delivered(env: dict[str, str]) -> dict[str, str]:
+    import json as json_module
+
+    return json_module.loads(env["STRATA_VALUES"])
+
+
+def _phase_calls(integration: ScriptIntegration, tmp_path: Path, phase: str, tokens):
+    """Run `phase` and return the (result)."""
+    if phase == "plan":
+        return integration.plan(tmp_path, dry_run=True, resolved_values=tokens)
+    if phase == "apply":
+        return integration.deploy(tmp_path, resolved_values=tokens)
+    return integration.destroy(tmp_path, resolved_values=tokens)
+
+
+@pytest.mark.parametrize("phase", ["plan", "apply", "destroy"])
+def test_only_the_listed_values_and_the_deployment_entries_are_delivered(monkeypatch, tmp_path: Path, phase):
+    captured = _capture(monkeypatch)
+    _script_in(tmp_path, "deploy.sh")
+    integration = _bound("deploy.sh", plan_args=["x"], destroy_args=["x"], values=["API_TOKEN", "build.url"])
+
+    result = _phase_calls(integration, tmp_path, phase, _TOKENS)
+
+    assert result.is_successful
+    assert _delivered(captured["env"]) == {
+        "API_TOKEN": "tok-1",
+        "build.url": "https://example.test",
+        "deployment:name": "app",
+        "deployment:tenant": "acme",
+    }
+
+
+def test_an_empty_allow_list_delivers_only_the_deployment_entries(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    _bound("deploy.sh", values=[]).deploy(tmp_path, resolved_values=_TOKENS)
+    assert _delivered(captured["env"]) == {"deployment:name": "app", "deployment:tenant": "acme"}
+
+
+def test_without_an_allow_list_every_value_is_delivered(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    _bound("deploy.sh").deploy(tmp_path, resolved_values=_TOKENS)
+    assert _delivered(captured["env"]) == _TOKENS
+
+
+def test_the_allow_list_does_not_limit_what_args_can_use(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    integration = _bound("deploy.sh", args=["--token", "${secret:API_TOKEN}"], values=[])
+
+    integration.deploy(tmp_path, resolved_values=_TOKENS)
+
+    assert captured["args"][-2:] == ["--token", "tok-1"]
+    assert "API_TOKEN" not in _delivered(captured["env"])
+
+
+def test_an_allow_list_with_nothing_resolved_delivers_no_values_and_does_not_fail(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    result = _bound("deploy.sh", values=["API_TOKEN"]).deploy(tmp_path)
+    assert result.is_successful
+    assert "STRATA_VALUES" not in captured["env"]
+
+
+@pytest.mark.parametrize("method", ["plan", "deploy", "destroy", "plan_destroy"])
+def test_a_listed_value_that_did_not_resolve_fails_the_call_and_names_it(monkeypatch, tmp_path: Path, method):
+    captured = _capture(monkeypatch)
+    _script_in(tmp_path, "deploy.sh")
+    integration = _bound("deploy.sh", plan_args=["x"], destroy_args=["x"], values=["API_TOKEN", "TYPO", "ALSO_GONE"])
+    kwargs = {"dry_run": True} if method == "plan" else {}
+
+    result = getattr(integration, method)(tmp_path, resolved_values={"API_TOKEN": "t"}, **kwargs)
+
+    assert not result.is_successful
+    assert "'TYPO'" in result.stderr
+    assert "'ALSO_GONE'" in result.stderr
+    assert "script.values" in result.stderr
+    assert "args" not in captured  # nothing ran
+
+
+def test_a_plain_preview_also_catches_a_listed_value_that_did_not_resolve(tmp_path: Path):
+    """A real `deploy run` only previews before the apply; the typo must not wait for the apply to surface."""
+    _script_in(tmp_path, "deploy.sh")
+    result = _bound("deploy.sh", values=["TYPO"]).plan(tmp_path, resolved_values={"API_TOKEN": "t"})
+    assert not result.is_successful
+    assert "'TYPO'" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Outputs: STRATA_OUTPUT_FILE in, output() out (docs/design/script-provisioner.md)
+# ---------------------------------------------------------------------------
+
+
+def _writing(monkeypatch, content: str | None, *, returncode: int = 0) -> dict[str, object]:
+    """Stub the process: it writes `content` to `STRATA_OUTPUT_FILE` (nothing when `content` is None)."""
+    seen: dict[str, object] = {}
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        target = Path(env["STRATA_OUTPUT_FILE"])
+        seen["file"] = target
+        seen["directory_existed"] = target.parent.is_dir()
+        if content is not None:
+            target.write_text(content, encoding="utf-8")
+        return CommandResult(returncode=returncode, stdout="", stderr="boom" if returncode else "")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(shutil, "which", lambda name: name)
+    return seen
+
+
+def _collected(integration: ScriptIntegration, tmp_path: Path) -> dict[str, dict[str, object]]:
+    import json as json_module
+
+    result = integration.output(tmp_path, json_format=True)
+    assert result.is_successful, result.stderr
+    return json_module.loads(result.stdout)
+
+
+def test_deploy_gives_the_script_a_private_output_file_outside_the_build_directory(monkeypatch, tmp_path: Path):
+    seen = _writing(monkeypatch, None)
+
+    _bound("deploy.sh").deploy(tmp_path)
+
+    target = seen["file"]
+    assert isinstance(target, Path)
+    assert seen["directory_existed"] is True
+    assert tmp_path not in target.parents
+    assert not target.exists()  # nothing is pre-created: the script writes it or does not
+
+
+def test_the_scratch_directory_is_removed_after_the_run(monkeypatch, tmp_path: Path):
+    seen = _writing(monkeypatch, '{"ip": "10.0.0.5"}')
+
+    _bound("deploy.sh").deploy(tmp_path)
+
+    target = seen["file"]
+    assert isinstance(target, Path)
+    assert not target.parent.exists()
+
+
+@pytest.mark.parametrize("phase", ["plan", "apply", "destroy"])
+def test_the_output_file_is_set_in_every_executing_phase(monkeypatch, tmp_path: Path, phase):
+    """A script that writes outputs unconditionally must not need to branch on the phase."""
+    seen = _writing(monkeypatch, None)
+    _script_in(tmp_path, "deploy.sh")
+    integration = _bound("deploy.sh", plan_args=["x"], destroy_args=["x"])
+
+    result = _phase_calls(integration, tmp_path, phase, {"k": "v"})
+
+    assert result.is_successful
+    assert isinstance(seen["file"], Path)
+
+
+def test_output_returns_what_the_script_wrote_as_strings(monkeypatch, tmp_path: Path):
+    _writing(monkeypatch, '{"ip": "10.0.0.5", "count": 3, "on": true, "tags": ["a", "b"], "nested": {"k": 1}}')
+    integration = _bound("deploy.sh")
+
+    integration.deploy(tmp_path)
+
+    assert _collected(integration, tmp_path) == {
+        "ip": {"value": "10.0.0.5", "sensitive": False},
+        "count": {"value": "3", "sensitive": False},
+        "on": {"value": "true", "sensitive": False},
+        "tags": {"value": '["a", "b"]', "sensitive": False},
+        "nested": {"value": '{"k": 1}', "sensitive": False},
+    }
+
+
+def test_output_marks_the_listed_keys_sensitive_and_hides_the_marker(monkeypatch, tmp_path: Path):
+    _writing(monkeypatch, '{"ip": "10.0.0.5", "token": "abc", "_sensitive": ["token", "not-written"]}')
+    integration = _bound("deploy.sh")
+
+    integration.deploy(tmp_path)
+
+    assert _collected(integration, tmp_path) == {
+        "ip": {"value": "10.0.0.5", "sensitive": False},
+        "token": {"value": "abc", "sensitive": True},
+    }
+
+
+@pytest.mark.parametrize("content", [None, "", "  \n", "{}"])
+def test_output_is_empty_when_the_script_wrote_nothing(monkeypatch, tmp_path: Path, content):
+    _writing(monkeypatch, content)
+    integration = _bound("deploy.sh")
+
+    integration.deploy(tmp_path)
+
+    assert _collected(integration, tmp_path) == {}
+
+
+def test_output_is_empty_before_any_deploy(tmp_path: Path):
+    assert _collected(_bound("deploy.sh"), tmp_path) == {}
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "not json",
+        "[1, 2]",
+        '"text"',
+        '{"a": 1, "_sensitive": "a"}',
+        '{"a": 1, "_sensitive": [1]}',
+        '{"bad key": 1}',
+        '{"a\\"b": 1}',
+    ],
+)
+def test_a_malformed_output_file_is_reported_and_none_of_it_is_used(monkeypatch, tmp_path: Path, content):
+    """Fail closed: a half-read file could drop the `_sensitive` marker and let a secret into the store."""
+    _writing(monkeypatch, content)
+    integration = _bound("deploy.sh")
+
+    deployed = integration.deploy(tmp_path)
+    collected = integration.output(tmp_path, json_format=True)
+
+    assert deployed.is_successful  # the step itself still succeeded
+    assert not collected.is_successful
+    assert collected.stdout == ""
+    assert "STRATA_OUTPUT_FILE" in collected.stderr
+
+
+def test_a_failed_script_leaves_no_outputs(monkeypatch, tmp_path: Path):
+    _writing(monkeypatch, '{"ip": "10.0.0.5"}', returncode=1)
+    integration = _bound("deploy.sh")
+
+    assert not integration.deploy(tmp_path).is_successful
+
+    assert _collected(integration, tmp_path) == {}
+
+
+def test_a_second_deploy_does_not_keep_the_first_ones_outputs(monkeypatch, tmp_path: Path):
+    integration = _bound("deploy.sh", args=["${var:ABSENT}"])
+    _writing(monkeypatch, '{"ip": "10.0.0.5"}')
+    assert integration.deploy(tmp_path, resolved_values={"ABSENT": "x"}).is_successful
+    assert _collected(integration, tmp_path) != {}
+
+    failed = integration.deploy(tmp_path, resolved_values={})  # the token no longer resolves: nothing runs
+
+    assert not failed.is_successful
+    assert _collected(integration, tmp_path) == {}
+
+
+def test_a_previews_or_a_destroys_outputs_are_not_collected(monkeypatch, tmp_path: Path):
+    _writing(monkeypatch, '{"ip": "10.0.0.5"}')
+    _script_in(tmp_path, "deploy.sh")
+    integration = _bound("deploy.sh", plan_args=["x"], destroy_args=["x"])
+
+    integration.plan(tmp_path, dry_run=True)
+    integration.destroy(tmp_path)
+
+    assert _collected(integration, tmp_path) == {}
+
+
+def test_output_accepts_what_collect_step_outputs_passes(monkeypatch, tmp_path: Path):
+    """The controller passes `auth` and `resolved_values` for a script step too."""
+    _writing(monkeypatch, '{"ip": "10.0.0.5"}')
+    integration = _bound("deploy.sh")
+    integration.deploy(tmp_path)
+
+    result = integration.output(tmp_path, json_format=True, env={}, auth=None, resolved_values={"k": "v"})
+
+    assert result.is_successful

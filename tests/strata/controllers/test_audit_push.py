@@ -89,6 +89,16 @@ def test_non_git_remote_type_fails(tmp_path: Path, monkeypatch):
     assert captured == []
 
 
+def test_path_remote_fails_without_running_any_command(tmp_path: Path, monkeypatch):
+    """A path remote is read where a pipeline put it; strata never pushes to it."""
+    captured = _capture(monkeypatch)
+    remote = SolutionRemoteModel(name="xyz-configuration", type=RemoteType.GIT, url="https://h/x.git", path="repos/x")
+    result = push_audit_files(tmp_path, _sink(), _solution([remote]), {}, Path("p"), "actor")
+    assert result.success is False
+    assert "has a 'path'" in result.detail
+    assert captured == []
+
+
 def test_no_solution_fails_cleanly(tmp_path: Path, monkeypatch):
     captured = _capture(monkeypatch)
     result = push_audit_files(tmp_path, _sink(), None, {}, Path("p"), "actor")

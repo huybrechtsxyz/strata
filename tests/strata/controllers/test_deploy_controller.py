@@ -3095,11 +3095,49 @@ def test_collect_step_outputs_empty_on_failed_output_call():
     class _FakeResult:
         is_successful = False
         stdout = ""
+        stderr = ""
 
     integration = TerraformIntegration()
     integration.output = lambda *a, **kw: _FakeResult()  # type: ignore[method-assign]
 
     assert collect_step_outputs(integration, Path("/work"), {}) == ({}, set())
+
+
+@pytest.mark.parametrize(("stderr", "expected"), [("no state found\n", ["no state found"]), ("  \n", [])])
+def test_collect_step_outputs_says_why_a_failed_output_call_lost_the_outputs(stderr, expected):
+    from strata.controllers.deploy_controller import collect_step_outputs
+    from strata.integrations.terraform import TerraformIntegration
+
+    class _FakeResult:
+        is_successful = False
+        stdout = ""
+
+    _FakeResult.stderr = stderr  # type: ignore[attr-defined]
+    integration = TerraformIntegration()
+    integration.output = lambda *a, **kw: _FakeResult()  # type: ignore[method-assign]
+    warnings: list[str] = []
+
+    assert collect_step_outputs(integration, Path("/work"), {}, on_warning=warnings.append) == ({}, set())
+    assert warnings == expected
+
+
+def test_collect_step_outputs_does_not_warn_when_the_output_call_worked():
+    from strata.controllers.deploy_controller import collect_step_outputs
+    from strata.integrations.terraform import TerraformIntegration
+
+    class _FakeResult:
+        is_successful = True
+        stdout = json.dumps({"vm_ip": {"value": "10.0.0.5", "sensitive": False}})
+        stderr = "terraform noise on stderr"
+
+    integration = TerraformIntegration()
+    integration.output = lambda *a, **kw: _FakeResult()  # type: ignore[method-assign]
+    warnings: list[str] = []
+
+    values, _ = collect_step_outputs(integration, Path("/work"), {}, on_warning=warnings.append)
+
+    assert values == {"vm_ip": "10.0.0.5"}
+    assert warnings == []
 
 
 # ---------------------------------------------------------------------------

@@ -113,6 +113,10 @@ def push_audit_files(
         return PushResult(
             False, f"remote '{remote.name}' has type '{remote.type.value}', but an audit push needs 'git'"
         )
+    if remote.path is not None:
+        return PushResult(
+            False, f"remote '{remote.name}' has a 'path', which strata only reads; an audit push needs a 'reference'"
+        )
 
     checkout_path = layout.audit_push_checkout_path(root, remote.name, sink.branch)
     with credential_env(auth, resolved_values, None) as env:

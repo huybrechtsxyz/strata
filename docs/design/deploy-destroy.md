@@ -74,8 +74,9 @@ The labels are stable: code comments cite them.
 - **D4 - What a destroy skips.** The image tag policy and the security gates would block the one operation that has
   to stay possible, so a `deny` policy or a failing CVE gate never stops a teardown. A destroy manifest carries no
   `policy_results`, because the policy file in the build directory belongs to the earlier deploy.
-- **D5 - Unsupported tools.** An integration declares `SUPPORTS_DESTROY = False` (the script integration). A step
-  that uses one is a pre-flight error naming the step and suggesting `--stage` / `--scope` to leave it out, before
+- **D5 - Unsupported tools.** An integration declares `SUPPORTS_DESTROY = False`, or, when the answer depends on the
+  provisioner, overrides the `supports_destroy` property (the script integration: true only with `destroy_args`).
+  A step that uses one is a pre-flight error naming the step and suggesting `--stage` / `--scope` to leave it out, before
   anything is destroyed; under `--dry-run` it is a warning. A step is never skipped silently: skipping would strand
   what it created. The flag is read from the integration, never from a tool name, so the orchestrator stays
   tool-agnostic.
@@ -107,7 +108,7 @@ The labels are stable: code comments cite them.
   | Helm      | `helm get manifest`, parsed into one `Kind/name` line per resource. A missing release is reported as "not installed, nothing to remove".              |
   | Compose   | The running services of the stack (`docker stack services`). Nothing tool-native previews a removal. An unreadable stack is a warning, not a failure. |
   | GitOps    | Whether the rendered file is present in the config repo checkout: "would remove `<file>`" or "not present". Never a diff.                             |
-  | Script    | None: destroy is unsupported (D5).                                                                                                                    |
+  | Script    | `would run: <destroy_args>`; the script is never executed. Without `destroy_args` the step is unsupported (D5).                                       |
 
   - *Contract.* `InfraIntegration.plan_destroy()` is not abstract and raises `IntegrationError` by default. It is a
     separate method, not `plan(destroy=True)`, because `plan(**kwargs)` swallows unknown keywords and GitOps would
@@ -152,11 +153,11 @@ The labels are stable: code comments cite them.
 Additions to `InfraIntegration` (`integrations/capabilities.py`), all with defaults so existing integrations keep
 working:
 
-| Member                                                                 | Default                   | Implemented by                    |
-| ---------------------------------------------------------------------- | ------------------------- | --------------------------------- |
-| `SUPPORTS_DESTROY: ClassVar[bool]`                                     | `True`                    | `False` on the script integration |
-| `plan_destroy(path, **kwargs) -> CommandResult`                        | raises `IntegrationError` | Terraform, GitOps                 |
-| `destroy_namespace(namespace, modules, *, dry_run, env, on_step, ...)` | raises `IntegrationError` | Helm, Compose                     |
+| Member                                                                 | Default                   | Implemented by                |
+| ---------------------------------------------------------------------- | ------------------------- | ----------------------------- |
+| `SUPPORTS_DESTROY: ClassVar[bool]`, `supports_destroy` property        | `True`                    | script: `destroy_args` is set |
+| `plan_destroy(path, **kwargs) -> CommandResult`                        | raises `IntegrationError` | Terraform, GitOps             |
+| `destroy_namespace(namespace, modules, *, dry_run, env, on_step, ...)` | raises `IntegrationError` | Helm, Compose                 |
 
 A preview never changes anything and never writes a file. `destroy_namespace()` takes no `tokens`: a destroy reads
 only release and stack names. `HelmIntegration.destroy()` and `ComposeIntegration.destroy()` take a `line_callback`

@@ -337,6 +337,53 @@ def test_provisioner_script_accepts_args():
     assert model.script.args == ["--environment", "prod"]
 
 
+def test_provisioner_script_phase_args_default_to_none():
+    model = ProvisionerModel.model_validate(_minimal_script_provisioner())
+    assert model.script.plan_args is None
+    assert model.script.destroy_args is None
+
+
+def test_provisioner_script_accepts_plan_and_destroy_args():
+    data = _minimal_script_provisioner()
+    data["script"].update({"plan_args": ["--action", "plan"], "destroy_args": ["--action", "revoke"]})
+    model = ProvisionerModel.model_validate(data)
+    assert model.script.plan_args == ["--action", "plan"]
+    assert model.script.destroy_args == ["--action", "revoke"]
+
+
+def test_provisioner_script_values_default_to_none():
+    assert ProvisionerModel.model_validate(_minimal_script_provisioner()).script.values is None
+
+
+@pytest.mark.parametrize("values", [[], ["API_TOKEN"], ["API_TOKEN", "REGION", "build.url", "my-key_2"]])
+def test_provisioner_script_accepts_a_value_allow_list(values):
+    data = _minimal_script_provisioner()
+    data["script"]["values"] = values
+    assert ProvisionerModel.model_validate(data).script.values == values
+
+
+@pytest.mark.parametrize("bad", ["", " ", "has space", "${var:X}", "deployment:name", "a/b"])
+def test_provisioner_script_rejects_a_value_key_that_is_not_a_plain_key(bad):
+    data = _minimal_script_provisioner()
+    data["script"]["values"] = ["OK", bad]
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_rejects_a_value_listed_twice():
+    data = _minimal_script_provisioner()
+    data["script"]["values"] = ["API_TOKEN", "REGION", "API_TOKEN"]
+    with pytest.raises(ValidationError, match="API_TOKEN"):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_script_rejects_phase_args_it_does_not_know():
+    data = _minimal_script_provisioner()
+    data["script"]["apply_args"] = ["--x"]
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
 def test_provisioner_script_requires_source():
     """'script' is not a sync type (unlike argocd/flux) — source stays required."""
     data = _minimal_script_provisioner()

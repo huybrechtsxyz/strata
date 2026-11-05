@@ -67,16 +67,18 @@ def test_non_git_remote_type_fails_without_running_any_command(tmp_path: Path, m
     assert captured == []
 
 
-def test_missing_reference_fails_without_running_any_command(tmp_path: Path, monkeypatch):
+def test_path_remote_fails_without_running_any_command(tmp_path: Path, monkeypatch):
+    """A remote with a `path` has no reference, so there is no branch to push to."""
     captured = _capture(monkeypatch)
-    remote = SolutionRemoteModel.model_construct(
-        name="gitops-config", type=RemoteType.GIT, url="https://example.com/x.git", reference=None
+    remote = SolutionRemoteModel(
+        name="gitops-config", type=RemoteType.GIT, url="https://example.com/x.git", path="repos/x"
     )
     rendered = tmp_path / "values.yaml"
     rendered.write_text("replicas: 3")
     result = push_file(tmp_path, remote, rendered, "apps/forge/values.yaml", "deploy: forge")
     assert result.success is False
     assert "no reference" in result.detail
+    assert "'path' is read-only" in result.detail
     assert captured == []
 
 

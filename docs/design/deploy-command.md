@@ -204,7 +204,8 @@ namespaced; v1's flat-pool behavior is the outlier, not the norm.
 Collected via `collect_step_outputs()` (`getattr(integration, "output",
 None)`, Terraform-specific like `init`/`validate` — Compose/Helm
 integrations contribute nothing, no native "outputs" concept in either
-real reference repo). Only resolves inside schema-owned string fields
+real reference repo; a script writes its outputs to `STRATA_OUTPUT_FILE`,
+[script-provisioner.md](script-provisioner.md)). Only resolves inside schema-owned string fields
 (`provisioner.backend.configuration`, and `dns`/`networks`/`firewalls`
 documents claimed by an owning step) — never folded into `env=`/
 `TF_VAR_*` (a `"step.key"`-shaped name isn't a valid Terraform

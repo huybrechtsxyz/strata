@@ -135,9 +135,11 @@ def run_semantic_checks(
     diagnostics.extend(_check_workspaces(index))
     diagnostics.extend(_check_environments(index))
     diagnostics.extend(_check_deployment_value_tokens(index, resolved))
+    diagnostics.extend(_check_script_values(index, resolved))
     diagnostics.extend(_check_remotes(index, solution))
     diagnostics.extend(_check_asset_locations(index))
     diagnostics.extend(_check_remote_integrations(index, solution, root))
+    diagnostics.extend(_check_path_remote_pushes(index, solution))
     diagnostics.extend(_check_value_references(index))
     diagnostics.extend(_check_paths(index, root))
     diagnostics.extend(_check_version_workspace(index, resolved))
@@ -1363,6 +1365,43 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     return diagnostics
 
 
+def _check_script_values(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
+    """Every key a script provisioner lists in `script.values` exists for the deployments that run it.
+
+    A key is a variable, secret or feature some resolved environment declares, or a `<step>.<key>` output of a
+    step in the workspace (an output is only produced at deploy time, so only its step can be checked). Without a
+    resolvable environment there is nothing to check against, the same rule `${var:}` tokens follow.
+    """
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.DEPLOYMENT):
+        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
+        declared = _merged_declared_keys(index, deployment)
+        workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace or "")
+        if declared is None or workspace_entry is None:
+            continue
+        workspace = cast(WorkspaceModel, workspace_entry.model)
+        known = set().union(*declared.values())
+        steps = {step.name for step in workspace.spec.execution or []}
+        found = Diagnostics()
+        for position, provisioner in enumerate(workspace.spec.provisioners):
+            if provisioner.script is None or provisioner.script.values is None:
+                continue
+            for item, key in enumerate(provisioner.script.values):
+                step, dot, _ = key.partition(".")
+                if key in known or (dot and step in steps):
+                    continue
+                found.error(
+                    f"Workspace '{workspace.meta.name}': provisioner '{provisioner.name}' lists '{key}' in "
+                    f"script.values, which no environment of deployment '{deployment.meta.name}' declares "
+                    f"(declared: {sorted(known)}) and no step of the workspace produces as an output "
+                    f"(steps: {sorted(steps)}).",
+                    location=f"spec.provisioners.{position}.script.values.{item}",
+                    code="undeclared_script_value",
+                )
+        diagnostics.extend(found, source=str(workspace_entry.source))
+    return diagnostics
+
+
 def _reachable_environment_names(index: DocumentIndex, deployment: DeploymentModel) -> list[str]:
     """Every Environment name this deployment resolves — its Tenant's own
     `spec.environments` first (tenant merges in before deployment), then
@@ -1612,6 +1651,50 @@ def _check_remote_integrations(index: DocumentIndex, solution: SolutionModel | N
                 location=location,
                 code=f"remote_integration_{suffix}",
             )
+    return diagnostics
+
+
+def _check_path_remote_pushes(index: DocumentIndex, solution: SolutionModel | None) -> Diagnostics:
+    """A remote with a `path` is never pushed to: GitOps and audit sinks need a `reference`.
+
+    Both push from their own checkout of the remote's URL (`layout.gitops_push_checkout_path()`,
+    `.audit_push_checkout_path()`), which a path remote, read where a pipeline put it, never has. Caught
+    here so the mistake is a `validate` error rather than a failed push mid-deploy
+    (docs/work/remote-external-path.md).
+    """
+    diagnostics = Diagnostics()
+    path_remotes = {remote.name for remote in (solution.spec.remotes or []) if remote.path} if solution else set()
+    if not path_remotes:
+        return diagnostics
+
+    def report(remote: str, user: str, source: str, location: str) -> None:
+        diagnostics.error(
+            f"{user} pushes to remote '{remote}', which has a 'path': strata only reads a path remote. "
+            "Give the remote a 'reference' (the branch) instead.",
+            source=source,
+            location=location,
+            code="path_remote_not_pushable",
+        )
+
+    for entry in index.all_of(PlatformKind.WORKSPACE):
+        for position, provisioner in enumerate(cast(WorkspaceModel, entry.model).spec.provisioners):
+            if provisioner.gitops is not None and provisioner.gitops.remote in path_remotes:
+                report(
+                    provisioner.gitops.remote,
+                    f"GitOps provisioner '{provisioner.name}'",
+                    str(entry.source),
+                    f"spec.provisioners.{position}.gitops.remote",
+                )
+    for entry in index.all_of(PlatformKind.CONFIGURATION):
+        audit = cast(ConfigurationModel, entry.model).spec.audit
+        for position, sink in enumerate((audit.sinks or []) if audit else []):
+            if sink.git is not None and sink.git.remote in path_remotes:
+                report(
+                    sink.git.remote,
+                    f"Audit sink '{sink.name}'",
+                    str(entry.source),
+                    f"spec.audit.sinks.{position}.git.remote",
+                )
     return diagnostics
 
 

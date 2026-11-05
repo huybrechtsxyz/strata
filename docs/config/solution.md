@@ -14,7 +14,13 @@ not by discovery itself.
   - `name` — referenced elsewhere as `@<name>/<path>`
   - `type` — `local`, `git`, `oci`, or `helm`
   - `url` — the source location; must not embed a password or token (use an integration for credentials)
-  - `fetch` — `strata` (strata materializes it) or `external` (already placed by CI/elsewhere)
+  - `reference` — the branch, tag or commit SHA the remote is taken at. A `git` remote needs this
+    or `path`, never both
+  - `path` — `git` only: where a pipeline already checked the repository out, relative to the solution
+    root and inside it. Strata reads it there and never clones it; see
+    [A repository your pipeline checked out](#a-repository-your-pipeline-checked-out)
+  - `fetch` — `strata` (strata materializes it) or `external` (already placed by CI/elsewhere).
+    `path` implies `external`
   - `integration` — optional name of an [integration](integration.md) providing credentials; it must
     exist and declare the `sources` capability, or validation fails. Not valid for `type: local`.
     See [integrations/git.md](../integrations/git.md) for a private git remote and
@@ -46,6 +52,32 @@ spec:
       type: local
       url: modules
 ```
+
+## A repository your pipeline checked out
+
+When CI clones a repository itself (for example an Azure DevOps `resources.repositories` checkout),
+the pipeline has to state the ref, because it does so before strata runs. There are two ways to tell
+strata where that checkout is:
+
+- **`path`** (recommended). The pipeline owns the ref; strata only reads the folder.
+
+  ```yaml
+  remotes:
+    - name: iac
+      type: git
+      url: https://github.com/org/iac.git
+      path: repos/iac          # the pipeline's checkout path, inside the solution
+  ```
+
+  Exclude that folder from discovery (`discovery.exclude: ["repos/**"]`) so its YAML is not read as
+  strata documents. When the folder is a git checkout, the deploy's audit manifest records its commit
+  under `artifacts.repositories.<name>.commit`.
+- **`reference` with `fetch: external`**. Strata expects the checkout at
+  `.strata/remotes/<name>/<reference>`, so the pipeline must repeat the ref and place or link its
+  checkout there.
+
+A `path` remote cannot be pinned by a `version` document, take an `integration`, or be pushed to by a
+GitOps provisioner or an audit sink: those need strata to own the clone and the ref.
 
 ## Notes
 

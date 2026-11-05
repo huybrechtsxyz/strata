@@ -81,7 +81,8 @@ def resolve_remote(
             prepare_git_credentials()`. Ignored when `auth` is `None`.
         checkout_path: Where the checkout lives when it is not a manifest remote's
             own `.strata/remotes/<name>/<ref>` — an asset's `spec.location`
-            (docs/design/asset-management.md) passes its own. Ignored for `type: local`.
+            (docs/design/asset-management.md) passes its own. Ignored for `type: local`
+            and for a remote with a `path`.
         credentials: Asked for `auth`/`resolved_values` only when a clone is actually about to run, so an
             existing checkout, `fetch: external`, `type: local` and a `None` remote never resolve
             anything (docs/work/remotes-at-scale.md C2). Mutually exclusive with `auth`/`resolved_values`.
@@ -92,8 +93,8 @@ def resolve_remote(
 
     Raises:
         ValueError: `credentials` is given together with `auth` or `resolved_values`.
-        RemoteResolutionError: `fetch: external` names a path nothing has
-            checked out yet, the remote's `type` has no fetch mechanism
+        RemoteResolutionError: `fetch: external` (or a remote's `path`) names a
+            path nothing has checked out yet, the remote's `type` has no fetch mechanism
             built (`oci`/`helm` — see docs/design/remotes.md), or the git
             clone/checkout itself failed.
     """
@@ -108,6 +109,22 @@ def resolve_remote(
         # real `config` remote in config-repo's remotes.yaml: `type:
         # bundled` in v1 terms, `url: "."`).
         return (root / remote.url).resolve()
+
+    if remote.path is not None:
+        # A path remote is wherever the pipeline put it — never under
+        # .strata/remotes/, never cloned, and not moved by `checkout_path`
+        # (docs/work/remote-external-path.md).
+        located = root / remote.path
+        if not located.exists():
+            raise RemoteResolutionError(
+                f"Remote '{remote.name}' has path '{remote.path}', but nothing is at '{located}'. Make sure "
+                "your CI checkout step (or a manual git clone) places the repository there before running strata."
+            )
+        if not located.is_dir():
+            raise RemoteResolutionError(
+                f"Remote '{remote.name}' has path '{remote.path}', but '{located}' is not a directory."
+            )
+        return located
 
     checkout_path = checkout_path or layout.remote_checkout_path(root, remote.name, remote.reference)
     if checkout_path.exists():

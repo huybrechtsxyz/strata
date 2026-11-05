@@ -197,6 +197,16 @@ class InfraIntegration(Integration):
     #: before anything is destroyed without naming a tool (docs/design/deploy-destroy.md, D5).
     SUPPORTS_DESTROY: ClassVar[bool] = True
 
+    #: `False` when `plan()` writes no `<step>.tfplan`, so `deploy apply` has nothing to apply (`ScriptIntegration`,
+    #: GitOps). Lets `deploy apply` refuse such a step before anything runs, without naming a tool.
+    SUPPORTS_SAVED_PLAN: ClassVar[bool] = True
+
+    @property
+    def supports_destroy(self) -> bool:
+        """Whether this instance can destroy what it created. The class constant by default; an integration whose
+        answer depends on the provisioner it is bound to (`ScriptIntegration`) overrides it."""
+        return self.SUPPORTS_DESTROY
+
     def prepare(
         self,
         path: Path,

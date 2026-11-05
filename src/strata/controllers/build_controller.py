@@ -757,6 +757,13 @@ def build_run(
         # a real consumer.
         materialised[provisioner.name] = source_path
 
+        # Knowable now that the source is on disk; deploy would otherwise fail on it with a raw OS error.
+        if provisioner.script is not None and not (source_path / provisioner.script.file).is_file():
+            raise UsageError(
+                f"Provisioner '{provisioner.name}': script file '{provisioner.script.file}' does not exist in "
+                f"its materialised source {source_path}."
+            )
+
         try:
             # `remotes`/`root` are unused by every `prepare()` override except
             # `BaseGitOpsIntegration`'s (docs/design/gitops-integration.md
