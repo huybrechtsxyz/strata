@@ -642,13 +642,22 @@ _CONSUMER = "import json, sys\nwith open('result.json', 'w') as handle:\n    jso
 
 
 def _chained_solution(
-    tmp_path: Path, *, producer: str, consumer_args: list[str], output_store: str | None = None
+    tmp_path: Path,
+    *,
+    producer: str,
+    consumer_args: list[str],
+    output_store: str | None = None,
+    consumer: str = _CONSUMER,
+    consumer_extra: str = "",
 ) -> Path:
-    """`run_script` (runs `producer`), then `use_output` (depends on it, runs `_CONSUMER` with `consumer_args`)."""
+    """`run_script` (runs `producer`), then `use_output` (depends on it, runs `consumer` with `consumer_args`).
+
+    `consumer_extra` is YAML appended to the consumer's `script:` block, indented eight spaces.
+    """
     root = tmp_path / "sln"
     _write(root, "strata.yaml", MANIFEST)
     _write(root, "scripts/deploy.py", producer)
-    _write(root, "scripts_next/next.py", _CONSUMER)
+    _write(root, "scripts_next/next.py", consumer)
     _write(
         root,
         "provider.yaml",
@@ -674,7 +683,7 @@ def _chained_solution(
         "    - name: script_main\n      tool: script\n      source:\n        source_path: scripts\n"
         "      script:\n        file: deploy.py\n"
         "    - name: script_next\n      tool: script\n      source:\n        source_path: scripts_next\n"
-        f"      script:\n        file: next.py\n        args:\n{items}"
+        f"      script:\n        file: next.py\n        args:\n{items}{consumer_extra}"
         "  execution:\n"
         "    - name: run_script\n      provisioner: script_main\n      resources:\n        - r1\n"
         "    - name: use_output\n      provisioner: script_next\n      depends_on:\n        - run_script\n"
@@ -784,3 +793,41 @@ def test_a_sensitive_script_output_is_never_recorded_to_the_output_store(tmp_pat
     record = json.loads(record_bytes)
     assert record["run_script"]["values"] == {"address": "10.0.0.5"}
     assert TOKEN_OUTPUT not in record_bytes.decode("utf-8")
+
+
+_NOISY_CONSUMER = "import sys\nprint('using ' + ' '.join(sys.argv[1:]))\nsys.exit(3)\n"
+
+
+def test_a_sensitive_output_is_redacted_from_a_later_steps_failure(tmp_path: Path, real_python):
+    """The consumer echoes the token it was given and fails: the error must not carry the real value."""
+    root = _chained_solution(
+        tmp_path,
+        producer=_PRODUCER,
+        consumer_args=["--token", "${output:run_script.token}", "--address", "${output:run_script.address}"],
+        consumer=_NOISY_CONSUMER,
+    )
+    build_path = _built(tmp_path, root)
+
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert not diagnostics.ok
+    message = " ".join(diagnostics.messages())
+    assert TOKEN_OUTPUT not in message
+    assert "--token ***" in message
+    assert "10.0.0.5" in message  # an output that is not sensitive is left alone
+
+
+def test_a_destroy_listing_an_output_in_values_stops_before_anything_runs(tmp_path: Path, run):
+    root = _chained_solution(
+        tmp_path,
+        producer="pass\n",
+        consumer_args=["--x", "one"],
+        consumer_extra="        destroy_args: [--x, one]\n        values: [run_script.address]\n",
+    )
+    build_path = _built(tmp_path, root)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, destroy=True, force=True, stage="use_output")
+
+    assert "destroy_output_unavailable" in [e.code for e in diagnostics.errors]
+    assert "run_script.address" in " ".join(diagnostics.messages())
+    assert run.calls == []

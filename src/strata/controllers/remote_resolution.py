@@ -124,6 +124,7 @@ def resolve_remote(
             raise RemoteResolutionError(
                 f"Remote '{remote.name}' has path '{remote.path}', but '{located}' is not a directory."
             )
+        # Left as written, not `.resolve()`d: `resolve_within()` resolves both sides, and messages show the user's path.
         return located
 
     checkout_path = checkout_path or layout.remote_checkout_path(root, remote.name, remote.reference)

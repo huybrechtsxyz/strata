@@ -27,7 +27,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - A `git` remote in `strata.yaml` can name a `path` instead of a `reference`: the folder where a pipeline already
   checked the repository out, inside the solution. strata reads it there and never clones it, so the ref is stated
   only in the pipeline and the pipeline no longer has to link its checkout to `.strata/remotes/<name>/<reference>`.
-  `path` implies `fetch: external`. The deploy's audit manifest records the checkout's commit. A `path` remote cannot
+  `path` implies `fetch: external`. The deploy's audit manifest records the checkout's commit, and warns when it
+  cannot (not a git checkout, or `git` failed). A `path` remote cannot
   take an `integration`, be pinned by a `version` document, or be pushed to by a GitOps provisioner or audit sink
   (`strata validate` reports the last as `path_remote_not_pushable`).
 
@@ -45,6 +46,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Fixed
 
+- A sensitive output (a Terraform output marked `sensitive`, or a key a script lists in `_sensitive`) is now masked in
+  the streamed output and error messages of the steps that run after it, like a secret is.
 - `deploy run --dry-run` and `deploy plan` now show what a `script` step would run (`would run: ...`, secrets
   redacted). The preview was computed and then dropped.
 - `build run` now fails when a `script` provisioner's `file` is not in its materialised source. It used to pass, and

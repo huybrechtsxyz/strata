@@ -247,7 +247,7 @@ not applicable rather than silently absent:
 | `init`     | download providers, set up backend/state           | **N/A — omitted.** No providers/backend/state exist for a script; there is nothing to initialize                                                                                                |
 | `validate` | syntax-check the HCL, no state/credentials touched | **Real** — a per-interpreter no-exec syntax check (below)                                                                                                                                       |
 | `plan`     | preview the diff, no apply                         | **Real, opt-in** - runs the script with `plan_args` when a preview was asked for and `plan_args` is set; otherwise only confirms the file exists and prints `would run: ...` (see Phases below) |
-| `deploy`   | apply the plan                                     | **Real** — actually executes the script and collects its outputs (below)                                                                                                                                                        |
+| `deploy`   | apply the plan                                     | **Real** — actually executes the script and collects its outputs (below)                                                                                                                        |
 | `destroy`  | tear down                                          | **Real, opt-in** - runs the script with `destroy_args`; a script without them cannot be destroyed (see Phases below)                                                                            |
 
 `plan()` cannot be a bare "not supported" raise — a missing plan preview
@@ -545,6 +545,12 @@ The script writes one JSON object to the file named by the environment variable 
   controller, the output store and the token resolution needed no change for scripts. The one controller change is
   that a failed `output()` call now produces a warning with its stderr, for every tool: before, a Terraform or GitOps
   step that lost its outputs said nothing, and a later `${output:}` failed with no explanation.
+- **Who can produce outputs.** Only an integration that defines `output()`: Terraform, GitOps and script. Helm and
+  Compose steps have none, and a `${output:}` on them never resolves.
+- **The pairing of `deploy()` and `output()`.** `output()` returns what the last `deploy()` of the same instance
+  wrote; the instance holds it. The controller makes one integration per step and calls the two back to back, so
+  nothing else can come between them. An instance that is reused for another step, or asked for `output()` before
+  `deploy()`, reports no outputs.
 - **Limits.** The script cannot read another step's outputs from the file; it receives them through
   `STRATA_VALUES` (listed in `values` if scoped) or `args`.
 

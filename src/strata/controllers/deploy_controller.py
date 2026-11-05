@@ -392,6 +392,12 @@ def _step_payload(
     }
 
 
+def _script_output_values(provisioner: ProvisionerModel, step_names: set[str]) -> set[str]:
+    """The `<step>.<key>` entries of `script.values`: a listed key is an output when its first segment names a step."""
+    listed = provisioner.script.values if provisioner.script is not None else None
+    return {key for key in listed or [] if "." in key and key.partition(".")[0] in step_names}
+
+
 def _destroy_preflight(
     resolved_steps: list[tuple[ProvisioningStepModel, ProvisionerModel, InfraIntegration]],
     *,
@@ -469,6 +475,7 @@ def _destroy_preflight(
             referenced_output_keys(backend_configuration)
             | referenced_output_keys(step_payload)
             | referenced_output_keys(provisioner.script.destroy_args if provisioner.script is not None else None)
+            | _script_output_values(provisioner, {s.name for s in all_steps})
         )
         if not referenced:
             continue
@@ -1519,6 +1526,12 @@ def deploy_run(
 
         step_outputs[step.name], step_sensitive_outputs[step.name] = collect_step_outputs(
             integration, path, env, auth=auth, resolved_values=step_resolved_values, on_warning=_outputs_lost
+        )
+        # A sensitive output reaches later steps as an argument or env value, so it is masked like a secret from here on.
+        secret_values.update(
+            value
+            for key, value in step_outputs[step.name].items()
+            if key in step_sensitive_outputs[step.name] and len(value) >= _MIN_REDACT_LENGTH
         )
         if output_store is not None:
             # Per step, immediately after collection — not batched to the

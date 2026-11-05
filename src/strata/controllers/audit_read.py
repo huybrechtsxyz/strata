@@ -140,7 +140,7 @@ def sync_read_checkout(root: Path, solution: SolutionModel | None, sink: AuditGi
     reachable case here.
 
     Raises:
-        AuditReadError: The remote isn't declared, isn't a `git` remote, or
+        AuditReadError: The remote isn't declared, isn't a `git` remote, has a `path`, or
             the clone/fetch/reset itself failed.
     """
     remotes_by_name = {remote.name: remote for remote in (solution.spec.remotes or [])} if solution else {}
@@ -150,6 +150,11 @@ def sync_read_checkout(root: Path, solution: SolutionModel | None, sink: AuditGi
     if remote.type != RemoteType.GIT:
         raise AuditReadError(
             f"remote '{remote.name}' has type '{remote.type.value}', but a readable audit sink needs 'git'"
+        )
+    if remote.path is not None:
+        raise AuditReadError(
+            f"remote '{remote.name}' has a 'path', which strata only reads where a pipeline put it; an audit sink "
+            "needs a 'reference' (the branch)"
         )
 
     checkout_path = layout.audit_read_checkout_path(root, remote.name, sink.branch)

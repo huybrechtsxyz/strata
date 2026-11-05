@@ -1080,6 +1080,10 @@ def _with_path_remote(root: Path) -> None:
     (root / "repos" / "infra").mkdir(parents=True)
 
 
+def _commit_warnings(diagnostics: Diagnostics) -> list:
+    return [d for d in diagnostics.warnings if d.code == "audit_remote_commit_unavailable"]
+
+
 def _manifest_repository(root: Path) -> dict:
     manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
     return json.loads(manifest_path.read_text())["artifacts"]["repositories"]["infra-remote"]
@@ -1097,19 +1101,39 @@ def test_manifest_records_the_commit_of_a_path_remote(tmp_path: Path, _terraform
         ["git", "rev-parse", "HEAD"], cwd=checkout, check=True, capture_output=True, text=True
     ).stdout.strip()
 
-    _finalize(root, _run_deploy_and_build(root, tmp_path))
+    diagnostics = _finalize(root, _run_deploy_and_build(root, tmp_path))
 
     repository = _manifest_repository(root)
     assert repository["commit"] == head
+    assert _commit_warnings(diagnostics) == []
     assert "ref" not in repository  # the pipeline owns the ref; the manifest does not invent one
     assert repository["url"] == "https://example.com/org/infra.git"
 
 
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_a_path_remote_inside_the_solutions_own_git_tree_records_no_commit(tmp_path: Path, _terraform_stub):
+    """A plain folder inside the solution's repository has no commit of its own: `git rev-parse` would walk up and
+    report the solution's, so the checkout must hold its own `.git`."""
+    root = _solution_with_workload(tmp_path)
+    _with_path_remote(root)
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run([*git, "init", "-b", "main", str(root)], check=True, capture_output=True)
+    subprocess.run([*git, "commit", "--allow-empty", "-m", "solution"], cwd=root, check=True, capture_output=True)
+
+    diagnostics = _finalize(root, _run_deploy_and_build(root, tmp_path))
+
+    assert "commit" not in _manifest_repository(root)
+    assert len(_commit_warnings(diagnostics)) == 1
+
+
 def test_a_path_remote_that_is_not_a_git_checkout_records_no_commit(tmp_path: Path, _terraform_stub):
-    """A plain copy (or a folder inside the solution's own git work tree) has no commit of its own."""
+    """A plain copy has no commit of its own."""
     root = _solution_with_workload(tmp_path)
     _with_path_remote(root)
 
-    _finalize(root, _run_deploy_and_build(root, tmp_path))
+    diagnostics = _finalize(root, _run_deploy_and_build(root, tmp_path))
 
     assert "commit" not in _manifest_repository(root)
+    [warning] = _commit_warnings(diagnostics)
+    assert "infra-remote" in warning.message
+    assert "not a git checkout" in warning.message

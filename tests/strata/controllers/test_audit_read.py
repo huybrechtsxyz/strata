@@ -150,6 +150,15 @@ def test_sync_read_checkout_raises_for_a_non_git_remote_type(tmp_path: Path):
         sync_read_checkout(tmp_path, solution, sink)
 
 
+def test_sync_read_checkout_raises_for_a_path_remote(tmp_path: Path):
+    remote = SolutionRemoteModel(name="audit-repo", type=RemoteType.GIT, url="https://h/x.git", path="repos/x")
+    solution = SolutionModel.model_validate({"meta": {"name": "s"}, "spec": {"remotes": [remote.model_dump()]}})
+    sink = _git_sink().git
+    assert sink is not None
+    with pytest.raises(AuditReadError, match="has a 'path'"):
+        sync_read_checkout(tmp_path, solution, sink)
+
+
 # ---------------------------------------------------------------------------
 # list_latest_per_deployment — pure filesystem, no git needed at all
 # ---------------------------------------------------------------------------
