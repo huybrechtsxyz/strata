@@ -545,6 +545,12 @@ The script writes one JSON object to the file named by the environment variable 
   controller, the output store and the token resolution needed no change for scripts. The one controller change is
   that a failed `output()` call now produces a warning with its stderr, for every tool: before, a Terraform or GitOps
   step that lost its outputs said nothing, and a later `${output:}` failed with no explanation.
+- **Previews.** A preview applies no step, so the outputs of an upstream step exist only when an earlier real run
+  recorded them in the workspace's `output_store` (`deploy run` reads the record for a preview too). A step whose
+  arguments for the phase that will run (`plan_args` in a preview, `args` otherwise), or whose `values`, name an
+  output that is missing stops the preview before the script is asked to run, with the same message a Terraform step
+  gets plus a note saying why. There is no way to preview such a step without a recorded output; skipping it with a
+  warning instead of failing was considered and left until a real chained case shows which is wanted.
 - **Who can produce outputs.** Only an integration that defines `output()`: Terraform, GitOps and script. Helm and
   Compose steps have none, and a `${output:}` on them never resolves.
 - **The pairing of `deploy()` and `output()`.** `output()` returns what the last `deploy()` of the same instance

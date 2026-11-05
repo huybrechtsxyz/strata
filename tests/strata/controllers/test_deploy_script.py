@@ -8,6 +8,7 @@ Most tests stub `run_command`, so no interpreter is needed. The last section run
 import json
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -831,3 +832,89 @@ def test_a_destroy_listing_an_output_in_values_stops_before_anything_runs(tmp_pa
     assert "destroy_output_unavailable" in [e.code for e in diagnostics.errors]
     assert "run_script.address" in " ".join(diagnostics.messages())
     assert run.calls == []
+
+
+def test_a_preview_needing_an_output_nobody_recorded_says_a_preview_applies_nothing(tmp_path: Path, run):
+    root = _chained_solution(tmp_path, producer=_PRODUCER, consumer_args=["--address", "${output:run_script.address}"])
+    build_path = _built(tmp_path, root)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, dry_run=True)
+
+    assert not diagnostics.ok
+    message = " ".join(diagnostics.messages())
+    assert "run_script.address" in message
+    assert "A preview does not apply 'run_script'" in message
+    assert "output_store" in message
+    assert run.of_script() == []
+
+
+def test_a_real_run_missing_an_output_does_not_blame_the_preview(tmp_path: Path, run):
+    """The producer's (stubbed) run wrote no file, so the consumer's output is missing, and the run says so plainly."""
+    root = _chained_solution(tmp_path, producer=_PRODUCER, consumer_args=["--address", "${output:run_script.address}"])
+    build_path = _built(tmp_path, root)
+
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert not diagnostics.ok
+    message = " ".join(diagnostics.messages())
+    assert "run_script.address" in message
+    assert "preview" not in message.lower()
+
+
+def test_a_preview_reads_the_output_an_earlier_real_run_recorded(tmp_path: Path, run, monkeypatch):
+    """The remedy the message gives: with an `output_store`, a recorded output resolves in a preview."""
+    data = _fake_output_store(monkeypatch)
+    data["strata/deployment-outputs/app"] = (
+        json.dumps(
+            {"run_script": {"collected_at": datetime.now(timezone.utc).isoformat(), "values": {"address": "10.0.0.5"}}}
+        ).encode("utf-8"),
+        "1",
+    )
+    root = _chained_solution(
+        tmp_path,
+        producer=_PRODUCER,
+        consumer_args=["--address", "${output:run_script.address}"],
+        output_store="fake-output-store",
+    )
+    build_path = _built(tmp_path, root)
+    steps: list[str] = []
+
+    diagnostics = deploy_run(_context(root), "app", build_path, dry_run=True, on_step=steps.append)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert any(s.startswith("would run:") and "--address 10.0.0.5" in s for s in steps)
+
+
+def test_a_preview_also_checks_the_outputs_a_script_lists_in_values(tmp_path: Path, run):
+    root = _chained_solution(
+        tmp_path,
+        producer=_PRODUCER,
+        consumer_args=["--x", "one"],
+        consumer_extra="        values: [run_script.address]\n",
+    )
+    build_path = _built(tmp_path, root)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, dry_run=True)
+
+    assert not diagnostics.ok
+    message = " ".join(diagnostics.messages())
+    assert "run_script.address" in message
+    assert "was not produced by it" in message  # caught before the script is asked to run, not by its failure
+
+
+def test_a_preview_checks_plan_args_but_a_real_run_does_not(tmp_path: Path, run):
+    """Only the arguments of the phase that runs need their outputs: a real run never uses `plan_args`."""
+    root = _chained_solution(
+        tmp_path,
+        producer="pass\n",
+        consumer_args=["--x", "one"],
+        consumer_extra='        plan_args: ["--a", "${output:run_script.address}"]\n',
+    )
+    build_path = _built(tmp_path, root)
+
+    preview = deploy_run(_context(root), "app", build_path, dry_run=True)
+    real = deploy_run(_context(root), "app", build_path)
+
+    assert not preview.ok
+    assert "was not produced by it" in " ".join(preview.messages())
+    assert real.ok, real.messages()

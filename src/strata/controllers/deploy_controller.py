@@ -398,6 +398,15 @@ def _script_output_values(provisioner: ProvisionerModel, step_names: set[str]) -
     return {key for key in listed or [] if "." in key and key.partition(".")[0] in step_names}
 
 
+def _script_referenced_outputs(provisioner: ProvisionerModel, step_names: set[str], dry_run: bool) -> set[str]:
+    """The outputs a script step needs to run its next phase: the arguments of that phase, and its listed values."""
+    script = provisioner.script
+    if script is None:
+        return set()
+    arguments = script.plan_args if dry_run and script.plan_args is not None else script.args
+    return referenced_output_keys(arguments) | _script_output_values(provisioner, step_names)
+
+
 def _destroy_preflight(
     resolved_steps: list[tuple[ProvisioningStepModel, ProvisionerModel, InfraIntegration]],
     *,
@@ -1271,16 +1280,26 @@ def deploy_run(
         # attempted below. Reports every missing key in one pass, not
         # just the first `resolve_value_tokens()` happens to hit.
         backend_configuration = provisioner.backend.configuration if provisioner.backend is not None else {}
-        referenced = referenced_output_keys(backend_configuration) | referenced_output_keys(step_payload)
+        referenced = (
+            referenced_output_keys(backend_configuration)
+            | referenced_output_keys(step_payload)
+            | _script_referenced_outputs(provisioner, {s.name for s in all_steps}, dry_run)
+        )
         missing = sorted(key for key in referenced if key not in tokens)
         if missing:
             for key in missing:
                 upstream_step, _, output_key = key.partition(".")
                 available = sorted(k.split(".", 1)[1] for k in tokens if k.startswith(f"{upstream_step}."))
+                preview_hint = (
+                    f" A preview does not apply '{upstream_step}', so its outputs exist only if an earlier real run "
+                    "recorded them in the workspace's `output_store`."
+                    if dry_run
+                    else ""
+                )
                 diagnostics.error(
                     f"Step '{step.name}': '${{output:{key}}}' references step '{upstream_step}', but "
                     f"'{output_key}' was not produced by it (or any durable record). "
-                    f"Available from '{upstream_step}': {available}",
+                    f"Available from '{upstream_step}': {available}.{preview_hint}",
                     location=step.name,
                 )
             return diagnostics

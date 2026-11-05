@@ -34,6 +34,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Changed
 
+- A `script` step's `${output:}` references (its arguments, and `<step>.<key>` entries of `values`) are now checked
+  before the step runs, like a Terraform step's, and a preview says why one is missing: a preview applies no step, so
+  an upstream output exists only if an earlier real run recorded it in the workspace's `output_store`.
 - When a step's outputs cannot be collected after a successful deploy, the run now warns with the reason. Before, a
   Terraform or GitOps step whose output command failed said nothing, and a later `${output:}` failed with no
   explanation.
