@@ -133,6 +133,24 @@ def remote_checkout_path(root: Path, remote: str, reference: str | None) -> Path
     return remotes_dir(root) / remote / (reference or "_unpinned")
 
 
+def path_remote_location(root: Path, path: str) -> Path:
+    """Return where a `path` remote's checkout is: `path` from the solution root, `..` followed.
+
+    An absolute `path` is used as it is. The folder is not required to exist, so this is pure. Every
+    reader of a path remote (the resolver, the audit manifest) calls this one function so they agree.
+
+    Args:
+        root: Solution root, the folder holding `strata.yaml` (not the directory strata was started in).
+        path: The remote's declared `path`.
+    """
+    return (root / path).resolve()
+
+
+def is_inside_solution(root: Path, location: Path) -> bool:
+    """Return whether `location` is `root` itself or somewhere below it."""
+    return location.resolve().is_relative_to(root.resolve())
+
+
 def asset_checkout_path(root: Path, asset: str, reference: str | None) -> Path:
     """Return where an asset's own `spec.location` materialises on disk, keyed by its ref.
 

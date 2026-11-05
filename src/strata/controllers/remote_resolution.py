@@ -114,7 +114,7 @@ def resolve_remote(
         # A path remote is wherever the pipeline put it — never under
         # .strata/remotes/, never cloned, and not moved by `checkout_path`
         # (docs/work/remote-external-path.md).
-        located = root / remote.path
+        located = layout.path_remote_location(root, remote.path)
         if not located.exists():
             raise RemoteResolutionError(
                 f"Remote '{remote.name}' has path '{remote.path}', but nothing is at '{located}'. Make sure "
@@ -124,7 +124,6 @@ def resolve_remote(
             raise RemoteResolutionError(
                 f"Remote '{remote.name}' has path '{remote.path}', but '{located}' is not a directory."
             )
-        # Left as written, not `.resolve()`d: `resolve_within()` resolves both sides, and messages show the user's path.
         return located
 
     checkout_path = checkout_path or layout.remote_checkout_path(root, remote.name, remote.reference)

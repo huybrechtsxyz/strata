@@ -167,9 +167,10 @@ class SolutionRemoteModel(PlatformBaseModel):
 
     schema_rules: ClassVar[tuple[str, ...]] = (
         "Type `git` needs exactly one of `reference` (pin a branch, tag or commit SHA) and `path` (a "
-        "checkout someone else already placed in the solution).",
+        "checkout someone else already placed on disk).",
         "`path` is only valid for type `git`. It implies `fetch: external`, so `fetch: strata` and "
-        "`integration` are not allowed with it, and it is a solution-relative path without `..`.",
+        "`integration` are not allowed with it. It is resolved from the solution root and may use `..` "
+        "or be absolute; `strata validate` warns when it leaves the solution.",
         "`reference` is not allowed for type `helm` or `local`; pick chart versions where the "
         "chart is used (`chart_version`).",
         "For type `oci`, `reference` is required when the remote serves a non-chart artifact (pin "
@@ -215,9 +216,11 @@ class SolutionRemoteModel(PlatformBaseModel):
     path: str | None = Field(
         None,
         min_length=1,
-        description="Where a pipeline already checked this git repository out, relative to the solution "
-        "root (for example `repos/iac-int-deployment`). Strata reads it there and never clones it. Use "
-        "instead of `reference` when the pipeline owns the ref; implies `fetch: external`.\n\n"
+        description="Where a pipeline or developer already checked this git repository out. Relative to the "
+        "solution root (the folder holding `strata.yaml`), for example `repos/iac-int-deployment` or, for a "
+        "checkout beside the solution, `../iac-int-deployment`; or an absolute path. Strata reads it there "
+        "and never clones it. Use instead of `reference` when the pipeline owns the ref; implies "
+        "`fetch: external`. `strata validate` warns when the path leaves the solution.\n\n"
         "Design notes: docs/work/remote-external-path.md. Without it, a `fetch: external` "
         "remote is found at `.strata/remotes/<name>/<reference>`, so a pipeline must repeat "
         "the ref it checked out and link its checkout there. Not keyed by ref: a version pin "
@@ -300,9 +303,11 @@ class SolutionRemoteModel(PlatformBaseModel):
         It implies `fetch: external` (nobody fetches into a path strata was
         told to read), so the default is switched rather than asking for a
         redundant field; only an explicit `fetch: strata` is a contradiction.
-        Same path safety as a `local` remote's `url`: the checkout must be
-        inside the solution, which is also what keeps CI and a workstation
-        on one value (docs/work/remote-external-path.md Q1).
+        Unlike a `local` remote's `url`, the path may leave the solution (`..`
+        or absolute): a pipeline checks repositories out beside the solution,
+        and one committed value must work there and on a workstation. The
+        guard moved from the schema to a `validate` warning
+        (`path_remote_outside_solution`) so the choice is visible in review.
         """
         if self.path is None:
             return self
@@ -317,7 +322,6 @@ class SolutionRemoteModel(PlatformBaseModel):
             raise ValueError(f"Remote '{self.name}': 'integration' is not valid with 'path' — strata never clones it.")
         if "fetch" in self.model_fields_set and self.fetch is RemoteFetch.STRATA:
             raise ValueError(f"Remote '{self.name}': 'fetch: strata' is not valid with 'path' — it is external.")
-        validate_relative_path(self.path)
         validate_not_option_like(self.path, "path")
         if self.fetch is not RemoteFetch.EXTERNAL:
             # Guarded: `validate_assignment` re-runs this validator on the assignment.

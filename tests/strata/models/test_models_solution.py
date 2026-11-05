@@ -298,8 +298,18 @@ def test_solution_path_remote_rejects_integration():
         SolutionModel.model_validate(data)
 
 
-@pytest.mark.parametrize("bad_path", ["../iac", "/srv/iac", "C:\\iac", "repos/../../iac"])
-def test_solution_path_remote_rejects_a_path_outside_the_solution(bad_path):
+@pytest.mark.parametrize(
+    "path", ["../iac", "../../iac", "repos/../../iac", "/srv/iac", "C:\\iac", "\\\\server\\share\\iac"]
+)
+def test_solution_path_remote_accepts_a_path_outside_the_solution(path):
+    """`path` is resolved from the solution root and may leave it: a pipeline checks repositories out as siblings."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote(path=path)]
+    assert SolutionModel.model_validate(data).spec.remotes[0].path == path
+
+
+@pytest.mark.parametrize("bad_path", ["-iac", "--upload-pack=x", ""])
+def test_solution_path_remote_rejects_an_option_like_or_empty_path(bad_path):
     data = _minimal_solution()
     data["spec"]["remotes"] = [_path_remote(path=bad_path)]
     with pytest.raises(ValidationError):
