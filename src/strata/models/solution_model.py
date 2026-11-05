@@ -170,7 +170,7 @@ class SolutionRemoteModel(PlatformBaseModel):
         "checkout someone else already placed on disk).",
         "`path` is only valid for type `git`. It implies `fetch: external`, so `fetch: strata` and "
         "`integration` are not allowed with it. It is resolved from the solution root and may use `..` "
-        "or be absolute; `strata validate` warns when it leaves the solution.",
+        "or be absolute.",
         "`reference` is not allowed for type `helm` or `local`; pick chart versions where the "
         "chart is used (`chart_version`).",
         "For type `oci`, `reference` is required when the remote serves a non-chart artifact (pin "
@@ -220,7 +220,7 @@ class SolutionRemoteModel(PlatformBaseModel):
         "solution root (the folder holding `strata.yaml`), for example `repos/iac-int-deployment` or, for a "
         "checkout beside the solution, `../iac-int-deployment`; or an absolute path. Strata reads it there "
         "and never clones it. Use instead of `reference` when the pipeline owns the ref; implies "
-        "`fetch: external`. `strata validate` warns when the path leaves the solution.\n\n"
+        "`fetch: external`.\n\n"
         "Design notes: docs/work/remote-external-path.md. Without it, a `fetch: external` "
         "remote is found at `.strata/remotes/<name>/<reference>`, so a pipeline must repeat "
         "the ref it checked out and link its checkout there. Not keyed by ref: a version pin "
@@ -305,9 +305,10 @@ class SolutionRemoteModel(PlatformBaseModel):
         redundant field; only an explicit `fetch: strata` is a contradiction.
         Unlike a `local` remote's `url`, the path may leave the solution (`..`
         or absolute): a pipeline checks repositories out beside the solution,
-        and one committed value must work there and on a workstation. The
-        guard moved from the schema to a `validate` warning
-        (`path_remote_outside_solution`) so the choice is visible in review.
+        and one committed value must work there and on a workstation. Writing
+        `path` is itself the statement "I put it there", so leaving the
+        solution is not reported (a 2.3.1 warning for it failed `validate
+        --strict` for exactly that layout).
         """
         if self.path is None:
             return self

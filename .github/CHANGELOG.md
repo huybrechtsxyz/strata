@@ -8,6 +8,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-11-05
+
+### Removed
+
+- The `path_remote_outside_solution` warning from 2.3.1. It fired for every `path` outside the solution, so
+  `strata validate --strict` failed for the sibling layout (`path: ../iac`) that 2.3.1 was made for. Writing `path`
+  already states that the checkout was placed by someone else, so a path outside the solution is no longer reported.
+  A `path` that does not exist still fails `build run`.
+
 ## [2.3.1] - 2026-11-05
 
 ### Changed
@@ -152,7 +161,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.3.1...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.3.2...HEAD
+[2.3.2]: https://github.com/huybrechtsxyz/strata/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/huybrechtsxyz/strata/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/huybrechtsxyz/strata/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/huybrechtsxyz/strata/compare/v2.1.0...v2.2.0

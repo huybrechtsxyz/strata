@@ -129,8 +129,8 @@ How values merge for a deployment:
 - A remote with `fetch: external` must already be checked out at `.strata/remotes/<name>/<reference>` before
   `build run`; strata will not clone it. When a pipeline does the checkout, give the remote `path: <checkout dir>`
   instead of `reference`: strata reads it there and the ref stays in the pipeline. The path is relative to the
-  solution root (`..` allowed, so `../iac` is a checkout beside the solution) or absolute, and `strata validate`
-  warns when it leaves the solution. A `path` remote cannot be pinned or pushed to (GitOps, audit sinks).
+  solution root (`..` allowed, so `../iac` is a checkout beside the solution) or absolute. A `path` remote cannot
+  be pinned or pushed to (GitOps, audit sinks).
 - A version pin on a `type: local` remote is accepted but changes nothing.
 - An `attributeconfig` must set `target.view` (`document` or `effective`); there is no default.
 

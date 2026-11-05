@@ -278,22 +278,3 @@ def test_path_remote_location_does_not_need_the_folder_to_exist(tmp_path: Path):
     from strata.utils.layout import path_remote_location
 
     assert not path_remote_location(tmp_path, "../not-there-yet").exists()
-
-
-@pytest.mark.parametrize(
-    ("path", "inside"),
-    [("repos/iac", True), ("a/../repos/iac", True), (".", True), ("../iac", False), ("repos/../../iac", False)],
-)
-def test_is_inside_solution(tmp_path: Path, path: str, inside: bool):
-    from strata.utils.layout import is_inside_solution, path_remote_location
-
-    root = tmp_path / "cfg"
-    assert is_inside_solution(root, path_remote_location(root, path)) is inside
-
-
-def test_an_absolute_path_is_inside_only_when_it_is_under_the_root(tmp_path: Path):
-    from strata.utils.layout import is_inside_solution, path_remote_location
-
-    root = tmp_path / "cfg"
-    assert is_inside_solution(root, path_remote_location(root, str(root / "repos" / "iac")))
-    assert not is_inside_solution(root, path_remote_location(root, str(tmp_path / "iac")))
