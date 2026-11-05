@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Solution (kind: solution) &mdash; strata 2.2.0 documentation</title>
+  <title>Solution (kind: solution) &mdash; strata 2.3.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b21de401"></script>
+      <script src="../_static/documentation_options.js?v=c3c8ae58"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -62,6 +62,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
 </ul>
@@ -71,6 +72,7 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#a-repository-your-pipeline-checked-out">A repository your pipeline checked out</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
@@ -145,7 +147,13 @@ loader’s built-in ignores (<code class="docutils literal notranslate"><span cl
 <li><p><code class="docutils literal notranslate"><span class="pre">name</span></code> — referenced elsewhere as <code class="docutils literal notranslate"><span class="pre">&#64;&lt;name&gt;/&lt;path&gt;</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">type</span></code> — <code class="docutils literal notranslate"><span class="pre">local</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>, <code class="docutils literal notranslate"><span class="pre">oci</span></code>, or <code class="docutils literal notranslate"><span class="pre">helm</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">url</span></code> — the source location; must not embed a password or token (use an integration for credentials)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">fetch</span></code> — <code class="docutils literal notranslate"><span class="pre">strata</span></code> (strata materializes it) or <code class="docutils literal notranslate"><span class="pre">external</span></code> (already placed by CI/elsewhere)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reference</span></code> — the branch, tag or commit SHA the remote is taken at. A <code class="docutils literal notranslate"><span class="pre">git</span></code> remote needs this
+or <code class="docutils literal notranslate"><span class="pre">path</span></code>, never both</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">path</span></code> — <code class="docutils literal notranslate"><span class="pre">git</span></code> only: where a pipeline already checked the repository out, relative to the solution
+root and inside it. Strata reads it there and never clones it; see
+<a class="reference internal" href="#a-repository-your-pipeline-checked-out">A repository your pipeline checked out</a></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fetch</span></code> — <code class="docutils literal notranslate"><span class="pre">strata</span></code> (strata materializes it) or <code class="docutils literal notranslate"><span class="pre">external</span></code> (already placed by CI/elsewhere).
+<code class="docutils literal notranslate"><span class="pre">path</span></code> implies <code class="docutils literal notranslate"><span class="pre">external</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">integration</span></code> — optional name of an <a class="reference internal" href="integration.html"><span class="std std-doc">integration</span></a> providing credentials; it must
 exist and declare the <code class="docutils literal notranslate"><span class="pre">sources</span></code> capability, or validation fails. Not valid for <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">local</span></code>.
 See <a class="reference internal" href="../integrations/git.html"><span class="std std-doc">integrations/git.md</span></a> for a private git remote and
@@ -180,6 +188,31 @@ See <a class="reference internal" href="../integrations/git.html"><span class="s
 <span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">modules</span>
 </pre></div>
 </div>
+</section>
+<section id="a-repository-your-pipeline-checked-out">
+<h2>A repository your pipeline checked out<a class="headerlink" href="#a-repository-your-pipeline-checked-out" title="Link to this heading"></a></h2>
+<p>When CI clones a repository itself (for example an Azure DevOps <code class="docutils literal notranslate"><span class="pre">resources.repositories</span></code> checkout),
+the pipeline has to state the ref, because it does so before strata runs. There are two ways to tell
+strata where that checkout is:</p>
+<ul>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">path</span></code></strong> (recommended). The pipeline owns the ref; strata only reads the folder.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">remotes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iac</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git</span>
+<span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/org/iac.git</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repos/iac</span><span class="w">          </span><span class="c1"># the pipeline's checkout path, inside the solution</span>
+</pre></div>
+</div>
+<p>Exclude that folder from discovery (<code class="docutils literal notranslate"><span class="pre">discovery.exclude:</span> <span class="pre">[&quot;repos/**&quot;]</span></code>) so its YAML is not read as
+strata documents. When the folder is a git checkout, the deploy’s audit manifest records its commit
+under <code class="docutils literal notranslate"><span class="pre">artifacts.repositories.&lt;name&gt;.commit</span></code>.</p>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">reference</span></code> with <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">external</span></code></strong>. Strata expects the checkout at
+<code class="docutils literal notranslate"><span class="pre">.strata/remotes/&lt;name&gt;/&lt;reference&gt;</span></code>, so the pipeline must repeat the ref and place or link its
+checkout there.</p></li>
+</ul>
+<p>A <code class="docutils literal notranslate"><span class="pre">path</span></code> remote cannot be pinned by a <code class="docutils literal notranslate"><span class="pre">version</span></code> document, take an <code class="docutils literal notranslate"><span class="pre">integration</span></code>, or be pushed to by a
+GitOps provisioner or an audit sink: those need strata to own the clone and the ref.</p>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>

@@ -28,7 +28,8 @@ parameters.
   "Topology grouping" below. Inline since ADR-0028 (reverted from a standalone `kind: topology`
   document, ADR-0011) — not a list of names.
 - `spec.provisioners[]` — tool definitions (`ProvisionerModel`): `name`, `tool` (terraform, ansible,
-  helm, compose, ...), `source`, `backend` (terraform only), `properties` (ansible only),
+  helm, compose, script, ...), `source`, `backend` (terraform only), `properties` (ansible only),
+  `script` (script only, see "Script provisioner" below),
   `integration` (which [`integration`](integration.md) document supplies version/auth), `output`
   (Jinja2 template escape hatch)
 - `spec.execution[]` — the ordered recipe (`ProvisioningStepModel`): `name`, `provisioner`,
@@ -180,6 +181,48 @@ Things to know:
   variables) can use them. They are not allowed in an [`environment`](environment.md) store's own `value`.
   The design, and why it is a token rather than a default key, is in
   [deployment-tokens.md](../design/deployment-tokens.md).
+
+## Script provisioner
+
+`tool: script` runs a `.ps1`, `.sh`, `.bash`, `.py` or `.bat` file as a step. `script` is required for this tool and
+rejected for any other built-in one, and `source` is required as for every tool: `source.source_path` is the directory
+that is materialised, and `script.file` is relative to it.
+
+```yaml
+provisioners:
+  - name: secrets-script
+    tool: script
+    source:
+      source_path: scripts/secrets
+    script:
+      file: secrets.py
+      args: [--action, reload]
+      plan_args: [--action, plan]
+      destroy_args: [--action, revoke, --records, "${var:revoke_records}"]
+      values: [VAULT_TOKEN]
+```
+
+| Field          | Used by                                  | When unset                                                    |
+| -------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| `file`         | every phase                              | required                                                      |
+| `args`         | `deploy run`, the apply                  | the script gets no arguments                                  |
+| `plan_args`    | `deploy run --dry-run` and `deploy plan` | a preview prints `would run: ...` and executes nothing        |
+| `destroy_args` | `deploy destroy --force`                 | the step cannot be destroyed, and `deploy destroy` refuses it |
+| `values`       | the environment variable `STRATA_VALUES` | the script receives every resolved value                      |
+
+- Every argument can use value tokens. The path of the rendered `output.template`, when the provisioner sets one, is
+  appended to `args` and `plan_args` as the last argument.
+- A script has to guard itself: strata cannot check that it changes nothing when run with `plan_args`.
+  `STRATA_PHASE` (`plan`, `apply` or `destroy`) tells it which phase it is in.
+- `values` lists keys: variables, secrets, features, and `<step>.<key>` outputs. `STRATA_VALUES` then holds those and
+  `deployment:name` and `deployment:tenant`. `strata validate` reports a key nothing declares. It limits
+  `STRATA_VALUES` only: arguments can still use any token.
+- A script passes values to later steps by writing a JSON object to the file named by `STRATA_OUTPUT_FILE`;
+  `_sensitive` lists the keys never recorded in the `output_store`.
+- `deploy apply` refuses a script step: it writes no saved plan. Use `deploy run`.
+
+A worked example, with the script, is in [how-to/script-provisioner.md](../how-to/script-provisioner.md).
+The design is in [script-provisioner.md](../design/script-provisioner.md).
 
 ## Image tag policy
 

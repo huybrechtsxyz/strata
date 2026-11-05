@@ -1,0 +1,372 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Run a Script as a Pipeline Step (tool: script) &mdash; strata 2.3.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=c3c8ae58"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How To: Gate deploys on security findings" href="security-gates.html" />
+    <link rel="prev" title="How To: Use the SBOM Feature (CycloneDX)" href="sbom-generation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#declare-the-step">1. Declare the step</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#write-the-script">2. Write the script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#give-it-only-the-values-it-needs">3. Give it only the values it needs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pass-results-to-the-next-step">4. Pass results to the next step</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#trust-it-step-by-step">5. Trust it step by step</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/attributeconfig.html">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/chart-registries.html">Chart registries (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/script-provisioner.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-run-a-script-as-a-pipeline-step-tool-script">
+<h1>How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)<a class="headerlink" href="#how-to-run-a-script-as-a-pipeline-step-tool-script" title="Link to this heading"></a></h1>
+<p>A <code class="docutils literal notranslate"><span class="pre">script</span></code> provisioner runs a <code class="docutils literal notranslate"><span class="pre">.ps1</span></code>, <code class="docutils literal notranslate"><span class="pre">.sh</span></code>, <code class="docutils literal notranslate"><span class="pre">.bash</span></code>, <code class="docutils literal notranslate"><span class="pre">.py</span></code> or <code class="docutils literal notranslate"><span class="pre">.bat</span></code> file as an ordinary step of a workspace. This guide
+builds one around a real case: a script that manages secrets and does three things, <code class="docutils literal notranslate"><span class="pre">plan</span></code>, <code class="docutils literal notranslate"><span class="pre">reload</span></code> and <code class="docutils literal notranslate"><span class="pre">revoke</span></code>.
+A schedule runs <code class="docutils literal notranslate"><span class="pre">reload</span></code>, a person runs <code class="docutils literal notranslate"><span class="pre">revoke</span></code> for a list of records, and a preview must never change anything.</p>
+<p>How it works, and why, is in <span class="xref myst">script-provisioner.md</span>. The fields are in
+<a class="reference internal" href="../config/workspace.html#script-provisioner"><span class="std std-ref">workspace.md</span></a>.</p>
+<section id="declare-the-step">
+<h2>1. Declare the step<a class="headerlink" href="#declare-the-step" title="Link to this heading"></a></h2>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secrets</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secrets-script</span>
+<span class="w">      </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">script</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/secrets</span>
+<span class="w">      </span><span class="nt">script</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secrets.py</span>
+<span class="w">        </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--action</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">reload</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">plan_args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--action</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">plan</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">destroy_args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--action</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">revoke</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">--records</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"${var:revoke_records}"</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">VAULT_TOKEN</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">execution</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">manage-secrets</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secrets-script</span>
+<span class="w">      </span><span class="nt">resources</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">placeholder</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>Each list is one phase of the same script. (A step needs at least one target; <code class="docutils literal notranslate"><span class="pre">resources</span></code> here names a resource of
+the workspace.)</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Command</p></th>
+<th class="head"><p>Runs the script with</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">STRATA_PHASE</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">D</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">args</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">apply</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">D</span> <span class="pre">--dry-run</span></code>, <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">plan</span> <span class="pre">D</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plan_args</span></code>, when set; otherwise nothing is executed</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plan</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">destroy</span> <span class="pre">D</span> <span class="pre">--force</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">destroy_args</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">destroy</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">destroy</span> <span class="pre">D</span> <span class="pre">--dry-run</span></code></p></td>
+<td><p>nothing: it prints <code class="docutils literal notranslate"><span class="pre">would</span> <span class="pre">run:</span> <span class="pre">...</span></code></p></td>
+<td><p>none</p></td>
+</tr>
+</tbody>
+</table>
+<ul class="simple">
+<li><p>Without <code class="docutils literal notranslate"><span class="pre">plan_args</span></code>, a preview prints the command it would run and executes nothing.</p></li>
+<li><p>Without <code class="docutils literal notranslate"><span class="pre">destroy_args</span></code>, the step cannot be destroyed, and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code> refuses it before anything is removed.
+Leave it out with <code class="docutils literal notranslate"><span class="pre">--stage</span></code> or <code class="docutils literal notranslate"><span class="pre">--scope</span></code>.</p></li>
+<li><p>A real <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> never runs <code class="docutils literal notranslate"><span class="pre">plan_args</span></code>. It would otherwise run the script twice.</p></li>
+<li><p>Every argument can use value tokens: <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>, <code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>, <code class="docutils literal notranslate"><span class="pre">${feature:}</span></code>, <code class="docutils literal notranslate"><span class="pre">${output:}</span></code> and <code class="docutils literal notranslate"><span class="pre">${deployment:}</span></code>.</p></li>
+</ul>
+</section>
+<section id="write-the-script">
+<h2>2. Write the script<a class="headerlink" href="#write-the-script" title="Link to this heading"></a></h2>
+<p>strata cannot check that a script is free of side effects when it runs with <code class="docutils literal notranslate"><span class="pre">plan_args</span></code>. The script has to guard
+itself. <code class="docutils literal notranslate"><span class="pre">STRATA_PHASE</span></code> says which phase it was started in, whatever the arguments are:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+<span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--action"</span><span class="p">,</span> <span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="s2">"plan"</span><span class="p">,</span> <span class="s2">"reload"</span><span class="p">,</span> <span class="s2">"revoke"</span><span class="p">],</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--records"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span>
+<span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+
+<span class="c1"># A preview must not change anything, even when plan_args is wrong.</span>
+<span class="n">phase</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"STRATA_PHASE"</span><span class="p">]</span>
+<span class="k">if</span> <span class="n">phase</span> <span class="o">==</span> <span class="s2">"plan"</span> <span class="ow">and</span> <span class="n">args</span><span class="o">.</span><span class="n">action</span> <span class="o">!=</span> <span class="s2">"plan"</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"refusing '</span><span class="si">{</span><span class="n">args</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2">' during a preview"</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">phase</span> <span class="o">==</span> <span class="s2">"destroy"</span> <span class="ow">and</span> <span class="n">args</span><span class="o">.</span><span class="n">action</span> <span class="o">!=</span> <span class="s2">"revoke"</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"refusing '</span><span class="si">{</span><span class="n">args</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2">' during a destroy"</span><span class="p">)</span>
+
+<span class="n">token</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"STRATA_VALUES"</span><span class="p">])[</span><span class="s2">"VAULT_TOKEN"</span><span class="p">]</span>
+
+<span class="c1"># ... your logic: plan, reload or revoke, using `token` ...</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"STRATA_OUTPUT_FILE"</span><span class="p">],</span> <span class="s2">"w"</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
+    <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">({</span><span class="s2">"version"</span><span class="p">:</span> <span class="mi">7</span><span class="p">},</span> <span class="n">handle</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The same guard in Bash and PowerShell:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">"</span><span class="nv">$STRATA_PHASE</span><span class="s2">"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"plan"</span><span class="w"> </span><span class="o">]</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">"</span><span class="nv">$ACTION</span><span class="s2">"</span><span class="w"> </span>!<span class="o">=</span><span class="w"> </span><span class="s2">"plan"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"refusing '</span><span class="nv">$ACTION</span><span class="s2">' during a preview"</span><span class="w"> </span>&gt;<span class="p">&amp;</span><span class="m">2</span>
+<span class="w">  </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
+<span class="k">fi</span>
+</pre></div>
+</div>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="p">(</span><span class="nv">$env:STRATA_PHASE</span> <span class="o">-eq</span> <span class="s1">'plan'</span> <span class="o">-and</span> <span class="nv">$Action</span> <span class="o">-ne</span> <span class="s1">'plan'</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">Write-Error</span> <span class="s2">"refusing '$Action' during a preview"</span>
+    <span class="n">exit</span> <span class="n">1</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>What the script receives, besides its arguments:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Environment variable</p></th>
+<th class="head"><p>Holds</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">STRATA_PHASE</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plan</span></code>, <code class="docutils literal notranslate"><span class="pre">apply</span></code> or <code class="docutils literal notranslate"><span class="pre">destroy</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">STRATA_VALUES</span></code></p></td>
+<td><p>JSON: the resolved values (see step 3).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">STRATA_OUTPUT_FILE</span></code></p></td>
+<td><p>A path the script may write a JSON object to (see step 4). Set in every phase.</p></td>
+</tr>
+</tbody>
+</table>
+<p>The working directory is the step’s directory in the build output. The process also inherits the pipeline’s own
+environment.</p>
+</section>
+<section id="give-it-only-the-values-it-needs">
+<h2>3. Give it only the values it needs<a class="headerlink" href="#give-it-only-the-values-it-needs" title="Link to this heading"></a></h2>
+<p>By default <code class="docutils literal notranslate"><span class="pre">STRATA_VALUES</span></code> holds every resolved value of the deployment, so a script that needs one token also
+receives every unrelated secret. List the keys it needs in <code class="docutils literal notranslate"><span class="pre">values</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">VAULT_TOKEN</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>The script then receives <code class="docutils literal notranslate"><span class="pre">VAULT_TOKEN</span></code>, <code class="docutils literal notranslate"><span class="pre">deployment:name</span></code> and <code class="docutils literal notranslate"><span class="pre">deployment:tenant</span></code> (when the deployment has a tenant).
+An empty list <code class="docutils literal notranslate"><span class="pre">[]</span></code> delivers only the two <code class="docutils literal notranslate"><span class="pre">deployment:</span></code> entries.</p>
+<ul class="simple">
+<li><p>Keys are variable, secret and feature keys, and <code class="docutils literal notranslate"><span class="pre">&lt;step&gt;.&lt;key&gt;</span></code> for an output of an earlier step.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> reports a key that no environment of the deployment declares. A key that does not resolve at
+deploy time fails the step before the script runs, in a preview too.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">values</span></code> limits <code class="docutils literal notranslate"><span class="pre">STRATA_VALUES</span></code> only. Arguments can still use any token, and a secret in an argument is visible in
+the process list of the machine. Prefer <code class="docutils literal notranslate"><span class="pre">STRATA_VALUES</span></code> for a secret.</p></li>
+</ul>
+</section>
+<section id="pass-results-to-the-next-step">
+<h2>4. Pass results to the next step<a class="headerlink" href="#pass-results-to-the-next-step" title="Link to this heading"></a></h2>
+<p>A script writes one JSON object to the file named by <code class="docutils literal notranslate"><span class="pre">STRATA_OUTPUT_FILE</span></code>. The steps that depend on it read the keys as
+<code class="docutils literal notranslate"><span class="pre">${output:&lt;step&gt;.&lt;key&gt;}</span></code>:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="nt">"token"</span><span class="p">:</span><span class="w"> </span><span class="s2">"abc"</span><span class="p">,</span><span class="w"> </span><span class="nt">"_sensitive"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"token"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">use-secrets</span>
+<span class="w">  </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">consumer</span>
+<span class="w">  </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">manage-secrets</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">resources</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">placeholder</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>with <code class="docutils literal notranslate"><span class="pre">args:</span> <span class="pre">[--version,</span> <span class="pre">&quot;${output:manage-secrets.version}&quot;]</span></code> on the consumer.</p>
+<ul class="simple">
+<li><p>Values may be any JSON. Anything other than a string is passed on as its JSON text: <code class="docutils literal notranslate"><span class="pre">7</span></code> becomes <code class="docutils literal notranslate"><span class="pre">&quot;7&quot;</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_sensitive</span></code> lists the keys that are secret. They can be used by later steps in the same run and are never recorded
+in the workspace’s <code class="docutils literal notranslate"><span class="pre">output_store</span></code>. A key that is not listed is recorded, as in Terraform.</p></li>
+<li><p>Write nothing, or <code class="docutils literal notranslate"><span class="pre">{}</span></code>, for no outputs.</p></li>
+<li><p>A file that is not valid JSON, is not an object, or has a key a token cannot name gives no outputs at all and a
+warning naming the step. The step itself does not fail.</p></li>
+<li><p>Only a successful <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> produces outputs. A preview and a destroy collect none.</p></li>
+<li><p>The file is in a private directory outside the build output and is removed when the script ends.</p></li>
+</ul>
+</section>
+<section id="trust-it-step-by-step">
+<h2>5. Trust it step by step<a class="headerlink" href="#trust-it-step-by-step" title="Link to this heading"></a></h2>
+<p>A preview that runs the script is only as safe as the script. Before it goes on a schedule:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">D</span> <span class="pre">--smoke-test</span></code> runs nothing and reports which steps would run. A value that cannot be resolved
+fails it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">D</span> <span class="pre">--dry-run</span> <span class="pre">--follow</span></code> in a test environment. The script runs with <code class="docutils literal notranslate"><span class="pre">plan_args</span></code>; <code class="docutils literal notranslate"><span class="pre">--follow</span></code> shows
+its output (<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">plan</span></code> follows by default). A secret in the output is redacted.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">destroy</span> <span class="pre">D</span> <span class="pre">--dry-run</span></code> shows <code class="docutils literal notranslate"><span class="pre">would</span> <span class="pre">run:</span> <span class="pre">...</span></code> for the destroy and executes nothing.</p></li>
+<li><p>Only then <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">D</span></code> on the schedule.</p></li>
+</ol>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>The preview only prints <code class="docutils literal notranslate"><span class="pre">would</span> <span class="pre">run:</span> <span class="pre">...</span></code>.</strong> <code class="docutils literal notranslate"><span class="pre">plan_args</span></code> is not set, so nothing was executed. Set it, or accept the
+command line as the preview.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">does</span> <span class="pre">not</span> <span class="pre">support</span> <span class="pre">destroy:</span> <span class="pre">set</span> <span class="pre">'destroy_args'</span></code>.</strong> The provisioner has no <code class="docutils literal notranslate"><span class="pre">destroy_args</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">script.values</span> <span class="pre">lists</span> <span class="pre">'X',</span> <span class="pre">which</span> <span class="pre">did</span> <span class="pre">not</span> <span class="pre">resolve</span> <span class="pre">to</span> <span class="pre">a</span> <span class="pre">value</span></code>.</strong> <code class="docutils literal notranslate"><span class="pre">X</span></code> is not declared by the deployment’s environments,
+or is an output of a step that has not run in this invocation. A destroy only has outputs recorded in the
+<code class="docutils literal notranslate"><span class="pre">output_store</span></code>.</p></li>
+<li><p><strong>A failed step shows <code class="docutils literal notranslate"><span class="pre">exit</span> <span class="pre">code</span> <span class="pre">N</span></code></strong> and the last 10 lines of what the script printed, with secrets redacted. A
+script that was killed by its timeout says <code class="docutils literal notranslate"><span class="pre">timed</span> <span class="pre">out</span> <span class="pre">and</span> <span class="pre">was</span> <span class="pre">killed</span></code>. Raise it with <code class="docutils literal notranslate"><span class="pre">timeouts.apply</span></code> on the
+deployment stage or <code class="docutils literal notranslate"><span class="pre">STRATA_TIMEOUT_&lt;STEP&gt;_APPLY</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">apply</span></code> refuses a script step.</strong> A script writes no saved plan. Use <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>, or leave the step out
+with <code class="docutils literal notranslate"><span class="pre">--stage</span></code> or <code class="docutils literal notranslate"><span class="pre">--scope</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> says the script file does not exist.</strong> <code class="docutils literal notranslate"><span class="pre">script.file</span></code> is relative to the step’s <code class="docutils literal notranslate"><span class="pre">source</span></code>.</p></li>
+<li><p><strong>The interpreter.</strong> <code class="docutils literal notranslate"><span class="pre">.py</span></code> runs with the first <code class="docutils literal notranslate"><span class="pre">python3</span></code> or <code class="docutils literal notranslate"><span class="pre">python</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>, not strata’s own Python, so the script
+can use its own packages. <code class="docutils literal notranslate"><span class="pre">.ps1</span></code> prefers <code class="docutils literal notranslate"><span class="pre">pwsh</span></code>, <code class="docutils literal notranslate"><span class="pre">.sh</span></code> and <code class="docutils literal notranslate"><span class="pre">.bash</span></code> use <code class="docutils literal notranslate"><span class="pre">bash</span></code>, and <code class="docutils literal notranslate"><span class="pre">.bat</span></code> needs Windows.</p></li>
+</ul>
+<p>See <a class="reference internal" href="ci-deploy-pipeline.html"><span class="std std-doc">ci-deploy-pipeline.md</span></a> for putting these commands in a pipeline.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="sbom-generation.html" class="btn btn-neutral float-left" title="How To: Use the SBOM Feature (CycloneDX)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="security-gates.html" class="btn btn-neutral float-right" title="How To: Gate deploys on security findings" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

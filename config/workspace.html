@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workspace (kind: workspace) &mdash; strata 2.2.0 documentation</title>
+  <title>Workspace (kind: workspace) &mdash; strata 2.3.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b21de401"></script>
+      <script src="../_static/documentation_options.js?v=c3c8ae58"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -62,6 +62,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
 </ul>
@@ -82,6 +83,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#terraform-backend">Terraform backend</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#script-provisioner">Script provisioner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#image-tag-policy">Image tag policy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#provider-slots">Provider slots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#asset-slots">Asset slots</a></li>
@@ -166,7 +168,8 @@ if fully externally managed)</p></li>
 “Topology grouping” below. Inline since ADR-0028 (reverted from a standalone <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topology</span></code>
 document, ADR-0011) — not a list of names.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.provisioners[]</span></code> — tool definitions (<code class="docutils literal notranslate"><span class="pre">ProvisionerModel</span></code>): <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">tool</span></code> (terraform, ansible,
-helm, compose, …), <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">backend</span></code> (terraform only), <code class="docutils literal notranslate"><span class="pre">properties</span></code> (ansible only),
+helm, compose, script, …), <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">backend</span></code> (terraform only), <code class="docutils literal notranslate"><span class="pre">properties</span></code> (ansible only),
+<code class="docutils literal notranslate"><span class="pre">script</span></code> (script only, see “Script provisioner” below),
 <code class="docutils literal notranslate"><span class="pre">integration</span></code> (which <a class="reference internal" href="integration.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">integration</span></code></span></a> document supplies version/auth), <code class="docutils literal notranslate"><span class="pre">output</span></code>
 (Jinja2 template escape hatch)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.execution[]</span></code> — the ordered recipe (<code class="docutils literal notranslate"><span class="pre">ProvisioningStepModel</span></code>): <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">provisioner</span></code>,
@@ -321,6 +324,69 @@ variables) can use them. They are not allowed in an <a class="reference internal
 The design, and why it is a token rather than a default key, is in
 <span class="xref myst">deployment-tokens.md</span>.</p></li>
 </ul>
+</section>
+<section id="script-provisioner">
+<h2>Script provisioner<a class="headerlink" href="#script-provisioner" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code> runs a <code class="docutils literal notranslate"><span class="pre">.ps1</span></code>, <code class="docutils literal notranslate"><span class="pre">.sh</span></code>, <code class="docutils literal notranslate"><span class="pre">.bash</span></code>, <code class="docutils literal notranslate"><span class="pre">.py</span></code> or <code class="docutils literal notranslate"><span class="pre">.bat</span></code> file as a step. <code class="docutils literal notranslate"><span class="pre">script</span></code> is required for this tool and
+rejected for any other built-in one, and <code class="docutils literal notranslate"><span class="pre">source</span></code> is required as for every tool: <code class="docutils literal notranslate"><span class="pre">source.source_path</span></code> is the directory
+that is materialised, and <code class="docutils literal notranslate"><span class="pre">script.file</span></code> is relative to it.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secrets-script</span>
+<span class="w">    </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">script</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/secrets</span>
+<span class="w">    </span><span class="nt">script</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secrets.py</span>
+<span class="w">      </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--action</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">reload</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">plan_args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--action</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">plan</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">destroy_args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--action</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">revoke</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">--records</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"${var:revoke_records}"</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">VAULT_TOKEN</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Used by</p></th>
+<th class="head"><p>When unset</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">file</span></code></p></td>
+<td><p>every phase</p></td>
+<td><p>required</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">args</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>, the apply</p></td>
+<td><p>the script gets no arguments</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plan_args</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">--dry-run</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">plan</span></code></p></td>
+<td><p>a preview prints <code class="docutils literal notranslate"><span class="pre">would</span> <span class="pre">run:</span> <span class="pre">...</span></code> and executes nothing</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">destroy_args</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span> <span class="pre">--force</span></code></p></td>
+<td><p>the step cannot be destroyed, and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code> refuses it</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">values</span></code></p></td>
+<td><p>the environment variable <code class="docutils literal notranslate"><span class="pre">STRATA_VALUES</span></code></p></td>
+<td><p>the script receives every resolved value</p></td>
+</tr>
+</tbody>
+</table>
+<ul class="simple">
+<li><p>Every argument can use value tokens. The path of the rendered <code class="docutils literal notranslate"><span class="pre">output.template</span></code>, when the provisioner sets one, is
+appended to <code class="docutils literal notranslate"><span class="pre">args</span></code> and <code class="docutils literal notranslate"><span class="pre">plan_args</span></code> as the last argument.</p></li>
+<li><p>A script has to guard itself: strata cannot check that it changes nothing when run with <code class="docutils literal notranslate"><span class="pre">plan_args</span></code>.
+<code class="docutils literal notranslate"><span class="pre">STRATA_PHASE</span></code> (<code class="docutils literal notranslate"><span class="pre">plan</span></code>, <code class="docutils literal notranslate"><span class="pre">apply</span></code> or <code class="docutils literal notranslate"><span class="pre">destroy</span></code>) tells it which phase it is in.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">values</span></code> lists keys: variables, secrets, features, and <code class="docutils literal notranslate"><span class="pre">&lt;step&gt;.&lt;key&gt;</span></code> outputs. <code class="docutils literal notranslate"><span class="pre">STRATA_VALUES</span></code> then holds those and
+<code class="docutils literal notranslate"><span class="pre">deployment:name</span></code> and <code class="docutils literal notranslate"><span class="pre">deployment:tenant</span></code>. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> reports a key nothing declares. It limits
+<code class="docutils literal notranslate"><span class="pre">STRATA_VALUES</span></code> only: arguments can still use any token.</p></li>
+<li><p>A script passes values to later steps by writing a JSON object to the file named by <code class="docutils literal notranslate"><span class="pre">STRATA_OUTPUT_FILE</span></code>;
+<code class="docutils literal notranslate"><span class="pre">_sensitive</span></code> lists the keys never recorded in the <code class="docutils literal notranslate"><span class="pre">output_store</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">apply</span></code> refuses a script step: it writes no saved plan. Use <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>.</p></li>
+</ul>
+<p>A worked example, with the script, is in <a class="reference internal" href="../how-to/script-provisioner.html"><span class="std std-doc">how-to/script-provisioner.md</span></a>.
+The design is in <span class="xref myst">script-provisioner.md</span>.</p>
 </section>
 <section id="image-tag-policy">
 <h2>Image tag policy<a class="headerlink" href="#image-tag-policy" title="Link to this heading"></a></h2>

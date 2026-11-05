@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Run strata in a CI pipeline &mdash; strata 2.2.0 documentation</title>
+  <title>How To: Run strata in a CI pipeline &mdash; strata 2.3.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b21de401"></script>
+      <script src="../_static/documentation_options.js?v=c3c8ae58"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -71,6 +71,7 @@
 <li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
 </ul>
@@ -399,6 +400,16 @@ with a dot unless you set <code class="docutils literal notranslate"><span class
 <li><p>A step that reads another step’s output with <code class="docutils literal notranslate"><span class="pre">${output:...}</span></code> may show “(known after apply)” in the
 plan. Apply dependent steps in dependency order.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">apply</span></code> records the audit trail like <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>, including the <code class="docutils literal notranslate"><span class="pre">--change-*</span></code> flags.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">apply</span></code> only works for tools that save a plan. A <code class="docutils literal notranslate"><span class="pre">script</span></code> or ArgoCD/Flux step is refused before anything
+runs; use <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> for those, or leave them out with <code class="docutils literal notranslate"><span class="pre">--stage</span></code> / <code class="docutils literal notranslate"><span class="pre">--scope</span></code>.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">script</span></code> step runs in a preview (<code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>, <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">plan</span></code>) only when its provisioner sets <code class="docutils literal notranslate"><span class="pre">plan_args</span></code>;
+otherwise the preview prints <code class="docutils literal notranslate"><span class="pre">would</span> <span class="pre">run:</span> <span class="pre">...</span></code>. The script sees <code class="docutils literal notranslate"><span class="pre">STRATA_PHASE</span></code> (<code class="docutils literal notranslate"><span class="pre">plan</span></code>, <code class="docutils literal notranslate"><span class="pre">apply</span></code> or <code class="docutils literal notranslate"><span class="pre">destroy</span></code>), so
+guard anything that changes state with it. A preview that executes the script streams its output with <code class="docutils literal notranslate"><span class="pre">--follow</span></code>.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">script</span></code> step receives every resolved value in <code class="docutils literal notranslate"><span class="pre">STRATA_VALUES</span></code> unless its provisioner lists <code class="docutils literal notranslate"><span class="pre">values</span></code>; then it
+gets only those keys (plus <code class="docutils literal notranslate"><span class="pre">deployment:name</span></code> and <code class="docutils literal notranslate"><span class="pre">deployment:tenant</span></code>), so an unrelated secret never reaches it.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">script</span></code> step passes values to the steps after it by writing a JSON object to the file named by
+<code class="docutils literal notranslate"><span class="pre">STRATA_OUTPUT_FILE</span></code>; they become <code class="docutils literal notranslate"><span class="pre">${output:&lt;step&gt;.&lt;key&gt;}</span></code>. List secret keys in <code class="docutils literal notranslate"><span class="pre">&quot;_sensitive&quot;</span></code> so they are used in
+the run but never recorded in the <code class="docutils literal notranslate"><span class="pre">output_store</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">setup</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">check</span></code> run only init, or init and validate, if you want those as
 separate stages.</p></li>
 </ul>
@@ -407,7 +418,7 @@ separate stages.</p></li>
 <h2>6. Tear a deployment down<a class="headerlink" href="#tear-a-deployment-down" title="Link to this heading"></a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">destroy</span> <span class="pre">D</span></code> removes what <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> created: Terraform-managed resources, Helm releases, Compose
 stacks and GitOps files, last step first. It cannot be undone, so it needs exactly one of <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> (preview,
-changes nothing) or <code class="docutils literal notranslate"><span class="pre">--force</span></code> (destroy, no prompt). Neither, or both, exits 2. Preview in one job and destroy in a
+changes nothing), <code class="docutils literal notranslate"><span class="pre">--smoke-test</span></code> (report only) or <code class="docutils literal notranslate"><span class="pre">--force</span></code> (destroy, no prompt). Anything else exits 2. Preview in one job and destroy in a
 job behind a protected environment, so a person approves exactly what the preview showed.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">jobs</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">preview</span><span class="p">:</span>
@@ -430,6 +441,9 @@ job behind a protected environment, so a person approves exactly what the previe
 <p>Things to know:</p>
 <ul class="simple">
 <li><p>A destroy reads the build directory like a deploy does: run <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> first, with the same <code class="docutils literal notranslate"><span class="pre">--pin</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--smoke-test</span></code> calls no tool and reads no store, like <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">--smoke-test</span></code>: values still resolve, then each
+step is reported as “would destroy step X”, last first. It catches a step that cannot be destroyed and a filter
+that selects nothing, but not a missing output record or a state problem; <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> does.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> streams its preview without <code class="docutils literal notranslate"><span class="pre">--follow</span></code>. Terraform runs <code class="docutils literal notranslate"><span class="pre">plan</span> <span class="pre">-destroy</span></code> (it takes the state lock and
 needs credentials) and never writes <code class="docutils literal notranslate"><span class="pre">&lt;step&gt;.tfplan</span></code>, so a reviewed apply plan is left untouched. Helm lists
 <code class="docutils literal notranslate"><span class="pre">Kind/name</span></code> per resource, never Secret data; Compose lists the stack’s running services; GitOps says whether the
@@ -438,8 +452,10 @@ file is in the config repo.</p></li>
 <li><p>To destroy part of a deployment, use <code class="docutils literal notranslate"><span class="pre">--stage</span></code> or <code class="docutils literal notranslate"><span class="pre">--scope</span></code>. Run <code class="docutils literal notranslate"><span class="pre">--scope</span> <span class="pre">apps</span></code> before <code class="docutils literal notranslate"><span class="pre">--scope</span> <span class="pre">infra</span></code>. A destroyed
 step that other steps depend on, and that are not in the run, is a warning, not an error, so the second run stays
 possible.</p></li>
-<li><p>A <code class="docutils literal notranslate"><span class="pre">script</span></code> step cannot be destroyed. <code class="docutils literal notranslate"><span class="pre">--force</span></code> refuses before anything is removed, and names the step; leave it
-out with <code class="docutils literal notranslate"><span class="pre">--stage</span></code> or <code class="docutils literal notranslate"><span class="pre">--scope</span></code>. Under <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> it is a warning.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">script</span></code> step can be destroyed only when its provisioner sets <code class="docutils literal notranslate"><span class="pre">destroy_args</span></code>; <code class="docutils literal notranslate"><span class="pre">--force</span></code> then runs the script with
+them and <code class="docutils literal notranslate"><span class="pre">STRATA_PHASE=destroy</span></code>. Without <code class="docutils literal notranslate"><span class="pre">destroy_args</span></code>, <code class="docutils literal notranslate"><span class="pre">--force</span></code> refuses before anything is removed, and names
+the step; leave it out with <code class="docutils literal notranslate"><span class="pre">--stage</span></code> or <code class="docutils literal notranslate"><span class="pre">--scope</span></code>. Under <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> it is a warning, or, with <code class="docutils literal notranslate"><span class="pre">destroy_args</span></code>,
+the line <code class="docutils literal notranslate"><span class="pre">would</span> <span class="pre">run:</span> <span class="pre">...</span></code>: a destroy preview never executes the script.</p></li>
 <li><p>A Terraform step that reads another step’s output with <code class="docutils literal notranslate"><span class="pre">${output:...}</span></code> needs the workspace’s <code class="docutils literal notranslate"><span class="pre">output_store</span></code>: a
 destroy collects no outputs, so it reads the ones <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> recorded. Without a usable record the run stops
 before destroying anything. Pass <code class="docutils literal notranslate"><span class="pre">--output-max-age</span></code> when the record is stale. A successful destroy clears the
