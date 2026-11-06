@@ -58,7 +58,7 @@ build's result. They never fail the build.
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `metadata.component` | `type: application`, named after the deployment (the workspace when there is none), `bom-ref` `strata:deployment/<name>` (or `strata:workspace/<name>`), properties `strata:workspace`, `strata:version` and `strata:commit` |
 | `metadata.tools`     | One component: `strata` and its version                                                                                                                                                                                      |
-| `components`         | One per purl. `bom-ref` is the purl, so two builds of the same deployment name every component the same way and can be diffed. An image with a digest also has `hashes`                                                    |
+| `components`         | One per purl. `bom-ref` is the purl, so two builds of the same deployment name every component the same way and can be diffed. An image with a digest also has `hashes`                                                      |
 | `dependencies`       | The deployment depends on every component                                                                                                                                                                                    |
 
 The serial number and timestamp still differ per build, as CycloneDX intends.
