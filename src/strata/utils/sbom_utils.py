@@ -22,6 +22,19 @@ MUTABLE_ALIAS_TAGS: frozenset[str] = frozenset(
 #: optional pre-release / build metadata suffix.
 _SEMVER_RE = re.compile(r"^v?\d+(\.\d+)*(-[a-zA-Z0-9.+]+)?(\+[a-zA-Z0-9.+]+)?$")
 
+#: A version constraint that allows exactly one version: a bare version, or Terraform's `=` operator.
+_EXACT_CONSTRAINT_RE = re.compile(r"=?\s*(v?\d+(\.\d+)*(-[a-zA-Z0-9.+]+)?(\+[a-zA-Z0-9.+]+)?)")
+
+
+def exact_version(constraint: str | None) -> str | None:
+    """The one version `constraint` allows, or `None` for a range (`~> 5.0`, `>= 5, < 6`) or nothing.
+
+    Examples:
+        "5.0.0" -> "5.0.0"; "= 5.0.0" -> "5.0.0"; "~> 5.0" -> None
+    """
+    match = _EXACT_CONSTRAINT_RE.fullmatch(constraint.strip()) if constraint else None
+    return match.group(1) if match else None
+
 
 def is_floating_tag(tag: str | None) -> bool:
     """Return True when the image tag is mutable / not pinned.
@@ -131,6 +144,32 @@ def image_to_purl(image: str) -> str:
         version=digest or tag,
         qualifiers={"repository_url": registry} if registry else None,
     ).to_string()
+
+
+#: OCI digest algorithm -> (CycloneDX hash algorithm name, hex length).
+_DIGEST_ALGORITHMS: dict[str, tuple[str, int]] = {
+    "sha256": ("SHA-256", 64),
+    "sha384": ("SHA-384", 96),
+    "sha512": ("SHA-512", 128),
+}
+_LOWER_HEX_RE = re.compile(r"[0-9a-f]+")
+
+
+def image_digest_hash(image: str) -> tuple[str, str] | None:
+    """The `(CycloneDX algorithm, hex)` of the digest an image reference carries, or `None`.
+
+    `None` without a digest, for an algorithm CycloneDX has no name for, and for a digest that is not
+    lowercase hex of the algorithm's length (the OCI form).
+
+    Example:
+        "postgres:16@sha256:9f86..." -> ("SHA-256", "9f86...")
+    """
+    _, _, digest = parse_image_ref(image)
+    algorithm, _, content = (digest or "").partition(":")
+    known = _DIGEST_ALGORITHMS.get(algorithm)
+    if known is None or len(content) != known[1] or not _LOWER_HEX_RE.fullmatch(content):
+        return None
+    return known[0], content
 
 
 def helm_chart_to_purl(name: str, version: str | None, repository: str | None = None) -> str:

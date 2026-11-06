@@ -4,7 +4,9 @@
 import pytest
 
 from strata.utils.sbom_utils import (
+    exact_version,
     helm_chart_to_purl,
+    image_digest_hash,
     image_to_purl,
     is_floating_tag,
     is_local_module_source,
@@ -133,6 +135,42 @@ def test_image_to_purl_keeps_a_docker_hub_organisation():
     assert image_to_purl("docker.io/bitnami/redis:7.2") == "pkg:docker/bitnami/redis@7.2"
 
 
+_SHA256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+
+
+@pytest.mark.parametrize(
+    ("image", "expected"),
+    [
+        (f"postgres@sha256:{_SHA256}", ("SHA-256", _SHA256)),
+        (f"ghcr.io/acme/api:1.4.2@sha256:{_SHA256}", ("SHA-256", _SHA256)),
+        (f"registry:5000/img@sha256:{_SHA256}", ("SHA-256", _SHA256)),
+        ("img@sha384:" + "b" * 96, ("SHA-384", "b" * 96)),
+        ("img@sha512:" + "c" * 128, ("SHA-512", "c" * 128)),
+    ],
+)
+def test_image_digest_hash_returns_the_cyclonedx_algorithm_and_hex(image, expected):
+    assert image_digest_hash(image) == expected
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "redis:7-alpine",
+        "redis",
+        "registry:5000/img:1.0",
+        "img@md5:" + "a" * 32,
+        "img@sha256:abc123",
+        "img@sha256:" + "a" * 65,
+        "img@sha256:" + _SHA256.upper(),
+        "img@sha256:" + "g" * 64,
+        "img@" + _SHA256,
+    ],
+)
+def test_image_digest_hash_is_none_without_a_valid_digest(image):
+    """A tag-only image, an unknown algorithm, or a digest that breaks the OCI form records no hash."""
+    assert image_digest_hash(image) is None
+
+
 # ---------------------------------------------------------------------------
 # helm_chart_to_purl()
 # ---------------------------------------------------------------------------
@@ -165,6 +203,28 @@ def test_is_local_module_source_false_for_a_registry_source():
 
 def test_terraform_module_to_purl_local_is_none():
     assert terraform_module_to_purl("./modules/net") is None
+
+
+@pytest.mark.parametrize(
+    ("constraint", "exact"),
+    [
+        ("5.0.0", "5.0.0"),
+        ("v5.0.0", "v5.0.0"),
+        ("1.2.3-beta.1", "1.2.3-beta.1"),
+        ("= 5.0.0", "5.0.0"),
+        ("=5.0.0", "5.0.0"),
+        (" 5.0.0 ", "5.0.0"),
+        ("~> 5.0", None),
+        (">= 5.0, < 6.0", None),
+        ("!= 5.1.0", None),
+        ("5.0.0, 5.1.0", None),
+        ("latest", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_exact_version_is_only_a_single_pinned_version(constraint, exact):
+    assert exact_version(constraint) == exact
 
 
 def test_terraform_module_to_purl_short_form_public_registry():

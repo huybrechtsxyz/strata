@@ -270,6 +270,74 @@ def test_two_spellings_of_one_purl_are_one_component(tmp_path: Path, monkeypatch
     assert component["properties"] == [{"name": "note", "value": "second"}]
 
 
+_DIGEST = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+
+
+def _image_build(tmp_path: Path, *images: str, compose: str | None = None) -> list[dict]:
+    services = [ModuleServiceModel(name=f"svc{n}", image=image) for n, image in enumerate(images)]
+    module = _module("app", services=services)
+    if compose is not None:
+        (tmp_path / "apps").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "apps" / "docker-compose.yml").write_text(
+            f"services:\n  web:\n    image: {compose}\n", encoding="utf-8"
+        )
+    write_sbom(tmp_path, _graph(_namespace(ModuleReferenceModel(name="app", module="app"))), _index(module))
+    return _written(tmp_path)["components"]
+
+
+def test_an_image_digest_is_written_as_a_cyclonedx_hash(tmp_path: Path):
+    """The file passes write_sbom's own schema validation, so the hash shape is the schema's."""
+    by_name = {c["name"]: c for c in _image_build(tmp_path, f"ghcr.io/acme/api:1.4.2@sha256:{_DIGEST}", "redis:7.2")}
+
+    assert by_name["svc0"]["hashes"] == [{"alg": "SHA-256", "content": _DIGEST}]
+    assert "hashes" not in by_name["svc1"]
+
+
+def test_an_image_found_by_two_collectors_has_one_hash(tmp_path: Path):
+    image = f"postgres@sha256:{_DIGEST}"
+    [component] = _image_build(tmp_path, image, compose=image)
+    assert component["hashes"] == [{"alg": "SHA-256", "content": _DIGEST}]
+
+
+def test_duplicates_keep_the_first_hash_and_gain_the_others_algorithms():
+    from strata.controllers.sbom_controller import _merge_by_purl
+    from strata.models.sbom_model import SbomComponentModel
+
+    def component(**hashes: str) -> SbomComponentModel:
+        return SbomComponentModel(
+            component_type="container", name="a", purl="pkg:docker/a@1", hashes=hashes, source_collector="test"
+        )
+
+    [merged] = _merge_by_purl([component(SHA_256="first"), component(SHA_256="second", SHA_512="other")])
+
+    assert merged.hashes == {"SHA_256": "first", "SHA_512": "other"}
+
+
+def test_a_hash_with_an_algorithm_cyclonedx_does_not_know_is_left_out(tmp_path: Path, monkeypatch):
+    from strata.integrations.sbom_collectors import registry
+    from strata.integrations.sbom_collectors.base import CollectorResult
+    from strata.models.sbom_model import SbomComponentModel
+
+    class Plugin:
+        def collect(self, graph, modules, build_path):
+            component = SbomComponentModel(
+                component_type="library",
+                name="a",
+                purl="pkg:generic/a@1",
+                hashes={"SHA-256": _DIGEST, "CRC32": "deadbeef"},
+                source_collector="plugin",
+            )
+            return CollectorResult(components=[component])
+
+    monkeypatch.setattr(registry, "list_collectors", lambda: ["plugin"])
+    monkeypatch.setattr(registry, "get", lambda name: Plugin())
+
+    write_sbom(tmp_path, _graph(), _index())
+
+    [component] = _written(tmp_path)["components"]
+    assert component["hashes"] == [{"alg": "SHA-256", "content": _DIGEST}]
+
+
 def test_a_chart_from_a_solution_remote_carries_the_repository(tmp_path: Path):
     from strata.models.solution_model import SolutionRemoteModel
 

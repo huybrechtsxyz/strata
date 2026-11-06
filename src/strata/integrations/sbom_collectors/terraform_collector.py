@@ -19,7 +19,12 @@ from strata.integrations.sbom_collectors.base import CollectorResult, SbomCollec
 from strata.models.module_model import ModuleModel
 from strata.models.sbom_model import SbomComponentModel
 from strata.utils.diagnostics import Diagnostic, Severity
-from strata.utils.sbom_utils import terraform_module_to_purl, terraform_provider_address, terraform_provider_to_purl
+from strata.utils.sbom_utils import (
+    exact_version,
+    terraform_module_to_purl,
+    terraform_provider_address,
+    terraform_provider_to_purl,
+)
 
 #: Terraform's dependency lock file, one per root module, beside its `*.tf` files.
 _LOCK_FILENAME = ".terraform.lock.hcl"
@@ -190,7 +195,7 @@ class TerraformCollector(SbomCollector):
         # Keyed by the covering lock file, or by the folder itself when none covers it.
         providers_by_lock: dict[Path, tuple[Path | None, dict[str, dict[str, str]]]] = {}
         using_unlocked: set[Path] = set()
-        tf_modules: dict[str, str | None] = {}
+        tf_modules: list[tuple[str, str | None]] = []
 
         for tf_file in _terraform_files(build_path):
             try:
@@ -247,10 +252,14 @@ class TerraformCollector(SbomCollector):
                 )
             )
 
-        for source, version in tf_modules.items():
-            purl = terraform_module_to_purl(source, version)
-            if purl is None:
+        # A module `version` is often a range; only an exact one is a version a scanner can match.
+        seen_module_purls: set[str] = set()
+        for source, version in tf_modules:
+            exact = exact_version(version)
+            purl = terraform_module_to_purl(source, exact)
+            if purl is None or purl in seen_module_purls:
                 continue
+            seen_module_purls.add(purl)
             base = source.split("?")[0].split("//")[0]
             if base.startswith("registry.terraform.io/"):
                 base = base[len("registry.terraform.io/") :]
@@ -260,9 +269,9 @@ class TerraformCollector(SbomCollector):
                 SbomComponentModel(
                     component_type="library",
                     name=name,
-                    version=version,
+                    version=exact,
                     purl=purl,
-                    properties={},
+                    properties={_CONSTRAINT_PROPERTY: version} if version and exact is None else {},
                     source_collector="terraform-module",
                 )
             )
@@ -321,8 +330,8 @@ class TerraformCollector(SbomCollector):
                     providers[provider_name] = entry
 
     @staticmethod
-    def _extract_modules(data: dict[str, Any], tf_modules: dict[str, str | None]) -> None:
-        """Extract `module {}` block entries into `tf_modules` (deduplicated, first-wins).
+    def _extract_modules(data: dict[str, Any], tf_modules: list[tuple[str, str | None]]) -> None:
+        """Append every `module {}` block's `(source, version)` to `tf_modules`.
 
         `python-hcl2` represents labeled blocks as:
             {"module": [{"label": [{"source": '"..."', "version": '"..."'}]}]}
@@ -338,7 +347,5 @@ class TerraformCollector(SbomCollector):
                     if not isinstance(cfg, dict):
                         continue
                     source = _strip_hcl_string(cfg.get("source"))
-                    if not source or source in tf_modules:
-                        continue
-                    version = _strip_hcl_string(cfg.get("version"))
-                    tf_modules[source] = version
+                    if source:
+                        tf_modules.append((source, _strip_hcl_string(cfg.get("version"))))

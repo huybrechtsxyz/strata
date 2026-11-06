@@ -22,7 +22,7 @@ from datetime import date
 from pathlib import Path
 from typing import cast
 
-from cyclonedx.model import Property
+from cyclonedx.model import HashAlgorithm, HashType, Property
 from cyclonedx.model.bom import Bom
 from cyclonedx.model.component import Component, ComponentType
 from cyclonedx.output.json import JsonV1Dot6
@@ -185,7 +185,7 @@ def _resolve_all_modules(
 
 
 def _merge_by_purl(components: list[SbomComponentModel]) -> list[SbomComponentModel]:
-    """One component per purl, first one kept, with the properties of every duplicate added.
+    """One component per purl, first one kept, with the properties and hashes of every duplicate added.
 
     Two collectors can find the same image (the module declares it, the rendered compose file
     names it); listed twice it would be two components with one `bom-ref`, an invalid BOM.
@@ -196,9 +196,15 @@ def _merge_by_purl(components: list[SbomComponentModel]) -> list[SbomComponentMo
         first = merged.get(key)
         if first is None:
             merged[key] = component
-        elif not component.properties.keys() <= first.properties.keys():
-            properties = {**component.properties, **first.properties}
-            merged[key] = first.model_copy(update={"properties": properties})
+        elif not (
+            component.properties.keys() <= first.properties.keys() and component.hashes.keys() <= first.hashes.keys()
+        ):
+            merged[key] = first.model_copy(
+                update={
+                    "properties": {**component.properties, **first.properties},
+                    "hashes": {**component.hashes, **first.hashes},
+                }
+            )
     return list(merged.values())
 
 
@@ -256,6 +262,7 @@ def _build_cyclonedx_json(
             version=comp.version,
             purl=purl,
             properties=properties,
+            hashes=_hash_types(comp.hashes),
             bom_ref=purl.to_string() if purl is not None else f"strata:component/{comp.purl}",
         )
         bom.components.add(component)
@@ -264,6 +271,12 @@ def _build_cyclonedx_json(
 
     output = JsonV1Dot6(bom)
     return output.output_as_string()
+
+
+def _hash_types(hashes: dict[str, str]) -> list[HashType]:
+    """CycloneDX hashes; an algorithm name CycloneDX does not know (a plugin collector's) is left out."""
+    known = {algorithm.value for algorithm in HashAlgorithm}
+    return [HashType(alg=HashAlgorithm(name), content=content) for name, content in hashes.items() if name in known]
 
 
 def declared_cve_scanner(index: DocumentIndex) -> CveScannerIntegration | None:

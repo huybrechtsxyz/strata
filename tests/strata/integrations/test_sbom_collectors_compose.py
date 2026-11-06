@@ -38,6 +38,21 @@ def test_collect_extracts_images_from_a_rendered_compose_file(tmp_path: Path):
     assert comp.name == "redis"
     assert comp.version == "7.2"
     assert comp.source_collector == "compose"
+    assert comp.hashes == {}
+
+
+def test_a_compose_image_with_a_digest_records_it_as_a_hash_and_is_not_floating(tmp_path: Path):
+    digest = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    (tmp_path / "docker-compose.yml").write_text(
+        f"services:\n  db:\n    image: postgres@sha256:{digest}\n", encoding="utf-8"
+    )
+
+    result = ComposeCollector().collect(_graph(), [], tmp_path)
+
+    [component] = result.components
+    assert component.hashes == {"SHA-256": digest}
+    assert component.properties == {}
+    assert result.diagnostics == []
 
 
 def test_collect_flags_a_floating_tag_as_a_warning(tmp_path: Path):

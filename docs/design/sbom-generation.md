@@ -58,7 +58,7 @@ build's result. They never fail the build.
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `metadata.component` | `type: application`, named after the deployment (the workspace when there is none), `bom-ref` `strata:deployment/<name>` (or `strata:workspace/<name>`), properties `strata:workspace`, `strata:version` and `strata:commit` |
 | `metadata.tools`     | One component: `strata` and its version                                                                                                                                                                                      |
-| `components`         | One per purl. `bom-ref` is the purl, so two builds of the same deployment name every component the same way and can be diffed                                                                                                |
+| `components`         | One per purl. `bom-ref` is the purl, so two builds of the same deployment name every component the same way and can be diffed. An image with a digest also has `hashes`                                                    |
 | `dependencies`       | The deployment depends on every component                                                                                                                                                                                    |
 
 The serial number and timestamp still differ per build, as CycloneDX intends.
@@ -93,6 +93,19 @@ A floating image tag (no tag, a mutable alias such as `latest`/`main`/`dev`, or 
 semver-shaped) gets the property `strata:tag-stability: floating`. An artifact image whose tag a
 `kind: version` pin chose is floating only when the tag is a mutable alias.
 
+An image and a declared chart list where they are used in `strata:used-by`, comma-separated in
+first-use order: `service:MODULE/SERVICE` and `variable:KEY` for images (the names `strata deploy
+images` and the image tag policy use; an artifact's come from `graph.images`), `module:NAME` for a
+chart. One property rather than a namespace, a module and a service property, because a component
+used in several places needs each module kept with its service. A chart found only in a
+`Chart.yaml`, and Terraform providers and modules, have none: the collector sees a folder, not the
+module or provisioner.
+
+An image or chart whose version a `kind: version` pin chose has `strata:pinned-by: <version
+document>`, so a reviewer can tell a deliberate pin from a declared default. Images take it from
+`graph.images` (`tag_source == "pin"`, `pin_version`, with `--pin` already applied); a declared
+chart from `graph.version.spec.pins.charts`, keyed by the module name as the overlay keys it.
+
 The `terraform` collector groups providers by the lock file that covers them: the nearest
 `.terraform.lock.hcl` in a file's folder or its parents, never above the build path. That is how
 Terraform resolves it: one lock file per root module covers the providers its child modules
@@ -123,12 +136,35 @@ Built by the pure helpers in `strata/utils/sbom_utils.py`:
 - **Charts**: `pkg:helm/<name>@<version>`, with `?repository_url=` when the repository is known.
 - **Terraform**: providers `pkg:terraform/<namespace>/<type>@<locked version>`, with
   `?repository_url=<host>` for a registry other than `registry.terraform.io`; registry modules
-  `pkg:terraform/...?repository_url=registry.terraform.io`; GitHub modules
-  `pkg:github/<org>/<repo>@<ref>`. Local modules (`./`, `../`) are not components.
+  `pkg:terraform/<namespace>/<name>@<version>?repository_url=registry.terraform.io`; GitHub modules
+  `pkg:github/<org>/<repo>@<ref>`. Local modules (`./`, `../`) are not components. A registry
+  module's purl has a version only when its `version` allows exactly one (`5.0.0` or `= 5.0.0`,
+  `sbom_utils.exact_version()`); a range such as `~> 5.0` is the `strata:version-constraint`
+  property instead. Every `module` block is read, so two exact versions of one module are two
+  components, and two ranges of it are one.
 
 `security_gate_controller.images_from_sbom()` reads images back from container purls. It takes the
 registry from `repository_url`, and from the first name segment for an SBOM written before 2.3.3,
 so an older build path still works.
+
+### Image digests
+
+An image reference that carries a digest (`ghcr.io/acme/api:1.4.2@sha256:9f86...`, a digest-only
+`postgres@sha256:...`, or an artifact whose tag or pin is `sha256:...`) also gets a CycloneDX
+`hashes` entry: `{alg: SHA-256, content: 9f86...}`. Tools that match or verify on hashes read that
+field, not a purl version.
+
+- `sbom_utils.image_digest_hash()` maps `sha256`/`sha384`/`sha512` to `SHA-256`/`SHA-384`/
+  `SHA-512` (the `HashAlgorithm` values) and requires lowercase hex of the algorithm's length, the
+  OCI form. Any other digest records no hash; its purl is unchanged.
+- The image and compose collectors set `SbomComponentModel.hashes`; `_merge_by_purl()` merges it
+  like `properties`; `_build_cyclonedx_json()` writes `HashType`s and leaves out an algorithm name
+  CycloneDX does not know (only a plugin collector can produce one) instead of failing the build.
+- The purl version stays the digest and the image gate keeps reading it from there, so an SBOM
+  written before hashes existed still works. The component `version` stays the tag, `None` for a
+  digest-only reference: tools show `version` as a release, and the purl already has the digest.
+- A digest-only image is never `strata:tag-stability: floating`.
+- A tag-only image has no hash: its digest is only in the registry.
 
 ### Extending
 
@@ -143,10 +179,14 @@ mechanism as `strata.integrations` (ADR-0021 D10).
 - Application lockfiles (`requirements.txt`, `package-lock.json`, `go.sum`, ...): no collector;
   revisit when a real build needs application-level dependencies.
 - Ansible collections: v2 has no Ansible integration to collect from.
-- Terraform module versions from `.terraform/modules/modules.json`: a registry module carries the
-  `version` its `module` block declares, which may be a constraint.
+- The version a module range resolved to: it is only in `.terraform/modules/modules.json` after
+  `terraform init`, and Terraform has no lock file for modules. A range stays a property.
 - A standalone `strata sbom scan`/`inventory`/`validate` command: no evidence of use outside
   `build run`; `cyclonedx-cli`, Trivy, Grype and Dependency-Track read the file directly.
+- Looking up a tag's digest in its registry: it needs network access and registry credentials at
+  build time, and makes `build run` depend on the registry. It would fill the same `hashes` field.
+- Hashes for charts and Terraform. A provider's `h1:`/`zh:` lock file hashes are not CycloneDX
+  algorithms (`h1:` hashes a directory, `zh:` a zip per platform) and would mislead a consumer.
 
 ## Related Decisions
 
@@ -193,3 +233,11 @@ mechanism as `strata.integrations` (ADR-0021 D10).
   up is not the one that was reviewed.
 - Floating-tag and parse warnings are always `WARNING` and never gate the build. A deployment that
   must reject floating tags uses the image tag policy ([image-tag-policy.md](image-tag-policy.md)).
+- Terraform registry modules had the same problem as providers: a `version` range went into the
+  purl, and modules were deduplicated by source, so only the first of two versions was listed.
+  Modules have no lock file, so only an exact `version` becomes the purl version and a range is a
+  property; deduplication is by purl.
+- An image's digest was only in its purl version. It is now also a CycloneDX hash, from the digest
+  already in the solution, without a registry lookup. Building it showed that both image collectors
+  judged tag stability on the tag alone, so a digest-only image was reported as floating; they now
+  pass the digest when there is no tag.

@@ -37,6 +37,14 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - A component's `bom-ref` is its purl instead of a random value, so two builds of one deployment can be diffed.
   A component found by two collectors (an image declared by the module and named in the rendered compose file) is
   listed once.
+- An image and a chart in `sbom.json` say where they are used, in a `strata:used-by` property:
+  `service:MODULE/SERVICE` and `variable:KEY` for an image, `module:NAME` for a chart. An image used by several
+  services lists all of them; before, only the first service name was kept.
+- An image or chart whose version a `kind: version` pin chose has `strata:pinned-by: <version document>` in
+  `sbom.json`.
+- An image referenced by digest (`...@sha256:...`) also lists the digest as a CycloneDX hash
+  (`"hashes": [{"alg": "SHA-256", "content": "..."}]`), so tools that match on hashes find it. Only the digest
+  already in the solution is used; a tag is not looked up in the registry.
 - A Helm chart taken from a `type: helm` remote is recorded with the remote's URL as `repository_url`, and is not
   listed a second time from its materialised `Chart.yaml`.
 - A Terraform provider in `sbom.json` has the version locked in its root module's `.terraform.lock.hcl`
@@ -47,6 +55,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   The lock file is the nearest one in the folder or a parent, so a child module's providers take the root's
   locked version. `.terraform/` folders (what `terraform init` downloaded during a `deploy run` in the same build
   path) are no longer read as source.
+- A Terraform registry module in `sbom.json` has a version only when its `version` pins exactly one (`5.0.0` or
+  `= 5.0.0`); a range such as `~> 5.0` was written into the purl and is now the `strata:version-constraint`
+  property. Two modules from one source at different exact versions are now both listed (before, only the first
+  one was).
+
+### Fixed
+
+- An image referenced by digest only (`postgres@sha256:...`) is no longer marked `strata:tag-stability: floating`
+  in `sbom.json`, nor reported as a floating-tag warning by `build run`: a digest is the most precise reference.
+
 ## [2.3.2] - 2026-11-05
 
 ### Removed

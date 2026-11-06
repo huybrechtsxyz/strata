@@ -30,6 +30,16 @@ A floating image tag (none, `latest`, `main`, `dev`, or a tag that is not a vers
 listed with the property `strata:tag-stability: floating` and reported as a warning. It never
 fails the build; use the [image tag policy](../design/image-tag-policy.md) for that.
 
+An image or chart says where it is used in `strata:used-by`, for example
+`service:authentik/server` or `variable:API_IMAGE, service:web/api` for an image and
+`module:authentik` for a chart, so a CVE on a component points to the module that owns it. A
+version that a [`kind: version`](../config/version.md) pin chose also has
+`strata:pinned-by: <version document>`.
+
+An image you reference by digest (`image: ghcr.io/acme/api:1.4.2@sha256:...`) also lists that
+digest under `hashes` (`{"alg": "SHA-256", "content": "..."}`). An image referenced by tag has
+none: strata does not ask the registry.
+
 ## Example
 
 ```json
@@ -101,8 +111,9 @@ curl -X POST "$DTRACK_URL/api/v1/bom" -H "X-Api-Key: $DTRACK_API_KEY" \
 
 - Application lockfiles (`requirements.txt`, `package-lock.json`, `go.sum`, ...).
 - Ansible collections.
-- Resolved Terraform module versions: a registry module carries the `version` its `module` block
-  declares.
+- The version a Terraform module range resolves to: a registry module whose `version` is a range
+  (`~> 5.0`) is listed without a version and with the range in `strata:version-constraint`. Pin
+  an exact version (`version = "5.0.0"`) to have it scanned.
 
 ## Adding a collector
 

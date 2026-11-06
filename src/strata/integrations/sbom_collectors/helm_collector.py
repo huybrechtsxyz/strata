@@ -36,21 +36,28 @@ class HelmCollector(SbomCollector):
 
     Both are deduplicated together by chart name and version, first one
     kept: a declared chart knows its repository, the `Chart.yaml` it was
-    materialised to does not.
+    materialised to does not. A declared chart lists the modules that use it
+    in a `strata:used-by` property (`module:NAME`).
     """
 
     def collect(self, graph: ResolvedWorkspaceGraph, modules: list[ModuleModel], build_path: Path) -> CollectorResult:
         components: list[SbomComponentModel] = []
         diagnostics: list[Diagnostic] = []
         seen: set[tuple[str, str | None]] = set()
+        uses: dict[tuple[str, str | None], list[str]] = {}
+        chart_pins = (graph.version.spec.pins.charts or {}) if graph.version is not None else {}
 
         for module in modules:
             source = module.spec.source
             if source.chart_name is None:
                 continue
-            if (source.chart_name, source.chart_version) in seen:
+            key = (source.chart_name, source.chart_version)
+            used = uses.setdefault(key, [])
+            if f"module:{module.meta.name}" not in used:
+                used.append(f"module:{module.meta.name}")
+            if key in seen:
                 continue
-            seen.add((source.chart_name, source.chart_version))
+            seen.add(key)
             purl = helm_chart_to_purl(source.chart_name, source.chart_version, source.chart_repository)
             components.append(
                 SbomComponentModel(
@@ -58,7 +65,11 @@ class HelmCollector(SbomCollector):
                     name=source.chart_name,
                     version=source.chart_version,
                     purl=purl,
-                    properties={},
+                    properties=(
+                        {"strata:pinned-by": graph.version.meta.name}
+                        if graph.version is not None and module.meta.name in chart_pins
+                        else {}
+                    ),
                     source_collector="helm",
                 )
             )
@@ -67,6 +78,12 @@ class HelmCollector(SbomCollector):
             for chart_file in self._find_chart_files(build_path):
                 self._collect_chart_file(chart_file, components, diagnostics, seen)
 
+        components = [
+            c.model_copy(update={"properties": {**c.properties, "strata:used-by": ", ".join(uses[key])}})
+            if (key := (c.name, c.version)) in uses
+            else c
+            for c in components
+        ]
         return CollectorResult(components=components, diagnostics=diagnostics)
 
     @staticmethod

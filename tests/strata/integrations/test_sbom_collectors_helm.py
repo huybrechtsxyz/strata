@@ -44,6 +44,34 @@ def test_collect_extracts_a_declarative_chart_reference():
     assert comp.source_collector == "helm"
 
 
+def test_a_chart_lists_every_module_that_uses_it():
+    first = _chart_module("auth-a", chart_name="authentik", chart_version="2024.12.0")
+    second = _chart_module("auth-b", chart_name="authentik", chart_version="2024.12.0")
+
+    [component] = HelmCollector().collect(_graph(), [first, second], Path("/does/not/matter")).components
+
+    assert component.properties == {"strata:used-by": "module:auth-a, module:auth-b"}
+
+
+def test_a_chart_a_version_document_pinned_names_that_document():
+    from dataclasses import replace
+
+    from strata.models.version_model import VersionModel
+
+    version = VersionModel.model_validate(
+        {"meta": {"name": "prd"}, "spec": {"pins": {"charts": {"auth-a": "2025.1.0"}}}}
+    )
+    pinned = _chart_module("auth-a", chart_name="authentik", chart_version="2025.1.0")
+    declared = _chart_module("portainer", chart_name="portainer", chart_version="1.0.0")
+
+    result = HelmCollector().collect(replace(_graph(), version=version), [pinned, declared], Path("/does/not/matter"))
+
+    assert {c.name: c.properties.get("strata:pinned-by") for c in result.components} == {
+        "authentik": "prd",
+        "portainer": None,
+    }
+
+
 def test_collect_skips_a_non_chart_module():
     module = ModuleModel(
         meta=ModuleMetaModel(name="plain"),

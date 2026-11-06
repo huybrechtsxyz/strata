@@ -13,7 +13,7 @@ from strata.integrations.sbom_collectors.base import CollectorResult, SbomCollec
 from strata.models.module_model import ModuleModel
 from strata.models.sbom_model import SbomComponentModel
 from strata.utils.diagnostics import Diagnostic, Severity
-from strata.utils.sbom_utils import image_to_purl, is_floating_tag, parse_image_ref
+from strata.utils.sbom_utils import image_digest_hash, image_to_purl, is_floating_tag, parse_image_ref
 
 _COMPOSE_FILENAMES = ("docker-compose.yml", "docker-compose.yaml")
 _FLOATING_PROPERTY = "strata:tag-stability"
@@ -84,9 +84,9 @@ class ComposeCollector(SbomCollector):
                 continue
             seen_purls.add(purl)
 
-            _, tag, _ = parse_image_ref(image)
+            _, tag, digest = parse_image_ref(image)
             properties: dict[str, str] = {}
-            if is_floating_tag(tag):
+            if is_floating_tag(tag or digest):
                 properties[_FLOATING_PROPERTY] = _FLOATING_VALUE
                 diagnostics.append(
                     Diagnostic(
@@ -96,6 +96,7 @@ class ComposeCollector(SbomCollector):
                     )
                 )
 
+            digest_hash = image_digest_hash(image)
             components.append(
                 SbomComponentModel(
                     component_type="container",
@@ -103,6 +104,7 @@ class ComposeCollector(SbomCollector):
                     version=tag,
                     purl=purl,
                     properties=properties,
+                    hashes=dict([digest_hash]) if digest_hash else {},
                     source_collector="compose",
                 )
             )

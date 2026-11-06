@@ -369,6 +369,70 @@ def test_collect_skips_a_local_module_source(tmp_path: Path):
     assert [c for c in result.components if c.source_collector == "terraform-module"] == []
 
 
+def _vpc(version: str | None) -> str:
+    pinned = f'  version = "{version}"\n' if version is not None else ""
+    return f'module "vpc" {{\n  source  = "terraform-aws-modules/vpc/aws"\n{pinned}}}\n'
+
+
+def _modules(build_path: Path) -> list:
+    result = TerraformCollector().collect(_graph(), [], build_path)
+    return [c for c in result.components if c.source_collector == "terraform-module"]
+
+
+@pytest.mark.parametrize("written", ["5.0.0", "= 5.0.0", "=5.0.0"])
+def test_an_exact_module_version_is_the_purl_version(tmp_path: Path, written):
+    (tmp_path / "main.tf").write_text(_vpc(written), encoding="utf-8")
+
+    [module] = _modules(tmp_path)
+
+    assert (module.version, module.purl, module.properties) == (
+        "5.0.0",
+        "pkg:terraform/terraform-aws-modules/vpc@5.0.0?repository_url=registry.terraform.io",
+        {},
+    )
+
+
+@pytest.mark.parametrize("written", ["~> 5.0", ">= 5.0, < 6.0", "!= 5.1.0"])
+def test_a_module_version_range_is_kept_as_a_property_not_a_version(tmp_path: Path, written):
+    (tmp_path / "main.tf").write_text(_vpc(written), encoding="utf-8")
+
+    [module] = _modules(tmp_path)
+
+    assert (module.version, module.purl, module.properties) == (
+        None,
+        "pkg:terraform/terraform-aws-modules/vpc?repository_url=registry.terraform.io",
+        {"strata:version-constraint": written},
+    )
+
+
+def test_a_module_without_a_version_has_neither(tmp_path: Path):
+    (tmp_path / "main.tf").write_text(_vpc(None), encoding="utf-8")
+    [module] = _modules(tmp_path)
+    assert (module.version, module.properties) == (None, {})
+
+
+def test_two_exact_versions_of_one_module_are_both_listed_and_two_ranges_are_one(tmp_path: Path):
+    for root, version in (("a", "5.0.0"), ("b", "5.8.1"), ("c", "~> 5.0"), ("d", "~> 5.8")):
+        (tmp_path / root).mkdir()
+        (tmp_path / root / "main.tf").write_text(_vpc(version), encoding="utf-8")
+
+    modules = _modules(tmp_path)
+
+    assert [(m.version, m.properties) for m in modules] == [
+        ("5.0.0", {}),
+        ("5.8.1", {}),
+        (None, {"strata:version-constraint": "~> 5.0"}),
+    ]
+
+
+def test_a_github_module_keeps_its_ref(tmp_path: Path):
+    (tmp_path / "main.tf").write_text(
+        'module "net" {\n  source = "github.com/acme/net//modules/vnet?ref=v1.4.0"\n}\n', encoding="utf-8"
+    )
+    [module] = _modules(tmp_path)
+    assert module.purl == "pkg:github/acme/net@v1.4.0"
+
+
 def test_collect_warns_on_an_unparseable_tf_file(tmp_path: Path):
     (tmp_path / "main.tf").write_text("this is not valid { hcl [[[", encoding="utf-8")
     result = TerraformCollector().collect(_graph(), [], tmp_path)
