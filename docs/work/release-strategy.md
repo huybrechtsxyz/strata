@@ -246,6 +246,11 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-05: **Built 2.3.2** - bumped `VERSION.txt` from `2.3.1` to `2.3.2`. A patch that removes the
+  `path_remote_outside_solution` warning added in 2.3.1: it failed `strata validate --strict` for every pipeline using
+  the sibling layout (`path: ../iac`) that 2.3.1 was for. Built on `fix/path-remote-drop-outside-warning`, for a pull
+  request to `main`. Same release caution as 2.3.0: tag only after `ci-build` is green on the merge commit.
+
 - 2026-11-05: **Built 2.3.1** - bumped `VERSION.txt` from `2.3.0` to `2.3.1` (normalizes to `2.3.1`; confirmed via
   `packaging.version.Version` first; no trailing newline). A patch: a `git` remote's `path` is resolved from the
   solution root and may use `..` or be absolute (before, it had to stay inside the solution), with a

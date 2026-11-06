@@ -74,8 +74,8 @@ remotes:
    `fetch: strata` together with `path` is an error. Writing `fetch: external` alongside is allowed but redundant.
 4. `path` is relative to the solution root (the folder holding `strata.yaml`, not the directory strata was started in)
    and may use `..`, or be absolute. Only an option-like value (`-x`) and an empty one are rejected. It may be a
-   symlink; it is only required to be a directory at resolve time. `strata validate` warns
-   (`path_remote_outside_solution`) when the resolved location is outside the solution tree.
+   symlink; it is only required to be a directory at resolve time. Leaving the solution is not reported: writing
+   `path` is already the statement that someone else placed the checkout.
 5. `integration` is rejected with `path`: strata never talks to the network for it, so credentials have no use.
 6. `url` stays required. It is no longer used to find anything; it is provenance, recorded in the audit manifest. (A
    later change could make it optional in path mode. Not now: it keeps the manifest and `strata.yaml` honest about
@@ -146,11 +146,12 @@ clones the repository there. The value is the same in both places only when both
 
 ## Open questions
 
-- **Q1 - Different paths in CI and on a workstation. Decided 2026-11-05: allow `..` and absolute paths, warn outside the
-  solution.** The first answer was to do nothing and keep the path inside the solution, with an environment override
+- **Q1 - Different paths in CI and on a workstation. Decided 2026-11-05: allow `..` and absolute paths.** The first
+  answer was to do nothing and keep the path inside the solution, with an environment override
   (`STRATA_REMOTE_<NAME>_PATH`) as the later option. Allowing `..` needs no new mechanism and fits the layout
-  Azure DevOps and developers already share (sibling folders). The guard moved from the schema to a `validate`
-  warning. The environment override is still open for a layout where no single value works, with no evidence for it yet.
+  Azure DevOps and developers already share (sibling folders). A `validate` warning for a path outside the solution
+  shipped in 2.3.1 and was removed in 2.3.2 (see the Changelog). The environment override is still open for a layout
+  where no single value works, with no evidence for it yet.
 - **Q2 - Record the commit for ref-mode `fetch: external` remotes too?** Recommend: yes, in a follow-up, after path
   mode proves the lookup.
 - **Q3 - Should a ref-mode external checkout be checked against its `reference`?** Not part of this change (D4).
@@ -201,3 +202,8 @@ Out of scope: verifying ref-mode checkouts (Q3); an environment override for the
   absolute, resolved from the solution root by one helper (`layout.path_remote_location()`) that the resolver and the
   audit manifest both call; the schema no longer rejects them, and `strata validate` warns
   (`path_remote_outside_solution`) when the location is outside the solution. The environment override stays open.
+- 2026-11-05: The `path_remote_outside_solution` warning removed again (2.3.2). It made `validate --strict` fail for
+  every pipeline using the sibling layout it was built for, leaving a choice between dropping `--strict` (and the
+  stale-pin guard) and filtering JSON. And it guarded nothing: writing `path` already says "I put it there", and the
+  same pull request that changes `path` can add a script step that runs anything. A missing folder still fails
+  `build run`. Untrusted pull-request builds are the pipeline's concern, not `strata.yaml`'s.

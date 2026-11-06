@@ -80,9 +80,8 @@ strata where that checkout is:
     (`discovery.exclude: ["repos/**"]`) so its YAML is not read as strata documents.
   - **Absolute**: used as it is. It only helps where every machine has the same layout.
 
-  `strata validate` warns (`path_remote_outside_solution`) when the path leaves the solution, so a
-  change that points a build at another folder is visible in review. When the folder is a git
-  checkout, the deploy's audit manifest records its commit under
+  A path that does not exist fails `build run` with an error naming the remote and the folder it
+  looked in. When the folder is a git checkout, the deploy's audit manifest records its commit under
   `artifacts.repositories.<name>.commit`.
 - **`reference` with `fetch: external`**. Strata expects the checkout at
   `.strata/remotes/<name>/<reference>`, so the pipeline must repeat the ref and place or link its

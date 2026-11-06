@@ -259,6 +259,26 @@ def test_strict_promotes_warnings_to_failure(runner, solution, monkeypatch):
     assert "FAILED" in result.output
 
 
+def test_strict_passes_with_a_path_remote_beside_the_solution(runner, tmp_path):
+    """The layout a multi-checkout pipeline produces must pass `validate --strict` (2.3.1 warned and failed it)."""
+    root = tmp_path / "cfg"
+    root.mkdir()
+    (tmp_path / "iac").mkdir()
+    (root / "strata.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: solution\nmeta:\n  name: test-solution\nspec:\n"
+        "  remotes:\n    - name: iac\n      type: git\n      url: https://example.com/org/iac.git\n"
+        "      path: ../iac\n",
+        encoding="utf-8",
+    )
+    (root / "namespace.yaml").write_text(NAMESPACE_DOC, encoding="utf-8")
+
+    result = runner.invoke(cli, ["validate", str(root), "--strict", "--output", "json"])
+
+    payload = json.loads(result.output)
+    assert result.exit_code == EXIT_SUCCESS, payload["diagnostics"]
+    assert payload["diagnostics"] == []
+
+
 # ---------------------------------------------------------------------------
 # Surface
 # ---------------------------------------------------------------------------

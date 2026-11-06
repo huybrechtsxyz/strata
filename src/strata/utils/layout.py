@@ -146,11 +146,6 @@ def path_remote_location(root: Path, path: str) -> Path:
     return (root / path).resolve()
 
 
-def is_inside_solution(root: Path, location: Path) -> bool:
-    """Return whether `location` is `root` itself or somewhere below it."""
-    return location.resolve().is_relative_to(root.resolve())
-
-
 def asset_checkout_path(root: Path, asset: str, reference: str | None) -> Path:
     """Return where an asset's own `spec.location` materialises on disk, keyed by its ref.
 

@@ -4440,7 +4440,7 @@ def test_a_reference_remote_can_still_be_pushed_to(tmp_path, pusher):
 
 
 # ---------------------------------------------------------------------------
-# A path remote outside the solution tree is allowed, with a warning
+# A path remote anywhere is accepted without a finding: writing `path` already says "I put it there"
 # ---------------------------------------------------------------------------
 
 
@@ -4456,47 +4456,21 @@ def _solution_with_path_remote(tmp_path: Path, path: str) -> Path:
     return root
 
 
-def _outside_warnings(context) -> list:
-    return [d for d in context.diagnostics.warnings if d.code == "path_remote_outside_solution"]
+def _remote_path_findings(context) -> list:
+    return [d for d in context.diagnostics.items if d.location == "spec.remotes.0.path"]
 
 
-@pytest.mark.parametrize("path", ["repos/iac", "a/../repos/iac"])
-def test_a_path_remote_inside_the_solution_gets_no_warning(tmp_path, path):
-    context = _resolve(_solution_with_path_remote(tmp_path, path))
-    assert _outside_warnings(context) == []
-
-
-@pytest.mark.parametrize("path", ["../iac", "repos/../../iac"])
-def test_a_path_remote_that_leaves_the_solution_is_allowed_with_a_warning(tmp_path, path):
+@pytest.mark.parametrize("path", ["repos/iac", "a/../repos/iac", "../iac", "repos/../../iac"])
+def test_a_path_remote_inside_or_outside_the_solution_has_no_finding(tmp_path, path):
     context = _resolve(_solution_with_path_remote(tmp_path, path))
 
-    assert context.ok, context.diagnostics.messages()  # a warning, not an error
-    [warning] = _outside_warnings(context)
-    assert "'iac'" in warning.message
-    assert path in warning.message
-    assert "outside the solution" in warning.message
-    assert warning.location == "spec.remotes.0.path"
+    assert context.ok, context.diagnostics.messages()
+    assert context.diagnostics.warnings == []
+    assert _remote_path_findings(context) == []
 
 
-def test_an_absolute_path_remote_outside_the_solution_warns(tmp_path):
+def test_an_absolute_path_remote_outside_the_solution_has_no_finding(tmp_path):
     outside = tmp_path / "elsewhere" / "iac"
     context = _resolve(_solution_with_path_remote(tmp_path, outside.as_posix()))
-    assert len(_outside_warnings(context)) == 1
 
-
-def test_an_absolute_path_remote_inside_the_solution_does_not_warn(tmp_path):
-    inside = tmp_path / "sln" / "repos" / "iac"
-    context = _resolve(_solution_with_path_remote(tmp_path, inside.as_posix()))
-    assert _outside_warnings(context) == []
-
-
-def test_a_reference_remote_never_gets_the_outside_warning(tmp_path):
-    root = _base_solution(tmp_path)
-    _write(
-        root,
-        "strata.yaml",
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: solution\nmeta:\n  name: test-solution\nspec:\n"
-        "  remotes:\n    - name: iac\n      type: git\n      url: https://example.com/org/iac.git\n"
-        "      reference: main\n",
-    )
-    assert _outside_warnings(_resolve(root)) == []
+    assert context.diagnostics.warnings == []
