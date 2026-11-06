@@ -66,6 +66,27 @@ def test_collect_extracts_chart_yaml_and_its_dependencies(tmp_path: Path):
     assert all(c.source_collector == "helm" for c in result.components)
 
 
+def test_a_materialised_chart_does_not_duplicate_its_declared_chart(tmp_path: Path):
+    """The declared chart knows its repository and its rendered `Chart.yaml` does not: one component, with it."""
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="authentik"),
+        spec=ModuleSpecModel(
+            source=SourceModel(
+                chart_repository="https://charts.goauthentik.io", chart_name="authentik", chart_version="2024.12.0"
+            ),
+            type="helm",
+            default_labels={},
+        ),
+    )
+    (tmp_path / "Chart.yaml").write_text("name: authentik\nversion: 2024.12.0\n", encoding="utf-8")
+
+    result = HelmCollector().collect(_graph(), [module], tmp_path)
+
+    assert [c.purl for c in result.components] == [
+        "pkg:helm/authentik@2024.12.0?repository_url=https://charts.goauthentik.io"
+    ]
+
+
 def test_collect_warns_on_an_unparseable_chart_file(tmp_path: Path):
     (tmp_path / "Chart.yaml").write_text("{ not: valid: yaml: [", encoding="utf-8")
     result = HelmCollector().collect(_graph(), [], tmp_path)

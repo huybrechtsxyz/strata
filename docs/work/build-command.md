@@ -174,7 +174,7 @@ its own document — except where noted.
 after reading v1's real source directly — SBOM generation is actually an
 *unconditional* phase of every v1 `build run` (not opt-in, not
 low-confidence), only its downstream consumption was ever unconfirmed. See
-[sbom-generation.md](sbom-generation.md) for the corrected finding and a
+[sbom-generation.md](../design/sbom-generation.md) for the corrected finding and a
 scoped v2 design (proposed, not yet implemented).
 
 1. **~~No stale-output cleaning before a build (correctness).~~ Fixed.** v1's

@@ -1177,7 +1177,7 @@ durable, reviewable record.
   schema-validated `sbom.json` covering 4 of v1's 8 collectors
   (`image`/`compose`/`helm`/`terraform`) via a new, pluggable
   `strata.sbom_collectors` registry — see
-  [docs/work/sbom-generation.md](sbom-generation.md). `ansible`/`deps`
+  [docs/design/sbom-generation.md](../design/sbom-generation.md). `ansible`/`deps`
   remain deferred; CVE scanning/policies/manifest embedding are separate,
   already-tracked concerns.
 - **Migration action:** none — `strata build run` now produces `sbom.json`

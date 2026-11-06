@@ -18,7 +18,7 @@
   `ScannerIntegration` capability, shared open questions both face; this
   doc's own "v2 design decision" extends that doc's `on_missing_data`
   reasoning to a genuinely per-unit (not whole-policy) shape),
-  [sbom-generation.md](../work/sbom-generation.md) (sibling bucket-C
+  [sbom-generation.md](../design/sbom-generation.md) (sibling bucket-C
   concern, same "real external tool, not a strata-internal check" shape)
 
 ## Overview

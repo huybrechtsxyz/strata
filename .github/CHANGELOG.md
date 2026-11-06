@@ -8,6 +8,45 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-11-06
+
+### Added
+
+- `provisioner_lock_policy` on a workspace: `build run` fails (`deny`) or warns (`warn`) when a Terraform or
+  OpenTofu provisioner has no `.terraform.lock.hcl`, or one that does not lock every provider it declares. It has
+  `rings` and an `allow` list with a reason and an optional expiry, runs in `strata policy check`, and is recorded in
+  `policy_results.json`. Opt-in: without it nothing fails.
+- Without the policy, `build run` prints an `info` line (`sbom_provider_unlocked`) for each Terraform root whose
+  providers end up in the SBOM without a version, or not at all (used without `required_providers` and no lock
+  file). `info` never fails a command, not even `validate --strict`.
+
+### Changed
+
+- Image purls in `sbom.json` follow the purl specification: the registry is the `repository_url` qualifier instead of
+  part of the name (`pkg:docker/goauthentik/server@2026.5.2?repository_url=ghcr.io`, was
+  `pkg:docker/ghcr.io/goauthentik/server@2026.5.2`), and every spelling of a Docker Hub image gives one purl
+  (`postgres`, `library/postgres` and `docker.io/library/postgres` are all `pkg:docker/postgres`). Every image purl
+  changes once, so Dependency-Track and similar tools see new components. The image gate reads both shapes.
+  An image written with `docker.io/...` now reaches the image gate as its short Docker Hub path (`postgres`, not
+  `docker.io/library/postgres`): rename such a key in an `image_findings` integration's
+  `configuration.images.names`, and check `name_strategy: full`.
+- `sbom.json` names what it describes: `metadata.component` is the deployment (with its workspace, `kind:
+  version` and the commit being built, `strata:commit`), `metadata.tools` is strata and its version, and the
+  deployment depends on every component. The commit comes from the same variables as the release gate
+  (`STRATA_COMMIT_SHA`, then the CI's own), else `git rev-parse HEAD`.
+- A component's `bom-ref` is its purl instead of a random value, so two builds of one deployment can be diffed.
+  A component found by two collectors (an image declared by the module and named in the rendered compose file) is
+  listed once.
+- A Helm chart taken from a `type: helm` remote is recorded with the remote's URL as `repository_url`, and is not
+  listed a second time from its materialised `Chart.yaml`.
+- A Terraform provider in `sbom.json` has the version locked in its root module's `.terraform.lock.hcl`
+  (`pkg:terraform/hashicorp/azurerm@4.12.0`) instead of its `required_providers` constraint (`@~>4.0`), which
+  scanners cannot match. Without a lock file the provider has no version. The constraint is kept in the
+  `strata:version-constraint` property. A provider used without a `required_providers` entry is now listed from the
+  lock file, and a provider from a registry other than `registry.terraform.io` carries it as `repository_url`.
+  The lock file is the nearest one in the folder or a parent, so a child module's providers take the root's
+  locked version. `.terraform/` folders (what `terraform init` downloaded during a `deploy run` in the same build
+  path) are no longer read as source.
 ## [2.3.2] - 2026-11-05
 
 ### Removed
@@ -161,7 +200,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.3.2...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.3.3...HEAD
+[2.3.3]: https://github.com/huybrechtsxyz/strata/compare/v2.3.2...v2.3.3
 [2.3.2]: https://github.com/huybrechtsxyz/strata/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/huybrechtsxyz/strata/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/huybrechtsxyz/strata/compare/v2.2.0...v2.3.0

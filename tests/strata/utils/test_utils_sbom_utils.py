@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Tests for SBOM PURL/parsing helpers (docs/design/sbom-generation.md Phase 1)."""
 
+import pytest
+
 from strata.utils.sbom_utils import (
     helm_chart_to_purl,
     image_to_purl,
@@ -9,6 +11,7 @@ from strata.utils.sbom_utils import (
     parse_image_ref,
     split_registry,
     terraform_module_to_purl,
+    terraform_provider_address,
     terraform_provider_to_purl,
 )
 
@@ -99,6 +102,37 @@ def test_image_to_purl_with_neither():
     assert image_to_purl("redis") == "pkg:docker/redis"
 
 
+@pytest.mark.parametrize(
+    ("image", "purl"),
+    [
+        ("ghcr.io/goauthentik/server:2026.5.2", "pkg:docker/goauthentik/server@2026.5.2?repository_url=ghcr.io"),
+        ("registry:5000/img:1.0", "pkg:docker/img@1.0?repository_url=registry:5000"),
+        ("acr.example.io/team/api@sha256:abc123", "pkg:docker/team/api@sha256:abc123?repository_url=acr.example.io"),
+        ("portainer/portainer-ce:2.39.3-alpine", "pkg:docker/portainer/portainer-ce@2.39.3-alpine"),
+    ],
+)
+def test_image_to_purl_puts_the_registry_in_a_repository_url_qualifier(image, purl):
+    """purl-spec `docker` type: the name is the repository, the registry is the `repository_url` qualifier."""
+    assert image_to_purl(image) == purl
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "postgres:16-alpine",
+        "library/postgres:16-alpine",
+        "docker.io/library/postgres:16-alpine",
+        "index.docker.io/library/postgres:16-alpine",
+    ],
+)
+def test_image_to_purl_gives_every_spelling_of_a_docker_hub_image_one_purl(image):
+    assert image_to_purl(image) == "pkg:docker/postgres@16-alpine"
+
+
+def test_image_to_purl_keeps_a_docker_hub_organisation():
+    assert image_to_purl("docker.io/bitnami/redis:7.2") == "pkg:docker/bitnami/redis@7.2"
+
+
 # ---------------------------------------------------------------------------
 # helm_chart_to_purl()
 # ---------------------------------------------------------------------------
@@ -143,5 +177,24 @@ def test_terraform_module_to_purl_github_with_ref_query():
     assert purl == "pkg:github/org/repo@v1.0.0"
 
 
-def test_terraform_provider_to_purl_with_constraint():
-    assert terraform_provider_to_purl("hashicorp/azurerm", "~>3.90") == "pkg:terraform/hashicorp/azurerm@~>3.90"
+@pytest.mark.parametrize(
+    ("source", "address"),
+    [
+        ("hashicorp/azurerm", "registry.terraform.io/hashicorp/azurerm"),
+        ("azurerm", "registry.terraform.io/hashicorp/azurerm"),
+        ("registry.terraform.io/hashicorp/azurerm", "registry.terraform.io/hashicorp/azurerm"),
+        ("Registry.OpenTofu.org/Hashicorp/Null", "registry.opentofu.org/hashicorp/null"),
+    ],
+)
+def test_terraform_provider_address_applies_terraforms_defaults(source, address):
+    assert terraform_provider_address(source) == address
+
+
+def test_terraform_provider_purl_leaves_out_the_default_registry_and_qualifies_another():
+    assert terraform_provider_to_purl("registry.terraform.io/hashicorp/azurerm", "4.12.0") == (
+        "pkg:terraform/hashicorp/azurerm@4.12.0"
+    )
+    assert terraform_provider_to_purl("registry.opentofu.org/hashicorp/null", "3.2.1") == (
+        "pkg:terraform/hashicorp/null@3.2.1?repository_url=registry.opentofu.org"
+    )
+    assert terraform_provider_to_purl("hashicorp/azurerm") == "pkg:terraform/hashicorp/azurerm"

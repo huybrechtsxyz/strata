@@ -30,7 +30,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "helm": ("strata.integrations.sbom_collectors.helm_collector", "HelmCollector"),
     "terraform": ("strata.integrations.sbom_collectors.terraform_collector", "TerraformCollector"),
     # ansible/deps(lockfiles) as each gets a real v2 consumer/trigger
-    # (docs/design/sbom-generation.md Remaining Work).
+    # (docs/design/sbom-generation.md, Out of scope).
 }
 
 

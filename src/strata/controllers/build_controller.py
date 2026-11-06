@@ -46,10 +46,15 @@ from strata.controllers.integration_resolution import find_provisioner, resolve_
 from strata.controllers.policy_results import checkov_policy_result as build_checkov_policy_result
 from strata.controllers.policy_results import cve_policy_result as build_cve_policy_result
 from strata.controllers.policy_results import image_tag_policy_result as build_image_tag_policy_result
+from strata.controllers.policy_results import (
+    provisioner_lock_policy_result as build_provisioner_lock_policy_result,
+)
 from strata.controllers.policy_results import write_policy_results
+from strata.controllers.provisioner_lock_policy import check_provisioner_lock_policy
 from strata.controllers.remote_credentials import RemoteCredentialResolver
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
 from strata.controllers.sbom_controller import evaluate_cve_policy, write_sbom
+from strata.controllers.security_gate_controller import built_commit_sha
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import (
@@ -817,7 +822,7 @@ def build_run(
     # rendered, matching v1's own unconditional "sbom runs last" ordering.
     # Skipped in a dry run: nothing has actually been rendered to scan yet.
     if not dry_run:
-        sbom_diagnostics = write_sbom(build_path, graph, index)
+        sbom_diagnostics = write_sbom(build_path, graph, index, remotes, commit=built_commit_sha(context.root))
         diagnostics.extend(sbom_diagnostics)
         _step(f"wrote {build_path / 'sbom.json'}")
 
@@ -850,12 +855,19 @@ def build_run(
         diagnostics.extend(checkov_diagnostics)
         checkov_policy_result = build_checkov_policy_result(graph.workspace, checkov_diagnostics)
 
+        # Provisioner lock policy (docs/design/provisioner-lock-policy.md): over the same materialised sources.
+        lock_diagnostics = check_provisioner_lock_policy(context, deployment, graph.workspace, materialised)
+        diagnostics.extend(lock_diagnostics)
+        lock_policy_result = build_provisioner_lock_policy_result(graph.workspace, lock_diagnostics)
+
         # Both results are written together, not via two separate calls —
         # write_policy_results() overwrites the whole file each call, so a
         # second, independent call here would have silently discarded
         # whichever policy's result was written first the moment a second
         # build-phase policy was ever configured at once.
-        policy_results = [r for r in (image_tag_result, cve_policy_result, checkov_policy_result) if r is not None]
+        policy_results = [
+            r for r in (image_tag_result, cve_policy_result, checkov_policy_result, lock_policy_result) if r is not None
+        ]
         if policy_results:
             write_policy_results(build_path, policy_results)
     else:

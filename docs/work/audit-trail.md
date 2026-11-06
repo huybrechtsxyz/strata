@@ -989,8 +989,8 @@ spec:
     # no `path`, no `structure` — .strata/audit is a fixed layout location
     # (layout.audit_dir()), and the per-execution directory shape is
     # derived from this deployment's own `layers.segments` when declared,
-    # falling back to workspace/deployment otherwise (see above). Neither
-    # is a field on this model.
+    # falling back to workspace otherwise, then the deployment name (see
+    # above). Neither is a field on this model.
 
     event_overrides:                 # flat, no nested "policy" model — see "Event admission" above
       deployment.measured: false     # example override; all three default to true otherwise
@@ -1037,8 +1037,9 @@ if deployment.spec.layers and deployment.spec.layers.segments:
     ordered_values = [deployment.spec.layers.segments[s.name] for s in convention.segments]
     relative_path = Path(*ordered_values)
 else:
-    relative_path = Path(workspace, deployment)
+    relative_path = Path(workspace)
 
+relative_path = relative_path / deployment                # always appended
 relative_path = relative_path / "{yyyymmdd-hhmmss}"   # concrete leaf, always appended
 
 # No template string, no `structure` field — this is a plain function of
@@ -1061,6 +1062,15 @@ name was enough to lose audit history with no error. Making the timestamp
 leaf mandatory and separate from the derived directory shape closes that
 class of bug structurally: the collision-avoiding segment is never
 something a config author's `layers.segments` (or its absence) can omit.
+
+**The deployment name is always part of the path, too.** `layers.segments`
+are taken from the deployment file's *directory*, so every deployment
+file in one folder (a bootstrap and a spoke stack, say) has identical
+segments. Without the name, their records share one directory, told
+apart only by the timestamp, and two runs started in the same second
+overwrite each other. v1's built-in structures always had `{{ deployment }}`.
+No de-duplication when the last segment already equals the deployment
+name: a redundant `.../web/web/<ts>` is preferred over a conditional shape.
 
 `yyyymmdd-hhmmss` (not ISO-8601 with colons) matches v1's own filesystem
 sanitization (`fs_timestamp = payload.timestamp.replace(":", "-")` in
@@ -2977,5 +2987,12 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   findings came from this one policy. Replaced the prose test scenarios
   with 6 explicitly named test functions. No code written yet — still
   design only, now genuinely implementation-ready.
+- 2026-11-06: Path resolution always puts the deployment name before the
+  timestamp leaf, in the `layers` branch too
+  (`<segments...>/<deployment>/<ts>`). Deployments in one folder share
+  their segments, so a bootstrap and a spoke record landed in the same
+  directory and could overwrite each other on a same-second start. Readers
+  glob for `_manifest.json` and group by its `deployment` field, so records
+  written in the old shape are still found.
 
 

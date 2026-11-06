@@ -25,8 +25,10 @@ from strata.controllers.policy_results import (
     checkov_policy_result,
     cve_policy_result,
     image_tag_policy_result,
+    provisioner_lock_policy_result,
     read_policy_results,
 )
+from strata.controllers.provisioner_lock_policy import check_provisioner_lock_policy
 from strata.controllers.sbom_controller import (
     CveFindingsReport,
     cve_findings,
@@ -46,6 +48,7 @@ from strata.models.checkov_model import CheckovPolicyModel
 from strata.models.common_models import PlatformKind
 from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.integration_model import IntegrationModel
+from strata.models.provisioner_lock_policy_model import ProvisionerLockPolicyModel
 from strata.models.sbom_model import CveMaxSeverityPolicyModel
 from strata.models.security_gate_model import ImageGatePolicyModel, ReleaseGatePolicyModel
 from strata.models.workspace_model import WorkspaceModel
@@ -56,7 +59,12 @@ from strata.utils.errors import UsageError
 DEFAULT_FINDINGS_SEVERITY = "HIGH"
 
 _Policy = (
-    CveMaxSeverityPolicyModel | CheckovPolicyModel | ReleaseGatePolicyModel | ImageGatePolicyModel | ImageTagPolicyModel
+    CveMaxSeverityPolicyModel
+    | CheckovPolicyModel
+    | ReleaseGatePolicyModel
+    | ImageGatePolicyModel
+    | ImageTagPolicyModel
+    | ProvisionerLockPolicyModel
 )
 
 
@@ -172,6 +180,21 @@ def _image_tag_check(request: _CheckRequest) -> tuple[Diagnostics, list[Manifest
     return diagnostics, [result] if result is not None else []
 
 
+def _provisioner_lock_check(request: _CheckRequest) -> tuple[Diagnostics, list[ManifestPolicyResultModel]]:
+    """The lock file rule over the re-derived source paths; offline."""
+    deployment, _ = resolve_deployment_workspace(
+        request.context, request.deployment_name, version_pin=request.version_pin
+    )
+    diagnostics = check_provisioner_lock_policy(
+        request.context,
+        deployment,
+        request.workspace,
+        expected_source_paths(request.build_path, request.workspace),
+    )
+    result = provisioner_lock_policy_result(request.workspace, diagnostics)
+    return diagnostics, [result] if result is not None else []
+
+
 def _gate_check(gate: Gate) -> _CheckFunction:
     def _check(request: _CheckRequest) -> tuple[Diagnostics, list[ManifestPolicyResultModel]]:
         evaluation = evaluate_security_gates(
@@ -205,6 +228,7 @@ _POLICIES: tuple[_PolicyRow, ...] = (
     _PolicyRow("release_gate_policy", "deploy", check=_gate_check("release"), findings=None),
     _PolicyRow("image_gate_policy", "deploy", check=_gate_check("images"), findings=_image_findings),
     _PolicyRow("image_tag_policy", "build", check=_image_tag_check, findings=None),
+    _PolicyRow("provisioner_lock_policy", "build", check=_provisioner_lock_check, findings=None),
 )
 _ROWS = {row.name: row for row in _POLICIES}
 
@@ -354,7 +378,7 @@ def _backing(context: SolutionContext, name: str, policy: _Policy) -> str:
     if name == "checkov_policy":
         checkov = declared_checkov(context.controller.index)
         return f"checkov '{checkov.name}'" if checkov is not None else "checkov (PATH)"
-    if name == "image_tag_policy":
+    if name in ("image_tag_policy", "provisioner_lock_policy"):
         return "strata (offline)"
     integration_name = cast(ReleaseGatePolicyModel | ImageGatePolicyModel, policy).integration
     entry = context.controller.index.get(PlatformKind.INTEGRATION, integration_name)

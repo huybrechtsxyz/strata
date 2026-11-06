@@ -122,10 +122,191 @@ def test_write_sbom_with_no_namespaces_writes_an_empty_bom(tmp_path: Path):
 def test_write_sbom_raises_when_the_bom_fails_schema_validation(tmp_path: Path, monkeypatch):
     import strata.controllers.sbom_controller as sbom_controller_module
 
-    monkeypatch.setattr(sbom_controller_module, "_build_cyclonedx_json", lambda components: "{}")
+    monkeypatch.setattr(sbom_controller_module, "_build_cyclonedx_json", lambda *args, **kwargs: "{}")
 
     with pytest.raises(RuntimeError, match="failed CycloneDX schema validation"):
         write_sbom(tmp_path, _graph(), _index())
+
+
+# ---------------------------------------------------------------------------
+# What the SBOM describes, stable component references, one entry per component
+# ---------------------------------------------------------------------------
+
+
+def _deployment_graph(*namespaces: NamespaceModel) -> ResolvedWorkspaceGraph:
+    from dataclasses import replace
+
+    from strata.models.deployment_model import DeploymentModel
+
+    deployment = DeploymentModel.model_validate(
+        {"meta": {"name": "prd-app"}, "spec": {"workspace": "ws", "environments": ["prd"]}}
+    )
+    return replace(_graph(*namespaces), deployment=deployment)
+
+
+def _written(tmp_path: Path) -> dict:
+    return json.loads((tmp_path / "sbom.json").read_text(encoding="utf-8"))
+
+
+def _redis_build(tmp_path: Path) -> dict:
+    module = _module("redis", services=[ModuleServiceModel(name="redis", image="ghcr.io/acme/redis:7.2")])
+    write_sbom(
+        tmp_path, _deployment_graph(_namespace(ModuleReferenceModel(name="redis", module="redis"))), _index(module)
+    )
+    return _written(tmp_path)
+
+
+def test_the_sbom_says_which_deployment_it_describes(tmp_path: Path):
+    component = _redis_build(tmp_path)["metadata"]["component"]
+
+    assert component["type"] == "application"
+    assert component["name"] == "prd-app"
+    assert {p["name"]: p["value"] for p in component["properties"]}["strata:workspace"] == "ws"
+
+
+def test_the_sbom_names_the_strata_version_that_wrote_it(tmp_path: Path):
+    from strata import __version__
+
+    tools = _redis_build(tmp_path)["metadata"]["tools"]["components"]
+
+    assert [(tool["name"], tool["version"]) for tool in tools] == [("strata", str(__version__))]
+
+
+def test_without_a_deployment_the_workspace_is_the_subject(tmp_path: Path):
+    write_sbom(tmp_path, _graph(), _index())
+    assert _written(tmp_path)["metadata"]["component"]["name"] == "ws"
+
+
+def test_the_sbom_names_the_commit_that_was_built(tmp_path: Path):
+    write_sbom(tmp_path / "a", _graph(), _index(), commit="a" * 40)
+    write_sbom(tmp_path / "b", _graph(), _index())
+
+    def properties(path: Path) -> dict[str, str]:
+        return {p["name"]: p["value"] for p in _written(path)["metadata"]["component"]["properties"]}
+
+    assert properties(tmp_path / "a")["strata:commit"] == "a" * 40
+    assert "strata:commit" not in properties(tmp_path / "b")
+
+
+def test_a_component_reference_is_its_purl_so_two_builds_agree(tmp_path: Path):
+    first = _redis_build(tmp_path / "a")
+    second = _redis_build(tmp_path / "b")
+
+    [component] = first["components"]
+    assert component["bom-ref"] == component["purl"] == "pkg:docker/acme/redis@7.2?repository_url=ghcr.io"
+    assert [c["bom-ref"] for c in first["components"]] == [c["bom-ref"] for c in second["components"]]
+
+
+def test_the_deployment_depends_on_every_component(tmp_path: Path):
+    bom = _redis_build(tmp_path)
+
+    root = bom["metadata"]["component"]["bom-ref"]
+    dependencies = {entry["ref"]: entry.get("dependsOn", []) for entry in bom["dependencies"]}
+    assert dependencies[root] == [bom["components"][0]["bom-ref"]]
+
+
+def test_an_image_found_by_two_collectors_is_listed_once(tmp_path: Path):
+    """The image collector reads the module, the compose collector the rendered file (where the service may be
+    named differently): one component, with the properties of both."""
+    module = _module("app", services=[ModuleServiceModel(name="app", image="acme/app:latest")])
+    (tmp_path / "apps").mkdir()
+    (tmp_path / "apps" / "docker-compose.yml").write_text(
+        "services:\n  web:\n    image: acme/app:latest\n", encoding="utf-8"
+    )
+
+    write_sbom(tmp_path, _graph(_namespace(ModuleReferenceModel(name="app", module="app"))), _index(module))
+
+    components = _written(tmp_path)["components"]
+    assert [c["purl"] for c in components] == ["pkg:docker/acme/app@latest"]
+    assert {p["name"] for p in components[0]["properties"]} >= {"strata:tag-stability"}
+
+
+def test_duplicates_keep_the_first_component_and_gain_the_others_properties():
+    from strata.controllers.sbom_controller import _merge_by_purl
+    from strata.models.sbom_model import SbomComponentModel
+
+    def component(name: str, **properties: str) -> SbomComponentModel:
+        return SbomComponentModel(
+            component_type="container",
+            name=name,
+            version="1",
+            purl="pkg:docker/a@1",
+            properties=properties,
+            source_collector=name,
+        )
+
+    [merged] = _merge_by_purl([component("image", a="1"), component("compose", a="2", b="3")])
+
+    assert (merged.name, merged.properties) == ("image", {"a": "1", "b": "3"})
+
+
+def test_two_spellings_of_one_purl_are_one_component(tmp_path: Path, monkeypatch):
+    """The bom-ref is the normalised purl, so duplicates must be found on it too, or the BOM is invalid."""
+    from strata.integrations.sbom_collectors import registry
+    from strata.integrations.sbom_collectors.base import CollectorResult
+    from strata.models.sbom_model import SbomComponentModel
+
+    def chart(purl: str, **properties: str) -> SbomComponentModel:
+        return SbomComponentModel(
+            component_type="library", name="a", version="1", purl=purl, properties=properties, source_collector="test"
+        )
+
+    class TwoSpellings:
+        def collect(self, graph, modules, build_path):
+            return CollectorResult(
+                components=[
+                    chart("pkg:helm/a@1?repository_url=https%3A//x.io"),
+                    chart("pkg:helm/a@1?repository_url=https://x.io", note="second"),
+                ]
+            )
+
+    monkeypatch.setattr(registry, "list_collectors", lambda: ["test"])
+    monkeypatch.setattr(registry, "get", lambda name: TwoSpellings())
+
+    write_sbom(tmp_path, _graph(), _index())
+
+    [component] = _written(tmp_path)["components"]
+    assert component["bom-ref"] == "pkg:helm/a@1?repository_url=https://x.io"
+    assert component["properties"] == [{"name": "note", "value": "second"}]
+
+
+def test_a_chart_from_a_solution_remote_carries_the_repository(tmp_path: Path):
+    from strata.models.solution_model import SolutionRemoteModel
+
+    chart = ModuleModel(
+        meta=ModuleMetaModel(name="authentik"),
+        spec=ModuleSpecModel(
+            source=SourceModel(remote="charts", chart_name="authentik", chart_version="2026.5.2"),
+            type="helm",
+            default_labels={},
+        ),
+    )
+    remotes = {"charts": SolutionRemoteModel(name="charts", type="helm", url="https://charts.goauthentik.io")}
+
+    write_sbom(
+        tmp_path,
+        _graph(_namespace(ModuleReferenceModel(name="authentik", module="authentik"))),
+        _index(chart),
+        remotes=remotes,
+    )
+
+    [component] = _written(tmp_path)["components"]
+    assert component["purl"] == "pkg:helm/authentik@2026.5.2?repository_url=https://charts.goauthentik.io"
+
+
+def test_a_chart_whose_remote_is_unknown_keeps_a_purl_without_repository(tmp_path: Path):
+    chart = ModuleModel(
+        meta=ModuleMetaModel(name="authentik"),
+        spec=ModuleSpecModel(
+            source=SourceModel(remote="charts", chart_name="authentik", chart_version="2026.5.2"),
+            type="helm",
+            default_labels={},
+        ),
+    )
+    write_sbom(tmp_path, _graph(_namespace(ModuleReferenceModel(name="authentik", module="authentik"))), _index(chart))
+
+    [component] = _written(tmp_path)["components"]
+    assert component["purl"] == "pkg:helm/authentik@2026.5.2"
 
 
 # ---------------------------------------------------------------------------

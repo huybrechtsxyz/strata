@@ -131,7 +131,7 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
 - [ADR-0019](../decisions/0019-version-pinning.md) - `images` and `charts` pins
 - [image-tag-policy.md](../design/image-tag-policy.md) - the policy that exposed this
 - [effective-images.md](effective-images.md) - the resolver and its rows
-- [sbom-generation.md](sbom-generation.md) - the image and Helm chart collectors
+- [sbom-generation.md](../design/sbom-generation.md) - the image and Helm chart collectors
 
 ## Remaining Work / Open Questions
 

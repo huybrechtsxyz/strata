@@ -34,22 +34,24 @@ class HelmCollector(SbomCollector):
        (materialised there by `sync_module_source()`), plus each chart's
        own `dependencies[]`. Mirrors v1's `HelmChartFileCollector`.
 
-    Both are deduplicated together by PURL.
+    Both are deduplicated together by chart name and version, first one
+    kept: a declared chart knows its repository, the `Chart.yaml` it was
+    materialised to does not.
     """
 
     def collect(self, graph: ResolvedWorkspaceGraph, modules: list[ModuleModel], build_path: Path) -> CollectorResult:
         components: list[SbomComponentModel] = []
         diagnostics: list[Diagnostic] = []
-        seen_purls: set[str] = set()
+        seen: set[tuple[str, str | None]] = set()
 
         for module in modules:
             source = module.spec.source
             if source.chart_name is None:
                 continue
-            purl = helm_chart_to_purl(source.chart_name, source.chart_version, source.chart_repository)
-            if purl in seen_purls:
+            if (source.chart_name, source.chart_version) in seen:
                 continue
-            seen_purls.add(purl)
+            seen.add((source.chart_name, source.chart_version))
+            purl = helm_chart_to_purl(source.chart_name, source.chart_version, source.chart_repository)
             components.append(
                 SbomComponentModel(
                     component_type="library",
@@ -63,7 +65,7 @@ class HelmCollector(SbomCollector):
 
         if build_path.exists():
             for chart_file in self._find_chart_files(build_path):
-                self._collect_chart_file(chart_file, components, diagnostics, seen_purls)
+                self._collect_chart_file(chart_file, components, diagnostics, seen)
 
         return CollectorResult(components=components, diagnostics=diagnostics)
 
@@ -92,7 +94,7 @@ class HelmCollector(SbomCollector):
         chart_file: Path,
         components: list[SbomComponentModel],
         diagnostics: list[Diagnostic],
-        seen_purls: set[str],
+        seen: set[tuple[str, str | None]],
     ) -> None:
         try:
             with chart_file.open("r", encoding="utf-8") as fh:
@@ -113,15 +115,15 @@ class HelmCollector(SbomCollector):
         name = data.get("name")
         version = data.get("version")
         if name:
-            purl = helm_chart_to_purl(name, version)
-            if purl not in seen_purls:
-                seen_purls.add(purl)
+            key = (str(name), str(version) if version else None)
+            if key not in seen:
+                seen.add(key)
                 components.append(
                     SbomComponentModel(
                         component_type="library",
-                        name=str(name),
-                        version=str(version) if version else None,
-                        purl=purl,
+                        name=key[0],
+                        version=key[1],
+                        purl=helm_chart_to_purl(key[0], key[1]),
                         properties={},
                         source_collector="helm",
                     )
@@ -134,17 +136,16 @@ class HelmCollector(SbomCollector):
             if not dep_name:
                 continue
             dep_version = dependency.get("version")
-            dep_repository = dependency.get("repository")
-            purl = helm_chart_to_purl(dep_name, dep_version, dep_repository)
-            if purl in seen_purls:
+            key = (str(dep_name), str(dep_version) if dep_version else None)
+            if key in seen:
                 continue
-            seen_purls.add(purl)
+            seen.add(key)
             components.append(
                 SbomComponentModel(
                     component_type="library",
-                    name=str(dep_name),
-                    version=str(dep_version) if dep_version else None,
-                    purl=purl,
+                    name=key[0],
+                    version=key[1],
+                    purl=helm_chart_to_purl(key[0], key[1], dependency.get("repository")),
                     properties={},
                     source_collector="helm",
                 )

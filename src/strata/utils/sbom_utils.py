@@ -11,6 +11,8 @@ pulling in anything heavier.
 import re
 from urllib.parse import quote
 
+from packageurl import PackageURL
+
 #: Tags that indicate a floating (mutable) image reference.
 MUTABLE_ALIAS_TAGS: frozenset[str] = frozenset(
     {"latest", "main", "master", "dev", "develop", "staging", "edge", "nightly", "canary"}
@@ -98,21 +100,37 @@ def split_registry(name: str) -> tuple[str | None, str]:
     return None, name
 
 
-def image_to_purl(image: str) -> str:
-    """Convert a container image reference to a Package URL string.
+#: The names Docker Hub answers to; an image on any of them is written without a registry.
+_DOCKER_HUB_REGISTRIES: frozenset[str] = frozenset({"docker.io", "index.docker.io", "registry-1.docker.io"})
 
-    Uses the digest when present; falls back to the tag.
+
+def image_to_purl(image: str) -> str:
+    """Convert a container image reference to a Package URL string (purl-spec `docker` type).
+
+    The name is the repository; a registry other than Docker Hub goes in the `repository_url`
+    qualifier, and Docker Hub's implicit `library/` is dropped, so every spelling of one image
+    gives one purl. Uses the digest when present; falls back to the tag.
 
     Examples:
         "traefik:v3.0.1" -> "pkg:docker/traefik@v3.0.1"
+        "docker.io/library/postgres:16" -> "pkg:docker/postgres@16"
+        "ghcr.io/org/app:1.0" -> "pkg:docker/org/app@1.0?repository_url=ghcr.io"
         "postgres@sha256:abc123" -> "pkg:docker/postgres@sha256:abc123"
     """
     name, tag, digest = parse_image_ref(image)
-    if digest:
-        return f"pkg:docker/{name}@{digest}"
-    if tag:
-        return f"pkg:docker/{name}@{tag}"
-    return f"pkg:docker/{name}"
+    registry, repository = split_registry(name)
+    if registry in _DOCKER_HUB_REGISTRIES:
+        registry = None
+    if registry is None:
+        repository = repository.removeprefix("library/")
+    namespace, _, short_name = repository.rpartition("/")
+    return PackageURL(
+        type="docker",
+        namespace=namespace or None,
+        name=short_name,
+        version=digest or tag,
+        qualifiers={"repository_url": registry} if registry else None,
+    ).to_string()
 
 
 def helm_chart_to_purl(name: str, version: str | None, repository: str | None = None) -> str:
@@ -139,20 +157,47 @@ def is_local_module_source(source: str) -> bool:
     return source.startswith("./") or source.startswith("../")
 
 
+#: Where Terraform looks for a provider whose source names no host.
+TERRAFORM_DEFAULT_REGISTRY = "registry.terraform.io"
+
+
+def terraform_provider_address(source: str) -> str:
+    """The full `host/namespace/type` address of a provider source, as `.terraform.lock.hcl` keys it.
+
+    Applies Terraform's defaults: no host is `registry.terraform.io`, no namespace is `hashicorp`.
+    Lower-cased, because Terraform compares addresses case-insensitively.
+
+    Examples:
+        "hashicorp/azurerm" -> "registry.terraform.io/hashicorp/azurerm"
+        "azurerm" -> "registry.terraform.io/hashicorp/azurerm"
+    """
+    parts = source.strip().lower().split("/")
+    if len(parts) == 1:
+        parts = [TERRAFORM_DEFAULT_REGISTRY, "hashicorp", *parts]
+    elif len(parts) == 2:
+        parts = [TERRAFORM_DEFAULT_REGISTRY, *parts]
+    return "/".join(parts)
+
+
 def terraform_provider_to_purl(source: str, version: str | None = None) -> str:
     """Convert a Terraform provider source to a Package URL string.
 
-    `version` is typically a constraint string (e.g. `~>5.0`), not a resolved
-    version — recorded as-is.
+    `version` should be a real version (the one `.terraform.lock.hcl` locked), not a constraint.
+    A registry other than `registry.terraform.io` goes in the `repository_url` qualifier.
 
-    Example:
-        terraform_provider_to_purl("hashicorp/azurerm", "~>3.90")
-        -> "pkg:terraform/hashicorp/azurerm@~>3.90"
+    Examples:
+        terraform_provider_to_purl("hashicorp/azurerm", "4.12.0") -> "pkg:terraform/hashicorp/azurerm@4.12.0"
+        terraform_provider_to_purl("registry.opentofu.org/hashicorp/null")
+        -> "pkg:terraform/hashicorp/null?repository_url=registry.opentofu.org"
     """
-    purl = f"pkg:terraform/{source}"
-    if version:
-        purl += f"@{version}"
-    return purl
+    host, namespace, name = terraform_provider_address(source).split("/", 2)
+    return PackageURL(
+        type="terraform",
+        namespace=namespace,
+        name=name,
+        version=version,
+        qualifiers={"repository_url": host} if host != TERRAFORM_DEFAULT_REGISTRY else None,
+    ).to_string()
 
 
 def terraform_module_to_purl(source: str, version: str | None = None) -> str | None:

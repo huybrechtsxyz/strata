@@ -281,6 +281,21 @@ def resolve_commit_sha(
     return None, "none"
 
 
+def built_commit_sha(root: Path) -> str | None:
+    """The commit being built: the first valid commit variable (design D6), else `git rev-parse HEAD` in `root`.
+
+    The release gate's own sources minus `--commit` and the policy pin, which choose a commit to
+    judge rather than the one checked out. `None` outside a git checkout.
+    """
+    for name in _COMMIT_ENV_VARS:
+        sha = os.environ.get(name, "").strip().lower()
+        if _is_commit(sha):
+            return sha
+    result = run_command(["git", "rev-parse", "HEAD"], cwd=root, timeout=_GIT_TIMEOUT)
+    sha = result.stdout.strip().lower()
+    return sha if result.is_successful and _is_commit(sha) else None
+
+
 def _is_commit(value: str) -> bool:
     return len(value) == _COMMIT_LENGTH and all(char in "0123456789abcdef" for char in value)
 
@@ -400,8 +415,9 @@ def images_from_sbom(build_path: Path) -> list[ImageRef] | None:
     """The container images `build run` recorded in `sbom.json`, or `None` when there is no SBOM.
 
     The image comes from each container component's purl (`image_to_purl()`): its version is a
-    digest when it contains `:` (a tag cannot), else a tag. Duplicates (one image used by several
-    services) are kept once, in SBOM order.
+    digest when it contains `:` (a tag cannot), else a tag, and its registry is the `repository_url`
+    qualifier (or, in an SBOM from an older strata, the first segment of the name). Duplicates (one
+    image used by several services) are kept once, in SBOM order.
 
     Raises:
         ValueError: `sbom.json` exists but cannot be read as an SBOM.
@@ -429,8 +445,11 @@ def images_from_sbom(build_path: Path) -> list[ImageRef] | None:
         name = f"{parsed.namespace}/{parsed.name}" if parsed.namespace else parsed.name
         version = parsed.version or None
         tag, digest = (None, version) if version and ":" in version else (version, None)
-        registry, repository = split_registry(name)
-        key = (name, tag, digest)
+        qualifiers = parsed.qualifiers if isinstance(parsed.qualifiers, Mapping) else {}
+        repository_url = qualifiers.get("repository_url")
+        # An older strata put the registry in the first segment of the purl name.
+        registry, repository = (repository_url, name) if repository_url else split_registry(name)
+        key = (f"{registry}/{repository}" if registry else repository, tag, digest)
         if key in seen:
             continue
         seen.add(key)

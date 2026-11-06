@@ -154,3 +154,6 @@ scanner is available or the scan fails.
   failed check at any `severity_gate`, so a `deny` policy fails on it; use `enforcement: warn`,
   `skip_checks` or `include_checks` to relax it. `strata policy findings --policy checkov_policy`
   marks them `[unrated]`.
+- `image_tag_policy` and `provisioner_lock_policy` need no integration: they read only the solution
+  and the build path, and `strata policy check` evaluates them offline. See
+  [workspace.md](../config/workspace.md).

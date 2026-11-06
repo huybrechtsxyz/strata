@@ -62,6 +62,16 @@ def image_tag_policy_result(
     return _build_phase_result("image_tag_policy", "image_tag", policy.enforcement, diagnostics, phase)
 
 
+def provisioner_lock_policy_result(
+    workspace: WorkspaceModel, diagnostics: Diagnostics
+) -> ManifestPolicyResultModel | None:
+    """The `provisioner_lock_policy` entry for `policy_results.json`, or `None` when unset (as `cve_policy_result()`)."""
+    policy = workspace.spec.provisioner_lock_policy
+    if policy is None:
+        return None
+    return _build_phase_result("provisioner_lock_policy", "provisioner_lock", policy.enforcement, diagnostics)
+
+
 def _build_phase_result(
     name: str, policy_type: str, enforcement: str, diagnostics: Diagnostics, phase: str = "build"
 ) -> ManifestPolicyResultModel:
