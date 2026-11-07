@@ -53,10 +53,13 @@ parameters.
 - `spec.image_tag_policy` — fail `build run` and `deploy run` when an image the deployment runs has no
   tag, a floating tag such as `latest`, or a tag that does not match the shape you require (see "Image
   tag policy" below)
+- `spec.provisioner_lock_policy` — fail `build run` when a Terraform or OpenTofu provisioner has no
+  `.terraform.lock.hcl`, or one that does not lock every provider it declares (see "Provisioner lock policy"
+  below)
 
   Every policy has `enforcement` (`deny` | `warn`). The CVE, Checkov and gate policies also have
-  `on_missing_data` (`skip` | `warn` | `block`, default `block`); `image_tag_policy` has none, because it
-  reads only the solution. `strata policy list` shows what a deployment's workspace configures;
+  `on_missing_data` (`skip` | `warn` | `block`, default `block`); `image_tag_policy` and
+  `provisioner_lock_policy` have none, because they read only the solution and the build path. `strata policy list` shows what a deployment's workspace configures;
   `strata policy check` evaluates them on demand. See
   [how-to/security-gates.md](../how-to/security-gates.md).
 
@@ -286,6 +289,48 @@ module, strata does not write a service's `image` into the chart's values, so th
 policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
 the module's `configuration`, in the chart's own key shape. See
 [helm-image-delivery.md](../work/helm-image-delivery.md).
+
+## Provisioner lock policy
+
+Terraform records the provider versions it chose in `.terraform.lock.hcl`, next to the root module's `*.tf` files.
+strata reads that file to list each provider in `sbom.json` at its real version; without it a provider is listed
+without a version, or not at all when the code uses it without declaring it in `required_providers`, and a scanner
+cannot check it. `build run` then prints an `info` line naming the folder and the providers, and never fails.
+
+`spec.provisioner_lock_policy` makes a missing or incomplete lock file a finding:
+
+```yaml
+spec:
+  provisioner_lock_policy:
+    enforcement: deny              # deny (default) | warn
+    rings: [acc, prd]              # only deployments whose version document is in these rings; default all
+    allow:
+      - provisioner: legacy-infra  # a name in spec.provisioners
+        reason: vendored root, providers pinned exactly in required_providers
+        expires: 2026-12-31        # optional ISO date, honoured through that day
+```
+
+- Every `terraform` and `opentofu` provisioner this build materialised is judged, against the lock file in its
+  source folder. Child modules are covered by that file.
+- It fails when the source needs providers (it declares `required_providers` anywhere, or its root has a
+  `provider`, `resource`, `data` or `module` block) and the lock file is missing, or when the lock file does not
+  lock a declared provider. Both are finding `provisioner_lock_missing`, which names the providers and says to run
+  `terraform init` and commit the lock file.
+- A root with only outputs and locals has nothing to lock and passes.
+- `deny` makes the finding an error and fails `build run` (exit 3); `warn` makes it a warning. With the policy set,
+  the `info` line is not printed.
+- `allow` exempts a provisioner and needs a `reason`; `rings` works as for the image tag policy. An `allow` entry
+  that names no declared provisioner fails validation.
+
+| Command               | Behavior                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `strata build run`    | Judged after the SBOM, beside `cve_policy` and `checkov_policy`. Not under `--dry-run`.     |
+| `strata policy check` | Evaluates it offline against `--build-path` and records the result. `policy list` shows it. |
+| `strata deploy run`   | Not evaluated: deploy uses the built sources.                                               |
+| `strata validate`     | Not evaluated: remote sources are not materialised yet.                                     |
+
+The result is recorded in `policy_results.json` as `provisioner_lock_policy` and ends up in the audit manifest. The
+design is in [provisioner-lock-policy.md](../design/provisioner-lock-policy.md).
 
 ## Provider slots
 

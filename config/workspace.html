@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workspace (kind: workspace) &mdash; strata 2.3.2 documentation</title>
+  <title>Workspace (kind: workspace) &mdash; strata 2.3.3 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=5048a02b"></script>
+      <script src="../_static/documentation_options.js?v=f4302432"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -61,7 +61,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
@@ -85,6 +85,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#terraform-backend">Terraform backend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#script-provisioner">Script provisioner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#image-tag-policy">Image tag policy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#provisioner-lock-policy">Provisioner lock policy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#provider-slots">Provider slots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#asset-slots">Asset slots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#topology-grouping">Topology grouping</a></li>
@@ -192,10 +193,13 @@ verdict on <code class="docutils literal notranslate"><span class="pre">reposito
 image in <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code> against <code class="docutils literal notranslate"><span class="pre">max_severity</span></code>/<code class="docutils literal notranslate"><span class="pre">max_count</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.image_tag_policy</span></code> — fail <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> when an image the deployment runs has no
 tag, a floating tag such as <code class="docutils literal notranslate"><span class="pre">latest</span></code>, or a tag that does not match the shape you require (see “Image
-tag policy” below)</p>
+tag policy” below)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.provisioner_lock_policy</span></code> — fail <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> when a Terraform or OpenTofu provisioner has no
+<code class="docutils literal notranslate"><span class="pre">.terraform.lock.hcl</span></code>, or one that does not lock every provider it declares (see “Provisioner lock policy”
+below)</p>
 <p>Every policy has <code class="docutils literal notranslate"><span class="pre">enforcement</span></code> (<code class="docutils literal notranslate"><span class="pre">deny</span></code> | <code class="docutils literal notranslate"><span class="pre">warn</span></code>). The CVE, Checkov and gate policies also have
-<code class="docutils literal notranslate"><span class="pre">on_missing_data</span></code> (<code class="docutils literal notranslate"><span class="pre">skip</span></code> | <code class="docutils literal notranslate"><span class="pre">warn</span></code> | <code class="docutils literal notranslate"><span class="pre">block</span></code>, default <code class="docutils literal notranslate"><span class="pre">block</span></code>); <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> has none, because it
-reads only the solution. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">list</span></code> shows what a deployment’s workspace configures;
+<code class="docutils literal notranslate"><span class="pre">on_missing_data</span></code> (<code class="docutils literal notranslate"><span class="pre">skip</span></code> | <code class="docutils literal notranslate"><span class="pre">warn</span></code> | <code class="docutils literal notranslate"><span class="pre">block</span></code>, default <code class="docutils literal notranslate"><span class="pre">block</span></code>); <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> and
+<code class="docutils literal notranslate"><span class="pre">provisioner_lock_policy</span></code> have none, because they read only the solution and the build path. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">list</span></code> shows what a deployment’s workspace configures;
 <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">check</span></code> evaluates them on demand. See
 <a class="reference internal" href="../how-to/security-gates.html"><span class="std std-doc">how-to/security-gates.md</span></a>.</p>
 </li>
@@ -482,6 +486,60 @@ module, strata does not write a service’s <code class="docutils literal notran
 policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
 the module’s <code class="docutils literal notranslate"><span class="pre">configuration</span></code>, in the chart’s own key shape. See
 <span class="xref myst">helm-image-delivery.md</span>.</p>
+</section>
+<section id="provisioner-lock-policy">
+<h2>Provisioner lock policy<a class="headerlink" href="#provisioner-lock-policy" title="Link to this heading"></a></h2>
+<p>Terraform records the provider versions it chose in <code class="docutils literal notranslate"><span class="pre">.terraform.lock.hcl</span></code>, next to the root module’s <code class="docutils literal notranslate"><span class="pre">*.tf</span></code> files.
+strata reads that file to list each provider in <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code> at its real version; without it a provider is listed
+without a version, or not at all when the code uses it without declaring it in <code class="docutils literal notranslate"><span class="pre">required_providers</span></code>, and a scanner
+cannot check it. <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> then prints an <code class="docutils literal notranslate"><span class="pre">info</span></code> line naming the folder and the providers, and never fails.</p>
+<p><code class="docutils literal notranslate"><span class="pre">spec.provisioner_lock_policy</span></code> makes a missing or incomplete lock file a finding:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provisioner_lock_policy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span><span class="w">              </span><span class="c1"># deny (default) | warn</span>
+<span class="w">    </span><span class="nt">rings</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">acc</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">prd</span><span class="p p-Indicator">]</span><span class="w">              </span><span class="c1"># only deployments whose version document is in these rings; default all</span>
+<span class="w">    </span><span class="nt">allow</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">legacy-infra</span><span class="w">  </span><span class="c1"># a name in spec.provisioners</span>
+<span class="w">        </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vendored root, providers pinned exactly in required_providers</span>
+<span class="w">        </span><span class="nt">expires</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-12-31</span><span class="w">        </span><span class="c1"># optional ISO date, honoured through that day</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Every <code class="docutils literal notranslate"><span class="pre">terraform</span></code> and <code class="docutils literal notranslate"><span class="pre">opentofu</span></code> provisioner this build materialised is judged, against the lock file in its
+source folder. Child modules are covered by that file.</p></li>
+<li><p>It fails when the source needs providers (it declares <code class="docutils literal notranslate"><span class="pre">required_providers</span></code> anywhere, or its root has a
+<code class="docutils literal notranslate"><span class="pre">provider</span></code>, <code class="docutils literal notranslate"><span class="pre">resource</span></code>, <code class="docutils literal notranslate"><span class="pre">data</span></code> or <code class="docutils literal notranslate"><span class="pre">module</span></code> block) and the lock file is missing, or when the lock file does not
+lock a declared provider. Both are finding <code class="docutils literal notranslate"><span class="pre">provisioner_lock_missing</span></code>, which names the providers and says to run
+<code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">init</span></code> and commit the lock file.</p></li>
+<li><p>A root with only outputs and locals has nothing to lock and passes.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">deny</span></code> makes the finding an error and fails <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> (exit 3); <code class="docutils literal notranslate"><span class="pre">warn</span></code> makes it a warning. With the policy set,
+the <code class="docutils literal notranslate"><span class="pre">info</span></code> line is not printed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">allow</span></code> exempts a provisioner and needs a <code class="docutils literal notranslate"><span class="pre">reason</span></code>; <code class="docutils literal notranslate"><span class="pre">rings</span></code> works as for the image tag policy. An <code class="docutils literal notranslate"><span class="pre">allow</span></code> entry
+that names no declared provisioner fails validation.</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Command</p></th>
+<th class="head"><p>Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code></p></td>
+<td><p>Judged after the SBOM, beside <code class="docutils literal notranslate"><span class="pre">cve_policy</span></code> and <code class="docutils literal notranslate"><span class="pre">checkov_policy</span></code>. Not under <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">check</span></code></p></td>
+<td><p>Evaluates it offline against <code class="docutils literal notranslate"><span class="pre">--build-path</span></code> and records the result. <code class="docutils literal notranslate"><span class="pre">policy</span> <span class="pre">list</span></code> shows it.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code></p></td>
+<td><p>Not evaluated: deploy uses the built sources.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code></p></td>
+<td><p>Not evaluated: remote sources are not materialised yet.</p></td>
+</tr>
+</tbody>
+</table>
+<p>The result is recorded in <code class="docutils literal notranslate"><span class="pre">policy_results.json</span></code> as <code class="docutils literal notranslate"><span class="pre">provisioner_lock_policy</span></code> and ends up in the audit manifest. The
+design is in <span class="xref myst">provisioner-lock-policy.md</span>.</p>
 </section>
 <section id="provider-slots">
 <h2>Provider slots<a class="headerlink" href="#provider-slots" title="Link to this heading"></a></h2>

@@ -1,102 +1,127 @@
-# How To: Use the SBOM Feature (CycloneDX)
+# How To: Use the SBOM (CycloneDX)
 
-Every `strata build run` now also generates a CycloneDX 1.6 Software Bill of Materials
-(SBOM) — automatically, with no flag to opt in or out. This guide covers what gets
-scanned, where the output lands, how to feed it into an external scanner/registry, and
-how to add a collector for a technology this doesn't cover yet. See
-[docs/work/sbom-generation.md](../work/sbom-generation.md) for the full design
-rationale and evidence trail.
+Every `strata build run` writes a CycloneDX 1.6 Software Bill of Materials, `sbom.json`, at the
+root of the build path (next to `resolved.yaml`). There is nothing to configure. This guide covers
+what it contains, how strata and other tools use it, and how to add a collector. The design is in
+[docs/design/sbom-generation.md](../design/sbom-generation.md).
 
-## The short answer
+## What is in it
 
-- **Nothing to configure.** `strata build run` writes `sbom.json` at the root of
-  `--build-path` (next to `resolved.yaml`), every time, right after every provisioner
-  and workload module has been rendered.
-- **It's a real, spec-compliant CycloneDX 1.6 document**, validated in-process before
-  being written — any CycloneDX-consuming tool (`cyclonedx-cli`, trivy, grype, OWASP
-  Dependency-Track, Anchore Syft) can read it directly, today, with zero strata-specific
-  tooling.
-- **4 component sources today**: container images, Helm charts, and Terraform
-  providers/modules. Application-level dependencies (lockfiles) and CVE scanning are not
-  built yet — see [What's not covered yet](#whats-not-covered-yet).
+- **The deployment** (`metadata.component`): an application named after the deployment, with the
+  workspace, `kind: version` and the commit being built (`strata:commit`) as properties. It depends
+  on every component. The commit is `STRATA_COMMIT_SHA` or the CI's own variable (`GITHUB_SHA`,
+  `BUILD_SOURCEVERSION`, `CI_COMMIT_SHA`, ...), else `git rev-parse HEAD`, the order the release
+  gate uses.
+- **The tool** (`metadata.tools`): `strata` and its version.
+- **Components**, one per package URL (purl), each with the purl as its `bom-ref`, so two builds of
+  the same deployment can be diffed component by component:
 
-## What gets scanned
+| Collector   | Reads                                                                                                                                  |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `image`     | Every resolved module's `spec.services[].image`, and artifact images                                                                   |
+| `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                                 |
+| `helm`      | Chart modules (`chart_name`/`chart_version`, the repository or the remote's URL), every rendered `Chart.yaml` and its `dependencies[]` |
+| `terraform` | `required_providers {}` and `module "x" {}` blocks in every rendered `*.tf`, and each root module's `.terraform.lock.hcl`              |
 
-| Collector   | What it reads                                                                                                             | Where that data comes from                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `image`     | Every resolved module's `spec.services[].image`                                                                           | The in-memory, already-resolved `ModuleModel` (no file scan needed)             |
-| `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                    | Files `ComposeIntegration.prepare_namespace()` already wrote under `build_path` |
-| `helm`      | Chart-based modules' `spec.source.{chart_name,chart_version}`, **and** every rendered `Chart.yaml` + its `dependencies[]` | Both the resolved module and files `sync_module_source()` already materialised  |
-| `terraform` | `required_providers {}` and `module "x" {}` blocks in every `*.tf` file                                                   | The synced provisioner source under `build_path`, parsed via `python-hcl2`      |
+Versions are the deployed ones: `kind: version` pins and `--pin` are applied first. The SBOM is
+validated against the CycloneDX schema before it is written, and is not written in a dry run.
 
-A floating/mutable tag (`:latest`, `:main`, a tag that isn't semver-shaped) is still
-included as a component — it just gets a `strata:tag-stability: floating` property and a
-`Severity.WARNING` finding in the command's diagnostics output. This never fails the
-build; it's informational.
+A floating image tag (none, `latest`, `main`, `dev`, or a tag that is not a version number) is
+listed with the property `strata:tag-stability: floating` and reported as a warning. It never
+fails the build; use the [image tag policy](../design/image-tag-policy.md) for that.
 
-## Example output
+An image or chart says where it is used in `strata:used-by`, for example
+`service:authentik/server` or `variable:API_IMAGE, service:web/api` for an image and
+`module:authentik` for a chart, so a CVE on a component points to the module that owns it. A
+version that a [`kind: version`](../config/version.md) pin chose also has
+`strata:pinned-by: <version document>`.
+
+An image you reference by digest (`image: ghcr.io/acme/api:1.4.2@sha256:...`) also lists that
+digest under `hashes` (`{"alg": "SHA-256", "content": "..."}`). An image referenced by tag has
+none: strata does not ask the registry.
+
+## Example
 
 ```json
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
+  "metadata": {
+    "component": {
+      "type": "application", "name": "prd-deployment", "bom-ref": "strata:deployment/prd-deployment",
+      "properties": [{ "name": "strata:version", "value": "prd" }, { "name": "strata:workspace", "value": "main" },
+                     { "name": "strata:commit", "value": "cf305ff..." }]
+    },
+    "tools": { "components": [{ "type": "application", "name": "strata", "version": "2.3.3" }] }
+  },
   "components": [
-    { "type": "container", "name": "server", "version": "2024.1.0",
-      "purl": "pkg:docker/ghcr.io/goauthentik/server@2024.1.0" },
-    { "type": "library", "name": "authentik", "version": "2024.1.0",
-      "purl": "pkg:helm/authentik@2024.1.0" },
-    { "type": "library", "name": "azurerm", "version": "~>3.90",
-      "purl": "pkg:terraform/hashicorp/azurerm@~>3.90" }
+    { "type": "container", "name": "server", "version": "2026.5.2",
+      "bom-ref": "pkg:docker/goauthentik/server@2026.5.2?repository_url=ghcr.io",
+      "purl": "pkg:docker/goauthentik/server@2026.5.2?repository_url=ghcr.io" },
+    { "type": "container", "name": "db", "version": "16-alpine",
+      "bom-ref": "pkg:docker/postgres@16-alpine", "purl": "pkg:docker/postgres@16-alpine" },
+    { "type": "library", "name": "authentik", "version": "2026.5.2",
+      "bom-ref": "pkg:helm/authentik@2026.5.2?repository_url=https://charts.example.io",
+      "purl": "pkg:helm/authentik@2026.5.2?repository_url=https://charts.example.io" }
+  ],
+  "dependencies": [
+    { "ref": "strata:deployment/prd-deployment",
+      "dependsOn": ["pkg:docker/goauthentik/server@2026.5.2?repository_url=ghcr.io", "..."] }
   ]
 }
 ```
 
-## Feeding it into an external scanner or registry
+Image purls follow the purl specification: the registry is the `repository_url` qualifier, and
+Docker Hub images (`postgres`, `library/postgres`, `docker.io/library/postgres`) all become
+`pkg:docker/postgres`.
 
-Since `sbom.json` is a standard CycloneDX document, wire it into whatever your pipeline
-already uses — strata doesn't need to know about any of these:
+Terraform providers are listed at the version locked in `.terraform.lock.hcl`, e.g.
+`pkg:terraform/hashicorp/azurerm@4.12.0`. Commit the lock file next to your root module's `*.tf`
+files, as Terraform recommends: without it a provider is listed with no version, so scanners
+cannot check it. The `required_providers` constraint is always in the
+`strata:version-constraint` property. `build run` prints an `info` line for each Terraform root whose
+providers end up without a version (no lock file, or one that does not lock them); it never fails
+the build. To make it fail, set the workspace's
+[`provisioner_lock_policy`](../config/workspace.md#provisioner-lock-policy).
+
+## How strata uses it
+
+| Feature                                      | What it does with `sbom.json`                                                                  |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `cve_policy` (workspace)                     | `build run` scans it with Trivy or Grype right after writing it and fails or warns on findings |
+| `image_gate_policy` (workspace)              | `deploy run` asks the security platform about every container image in it                      |
+| `strata policy findings --policy cve_policy` | Lists every CVE in it, allowlisted ones marked                                                 |
+| Deploy audit record                          | Stores its path, format, SHA-256 and component count                                           |
+
+The gates are set up in [security-gates.md](security-gates.md).
+
+## Using it in other tools
+
+`sbom.json` is a standard CycloneDX document, so any CycloneDX tool reads it directly:
 
 ```bash
-# Fail the pipeline on a CRITICAL finding (trivy)
 trivy sbom build/sbom.json --exit-code 1 --severity CRITICAL
-
-# Same idea with grype
 grype sbom:build/sbom.json --fail-on critical
-
-# Validate against the official CycloneDX schema with the canonical CLI
 cyclonedx-cli validate --input-file build/sbom.json --input-format json
-
-# Upload to OWASP Dependency-Track for trend tracking
 curl -X POST "$DTRACK_URL/api/v1/bom" -H "X-Api-Key: $DTRACK_API_KEY" \
   -F "project=$PROJECT_UUID" -F "bom=@build/sbom.json"
 ```
 
-**strata itself does not gate a build or deploy on scan results today.** It only
-generates the artifact. v1 had an in-process CVE scanner + policy engine that *could*
-block a build — v2 doesn't have that yet (see
-[What's not covered yet](#whats-not-covered-yet)). Until it does, the pattern above (a
-separate pipeline step reading `sbom.json`) is the way to gate on vulnerability findings.
+## Not covered
 
-## What's not covered yet
+- Application lockfiles (`requirements.txt`, `package-lock.json`, `go.sum`, ...).
+- Ansible collections.
+- The version a Terraform module range resolves to: a registry module whose `version` is a range
+  (`~> 5.0`) is listed without a version and with the range in `strata:version-constraint`. Pin
+  an exact version (`version = "5.0.0"`) to have it scanned.
 
-- **Application-level dependencies** (`requirements.txt`, `package-lock.json`, `go.sum`,
-  …) — no lockfile collector exists yet; no trigger defined for when to build one.
-- **Ansible collections** — no v2 Ansible integration exists to collect from at all.
-- **CVE scanning** — no in-process `trivy`/`grype` integration; use the external-tool
-  pattern above instead.
-- **`sbom_*` policies / blocking a build on severity** — would need the CVE scanner
-  integration above plus a scoped policy check; not designed yet.
-- **Deployment manifest embedding** — `sbom.json`'s hash isn't recorded anywhere else
-  yet (no v2 deployment manifest feature exists). The file itself is still written and
-  verified; nothing currently reads a reference to it.
+## Adding a collector
 
-## Adding a collector for a new technology
+A collector is one class implementing `SbomCollector.collect(graph, modules, build_path)`;
+`write_sbom()` picks up every registered one.
 
-A collector is one small class implementing `SbomCollector.collect()` — no changes to
-`write_sbom()` or any existing collector are ever needed.
-
-**Built-in** (ships with strata): add the class under
-`strata/integrations/sbom_collectors/`, then one entry in `registry.py`'s `_KNOWN` dict:
+**Built-in**: add the class under `strata/integrations/sbom_collectors/` and one entry to
+`registry.py`'s `_KNOWN` table:
 
 ```python
 # strata/integrations/sbom_collectors/npm_collector.py
@@ -108,16 +133,12 @@ class NpmLockfileCollector(SbomCollector):
 _KNOWN["npm"] = ("strata.integrations.sbom_collectors.npm_collector", "NpmLockfileCollector")
 ```
 
-**Third-party / private** (an org-specific source strata will never ship): a separate
-installable package registering an entry point — zero changes to this repo:
+**Third-party**: a separate package declaring an entry point, with no change to strata:
 
 ```toml
-# some-other-package's pyproject.toml
 [project.entry-points."strata.sbom_collectors"]
 npm = "acme_strata_plugins.npm_collector:NpmLockfileCollector"
 ```
 
-Either way, `write_sbom()` picks it up automatically via
-`registry.list_collectors()` — see
-[docs/work/sbom-generation.md](../work/sbom-generation.md#extensibility--a-new-collector-is-one-small-class-zero-core-repo-changes-for-a-third-party)
-for the full extensibility design.
+A component found by more than one collector is listed once (by purl), so a new collector may
+overlap with an existing one.
