@@ -8,6 +8,27 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+- Helm: a local chart keeps its own default values. `build run` used to write the module's values over the chart's
+  `values.yaml`, so every default the module did not repeat was lost, and a template reading one failed with `nil
+  pointer evaluating interface {}`. The module's values are now `strata-values.yaml` beside `meta.yaml`, given to Helm
+  with `-f` on top of the chart's defaults, as for a registry chart. A module that relied on the chart's defaults being
+  dropped now gets them.
+- Helm: a registry chart module with no `services` and no `configuration` can deploy. No values file was written, and
+  `helm upgrade` failed on the missing `-f` file. `strata-values.yaml` is now always written (`{}` when empty).
+- Run `strata build run` again before deploying: a build from an earlier version has no `strata-values.yaml`, and
+  `deploy` reports that for each Helm module instead of deploying without values.
+
+### Security
+
+- Helm: a module's secret values reach `helm upgrade` on stdin (`-f -`) instead of as `--set-string path=value`
+  arguments, where any user of the machine could read them in the process list. A secret inside a list now arrives
+  as a list item; `--set-string` read the index as a map key.
+- Helm: `deploy plan` and `deploy run --dry-run` no longer stream the rendered manifest, whose Secret `data` is base64
+  and was not redacted. Each release is reported as one `Kind/name` line per resource, hooks marked, and is shown
+  without `--follow` too.
+
 ## [2.3.3] - 2026-11-06
 
 ### Added

@@ -285,7 +285,6 @@ def build_workload_modules(
             sync_module_source(root, module_dir, module.spec.source, remotes, credentials=credentials)
             _step(f"materialised module '{reference.name}' for namespace '{namespace.meta.name}' at {module_dir}")
             if module.spec.type == "helm" and module.spec.source.chart_name is None and module.spec.configuration:
-                # Read before prepare_namespace() overwrites the copied chart's values.yaml.
                 for finding in check_configuration_keys(module.spec.configuration, read_chart_values(module_dir)):
                     diagnostics.warning(
                         f"Namespace '{namespace.meta.name}', module '{reference.name}': {finding}",

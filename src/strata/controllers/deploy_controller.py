@@ -851,7 +851,7 @@ def deploy_run(
     # here, once, and redacted out of every streamed line before a caller
     # (console
     # `--follow`, a future NDJSON writer) ever sees it. This one set also
-    # covers Helm/Compose's own per-module `--set-string` secrets for
+    # covers Helm/Compose's own per-module secrets for
     # free — `resolve_module_values()`/`resolve_compose_values()` derive
     # those from `${secret:KEY}` tokens resolved against this exact same
     # `resolved.values` dict, so no second mechanism is needed.
@@ -1265,6 +1265,7 @@ def deploy_run(
                         env=env,
                         line_callback=_line,
                         registry_credentials=chart_credentials,
+                        on_step=_step,
                     )
                 )
             if not diagnostics.ok:

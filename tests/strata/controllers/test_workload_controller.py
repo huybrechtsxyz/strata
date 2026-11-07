@@ -389,7 +389,7 @@ def test_build_workload_modules_materialises_source_and_writes_helm_output(tmp_p
 
     module_dir = build_path / "apps" / "auth"
     assert (module_dir / "Chart.yaml").read_text() == "name: authentik"
-    assert (module_dir / "values.yaml").exists()
+    assert (module_dir / "strata-values.yaml").exists()
     meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
     # releaseName defaults to the reference name ("auth"), not module.meta.name ("authentik").
     assert meta["releaseName"] == "auth"
@@ -434,8 +434,10 @@ def test_build_workload_modules_warns_on_configuration_keys_a_local_chart_does_n
     assert "'replicaCnt'" in messages[0] and "did you mean 'replicaCount'" in messages[0]
     assert "'image.tagg'" in messages[1] and "did you mean 'image.tag'" in messages[1]
     assert {item.code for item in diagnostics.items} == {"helm_unknown_configuration_key"}
-    # The check read the chart's own defaults, not the values.yaml prepare_namespace() then overwrote.
-    assert "replicaCnt" in (tmp_path / "build" / "apps" / "app" / "values.yaml").read_text()
+    # The module's values go beside the chart's own defaults, which stay as they were copied.
+    module_dir = tmp_path / "build" / "apps" / "app"
+    assert "replicaCnt" in (module_dir / "strata-values.yaml").read_text()
+    assert (module_dir / "values.yaml").read_text() == "replicaCount: 1\nimage:\n  tag: latest\n"
 
 
 def test_build_workload_modules_is_quiet_when_every_configuration_key_is_declared(tmp_path: Path):
@@ -557,7 +559,7 @@ def test_build_workload_modules_writes_helm_output_for_a_registry_chart_module(t
     )
 
     module_dir = build_path / "apps" / "auth"
-    assert (module_dir / "values.yaml").exists()
+    assert (module_dir / "strata-values.yaml").exists()
     meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
     assert meta["chartName"] == "authentik"
 
@@ -806,7 +808,7 @@ def test_build_workload_modules_renders_enabled_references_alongside_a_disabled_
     )
 
     assert not (build_path / "apps" / "auth").exists()
-    assert (build_path / "apps" / "proxy" / "values.yaml").exists()
+    assert (build_path / "apps" / "proxy" / "strata-values.yaml").exists()
 
 
 def test_build_workload_modules_disabled_reference_does_not_need_to_resolve(tmp_path: Path):

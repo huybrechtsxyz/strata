@@ -26,11 +26,13 @@ nextcloud), every registry chart pinned with a `chart_version`.
 ### Build (`build run`)
 
 `build run` never executes Helm ([ADR-0022](../decisions/0022-strata-build-run.md)). For each module,
-`prepare_namespace()` writes `values.yaml` (the module's `services` and `configuration`) and `meta.yaml` into the module
-directory, overwriting the copied chart's own `values.yaml`.
+`prepare_namespace()` writes `strata-values.yaml` (the module's `services` and `configuration`, `{}` when it sets nothing)
+and `meta.yaml` into the module directory. A local chart's own `values.yaml` is left as copied: Helm reads it as the chart's
+defaults, and `strata-values.yaml` overlays them, exactly as for a registry chart. The file is always written, so a deploy can
+always pass it with `-f`.
 
-For a local chart, `build_workload_modules()` first compares `module.spec.configuration` against the chart's own
-`values.yaml` (read right after the copy, before it is overwritten): a key the chart does not declare is a
+For a local chart, `build_workload_modules()` also compares `module.spec.configuration` against the chart's own
+`values.yaml`: a key the chart does not declare is a
 `helm_unknown_configuration_key` warning with a close-match suggestion. The check covers the top level plus one nested level,
 and an empty default mapping (`env: {}`) is treated as free-form.
 
@@ -58,9 +60,17 @@ and an empty default mapping (`env: {}`) is treated as free-form.
 ### Deploy (`deploy_namespace()`)
 
 One `helm upgrade --install` per module, from the built directory. `meta.yaml` supplies the release, namespace and chart
-coordinates; `values.yaml`'s tokens are resolved and rewritten in place for non-secret leaves, and secret-shaped leaves go
-through `--set-string`. `deploy_run()` makes `build_path` absolute first, because Helm runs with its working directory in the
-module directory and a relative path would resolve twice.
+coordinates; `strata-values.yaml`'s tokens are resolved and rewritten in place for non-secret leaves. Secret-shaped leaves
+stay tokens in the file and reach Helm as a second values document on stdin (`-f strata-values.yaml -f -`), so a secret is
+never on disk or in argv. A module directory without `meta.yaml` or `strata-values.yaml` (a build from an older strata) is an
+error for that module, not a deploy without values. That document holds only the branches that lead to a secret, except that a list holding one is sent whole,
+because Helm replaces lists instead of merging them. `deploy_run()` makes `build_path` absolute first, because Helm runs with
+its working directory in the module directory and a relative path would resolve twice.
+
+The `--dry-run` preview (`helm upgrade --dry-run`) is never streamed: its output is the rendered manifest, and a Secret's
+`data` is base64, which the output redaction cannot mask. The step reports one `Kind/name` line per resource instead, hooks
+marked, as the destroy preview does ([deploy-destroy.md](deploy-destroy.md)). The chart's `NOTES` are not shown either,
+because they are rendered from the same values.
 
 Chart resolution (`_resolve_chart()`):
 

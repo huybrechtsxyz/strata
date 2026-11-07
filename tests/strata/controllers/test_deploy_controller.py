@@ -268,7 +268,7 @@ def test_deploy_run_accepts_a_relative_build_path(tmp_path: Path, monkeypatch):
     module_dir = str(tmp_path / "build" / "apps" / "auth")
     assert lint[-1] == module_dir
     assert upgrade[-1] == module_dir
-    assert upgrade[upgrade.index("-f") + 1] == str(Path(module_dir) / "values.yaml")
+    assert upgrade[upgrade.index("-f") + 1] == str(Path(module_dir) / "strata-values.yaml")
 
 
 def test_deploy_run_check_with_no_modules_of_the_type_does_not_claim_a_check_happened(tmp_path: Path, monkeypatch):
@@ -3836,7 +3836,7 @@ def test_deploy_run_dispatches_container_capable_step_to_deploy_namespace(tmp_pa
         "--namespace",
         "apps",
         "-f",
-        str(module_dir / "values.yaml"),
+        str(module_dir / "strata-values.yaml"),
         "auth",
         str(module_dir),
     ]
@@ -3871,7 +3871,7 @@ def test_deploy_run_dry_run_previews_container_capable_step_via_plan(tmp_path: P
         "--namespace",
         "apps",
         "-f",
-        str(module_dir / "values.yaml"),
+        str(module_dir / "strata-values.yaml"),
         "auth",
         str(module_dir),
     ]

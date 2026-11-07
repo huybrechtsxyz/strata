@@ -38,7 +38,7 @@ build_workload_modules(index, root, remotes, namespace, resolved, build_path)
 HelmIntegration.prepare_namespace(namespace, modules, *, resolved)        # helm.py
   └─ for item in modules:
        values = _render_values(item.module)     # env/persistence per service, module.spec.configuration merged in
-       if values: write item.source_path/values.yaml
+       write item.source_path/strata-values.yaml  # always ({} if empty); a local chart's own values.yaml is untouched
        write item.source_path/meta.yaml          # releaseName/namespace, chart coordinates if registry-based
 
 ComposeIntegration.prepare_namespace(namespace, modules, *, resolved)     # compose.py

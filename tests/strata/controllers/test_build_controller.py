@@ -1579,7 +1579,7 @@ def test_build_run_renders_helm_workload_modules(tmp_path: Path):
     assert diagnostics.ok
     module_dir = build_path / "apps" / "auth"
     assert (module_dir / "Chart.yaml").exists()
-    assert (module_dir / "values.yaml").exists()
+    assert (module_dir / "strata-values.yaml").exists()
     meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
     assert meta == {"releaseName": "auth", "namespace": "apps"}
 

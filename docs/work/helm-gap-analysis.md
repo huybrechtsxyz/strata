@@ -1,6 +1,6 @@
 # Helm gap analysis - Work
 
-- Status: draft
+- Status: in-progress
 - Last updated: 2026-11-07
 
 ## Overview
@@ -27,10 +27,10 @@ not run end to end (no cluster).
 
 | #  | Gap                                                                    | Kind        | Impact | Evidence    |
 | -- | ---------------------------------------------------------------------- | ----------- | ------ | ----------- |
-| 1  | A local chart loses its own default values                             | correctness | high   | verified    |
-| 2  | Secret values are passed on the `helm` command line                    | security    | high   | by reading  |
-| 3  | `deploy plan` / `--dry-run` streams the rendered manifest with Secrets | security    | medium | by reading  |
-| 4  | A registry chart with no services or configuration cannot deploy       | correctness | medium | verified    |
+| 1  | A local chart loses its own default values (fixed)                     | correctness | high   | verified    |
+| 2  | Secret values are passed on the `helm` command line (fixed)            | security    | high   | by reading  |
+| 3  | `deploy plan` / `--dry-run` streams the rendered manifest (fixed)      | security    | medium | by reading  |
+| 4  | A registry chart with no values cannot deploy (fixed)                  | correctness | medium | verified    |
 | 5  | Stage timeouts do not reach a Helm upgrade; `--timeout 5m` is fixed    | operability | medium | by reading  |
 | 6  | The cluster is whatever kube context is active                         | safety      | medium | by design   |
 | 7  | Release and Kubernetes namespace names are not validated               | validation  | low    | by reading  |
@@ -56,9 +56,11 @@ haven's 19 local charts pass today, probably because v1 had the same behaviour a
 the charts need. Fixing this adds defaults back, so a chart whose default conflicts with an intent the module
 expressed by omission would change. Helm merges maps and replaces lists, so the risk is small.
 
-Fix: leave the chart's `values.yaml` alone and write strata's values to a separate file (for example
-`values.strata.yaml`), passed with `-f`. The lint overlay and the key check already read the chart's file and need
-only the new file name.
+**Done (2026-11-07), together with gap 4.** `prepare_namespace()` writes `strata-values.yaml` beside `meta.yaml` and
+leaves the chart's `values.yaml` alone; deploy passes `-f strata-values.yaml`. A module directory without it (a build
+from before this change) is an error, not a deploy without values. A real-Helm test renders a chart whose defaults
+the module does not repeat. Still open: the haven comparison in the open questions, since a module that relied on
+dropped defaults now gets them.
 
 #### 2. Secret values are passed on the `helm` command line
 
@@ -67,12 +69,15 @@ other users of the machine (`ps`, Task Manager, process auditing on CI agents). 
 exactly this reason, and states that `run_command()` forbids that leak class. Registry passwords follow that rule;
 module secrets do not.
 
-Second defect on the same path: `--set-string` treats a dot in a key as nesting, so an environment variable named
-`A.B` becomes `env.A.B`. Only secret leaves are affected, because non-secret ones are written to the file.
+A dot inside a key was not a problem: the paths escape it as `\.`, which `--set-string` also reads as a literal dot.
+A secret inside a list was: the path `extraEnv.1.value` made `--set-string` create a map key `1` instead of
+setting a list item. No consumer had one.
 
-Fix: write the secret leaves as a second values document and pass it on stdin with `-f -`, through the existing
-`Integration.run(input=)`. Verified: `helm template ... -f -` reads values from stdin in 3.13.2. Nothing reaches argv
-or disk, and keys are taken literally.
+**Done (2026-11-07).** The secret leaves are a second values document on stdin (`-f strata-values.yaml -f -`), through the
+existing `Integration.run(input=)`. Only the branches that lead to a secret are sent, and a list holding one is sent
+whole, because Helm replaces lists. `_set_string_args()` and `_escape_set_value()` are removed. Verified with
+`helm template` 3.13.2: the stdin value replaces the token left in the file, special characters survive, and `0123`
+stays a string.
 
 #### 3. `deploy plan` / `--dry-run` streams the rendered manifest with Secrets
 
@@ -81,8 +86,11 @@ The dry-run calls `helm upgrade --dry-run`, which prints the full rendered manif
 `Secret`'s `data`, which is base64. [deploy-destroy.md](../design/deploy-destroy.md) (D7) avoids this for the destroy
 preview by showing only `Kind/name`. The deploy preview does not.
 
-Fix: summarise the dry-run like the destroy preview, as one `Kind/name` line per resource plus the chart and version.
-A real diff (the `helm diff` plugin) is a separate feature; see the open questions.
+**Done (2026-11-07).** The dry-run is not streamed. `summarise_dry_run()` reads its `HOOKS:` and `MANIFEST:` sections
+and the step reports one `Kind/name` line per resource (hooks marked) through `on_step`, which `deploy_namespace()` now
+takes, so the summary is shown without `--follow` too. `NOTES:` are dropped, because they are rendered from the same
+values. A failed preview still reports Helm's stderr, which holds an error, not the manifest. A real diff (the
+`helm diff` plugin) is a separate feature; see the open questions.
 
 #### 4. A registry chart with no services or configuration cannot deploy
 
@@ -91,7 +99,7 @@ A real diff (the `helm diff` plugin) is a separate feature; see the open questio
 fails with `open .../values.yaml: ... cannot find the path` (verified). `helm lint` skips registry charts, so nothing
 catches it before deploy.
 
-Fix: omit `-f` when there is no file, or always write `{}`. Add a test for a bare `chart_name` module.
+**Done (2026-11-07).** `strata-values.yaml` is always written, `{}` when the module sets nothing (see gap 1).
 
 #### 5. Stage timeouts do not reach a Helm upgrade
 
@@ -171,10 +179,11 @@ breaks.
 
 ### Proposed order
 
-- [ ] 1. Gap 1: write strata's values to their own file; check the ADR-0043 haven failure against it
-- [ ] 2. Gap 2: secrets on stdin with `-f -`
-- [ ] 3. Gap 4: no `-f` without a values file, plus a test
-- [ ] 4. Gap 3: summarise the dry-run instead of streaming the manifest
+- [x] 1. Gap 1: write strata's values to their own file
+- [ ] 1a. Check the ADR-0043 haven failure and haven's local charts against gap 1
+- [x] 2. Gap 2: secrets on stdin with `-f -`
+- [x] 3. Gap 4: always write the values file
+- [x] 4. Gap 3: summarise the dry-run instead of streaming the manifest
 - [ ] 5. Gap 5: stage timeouts for plan and apply
 - [ ] 6. Gap 7: name checks and the release uniqueness check in `strata validate`
 - [ ] 7. Gap 6: decide on the context guard
@@ -191,6 +200,10 @@ breaks.
 - **Release status and rollback.** No `deploy status` or rollback exists for Helm. No consumer has asked for either.
 
 ## Changelog
+
+- 2026-11-07: gaps 1 and 4 fixed (`strata-values.yaml`).
+- 2026-11-07: gaps 2 and 3 fixed on `feature/helm-improvements`. Corrected gap 2: a dot in a key was handled; a list
+  index was not.
 
 - 2026-11-07: created. Gaps 1 and 4 and the `-f -` fix for gap 2 verified with `helm` 3.13.2 and a test chart; the
   rest from reading the source.

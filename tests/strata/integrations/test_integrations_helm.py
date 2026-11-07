@@ -10,15 +10,16 @@ import yaml
 
 from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError, RegistryAuthError
 from strata.integrations.helm import (
+    VALUES_FILE,
     HelmIntegration,
     RegistryCredentials,
     _repo_alias,
     _resolve_chart,
-    _set_string_args,
     check_configuration_keys,
     credentials_from_authentication,
     read_chart_values,
     resolve_module_values,
+    summarise_dry_run,
     summarise_manifest,
 )
 from strata.integrations.registry import get
@@ -51,6 +52,8 @@ def _capture(monkeypatch):
         captured["args"] = args
         captured["cwd"] = cwd
         captured["env"] = env
+        captured["input"] = input
+        captured["line_callback"] = line_callback
         return CommandResult(returncode=0, stdout="ok", stderr="")
 
     import strata.integrations.base as base_module
@@ -254,7 +257,7 @@ def test_prepare_namespace_writes_one_values_and_meta_file_per_module(tmp_path: 
 
     HelmIntegration().prepare_namespace(_namespace(), [resolved_module], resolved=ValueResolution(deployment="app"))
 
-    values = yaml.safe_load((module_dir / "values.yaml").read_text())
+    values = yaml.safe_load((module_dir / VALUES_FILE).read_text())
     assert values == {
         "authentik-server": {
             "env": {"DB_PASSWORD": "${secret:DB_PASSWORD}", "TZ": "Europe/Brussels"},
@@ -278,27 +281,65 @@ def test_prepare_namespace_never_merges_across_modules(tmp_path: Path):
         resolved=ValueResolution(deployment="app"),
     )
 
-    assert (dir_a / "values.yaml").exists()
-    assert (dir_b / "values.yaml").exists()
-    assert yaml.safe_load((dir_a / "values.yaml").read_text()) == {"a": {}}
-    assert yaml.safe_load((dir_b / "values.yaml").read_text()) == {"b": {}}
+    assert (dir_a / VALUES_FILE).exists()
+    assert (dir_b / VALUES_FILE).exists()
+    assert yaml.safe_load((dir_a / VALUES_FILE).read_text()) == {"a": {}}
+    assert yaml.safe_load((dir_b / VALUES_FILE).read_text()) == {"b": {}}
 
 
-def test_prepare_namespace_omits_values_file_when_nothing_to_render(tmp_path: Path):
-    """No services, no module-level configuration - a local chart's own shipped
-    values.yaml (already copied into module_dir) is left untouched, per v1's
-    own 'omit when there is nothing to render' rule."""
+def test_prepare_namespace_writes_an_empty_values_file_when_nothing_to_render(tmp_path: Path):
+    """A deploy always passes the file with `-f`, so it must exist: a registry chart has nothing else to give
+    (gap 4 of docs/work/helm-gap-analysis.md)."""
     module = _module(services=None, configuration=None)
     module_dir = tmp_path / "apps" / "authentik"
     module_dir.mkdir(parents=True)
-    (module_dir / "values.yaml").write_text("shipped: true\n")
 
     HelmIntegration().prepare_namespace(
         _namespace(), [_resolved_module("authentik", module, module_dir)], resolved=ValueResolution(deployment="app")
     )
 
-    assert yaml.safe_load((module_dir / "values.yaml").read_text()) == {"shipped": True}
+    assert yaml.safe_load((module_dir / VALUES_FILE).read_text()) == {}
     assert (module_dir / "meta.yaml").exists()
+
+
+def test_prepare_namespace_leaves_the_local_charts_own_values_yaml_alone(tmp_path: Path):
+    """The chart's `values.yaml` is its defaults; replacing it dropped every default the module did not repeat."""
+    module = _module(services=None, configuration={"replicas": 3})
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "values.yaml").write_text("image:\n  repository: nginx\nreplicas: 2\n")
+
+    HelmIntegration().prepare_namespace(
+        _namespace(), [_resolved_module("authentik", module, module_dir)], resolved=ValueResolution(deployment="app")
+    )
+
+    assert (module_dir / "values.yaml").read_text() == "image:\n  repository: nginx\nreplicas: 2\n"
+    assert yaml.safe_load((module_dir / VALUES_FILE).read_text()) == {"replicas": 3}
+
+
+@pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+def test_prepare_namespace_output_renders_with_the_charts_defaults_under_real_helm(tmp_path: Path):
+    """What `deploy` passes (`-f VALUES_FILE`) overlays the chart's defaults instead of replacing them. Before,
+    this chart failed with `nil pointer evaluating interface {}.repository`."""
+    module_dir = tmp_path / "apps" / "demo"
+    (module_dir / "templates").mkdir(parents=True)
+    (module_dir / "Chart.yaml").write_text("apiVersion: v2\nname: demo\nversion: 0.1.0\n")
+    (module_dir / "values.yaml").write_text("image:\n  repository: nginx\n  tag: '1.27'\nreplicas: 2\n")
+    (module_dir / "templates" / "cm.yaml").write_text(
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: demo\ndata:\n"
+        '  image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"\n'
+        '  replicas: "{{ .Values.replicas }}"\n'
+    )
+    HelmIntegration().prepare_namespace(
+        _namespace(),
+        [_resolved_module("demo", _module("demo", services=None, configuration={"replicas": 3}), module_dir)],
+        resolved=ValueResolution(deployment="app"),
+    )
+
+    result = HelmIntegration().run("template", "demo", str(module_dir), "-f", str(module_dir / VALUES_FILE))
+
+    assert result.is_successful, result.stderr
+    assert yaml.safe_load(result.stdout)["data"] == {"image": "nginx:1.27", "replicas": "3"}
 
 
 def test_prepare_namespace_merges_module_and_service_configuration(tmp_path: Path):
@@ -313,7 +354,7 @@ def test_prepare_namespace_merges_module_and_service_configuration(tmp_path: Pat
         _namespace(), [_resolved_module("authentik", module, module_dir)], resolved=ValueResolution(deployment="app")
     )
 
-    values = yaml.safe_load((module_dir / "values.yaml").read_text())
+    values = yaml.safe_load((module_dir / VALUES_FILE).read_text())
     assert values == {
         "authentik-server": {"replicas": 2},
         "ingress": {"enabled": True},
@@ -339,7 +380,7 @@ def test_prepare_namespace_renders_persistence_only_for_storage_class_mounts(tmp
         _namespace(), [_resolved_module("authentik", module, module_dir)], resolved=ValueResolution(deployment="app")
     )
 
-    values = yaml.safe_load((module_dir / "values.yaml").read_text())
+    values = yaml.safe_load((module_dir / VALUES_FILE).read_text())
     assert values["authentik-server"]["persistence"] == {
         "data": {"storageClass": "fast-ssd", "accessMode": "ReadWriteOnce", "size": "10Gi"}
     }
@@ -453,7 +494,7 @@ def test_resolve_module_values_leaves_a_secret_shaped_leaf_unresolved_and_tracks
     )
     resolved, secrets = resolve_module_values(module, {"db_password": "hunter2"})
     assert resolved == {"authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}}
-    assert secrets == {"authentik-server.env.DB_PASSWORD": "hunter2"}
+    assert secrets == {"authentik-server": {"env": {"DB_PASSWORD": "hunter2"}}}
 
 
 def test_resolve_module_values_matches_the_real_immich_style_configuration_path():
@@ -467,7 +508,7 @@ def test_resolve_module_values_matches_the_real_immich_style_configuration_path(
     )
     resolved, secrets = resolve_module_values(module, {"db_password": "hunter2"})
     assert resolved["controllers"]["main"]["containers"]["main"]["env"]["DB_PASSWORD"] == "${secret:db_password}"
-    assert secrets == {"controllers.main.containers.main.env.DB_PASSWORD": "hunter2"}
+    assert secrets == {"controllers": {"main": {"containers": {"main": {"env": {"DB_PASSWORD": "hunter2"}}}}}}
 
 
 def test_resolve_module_values_does_not_touch_disk():
@@ -476,6 +517,30 @@ def test_resolve_module_values_does_not_touch_disk():
     resolved, secrets = resolve_module_values(module, {})
     assert resolved == {"authentik-server": {}}
     assert secrets == {}
+
+
+def test_resolve_module_values_carries_a_list_holding_a_secret_whole():
+    """Helm replaces a list rather than merging it, so the overlay must hold every item, resolved."""
+    module = _module(
+        services=None,
+        configuration={
+            "replicas": 2,
+            "extraEnv": [
+                {"name": "TZ", "value": "${var:tz}"},
+                {"name": "DB_PASSWORD", "value": "${secret:db_password}"},
+            ],
+        },
+    )
+    _, secrets = resolve_module_values(module, {"tz": "Europe/Brussels", "db_password": "hunter2"})
+    assert secrets == {
+        "extraEnv": [{"name": "TZ", "value": "Europe/Brussels"}, {"name": "DB_PASSWORD", "value": "hunter2"}]
+    }
+
+
+def test_resolve_module_values_keeps_a_dotted_key_as_one_key():
+    module = _module(services=None, configuration={"secrets": {"example.com": "${secret:db_password}", "other": 1}})
+    _, secrets = resolve_module_values(module, {"db_password": "hunter2"})
+    assert secrets == {"secrets": {"example.com": "hunter2"}}
 
 
 # ---------------------------------------------------------------------------
@@ -488,14 +553,27 @@ def _remote(name: str, remote_type: RemoteType, url: str) -> SolutionRemoteModel
     return SolutionRemoteModel(name=name, type=remote_type, url=url, reference=reference)
 
 
-def test_set_string_args_escapes_special_characters():
-    args = _set_string_args([("authentik-server.env.DB_PASSWORD", "a,b=c.d{e}[f]\\g")])
-    assert args == ["--set-string", "authentik-server.env.DB_PASSWORD=a\\,b\\=c\\.d\\{e\\}\\[f\\]\\\\g"]
+def test_plan_and_deploy_send_secret_values_on_stdin_never_in_argv(monkeypatch):
+    secret = {"server": {"env": {"DB_PASSWORD": "a,b=c.d{e}[f]\\g", "PORT_PIN": "0123"}}}
+    for method in ("plan", "deploy"):
+        captured = _capture(monkeypatch)
+        getattr(HelmIntegration(), method)(
+            Path("/work/values.yaml"), release="app", namespace="apps", chart="repo/app", secret_values=secret
+        )
+        args = captured["args"]
+        assert args[args.index(str(Path("/work/values.yaml"))) + 1 : args.index("app")] == ["-f", "-"]
+        assert not any("a,b=c" in arg for arg in args)
+        # Read back exactly, and still a string where YAML would see a number.
+        assert yaml.safe_load(captured["input"]) == secret
 
 
-def test_set_string_args_empty_when_no_secrets():
-    assert _set_string_args(None) == []
-    assert _set_string_args([]) == []
+def test_plan_and_deploy_without_secret_values_read_no_stdin(monkeypatch):
+    captured = _capture(monkeypatch)
+    HelmIntegration().deploy(
+        Path("/work/values.yaml"), release="app", namespace="apps", chart="repo/app", secret_values={}
+    )
+    assert "-" not in captured["args"]
+    assert captured["input"] is None
 
 
 def _token_auth(*, token: str = "PROGET_API_KEY", username: str | None = "api") -> AuthenticationModel:
@@ -689,7 +767,7 @@ def test_deploy_namespace_local_chart_uses_source_path_directly(monkeypatch, tmp
     module_dir = tmp_path / "apps" / "authentik"
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}}))
+    (module_dir / VALUES_FILE).write_text(yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}}))
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(
@@ -709,18 +787,16 @@ def test_deploy_namespace_local_chart_uses_source_path_directly(monkeypatch, tmp
         "--namespace",
         "apps",
         "-f",
-        str(module_dir / "values.yaml"),
+        str(module_dir / VALUES_FILE),
         "authentik",
         str(module_dir),
     ]
-    assert yaml.safe_load((module_dir / "values.yaml").read_text()) == {
+    assert yaml.safe_load((module_dir / VALUES_FILE).read_text()) == {
         "authentik-server": {"env": {"TZ": "Europe/Brussels"}}
     }
 
 
-def test_deploy_namespace_registry_chart_resolves_chart_ref_and_delivers_secrets_via_set_string(
-    monkeypatch, tmp_path: Path
-):
+def test_deploy_namespace_registry_chart_resolves_chart_ref_and_delivers_secrets_on_stdin(monkeypatch, tmp_path: Path):
     captured = _capture(monkeypatch)
     module = _module(
         source=SourceModel(remote="goauthentik", chart_name="authentik", chart_version="2024.12.0"),
@@ -744,7 +820,7 @@ def test_deploy_namespace_registry_chart_resolves_chart_ref_and_delivers_secrets
             }
         )
     )
-    (module_dir / "values.yaml").write_text(
+    (module_dir / VALUES_FILE).write_text(
         yaml.safe_dump({"authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}})
     )
     resolved_module = _resolved_module("authentik", module, module_dir)
@@ -767,16 +843,18 @@ def test_deploy_namespace_registry_chart_resolves_chart_ref_and_delivers_secrets
         "--namespace",
         "apps",
         "-f",
-        str(module_dir / "values.yaml"),
-        "--set-string",
-        "authentik-server.env.DB_PASSWORD=hunter2",
+        str(module_dir / VALUES_FILE),
+        "-f",
+        "-",
         "authentik",
         "oci://registry.example.com/charts/authentik",
         "--version",
         "2024.12.0",
     ]
+    assert not any("hunter2" in arg for arg in captured["args"])
+    assert yaml.safe_load(captured["input"]) == {"authentik-server": {"env": {"DB_PASSWORD": "hunter2"}}}
     # Secret-shaped leaf is left as a literal token on disk, never written resolved.
-    assert yaml.safe_load((module_dir / "values.yaml").read_text()) == {
+    assert yaml.safe_load((module_dir / VALUES_FILE).read_text()) == {
         "authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}
     }
 
@@ -849,7 +927,7 @@ def test_deploy_namespace_failed_repo_refresh_warns_and_still_deploys(monkeypatc
             }
         )
     )
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"replicas": 1}))
+    (module_dir / VALUES_FILE).write_text(yaml.safe_dump({"replicas": 1}))
 
     diagnostics = HelmIntegration().deploy_namespace(
         _namespace(), [_resolved_module("gatus", module, module_dir)], tokens={}, dry_run=False
@@ -865,7 +943,8 @@ def _check_fixture(tmp_path: Path, *, name: str = "authentik", meta: dict | None
     module_dir = tmp_path / "apps" / name
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump(meta or {"releaseName": name, "namespace": "apps"}))
-    (module_dir / "values.yaml").write_text("built: values\n")
+    (module_dir / VALUES_FILE).write_text("{}\n")
+    (module_dir / "values.yaml").write_text("built: values\n")  # the chart's own defaults
     return _resolved_module(name, module, module_dir), module_dir
 
 
@@ -1417,7 +1496,7 @@ def test_deploy_namespace_dry_run_passes_the_pinned_chart_version(monkeypatch, t
             }
         )
     )
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"replicas": 1}))
+    (module_dir / VALUES_FILE).write_text(yaml.safe_dump({"replicas": 1}))
     resolved_module = _resolved_module("gatus", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=True)
@@ -1449,7 +1528,7 @@ def test_deploy_namespace_inline_chart_repository_resolves_chart_ref_without_a_d
             }
         )
     )
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}}))
+    (module_dir / VALUES_FILE).write_text(yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}}))
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     # No `remotes=` passed at all — an inline chart_repository needs no solution-level declaration.
@@ -1470,7 +1549,7 @@ def test_deploy_namespace_inline_chart_repository_resolves_chart_ref_without_a_d
         "--namespace",
         "apps",
         "-f",
-        str(module_dir / "values.yaml"),
+        str(module_dir / VALUES_FILE),
         "authentik",
         f"{_repo_alias('https://charts.goauthentik.io')}/authentik",
     ]
@@ -1486,7 +1565,26 @@ def test_deploy_namespace_missing_meta_file_reports_a_diagnostic_and_skips(monke
     diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=False)
 
     assert not diagnostics.ok
-    assert "meta.yaml not found" in diagnostics.errors[0].message
+    assert "meta.yaml and strata-values.yaml not found" in diagnostics.errors[0].message
+
+
+def test_deploy_namespace_build_without_the_values_file_is_an_error_not_a_deploy_without_values(
+    monkeypatch, tmp_path: Path
+):
+    """A build from before `VALUES_FILE` has `meta.yaml` only; deploying it would silently drop every value."""
+    captured = _capture(monkeypatch)
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
+
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(), [_resolved_module("authentik", _module(), module_dir)], tokens={}, dry_run=False
+    )
+
+    assert [error.message for error in diagnostics.errors] == [
+        "Namespace 'apps', module 'authentik': strata-values.yaml not found — run 'strata build run' first."
+    ]
+    assert "args" not in captured
 
 
 def test_deploy_namespace_unresolvable_token_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):
@@ -1504,6 +1602,7 @@ def test_deploy_namespace_unresolvable_token_reports_a_diagnostic_and_skips(monk
     module_dir = tmp_path / "apps" / "authentik"
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
+    (module_dir / VALUES_FILE).write_text("{}\n")
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=False)
@@ -1548,7 +1647,9 @@ def test_deploy_namespace_output_preflight_skips_only_the_offending_module(monke
     good_dir.mkdir(parents=True)
     bad_dir.mkdir(parents=True)
     (good_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "good", "namespace": "apps"}))
+    (good_dir / VALUES_FILE).write_text("{}\n")
     (bad_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "bad", "namespace": "apps"}))
+    (bad_dir / VALUES_FILE).write_text("{}\n")
     resolved_modules = [
         _resolved_module("good", good_module, good_dir),
         _resolved_module("bad", bad_module, bad_dir),
@@ -1595,6 +1696,7 @@ def test_deploy_namespace_output_preflight_runs_under_dry_run_too(monkeypatch, t
     module_dir = tmp_path / "apps" / "bad"
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "bad", "namespace": "apps"}))
+    (module_dir / VALUES_FILE).write_text("{}\n")
     resolved_module = _resolved_module("bad", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(
@@ -1616,6 +1718,7 @@ def test_deploy_namespace_unresolvable_chart_remote_reports_a_diagnostic_and_ski
             {"releaseName": "authentik", "namespace": "apps", "chartName": "authentik", "chartRemote": "missing"}
         )
     )
+    (module_dir / VALUES_FILE).write_text("{}\n")
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=False)
@@ -1639,7 +1742,7 @@ def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: P
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
     values_before = yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}})
-    (module_dir / "values.yaml").write_text(values_before)
+    (module_dir / VALUES_FILE).write_text(values_before)
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(
@@ -1655,12 +1758,93 @@ def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: P
         "--namespace",
         "apps",
         "-f",
-        str(module_dir / "values.yaml"),
+        str(module_dir / VALUES_FILE),
         "authentik",
         str(module_dir),
     ]
     # A real preview needs the same real, resolved input a deploy would use.
-    assert (module_dir / "values.yaml").read_text() != values_before
+    assert (module_dir / VALUES_FILE).read_text() != values_before
+
+
+_DRY_RUN = """Release "auth" has been upgraded. Happy Helming!
+NAME: auth
+NAMESPACE: apps
+STATUS: pending-upgrade
+REVISION: 2
+HOOKS:
+---
+# Source: auth/templates/migrate.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: auth-migrate
+MANIFEST:
+---
+# Source: auth/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: auth-db
+data:
+  password: aHVudGVyMg==
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-server
+
+NOTES:
+Log in with password hunter2
+"""
+
+
+def test_summarise_dry_run_lists_resources_and_hooks_never_data_or_notes():
+    lines = summarise_dry_run(_DRY_RUN)
+    assert lines == ["Secret/auth-db", "Deployment/auth-server", "Job/auth-migrate (hook)"]
+    assert not any("aHVudGVyMg" in line or "hunter2" in line for line in lines)
+
+
+def test_summarise_dry_run_of_unexpected_output_is_empty():
+    assert summarise_dry_run("ok") == []
+
+
+def test_deploy_namespace_dry_run_never_streams_the_manifest_and_reports_a_summary(monkeypatch, tmp_path: Path):
+    """The preview is the rendered manifest: base64 Secret data that redaction cannot mask (D7)."""
+    import strata.integrations.base as base_module
+
+    seen: dict[str, object] = {}
+
+    def _fake(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        seen["line_callback"] = line_callback
+        return CommandResult(returncode=0, stdout=_DRY_RUN, stderr="")
+
+    monkeypatch.setattr(base_module, "run_command", _fake)
+    module = _module(services=[ModuleServiceModel(name="server")])
+    module_dir = tmp_path / "apps" / "auth"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "auth", "namespace": "apps"}))
+    (module_dir / VALUES_FILE).write_text("{}\n")
+    streamed: list[str] = []
+    steps: list[str] = []
+
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(),
+        [_resolved_module("auth", module, module_dir)],
+        tokens={},
+        dry_run=True,
+        line_callback=lambda stream, line: streamed.append(line),
+        on_step=steps.append,
+    )
+
+    assert diagnostics.ok
+    assert seen["line_callback"] is None
+    assert streamed == []
+    assert steps == [
+        "would upgrade release 'auth' (namespace 'apps'): 3 resource(s)",
+        "  Secret/auth-db",
+        "  Deployment/auth-server",
+        "  Job/auth-migrate (hook)",
+    ]
 
 
 def test_deploy_namespace_dry_run_plan_failure_is_reported_as_an_error(monkeypatch, tmp_path: Path):
@@ -1668,7 +1852,7 @@ def test_deploy_namespace_dry_run_plan_failure_is_reported_as_an_error(monkeypat
     module_dir = tmp_path / "apps" / "authentik"
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"authentik-server": {}}))
+    (module_dir / VALUES_FILE).write_text(yaml.safe_dump({"authentik-server": {}}))
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     def _failing_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
