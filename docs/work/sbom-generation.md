@@ -1,6 +1,7 @@
 # SBOM generation: images inside Helm charts - Work
 
-- Status: draft
+- Status: deferred - to be done together with the other Helm image gaps in
+  [helm-image-delivery.md](helm-image-delivery.md)
 - Last updated: 2026-11-07
 
 ## Overview
@@ -153,6 +154,9 @@ Proposed: B. Step 1 is safe on by default: it only adds a property.
 
 ## Changelog
 
+- 2026-11-07: Deferred. The SBOM's Helm gap shares its cause (strata does not know what a chart runs) and its
+  marker with [helm-image-delivery.md](helm-image-delivery.md), so both are tackled in one piece of Helm work
+  rather than the SBOM part on its own.
 - 2026-11-07: Created. Verified that a remote chart is not in the build path, that a local chart is installed from
   the build path folder, and that strata's `values.yaml` replaces a local chart's own. Proposes a declared-only
   marker shared with helm-image-delivery.md, rendering local charts with `helm template`, and remote charts as a

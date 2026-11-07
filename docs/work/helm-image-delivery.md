@@ -146,6 +146,9 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
 - [ ] 4. Docs: the policy section of the workspace reference, `module.md` (what a Helm service `image` means), and
   the stale rows listed below
 - [ ] 5. Optional, on demand: option C, then option D
+- [ ] 6. The SBOM side, done in the same piece of work: the declared-only marker and rendering local charts, as
+  designed in [sbom-generation.md](sbom-generation.md). Its step 1 is this doc's open question on a shared
+  marker, and its step 2 is option D for local charts only (offline).
 
 ### Open questions
 
@@ -179,5 +182,7 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
 
 ## Changelog
 
+- 2026-11-07: The SBOM's Helm gap ([sbom-generation.md](sbom-generation.md)) is deferred to be done together with
+  this doc's work; added as plan item 6.
 - 2026-11-02: created from a review of [image-tag-policy.md](../design/image-tag-policy.md). Verified in the v2 and
   v1 source and in a rendered `config/` build that a Helm service image is never written into the chart values.
