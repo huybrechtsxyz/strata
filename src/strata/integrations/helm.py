@@ -130,6 +130,7 @@ class HelmIntegration(InfraIntegration):
         line_callback: Callable[[str, str], None] | None = None,
         registry_credentials: Mapping[str, "RegistryCredentials"] | None = None,
         on_step: Callable[[str], None] | None = None,
+        timeout: int | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
         """Deploy every Helm module in `modules` (docs/design/gap_fit_v1.md gap #13).
@@ -160,6 +161,9 @@ class HelmIntegration(InfraIntegration):
         temporary Helm config that every helm call for the module shares and that is removed when this
         returns, so the password never reaches the user's own Helm config. A failed login is an error
         for that module (`helm_registry_auth_failed`); the others still run.
+
+        `timeout` (seconds, the stage's `plan` or `apply` timeout; docs/design/cli-timeout.md) limits each
+        module's `helm upgrade` (see `_upgrade_timeouts()`). `None` keeps the defaults.
         """
         del kwargs
         with ExitStack() as isolated:
@@ -174,6 +178,7 @@ class HelmIntegration(InfraIntegration):
                 registry_credentials=registry_credentials or {},
                 isolated=isolated,
                 say=on_step or (lambda message: None),
+                timeouts=_upgrade_timeouts(timeout, dry_run=dry_run),
             )
 
     def _deploy_modules(
@@ -189,6 +194,7 @@ class HelmIntegration(InfraIntegration):
         registry_credentials: Mapping[str, "RegistryCredentials"],
         isolated: ExitStack,
         say: Callable[[str], None],
+        timeouts: dict[str, Any],
     ) -> Diagnostics:
         diagnostics = Diagnostics()
         for item in modules:
@@ -293,6 +299,7 @@ class HelmIntegration(InfraIntegration):
                     version=chart_version,
                     secret_values=secrets,
                     env=module_env,
+                    **timeouts,
                 )
                 if plan_result is not None and not plan_result.is_successful:
                     diagnostics.error(
@@ -319,6 +326,7 @@ class HelmIntegration(InfraIntegration):
                 secret_values=secrets,
                 env=module_env,
                 line_callback=line_callback,
+                **timeouts,
             )
             if not result.is_successful:
                 diagnostics.error(
@@ -910,6 +918,21 @@ def _repo_alias(url: str) -> str:
     prefix = re.sub(r"[^a-zA-Z0-9]", "-", host_and_path).strip("-")[:12].rstrip("-")
     digest = hashlib.sha1(url.rstrip("/").encode(), usedforsecurity=False).hexdigest()[:8]
     return f"{prefix}-{digest}"
+
+
+def _upgrade_timeouts(timeout: int | None, *, dry_run: bool) -> dict[str, Any]:
+    """`plan()`/`deploy()` keyword arguments for a stage timeout of `timeout` seconds; `{}` keeps their defaults.
+
+    The stage timeout is the most one `helm upgrade` may take, so it is the process timeout. Helm's own
+    `--timeout` gets half of it: `--atomic` waits that long again while it rolls a failed release back, and
+    strata must not kill Helm in the middle of a rollback. The defaults (600 s and `5m`) are the same rule for
+    600 s. A dry-run waits for nothing, so it gets the process timeout only.
+    """
+    if timeout is None:
+        return {}
+    if dry_run:
+        return {"timeout": timeout}
+    return {"timeout": timeout, "deploy_timeout": f"{max(timeout // 2, 1)}s"}
 
 
 def _stdin_values(secret_values: Mapping[str, Any] | None) -> str | None:

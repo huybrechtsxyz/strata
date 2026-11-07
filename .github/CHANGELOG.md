@@ -8,6 +8,13 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Changed
+
+- Helm and Compose steps honour a stage's `timeouts.plan` and `timeouts.apply` (and `STRATA_TIMEOUT_<STEP>_PLAN` /
+  `_APPLY`); before, only `check` and `destroy` reached them. For Helm the timeout is per release: an `apply` timeout
+  of N seconds sets Helm's `--timeout` to N/2, leaving the other half for `--atomic` to roll back. Without an override
+  nothing changes (600 s and `--timeout 5m`).
+
 ### Fixed
 
 - Helm: a local chart keeps its own default values. `build run` used to write the module's values over the chart's

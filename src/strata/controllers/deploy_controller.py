@@ -1266,6 +1266,7 @@ def deploy_run(
                         line_callback=_line,
                         registry_credentials=chart_credentials,
                         on_step=_step,
+                        **_timeout_kwargs(step, deployment_stage, "plan" if dry_run else "apply"),
                     )
                 )
             if not diagnostics.ok:

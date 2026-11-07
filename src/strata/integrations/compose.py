@@ -136,6 +136,7 @@ class ComposeIntegration(InfraIntegration):
         dry_run: bool,
         env: dict[str, str] | None = None,
         line_callback: Callable[[str, str], None] | None = None,
+        timeout: int | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
         """Deploy `namespace`'s merged `docker-compose.yml` as one Swarm stack
@@ -166,11 +167,15 @@ class ComposeIntegration(InfraIntegration):
         `self.deploy(...)` — never both. A tool-unsupported preview is a
         warning, not a failure (`plan_or_warn()`'s own contract); a real
         plan failure is still an error.
+
+        `timeout` (seconds, the stage's `plan` or `apply` timeout; docs/design/cli-timeout.md) replaces the
+        `stack config`/`stack deploy` default. `None` keeps it.
         """
         del kwargs
         diagnostics = Diagnostics()
         if not modules:
             return diagnostics
+        timeouts: dict[str, Any] = {} if timeout is None else {"timeout": timeout}
 
         compose_file = modules[0].source_path.parent / "docker-compose.yml"
         if not compose_file.exists():
@@ -220,6 +225,7 @@ class ComposeIntegration(InfraIntegration):
                 location=str(namespace.meta.name),
                 env={**(env or {}), **secrets},
                 line_callback=line_callback,
+                **timeouts,
             )
             if plan_result is not None and not plan_result.is_successful:
                 diagnostics.error(
@@ -233,6 +239,7 @@ class ComposeIntegration(InfraIntegration):
             namespace=str(namespace.meta.name),
             env={**(env or {}), **secrets},
             line_callback=line_callback,
+            **timeouts,
         )
         if not result.is_successful:
             diagnostics.error(

@@ -332,6 +332,38 @@ def test_deploy_run_check_phase_uses_the_check_timeout(tmp_path: Path, monkeypat
     assert [(argv[1], timeout) for argv, timeout in calls if argv[0] == "helm"] == [("lint", 7)]
 
 
+def test_deploy_run_helm_upgrade_uses_the_apply_timeout_and_gives_helm_half(tmp_path: Path, monkeypatch):
+    """Half for Helm's `--timeout`, so `--atomic` can roll back before strata kills the process (gap 5)."""
+    calls = _fake_helm(monkeypatch)
+    monkeypatch.setenv("STRATA_TIMEOUT_DEPLOY_APPS_APPLY", "1800")
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+
+    assert diagnostics.ok, diagnostics.messages()
+    [(upgrade, timeout)] = [(argv, timeout) for argv, timeout in calls if argv[:2] == ["helm", "upgrade"]]
+    assert timeout == 1800
+    assert upgrade[upgrade.index("--timeout") + 1] == "900s"
+
+
+def test_deploy_run_helm_dry_run_uses_the_plan_timeout(tmp_path: Path, monkeypatch):
+    calls = _fake_helm(monkeypatch)
+    monkeypatch.setenv("STRATA_TIMEOUT_DEPLOY_APPS_PLAN", "120")
+    monkeypatch.setenv("STRATA_TIMEOUT_DEPLOY_APPS_APPLY", "1800")
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", dry_run=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    [(upgrade, timeout)] = [(argv, timeout) for argv, timeout in calls if argv[:2] == ["helm", "upgrade"]]
+    assert timeout == 120
+    assert "--dry-run" in upgrade and "--timeout" not in upgrade
+
+
 def test_deploy_run_integration_without_a_check_phase_is_skipped_not_failed(tmp_path: Path, monkeypatch):
     from strata.integrations.errors import CheckPhaseUnsupportedError
     from strata.integrations.helm import HelmIntegration

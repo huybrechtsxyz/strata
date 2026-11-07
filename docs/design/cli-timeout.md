@@ -1,7 +1,7 @@
 # External CLI Timeouts (Terraform, Helm, Compose)
 
 - Status: current
-- Last updated: 2026-10-08
+- Last updated: 2026-11-07
 
 ## Overview
 
@@ -11,8 +11,9 @@ compose`) has a timeout, applied by `src/strata/utils/transport.py`'s
 (`init`/`validate`/`plan`/`apply`), that timeout is configurable per
 Deployment stage, with an environment variable escape hatch for a one-off
 override — see [ADR-0032](../decisions/0032-deploy-time-step-timeout-overrides.md)
-for the decision and why it's scoped the way it is. Helm/Compose remain
-fixed at their hardcoded defaults (see "Other CLI integrations" below).
+for the decision and why it's scoped the way it is. Helm and Compose
+steps use the same stage phases since 2026-11-07 (see "Helm and Compose"
+below).
 
 ## Current Design
 
@@ -69,19 +70,26 @@ Both are computed by `_timeout_kwargs(step, stage, phase)` in
 method's own default" — spread with `**` into each `init`/`validate`/
 `plan_or_warn`/`deploy` call.
 
-### Other CLI integrations, for comparison (not overridable)
+### Helm and Compose
 
-- **Helm** (`src/strata/integrations/helm.py`): `deploy_namespace`/
-  `uninstall` use a Python `timeout=600`/`300` *in addition to* Helm's own
-  `--timeout 5m` CLI flag (a separate `deploy_timeout: str` param baked
-  into argv) — two independent timeout layers that can disagree.
-  `lint`/`repo_update` = 60s. Not wired to either override mechanism:
-  `deploy_namespace()` has no per-phase breakdown the way Terraform's
-  discrete `init`/`validate`/`plan`/`deploy` methods do, so extending this
-  design there needs its own shape decision — deliberately out of scope.
-- **Compose** (`src/strata/integrations/compose.py`): `plan` (`stack
-  config`) = 60s, `deploy`/`destroy` = 300s, `services` = 60s. Same
-  no-per-phase-breakdown reasoning — out of scope.
+A container step has no `setup` phase. The other phases map as follows;
+both mechanisms above apply.
+
+| Phase     | Helm (`helm.py`)                                           | Compose (`compose.py`)              |
+| --------- | ---------------------------------------------------------- | ----------------------------------- |
+| `check`   | `helm lint` per local chart, default 60s                   | no check phase                      |
+| `plan`    | `helm upgrade --dry-run` per module, default 600s          | `docker stack config`, default 60s  |
+| `apply`   | `helm upgrade` per module, default 600s and `--timeout 5m` | `docker stack deploy`, default 300s |
+| `destroy` | `helm uninstall` per module, default 300s                  | `docker stack rm`, default 300s     |
+
+The timeout applies to each Helm release separately, not to the step as a
+whole. A real `helm upgrade` has two timeouts: strata's process timeout
+and Helm's own `--timeout`, after which `--atomic` rolls the release back,
+waiting again. So an `apply` timeout of N seconds sets the process timeout
+to N and `--timeout` to N/2, leaving the other half for the rollback.
+The defaults are that rule for N = 600. A dry-run waits for nothing and
+gets the process timeout only. Chart repository and registry calls
+(`repo add`, `registry login`) keep 60s.
 - **Generic `Integration.run()`/`.request()`** (`src/strata/integrations/
   base.py`): base-class defaults are `run()` = 300s, `request()` = 30s —
   only matter when a subclass doesn't override.

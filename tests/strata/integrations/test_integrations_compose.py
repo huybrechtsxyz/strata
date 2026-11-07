@@ -717,6 +717,22 @@ def test_destroy_namespace_forwards_timeout_and_line_callback(tmp_path: Path, mo
     assert calls[0]["line_callback"] is callback
 
 
+def test_deploy_namespace_forwards_the_stage_timeout_to_deploy_and_to_the_preview(tmp_path: Path, monkeypatch):
+    calls = _script_docker(monkeypatch, lambda args: _ok())
+    group = _destroy_group(tmp_path)
+    group[0].source_path.parent.mkdir(parents=True)
+    (group[0].source_path.parent / "docker-compose.yml").write_text("services: {}\n")
+
+    for dry_run in (False, True):
+        assert (
+            ComposeIntegration()
+            .deploy_namespace(_namespace("hearth"), group, tokens={}, dry_run=dry_run, timeout=42)
+            .ok
+        )
+
+    assert [(call["args"][2], call["timeout"]) for call in calls] == [("deploy", 42), ("config", 42)]
+
+
 def test_destroy_namespace_does_nothing_for_an_empty_group(monkeypatch):
     calls = _script_docker(monkeypatch, lambda args: _ok())
 

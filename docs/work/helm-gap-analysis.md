@@ -31,7 +31,7 @@ not run end to end (no cluster).
 | 2  | Secret values are passed on the `helm` command line (fixed)            | security    | high   | by reading  |
 | 3  | `deploy plan` / `--dry-run` streams the rendered manifest (fixed)      | security    | medium | by reading  |
 | 4  | A registry chart with no values cannot deploy (fixed)                  | correctness | medium | verified    |
-| 5  | Stage timeouts do not reach a Helm upgrade; `--timeout 5m` is fixed    | operability | medium | by reading  |
+| 5  | Stage timeouts do not reach a Helm upgrade (fixed)                     | operability | medium | by reading  |
 | 6  | The cluster is whatever kube context is active                         | safety      | medium | by design   |
 | 7  | Release and Kubernetes namespace names are not validated               | validation  | low    | by reading  |
 | 8  | Registry charts get no check before deploy                             | validation  | low    | by reading  |
@@ -109,8 +109,10 @@ database migration hook) is rolled back by `--atomic`, and neither `stage.timeou
 `STRATA_TIMEOUT_<STEP>_APPLY` can change that. [ADR-0032](../decisions/0032-deploy-time-step-timeout-overrides.md)
 deferred this. [cli-timeout.md](../design/cli-timeout.md) already calls the two timeouts a footgun.
 
-Fix: pass the apply and plan timeouts through. Derive Helm's `--timeout` from the stage timeout, with the process
-timeout a margin above it, so Helm's own rollback runs before strata kills the process.
+**Done (2026-11-07).** `deploy_run()` passes the `plan` (dry-run) or `apply` timeout to `deploy_namespace()`, for
+Compose too, which had the same gap. For Helm it is per release: N seconds is the process timeout and `--timeout` gets
+N/2 (`_upgrade_timeouts()`), because `--atomic` waits again while it rolls back. That keeps the defaults as the N = 600
+case (600 s and `5m`), so nothing changes without an override. A dry-run gets the process timeout only.
 
 #### 6. The cluster is whatever kube context is active
 
@@ -184,7 +186,7 @@ breaks.
 - [x] 2. Gap 2: secrets on stdin with `-f -`
 - [x] 3. Gap 4: always write the values file
 - [x] 4. Gap 3: summarise the dry-run instead of streaming the manifest
-- [ ] 5. Gap 5: stage timeouts for plan and apply
+- [x] 5. Gap 5: stage timeouts for plan and apply
 - [ ] 6. Gap 7: name checks and the release uniqueness check in `strata validate`
 - [ ] 7. Gap 6: decide on the context guard
 - [ ] 8. Gaps 8, 9 and 10: on demand, after checking haven
@@ -201,6 +203,7 @@ breaks.
 
 ## Changelog
 
+- 2026-11-07: gap 5 fixed (Helm and Compose plan/apply timeouts).
 - 2026-11-07: gaps 1 and 4 fixed (`strata-values.yaml`).
 - 2026-11-07: gaps 2 and 3 fixed on `feature/helm-improvements`. Corrected gap 2: a dot in a key was handled; a list
   index was not.

@@ -15,6 +15,7 @@ from strata.integrations.helm import (
     RegistryCredentials,
     _repo_alias,
     _resolve_chart,
+    _upgrade_timeouts,
     check_configuration_keys,
     credentials_from_authentication,
     read_chart_values,
@@ -565,6 +566,21 @@ def test_plan_and_deploy_send_secret_values_on_stdin_never_in_argv(monkeypatch):
         assert not any("a,b=c" in arg for arg in args)
         # Read back exactly, and still a string where YAML would see a number.
         assert yaml.safe_load(captured["input"]) == secret
+
+
+@pytest.mark.parametrize(
+    ("timeout", "dry_run", "expected"),
+    [
+        (None, False, {}),
+        (None, True, {}),
+        (1800, False, {"timeout": 1800, "deploy_timeout": "900s"}),
+        (600, False, {"timeout": 600, "deploy_timeout": "300s"}),  # the defaults: 600 s and 5m
+        (1, False, {"timeout": 1, "deploy_timeout": "1s"}),
+        (120, True, {"timeout": 120}),
+    ],
+)
+def test_upgrade_timeouts_give_helm_half_of_the_stage_timeout(timeout, dry_run, expected):
+    assert _upgrade_timeouts(timeout, dry_run=dry_run) == expected
 
 
 def test_plan_and_deploy_without_secret_values_read_no_stdin(monkeypatch):
