@@ -40,6 +40,10 @@ class SbomComponentModel(PlatformBaseModel):
         default_factory=dict,
         description="Component properties keyed by name (e.g. {'strata:tag-stability': 'floating'})",
     )
+    hashes: dict[str, str] = Field(
+        default_factory=dict,
+        description="Content hashes keyed by CycloneDX algorithm name (e.g. {'SHA-256': '9f86...'}): an image's digest",
+    )
     source_collector: str = Field(
         description="Short name of the collector that produced this component (image | compose | helm | terraform)"
     )

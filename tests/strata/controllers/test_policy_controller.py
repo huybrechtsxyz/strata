@@ -261,10 +261,14 @@ def test_the_table_has_a_row_for_every_workspace_policy_field():
     assert sorted(row.name for row in policy_controller._POLICIES) == sorted(fields)
 
 
-def test_every_policy_is_checkable_and_only_the_gate_and_tag_policies_have_no_findings():
+def test_every_policy_is_checkable_and_only_the_offline_and_gate_policies_have_no_findings():
     rows = {row.name: row for row in policy_controller._POLICIES}
     assert all(row.check is not None for row in rows.values())
-    assert {name for name, row in rows.items() if row.findings is None} == {"release_gate_policy", "image_tag_policy"}
+    assert {name for name, row in rows.items() if row.findings is None} == {
+        "release_gate_policy",
+        "image_tag_policy",
+        "provisioner_lock_policy",
+    }
 
 
 # ---------------------------------------------------------------------------

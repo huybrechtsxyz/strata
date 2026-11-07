@@ -133,7 +133,7 @@ Nothing exists yet: no `PolicyModel`, no `validators/policies/` package, no
 `integrations/checkov.py` or `integrations/cve_scanner.py` (confirmed via
 `list_dir` on `src/strata/{models,integrations}` — v2 has `sbom_model.py`
 and `sbom_collectors/` already, per
-[sbom-generation.md](sbom-generation.md)'s Phase 1, but nothing downstream
+[sbom-generation.md](../design/sbom-generation.md)'s Phase 1, but nothing downstream
 of the SBOM, and nothing for any bucket-A/B policy type either).
 
 ## Related work docs (concern-specific, each tracked independently)
@@ -141,7 +141,7 @@ of the SBOM, and nothing for any bucket-A/B policy type either).
 - [tenant-zone-policy.md](tenant-zone-policy.md) — `tenant_zone` (bucket B).
   Static config-time tier implemented; full plan-time tier sized, not built.
 - `docs/design/path-conventions.md` — `path_convention` (bucket A). Resolved.
-- [sbom-generation.md](sbom-generation.md) — the SBOM half of bucket C
+- [sbom-generation.md](../design/sbom-generation.md) — the SBOM half of bucket C
   (`sbom_components` production). Phase 1 implemented; CVE scanning and the
   `sbom_*` policy types explicitly marked out of scope there, picked up by
   this doc's siblings below.

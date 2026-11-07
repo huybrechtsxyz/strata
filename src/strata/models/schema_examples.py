@@ -404,6 +404,13 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
                     "rings": ["acc", "prd"],
                     "allow": [{"name": "redis", "reason": "third-party image, covered by cve_policy"}],
                 },
+                "provisioner_lock_policy": {
+                    "enforcement": "deny",
+                    "rings": ["acc", "prd"],
+                    "allow": [
+                        {"provisioner": "infra", "reason": "lock file being added in PR 412", "expires": "2026-12-31"}
+                    ],
+                },
             },
         },
     ],

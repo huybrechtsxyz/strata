@@ -213,7 +213,7 @@ schema.
   just not the extension's own secret-focused view. Locking, policy engine, lifecycle hooks, and
   SBOM are **not** extension features at all in v1 (they're CLI/backend capabilities v1's UI merely
   surfaces) - tracking their v2 status belongs in `docs/work/policy-engine-architecture.md` /
-  `docs/work/sbom-generation.md` / `docs/work/output-store-lock-audit.md`, not here. Listed only
+  `docs/design/sbom-generation.md` / `docs/work/output-store-lock-audit.md`, not here. Listed only
   so a reader doesn't think this file is the place to track them.
 - **Status:** out of scope for this file beyond this note - see the docs/work/ files named above.
 

@@ -245,7 +245,7 @@ compliance question attached yet.
 **Example checkout layout**, for `sink.path: records` pushed by two
 different deployments (`web-frontend` uses a `layers`-derived shape;
 `db-migrations` has no `layers` block, so it falls back to
-`workspace/deployment`):
+its workspace as the prefix; both end in `<deployment>/<timestamp>`):
 
 ```text
 .strata/audit-read/audit-repo/main/        # [new] — this command's own checkout

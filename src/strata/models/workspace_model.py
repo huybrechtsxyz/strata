@@ -40,6 +40,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.image_tag_policy_model import ImageTagPolicyModel
+from strata.models.provisioner_lock_policy_model import ProvisionerLockPolicyModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
 from strata.models.reference_fields import References
 from strata.models.sbom_model import CveMaxSeverityPolicyModel
@@ -565,6 +566,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "DNS document or network claimed by a step or by a resource it provisions. Otherwise the "
         "order is ambiguous and validation fails.",
         "A provisioner's `depends_on` must name declared provisioners, with no dependency cycle.",
+        "Every `provisioner_lock_policy.allow` entry must name a declared provisioner.",
     )
 
     lifecycle: CommonLifecycleModel | None = Field(
@@ -742,6 +744,13 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "Design notes: Opt-in guard rail over `effective_images()` (docs/design/image-tag-policy.md). "
         "Offline, so it runs in `build run --dry-run` too, and again at deploy preflight because the "
         "tag in effect at deploy can differ from the build's.",
+    )
+    provisioner_lock_policy: ProvisionerLockPolicyModel | None = Field(
+        None,
+        description="Fails `build run` when a Terraform or OpenTofu provisioner has no `.terraform.lock.hcl`, or "
+        "one that does not lock every provider it declares. Omit it to only get an `info` line in `build run`.\n\n"
+        "Design notes: Opt-in guard rail over the build path (docs/design/provisioner-lock-policy.md). Build only: "
+        "deploy uses the built sources.",
     )
 
     @model_validator(mode="after")
@@ -972,6 +981,19 @@ class WorkspaceSpecModel(PlatformBaseModel):
         topological_order(
             names, {p.name: p.depends_on or [] for p in self.provisioners}, label="provisioner depends_on"
         )
+        return self
+
+    @model_validator(mode="after")
+    def validate_provisioner_lock_allow(self) -> "WorkspaceSpecModel":
+        """An allow entry for a provisioner that does not exist would silently exempt nothing."""
+        if self.provisioner_lock_policy is None:
+            return self
+        names = {p.name for p in self.provisioners}
+        unknown = [e.provisioner for e in self.provisioner_lock_policy.allow or [] if e.provisioner not in names]
+        if unknown:
+            raise ValueError(
+                "; ".join(f"provisioner_lock_policy: allow '{name}' is not a declared provisioner." for name in unknown)
+            )
         return self
 
 

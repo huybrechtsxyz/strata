@@ -246,6 +246,13 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-06: **Built 2.3.3** - bumped `VERSION.txt` from `2.3.2` to `2.3.3`. SBOM improvements: image purls with
+  the registry in `repository_url` and one purl per Docker Hub image, `metadata.component`/`metadata.tools`, purl
+  `bom-ref`s with one component per purl, a chart's repository taken from its `type: helm` remote, and Terraform
+  provider versions from `.terraform.lock.hcl`. The image purl
+  change alters every image purl once. Built on `feature/sbom-improvements`, for a pull request to `main`. Tag only
+  after `ci-build` is green on the merge commit.
+
 - 2026-11-05: **Built 2.3.2** - bumped `VERSION.txt` from `2.3.1` to `2.3.2`. A patch that removes the
   `path_remote_outside_solution` warning added in 2.3.1: it failed `strata validate --strict` for every pipeline using
   the sibling layout (`path: ../iac`) that 2.3.1 was for. Built on `fix/path-remote-drop-outside-warning`, for a pull

@@ -13,10 +13,11 @@ model data. When a deployment declares `layers.follows`/`layers.segments`
 (already validated against `spec.paths` by `semantic_checks.py`'s
 `_check_deployment_layers()`), the directory is built by joining those
 resolved segment values, in the order that convention's own
-`PathConventionModel.segments[]` list declares them. Otherwise falls back to
-`workspace/deployment`. The `yyyymmdd-hhmmss` leaf is unconditional either
-way — a deliberate fix for a real v1 bug where some structures had no
-timestamp component at all and silently overwrote the prior run's record.
+`PathConventionModel.segments[]` list declares them. Otherwise the prefix is
+the workspace name. The deployment name and the `yyyymmdd-hhmmss` leaf are
+unconditional either way: segments come from the deployment file's directory,
+so every deployment in one folder shares them, and v1 had a real bug where
+some structures had no timestamp and silently overwrote the prior run's record.
 """
 
 from datetime import datetime
@@ -51,10 +52,10 @@ def resolve_audit_relative_path(
 
 
 def _resolve_base_path(deployment: DeploymentModel, configuration: ConfigurationModel | None) -> Path:
-    """The directory shape before the timestamp leaf — layers-derived, or workspace/deployment."""
+    """The directory shape before the timestamp leaf — `<segments...>/<deployment>`, or `<workspace>/<deployment>`."""
     ordered_values = _layers_segment_values(deployment, configuration)
     if ordered_values is not None:
-        return Path(*ordered_values)
+        return Path(*ordered_values, deployment.meta.name)
 
     workspace = deployment.spec.workspace or "unknown-workspace"
     return Path(workspace, deployment.meta.name)

@@ -44,6 +44,34 @@ def test_collect_extracts_a_declarative_chart_reference():
     assert comp.source_collector == "helm"
 
 
+def test_a_chart_lists_every_module_that_uses_it():
+    first = _chart_module("auth-a", chart_name="authentik", chart_version="2024.12.0")
+    second = _chart_module("auth-b", chart_name="authentik", chart_version="2024.12.0")
+
+    [component] = HelmCollector().collect(_graph(), [first, second], Path("/does/not/matter")).components
+
+    assert component.properties == {"strata:used-by": "module:auth-a, module:auth-b"}
+
+
+def test_a_chart_a_version_document_pinned_names_that_document():
+    from dataclasses import replace
+
+    from strata.models.version_model import VersionModel
+
+    version = VersionModel.model_validate(
+        {"meta": {"name": "prd"}, "spec": {"pins": {"charts": {"auth-a": "2025.1.0"}}}}
+    )
+    pinned = _chart_module("auth-a", chart_name="authentik", chart_version="2025.1.0")
+    declared = _chart_module("portainer", chart_name="portainer", chart_version="1.0.0")
+
+    result = HelmCollector().collect(replace(_graph(), version=version), [pinned, declared], Path("/does/not/matter"))
+
+    assert {c.name: c.properties.get("strata:pinned-by") for c in result.components} == {
+        "authentik": "prd",
+        "portainer": None,
+    }
+
+
 def test_collect_skips_a_non_chart_module():
     module = ModuleModel(
         meta=ModuleMetaModel(name="plain"),
@@ -64,6 +92,27 @@ def test_collect_extracts_chart_yaml_and_its_dependencies(tmp_path: Path):
     names = {c.name for c in result.components}
     assert names == {"authentik", "postgresql"}
     assert all(c.source_collector == "helm" for c in result.components)
+
+
+def test_a_materialised_chart_does_not_duplicate_its_declared_chart(tmp_path: Path):
+    """The declared chart knows its repository and its rendered `Chart.yaml` does not: one component, with it."""
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="authentik"),
+        spec=ModuleSpecModel(
+            source=SourceModel(
+                chart_repository="https://charts.goauthentik.io", chart_name="authentik", chart_version="2024.12.0"
+            ),
+            type="helm",
+            default_labels={},
+        ),
+    )
+    (tmp_path / "Chart.yaml").write_text("name: authentik\nversion: 2024.12.0\n", encoding="utf-8")
+
+    result = HelmCollector().collect(_graph(), [module], tmp_path)
+
+    assert [c.purl for c in result.components] == [
+        "pkg:helm/authentik@2024.12.0?repository_url=https://charts.goauthentik.io"
+    ]
 
 
 def test_collect_warns_on_an_unparseable_chart_file(tmp_path: Path):

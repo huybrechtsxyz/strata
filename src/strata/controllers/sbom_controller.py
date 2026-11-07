@@ -11,18 +11,18 @@ import that one, never the reverse).
 Called once per `build_run()` invocation, after every provisioner and
 workload module has been materialised/rendered — matching v1's own
 "sbom runs dead last" ordering (`platform -> terraform -> ... -> sync ->
-sbom`). Writes `build_path / "sbom.json"` directly; no deployment manifest
-exists yet to embed a `SbomReferenceModel` into (gap_fit_v1.md gap #7) —
-see the design doc's "write now, reference later" conclusion.
+sbom`). Writes `build_path / "sbom.json"` directly; the deploy audit record
+re-derives its reference from that file (`audit_run._sbom_reference()`).
 """
 
 import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import cast
 
-from cyclonedx.model import Property
+from cyclonedx.model import HashAlgorithm, HashType, Property
 from cyclonedx.model.bom import Bom
 from cyclonedx.model.component import Component, ComponentType
 from cyclonedx.output.json import JsonV1Dot6
@@ -30,6 +30,7 @@ from cyclonedx.schema import SchemaVersion
 from cyclonedx.validation.json import JsonStrictValidator
 from packageurl import PackageURL
 
+from strata import __version__
 from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.workload_controller import apply_version_pins, resolve_module
@@ -49,6 +50,7 @@ from strata.models.sbom_model import (
     SbomComponentModel,
     SbomReferenceModel,
 )
+from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
@@ -69,7 +71,13 @@ _TYPE_MAP: dict[str, ComponentType] = {
 }
 
 
-def write_sbom(build_path: Path, graph: ResolvedWorkspaceGraph, index: DocumentIndex) -> Diagnostics:
+def write_sbom(
+    build_path: Path,
+    graph: ResolvedWorkspaceGraph,
+    index: DocumentIndex,
+    remotes: Mapping[str, SolutionRemoteModel] | None = None,
+    commit: str | None = None,
+) -> Diagnostics:
     """Collect every registered SBOM collector's components, serialise to
     CycloneDX 1.6 JSON, validate, and write `build_path / "sbom.json"`.
 
@@ -84,6 +92,11 @@ def write_sbom(build_path: Path, graph: ResolvedWorkspaceGraph, index: DocumentI
             references into real `ModuleModel`s before any collector runs
             (collectors themselves never see `index` — ADR-0003 layering,
             `integrations` must not import `controllers`).
+        remotes: The solution's remotes, version pins applied — a chart
+            taken from a `type: helm` remote is recorded with that remote's
+            URL as its repository.
+        commit: The solution commit being built, recorded as the deployment's
+            `strata:commit` property; omitted when unknown.
 
     Returns:
         `Diagnostics` carrying every collector's warnings (floating image
@@ -102,16 +115,17 @@ def write_sbom(build_path: Path, graph: ResolvedWorkspaceGraph, index: DocumentI
             bug — verified here as a hard failure, not a silent trust).
     """
     diagnostics = Diagnostics()
-    modules = _resolve_all_modules(graph, index)
+    modules = _resolve_all_modules(graph, index, remotes or {})
 
-    components: list[SbomComponentModel] = []
+    collected: list[SbomComponentModel] = []
     for name in registry.list_collectors():
         collector = registry.get(name)
         result = collector.collect(graph, modules, build_path)
-        components.extend(result.components)
+        collected.extend(result.components)
         diagnostics.items.extend(result.diagnostics)
+    components = _merge_by_purl(collected)
 
-    bom_json = _build_cyclonedx_json(components)
+    bom_json = _build_cyclonedx_json(components, graph, commit)
 
     validation_error = JsonStrictValidator(SchemaVersion.V1_6).validate_str(bom_json)
     if validation_error is not None:
@@ -141,7 +155,9 @@ def write_sbom(build_path: Path, graph: ResolvedWorkspaceGraph, index: DocumentI
     return diagnostics
 
 
-def _resolve_all_modules(graph: ResolvedWorkspaceGraph, index: DocumentIndex) -> list[ModuleModel]:
+def _resolve_all_modules(
+    graph: ResolvedWorkspaceGraph, index: DocumentIndex, remotes: Mapping[str, SolutionRemoteModel]
+) -> list[ModuleModel]:
     """Resolve every enabled module reference, across every namespace the
     workspace references, into a real `ModuleModel` with the deployment's
     `kind: version` pins applied (`graph.version`, already reflecting
@@ -149,26 +165,90 @@ def _resolve_all_modules(graph: ResolvedWorkspaceGraph, index: DocumentIndex) ->
     step `workload_controller.build_workload_modules()` already does, done
     once here so every collector works from a flat list and never touches
     `DocumentIndex` itself. Without the overlay the SBOM would list the
-    declared image and chart versions, not the ones that are deployed."""
+    declared image and chart versions, not the ones that are deployed.
+
+    A chart taken from a known remote gets that remote's URL as its
+    `chart_repository`, the form the Helm collector records."""
     modules: list[ModuleModel] = []
     for namespace in graph.namespaces.values():
         for reference in namespace.spec.modules or []:
             if not reference.enabled:
                 continue
-            modules.append(apply_version_pins(resolve_module(index, reference), graph.version))
+            module = apply_version_pins(resolve_module(index, reference), graph.version)
+            source = module.spec.source
+            remote = remotes.get(source.remote) if source.remote and source.chart_name else None
+            if remote is not None and source.chart_repository is None:
+                source = source.model_copy(update={"remote": None, "chart_repository": remote.url})
+                module = module.model_copy(update={"spec": module.spec.model_copy(update={"source": source})})
+            modules.append(module)
     return modules
 
 
-def _build_cyclonedx_json(components: list[SbomComponentModel]) -> str:
+def _merge_by_purl(components: list[SbomComponentModel]) -> list[SbomComponentModel]:
+    """One component per purl, first one kept, with the properties and hashes of every duplicate added.
+
+    Two collectors can find the same image (the module declares it, the rendered compose file
+    names it); listed twice it would be two components with one `bom-ref`, an invalid BOM.
+    """
+    merged: dict[str, SbomComponentModel] = {}
+    for component in components:
+        key = _canonical_purl(component.purl)
+        first = merged.get(key)
+        if first is None:
+            merged[key] = component
+        elif not (
+            component.properties.keys() <= first.properties.keys() and component.hashes.keys() <= first.hashes.keys()
+        ):
+            merged[key] = first.model_copy(
+                update={
+                    "properties": {**component.properties, **first.properties},
+                    "hashes": {**component.hashes, **first.hashes},
+                }
+            )
+    return list(merged.values())
+
+
+def _canonical_purl(purl: str) -> str:
+    """The purl as `bom-ref` writes it, so two spellings of one purl merge; unparseable ones as written."""
+    try:
+        return PackageURL.from_string(purl).to_string()
+    except ValueError:
+        return purl
+
+
+def _build_cyclonedx_json(
+    components: list[SbomComponentModel], graph: ResolvedWorkspaceGraph, commit: str | None = None
+) -> str:
     """Convert collected components to a CycloneDX 1.6 JSON string.
 
     The only function in this module that imports `cyclonedx-python-lib`'s
     model-building classes — every collector stays free of this dependency
     (docs/design/sbom-generation.md's own isolation convention, matching
     v1's).
+
+    `metadata.component` is the deployment (the workspace when there is
+    none) and depends on every component; `metadata.tools` is strata. A
+    component's `bom-ref` is its purl, so two builds of the same deployment
+    name a component the same way and can be diffed.
     """
     bom = Bom()
+    bom.metadata.tools.components.add(Component(name="strata", type=ComponentType.APPLICATION, version=__version__))
+    subject = graph.deployment.meta.name if graph.deployment is not None else graph.workspace.meta.name
+    subject_kind = "deployment" if graph.deployment is not None else "workspace"
+    subject_properties = [Property(name="strata:workspace", value=graph.workspace.meta.name)]
+    if graph.version is not None:
+        subject_properties.append(Property(name="strata:version", value=graph.version.meta.name))
+    if commit:
+        subject_properties.append(Property(name="strata:commit", value=commit))
+    root = Component(
+        name=subject,
+        type=ComponentType.APPLICATION,
+        bom_ref=f"strata:{subject_kind}/{subject}",
+        properties=subject_properties,
+    )
+    bom.metadata.component = root
 
+    added: list[Component] = []
     for comp in components:
         cdx_type = _TYPE_MAP.get(comp.component_type, ComponentType.LIBRARY)
         try:
@@ -176,12 +256,27 @@ def _build_cyclonedx_json(components: list[SbomComponentModel]) -> str:
         except ValueError:
             purl = None
         properties = [Property(name=k, value=v) for k, v in comp.properties.items()]
-        bom.components.add(
-            Component(name=comp.name, type=cdx_type, version=comp.version, purl=purl, properties=properties)
+        component = Component(
+            name=comp.name,
+            type=cdx_type,
+            version=comp.version,
+            purl=purl,
+            properties=properties,
+            hashes=_hash_types(comp.hashes),
+            bom_ref=purl.to_string() if purl is not None else f"strata:component/{comp.purl}",
         )
+        bom.components.add(component)
+        added.append(component)
+    bom.register_dependency(root, added)
 
     output = JsonV1Dot6(bom)
     return output.output_as_string()
+
+
+def _hash_types(hashes: dict[str, str]) -> list[HashType]:
+    """CycloneDX hashes; an algorithm name CycloneDX does not know (a plugin collector's) is left out."""
+    known = {algorithm.value for algorithm in HashAlgorithm}
+    return [HashType(alg=HashAlgorithm(name), content=content) for name, content in hashes.items() if name in known]
 
 
 def declared_cve_scanner(index: DocumentIndex) -> CveScannerIntegration | None:

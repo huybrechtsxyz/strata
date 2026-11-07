@@ -54,7 +54,7 @@ v2 already ships its own scanner-type integrations, so Aikido overlaps rather th
   ([checkov-integration.md](../archive/checkov-integration.md), shipped).
 - **CVE scanning** - Trivy/Grype over the CycloneDX SBOM, with a solution-wide allowlist
   ([cve-scanner-integration.md](../archive/cve-scanner-integration.md), shipped).
-- **SBOM generation** - CycloneDX, Phase 1 collectors ([sbom-generation.md](../work/sbom-generation.md)).
+- **SBOM generation** - CycloneDX, Phase 1 collectors ([sbom-generation.md](../design/sbom-generation.md)).
 
 ### The core tension: Aikido scans repositories, strata's risk is in build output
 

@@ -299,6 +299,29 @@ def test_no_commit_anywhere_is_missing_data(tmp_path, script):
     assert script.requests == []
 
 
+def test_the_built_commit_comes_from_the_first_valid_variable(tmp_path, monkeypatch):
+    monkeypatch.setenv("STRATA_COMMIT_SHA", "abc1234")
+    monkeypatch.setenv("BUILD_SOURCEVERSION", "A" * 40)
+    monkeypatch.setenv("GIT_COMMIT", "b" * 40)
+    assert gates_module.built_commit_sha(tmp_path) == "a" * 40
+
+
+def test_the_built_commit_falls_back_to_git_head_in_the_solution_root(tmp_path, monkeypatch):
+    seen = []
+
+    def _git(args, *, cwd=None, timeout=60, **kwargs):
+        seen.append((args, cwd))
+        return CommandResult(returncode=0, stdout="F" * 40 + "\n", stderr="")
+
+    monkeypatch.setattr(gates_module, "run_command", _git)
+    assert gates_module.built_commit_sha(tmp_path) == "f" * 40
+    assert seen == [(["git", "rev-parse", "HEAD"], tmp_path)]
+
+
+def test_outside_git_there_is_no_built_commit(tmp_path):
+    assert gates_module.built_commit_sha(tmp_path) is None
+
+
 # ---------------------------------------------------------------------------
 # Pinned commit vs the run's commit (design D6a)
 # ---------------------------------------------------------------------------
@@ -428,6 +451,37 @@ def test_images_are_read_from_container_purls(tmp_path):
         (None, "redis", None, None),
     ]
     assert images[0].service == "svc0"
+
+
+def test_images_are_read_from_purls_with_a_repository_url_qualifier(tmp_path):
+    """The purl-spec shape `image_to_purl()` writes since 2.3.3; the older shape above must still read."""
+    _sbom(
+        tmp_path,
+        "pkg:docker/goauthentik/server@2026.5.2?repository_url=ghcr.io",
+        "pkg:docker/img@latest?repository_url=registry:5000",
+        "pkg:docker/team/api@sha256:abc123?repository_url=acr.example.io",
+        "pkg:docker/postgres@16-alpine",
+    )
+    images = images_from_sbom(tmp_path)
+    assert [(i.registry, i.repository, i.tag, i.digest) for i in images] == [
+        ("ghcr.io", "goauthentik/server", "2026.5.2", None),
+        ("registry:5000", "img", "latest", None),
+        ("acr.example.io", "team/api", None, "sha256:abc123"),
+        (None, "postgres", "16-alpine", None),
+    ]
+
+
+@pytest.mark.parametrize(
+    "image",
+    ["ghcr.io/goauthentik/server:2026.5.2", "registry:5000/img:1.0", "acr.example.io/team/api@sha256:abc123", "redis"],
+)
+def test_an_image_survives_the_round_trip_through_its_purl(tmp_path, image):
+    from strata.utils.sbom_utils import image_to_purl, parse_image_ref, split_registry
+
+    _sbom(tmp_path, image_to_purl(image))
+    [read] = images_from_sbom(tmp_path)
+    name, tag, digest = parse_image_ref(image)
+    assert (read.registry, read.repository, read.tag, read.digest) == (*split_registry(name), tag, digest)
 
 
 def test_no_sbom_is_none_and_an_unreadable_one_raises(tmp_path):

@@ -131,7 +131,7 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
 - [ADR-0019](../decisions/0019-version-pinning.md) - `images` and `charts` pins
 - [image-tag-policy.md](../design/image-tag-policy.md) - the policy that exposed this
 - [effective-images.md](effective-images.md) - the resolver and its rows
-- [sbom-generation.md](sbom-generation.md) - the image and Helm chart collectors
+- [sbom-generation.md](../design/sbom-generation.md) - the image and Helm chart collectors
 
 ## Remaining Work / Open Questions
 
@@ -146,6 +146,9 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
 - [ ] 4. Docs: the policy section of the workspace reference, `module.md` (what a Helm service `image` means), and
   the stale rows listed below
 - [ ] 5. Optional, on demand: option C, then option D
+- [ ] 6. The SBOM side, done in the same piece of work: the declared-only marker and rendering local charts, as
+  designed in [sbom-generation.md](sbom-generation.md). Its step 1 is this doc's open question on a shared
+  marker, and its step 2 is option D for local charts only (offline).
 
 ### Open questions
 
@@ -153,7 +156,7 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
   wrote on purpose. Suggested: judge them and word the finding "declared as X; the chart may run another".
 - **Does the SBOM and the CVE and image gates need the same marker?** They scan Helm-declared images as if they
   ran. A `strata:image-delivered=false` property on the SBOM component would let a gate report "scanned a declared
-  image".
+  image". Taken up in [sbom-generation.md](sbom-generation.md) (step 1), together with rendering local charts.
 - **`on_unknown_image` default.** `warn` (as `image_gate_policy`) is the suggestion. `block` makes every chart
   module declare its images or a pin, which is strict.
 - **Chart-only modules.** Is there a real consumer with a chart-only module whose image tag matters? Without one,
@@ -179,5 +182,7 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
 
 ## Changelog
 
+- 2026-11-07: The SBOM's Helm gap ([sbom-generation.md](sbom-generation.md)) is deferred to be done together with
+  this doc's work; added as plan item 6.
 - 2026-11-02: created from a review of [image-tag-policy.md](../design/image-tag-policy.md). Verified in the v2 and
   v1 source and in a rendered `config/` build that a Helm service image is never written into the chart values.

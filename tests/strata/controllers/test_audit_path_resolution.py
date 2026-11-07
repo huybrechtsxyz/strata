@@ -14,9 +14,15 @@ from strata.models.deployment_model import DeploymentModel
 _STARTED_AT = "2026-09-30T14:30:00Z"
 
 
-def _deployment(**spec_overrides) -> DeploymentModel:
+def _deployment(name: str = "fabrikam-prod", **spec_overrides) -> DeploymentModel:
     spec = {"partial": True, "workspace": "main", **spec_overrides}
-    return DeploymentModel.model_validate({"meta": {"name": "fabrikam-prod"}, "spec": spec})
+    return DeploymentModel.model_validate({"meta": {"name": name}, "spec": spec})
+
+
+_HUB_LAYERS = {
+    "follows": "hub-path",
+    "segments": {"ring": "prod", "hub": "hub1", "customer": "fabrikam", "spoke": "spoke1"},
+}
 
 
 def _configuration_with_hub_path_convention() -> ConfigurationModel:
@@ -43,15 +49,20 @@ def _configuration_with_hub_path_convention() -> ConfigurationModel:
 
 
 def test_derives_path_from_layers_segments_in_convention_order():
-    deployment = _deployment(
-        layers={
-            "follows": "hub-path",
-            "segments": {"ring": "prod", "hub": "hub1", "customer": "fabrikam", "spoke": "spoke1"},
-        }
-    )
+    deployment = _deployment(layers=_HUB_LAYERS)
     configuration = _configuration_with_hub_path_convention()
     relative = resolve_audit_relative_path(deployment, configuration, _STARTED_AT)
-    assert relative == Path("hub1", "spoke1", "fabrikam", "prod", "20260930-143000")
+    assert relative == Path("hub1", "spoke1", "fabrikam", "prod", "fabrikam-prod", "20260930-143000")
+
+
+def test_deployments_sharing_layers_segments_and_start_time_get_distinct_paths():
+    """Deployments in one folder share segments; the deployment name keeps their records apart."""
+    configuration = _configuration_with_hub_path_convention()
+    bootstrap = resolve_audit_relative_path(_deployment("bootstrap", layers=_HUB_LAYERS), configuration, _STARTED_AT)
+    spoke = resolve_audit_relative_path(_deployment("spoke", layers=_HUB_LAYERS), configuration, _STARTED_AT)
+    assert bootstrap != spoke
+    assert bootstrap.parts[-2:] == ("bootstrap", "20260930-143000")
+    assert spoke.parts[-2:] == ("spoke", "20260930-143000")
 
 
 def test_falls_back_to_workspace_deployment_when_no_layers_block():
