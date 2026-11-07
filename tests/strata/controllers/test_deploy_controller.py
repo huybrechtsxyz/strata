@@ -4198,3 +4198,355 @@ def test_deploy_run_resolves_a_deployment_token_in_the_terraform_variables_file(
 
     assert diagnostics.ok, diagnostics.messages()
     assert json.loads(tfvars.read_text())["strata"]["custom"]["state_label"] == "lbl-app"
+
+
+# ---------------------------------------------------------------------------
+# The kube context a deployment names (docs/work/helm-kube-context.md)
+# ---------------------------------------------------------------------------
+
+KUBECONFIG = """apiVersion: v1
+kind: Config
+contexts:
+  - name: forge-dev
+    context: {cluster: dev, user: dev}
+  - name: forge-prd
+    context: {cluster: prd, user: prd}
+current-context: forge-dev
+"""
+
+
+def _kube_context_solution(tmp_path: Path, monkeypatch, kube_context: str | None = "forge-prd") -> Path:
+    """`_helm_solution()` with `kube_context` on the deployment, and a kubeconfig whose active context is another."""
+    root = _helm_solution(tmp_path)
+    if kube_context is not None:
+        deployment = root / "deployment.yaml"
+        deployment.write_text(
+            deployment.read_text(encoding="utf-8") + f"  kube_context: {kube_context}\n", encoding="utf-8"
+        )
+    kubeconfig = tmp_path / "kubeconfig"
+    kubeconfig.write_text(KUBECONFIG, encoding="utf-8")
+    monkeypatch.setenv("KUBECONFIG", str(kubeconfig))
+    monkeypatch.delenv("HELM_KUBECONTEXT", raising=False)
+    monkeypatch.delenv("HELM_KUBEAPISERVER", raising=False)
+    return root
+
+
+def _fake_tools_with_env(monkeypatch) -> list[tuple[list[str], dict[str, str]]]:
+    """Stub `run_command`; records `(argv, env)` per call, `env` being what strata adds over `os.environ`."""
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append((list(args), dict(env or {})))
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return calls
+
+
+def _deploy_kube(root: Path, tmp_path: Path, **kwargs):
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    steps: list[str] = []
+    diagnostics = deploy_run(_context(root), "app", build_path, on_step=steps.append, **kwargs)
+    return diagnostics, steps
+
+
+def test_every_helm_call_runs_against_the_deployments_kube_context(tmp_path: Path, monkeypatch):
+    calls = _fake_tools_with_env(monkeypatch)
+    root = _kube_context_solution(tmp_path, monkeypatch)
+
+    diagnostics, steps = _deploy_kube(root, tmp_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    helm = [(argv[1], env.get("HELM_KUBECONTEXT")) for argv, env in calls if argv[0] == "helm" and argv[1] != "version"]
+    assert helm == [("lint", "forge-prd"), ("upgrade", "forge-prd")]
+    assert all("HELM_KUBECONTEXT" not in env for argv, env in calls if argv[0] == "terraform")
+    assert "step 'deploy_apps' via HelmIntegration: kube context 'forge-prd'" in steps
+
+
+def test_a_helm_dry_run_runs_against_the_deployments_kube_context(tmp_path: Path, monkeypatch):
+    calls = _fake_tools_with_env(monkeypatch)
+    root = _kube_context_solution(tmp_path, monkeypatch)
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stage="deploy_apps")
+
+    assert diagnostics.ok, diagnostics.messages()
+    [upgrade] = [(argv, env) for argv, env in calls if argv[:2] == ["helm", "upgrade"]]
+    assert "--dry-run" in upgrade[0]
+    assert upgrade[1]["HELM_KUBECONTEXT"] == "forge-prd"
+
+
+def test_a_kube_context_missing_from_the_kubeconfig_stops_the_deploy_before_any_tool_runs(tmp_path: Path, monkeypatch):
+    calls = _fake_tools_with_env(monkeypatch)
+    root = _kube_context_solution(tmp_path, monkeypatch, kube_context="forge-test")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_kube_context_missing"
+    assert "Deployment 'app' deploys Helm to kube context 'forge-test'" in error.message
+    assert "contexts: 'forge-dev', 'forge-prd'" in error.message
+    assert [argv for argv, _ in calls if argv[0] in ("terraform", "helm") and argv[1] != "version"] == []
+
+
+def test_a_different_helm_kubecontext_in_the_environment_is_a_conflict(tmp_path: Path, monkeypatch):
+    calls = _fake_tools_with_env(monkeypatch)
+    root = _kube_context_solution(tmp_path, monkeypatch)
+    monkeypatch.setenv("HELM_KUBECONTEXT", "forge-dev")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_kube_context_conflict"
+    assert "HELM_KUBECONTEXT is set to 'forge-dev'" in error.message
+    assert [argv for argv, _ in calls if argv[0] == "helm" and argv[1] != "version"] == []
+
+
+def test_the_same_helm_kubecontext_in_the_environment_is_accepted(tmp_path: Path, monkeypatch):
+    _fake_tools_with_env(monkeypatch)
+    root = _kube_context_solution(tmp_path, monkeypatch)
+    monkeypatch.setenv("HELM_KUBECONTEXT", "forge-prd")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+
+
+def test_helm_kubeapiserver_in_the_environment_is_a_conflict(tmp_path: Path, monkeypatch):
+    _fake_tools_with_env(monkeypatch)
+    root = _kube_context_solution(tmp_path, monkeypatch)
+    monkeypatch.setenv("HELM_KUBEAPISERVER", "https://127.0.0.1:6443")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_kube_context_conflict"
+    assert "HELM_KUBEAPISERVER" in error.message
+
+
+def test_a_smoke_test_does_not_read_the_kubeconfig(tmp_path: Path, monkeypatch):
+    _fake_tools_with_env(monkeypatch)
+    root = _kube_context_solution(tmp_path, monkeypatch, kube_context="forge-test")
+
+    diagnostics, steps = _deploy_kube(root, tmp_path, smoke_test=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "would check kube context 'forge-test'" in steps
+
+
+def test_a_run_without_a_helm_step_does_not_check_the_kube_context(tmp_path: Path, monkeypatch):
+    _fake_tools_with_env(monkeypatch)
+    root = _kube_context_solution(tmp_path, monkeypatch, kube_context="forge-test")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stage="apply_infra")
+
+    assert diagnostics.ok, diagnostics.messages()
+
+
+def test_without_a_kube_context_helm_uses_the_active_context(tmp_path: Path, monkeypatch):
+    calls = _fake_tools_with_env(monkeypatch)
+    root = _kube_context_solution(tmp_path, monkeypatch, kube_context=None)
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "missing"))
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert all("HELM_KUBECONTEXT" not in env for argv, env in calls if argv[0] == "helm")
+
+
+# ---------------------------------------------------------------------------
+# The docker context a deployment names (docs/work/compose-docker-context.md)
+# ---------------------------------------------------------------------------
+
+
+def _with_deployment_field(root: Path, line: str) -> None:
+    deployment = root / "deployment.yaml"
+    deployment.write_text(deployment.read_text(encoding="utf-8") + f"  {line}\n", encoding="utf-8")
+
+
+def _docker_context_solution(tmp_path: Path, monkeypatch, docker_context: str | None = "hearth-prd") -> Path:
+    root = _compose_solution(tmp_path)
+    if docker_context is not None:
+        _with_deployment_field(root, f"docker_context: {docker_context}")
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.delenv("DOCKER_CONTEXT", raising=False)
+    return root
+
+
+def _fake_docker(monkeypatch, contexts: tuple[str, ...] = ("default", "hearth-dev", "hearth-prd")):
+    """Stub `run_command`: Docker knows `contexts`; every other call succeeds. Records `(argv, env)` per call."""
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append((list(args), dict(env or {})))
+        if args[1:3] == ["context", "inspect"]:
+            known = args[3] in contexts
+            return CommandResult(returncode=0 if known else 1, stdout="", stderr="" if known else "not found")
+        if args[1:3] == ["context", "ls"]:
+            return CommandResult(returncode=0, stdout="\n".join(contexts) + "\n", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return calls
+
+
+def _stack_calls(calls) -> list[tuple[str, str | None]]:
+    return [(argv[2], env.get("DOCKER_CONTEXT")) for argv, env in calls if argv[:2] == ["docker", "stack"]]
+
+
+def test_every_compose_call_runs_against_the_deployments_docker_context(tmp_path: Path, monkeypatch):
+    calls = _fake_docker(monkeypatch)
+    root = _docker_context_solution(tmp_path, monkeypatch)
+
+    diagnostics, steps = _deploy_kube(root, tmp_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert _stack_calls(calls) == [("deploy", "hearth-prd")]
+    assert all("DOCKER_CONTEXT" not in env for argv, env in calls if argv[0] == "terraform")
+    assert "step 'deploy_apps' via ComposeIntegration: docker context 'hearth-prd'" in steps
+    assert [argv[1:] for argv, _ in calls if argv[1:3] == ["context", "inspect"]] == [
+        ["context", "inspect", "hearth-prd"]
+    ]
+
+
+def test_a_compose_dry_run_runs_against_the_deployments_docker_context(tmp_path: Path, monkeypatch):
+    calls = _fake_docker(monkeypatch)
+    root = _docker_context_solution(tmp_path, monkeypatch)
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stage="deploy_apps")
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert _stack_calls(calls) == [("config", "hearth-prd")]
+
+
+def test_a_missing_docker_context_stops_even_a_dry_run_before_any_tool_runs(tmp_path: Path, monkeypatch):
+    """`docker stack config` never resolves the context, so only this check catches it before the real deploy."""
+    calls = _fake_docker(monkeypatch)
+    root = _docker_context_solution(tmp_path, monkeypatch, docker_context="hearth-test")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "compose_docker_context_missing"
+    assert (
+        "Deployment 'app' deploys Compose to docker context 'hearth-test', but Docker has no such context "
+        "(contexts: 'default', 'hearth-dev', 'hearth-prd')." == error.message
+    )
+    assert _stack_calls(calls) == []
+    assert [argv for argv, _ in calls if argv[0] == "terraform" and argv[1] != "version"] == []
+
+
+def test_docker_host_in_the_environment_is_a_conflict(tmp_path: Path, monkeypatch):
+    calls = _fake_docker(monkeypatch)
+    root = _docker_context_solution(tmp_path, monkeypatch)
+    monkeypatch.setenv("DOCKER_HOST", "ssh://deploy@hearth")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "compose_docker_context_conflict"
+    assert "DOCKER_HOST is set in the environment, and it overrides the context" in error.message
+    assert _stack_calls(calls) == []
+
+
+def test_another_docker_context_in_the_environment_is_a_conflict(tmp_path: Path, monkeypatch):
+    _fake_docker(monkeypatch)
+    root = _docker_context_solution(tmp_path, monkeypatch)
+    monkeypatch.setenv("DOCKER_CONTEXT", "hearth-dev")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "compose_docker_context_conflict"
+    assert "DOCKER_CONTEXT is set to 'hearth-dev'" in error.message
+
+
+def test_the_same_docker_context_in_the_environment_is_accepted(tmp_path: Path, monkeypatch):
+    _fake_docker(monkeypatch)
+    root = _docker_context_solution(tmp_path, monkeypatch)
+    monkeypatch.setenv("DOCKER_CONTEXT", "hearth-prd")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+
+
+def test_a_smoke_test_does_not_ask_docker_about_the_context(tmp_path: Path, monkeypatch):
+    calls = _fake_docker(monkeypatch, contexts=())
+    root = _docker_context_solution(tmp_path, monkeypatch)
+
+    diagnostics, steps = _deploy_kube(root, tmp_path, smoke_test=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "would check docker context 'hearth-prd'" in steps
+    assert [argv for argv, _ in calls if argv[1:2] == ["context"]] == []
+
+
+def test_a_run_without_a_compose_step_does_not_check_the_docker_context(tmp_path: Path, monkeypatch):
+    calls = _fake_docker(monkeypatch, contexts=())
+    root = _docker_context_solution(tmp_path, monkeypatch)
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stage="apply_infra")
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [argv for argv, _ in calls if argv[1:2] == ["context"]] == []
+
+
+def test_without_a_docker_context_compose_uses_the_environment(tmp_path: Path, monkeypatch):
+    calls = _fake_docker(monkeypatch)
+    root = _docker_context_solution(tmp_path, monkeypatch, docker_context=None)
+    monkeypatch.setenv("DOCKER_HOST", "ssh://deploy@hearth")
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert _stack_calls(calls) == [("deploy", None)]
+
+
+def test_helm_and_compose_steps_are_each_pinned_to_their_own_context(tmp_path: Path, monkeypatch):
+    calls = _fake_docker(monkeypatch)
+    root = _docker_context_solution(tmp_path, monkeypatch)
+    _write(root, "charts/authentik/Chart.yaml", "name: authentik\n")
+    _write(
+        root,
+        "helm-module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    source_path: charts/authentik\n  type: helm\n",
+    )
+    _write(
+        root,
+        "helm-namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: forge\nspec:\n"
+        "  modules:\n    - name: auth\n      module: authentik\n",
+    )
+    workspace = root / "workspace.yaml"
+    workspace.write_text(
+        workspace.read_text(encoding="utf-8")
+        .replace("  namespaces:\n    - apps\n", "  namespaces:\n    - apps\n    - forge\n")
+        .replace(
+            "  execution:\n",
+            "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n  execution:\n"
+            "    - name: deploy_forge\n      provisioner: helm_main\n      namespaces:\n        - forge\n",
+        ),
+        encoding="utf-8",
+    )
+    _with_deployment_field(root, "kube_context: forge-prd")
+    kubeconfig = tmp_path / "kubeconfig"
+    kubeconfig.write_text(KUBECONFIG, encoding="utf-8")
+    monkeypatch.setenv("KUBECONFIG", str(kubeconfig))
+    monkeypatch.delenv("HELM_KUBECONTEXT", raising=False)
+    monkeypatch.delenv("HELM_KUBEAPISERVER", raising=False)
+
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    [upgrade] = [env for argv, env in calls if argv[:2] == ["helm", "upgrade"]]
+    assert upgrade.get("HELM_KUBECONTEXT") == "forge-prd" and "DOCKER_CONTEXT" not in upgrade
+    [deploy] = [env for argv, env in calls if argv[:3] == ["docker", "stack", "deploy"]]
+    assert deploy.get("DOCKER_CONTEXT") == "hearth-prd" and "HELM_KUBECONTEXT" not in deploy

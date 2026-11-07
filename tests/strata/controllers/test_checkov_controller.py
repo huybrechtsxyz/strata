@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from strata.controllers.checkov_controller import evaluate_checkov_policy
+from strata.controllers.checkov_controller import (
+    checkov_findings,
+    evaluate_checkov_policy,
+    snapshot_checkov_configs,
+)
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.integrations.errors import IntegrationError
 from strata.models.checkov_model import CheckovFindingModel, CheckovPolicyModel, CheckovScanResultModel
@@ -14,6 +18,7 @@ from strata.models.common_models import ModuleReferenceModel, PlatformKind, Sour
 from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleSpecModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
+from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceResourceModel, WorkspaceSpecModel
 
 
@@ -71,9 +76,11 @@ class _FakeScanner:
         self._result = result
         self._raises = raises
         self.scanned_directories: list[Path] = []
+        self.config_files: list[Path | None] = []
 
-    def scan(self, directory, *, framework, skip_checks, include_checks, custom_checks_dir, timeout):
+    def scan(self, directory, *, framework, skip_checks, include_checks, custom_checks_dir, config_file, timeout):
         self.scanned_directories.append(directory)
+        self.config_files.append(config_file)
         if self._raises is not None:
             raise self._raises
         assert self._result is not None
@@ -588,3 +595,123 @@ def test_evaluate_checkov_policy_one_unscannable_provisioner_does_not_block_a_si
     codes = {d.code for d in diagnostics.errors}
     assert "checkov_policy_missing_data" in codes
     assert "checkov_policy_violation" in codes
+
+
+# ---------------------------------------------------------------------------
+# config_file: snapshotted from the source's repository, passed as --config-file
+# ---------------------------------------------------------------------------
+
+
+def _solution(tmp_path: Path, *files: str) -> Path:
+    root = tmp_path / "solution"
+    root.mkdir()
+    for file in files:
+        (root / file).parent.mkdir(parents=True, exist_ok=True)
+        (root / file).write_text("skip-check: [CKV_1]\n")
+    return root
+
+
+def test_config_file_is_snapshotted_from_the_repo_root_and_passed_to_checkov(tmp_path: Path, monkeypatch):
+    scanner = _FakeScanner(result=_scan_result())
+    _patch_scanner(monkeypatch, scanner)
+    root = _solution(tmp_path, ".checkov.yaml")
+    build = tmp_path / "build"
+    workspace = _workspace({"config_file": ".checkov.yaml"}, execution=[_step("apply_infra", "tf_main")])
+    sources = {"tf_main": build / "tf_main"}
+
+    snapshot_checkov_configs(build, workspace, sources, root, {})
+    diagnostics = evaluate_checkov_policy(build, workspace, sources)
+
+    snapshot = build / "checkov-config" / "provisioners" / "tf_main.yaml"
+    assert diagnostics.ok
+    assert snapshot.read_text() == "skip-check: [CKV_1]\n"
+    assert scanner.config_files == [snapshot]
+
+
+def test_config_file_resolves_from_the_sources_remote_not_the_solution(tmp_path: Path, monkeypatch):
+    scanner = _FakeScanner(result=_scan_result())
+    _patch_scanner(monkeypatch, scanner)
+    root = _solution(tmp_path)
+    (root / "iac").mkdir()
+    (root / "iac" / ".checkov.yml").write_text("framework: terraform\n")
+    remotes = {"iac": SolutionRemoteModel.model_validate({"name": "iac", "type": "local", "url": "iac"})}
+    provisioner = ProvisionerModel(
+        name="tf_main", tool="terraform", source=SourceModel(remote="iac", source_path="terraform")
+    )
+    workspace = _workspace(
+        {"config_file": ".checkov.yml"}, provisioners=[provisioner], execution=[_step("apply_infra", "tf_main")]
+    )
+    build = tmp_path / "build"
+    sources = {"tf_main": build / "terraform"}
+
+    snapshot_checkov_configs(build, workspace, sources, root, remotes)
+
+    assert (build / "checkov-config" / "provisioners" / "tf_main.yaml").read_text() == "framework: terraform\n"
+
+
+def test_config_file_missing_from_the_repo_degrades_via_on_missing_data(tmp_path: Path, monkeypatch):
+    scanner = _FakeScanner(result=_scan_result())
+    _patch_scanner(monkeypatch, scanner)
+    root = _solution(tmp_path)
+    build = tmp_path / "build"
+    workspace = _workspace({"config_file": ".checkov.yaml"}, execution=[_step("apply_infra", "tf_main")])
+    sources = {"tf_main": build / "tf_main"}
+
+    snapshot_checkov_configs(build, workspace, sources, root, {})
+    diagnostics = evaluate_checkov_policy(build, workspace, sources)
+
+    assert not diagnostics.ok
+    assert "config_file '.checkov.yaml' not found" in diagnostics.items[0].message
+    assert diagnostics.items[0].code == "checkov_policy_missing_data"
+    assert scanner.scanned_directories == []
+
+
+def test_a_stale_config_snapshot_is_removed_when_config_file_is_unset(tmp_path: Path, monkeypatch):
+    scanner = _FakeScanner(result=_scan_result())
+    _patch_scanner(monkeypatch, scanner)
+    root = _solution(tmp_path, ".checkov.yaml")
+    build = tmp_path / "build"
+    sources = {"tf_main": build / "tf_main"}
+    snapshot_checkov_configs(
+        build, _workspace({"config_file": ".checkov.yaml"}, execution=[_step("s", "tf_main")]), sources, root, {}
+    )
+
+    workspace = _workspace({}, execution=[_step("s", "tf_main")])
+    snapshot_checkov_configs(build, workspace, sources, root, {})
+    evaluate_checkov_policy(build, workspace, sources)
+
+    assert not (build / "checkov-config").exists()
+    assert scanner.config_files == [None]
+
+
+def test_config_file_is_snapshotted_per_helm_module(tmp_path: Path, monkeypatch):
+    scanner = _FakeScanner(result=_scan_result(framework="helm"))
+    _patch_scanner(monkeypatch, scanner)
+    root = _solution(tmp_path, "charts/.checkov.yaml")
+    build = tmp_path / "build"
+    (build / "apps" / "nginx").mkdir(parents=True)
+    namespaces = {"apps": _namespace("apps", ModuleReferenceModel(name="nginx", module="nginx"))}
+    index = _index(_module("nginx"))
+    workspace = _workspace({"framework": "helm", "config_file": "charts/.checkov.yaml"})
+
+    snapshot_checkov_configs(build, workspace, {}, root, {}, namespaces=namespaces, index=index)
+    diagnostics = evaluate_checkov_policy(build, workspace, {}, namespaces=namespaces, index=index)
+
+    assert diagnostics.ok
+    assert scanner.config_files == [build / "checkov-config" / "modules" / "apps" / "nginx.yaml"]
+
+
+def test_findings_listing_reads_the_same_snapshot(tmp_path: Path, monkeypatch):
+    scanner = _FakeScanner(result=_scan_result("HIGH"))
+    _patch_scanner(monkeypatch, scanner)
+    root = _solution(tmp_path)
+    build = tmp_path / "build"
+    build.mkdir()
+    workspace = _workspace({"config_file": ".checkov.yaml"}, execution=[_step("apply_infra", "tf_main")])
+    sources = {"tf_main": build / "tf_main"}
+    snapshot_checkov_configs(build, workspace, sources, root, {})
+
+    report = checkov_findings(build, workspace, sources, namespaces=None, index=DocumentIndex(), threshold="HIGH")
+
+    assert report.targets[0].missing == "config_file '.checkov.yaml' not found in its source repository"
+    assert scanner.scanned_directories == []

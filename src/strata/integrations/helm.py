@@ -27,6 +27,7 @@ run`'s job, not `build run`'s (ADR-0023's value-substitution table), and no
 """
 
 import hashlib
+import os
 import re
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
@@ -72,6 +73,16 @@ class HelmIntegration(InfraIntegration):
     TRANSPORTS = frozenset({"cli"})
     COMMAND = "helm"
     VERSION_ARGS = ("version",)
+
+    TARGET_CONTEXT_FIELD = "kube_context"
+
+    def target_context_env(self, context: str) -> dict[str, str]:
+        """Helm reads `HELM_KUBECONTEXT` as the default for `--kube-context`, for every subcommand."""
+        return {KUBE_CONTEXT_ENV: context}
+
+    def target_context_problem(self, context: str, environ: Mapping[str, str]) -> tuple[str, str] | None:
+        """See `kube_context_problem()`; the kubeconfig is read, the cluster is not contacted."""
+        return kube_context_problem(context, environ)
 
     def parse_version(self, raw: str) -> str:
         """Extract `X.Y.Z` from `'version.BuildInfo{Version:"v3.14.0",...}'`."""
@@ -815,16 +826,146 @@ def _secret_overlay(node: Any, secrets: Mapping[str, str], path: str = "", *, pr
     return secrets.get(path, node)
 
 
+#: Helm's own release name rule (`chartutil.ValidateReleaseName`); checked with `helm template` 3.13.2.
+_RELEASE_NAME = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
+RELEASE_NAME_MAX_LENGTH = 53
+#: A Kubernetes namespace is a DNS-1123 label; the API server rejects anything else.
+_KUBERNETES_NAMESPACE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+KUBERNETES_NAMESPACE_MAX_LENGTH = 63
+
+
+@dataclass(frozen=True)
+class ReleaseIdentity:
+    """Where one module reference is installed: its release name and Kubernetes namespace, as `meta.yaml` has them.
+
+    `release_from_field`/`namespace_from_field` say whether each came from the module's own field or from a default
+    (the reference name, the strata namespace name), because the fix for a bad name differs.
+    """
+
+    release: str
+    kubernetes_namespace: str
+    release_from_field: bool
+    namespace_from_field: bool
+
+
+def release_identity(namespace_name: str, reference_name: str, module: ModuleModel) -> ReleaseIdentity:
+    """The release name and Kubernetes namespace a Helm module reference deploys as.
+
+    The release defaults to the reference name, not `module.meta.name` (v1's default): one Module document can
+    be attached to a namespace more than once under different reference names (`ModuleReferenceModel`), and two
+    live releases can never share a name. The namespace defaults to the strata namespace name. Both values are
+    used verbatim; a `${...}` token in either field is not resolved.
+    """
+    return ReleaseIdentity(
+        release=module.spec.release_name or reference_name,
+        kubernetes_namespace=module.spec.kubernetes_namespace or namespace_name,
+        release_from_field=module.spec.release_name is not None,
+        namespace_from_field=module.spec.kubernetes_namespace is not None,
+    )
+
+
+def release_name_problem(name: str) -> str | None:
+    """Why Helm rejects `name` as a release name, or `None` when it accepts it."""
+    if len(name) > RELEASE_NAME_MAX_LENGTH:
+        return f"it is {len(name)} characters long, and Helm allows at most {RELEASE_NAME_MAX_LENGTH}"
+    if not _RELEASE_NAME.match(name):
+        return (
+            "a Helm release name has only lowercase letters, digits, '-' and '.', and starts and ends with a "
+            "letter or digit"
+        )
+    return None
+
+
+def kubernetes_namespace_problem(name: str) -> str | None:
+    """Why Kubernetes rejects `name` as a namespace, or `None` when it accepts it."""
+    if len(name) > KUBERNETES_NAMESPACE_MAX_LENGTH:
+        return f"it is {len(name)} characters long, and Kubernetes allows at most {KUBERNETES_NAMESPACE_MAX_LENGTH}"
+    if not _KUBERNETES_NAMESPACE.match(name):
+        return (
+            "a Kubernetes namespace has only lowercase letters, digits and '-', and starts and ends with a "
+            "letter or digit"
+        )
+    return None
+
+
+#: Helm's default for `--kube-context`; set for every helm call of a deployment that names `kube_context`.
+KUBE_CONTEXT_ENV = "HELM_KUBECONTEXT"
+#: Overrides the server of whichever context Helm uses, so a deployment pinned to a context cannot allow it.
+KUBE_API_SERVER_ENV = "HELM_KUBEAPISERVER"
+
+
+@dataclass(frozen=True)
+class KubeconfigContexts:
+    """The context names the caller's kubeconfig defines, and the files they were read from."""
+
+    files: list[Path]
+    names: list[str]
+    unreadable: list[Path]
+
+
+def kubeconfig_context_names(environ: Mapping[str, str]) -> KubeconfigContexts:
+    """The context names in the kubeconfig Helm reads: the `KUBECONFIG` files, else `~/.kube/config`.
+
+    Only `contexts[].name` is read. A file that does not exist is skipped, as Helm skips it; a file that is not
+    valid YAML is listed in `unreadable`.
+    """
+    listed = [part for part in environ.get("KUBECONFIG", "").split(os.pathsep) if part]
+    files = [Path(part) for part in listed] if listed else [Path.home() / ".kube" / "config"]
+    names: list[str] = []
+    unreadable: list[Path] = []
+    for path in files:
+        if not path.is_file():
+            continue
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            unreadable.append(path)
+            continue
+        contexts = document.get("contexts") if isinstance(document, dict) else None
+        for context in contexts if isinstance(contexts, list) else []:
+            name = context.get("name") if isinstance(context, dict) else None
+            if isinstance(name, str) and name not in names:
+                names.append(name)
+    return KubeconfigContexts(files=files, names=names, unreadable=unreadable)
+
+
+def kube_context_problem(kube_context: str, environ: Mapping[str, str]) -> tuple[str, str] | None:
+    """Why Helm cannot be pinned to `kube_context` in this environment, as `(code, reason)`, or `None`.
+
+    The caller's own `HELM_KUBECONTEXT` may only repeat the same context, and `HELM_KUBEAPISERVER` would point the
+    context at another server. Otherwise the context must be defined in the kubeconfig.
+    """
+    caller_context = environ.get(KUBE_CONTEXT_ENV)
+    if caller_context and caller_context != kube_context:
+        return (
+            "helm_kube_context_conflict",
+            f"{KUBE_CONTEXT_ENV} is set to '{caller_context}' in the environment. Unset it, or deploy with a "
+            "deployment that names that context.",
+        )
+    if environ.get(KUBE_API_SERVER_ENV):
+        return (
+            "helm_kube_context_conflict",
+            f"{KUBE_API_SERVER_ENV} is set in the environment, which overrides the server of the context. Unset it.",
+        )
+    kubeconfig = kubeconfig_context_names(environ)
+    if kube_context in kubeconfig.names:
+        return None
+    files = ", ".join(str(path) for path in kubeconfig.files)
+    source = f"KUBECONFIG={files}" if environ.get("KUBECONFIG") else files
+    known = ", ".join(f"'{name}'" for name in kubeconfig.names) or "none"
+    unreadable = (
+        f" Not valid YAML: {', '.join(str(path) for path in kubeconfig.unreadable)}." if kubeconfig.unreadable else ""
+    )
+    return (
+        "helm_kube_context_missing",
+        f"it is not in the kubeconfig ({source}; contexts: {known}).{unreadable}",
+    )
+
+
 def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, Any]:
     """Build the `meta.yaml` payload for one Helm module.
 
-    `releaseName` defaults to `item.reference.name`, not `module.meta.name`
-    (v1's real default) — the same Module document can be attached to a
-    namespace more than once under different reference names
-    (`ModuleReferenceModel`'s own docstring), and two live Helm releases
-    can never share a name, so the one identifier guaranteed unique per
-    attachment (the reference name) is the only safe default; `module.meta.name`
-    is not, and would silently collide if that ever happens.
+    `releaseName`/`namespace` are `release_identity()`, the same names `strata validate` checks.
 
     Chart coordinates (`chartName`/`chartVersion`/`chartRemote`/
     `chartRepository`) are included only for a chart-based `source`
@@ -838,10 +979,8 @@ def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, A
     most one is ever written.
     """
     module = item.module
-    meta: dict[str, Any] = {
-        "releaseName": module.spec.release_name or item.reference.name,
-        "namespace": module.spec.kubernetes_namespace or str(namespace.meta.name),
-    }
+    identity = release_identity(str(namespace.meta.name), item.reference.name, module)
+    meta: dict[str, Any] = {"releaseName": identity.release, "namespace": identity.kubernetes_namespace}
 
     source = module.spec.source
     if source.chart_name is not None:

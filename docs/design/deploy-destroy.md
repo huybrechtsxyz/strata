@@ -131,7 +131,8 @@ The labels are stable: code comments cite them.
     treats that stderr as success ("already uninstalled") and any other failure as an error. It does not use
     `--ignore-not-found`, because strata's Helm minimum is whatever the integration document declares and when the
     flag appeared was not verified. Docker: `docker stack rm` on a node that is not a swarm manager exits 1 and stays
-    an error (a destroy pointed at the wrong `DOCKER_HOST`); on a swarm, a missing stack is not an error. `docker
+    an error (a destroy pointed at the wrong `DOCKER_HOST`; a deployment's `docker_context` pins the engine and
+    rejects `DOCKER_HOST`, see [compose-docker-context.md](../work/compose-docker-context.md)); on a swarm, a missing stack is not an error. `docker
     stack rm` defaults to `--detach=true`, so the integration passes `--detach=false`: a successful destroy means
     the tasks have stopped before the next step runs.
 - **D8 - Output store.** After the whole run succeeded, and only for a real run, `DeploymentOutputStore.clear()`

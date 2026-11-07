@@ -90,6 +90,33 @@ class SourceSyncError(SystemError):
     """A `SourceModel` could not be materialised into the build directory."""
 
 
+def source_repo_root(
+    root: Path,
+    source: SourceModel,
+    remotes: dict[str, SolutionRemoteModel],
+    *,
+    credentials: RemoteCredentialResolver | None = None,
+) -> Path:
+    """The repository `source` lives in: its remote's checkout, or `root` when it names none (ADR-0018).
+
+    Raises:
+        SourceSyncError: `source.remote` is not declared in `remotes`.
+        RemoteResolutionError: the remote could not be located or cloned.
+    """
+    remote = None
+    if source.remote is not None:
+        remote = remotes.get(source.remote)
+        if remote is None:
+            raise SourceSyncError(f"Source names remote '{source.remote}', which is not declared in this solution.")
+    return _resolve_repo(
+        root,
+        remote,
+        credentials,
+        integration=remote.integration if remote else None,
+        owner=f"remote '{source.remote}'",
+    )
+
+
 def _resolve_repo(
     root: Path,
     remote: SolutionRemoteModel | None,
@@ -171,19 +198,7 @@ def sync_source(
             "(chart_name set) are pulled by the deployer itself (e.g. `helm pull`), not copied."
         )
 
-    remote = None
-    if source.remote is not None:
-        remote = remotes.get(source.remote)
-        if remote is None:
-            raise SourceSyncError(f"Source names remote '{source.remote}', which is not declared in this solution.")
-
-    repo_root = _resolve_repo(
-        root,
-        remote,
-        credentials,
-        integration=remote.integration if remote else None,
-        owner=f"remote '{source.remote}'",
-    )
+    repo_root = source_repo_root(root, source, remotes, credentials=credentials)
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
     origin = repo_root / source.source_path
     destination = source_destination(build_path, source)
@@ -490,19 +505,7 @@ def sync_module_source(
         module_dir.mkdir(parents=True, exist_ok=True)
         return
 
-    remote = None
-    if source.remote is not None:
-        remote = remotes.get(source.remote)
-        if remote is None:
-            raise SourceSyncError(f"Source names remote '{source.remote}', which is not declared in this solution.")
-
-    repo_root = _resolve_repo(
-        root,
-        remote,
-        credentials,
-        integration=remote.integration if remote else None,
-        owner=f"remote '{source.remote}'",
-    )
+    repo_root = source_repo_root(root, source, remotes, credentials=credentials)
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
     origin = repo_root / source.source_path
 

@@ -8,6 +8,32 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- `strata validate` checks the release name and Kubernetes namespace of every enabled Helm module reference, defaults
+  included, and fails on what Helm or Kubernetes would reject: `helm_release_name_invalid` (lowercase letters,
+  digits, `-` and `.`, at most 53 characters), `helm_kubernetes_namespace_invalid` (lowercase letters, digits and
+  `-`, at most 63 characters) and `helm_release_conflict` (two references in one workspace installing the same release
+  into the same Kubernetes namespace). The defaults are the module reference name and the strata namespace name, which
+  may contain `_`: such a configuration now fails `validate`, `build run` and `deploy` instead of the `helm upgrade`.
+  Set `spec.release_name` / `spec.kubernetes_namespace` on the module, or rename the reference or namespace.
+- `spec.kube_context` on a deployment names the context in the caller's kubeconfig that its Helm steps deploy to.
+  Every `helm` call (deploy, dry-run, uninstall, destroy preview) then uses that context whichever is active, and the
+  deploy stops before its first step when the kubeconfig has no such context (`helm_kube_context_missing`) or the
+  environment sets `HELM_KUBEAPISERVER` or another `HELM_KUBECONTEXT` (`helm_kube_context_conflict`). Without the field
+  nothing changes at deploy; `strata validate` warns (`helm_kube_context_unset`) for a deployment with a Helm step.
+- `spec.docker_context` does the same for Compose steps: every `docker` call (`stack deploy`, the `stack config`
+  dry-run, `stack rm`, `stack services`) runs with `DOCKER_CONTEXT` set to it, and the deploy stops before its first
+  step when Docker has no such context (`compose_docker_context_missing`) or the environment sets `DOCKER_HOST`, which
+  would override it, or another `DOCKER_CONTEXT` (`compose_docker_context_conflict`). `strata validate` warns
+  (`compose_docker_context_unset`) for a deployment with a Compose step and no `docker_context`. A `${...}` token in
+  either field is a schema error.
+- `checkov_policy.config_file` names a Checkov config file (e.g. `.checkov.yaml`) relative to the root of the
+  repository each scanned provisioner or Helm module comes from. `build run` copies it into the build path
+  (`checkov-config/`) and passes it as `--config-file`; `strata policy check` and `policy findings` use that copy. A
+  repository without the file is reported through `on_missing_data`. Flags strata sets itself (`skip_checks`,
+  `include_checks`, `framework`, ...) win over the same keys in the file.
+
 ### Changed
 
 - Helm and Compose steps honour a stage's `timeouts.plan` and `timeouts.apply` (and `STRATA_TIMEOUT_<STEP>_PLAN` /

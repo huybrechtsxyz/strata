@@ -180,6 +180,24 @@ def test_scan_passes_custom_checks_dir(monkeypatch, tmp_path: Path):
     assert captured[0][captured[0].index("--external-checks-dir") + 1] == ".strata/checkov/custom/"
 
 
+def test_scan_passes_config_file(monkeypatch, tmp_path: Path):
+    _patch_which(monkeypatch, True)
+    captured = _patch_run(monkeypatch, CommandResult(returncode=0, stdout=_CHECKOV_JSON, stderr=""))
+
+    CheckovIntegration().scan(tmp_path, config_file=tmp_path / ".checkov.yaml")
+
+    assert captured[0][captured[0].index("--config-file") + 1] == str(tmp_path / ".checkov.yaml")
+
+
+def test_scan_omits_config_file_by_default(monkeypatch, tmp_path: Path):
+    _patch_which(monkeypatch, True)
+    captured = _patch_run(monkeypatch, CommandResult(returncode=0, stdout=_CHECKOV_JSON, stderr=""))
+
+    CheckovIntegration().scan(tmp_path)
+
+    assert "--config-file" not in captured[0]
+
+
 def test_scan_raises_when_not_available(monkeypatch, tmp_path: Path):
     _patch_which(monkeypatch, False)
     with pytest.raises(IntegrationError, match="checkov not found on PATH"):

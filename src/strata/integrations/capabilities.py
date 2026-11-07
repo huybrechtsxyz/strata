@@ -201,6 +201,24 @@ class InfraIntegration(Integration):
     #: GitOps). Lets `deploy apply` refuse such a step before anything runs, without naming a tool.
     SUPPORTS_SAVED_PLAN: ClassVar[bool] = True
 
+    #: The deployment field naming the context this tool deploys to (`kube_context`, `docker_context`), or `None`
+    #: when the tool is never pinned. Lets `deploy run` and `strata validate` pin a step without naming a tool
+    #: (docs/work/compose-docker-context.md).
+    TARGET_CONTEXT_FIELD: ClassVar[str | None] = None
+
+    def target_context_env(self, context: str) -> dict[str, str]:
+        """The environment that makes every call of this tool use `context`; empty when the tool is never pinned."""
+        del context
+        return {}
+
+    def target_context_problem(self, context: str, environ: Mapping[str, str]) -> tuple[str, str] | None:
+        """Why this tool cannot be pinned to `context` with the caller's `environ`, as `(code, reason)`, or `None`.
+
+        `deploy run` calls it once, before any step runs. `reason` completes "... deploys <tool> to <context>, but".
+        """
+        del context, environ
+        return None
+
     @property
     def supports_destroy(self) -> bool:
         """Whether this instance can destroy what it created. The class constant by default; an integration whose

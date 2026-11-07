@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Tests for `HelmIntegration` (ADR-0021 Phase 6)."""
 
+import os
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,8 @@ import yaml
 
 from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError, RegistryAuthError
 from strata.integrations.helm import (
+    KUBE_API_SERVER_ENV,
+    KUBE_CONTEXT_ENV,
     VALUES_FILE,
     HelmIntegration,
     RegistryCredentials,
@@ -18,7 +22,12 @@ from strata.integrations.helm import (
     _upgrade_timeouts,
     check_configuration_keys,
     credentials_from_authentication,
+    kube_context_problem,
+    kubeconfig_context_names,
+    kubernetes_namespace_problem,
     read_chart_values,
+    release_identity,
+    release_name_problem,
     resolve_module_values,
     summarise_dry_run,
     summarise_manifest,
@@ -1144,6 +1153,73 @@ def test_check_namespace_passes_the_check_timeout_to_lint(monkeypatch, tmp_path:
     assert calls[0]["timeout"] == 7
 
 
+_RELEASE_NAMES = [
+    "auth",
+    "a",
+    "my.app",
+    "a1-b2",
+    "a" * 53,
+    "my_app",
+    "My-app",
+    "app-",
+    "-app",
+    ".app",
+    "a..b",
+    "a" * 54,
+]
+
+
+@pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+def test_release_name_problem_agrees_with_real_helm(tmp_path: Path):
+    """The rule strata validates with is Helm's own: every name is accepted or rejected by both alike."""
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "Chart.yaml").write_text("apiVersion: v2\nname: probe\nversion: 0.1.0\n")
+    helm = HelmIntegration()
+    for name in _RELEASE_NAMES:
+        # `--name-template=` so a leading '-' is a name, not a flag.
+        accepted = helm.run("template", str(tmp_path), f"--name-template={name}").is_successful
+        assert (release_name_problem(name) is None) == accepted, name
+
+
+@pytest.mark.parametrize(
+    ("name", "problem"),
+    [("auth", None), ("a" * 54, "54 characters long"), ("my_app", "lowercase letters, digits, '-' and '.'")],
+)
+def test_release_name_problem_says_why(name, problem):
+    result = release_name_problem(name)
+    assert result is None if problem is None else problem in (result or "")
+
+
+@pytest.mark.parametrize(
+    ("name", "accepted"),
+    [
+        ("apps", True),
+        ("a" * 63, True),
+        ("a-1", True),
+        ("a" * 64, False),
+        ("apps_forge", False),
+        ("a.b", False),
+        ("Apps", False),
+        ("-apps", False),
+        ("apps-", False),
+    ],
+)
+def test_kubernetes_namespace_problem_follows_the_dns_label_rule(name, accepted):
+    assert (kubernetes_namespace_problem(name) is None) is accepted
+
+
+def test_release_identity_defaults_to_the_reference_and_namespace_names():
+    defaults = release_identity("apps", "auth", _module())
+    assert (defaults.release, defaults.kubernetes_namespace) == ("auth", "apps")
+    assert not defaults.release_from_field and not defaults.namespace_from_field
+
+    module = _module()
+    module.spec.release_name, module.spec.kubernetes_namespace = "sso", "identity"
+    fields = release_identity("apps", "auth", module)
+    assert (fields.release, fields.kubernetes_namespace) == ("sso", "identity")
+    assert fields.release_from_field and fields.namespace_from_field
+
+
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
 def test_check_namespace_against_real_helm_catches_a_template_error_the_overlay_can_fix(tmp_path: Path):
     """The overlay is what makes the chart renderable: the built values.yaml alone leaves `.Values.cfg` nil."""
@@ -2097,3 +2173,86 @@ def test_destroy_namespace_dry_run_warns_when_the_preview_cannot_be_read(tmp_pat
     assert diagnostics.ok
     assert len(diagnostics.warnings) == 1
     assert "unreachable" in diagnostics.warnings[0].message
+
+
+# ---------------------------------------------------------------------------
+# The kube context a deployment names (docs/work/helm-kube-context.md)
+# ---------------------------------------------------------------------------
+
+
+def _kubeconfig(path: Path, *names: str) -> Path:
+    path.write_text(yaml.safe_dump({"contexts": [{"name": name, "context": {}} for name in names]}), encoding="utf-8")
+    return path
+
+
+def test_kubeconfig_context_names_reads_every_kubeconfig_file_in_order(tmp_path: Path):
+    first = _kubeconfig(tmp_path / "a", "forge-prd", "shared")
+    second = _kubeconfig(tmp_path / "b", "shared", "forge-dev")
+    missing = tmp_path / "missing"
+
+    found = kubeconfig_context_names({"KUBECONFIG": os.pathsep.join([str(first), str(missing), str(second)])})
+
+    assert found.names == ["forge-prd", "shared", "forge-dev"]
+    assert found.files == [first, missing, second]
+    assert found.unreadable == []
+
+
+def test_kubeconfig_context_names_defaults_to_the_users_kube_config(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / ".kube").mkdir()
+    _kubeconfig(tmp_path / ".kube" / "config", "docker-desktop")
+
+    assert kubeconfig_context_names({}).names == ["docker-desktop"]
+
+
+def test_kubeconfig_context_names_reports_a_file_that_is_not_yaml(tmp_path: Path):
+    broken = tmp_path / "broken"
+    broken.write_text("contexts: [\n", encoding="utf-8")
+
+    found = kubeconfig_context_names({"KUBECONFIG": str(broken)})
+
+    assert found.names == [] and found.unreadable == [broken]
+
+
+def test_kube_context_problem_accepts_a_context_the_kubeconfig_defines(tmp_path: Path):
+    environ = {"KUBECONFIG": str(_kubeconfig(tmp_path / "config", "forge-prd"))}
+
+    assert kube_context_problem("forge-prd", environ) is None
+    assert kube_context_problem("forge-prd", {**environ, KUBE_CONTEXT_ENV: "forge-prd"}) is None
+
+
+def test_kube_context_problem_names_the_contexts_that_exist(tmp_path: Path):
+    environ = {"KUBECONFIG": str(_kubeconfig(tmp_path / "config", "forge-dev", "k3d-local"))}
+
+    code, reason = kube_context_problem("forge-prd", environ) or ("", "")
+
+    assert code == "helm_kube_context_missing"
+    assert f"KUBECONFIG={tmp_path / 'config'}" in reason
+    assert "contexts: 'forge-dev', 'k3d-local'" in reason
+
+
+def test_kube_context_problem_rejects_an_environment_that_points_helm_elsewhere(tmp_path: Path):
+    environ = {"KUBECONFIG": str(_kubeconfig(tmp_path / "config", "forge-prd"))}
+
+    assert kube_context_problem("forge-prd", {**environ, KUBE_CONTEXT_ENV: "forge-dev"}) == (
+        "helm_kube_context_conflict",
+        "HELM_KUBECONTEXT is set to 'forge-dev' in the environment. Unset it, or deploy with a deployment that "
+        "names that context.",
+    )
+    code, _ = kube_context_problem("forge-prd", {**environ, KUBE_API_SERVER_ENV: "https://x"}) or ("", "")
+    assert code == "helm_kube_context_conflict"
+
+
+@pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+def test_real_helm_refuses_a_kube_context_its_kubeconfig_does_not_define(tmp_path: Path):
+    """The pin relies on Helm reading HELM_KUBECONTEXT and failing, before any cluster call, on an unknown context."""
+    environ = {
+        **os.environ,
+        "KUBECONFIG": str(_kubeconfig(tmp_path / "config", "forge-dev")),
+        KUBE_CONTEXT_ENV: "forge-prd",
+    }
+
+    result = subprocess.run(["helm", "list", "-A"], capture_output=True, text=True, env=environ, timeout=60)
+
+    assert result.returncode != 0
+    assert 'context "forge-prd" does not exist' in result.stderr

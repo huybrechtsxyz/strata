@@ -33,7 +33,7 @@ not run end to end (no cluster).
 | 4  | A registry chart with no values cannot deploy (fixed)                  | correctness | medium | verified    |
 | 5  | Stage timeouts do not reach a Helm upgrade (fixed)                     | operability | medium | by reading  |
 | 6  | The cluster is whatever kube context is active                         | safety      | medium | by design   |
-| 7  | Release and Kubernetes namespace names are not validated               | validation  | low    | by reading  |
+| 7  | Release and Kubernetes namespace names are not validated (fixed)       | validation  | low    | by reading  |
 | 8  | Registry charts get no check before deploy                             | validation  | low    | by reading  |
 | 9  | Local chart dependencies are never built                               | correctness | low    | by reading  |
 | 10 | Helm 4 compatibility is unknown                                        | risk        | low    | to verify   |
@@ -125,6 +125,12 @@ Options, smallest first: print the active context at the start of a Helm step; a
 per deployment stage, checked before any `helm` call; or strata passing `--kube-context` and `--kubeconfig`
 itself. The second keeps the ADR-0020 split and only adds a guard.
 
+**Done (2026-11-07)**, as designed in [helm-kube-context.md](helm-kube-context.md): an optional `kube_context` on the
+deployment, which pins every `helm` call to that context through `HELM_KUBECONTEXT`, with a check before the first
+step that the kubeconfig defines it. `strata validate` warns when a deployment with a Helm step has none. Compose has the
+same gap with `DOCKER_HOST`, closed the same way by `docker_context`
+([compose-docker-context.md](compose-docker-context.md)).
+
 #### 7. Release and Kubernetes namespace names are not validated
 
 `release_name` (default: the module reference name) and `kubernetes_namespace` (default: the strata namespace name)
@@ -133,8 +139,9 @@ label for the namespace. A name like `My_App` passes `strata validate` and fails
 that end up with the same release name in the same Kubernetes namespace (possible through `kubernetes_namespace`)
 would install one over the other, and nothing detects it.
 
-Fix: format checks on the model, and a `strata validate` check that the (Kubernetes namespace, release) pair is unique
-within a deployment.
+**Done (2026-11-07)**, as designed in [helm-release-names.md](helm-release-names.md). Helm modules only for now (Argo CD later), and strict:
+both rules are errors in `strata validate`, defaults included, and the (Kubernetes namespace, release) pair must be
+unique within a workspace.
 
 #### 8. Registry charts get no check before deploy
 
@@ -187,22 +194,23 @@ breaks.
 - [x] 3. Gap 4: always write the values file
 - [x] 4. Gap 3: summarise the dry-run instead of streaming the manifest
 - [x] 5. Gap 5: stage timeouts for plan and apply
-- [ ] 6. Gap 7: name checks and the release uniqueness check in `strata validate`
-- [ ] 7. Gap 6: decide on the context guard
+- [x] 6. Gap 7: name checks and the release uniqueness check in `strata validate`
+- [x] 7. Gap 6: the kube context pin
 - [ ] 8. Gaps 8, 9 and 10: on demand, after checking haven
 
 ### Open questions
 
 - **Gap 1 compatibility.** Does any haven module depend on the chart defaults being dropped? A `build run` of haven
   followed by `helm template` for each local chart, with and without the fix, answers it.
-- **Gap 6 shape.** A per-stage expected context, or a per-deployment one? A stage is the unit that names Helm steps,
-  but a context belongs to an environment.
+- **Gap 6 shape.** Decided: per deployment (one deployment is one environment, so one cluster). A per-stage override
+  waits for a workspace whose Helm steps target two clusters.
 - **A real plan diff.** Should `deploy plan` show what would change in the cluster (`helm diff upgrade`)? It needs a
   plugin, so it would be optional, with the summary from gap 3 as the fallback.
 - **Release status and rollback.** No `deploy status` or rollback exists for Helm. No consumer has asked for either.
 
 ## Changelog
 
+- 2026-11-07: gap 7 fixed (Helm only; Argo CD later).
 - 2026-11-07: gap 5 fixed (Helm and Compose plan/apply timeouts).
 - 2026-11-07: gaps 1 and 4 fixed (`strata-values.yaml`).
 - 2026-11-07: gaps 2 and 3 fixed on `feature/helm-improvements`. Corrected gap 2: a dot in a key was handled; a list

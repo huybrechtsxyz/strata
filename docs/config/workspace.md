@@ -45,7 +45,12 @@ parameters.
 - `spec.cve_policy` — fail `build run` when the SBOM's CVE findings at or above `max_severity`
   exceed `max_count` (scanned with Trivy or Grype)
 - `spec.checkov_policy` — fail `build run` on Checkov findings at or above `severity_gate`; a
-  finding with no severity (open-source Checkov reports none) always counts
+  finding with no severity (open-source Checkov reports none) always counts. `config_file` names a
+  Checkov config file (e.g. `.checkov.yaml`) relative to the root of the repository each scanned
+  provisioner or Helm module comes from; `build run` copies it to `checkov-config/` in the build path
+  and passes it as `--config-file`. A repository without that file is handled by `on_missing_data`.
+  Without `config_file` strata passes none, and Checkov may still pick up a `.checkov.yaml` from the
+  scanned directory or the directory strata runs in
 - `spec.release_gate_policy` — at deploy, ask a `release_gate` [integration](integration.md) for its
   verdict on `repository` at the deployed commit
 - `spec.image_gate_policy` — at deploy, count an `image_findings` integration's open issues for every

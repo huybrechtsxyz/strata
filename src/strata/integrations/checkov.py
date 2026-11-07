@@ -56,6 +56,7 @@ class CheckovIntegration(ScannerIntegration):
         skip_checks: list[str] | None = None,
         include_checks: list[str] | None = None,
         custom_checks_dir: str | None = None,
+        config_file: Path | None = None,
         timeout: int = 120,
     ) -> CheckovScanResultModel:
         """Scan `directory` (an already-materialised/rendered IaC output
@@ -69,6 +70,9 @@ class CheckovIntegration(ScannerIntegration):
                 `--check`/`--skip-check` as mutually exclusive.
             include_checks: When set, run ONLY these check IDs (`--check`).
             custom_checks_dir: Extra custom-checks directory (`--external-checks-dir`).
+            config_file: Checkov config file (`--config-file`). Flags strata
+                passes itself (`--check`/`--skip-check`, ...) take precedence
+                over the same keys in the file, as Checkov's own CLI does.
             timeout: Subprocess timeout in seconds.
 
         Raises:
@@ -98,6 +102,8 @@ class CheckovIntegration(ScannerIntegration):
             args += ["--skip-check", ",".join(skip_checks)]
         if custom_checks_dir:
             args += ["--external-checks-dir", custom_checks_dir]
+        if config_file is not None:
+            args += ["--config-file", str(config_file)]
 
         result = self.run(*args, timeout=timeout)
         if not result.is_successful:

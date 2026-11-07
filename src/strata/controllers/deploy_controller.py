@@ -67,7 +67,7 @@ from strata.integrations.terraform_projection import (
 )
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
-from strata.models.deployment_model import DeploymentStageModel
+from strata.models.deployment_model import DeploymentSpecModel, DeploymentStageModel
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
@@ -294,6 +294,17 @@ def collect_step_outputs(
             if entry.get("sensitive") is True:
                 sensitive_keys.add(key)
     return values, sensitive_keys
+
+
+def _target_context(spec: DeploymentSpecModel, integration: InfraIntegration) -> str | None:
+    """The context the deployment pins `integration` to (`kube_context`, `docker_context`), or `None`."""
+    field = integration.TARGET_CONTEXT_FIELD
+    return cast(str | None, getattr(spec, field)) if field else None
+
+
+def _target_context_label(integration: InfraIntegration) -> str:
+    """`kube context`, `docker context`: the deployment field, as the messages name it."""
+    return (integration.TARGET_CONTEXT_FIELD or "context").replace("_", " ")
 
 
 def _upstream_step_names(step_name: str, steps: list[ProvisioningStepModel]) -> set[str]:
@@ -1056,6 +1067,30 @@ def deploy_run(
         if not diagnostics.ok:
             return diagnostics
 
+    # A tool with a target context (Helm's `kube_context`, Compose's `docker_context`) runs against the one the
+    # deployment names (docs/work/compose-docker-context.md). Checked once per tool, before any step, so a wrong
+    # environment stops the run before anything has changed.
+    checked_tools: set[tuple[str, str | None]] = set()
+    for _, _, integration in resolved_steps:
+        target_context = _target_context(deployment.spec, integration)
+        tool_key = (integration.name, integration.command)
+        if target_context is None or tool_key in checked_tools:
+            continue
+        checked_tools.add(tool_key)
+        label = _target_context_label(integration)
+        if smoke_test:
+            _step(f"would check {label} '{target_context}'")
+            continue
+        context_problem = integration.target_context_problem(target_context, os.environ)
+        if context_problem is not None:
+            code, reason = context_problem
+            diagnostics.error(
+                f"Deployment '{deployment.meta.name}' deploys {integration.TYPE.capitalize()} to {label} "
+                f"'{target_context}', but {reason}",
+                code=code,
+            )
+            return diagnostics
+
     upstream_by_step = {s.name: _upstream_step_names(s.name, all_steps) for s in all_steps}
     step_outputs: dict[str, dict[str, str]] = {}
     step_sensitive_outputs: dict[str, set[str]] = {}
@@ -1124,6 +1159,9 @@ def deploy_run(
             continue
 
         env = tf_var_env(resolved, integration.ENV_VAR_PREFIX)
+        target_context = _target_context(deployment.spec, integration)
+        if target_context is not None:
+            env.update(integration.target_context_env(target_context))
 
         upstream = upstream_by_step.get(step.name, set())
         visible_outputs = {
@@ -1192,6 +1230,10 @@ def deploy_run(
                 if (modules := resolve_namespace_modules(index, namespace, build_path).get(integration.TYPE, []))
             ]
             _step(f"running step '{step.name}' via {integration_type}")
+            if target_context is not None:
+                _step(
+                    f"step '{step.name}' via {integration_type}: {_target_context_label(integration)} '{target_context}'"
+                )
             if destroy:
                 for namespace, modules in reversed(container_targets):
                     diagnostics.extend(

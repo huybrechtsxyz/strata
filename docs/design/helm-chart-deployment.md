@@ -76,6 +76,15 @@ The `--dry-run` preview (`helm upgrade --dry-run`) is never streamed: its output
 marked, as the destroy preview does ([deploy-destroy.md](deploy-destroy.md)). The chart's `NOTES` are not shown either,
 because they are rendered from the same values.
 
+**The cluster.** Helm uses the kubeconfig the caller provides
+([ADR-0020](../decisions/0020-v1-consumer-feature-priority.md)). A deployment with `spec.kube_context` pins every `helm`
+call of its Helm steps to that context by adding `HELM_KUBECONTEXT` to the step's environment
+(`HelmIntegration.target_context_env()`), and `deploy_run()` checks before the first step, with
+`target_context_problem()` (`kube_context_problem()`), that the kubeconfig defines it and that the caller's environment
+does not point Helm elsewhere (`HELM_KUBECONTEXT`, `HELM_KUBEAPISERVER`). Only the context names are read from the
+kubeconfig; the cluster is not contacted ([helm-kube-context.md](../work/helm-kube-context.md)). Compose is pinned the
+same way through `docker_context` ([compose-docker-context.md](../work/compose-docker-context.md)).
+
 Chart resolution (`_resolve_chart()`):
 
 - **OCI** (`oci://` remote or inline repository): Helm resolves it natively, so the reference is `<url>/<chart>`.
@@ -114,6 +123,20 @@ failure: `remote_integration_unknown`, `remote_integration_not_sources`, `remote
 `remote_integration_auth_unsupported` (anything but `token`/`cli`) and `remote_integration_username_required`. For a git remote
 `disabled` and `auth_unsupported` stay warnings, because GitOps and audit pushes also use a git remote's integration.
 
+It also checks the names each enabled Helm module reference deploys as (`release_identity()`, the function `meta.yaml` is written
+with), defaults included, because a default is a strata name and may contain `_` ([helm-release-names.md](../work/helm-release-names.md)):
+
+- `_check_helm_release_names()`, over every Namespace document: the release name must match Helm's own rule (verified against
+  `helm template`, at most 53 characters) and the Kubernetes namespace must be a DNS-1123 label (at most 63 characters). A
+  name set in a module field is reported once on the module; a default once on the namespace.
+- `_check_workspace_helm_releases()`, per workspace: no two references install the same release into the same Kubernetes
+  namespace. A pair with an invalid name is left to the first check.
+
+Both are errors, with no opt-out: Helm or the API server would reject the same names at deploy.
+
+`_check_deployment_target_contexts()` warns on a deployable deployment that runs a Helm step (a provisioner whose tool, or
+named integration, is `helm`) and has no `kube_context`. The deployment schema rejects a `${...}` token in the field.
+
 ### Diagnostics
 
 | Code                                | Severity | Raised by                                                       |
@@ -124,6 +147,12 @@ failure: `remote_integration_unknown`, `remote_integration_not_sources`, `remote
 | `check_failed`                      | error    | the check phase, an `IntegrationError` other than unsupported   |
 | `helm_registry_credentials_invalid` | error    | deploy, credentials that cannot be built before any helm call   |
 | `helm_registry_auth_failed`         | error    | deploy, the registry rejected the login                         |
+| `helm_release_name_invalid`         | error    | validate, a release name Helm would reject                      |
+| `helm_kubernetes_namespace_invalid` | error    | validate, a Kubernetes namespace the API server would reject    |
+| `helm_release_conflict`             | error    | validate, two references install one release in one namespace   |
+| `helm_kube_context_unset`           | warning  | validate, a deployment with a Helm step names no kube context    |
+| `helm_kube_context_missing`         | error    | deploy, before any step, the kubeconfig has no such context      |
+| `helm_kube_context_conflict`        | error    | deploy, before any step, the environment points Helm elsewhere   |
 
 ### Code map
 

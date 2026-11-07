@@ -13,9 +13,10 @@ diverges later (e.g. Checkov adding a severity CVE scanning never has).
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from strata.models.common_models import PlatformBaseModel
+from strata.utils.path_safety import validate_relative_path
 
 #: Shared with `strata.integrations.checkov` and
 #: `strata.controllers.checkov_controller` — one source of truth for
@@ -125,6 +126,12 @@ class CheckovPolicyModel(PlatformBaseModel):
     )
     include_checks: list[str] | None = Field(None, description="When set, run ONLY these check IDs")
     custom_checks_dir: str | None = Field(None, description="Extra custom-checks directory, if any")
+    config_file: str | None = Field(
+        None,
+        description="Checkov config file (e.g. `.checkov.yaml`), relative to the root of the repository each "
+        "scanned provisioner or Helm module comes from. `build run` copies it into the build output and passes "
+        "it as `--config-file`; a target whose repository has no such file is handled by `on_missing_data`.",
+    )
     timeout: int = Field(default=120, ge=1, description="Scan subprocess timeout in seconds (default 120)")
     enforcement: Literal["deny", "warn"] = Field(
         default="deny", description="deny fails the build; warn reports and continues"
@@ -139,3 +146,9 @@ class CheckovPolicyModel(PlatformBaseModel):
         "matching CveMaxSeverityPolicyModel's own rationale: 'skip' makes 'never "
         "scanned' indistinguishable from 'scanned, found nothing'.",
     )
+
+    @field_validator("config_file")
+    @classmethod
+    def validate_config_file(cls, v: str | None) -> str | None:
+        """Repo-relative, never escaping it (see `validate_relative_path`)."""
+        return validate_relative_path(v) if v is not None else v
