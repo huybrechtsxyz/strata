@@ -153,7 +153,7 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
   wrote on purpose. Suggested: judge them and word the finding "declared as X; the chart may run another".
 - **Does the SBOM and the CVE and image gates need the same marker?** They scan Helm-declared images as if they
   ran. A `strata:image-delivered=false` property on the SBOM component would let a gate report "scanned a declared
-  image".
+  image". Taken up in [sbom-generation.md](sbom-generation.md) (step 1), together with rendering local charts.
 - **`on_unknown_image` default.** `warn` (as `image_gate_policy`) is the suggestion. `block` makes every chart
   module declare its images or a pin, which is strict.
 - **Chart-only modules.** Is there a real consumer with a chart-only module whose image tag matters? Without one,
