@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Tests for `HelmIntegration` (ADR-0021 Phase 6)."""
 
+import os
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,17 +12,29 @@ import yaml
 
 from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError, RegistryAuthError
 from strata.integrations.helm import (
+    HELM_3_DEPRECATED,
+    HELM_3_NOT_DECLARED,
+    KUBE_API_SERVER_ENV,
+    KUBE_CONTEXT_ENV,
+    VALUES_FILE,
     HelmIntegration,
     RegistryCredentials,
     _repo_alias,
     _resolve_chart,
-    _set_string_args,
+    _upgrade_timeouts,
     check_configuration_keys,
     credentials_from_authentication,
+    kube_context_problem,
+    kubeconfig_context_names,
+    kubernetes_namespace_problem,
     read_chart_values,
+    release_identity,
+    release_name_problem,
     resolve_module_values,
+    summarise_dry_run,
     summarise_manifest,
 )
+from strata.integrations.helm_cache import ChartPin, ChartPullError
 from strata.integrations.registry import get
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.models.auth_models import (
@@ -30,6 +44,7 @@ from strata.models.auth_models import (
     TokenAuthenticationModel,
 )
 from strata.models.common_models import ModuleReferenceModel, SourceModel
+from strata.models.integration_model import IntegrationModel
 from strata.models.module_model import (
     ModuleMetaModel,
     ModuleModel,
@@ -51,6 +66,8 @@ def _capture(monkeypatch):
         captured["args"] = args
         captured["cwd"] = cwd
         captured["env"] = env
+        captured["input"] = input
+        captured["line_callback"] = line_callback
         return CommandResult(returncode=0, stdout="ok", stderr="")
 
     import strata.integrations.base as base_module
@@ -95,7 +112,7 @@ def test_plan_argv(monkeypatch):
     assert captured["args"] == [
         "helm",
         "upgrade",
-        "--dry-run",
+        "--dry-run=client",
         "--install",
         "--namespace",
         "apps",
@@ -117,8 +134,8 @@ def test_deploy_argv_defaults(monkeypatch):
         "upgrade",
         "--install",
         "--create-namespace",
-        "--wait",
-        "--atomic",
+        "--wait=watcher",
+        "--rollback-on-failure",
         "--timeout",
         "5m",
         "--namespace",
@@ -155,6 +172,84 @@ def test_deploy_argv_flags_can_be_disabled(monkeypatch):
         "app",
         "repo/app",
     ]
+
+
+def _declared(version: str | None) -> HelmIntegration:
+    spec = {"type": "helm", "capabilities": ["container"], **({"version": version} if version is not None else {})}
+    return HelmIntegration(IntegrationModel.model_validate({"meta": {"name": "helm"}, "spec": spec}))
+
+
+@pytest.mark.parametrize(
+    ("declared", "major"),
+    [
+        (None, 4),
+        (">=3", 4),
+        (">=4.1", 4),
+        ("~> 4.2", 4),
+        ("<4", 3),
+        ("~=3.16", 3),
+        ("~> 3.16", 3),
+        ("==3.13.2", 3),
+        (">=3.8,<4", 3),
+    ],
+)
+def test_the_declared_spec_version_chooses_the_helm_major(declared, major):
+    assert _declared(declared).helm_major_declared() == major
+
+
+def test_no_integration_document_means_helm_4():
+    assert HelmIntegration().helm_major_declared() == 4
+
+
+def test_declared_helm_3_keeps_the_v1_flags(monkeypatch):
+    captured = _capture(monkeypatch)
+    helm_3 = _declared("<4")
+    helm_3.plan(Path("/work/values.yaml"), release="app", namespace="apps", chart="repo/app")
+    assert captured["args"][:4] == ["helm", "upgrade", "--dry-run", "--install"]
+    helm_3.deploy(Path("/work/values.yaml"), release="app", namespace="apps", chart="repo/app")
+    assert captured["args"][:6] == ["helm", "upgrade", "--install", "--create-namespace", "--wait", "--atomic"]
+    helm_3.deploy(Path("/work/values.yaml"), release="app", namespace="apps", chart="repo/app", wait=False)
+    assert "--atomic" in captured["args"] and not any(arg.startswith("--wait") for arg in captured["args"])
+
+
+def test_helm_4_names_the_wait_mode_beside_the_rollback(monkeypatch):
+    captured = _capture(monkeypatch)
+    HelmIntegration().deploy(Path("/work/values.yaml"), release="app", namespace="apps", chart="repo/app", atomic=False)
+    assert "--wait=watcher" in captured["args"] and "--rollback-on-failure" not in captured["args"]
+
+
+@pytest.mark.parametrize(
+    ("declared", "installed", "problems", "notices"),
+    [
+        (None, "4.3.1", [], []),
+        ("<4", "3.13.2", [], [HELM_3_DEPRECATED]),
+        (None, "3.13.2", [HELM_3_NOT_DECLARED], []),
+        (">=3", "3.5.1", [HELM_3_NOT_DECLARED], []),
+        ("<4", "4.3.1", [], []),  # the spec.version check reports this one
+        (None, "5.0.0", [], []),
+        (None, "garbage", [], []),
+    ],
+)
+def test_the_installed_helm_against_the_declared_one(declared, installed, problems, notices):
+    helm = _declared(declared)
+    found = helm.version_problems(installed)
+    assert [p.code for p in found] == problems
+    assert all(p.flags_only for p in found)
+    assert [n.code for n in helm.version_notices(installed)] == notices
+
+
+def test_the_undeclared_helm_3_message_names_both_fixes():
+    [problem] = HelmIntegration().version_problems("3.13.2")
+    assert problem.message == (
+        "Helm 3.13.2 found, but strata uses Helm 4 flags unless a helm integration declares Helm 3. "
+        'Install Helm 4, or declare spec.version: "<4" on a helm integration (Helm 3 is deprecated).'
+    )
+    [problem] = _declared(">=3").version_problems("3.13.2")
+    assert "spec.version '>=3' allows Helm 4" in problem.message and 'narrow it to "<4"' in problem.message
+
+
+def test_helm_reads_its_version_in_every_readiness_check():
+    assert HelmIntegration.READ_VERSION is True
 
 
 def test_destroy_argv(monkeypatch):
@@ -254,7 +349,7 @@ def test_prepare_namespace_writes_one_values_and_meta_file_per_module(tmp_path: 
 
     HelmIntegration().prepare_namespace(_namespace(), [resolved_module], resolved=ValueResolution(deployment="app"))
 
-    values = yaml.safe_load((module_dir / "values.yaml").read_text())
+    values = yaml.safe_load((module_dir / VALUES_FILE).read_text())
     assert values == {
         "authentik-server": {
             "env": {"DB_PASSWORD": "${secret:DB_PASSWORD}", "TZ": "Europe/Brussels"},
@@ -278,27 +373,65 @@ def test_prepare_namespace_never_merges_across_modules(tmp_path: Path):
         resolved=ValueResolution(deployment="app"),
     )
 
-    assert (dir_a / "values.yaml").exists()
-    assert (dir_b / "values.yaml").exists()
-    assert yaml.safe_load((dir_a / "values.yaml").read_text()) == {"a": {}}
-    assert yaml.safe_load((dir_b / "values.yaml").read_text()) == {"b": {}}
+    assert (dir_a / VALUES_FILE).exists()
+    assert (dir_b / VALUES_FILE).exists()
+    assert yaml.safe_load((dir_a / VALUES_FILE).read_text()) == {"a": {}}
+    assert yaml.safe_load((dir_b / VALUES_FILE).read_text()) == {"b": {}}
 
 
-def test_prepare_namespace_omits_values_file_when_nothing_to_render(tmp_path: Path):
-    """No services, no module-level configuration - a local chart's own shipped
-    values.yaml (already copied into module_dir) is left untouched, per v1's
-    own 'omit when there is nothing to render' rule."""
+def test_prepare_namespace_writes_an_empty_values_file_when_nothing_to_render(tmp_path: Path):
+    """A deploy always passes the file with `-f`, so it must exist: a registry chart has nothing else to give
+    (gap 4 of docs/work/helm-gap-analysis.md)."""
     module = _module(services=None, configuration=None)
     module_dir = tmp_path / "apps" / "authentik"
     module_dir.mkdir(parents=True)
-    (module_dir / "values.yaml").write_text("shipped: true\n")
 
     HelmIntegration().prepare_namespace(
         _namespace(), [_resolved_module("authentik", module, module_dir)], resolved=ValueResolution(deployment="app")
     )
 
-    assert yaml.safe_load((module_dir / "values.yaml").read_text()) == {"shipped": True}
+    assert yaml.safe_load((module_dir / VALUES_FILE).read_text()) == {}
     assert (module_dir / "meta.yaml").exists()
+
+
+def test_prepare_namespace_leaves_the_local_charts_own_values_yaml_alone(tmp_path: Path):
+    """The chart's `values.yaml` is its defaults; replacing it dropped every default the module did not repeat."""
+    module = _module(services=None, configuration={"replicas": 3})
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "values.yaml").write_text("image:\n  repository: nginx\nreplicas: 2\n")
+
+    HelmIntegration().prepare_namespace(
+        _namespace(), [_resolved_module("authentik", module, module_dir)], resolved=ValueResolution(deployment="app")
+    )
+
+    assert (module_dir / "values.yaml").read_text() == "image:\n  repository: nginx\nreplicas: 2\n"
+    assert yaml.safe_load((module_dir / VALUES_FILE).read_text()) == {"replicas": 3}
+
+
+@pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+def test_prepare_namespace_output_renders_with_the_charts_defaults_under_real_helm(tmp_path: Path):
+    """What `deploy` passes (`-f VALUES_FILE`) overlays the chart's defaults instead of replacing them. Before,
+    this chart failed with `nil pointer evaluating interface {}.repository`."""
+    module_dir = tmp_path / "apps" / "demo"
+    (module_dir / "templates").mkdir(parents=True)
+    (module_dir / "Chart.yaml").write_text("apiVersion: v2\nname: demo\nversion: 0.1.0\n")
+    (module_dir / "values.yaml").write_text("image:\n  repository: nginx\n  tag: '1.27'\nreplicas: 2\n")
+    (module_dir / "templates" / "cm.yaml").write_text(
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: demo\ndata:\n"
+        '  image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"\n'
+        '  replicas: "{{ .Values.replicas }}"\n'
+    )
+    HelmIntegration().prepare_namespace(
+        _namespace(),
+        [_resolved_module("demo", _module("demo", services=None, configuration={"replicas": 3}), module_dir)],
+        resolved=ValueResolution(deployment="app"),
+    )
+
+    result = HelmIntegration().run("template", "demo", str(module_dir), "-f", str(module_dir / VALUES_FILE))
+
+    assert result.is_successful, result.stderr
+    assert yaml.safe_load(result.stdout)["data"] == {"image": "nginx:1.27", "replicas": "3"}
 
 
 def test_prepare_namespace_merges_module_and_service_configuration(tmp_path: Path):
@@ -313,7 +446,7 @@ def test_prepare_namespace_merges_module_and_service_configuration(tmp_path: Pat
         _namespace(), [_resolved_module("authentik", module, module_dir)], resolved=ValueResolution(deployment="app")
     )
 
-    values = yaml.safe_load((module_dir / "values.yaml").read_text())
+    values = yaml.safe_load((module_dir / VALUES_FILE).read_text())
     assert values == {
         "authentik-server": {"replicas": 2},
         "ingress": {"enabled": True},
@@ -339,7 +472,7 @@ def test_prepare_namespace_renders_persistence_only_for_storage_class_mounts(tmp
         _namespace(), [_resolved_module("authentik", module, module_dir)], resolved=ValueResolution(deployment="app")
     )
 
-    values = yaml.safe_load((module_dir / "values.yaml").read_text())
+    values = yaml.safe_load((module_dir / VALUES_FILE).read_text())
     assert values["authentik-server"]["persistence"] == {
         "data": {"storageClass": "fast-ssd", "accessMode": "ReadWriteOnce", "size": "10Gi"}
     }
@@ -453,7 +586,7 @@ def test_resolve_module_values_leaves_a_secret_shaped_leaf_unresolved_and_tracks
     )
     resolved, secrets = resolve_module_values(module, {"db_password": "hunter2"})
     assert resolved == {"authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}}
-    assert secrets == {"authentik-server.env.DB_PASSWORD": "hunter2"}
+    assert secrets == {"authentik-server": {"env": {"DB_PASSWORD": "hunter2"}}}
 
 
 def test_resolve_module_values_matches_the_real_immich_style_configuration_path():
@@ -467,7 +600,7 @@ def test_resolve_module_values_matches_the_real_immich_style_configuration_path(
     )
     resolved, secrets = resolve_module_values(module, {"db_password": "hunter2"})
     assert resolved["controllers"]["main"]["containers"]["main"]["env"]["DB_PASSWORD"] == "${secret:db_password}"
-    assert secrets == {"controllers.main.containers.main.env.DB_PASSWORD": "hunter2"}
+    assert secrets == {"controllers": {"main": {"containers": {"main": {"env": {"DB_PASSWORD": "hunter2"}}}}}}
 
 
 def test_resolve_module_values_does_not_touch_disk():
@@ -476,6 +609,30 @@ def test_resolve_module_values_does_not_touch_disk():
     resolved, secrets = resolve_module_values(module, {})
     assert resolved == {"authentik-server": {}}
     assert secrets == {}
+
+
+def test_resolve_module_values_carries_a_list_holding_a_secret_whole():
+    """Helm replaces a list rather than merging it, so the overlay must hold every item, resolved."""
+    module = _module(
+        services=None,
+        configuration={
+            "replicas": 2,
+            "extraEnv": [
+                {"name": "TZ", "value": "${var:tz}"},
+                {"name": "DB_PASSWORD", "value": "${secret:db_password}"},
+            ],
+        },
+    )
+    _, secrets = resolve_module_values(module, {"tz": "Europe/Brussels", "db_password": "hunter2"})
+    assert secrets == {
+        "extraEnv": [{"name": "TZ", "value": "Europe/Brussels"}, {"name": "DB_PASSWORD", "value": "hunter2"}]
+    }
+
+
+def test_resolve_module_values_keeps_a_dotted_key_as_one_key():
+    module = _module(services=None, configuration={"secrets": {"example.com": "${secret:db_password}", "other": 1}})
+    _, secrets = resolve_module_values(module, {"db_password": "hunter2"})
+    assert secrets == {"secrets": {"example.com": "hunter2"}}
 
 
 # ---------------------------------------------------------------------------
@@ -488,14 +645,42 @@ def _remote(name: str, remote_type: RemoteType, url: str) -> SolutionRemoteModel
     return SolutionRemoteModel(name=name, type=remote_type, url=url, reference=reference)
 
 
-def test_set_string_args_escapes_special_characters():
-    args = _set_string_args([("authentik-server.env.DB_PASSWORD", "a,b=c.d{e}[f]\\g")])
-    assert args == ["--set-string", "authentik-server.env.DB_PASSWORD=a\\,b\\=c\\.d\\{e\\}\\[f\\]\\\\g"]
+def test_plan_and_deploy_send_secret_values_on_stdin_never_in_argv(monkeypatch):
+    secret = {"server": {"env": {"DB_PASSWORD": "a,b=c.d{e}[f]\\g", "PORT_PIN": "0123"}}}
+    for method in ("plan", "deploy"):
+        captured = _capture(monkeypatch)
+        getattr(HelmIntegration(), method)(
+            Path("/work/values.yaml"), release="app", namespace="apps", chart="repo/app", secret_values=secret
+        )
+        args = captured["args"]
+        assert args[args.index(str(Path("/work/values.yaml"))) + 1 : args.index("app")] == ["-f", "-"]
+        assert not any("a,b=c" in arg for arg in args)
+        # Read back exactly, and still a string where YAML would see a number.
+        assert yaml.safe_load(captured["input"]) == secret
 
 
-def test_set_string_args_empty_when_no_secrets():
-    assert _set_string_args(None) == []
-    assert _set_string_args([]) == []
+@pytest.mark.parametrize(
+    ("timeout", "dry_run", "expected"),
+    [
+        (None, False, {}),
+        (None, True, {}),
+        (1800, False, {"timeout": 1800, "deploy_timeout": "900s"}),
+        (600, False, {"timeout": 600, "deploy_timeout": "300s"}),  # the defaults: 600 s and 5m
+        (1, False, {"timeout": 1, "deploy_timeout": "1s"}),
+        (120, True, {"timeout": 120}),
+    ],
+)
+def test_upgrade_timeouts_give_helm_half_of_the_stage_timeout(timeout, dry_run, expected):
+    assert _upgrade_timeouts(timeout, dry_run=dry_run) == expected
+
+
+def test_plan_and_deploy_without_secret_values_read_no_stdin(monkeypatch):
+    captured = _capture(monkeypatch)
+    HelmIntegration().deploy(
+        Path("/work/values.yaml"), release="app", namespace="apps", chart="repo/app", secret_values={}
+    )
+    assert "-" not in captured["args"]
+    assert captured["input"] is None
 
 
 def _token_auth(*, token: str = "PROGET_API_KEY", username: str | None = "api") -> AuthenticationModel:
@@ -689,7 +874,7 @@ def test_deploy_namespace_local_chart_uses_source_path_directly(monkeypatch, tmp
     module_dir = tmp_path / "apps" / "authentik"
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}}))
+    (module_dir / VALUES_FILE).write_text(yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}}))
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(
@@ -702,23 +887,23 @@ def test_deploy_namespace_local_chart_uses_source_path_directly(monkeypatch, tmp
         "upgrade",
         "--install",
         "--create-namespace",
-        "--wait",
-        "--atomic",
+        "--wait=watcher",
+        "--rollback-on-failure",
         "--timeout",
         "5m",
         "--namespace",
         "apps",
         "-f",
-        str(module_dir / "values.yaml"),
+        str(module_dir / VALUES_FILE),
         "authentik",
         str(module_dir),
     ]
-    assert yaml.safe_load((module_dir / "values.yaml").read_text()) == {
+    assert yaml.safe_load((module_dir / VALUES_FILE).read_text()) == {
         "authentik-server": {"env": {"TZ": "Europe/Brussels"}}
     }
 
 
-def test_deploy_namespace_registry_chart_resolves_chart_ref_and_delivers_secrets_via_set_string(
+def test_deploy_namespace_registry_chart_installs_its_verified_archive_and_delivers_secrets_on_stdin(
     monkeypatch, tmp_path: Path
 ):
     captured = _capture(monkeypatch)
@@ -740,18 +925,23 @@ def test_deploy_namespace_registry_chart_resolves_chart_ref_and_delivers_secrets
                 "namespace": "apps",
                 "chartName": "authentik",
                 "chartVersion": "2024.12.0",
+                "chartDigest": "sha256:abc",
                 "chartRemote": "goauthentik",
             }
         )
     )
-    (module_dir / "values.yaml").write_text(
+    (module_dir / VALUES_FILE).write_text(
         yaml.safe_dump({"authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}})
     )
     resolved_module = _resolved_module("authentik", module, module_dir)
-    remotes = {"goauthentik": _remote("goauthentik", RemoteType.OCI, "oci://registry.example.com/charts")}
+    pin = _pin(tmp_path, "authentik", "2024.12.0")
 
     diagnostics = HelmIntegration().deploy_namespace(
-        _namespace(), [resolved_module], tokens={"db_password": "hunter2"}, dry_run=False, remotes=remotes
+        _namespace(),
+        [resolved_module],
+        tokens={"db_password": "hunter2"},
+        dry_run=False,
+        chart_archives={module_dir: pin},
     )
 
     assert diagnostics.ok
@@ -760,25 +950,67 @@ def test_deploy_namespace_registry_chart_resolves_chart_ref_and_delivers_secrets
         "upgrade",
         "--install",
         "--create-namespace",
-        "--wait",
-        "--atomic",
+        "--wait=watcher",
+        "--rollback-on-failure",
         "--timeout",
         "5m",
         "--namespace",
         "apps",
         "-f",
-        str(module_dir / "values.yaml"),
-        "--set-string",
-        "authentik-server.env.DB_PASSWORD=hunter2",
+        str(module_dir / VALUES_FILE),
+        "-f",
+        "-",
         "authentik",
-        "oci://registry.example.com/charts/authentik",
-        "--version",
-        "2024.12.0",
+        str(pin.archive),
     ]
+    assert not any("hunter2" in arg for arg in captured["args"])
+    assert yaml.safe_load(captured["input"]) == {"authentik-server": {"env": {"DB_PASSWORD": "hunter2"}}}
     # Secret-shaped leaf is left as a literal token on disk, never written resolved.
-    assert yaml.safe_load((module_dir / "values.yaml").read_text()) == {
+    assert yaml.safe_load((module_dir / VALUES_FILE).read_text()) == {
         "authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}
     }
+
+
+def _pin(tmp_path: Path, chart: str = "gatus", version: str = "1.0.0") -> ChartPin:
+    entry = tmp_path / "cache" / "source" / chart / version
+    return ChartPin(
+        name=chart,
+        version=version,
+        digest="sha256:abc",
+        archive=entry / f"{chart}-{version}.tgz",
+        chart_dir=entry / chart,
+    )
+
+
+def _write_chart_archive(destination: Path, name: str = "gatus", version: str = "1.0.0") -> None:
+    """The same bytes on every pull (a fixed gzip timestamp), as a registry serves them."""
+    import gzip
+    import io
+    import tarfile
+
+    archive = destination / f"{name}-{version}.tgz"
+    with gzip.GzipFile(archive, "wb", mtime=0) as packed, tarfile.open(fileobj=packed, mode="w") as tar:
+        data = f"apiVersion: v2\nname: {name}\nversion: {version}\n".encode()
+        info = tarfile.TarInfo(f"{name}/Chart.yaml")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+
+
+def _record_pulls(monkeypatch, *, failing=lambda args: None):
+    """`_record_helm()` whose successful `helm pull` writes a chart archive into `--destination`."""
+    calls: list[dict] = []
+
+    def _fake(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append({"args": list(args), "env": dict(env) if env is not None else None, "input": input})
+        stderr = failing(list(args))
+        if not stderr and args[1] == "pull":
+            _write_chart_archive(Path(args[args.index("--destination") + 1]), args[2].rsplit("/", 1)[-1])
+        return CommandResult(returncode=1 if stderr else 0, stdout="", stderr=stderr or "")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake)
+    return calls
 
 
 def test_check_configuration_keys_suggests_the_closest_declared_key():
@@ -823,41 +1055,22 @@ def test_read_chart_values_returns_an_empty_dict_when_missing_unparseable_or_not
     assert read_chart_values(tmp_path) == {"replicaCount": 1}
 
 
-def test_deploy_namespace_failed_repo_refresh_warns_and_still_deploys(monkeypatch, tmp_path: Path):
-    import strata.integrations.base as base_module
+def test_pull_registry_chart_failed_repo_refresh_warns_and_still_pulls(monkeypatch, tmp_path: Path):
+    calls = _record_pulls(monkeypatch, failing=lambda args: "no route to host" if args[1] == "repo" else None)
+    diagnostics = Diagnostics()
 
-    calls: list[list[str]] = []
-
-    def _fake(args, **kwargs):
-        calls.append(list(args))
-        if args[1] == "repo":
-            return CommandResult(returncode=1, stdout="", stderr="no route to host")
-        return CommandResult(returncode=0, stdout="ok", stderr="")
-
-    monkeypatch.setattr(base_module, "run_command", _fake)
-    module = _module(source=SourceModel(chart_repository="https://twin.github.io/helm-charts", chart_name="gatus"))
-    module_dir = tmp_path / "apps" / "gatus"
-    module_dir.mkdir(parents=True)
-    (module_dir / "meta.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "releaseName": "gatus",
-                "namespace": "apps",
-                "chartName": "gatus",
-                "chartVersion": "1.0.0",
-                "chartRepository": "https://twin.github.io/helm-charts",
-            }
-        )
-    )
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"replicas": 1}))
-
-    diagnostics = HelmIntegration().deploy_namespace(
-        _namespace(), [_resolved_module("gatus", module, module_dir)], tokens={}, dry_run=False
+    pin = HelmIntegration().pull_registry_chart(
+        {"chartName": "gatus", "chartRepository": "https://twin.github.io/helm-charts"},
+        {},
+        version="1.0.0",
+        cache_root=tmp_path / "cache",
+        diagnostics=diagnostics,
+        location="gatus",
     )
 
-    assert diagnostics.ok
+    assert pin.version == "1.0.0"
     assert [item.code for item in diagnostics.items] == ["helm_repo_refresh_failed"]
-    assert [call[1] for call in calls] == ["repo", "upgrade"]
+    assert [call[1] for call in (c["args"] for c in calls)] == ["repo", "pull"]
 
 
 def _check_fixture(tmp_path: Path, *, name: str = "authentik", meta: dict | None = None, **module_kwargs):
@@ -865,7 +1078,8 @@ def _check_fixture(tmp_path: Path, *, name: str = "authentik", meta: dict | None
     module_dir = tmp_path / "apps" / name
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump(meta or {"releaseName": name, "namespace": "apps"}))
-    (module_dir / "values.yaml").write_text("built: values\n")
+    (module_dir / VALUES_FILE).write_text("{}\n")
+    (module_dir / "values.yaml").write_text("built: values\n")  # the chart's own defaults
     return _resolved_module(name, module, module_dir), module_dir
 
 
@@ -1049,6 +1263,73 @@ def test_check_namespace_passes_the_check_timeout_to_lint(monkeypatch, tmp_path:
     assert calls[0]["timeout"] == 7
 
 
+_RELEASE_NAMES = [
+    "auth",
+    "a",
+    "my.app",
+    "a1-b2",
+    "a" * 53,
+    "my_app",
+    "My-app",
+    "app-",
+    "-app",
+    ".app",
+    "a..b",
+    "a" * 54,
+]
+
+
+@pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+def test_release_name_problem_agrees_with_real_helm(tmp_path: Path):
+    """The rule strata validates with is Helm's own: every name is accepted or rejected by both alike."""
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "Chart.yaml").write_text("apiVersion: v2\nname: probe\nversion: 0.1.0\n")
+    helm = HelmIntegration()
+    for name in _RELEASE_NAMES:
+        # `--name-template=` so a leading '-' is a name, not a flag.
+        accepted = helm.run("template", str(tmp_path), f"--name-template={name}").is_successful
+        assert (release_name_problem(name) is None) == accepted, name
+
+
+@pytest.mark.parametrize(
+    ("name", "problem"),
+    [("auth", None), ("a" * 54, "54 characters long"), ("my_app", "lowercase letters, digits, '-' and '.'")],
+)
+def test_release_name_problem_says_why(name, problem):
+    result = release_name_problem(name)
+    assert result is None if problem is None else problem in (result or "")
+
+
+@pytest.mark.parametrize(
+    ("name", "accepted"),
+    [
+        ("apps", True),
+        ("a" * 63, True),
+        ("a-1", True),
+        ("a" * 64, False),
+        ("apps_forge", False),
+        ("a.b", False),
+        ("Apps", False),
+        ("-apps", False),
+        ("apps-", False),
+    ],
+)
+def test_kubernetes_namespace_problem_follows_the_dns_label_rule(name, accepted):
+    assert (kubernetes_namespace_problem(name) is None) is accepted
+
+
+def test_release_identity_defaults_to_the_reference_and_namespace_names():
+    defaults = release_identity("apps", "auth", _module())
+    assert (defaults.release, defaults.kubernetes_namespace) == ("auth", "apps")
+    assert not defaults.release_from_field and not defaults.namespace_from_field
+
+    module = _module()
+    module.spec.release_name, module.spec.kubernetes_namespace = "sso", "identity"
+    fields = release_identity("apps", "auth", module)
+    assert (fields.release, fields.kubernetes_namespace) == ("sso", "identity")
+    assert fields.release_from_field and fields.namespace_from_field
+
+
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
 def test_check_namespace_against_real_helm_catches_a_template_error_the_overlay_can_fix(tmp_path: Path):
     """The overlay is what makes the chart renderable: the built values.yaml alone leaves `.Values.cfg` nil."""
@@ -1184,18 +1465,16 @@ def test_resolve_chart_a_non_auth_problem_with_credentials_present_is_not_an_aut
     assert chart is None and "not declared" in str(error)
 
 
-def test_deploy_namespace_only_a_failed_login_is_labelled_helm_registry_auth_failed(monkeypatch, tmp_path):
-    """A remote missing from `remotes` fails with no code, even though credentials were given for it."""
-    _record_helm(monkeypatch)
-    item, _ = _proget_module(tmp_path)
+def test_pull_registry_chart_an_undeclared_remote_is_a_pull_error_not_an_auth_error(monkeypatch, tmp_path):
+    """A remote missing from `remotes` fails as a pull, even though credentials were given for it."""
+    _record_pulls(monkeypatch)
 
-    diagnostics = HelmIntegration().deploy_namespace(
-        _namespace(), [item], tokens={}, dry_run=False, registry_credentials={"proget-charts": _CREDENTIALS}
-    )
+    with pytest.raises(ChartPullError, match="not declared") as raised:
+        HelmIntegration().pull_registry_chart(
+            _PROGET_META, {}, version="1.0.0", cache_root=tmp_path / "cache", credentials=_CREDENTIALS
+        )
 
-    [error] = diagnostics.items
-    assert "not declared" in error.message
-    assert error.code is None
+    assert raised.value.code == "helm_chart_pull_failed"
 
 
 @pytest.mark.parametrize(("username", "password"), [("", "s3cret-key-123"), ("api", "")])
@@ -1218,75 +1497,51 @@ def test_resolve_chart_inline_repository_never_receives_credentials(monkeypatch)
     assert "--username" not in calls[0]["args"] and calls[0]["input"] is None
 
 
-def test_deploy_namespace_credentialed_module_shares_one_isolated_helm_config_and_removes_it(monkeypatch, tmp_path):
-    calls = _record_helm(monkeypatch)
-    item, _ = _proget_module(tmp_path)
+def test_pull_registry_chart_logs_in_and_pulls_in_one_isolated_helm_config_and_removes_it(monkeypatch, tmp_path):
+    calls = _record_pulls(monkeypatch)
     remotes = {"proget-charts": _remote("proget-charts", RemoteType.HELM, "https://proget.example.com/helm/charts")}
 
-    diagnostics = HelmIntegration().deploy_namespace(
-        _namespace(),
-        [item],
-        tokens={},
-        dry_run=False,
-        remotes=remotes,
-        env={"KUBECONFIG": "/k"},
-        registry_credentials={"proget-charts": _CREDENTIALS},
+    pin = HelmIntegration().pull_registry_chart(
+        _PROGET_META, remotes, version="1.0.0", cache_root=tmp_path / "cache", credentials=_CREDENTIALS
     )
 
-    assert diagnostics.ok, diagnostics.messages()
-    assert [call["args"][1] for call in calls] == ["repo", "upgrade"]
+    assert pin.archive == tmp_path / "cache" / "proget-charts" / "gatus" / "1.0.0" / "gatus-1.0.0.tgz"
+    assert [call["args"][1] for call in calls] == ["repo", "pull"]
     assert calls[1]["args"][-2:] == ["--version", "1.0.0"]
     for call in calls:
         assert _HELM_STATE_VARS <= call["env"].keys()
-        assert call["env"]["KUBECONFIG"] == "/k"
         assert "s3cret-key-123" not in " ".join(call["args"]) + " ".join(call["env"].values())
     assert {call["env"]["HELM_REPOSITORY_CONFIG"] for call in calls} == {calls[0]["env"]["HELM_REPOSITORY_CONFIG"]}
     assert [call["input"] for call in calls] == ["s3cret-key-123", None]
     assert not Path(calls[0]["env"]["HELM_REPOSITORY_CONFIG"]).parent.exists()
 
 
-def test_deploy_namespace_dry_run_plan_uses_the_same_isolated_config(monkeypatch, tmp_path):
-    calls = _record_helm(monkeypatch)
-    item, _ = _proget_module(tmp_path)
+def test_pull_registry_chart_isolates_an_anonymous_repository_too(monkeypatch, tmp_path):
+    """The user's own Helm configuration is never touched, not even by an anonymous `repo add`."""
+    calls = _record_pulls(monkeypatch)
     remotes = {"proget-charts": _remote("proget-charts", RemoteType.HELM, "https://proget.example.com/helm/charts")}
 
-    HelmIntegration().deploy_namespace(
-        _namespace(),
-        [item],
-        tokens={},
-        dry_run=True,
-        remotes=remotes,
-        registry_credentials={"proget-charts": _CREDENTIALS},
-    )
+    HelmIntegration().pull_registry_chart(_PROGET_META, remotes, version="1.0.0", cache_root=tmp_path / "cache")
 
-    assert "--dry-run" in calls[1]["args"]
-    assert calls[0]["env"]["HELM_REPOSITORY_CONFIG"] == calls[1]["env"]["HELM_REPOSITORY_CONFIG"]
+    assert all(_HELM_STATE_VARS <= call["env"].keys() for call in calls)
+    assert all(call["input"] is None and "--username" not in call["args"] for call in calls)
 
 
-def test_deploy_namespace_failed_login_errors_that_module_only_and_still_removes_the_config(monkeypatch, tmp_path):
-    calls = _record_helm(monkeypatch, failing=lambda args: "401 Unauthorized" if args[1] == "repo" else None)
-    bad, _ = _proget_module(tmp_path)
-    local, _ = _check_fixture(tmp_path, name="local")
+def test_pull_registry_chart_failed_login_raises_without_the_password_and_removes_the_config(monkeypatch, tmp_path):
+    calls = _record_pulls(monkeypatch, failing=lambda args: "401 Unauthorized" if args[1] == "repo" else None)
     remotes = {"proget-charts": _remote("proget-charts", RemoteType.HELM, "https://proget.example.com/helm/charts")}
 
-    diagnostics = HelmIntegration().deploy_namespace(
-        _namespace(),
-        [bad, local],
-        tokens={},
-        dry_run=False,
-        remotes=remotes,
-        registry_credentials={"proget-charts": _CREDENTIALS},
-    )
+    with pytest.raises(RegistryAuthError) as raised:
+        HelmIntegration().pull_registry_chart(
+            _PROGET_META, remotes, version="1.0.0", cache_root=tmp_path / "cache", credentials=_CREDENTIALS
+        )
 
-    [error] = diagnostics.items
-    assert error.code == "helm_registry_auth_failed" and error.location == "gatus"
-    assert "s3cret-key-123" not in error.message
-    assert [call["args"][1] for call in calls] == ["repo", "upgrade"]  # the failed module never upgrades
-    assert calls[1]["env"] is None  # the uncredentialed local chart is untouched
+    assert "s3cret-key-123" not in str(raised.value)
+    assert [call["args"][1] for call in calls] == ["repo"]  # never pulls
     assert not Path(calls[0]["env"]["HELM_REPOSITORY_CONFIG"]).parent.exists()
 
 
-def test_deploy_namespace_removes_the_isolated_config_when_helm_itself_raises(monkeypatch, tmp_path):
+def test_pull_registry_chart_removes_the_isolated_config_when_helm_itself_raises(monkeypatch, tmp_path):
     seen: list[str] = []
 
     def _boom(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
@@ -1296,41 +1551,33 @@ def test_deploy_namespace_removes_the_isolated_config_when_helm_itself_raises(mo
     import strata.integrations.base as base_module
 
     monkeypatch.setattr(base_module, "run_command", _boom)
-    item, _ = _proget_module(tmp_path)
     remotes = {"proget-charts": _remote("proget-charts", RemoteType.HELM, "https://proget.example.com/helm/charts")}
 
     with pytest.raises(RuntimeError):
-        HelmIntegration().deploy_namespace(
-            _namespace(),
-            [item],
-            tokens={},
-            dry_run=False,
-            remotes=remotes,
-            registry_credentials={"proget-charts": _CREDENTIALS},
+        HelmIntegration().pull_registry_chart(
+            _PROGET_META, remotes, version="1.0.0", cache_root=tmp_path / "cache", credentials=_CREDENTIALS
         )
 
     assert not Path(seen[0]).parent.exists()
 
 
-def test_deploy_namespace_remote_without_credentials_keeps_the_caller_env_and_gap_2_behaviour(monkeypatch, tmp_path):
-    calls = _record_helm(monkeypatch, failing=lambda args: "no route" if args[1] == "repo" else None)
-    item, _ = _proget_module(tmp_path)
-    remotes = {"proget-charts": _remote("proget-charts", RemoteType.HELM, "https://proget.example.com/helm/charts")}
+def test_deploy_namespace_a_registry_chart_without_a_verified_archive_is_an_error_and_others_deploy(
+    monkeypatch, tmp_path
+):
+    calls = _record_helm(monkeypatch)
+    registry, _ = _proget_module(tmp_path)
+    local, _ = _check_fixture(tmp_path, name="local")
 
-    diagnostics = HelmIntegration().deploy_namespace(
-        _namespace(),
-        [item],
-        tokens={},
-        dry_run=False,
-        remotes=remotes,
-        env={"KUBECONFIG": "/k"},
-        registry_credentials={"another-remote": _CREDENTIALS},
+    diagnostics = HelmIntegration().deploy_namespace(_namespace(), [registry, local], tokens={}, dry_run=False)
+
+    [error] = diagnostics.items
+    assert error.code == "helm_chart_not_pinned" and error.location == "gatus"
+    assert error.message == (
+        "Namespace 'apps', module 'gatus': chart 'gatus' has no archive verified against the build's pin, so it is "
+        "not deployed."
     )
-
-    assert diagnostics.ok
-    assert [item.code for item in diagnostics.items] == ["helm_repo_refresh_failed"]
-    assert all(call["env"] == {"KUBECONFIG": "/k"} for call in calls)
-    assert all(call["input"] is None for call in calls)
+    assert [call["args"][1] for call in calls] == ["upgrade"]
+    assert calls[0]["args"][-1] == str(tmp_path / "apps" / "local")
 
 
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
@@ -1401,7 +1648,7 @@ def test_credentialed_chart_pull_against_a_real_basic_auth_server_in_an_isolated
         server.server_close()
 
 
-def test_deploy_namespace_dry_run_passes_the_pinned_chart_version(monkeypatch, tmp_path: Path):
+def test_deploy_namespace_dry_run_previews_the_verified_archive(monkeypatch, tmp_path: Path):
     captured = _capture(monkeypatch)
     module = _module(source=SourceModel(chart_repository="https://charts.example.com", chart_name="gatus"))
     module_dir = tmp_path / "apps" / "gatus"
@@ -1413,67 +1660,36 @@ def test_deploy_namespace_dry_run_passes_the_pinned_chart_version(monkeypatch, t
                 "namespace": "apps",
                 "chartName": "gatus",
                 "chartVersion": "1.0.0",
+                "chartDigest": "sha256:abc",
                 "chartRepository": "https://charts.example.com",
             }
         )
     )
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"replicas": 1}))
+    (module_dir / VALUES_FILE).write_text(yaml.safe_dump({"replicas": 1}))
     resolved_module = _resolved_module("gatus", module, module_dir)
+    pin = _pin(tmp_path)
 
-    diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=True)
-
-    assert diagnostics.ok
-    assert captured["args"][-2:] == ["--version", "1.0.0"]
-    assert "--dry-run" in captured["args"]
-
-
-def test_deploy_namespace_inline_chart_repository_resolves_chart_ref_without_a_declared_remote(
-    monkeypatch, tmp_path: Path
-):
-    captured = _capture(monkeypatch)
-    module = _module(
-        source=SourceModel(chart_repository="https://charts.goauthentik.io", chart_name="authentik"),
-        services=[
-            ModuleServiceModel(name="server", environment=[ModuleServiceEnvironmentModel(key="TZ", value="${var:tz}")])
-        ],
-    )
-    module_dir = tmp_path / "apps" / "authentik"
-    module_dir.mkdir(parents=True)
-    (module_dir / "meta.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "releaseName": "authentik",
-                "namespace": "apps",
-                "chartName": "authentik",
-                "chartRepository": "https://charts.goauthentik.io",
-            }
-        )
-    )
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}}))
-    resolved_module = _resolved_module("authentik", module, module_dir)
-
-    # No `remotes=` passed at all — an inline chart_repository needs no solution-level declaration.
     diagnostics = HelmIntegration().deploy_namespace(
-        _namespace(), [resolved_module], tokens={"tz": "Europe/Brussels"}, dry_run=False
+        _namespace(), [resolved_module], tokens={}, dry_run=True, chart_archives={module_dir: pin}
     )
 
     assert diagnostics.ok
-    assert captured["args"] == [
-        "helm",
-        "upgrade",
-        "--install",
-        "--create-namespace",
-        "--wait",
-        "--atomic",
-        "--timeout",
-        "5m",
-        "--namespace",
-        "apps",
-        "-f",
-        str(module_dir / "values.yaml"),
-        "authentik",
-        f"{_repo_alias('https://charts.goauthentik.io')}/authentik",
-    ]
+    assert str(pin.archive) in captured["args"]
+    assert "--dry-run=client" in captured["args"] and "--version" not in captured["args"]
+
+
+def test_pull_registry_chart_inline_repository_needs_no_declared_remote(monkeypatch, tmp_path: Path):
+    calls = _record_pulls(monkeypatch)
+    url = "https://charts.goauthentik.io"
+
+    # No remotes at all — an inline chart_repository needs no solution-level declaration.
+    pin = HelmIntegration().pull_registry_chart(
+        {"chartName": "authentik", "chartRepository": url}, {}, version=None, cache_root=tmp_path / "cache"
+    )
+
+    assert calls[1]["args"][1:3] == ["pull", f"{_repo_alias(url)}/authentik"]
+    assert "--version" not in calls[1]["args"]
+    assert pin.archive.parent == tmp_path / "cache" / _repo_alias(url) / "authentik" / "1.0.0"
 
 
 def test_deploy_namespace_missing_meta_file_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):
@@ -1486,7 +1702,26 @@ def test_deploy_namespace_missing_meta_file_reports_a_diagnostic_and_skips(monke
     diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=False)
 
     assert not diagnostics.ok
-    assert "meta.yaml not found" in diagnostics.errors[0].message
+    assert "meta.yaml and strata-values.yaml not found" in diagnostics.errors[0].message
+
+
+def test_deploy_namespace_build_without_the_values_file_is_an_error_not_a_deploy_without_values(
+    monkeypatch, tmp_path: Path
+):
+    """A build from before `VALUES_FILE` has `meta.yaml` only; deploying it would silently drop every value."""
+    captured = _capture(monkeypatch)
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
+
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(), [_resolved_module("authentik", _module(), module_dir)], tokens={}, dry_run=False
+    )
+
+    assert [error.message for error in diagnostics.errors] == [
+        "Namespace 'apps', module 'authentik': strata-values.yaml not found — run 'strata build run' first."
+    ]
+    assert "args" not in captured
 
 
 def test_deploy_namespace_unresolvable_token_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):
@@ -1504,6 +1739,7 @@ def test_deploy_namespace_unresolvable_token_reports_a_diagnostic_and_skips(monk
     module_dir = tmp_path / "apps" / "authentik"
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
+    (module_dir / VALUES_FILE).write_text("{}\n")
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=False)
@@ -1548,7 +1784,9 @@ def test_deploy_namespace_output_preflight_skips_only_the_offending_module(monke
     good_dir.mkdir(parents=True)
     bad_dir.mkdir(parents=True)
     (good_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "good", "namespace": "apps"}))
+    (good_dir / VALUES_FILE).write_text("{}\n")
     (bad_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "bad", "namespace": "apps"}))
+    (bad_dir / VALUES_FILE).write_text("{}\n")
     resolved_modules = [
         _resolved_module("good", good_module, good_dir),
         _resolved_module("bad", bad_module, bad_dir),
@@ -1595,6 +1833,7 @@ def test_deploy_namespace_output_preflight_runs_under_dry_run_too(monkeypatch, t
     module_dir = tmp_path / "apps" / "bad"
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "bad", "namespace": "apps"}))
+    (module_dir / VALUES_FILE).write_text("{}\n")
     resolved_module = _resolved_module("bad", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(
@@ -1606,22 +1845,27 @@ def test_deploy_namespace_output_preflight_runs_under_dry_run_too(monkeypatch, t
     assert calls == []
 
 
-def test_deploy_namespace_unresolvable_chart_remote_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):
-    _capture(monkeypatch)
-    module = _module(source=SourceModel(remote="missing", chart_name="authentik"))
-    module_dir = tmp_path / "apps" / "authentik"
-    module_dir.mkdir(parents=True)
-    (module_dir / "meta.yaml").write_text(
-        yaml.safe_dump(
-            {"releaseName": "authentik", "namespace": "apps", "chartName": "authentik", "chartRemote": "missing"}
+def test_pull_registry_chart_an_unresolvable_chart_remote_raises(monkeypatch, tmp_path: Path):
+    calls = _record_pulls(monkeypatch)
+
+    with pytest.raises(ChartPullError, match="not declared"):
+        HelmIntegration().pull_registry_chart(
+            {"chartName": "authentik", "chartRemote": "missing"}, {}, version=None, cache_root=tmp_path / "cache"
         )
-    )
-    resolved_module = _resolved_module("authentik", module, module_dir)
 
-    diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=False)
+    assert calls == []
 
-    assert not diagnostics.ok
-    assert "not declared" in diagnostics.errors[0].message
+
+def test_check_namespace_lints_a_registry_chart_from_its_verified_archive(monkeypatch, tmp_path: Path):
+    calls = _record_lint(monkeypatch)
+    item, module_dir = _proget_module(tmp_path)
+    pin = _pin(tmp_path)
+
+    diagnostics = HelmIntegration().check_namespace(_namespace(), [item], tokens={}, chart_archives={module_dir: pin})
+
+    assert diagnostics.ok
+    [lint] = calls
+    assert lint["args"][-1] == str(pin.chart_dir)
 
 
 def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: Path):
@@ -1639,7 +1883,7 @@ def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: P
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
     values_before = yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}})
-    (module_dir / "values.yaml").write_text(values_before)
+    (module_dir / VALUES_FILE).write_text(values_before)
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     diagnostics = HelmIntegration().deploy_namespace(
@@ -1650,17 +1894,98 @@ def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: P
     assert captured["args"] == [
         "helm",
         "upgrade",
-        "--dry-run",
+        "--dry-run=client",
         "--install",
         "--namespace",
         "apps",
         "-f",
-        str(module_dir / "values.yaml"),
+        str(module_dir / VALUES_FILE),
         "authentik",
         str(module_dir),
     ]
     # A real preview needs the same real, resolved input a deploy would use.
-    assert (module_dir / "values.yaml").read_text() != values_before
+    assert (module_dir / VALUES_FILE).read_text() != values_before
+
+
+_DRY_RUN = """Release "auth" has been upgraded. Happy Helming!
+NAME: auth
+NAMESPACE: apps
+STATUS: pending-upgrade
+REVISION: 2
+HOOKS:
+---
+# Source: auth/templates/migrate.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: auth-migrate
+MANIFEST:
+---
+# Source: auth/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: auth-db
+data:
+  password: aHVudGVyMg==
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-server
+
+NOTES:
+Log in with password hunter2
+"""
+
+
+def test_summarise_dry_run_lists_resources_and_hooks_never_data_or_notes():
+    lines = summarise_dry_run(_DRY_RUN)
+    assert lines == ["Secret/auth-db", "Deployment/auth-server", "Job/auth-migrate (hook)"]
+    assert not any("aHVudGVyMg" in line or "hunter2" in line for line in lines)
+
+
+def test_summarise_dry_run_of_unexpected_output_is_empty():
+    assert summarise_dry_run("ok") == []
+
+
+def test_deploy_namespace_dry_run_never_streams_the_manifest_and_reports_a_summary(monkeypatch, tmp_path: Path):
+    """The preview is the rendered manifest: base64 Secret data that redaction cannot mask (D7)."""
+    import strata.integrations.base as base_module
+
+    seen: dict[str, object] = {}
+
+    def _fake(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        seen["line_callback"] = line_callback
+        return CommandResult(returncode=0, stdout=_DRY_RUN, stderr="")
+
+    monkeypatch.setattr(base_module, "run_command", _fake)
+    module = _module(services=[ModuleServiceModel(name="server")])
+    module_dir = tmp_path / "apps" / "auth"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "auth", "namespace": "apps"}))
+    (module_dir / VALUES_FILE).write_text("{}\n")
+    streamed: list[str] = []
+    steps: list[str] = []
+
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(),
+        [_resolved_module("auth", module, module_dir)],
+        tokens={},
+        dry_run=True,
+        line_callback=lambda stream, line: streamed.append(line),
+        on_step=steps.append,
+    )
+
+    assert diagnostics.ok
+    assert seen["line_callback"] is None
+    assert streamed == []
+    assert steps == [
+        "would upgrade release 'auth' (namespace 'apps'): 3 resource(s)",
+        "  Secret/auth-db",
+        "  Deployment/auth-server",
+        "  Job/auth-migrate (hook)",
+    ]
 
 
 def test_deploy_namespace_dry_run_plan_failure_is_reported_as_an_error(monkeypatch, tmp_path: Path):
@@ -1668,7 +1993,7 @@ def test_deploy_namespace_dry_run_plan_failure_is_reported_as_an_error(monkeypat
     module_dir = tmp_path / "apps" / "authentik"
     module_dir.mkdir(parents=True)
     (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
-    (module_dir / "values.yaml").write_text(yaml.safe_dump({"authentik-server": {}}))
+    (module_dir / VALUES_FILE).write_text(yaml.safe_dump({"authentik-server": {}}))
     resolved_module = _resolved_module("authentik", module, module_dir)
 
     def _failing_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
@@ -1897,3 +2222,86 @@ def test_destroy_namespace_dry_run_warns_when_the_preview_cannot_be_read(tmp_pat
     assert diagnostics.ok
     assert len(diagnostics.warnings) == 1
     assert "unreachable" in diagnostics.warnings[0].message
+
+
+# ---------------------------------------------------------------------------
+# The kube context a deployment names (docs/work/helm-kube-context.md)
+# ---------------------------------------------------------------------------
+
+
+def _kubeconfig(path: Path, *names: str) -> Path:
+    path.write_text(yaml.safe_dump({"contexts": [{"name": name, "context": {}} for name in names]}), encoding="utf-8")
+    return path
+
+
+def test_kubeconfig_context_names_reads_every_kubeconfig_file_in_order(tmp_path: Path):
+    first = _kubeconfig(tmp_path / "a", "forge-prd", "shared")
+    second = _kubeconfig(tmp_path / "b", "shared", "forge-dev")
+    missing = tmp_path / "missing"
+
+    found = kubeconfig_context_names({"KUBECONFIG": os.pathsep.join([str(first), str(missing), str(second)])})
+
+    assert found.names == ["forge-prd", "shared", "forge-dev"]
+    assert found.files == [first, missing, second]
+    assert found.unreadable == []
+
+
+def test_kubeconfig_context_names_defaults_to_the_users_kube_config(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / ".kube").mkdir()
+    _kubeconfig(tmp_path / ".kube" / "config", "docker-desktop")
+
+    assert kubeconfig_context_names({}).names == ["docker-desktop"]
+
+
+def test_kubeconfig_context_names_reports_a_file_that_is_not_yaml(tmp_path: Path):
+    broken = tmp_path / "broken"
+    broken.write_text("contexts: [\n", encoding="utf-8")
+
+    found = kubeconfig_context_names({"KUBECONFIG": str(broken)})
+
+    assert found.names == [] and found.unreadable == [broken]
+
+
+def test_kube_context_problem_accepts_a_context_the_kubeconfig_defines(tmp_path: Path):
+    environ = {"KUBECONFIG": str(_kubeconfig(tmp_path / "config", "forge-prd"))}
+
+    assert kube_context_problem("forge-prd", environ) is None
+    assert kube_context_problem("forge-prd", {**environ, KUBE_CONTEXT_ENV: "forge-prd"}) is None
+
+
+def test_kube_context_problem_names_the_contexts_that_exist(tmp_path: Path):
+    environ = {"KUBECONFIG": str(_kubeconfig(tmp_path / "config", "forge-dev", "k3d-local"))}
+
+    code, reason = kube_context_problem("forge-prd", environ) or ("", "")
+
+    assert code == "helm_kube_context_missing"
+    assert f"KUBECONFIG={tmp_path / 'config'}" in reason
+    assert "contexts: 'forge-dev', 'k3d-local'" in reason
+
+
+def test_kube_context_problem_rejects_an_environment_that_points_helm_elsewhere(tmp_path: Path):
+    environ = {"KUBECONFIG": str(_kubeconfig(tmp_path / "config", "forge-prd"))}
+
+    assert kube_context_problem("forge-prd", {**environ, KUBE_CONTEXT_ENV: "forge-dev"}) == (
+        "helm_kube_context_conflict",
+        "HELM_KUBECONTEXT is set to 'forge-dev' in the environment. Unset it, or deploy with a deployment that "
+        "names that context.",
+    )
+    code, _ = kube_context_problem("forge-prd", {**environ, KUBE_API_SERVER_ENV: "https://x"}) or ("", "")
+    assert code == "helm_kube_context_conflict"
+
+
+@pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+def test_real_helm_refuses_a_kube_context_its_kubeconfig_does_not_define(tmp_path: Path):
+    """The pin relies on Helm reading HELM_KUBECONTEXT and failing, before any cluster call, on an unknown context."""
+    environ = {
+        **os.environ,
+        "KUBECONFIG": str(_kubeconfig(tmp_path / "config", "forge-dev")),
+        KUBE_CONTEXT_ENV: "forge-prd",
+    }
+
+    result = subprocess.run(["helm", "list", "-A"], capture_output=True, text=True, env=environ, timeout=60)
+
+    assert result.returncode != 0
+    assert 'context "forge-prd" does not exist' in result.stderr

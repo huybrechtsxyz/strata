@@ -462,14 +462,22 @@ class ModuleSpecModel(PlatformBaseModel):
     release_name: str | None = Field(
         None,
         description="Helm release name or Argo CD application name. Defaults to the name of the "
-        "module reference in the namespace.\n\n"
-        "Design notes: Helm release name or ArgoCD Application name. Defaults to "
-        "module.meta.name when not set.",
+        "module reference in the namespace. For `type: helm`, the name actually used (this field or the "
+        "default) must be a valid Helm release name: lowercase letters, digits, '-' and '.', starting and "
+        "ending with a letter or digit, at most 53 characters. `strata validate` reports any other as an "
+        "error, and two module references in one workspace that install the same release into the same "
+        "Kubernetes namespace. Value tokens are not resolved here.\n\n"
+        "Design notes: Helm release name or ArgoCD Application name. Defaults to the module reference "
+        "name, not module.meta.name, because one module can be referenced twice in a namespace.",
     )
     kubernetes_namespace: str | None = Field(
         None,
         description="Kubernetes namespace to deploy this module into. "
-        "Defaults to the strata namespace name when not set.",
+        "Defaults to the strata namespace name when not set. For `type: helm`, the name actually used "
+        "must be a valid Kubernetes namespace: lowercase letters, digits and '-', starting and ending with "
+        "a letter or digit, at most 63 characters. Strata namespace names may contain '_', so set this "
+        "field when the strata namespace name is not a valid Kubernetes one. Value tokens are not resolved "
+        "here.",
     )
 
     @model_validator(mode="after")

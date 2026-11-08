@@ -107,6 +107,20 @@ def test_manifest_actor_kept_distinct_from_commit_author():
     assert model.commit_author == "jane.doe"
 
 
+def test_manifest_providers_carry_the_tool_version_and_path_and_both_are_optional():
+    artifacts = {"platform": {"hash": "sha256:abc", "path": "platform.json"}}
+    old = {**artifacts, "providers": [{"name": "p1", "type": "helm"}]}
+    new = {
+        **artifacts,
+        "providers": [{"name": "p1", "type": "helm", "tool_version": "4.3.1", "tool_path": "/bin/helm"}],
+    }
+
+    [provider] = DeploymentManifestModel.model_validate(_minimal_manifest(artifacts=old)).artifacts.providers
+    assert provider.tool_version is None and provider.tool_path is None
+    [provider] = DeploymentManifestModel.model_validate(_minimal_manifest(artifacts=new)).artifacts.providers
+    assert provider.tool_version == "4.3.1" and provider.tool_path == "/bin/helm"
+
+
 def test_manifest_rejects_unknown_field():
     data = _minimal_manifest(unexpected_field="nope")
     with pytest.raises(ValidationError):

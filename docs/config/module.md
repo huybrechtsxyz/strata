@@ -9,9 +9,23 @@ from either a Helm chart or a Compose-style service list, sourced from a remote.
   `chart_version` (Helm) or `source_path` (Compose/copied files)
 - `spec.type` — the deployer tool (e.g. `helm`, `compose`, `argocd`, or a custom provisioner
   plugin name) — required for service deployment commands
-- `spec.release_name` — optional Helm release/ArgoCD Application name (defaults to `meta.name`)
+- `spec.release_name` — optional Helm release/ArgoCD Application name (defaults to the module
+  reference name in the namespace, not `meta.name`)
 - `spec.kubernetes_namespace` — optional target namespace override (defaults to the strata
   namespace name)
+
+  For a `type: helm` module, `strata validate` checks the names Helm will receive, defaults included,
+  and reports an error when Helm or Kubernetes would reject them:
+
+  - the release name: lowercase letters, digits, `-` and `.`, starting and ending with a letter or
+    digit, at most 53 characters (`helm_release_name_invalid`)
+  - the Kubernetes namespace: lowercase letters, digits and `-`, starting and ending with a letter
+    or digit, at most 63 characters (`helm_kubernetes_namespace_invalid`). A strata namespace name may
+    contain `_`, which Kubernetes rejects: set `spec.kubernetes_namespace` or rename the namespace.
+  - two module references in one workspace that would install the same release into the same
+    Kubernetes namespace (`helm_release_conflict`)
+
+  Value tokens (`${var:...}`) are not resolved in either field.
 - `spec.compose_file` — reference an external `docker-compose.yml` verbatim instead of generating
   one from `spec.services` — mutually exclusive with `spec.services`
 - `spec.files[]` — files/globs copied verbatim into the module's build output, each `{source, target}`

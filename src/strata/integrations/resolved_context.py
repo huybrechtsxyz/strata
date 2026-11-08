@@ -22,6 +22,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from strata.integrations.helm_cache import ChartPin
+from strata.integrations.helm_dependencies import DependencyRecord
 from strata.models.common_models import ModuleReferenceModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
@@ -244,6 +246,14 @@ class ResolvedModule:
     reference: ModuleReferenceModel
     module: ModuleModel
     source_path: Path
+    chart_pin: ChartPin | None = None
+    """A registry chart `build run` pinned into `.strata/helm/` (docs/work/helm-registry-chart-checks.md);
+    `None` for a local chart, an unpinned one, and at deploy."""
+    chart_dependencies: tuple[DependencyRecord, ...] = ()
+    """A local chart's dependencies `build run` placed in (or found in) its `charts/`
+    (docs/work/helm-chart-dependencies.md); empty at deploy."""
+    unpinned_dependencies: tuple[str, ...] = ()
+    """Names of the local chart's dependencies the build could not fetch; the deploy refuses the chart."""
 
 
 @dataclass(frozen=True)

@@ -1579,7 +1579,7 @@ def test_build_run_renders_helm_workload_modules(tmp_path: Path):
     assert diagnostics.ok
     module_dir = build_path / "apps" / "auth"
     assert (module_dir / "Chart.yaml").exists()
-    assert (module_dir / "values.yaml").exists()
+    assert (module_dir / "strata-values.yaml").exists()
     meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
     assert meta == {"releaseName": "auth", "namespace": "apps"}
 
@@ -1729,16 +1729,20 @@ class _FakeCheckovScanner:
     def __init__(self, *, result: CheckovScanResultModel):
         self._result = result
         self.scanned_directories: list[Path] = []
+        self.config_files: list[Path | None] = []
 
-    def scan(self, directory, *, framework, skip_checks, include_checks, custom_checks_dir, timeout):
+    def scan(self, directory, *, framework, skip_checks, include_checks, custom_checks_dir, config_file, timeout):
         self.scanned_directories.append(directory)
+        self.config_files.append(config_file)
         return self._result
 
 
-def _patch_checkov_scanner(monkeypatch: pytest.MonkeyPatch, result: CheckovScanResultModel) -> None:
+def _patch_checkov_scanner(monkeypatch: pytest.MonkeyPatch, result: CheckovScanResultModel) -> _FakeCheckovScanner:
     import strata.controllers.checkov_controller as checkov_controller_module
 
-    monkeypatch.setattr(checkov_controller_module, "CheckovIntegration", lambda: _FakeCheckovScanner(result=result))
+    scanner = _FakeCheckovScanner(result=result)
+    monkeypatch.setattr(checkov_controller_module, "CheckovIntegration", lambda: scanner)
+    return scanner
 
 
 def _minimal_solution(tmp_path: Path, *, cve_policy_yaml: str = "", checkov_policy_yaml: str = "") -> Path:
@@ -1869,6 +1873,22 @@ def test_build_run_writes_policy_results_when_checkov_policy_breaches(tmp_path: 
     assert results[0]["policy_type"] == "checkov"
     assert results[0]["passed"] is False
     assert len(results[0]["violations"]) >= 1
+
+
+def test_build_run_snapshots_checkov_config_file_and_passes_it_to_the_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    scanner = _patch_checkov_scanner(monkeypatch, _checkov_result("LOW"))
+    root = _minimal_solution(tmp_path, checkov_policy_yaml="  checkov_policy:\n    config_file: .checkov.yaml\n")
+    _write(root, ".checkov.yaml", "skip-check:\n  - CKV_TF_1\n")
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    (snapshot,) = (build_path / "checkov-config" / "provisioners").iterdir()
+    assert snapshot.read_text(encoding="utf-8") == "skip-check:\n  - CKV_TF_1\n"
+    assert scanner.config_files == [snapshot]
 
 
 def test_build_run_records_a_warn_enforcement_checkov_breach_as_passed_with_violations(

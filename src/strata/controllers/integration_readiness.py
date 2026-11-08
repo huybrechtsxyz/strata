@@ -7,6 +7,7 @@ disagree. Never resolves credentials and never contacts a remote service: that i
 `ConnectionCheckIntegration.check_connection()`'s job.
 """
 
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import cast
@@ -20,7 +21,7 @@ from strata.controllers.integration_resolution import (
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.value_controller import is_direct_store, reachable_environments, resolve_deployment_workspace
-from strata.integrations.base import Integration
+from strata.integrations.base import Integration, ReadinessProblem
 from strata.integrations.capabilities import ConnectionCheckIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.registry import IntegrationNotFoundError, known_types
@@ -31,21 +32,18 @@ from strata.models.store_model import FeatureStoreModel, SecretStoreModel, Varia
 from strata.services.environment_service import merge_environment_models
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
-from strata.utils.version_constraints import version_satisfies
+from strata.utils.version_constraints import is_version, version_satisfies
 
 #: Capabilities a document may declare without any integration class: its `authentication` is read directly.
 _CREDENTIAL_HOLDER_CAPABILITIES = frozenset({Capability.SOURCES})
 
 
 @dataclass(frozen=True)
-class ReadinessProblem:
-    code: str
-    message: str
-
-
-@dataclass(frozen=True)
 class IntegrationReadiness:
-    """What was found about one integration; `problems` is empty when it is usable."""
+    """What was found about one integration; `problems` is empty when it is usable.
+
+    `warnings` never make it unusable (`version_notices()`). `tool_path` is where the local tool resolved on `PATH`.
+    """
 
     name: str
     type: str
@@ -60,10 +58,22 @@ class IntegrationReadiness:
     installed_version: str | None
     connection_check: bool
     problems: tuple[ReadinessProblem, ...]
+    warnings: tuple[ReadinessProblem, ...] = ()
+    tool_path: str | None = None
 
     @property
     def ok(self) -> bool:
         return not self.problems
+
+    @property
+    def reported_version(self) -> str | None:
+        """`installed_version` when it is a version, for output and the deployment manifest; `None` when the tool's
+        output could not be parsed (a wrapper's banner, say), which is kept in `installed_version` for messages."""
+        return (
+            self.installed_version
+            if self.installed_version is not None and is_version(self.installed_version)
+            else None
+        )
 
     @property
     def credential_holder(self) -> bool:
@@ -138,6 +148,9 @@ def assess_document(config: IntegrationModel, *, read_version: bool = True) -> C
 def assess_integration(integration: Integration, *, read_version: bool = True) -> IntegrationReadiness:
     """Check `integration` without credentials or network.
 
+    The version is read when `spec.version` is declared or the class sets `READ_VERSION`; a version read is also
+    given to the class's `version_problems()` and `version_notices()` (docs/work/helm-4-support.md).
+
     Args:
         integration: A constructed integration (already `bind()`-ed for a provisioner, if any).
         read_version: Run the tool to read its version; `False` for `--smoke-test` (no tool contact).
@@ -159,16 +172,17 @@ def assess_integration(integration: Integration, *, read_version: bool = True) -
         problems.append(ReadinessProblem("integration_unavailable", f"'{command}' is not available on PATH."))
 
     installed: str | None = None
-    if required is not None:
-        if not local_tool:
-            problems.append(
-                ReadinessProblem(
-                    "integration_version_unenforceable",
-                    f"{integration.name}: spec.version '{required}' cannot be checked over a networked transport.",
-                )
+    warnings: list[ReadinessProblem] = []
+    if required is not None and not local_tool:
+        problems.append(
+            ReadinessProblem(
+                "integration_version_unenforceable",
+                f"{integration.name}: spec.version '{required}' cannot be checked over a networked transport.",
             )
-        elif available and read_version:
-            installed = integration.get_version()
+        )
+    elif local_tool and available and read_version and (required is not None or integration.READ_VERSION):
+        installed = integration.get_version()
+        if required is not None:
             if installed is None:
                 problems.append(
                     ReadinessProblem(
@@ -183,6 +197,9 @@ def assess_integration(integration: Integration, *, read_version: bool = True) -
                         f"{integration.name}: installed version {installed} does not satisfy '{required}'.",
                     )
                 )
+        if installed is not None:
+            problems.extend(integration.version_problems(installed))
+            warnings.extend(integration.version_notices(installed))
 
     return IntegrationReadiness(
         name=integration.name,
@@ -198,39 +215,54 @@ def assess_integration(integration: Integration, *, read_version: bool = True) -
         installed_version=installed,
         connection_check=isinstance(integration, ConnectionCheckIntegration),
         problems=tuple(problems),
+        warnings=tuple(warnings),
+        tool_path=shutil.which(command) if available and command is not None else None,
     )
 
 
-def readiness_diagnostics(readiness: IntegrationReadiness, *, used: bool = False) -> Diagnostics:
-    """Problems as findings (D19): an error when the integration is required or used, else a warning.
+def readiness_diagnostics(
+    readiness: IntegrationReadiness, *, used: bool = False, flags_only_as_warning: bool = False
+) -> Diagnostics:
+    """Problems as findings (D19): an error when the integration is required or used, else a warning. `warnings` are
+    always warnings, and so are `flags_only` problems with `flags_only_as_warning` (`deploy destroy`).
 
     A disabled integration nothing uses reports nothing: disabling it was a choice.
     """
     diagnostics = Diagnostics()
     if not readiness.enabled and not used:
         return diagnostics
-    report = diagnostics.error if used or readiness.required else diagnostics.warning
+    severe = diagnostics.error if used or readiness.required else diagnostics.warning
     label = f"Integration '{readiness.name}'" + (" (required)" if readiness.required else "")
     for problem in readiness.problems:
+        report = diagnostics.warning if flags_only_as_warning and problem.flags_only else severe
         report(f"{label}: {problem.message}", location=readiness.name, code=problem.code)
+    for notice in readiness.warnings:
+        diagnostics.warning(f"{label}: {notice.message}", location=readiness.name, code=notice.code)
     return diagnostics
 
 
 def integration_preflight(
-    index: DocumentIndex, *, exclude: frozenset[str] = frozenset(), read_version: bool = True
+    index: DocumentIndex,
+    *,
+    exclude: frozenset[str] = frozenset(),
+    read_version: bool = True,
+    flags_only_as_warning: bool = False,
 ) -> Diagnostics:
     """Every enabled Integration document's readiness, before `build run` or deploy does any work (D19-D22).
 
     Args:
         exclude: Document names the caller already checked more strictly (deploy's step preflight).
         read_version: Run each tool to read its version; `False` under `--smoke-test`.
+        flags_only_as_warning: Report `flags_only` problems as warnings (`deploy destroy`, which passes none of
+            those flags).
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.INTEGRATION):
         config = cast(IntegrationModel, entry.model)
         if entry.ref.name in exclude or not config.spec.enabled:
             continue
-        diagnostics.extend(readiness_diagnostics(assess_document(config, read_version=read_version).readiness))
+        readiness = assess_document(config, read_version=read_version).readiness
+        diagnostics.extend(readiness_diagnostics(readiness, flags_only_as_warning=flags_only_as_warning))
     return diagnostics
 
 

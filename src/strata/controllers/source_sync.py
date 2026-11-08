@@ -90,6 +90,33 @@ class SourceSyncError(SystemError):
     """A `SourceModel` could not be materialised into the build directory."""
 
 
+def source_repo_root(
+    root: Path,
+    source: SourceModel,
+    remotes: dict[str, SolutionRemoteModel],
+    *,
+    credentials: RemoteCredentialResolver | None = None,
+) -> Path:
+    """The repository `source` lives in: its remote's checkout, or `root` when it names none (ADR-0018).
+
+    Raises:
+        SourceSyncError: `source.remote` is not declared in `remotes`.
+        RemoteResolutionError: the remote could not be located or cloned.
+    """
+    remote = None
+    if source.remote is not None:
+        remote = remotes.get(source.remote)
+        if remote is None:
+            raise SourceSyncError(f"Source names remote '{source.remote}', which is not declared in this solution.")
+    return _resolve_repo(
+        root,
+        remote,
+        credentials,
+        integration=remote.integration if remote else None,
+        owner=f"remote '{source.remote}'",
+    )
+
+
 def _resolve_repo(
     root: Path,
     remote: SolutionRemoteModel | None,
@@ -171,19 +198,7 @@ def sync_source(
             "(chart_name set) are pulled by the deployer itself (e.g. `helm pull`), not copied."
         )
 
-    remote = None
-    if source.remote is not None:
-        remote = remotes.get(source.remote)
-        if remote is None:
-            raise SourceSyncError(f"Source names remote '{source.remote}', which is not declared in this solution.")
-
-    repo_root = _resolve_repo(
-        root,
-        remote,
-        credentials,
-        integration=remote.integration if remote else None,
-        owner=f"remote '{source.remote}'",
-    )
+    repo_root = source_repo_root(root, source, remotes, credentials=credentials)
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
     origin = repo_root / source.source_path
     destination = source_destination(build_path, source)
@@ -445,7 +460,7 @@ def sync_module_source(
     remotes: dict[str, SolutionRemoteModel],
     *,
     credentials: RemoteCredentialResolver | None = None,
-) -> None:
+) -> tuple[Path, Path] | None:
     """Materialise a workload module's chart source into `module_dir`
     (ADR-0022 D6/D7), if it has one to copy.
 
@@ -481,6 +496,10 @@ def sync_module_source(
         credentials: Resolves `remote.integration`'s credentials for a clone; `None` (default) clones
             with ambient git credentials only.
 
+    Returns:
+        `(repository root, copied origin)` for a copied source, so a local chart's `file://` dependencies can be
+        resolved against where it came from (docs/work/helm-chart-dependencies.md); `None` for a chart-based one.
+
     Raises:
         SourceSyncError: `source` names a remote that is not declared, its
             `source_path` does not exist under the resolved remote, or the
@@ -488,21 +507,9 @@ def sync_module_source(
     """
     if source.chart_name is not None:
         module_dir.mkdir(parents=True, exist_ok=True)
-        return
+        return None
 
-    remote = None
-    if source.remote is not None:
-        remote = remotes.get(source.remote)
-        if remote is None:
-            raise SourceSyncError(f"Source names remote '{source.remote}', which is not declared in this solution.")
-
-    repo_root = _resolve_repo(
-        root,
-        remote,
-        credentials,
-        integration=remote.integration if remote else None,
-        owner=f"remote '{source.remote}'",
-    )
+    repo_root = source_repo_root(root, source, remotes, credentials=credentials)
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
     origin = repo_root / source.source_path
 
@@ -522,3 +529,4 @@ def sync_module_source(
             shutil.copy2(origin, module_dir / origin.name)
     except OSError as exc:
         raise SourceSyncError(f"Failed to copy '{origin}' to '{module_dir}': {exc}") from exc
+    return repo_root, origin

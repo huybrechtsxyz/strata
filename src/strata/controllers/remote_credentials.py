@@ -7,8 +7,9 @@ without them) and nothing looked up the Integration document a remote or asset n
 `RemoteCredentialResolver` does both, once per build:
 
 - it turns an Integration document into `spec.authentication`, strictly: an unknown, disabled or
-  non-`sources` integration, or an authentication method that cannot authenticate git, is an
-  error rather than a silent fall back to ambient credentials;
+  non-`sources` integration, or an authentication method that cannot authenticate the fetch (a git
+  clone, or a chart registry for `for_registry()`), is an error rather than a silent fall back to
+  ambient credentials;
 - it resolves only the keys that authentication references, through `resolve_values()`. Unless
   `--resolve` was given (`allow_stores=False`) those keys must be declared with a store `build run`
   may read without a network call (`is_direct_store()`: constant, environment variable, ...), which
@@ -31,7 +32,9 @@ from strata.controllers.value_controller import (
     resolve_deployment,
     resolve_values,
 )
+from strata.integrations.errors import IntegrationError
 from strata.integrations.git_push import FETCH_METHODS, credential_keys
+from strata.integrations.helm import REGISTRY_AUTH_METHODS, RegistryCredentials, credentials_from_authentication
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
 from strata.models.integration_model import Capability, IntegrationModel
@@ -44,6 +47,14 @@ _MIN_REDACT_LENGTH = 6
 
 class RemoteCredentialError(SystemError):
     """Credentials for a fetch could not be resolved, so the remote cannot be fetched."""
+
+
+class CredentialsNeedResolveError(RemoteCredentialError):
+    """A credential is in a store a plain build does not read; `--resolve` would read it.
+
+    A subclass, so a fetch the build only needs for a pin (a registry chart) can leave the input unpinned
+    (ADR-0054), while a git clone still fails the build.
+    """
 
 
 @dataclass(frozen=True)
@@ -72,6 +83,7 @@ class RemoteCredentialResolver:
         self._allow_stores = allow_stores
         self._pin = pin
         self._cache: dict[str, FetchCredentials] = {}
+        self._registry_cache: dict[str, RegistryCredentials | None] = {}
         self._secrets: set[str] = set()
 
     def for_integration(self, name: str | None, *, owner: str) -> FetchCredentials:
@@ -89,6 +101,19 @@ class RemoteCredentialResolver:
             cached = self._cache[name] = self._resolve(name, owner)
         return cached
 
+    def for_registry(self, name: str | None, *, owner: str) -> RegistryCredentials | None:
+        """The chart registry credentials of integration `name` (ADR-0042), or `None` for ambient Helm login.
+
+        Raises:
+            CredentialsNeedResolveError: the password is in a store a plain build does not read.
+            RemoteCredentialError: anything else that stops the credentials resolving; see the module docstring.
+        """
+        if not name:
+            return None
+        if name not in self._registry_cache:
+            self._registry_cache[name] = self._resolve_registry(name, owner)
+        return self._registry_cache[name]
+
     def redact(self, text: str) -> str:
         """`text` with every resolved credential value replaced by `***`."""
         for secret in sorted(self._secrets, key=len, reverse=True):
@@ -96,6 +121,34 @@ class RemoteCredentialResolver:
         return text
 
     def _resolve(self, name: str, owner: str) -> FetchCredentials:
+        auth = self._authentication(name, owner)
+        if auth is None or auth.method == "cli":
+            return AMBIENT
+        if auth.method not in FETCH_METHODS:
+            raise RemoteCredentialError(
+                f"{owner}: integration '{name}' uses authentication method '{auth.method}', which cannot "
+                f"authenticate a git fetch (supported: {', '.join(FETCH_METHODS)})"
+            )
+        keys = credential_keys(auth)
+        return FetchCredentials(auth=auth, values=self._resolve_keys(keys, name, owner))
+
+    def _resolve_registry(self, name: str, owner: str) -> RegistryCredentials | None:
+        auth = self._authentication(name, owner)
+        if auth is None or auth.method == "cli":
+            return None
+        if auth.method != "token" or auth.token is None:
+            raise RemoteCredentialError(
+                f"{owner}: integration '{name}' uses authentication method '{auth.method}', which cannot "
+                f"authenticate a chart registry (supported: {', '.join(REGISTRY_AUTH_METHODS)})"
+            )
+        values = self._resolve_keys((auth.token.token,), name, owner)
+        try:
+            return credentials_from_authentication(auth, values, owner=owner)
+        except IntegrationError as exc:
+            raise RemoteCredentialError(str(exc)) from exc
+
+    def _authentication(self, name: str, owner: str) -> AuthenticationModel | None:
+        """Integration `name`'s `spec.authentication`, once it is known to exist, be enabled and serve sources."""
         index = self._context.controller.index
         entry = index.get(PlatformKind.INTEGRATION, name)
         if entry is None:
@@ -110,17 +163,9 @@ class RemoteCredentialResolver:
             raise RemoteCredentialError(
                 f"{owner}: integration '{name}' does not declare the 'sources' capability (declares: {declared})"
             )
+        return spec.authentication
 
-        auth = spec.authentication
-        if auth is None or auth.method == "cli":
-            return AMBIENT
-        if auth.method not in FETCH_METHODS:
-            raise RemoteCredentialError(
-                f"{owner}: integration '{name}' uses authentication method '{auth.method}', which cannot "
-                f"authenticate a git fetch (supported: {', '.join(FETCH_METHODS)})"
-            )
-
-        keys = credential_keys(auth)
+    def _resolve_keys(self, keys: tuple[str, ...], name: str, owner: str) -> dict[str, str]:
         self._check_declared(keys, name, owner)
         result = resolve_values(self._context, self._deployment_name, list(keys), version_pin=self._pin)
         failures = [d.message for d in result.diagnostics.errors if d.location in keys]
@@ -131,7 +176,7 @@ class RemoteCredentialResolver:
 
         values = {key: result.values[key] for key in keys}
         self._secrets.update(value for value in values.values() if len(value) >= _MIN_REDACT_LENGTH)
-        return FetchCredentials(auth=auth, values=values)
+        return values
 
     def _check_declared(self, keys: tuple[str, ...], name: str, owner: str) -> None:
         """Every key must be declared, and (without `--resolve`) in a store a plain build may read."""
@@ -146,7 +191,7 @@ class RemoteCredentialResolver:
                     f"reachable from deployment '{self._deployment_name}'"
                 )
             if not self._allow_stores and not is_direct_store(store):
-                raise RemoteCredentialError(
+                raise CredentialsNeedResolveError(
                     f"{owner}: '{key}' (integration '{name}') is stored in '{store.store.value}'; build only "
                     "reads constant/environment stores unless you pass --resolve"
                 )

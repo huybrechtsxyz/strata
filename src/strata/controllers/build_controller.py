@@ -38,7 +38,7 @@ from typing import Any, cast
 
 import yaml
 
-from strata.controllers.checkov_controller import evaluate_checkov_policy
+from strata.controllers.checkov_controller import evaluate_checkov_policy, snapshot_checkov_configs
 from strata.controllers.effective_images import effective_images
 from strata.controllers.image_tag_policy import check_image_tag_policy
 from strata.controllers.integration_readiness import integration_preflight
@@ -489,6 +489,7 @@ def build_run(
     resolve: bool = False,
     env_files: list[Path] | None = None,
     pin: str | None = None,
+    offline: bool = False,
 ) -> Diagnostics:
     """Render `deployment_name`'s workspace provisioners into `build_path`.
 
@@ -814,6 +815,7 @@ def build_run(
             dry_run=dry_run,
             on_step=on_step,
             credentials=credentials,
+            offline=offline,
         )
         diagnostics.extend(workload_diagnostics)
 
@@ -849,6 +851,17 @@ def build_run(
         # provisioner (Phase 1's own prerequisite fix). `namespaces`/`index`
         # are only used by the `framework: helm` branch (Phase 3) — already
         # in scope here, same `graph`/`index` the rest of `build_run()` uses.
+        # `config_file` is snapshotted into the build output first, so `strata policy check` reads the same file.
+        snapshot_checkov_configs(
+            build_path,
+            graph.workspace,
+            materialised,
+            context.root,
+            remotes,
+            namespaces=graph.namespaces,
+            index=index,
+            credentials=credentials,
+        )
         checkov_diagnostics = evaluate_checkov_policy(
             build_path, graph.workspace, materialised, namespaces=graph.namespaces, index=index
         )

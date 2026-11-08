@@ -4474,3 +4474,380 @@ def test_an_absolute_path_remote_outside_the_solution_has_no_finding(tmp_path):
     context = _resolve(_solution_with_path_remote(tmp_path, outside.as_posix()))
 
     assert context.diagnostics.warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Helm release names and Kubernetes namespaces (docs/work/helm-release-names.md)
+# ---------------------------------------------------------------------------
+
+_HELM_NAME_CODES = {"helm_release_name_invalid", "helm_kubernetes_namespace_invalid", "helm_release_conflict"}
+
+
+def _helm_module(root: Path, name: str, *, release_name: str | None = None, kubernetes_namespace: str | None = None):
+    extra = ""
+    if release_name is not None:
+        extra += f'  release_name: "{release_name}"\n'
+    if kubernetes_namespace is not None:
+        extra += f'  kubernetes_namespace: "{kubernetes_namespace}"\n'
+    _write(
+        root,
+        f"modules/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: {name}\nspec:\n  type: helm\n"
+        f"  source:\n    source_path: charts/{name}\n{extra}",
+    )
+
+
+def _namespace_doc(root: Path, name: str, *references: tuple) -> None:
+    """`references` are `(reference name, module)` or `(reference name, module, enabled)`."""
+    modules = "".join(
+        f"    - name: {ref[0]}\n      module: {ref[1]}\n" + ("      enabled: false\n" if ref[2:] == (False,) else "")
+        for ref in references
+    )
+    _write(
+        root,
+        f"namespaces/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: {name}\nspec:\n  modules:\n{modules}",
+    )
+
+
+def _workspace_namespaces(root: Path, *names: str) -> None:
+    path = root / "workspace.yaml"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("namespaces: [apps]", f"namespaces: [{', '.join(names)}]"), encoding="utf-8")
+
+
+def _helm_name_findings(context) -> list:
+    return [d for d in context.diagnostics.items if d.code in _HELM_NAME_CODES]
+
+
+def test_a_helm_module_with_valid_default_names_is_clean(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik")
+    _namespace_doc(root, "forge", ("auth", "authentik"))
+    _workspace_namespaces(root, "apps", "forge")
+
+    context = _resolve(root)
+
+    assert context.ok, context.diagnostics.messages()
+
+
+@pytest.mark.parametrize("name", ["auth", "a", "my.app", "a1-b2", "a" * 53])
+def test_a_release_name_helm_accepts_has_no_finding(tmp_path, name):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", release_name=name)
+    _namespace_doc(root, "forge", ("auth", "authentik"))
+
+    assert _helm_name_findings(_resolve(root)) == []
+
+
+@pytest.mark.parametrize("name", ["my_app", "My-app", "app-", "-app", ".app", "a" * 54])
+def test_a_release_name_helm_rejects_is_an_error_on_the_module(tmp_path, name):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", release_name=name)
+    _namespace_doc(root, "forge", ("auth", "authentik"))
+
+    [finding] = _helm_name_findings(_resolve(root))
+
+    assert finding.severity is Severity.ERROR
+    assert finding.code == "helm_release_name_invalid"
+    assert finding.location == "spec.release_name"
+    assert Path(finding.source).name == "authentik.yaml"
+    assert f"spec.release_name '{name}'" in finding.message
+
+
+def test_a_default_release_name_helm_rejects_points_at_the_reference(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik")
+    _namespace_doc(root, "forge", ("my_auth", "authentik"))
+
+    [finding] = _helm_name_findings(_resolve(root))
+
+    assert finding.code == "helm_release_name_invalid"
+    assert Path(finding.source).name == "forge.yaml"
+    assert finding.location == "spec.modules"
+    assert "module reference 'my_auth'" in finding.message
+    assert "rename the reference or set spec.release_name on module 'authentik'" in finding.message
+
+
+def test_an_invalid_release_name_field_is_reported_once_however_often_the_module_is_referenced(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", release_name="Auth")
+    _namespace_doc(root, "forge", ("auth", "authentik"), ("auth2", "authentik"))
+    _namespace_doc(root, "edge", ("auth", "authentik"))
+
+    assert [d.code for d in _helm_name_findings(_resolve(root))] == ["helm_release_name_invalid"]
+
+
+@pytest.mark.parametrize("name", ["apps_forge", "Apps", "a.b", "apps-", "a" * 64])
+def test_a_kubernetes_namespace_field_kubernetes_rejects_is_an_error_on_the_module(tmp_path, name):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", kubernetes_namespace=name)
+    _namespace_doc(root, "forge", ("auth", "authentik"))
+
+    [finding] = _helm_name_findings(_resolve(root))
+
+    assert finding.code == "helm_kubernetes_namespace_invalid"
+    assert finding.location == "spec.kubernetes_namespace"
+    assert Path(finding.source).name == "authentik.yaml"
+
+
+def test_a_63_character_kubernetes_namespace_is_accepted(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", kubernetes_namespace="a" * 63)
+    _namespace_doc(root, "forge", ("auth", "authentik"))
+
+    assert _helm_name_findings(_resolve(root)) == []
+
+
+def test_a_default_kubernetes_namespace_is_reported_once_on_the_namespace_naming_every_reference(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik")
+    _helm_module(root, "immich")
+    _namespace_doc(root, "apps_forge", ("auth", "authentik"), ("photos", "immich"))
+
+    [finding] = _helm_name_findings(_resolve(root))
+
+    assert finding.code == "helm_kubernetes_namespace_invalid"
+    assert Path(finding.source).name == "apps_forge.yaml"
+    assert finding.location == "meta.name"
+    assert "Helm module references 'auth', 'photos'" in finding.message
+    assert "set spec.kubernetes_namespace on module 'authentik', 'immich'" in finding.message
+
+
+def test_a_valid_kubernetes_namespace_field_overrides_an_invalid_namespace_name(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", kubernetes_namespace="forge")
+    _namespace_doc(root, "apps_forge", ("auth", "authentik"))
+
+    assert _helm_name_findings(_resolve(root)) == []
+
+
+def test_disabled_references_and_non_helm_modules_are_not_checked(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik")
+    _namespace_doc(root, "apps_forge", ("my_auth", "authentik", False), ("my_web", "web"))
+
+    assert _helm_name_findings(_resolve(root)) == []
+
+
+def test_a_token_in_a_name_field_says_tokens_are_not_resolved(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", release_name="${var:release}")
+    _namespace_doc(root, "forge", ("auth", "authentik"))
+
+    [finding] = [d for d in _helm_name_findings(_resolve(root)) if d.code == "helm_release_name_invalid"]
+
+    assert "Value tokens are not resolved in this field." in finding.message
+
+
+def test_two_references_installing_one_release_in_one_kubernetes_namespace_conflict(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", release_name="sso", kubernetes_namespace="apps")
+    _helm_module(root, "keycloak", release_name="sso", kubernetes_namespace="apps")
+    _namespace_doc(root, "forge", ("auth", "authentik"))
+    _namespace_doc(root, "edge", ("kc", "keycloak"))
+    _workspace_namespaces(root, "apps", "forge", "edge")
+
+    [finding] = _helm_name_findings(_resolve(root))
+
+    assert finding.code == "helm_release_conflict"
+    assert finding.severity is Severity.ERROR
+    assert Path(finding.source).name == "workspace.yaml"
+    assert "release 'sso' in Kubernetes namespace 'apps'" in finding.message
+    assert "namespace 'forge', reference 'auth' (module 'authentik')" in finding.message
+    assert "namespace 'edge', reference 'kc' (module 'keycloak')" in finding.message
+
+
+def test_two_references_in_one_namespace_with_the_same_release_name_conflict(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", release_name="sso")
+    _helm_module(root, "keycloak", release_name="sso")
+    _namespace_doc(root, "forge", ("auth", "authentik"), ("kc", "keycloak"))
+    _workspace_namespaces(root, "apps", "forge")
+
+    assert [d.code for d in _helm_name_findings(_resolve(root))] == ["helm_release_conflict"]
+
+
+def test_the_same_release_in_different_kubernetes_namespaces_or_workspaces_is_no_conflict(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", release_name="sso")
+    _helm_module(root, "keycloak", release_name="sso")
+    _namespace_doc(root, "forge", ("auth", "authentik"))
+    _namespace_doc(root, "edge", ("kc", "keycloak"))  # its own Kubernetes namespace, 'edge'
+    _namespace_doc(root, "spare", ("kc", "keycloak"))  # in no workspace
+    _workspace_namespaces(root, "apps", "forge", "edge")
+
+    assert _helm_name_findings(_resolve(root)) == []
+
+
+def test_an_invalid_name_is_not_also_reported_as_a_conflict(tmp_path):
+    root = _base_solution(tmp_path)
+    _helm_module(root, "authentik", release_name="SSO")
+    _helm_module(root, "keycloak", release_name="SSO")
+    _namespace_doc(root, "forge", ("auth", "authentik"), ("kc", "keycloak"))
+    _workspace_namespaces(root, "apps", "forge")
+
+    codes = [d.code for d in _helm_name_findings(_resolve(root))]
+
+    assert codes == ["helm_release_name_invalid", "helm_release_name_invalid"]
+
+
+# ---------------------------------------------------------------------------
+# The kube context of a deployment with a Helm step (docs/work/helm-kube-context.md)
+# ---------------------------------------------------------------------------
+
+_HELM_STEP = """    - name: helm
+      tool: helm
+      source: {source_path: charts}
+  execution:
+    - name: deploy-apps
+      provisioner: helm
+      namespaces: [apps]
+"""
+
+
+def _with_a_helm_step(root: Path) -> None:
+    path = root / "workspace.yaml"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("  execution:\n", _HELM_STEP), encoding="utf-8")
+
+
+def _deployment(root: Path, name: str, spec: str) -> None:
+    _write(
+        root,
+        f"deployments/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: {name}\nspec:\n{spec}",
+    )
+
+
+def _kube_context_findings(context) -> list:
+    return [d for d in context.diagnostics.items if d.code and d.code.startswith("helm_kube_context")]
+
+
+def test_a_deployment_with_a_helm_step_and_no_kube_context_is_warned(tmp_path):
+    root = _base_solution(tmp_path)
+    _with_a_helm_step(root)
+
+    [finding] = _kube_context_findings(_resolve(root))
+
+    assert finding.severity is Severity.WARNING
+    assert finding.code == "helm_kube_context_unset"
+    assert finding.location == "spec.kube_context"
+    assert Path(finding.source).name == "deployment.yaml"
+    assert "Deployment 'prd-deployment' runs Helm in step 'deploy-apps' with no spec.kube_context" in finding.message
+
+
+def test_a_deployment_with_a_helm_step_and_a_kube_context_is_clean(tmp_path):
+    root = _base_solution(tmp_path)
+    _with_a_helm_step(root)
+    path = root / "deployment.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + "  kube_context: forge-prd\n", encoding="utf-8")
+
+    assert _kube_context_findings(_resolve(root)) == []
+
+
+def test_a_deployment_without_a_helm_step_needs_no_kube_context(tmp_path):
+    assert _kube_context_findings(_resolve(_base_solution(tmp_path))) == []
+
+
+def test_a_helm_step_bound_through_a_named_integration_counts(tmp_path):
+    root = _base_solution(tmp_path)
+    _with_a_helm_step(root)
+    _write(
+        root,
+        "integrations/helm-cli.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: helm-cli\nspec:\n  type: helm\n",
+    )
+    path = root / "workspace.yaml"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(
+        text.replace("      tool: helm\n", "      tool: helm\n      integration: helm-cli\n"), encoding="utf-8"
+    )
+
+    assert [d.code for d in _kube_context_findings(_resolve(root))] == ["helm_kube_context_unset"]
+
+
+def test_a_partial_base_is_not_warned_but_the_deployment_extending_it_is(tmp_path):
+    root = _base_solution(tmp_path)
+    _with_a_helm_step(root)
+    _deployment(root, "base", "  partial: true\n  workspace: main\n")
+    _deployment(root, "leaf", "  extends: base\n  environments: [prd]\n")
+
+    sources = [Path(d.source).name for d in _kube_context_findings(_resolve(root))]
+
+    assert sorted(sources) == ["deployment.yaml", "leaf.yaml"]
+
+
+def test_a_kube_context_from_the_base_covers_the_deployment_extending_it(tmp_path):
+    root = _base_solution(tmp_path)
+    _with_a_helm_step(root)
+    (root / "deployment.yaml").unlink()
+    _deployment(root, "base", "  partial: true\n  workspace: main\n  kube_context: forge-prd\n")
+    _deployment(root, "leaf", "  extends: base\n  environments: [prd]\n")
+
+    assert _kube_context_findings(_resolve(root)) == []
+
+
+_COMPOSE_STEP = """    - name: compose
+      tool: compose
+      source: {source_path: stacks}
+  execution:
+    - name: deploy-stacks
+      provisioner: compose
+      namespaces: [apps]
+"""
+
+
+def _with_a_compose_step(root: Path) -> None:
+    path = root / "workspace.yaml"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("  execution:\n", _COMPOSE_STEP), encoding="utf-8")
+
+
+def _target_context_findings(context) -> list:
+    return [d for d in context.diagnostics.items if d.code and d.code.endswith("_context_unset")]
+
+
+def test_a_deployment_with_a_compose_step_and_no_docker_context_is_warned(tmp_path):
+    root = _base_solution(tmp_path)
+    _with_a_compose_step(root)
+
+    [finding] = _target_context_findings(_resolve(root))
+
+    assert finding.severity is Severity.WARNING
+    assert finding.code == "compose_docker_context_unset"
+    assert finding.location == "spec.docker_context"
+    assert (
+        "Deployment 'prd-deployment' runs Compose in step 'deploy-stacks' with no spec.docker_context, so it "
+        "deploys to whichever docker context is active." in finding.message
+    )
+
+
+def test_a_deployment_with_helm_and_compose_steps_needs_both_contexts(tmp_path):
+    root = _base_solution(tmp_path)
+    _with_a_compose_step(root)
+    _with_a_helm_step(root)
+    workspace = root / "workspace.yaml"
+    workspace.write_text(
+        workspace.read_text(encoding="utf-8").replace(
+            "      provisioner: compose\n", "      provisioner: compose\n      depends_on: [deploy-apps]\n"
+        ),
+        encoding="utf-8",
+    )
+    path = root / "deployment.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + "  docker_context: hearth-prd\n", encoding="utf-8")
+
+    assert [d.code for d in _target_context_findings(_resolve(root))] == ["helm_kube_context_unset"]
+
+
+@pytest.mark.parametrize("field", ["kube_context", "docker_context"])
+def test_a_value_token_in_a_context_field_is_a_schema_error(tmp_path, field):
+    root = _base_solution(tmp_path)
+    path = root / "deployment.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + f'  {field}: "${{var:cluster}}"\n', encoding="utf-8")
+
+    context = open_solution(root)
+
+    [finding] = context.diagnostics.errors
+    assert finding.location == f"spec.{field}"
+    assert "'${var:cluster}' contains a value token, which is not resolved here" in finding.message

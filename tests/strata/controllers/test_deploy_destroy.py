@@ -1122,3 +1122,81 @@ def test_a_real_terraform_destroy_removes_what_deploy_run_created(tmp_path: Path
     destroyed = deploy_run(_context(root), "app", build_path, destroy=True, force=True)
     assert destroyed.ok, destroyed.messages()
     assert _state() == []
+
+
+def _pinned_to_a_kube_context(root: Path, tmp_path: Path, monkeypatch) -> None:
+    """Name `forge-prd` as the deployment's kube context and give the run a kubeconfig that defines it."""
+    deployment = root / "deployment.yaml"
+    deployment.write_text(deployment.read_text(encoding="utf-8") + "  kube_context: forge-prd\n", encoding="utf-8")
+    kubeconfig = tmp_path / "kubeconfig"
+    kubeconfig.write_text("contexts:\n  - name: forge-prd\n  - name: forge-dev\n", encoding="utf-8")
+    monkeypatch.setenv("KUBECONFIG", str(kubeconfig))
+    monkeypatch.delenv("HELM_KUBECONTEXT", raising=False)
+    monkeypatch.delenv("HELM_KUBEAPISERVER", raising=False)
+
+
+def test_a_helm_uninstall_runs_against_the_deployments_kube_context(tmp_path: Path, tools, monkeypatch):
+    root = _helm_solution(tmp_path)
+    _pinned_to_a_kube_context(root, tmp_path, monkeypatch)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    [uninstall] = tools.of("helm", "uninstall")
+    assert uninstall.env is not None and uninstall.env["HELM_KUBECONTEXT"] == "forge-prd"
+
+
+def test_a_helm_destroy_preview_runs_against_the_deployments_kube_context(tmp_path: Path, tools, monkeypatch):
+    root = _helm_solution(tmp_path)
+    _pinned_to_a_kube_context(root, tmp_path, monkeypatch)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, dry_run=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    [preview] = tools.of("helm", "get")
+    assert preview.env is not None and preview.env["HELM_KUBECONTEXT"] == "forge-prd"
+
+
+def test_a_destroy_stops_before_any_tool_when_the_kube_context_is_missing(tmp_path: Path, tools, monkeypatch):
+    root = _helm_solution(tmp_path)
+    _pinned_to_a_kube_context(root, tmp_path, monkeypatch)
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "missing"))
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, force=True)
+
+    assert _codes(diagnostics, "errors") == ["helm_kube_context_missing"]
+    assert tools.of("helm") == [] and tools.terraform() == []
+
+
+def _pinned_to_a_docker_context(root: Path, monkeypatch) -> None:
+    deployment = root / "deployment.yaml"
+    deployment.write_text(deployment.read_text(encoding="utf-8") + "  docker_context: hearth-prd\n", encoding="utf-8")
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.delenv("DOCKER_CONTEXT", raising=False)
+
+
+def test_a_stack_removal_runs_against_the_deployments_docker_context(tmp_path: Path, tools, monkeypatch):
+    root = _compose_solution(tmp_path)
+    _pinned_to_a_docker_context(root, monkeypatch)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    [removal] = [c for c in tools.of("docker") if c.args[1:3] == ["stack", "rm"]]
+    assert removal.env is not None and removal.env["DOCKER_CONTEXT"] == "hearth-prd"
+
+
+def test_a_stack_removal_preview_runs_against_the_deployments_docker_context(tmp_path: Path, tools, monkeypatch):
+    root = _compose_solution(tmp_path)
+    _pinned_to_a_docker_context(root, monkeypatch)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, dry_run=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    [listing] = [c for c in tools.of("docker") if c.args[1:3] == ["stack", "services"]]
+    assert listing.env is not None and listing.env["DOCKER_CONTEXT"] == "hearth-prd"

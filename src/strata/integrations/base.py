@@ -20,6 +20,7 @@ executable, pin a version, point at a networked transport, ...).
 import shutil
 from abc import ABC
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
@@ -34,6 +35,19 @@ from strata.utils.transport import (
     http_request,
     run_command,
 )
+
+
+@dataclass(frozen=True)
+class ReadinessProblem:
+    """One readiness finding (docs/work/integration-readiness.md), here so an integration can return its own.
+
+    `flags_only`: the problem is about the flags strata would pass, not whether the tool works at all, so a command
+    that passes none of those flags may treat it as a warning (docs/work/helm-4-support.md).
+    """
+
+    code: str
+    message: str
+    flags_only: bool = False
 
 
 class Integration(ABC):
@@ -81,6 +95,10 @@ class Integration(ABC):
     #: Overridden per-class — CLIs disagree on the flag (`--version`,
     #: `version`, `-version`, ...).
     VERSION_ARGS: ClassVar[tuple[str, ...]] = ("--version",)
+
+    #: Read the installed version in the readiness check even when the document declares no `spec.version`,
+    #: for a class whose `version_problems()`/`version_notices()` need it (docs/work/helm-4-support.md).
+    READ_VERSION: ClassVar[bool] = False
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
         """
@@ -258,6 +276,18 @@ class Integration(ABC):
         the wrong default.
         """
         return raw.strip()
+
+    def version_problems(self, installed: str) -> list[ReadinessProblem]:
+        """What makes `installed` unusable for this integration beyond `spec.version`; reported like any readiness
+        problem. Default: nothing."""
+        del installed
+        return []
+
+    def version_notices(self, installed: str) -> list[ReadinessProblem]:
+        """Warnings about `installed` that do not make the integration unusable (a deprecated version, say).
+        Default: nothing."""
+        del installed
+        return []
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(name={self.name!r})"

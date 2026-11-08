@@ -58,6 +58,11 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
 from strata.utils.value_tokens import referenced_output_keys, resolve_value_tokens_renaming_secrets
 
+#: Docker's context for every command; set for the Compose steps of a deployment that names `docker_context`.
+DOCKER_CONTEXT_ENV = "DOCKER_CONTEXT"
+#: Overrides `DOCKER_CONTEXT` without a word, so a deployment pinned to a context cannot allow it.
+DOCKER_HOST_ENV = "DOCKER_HOST"
+
 
 class ComposeIntegration(InfraIntegration):
     """Docker Swarm — deploys a compose file as a stack."""
@@ -67,6 +72,37 @@ class ComposeIntegration(InfraIntegration):
     TRANSPORTS = frozenset({"cli"})
     COMMAND = "docker"
     VERSION_ARGS = ("--version",)
+    TARGET_CONTEXT_FIELD = "docker_context"
+
+    def target_context_env(self, context: str) -> dict[str, str]:
+        """Docker reads `DOCKER_CONTEXT` for every command, unless `DOCKER_HOST` is set (rejected before any step)."""
+        return {DOCKER_CONTEXT_ENV: context}
+
+    def target_context_problem(self, context: str, environ: Mapping[str, str]) -> tuple[str, str] | None:
+        """Why the stacks cannot be pinned to Docker context `context`, as `(code, reason)`, or `None`.
+
+        `DOCKER_HOST` silently wins over `DOCKER_CONTEXT`, so it may not be set at all; the caller's own
+        `DOCKER_CONTEXT` may only repeat `context`. The context must exist: `docker context inspect` asks Docker's
+        local context store (which honours `DOCKER_CONFIG`) without contacting an engine.
+        """
+        if environ.get(DOCKER_HOST_ENV):
+            return (
+                "compose_docker_context_conflict",
+                f"{DOCKER_HOST_ENV} is set in the environment, and it overrides the context. Unset it.",
+            )
+        caller_context = environ.get(DOCKER_CONTEXT_ENV)
+        if caller_context and caller_context != context:
+            return (
+                "compose_docker_context_conflict",
+                f"{DOCKER_CONTEXT_ENV} is set to '{caller_context}' in the environment. Unset it, or deploy with a "
+                "deployment that names that context.",
+            )
+        if self.run("context", "inspect", context, env=environ, timeout=30).is_successful:
+            return None
+        listing = self.run("context", "ls", "--format", "{{.Name}}", env=environ, timeout=30)
+        names = [line.strip() for line in listing.stdout.splitlines() if line.strip()] if listing.is_successful else []
+        known = ", ".join(f"'{name}'" for name in names) or "none found"
+        return ("compose_docker_context_missing", f"Docker has no such context (contexts: {known}).")
 
     def parse_version(self, raw: str) -> str:
         """Extract `X.Y.Z` from `"Docker version X.Y.Z, build ..."`."""
@@ -136,6 +172,7 @@ class ComposeIntegration(InfraIntegration):
         dry_run: bool,
         env: dict[str, str] | None = None,
         line_callback: Callable[[str, str], None] | None = None,
+        timeout: int | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
         """Deploy `namespace`'s merged `docker-compose.yml` as one Swarm stack
@@ -166,11 +203,15 @@ class ComposeIntegration(InfraIntegration):
         `self.deploy(...)` — never both. A tool-unsupported preview is a
         warning, not a failure (`plan_or_warn()`'s own contract); a real
         plan failure is still an error.
+
+        `timeout` (seconds, the stage's `plan` or `apply` timeout; docs/design/cli-timeout.md) replaces the
+        `stack config`/`stack deploy` default. `None` keeps it.
         """
         del kwargs
         diagnostics = Diagnostics()
         if not modules:
             return diagnostics
+        timeouts: dict[str, Any] = {} if timeout is None else {"timeout": timeout}
 
         compose_file = modules[0].source_path.parent / "docker-compose.yml"
         if not compose_file.exists():
@@ -220,6 +261,7 @@ class ComposeIntegration(InfraIntegration):
                 location=str(namespace.meta.name),
                 env={**(env or {}), **secrets},
                 line_callback=line_callback,
+                **timeouts,
             )
             if plan_result is not None and not plan_result.is_successful:
                 diagnostics.error(
@@ -233,6 +275,7 @@ class ComposeIntegration(InfraIntegration):
             namespace=str(namespace.meta.name),
             env={**(env or {}), **secrets},
             line_callback=line_callback,
+            **timeouts,
         )
         if not result.is_successful:
             diagnostics.error(

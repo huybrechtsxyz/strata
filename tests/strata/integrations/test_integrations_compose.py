@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 """Tests for `ComposeIntegration` (ADR-0021 Phase 6)."""
 
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
 
-from strata.integrations.compose import ComposeIntegration, resolve_compose_values
+from strata.integrations.compose import (
+    DOCKER_CONTEXT_ENV,
+    DOCKER_HOST_ENV,
+    ComposeIntegration,
+    resolve_compose_values,
+)
 from strata.integrations.errors import IntegrationError
 from strata.integrations.registry import get
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
@@ -717,6 +725,22 @@ def test_destroy_namespace_forwards_timeout_and_line_callback(tmp_path: Path, mo
     assert calls[0]["line_callback"] is callback
 
 
+def test_deploy_namespace_forwards_the_stage_timeout_to_deploy_and_to_the_preview(tmp_path: Path, monkeypatch):
+    calls = _script_docker(monkeypatch, lambda args: _ok())
+    group = _destroy_group(tmp_path)
+    group[0].source_path.parent.mkdir(parents=True)
+    (group[0].source_path.parent / "docker-compose.yml").write_text("services: {}\n")
+
+    for dry_run in (False, True):
+        assert (
+            ComposeIntegration()
+            .deploy_namespace(_namespace("hearth"), group, tokens={}, dry_run=dry_run, timeout=42)
+            .ok
+        )
+
+    assert [(call["args"][2], call["timeout"]) for call in calls] == [("deploy", 42), ("config", 42)]
+
+
 def test_destroy_namespace_does_nothing_for_an_empty_group(monkeypatch):
     calls = _script_docker(monkeypatch, lambda args: _ok())
 
@@ -760,3 +784,81 @@ def test_destroy_namespace_dry_run_warns_when_the_stack_cannot_be_listed(tmp_pat
     assert diagnostics.ok
     assert len(diagnostics.warnings) == 1
     assert "not a swarm manager" in diagnostics.warnings[0].message
+
+
+# ---------------------------------------------------------------------------
+# The docker context a deployment names (docs/work/compose-docker-context.md)
+# ---------------------------------------------------------------------------
+
+
+def _docker_knowing(monkeypatch, *contexts: str) -> list[list[str]]:
+    calls: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        if args[1:3] == ["context", "inspect"]:
+            return CommandResult(returncode=0 if args[3] in contexts else 1, stdout="", stderr="not found")
+        return CommandResult(returncode=0, stdout="\n".join(contexts), stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return calls
+
+
+def test_compose_is_pinned_through_docker_context():
+    integration = ComposeIntegration()
+
+    assert integration.TARGET_CONTEXT_FIELD == "docker_context"
+    assert integration.target_context_env("hearth-prd") == {DOCKER_CONTEXT_ENV: "hearth-prd"}
+
+
+def test_a_docker_context_docker_knows_has_no_problem(monkeypatch):
+    calls = _docker_knowing(monkeypatch, "default", "hearth-prd")
+
+    assert ComposeIntegration().target_context_problem("hearth-prd", {}) is None
+    assert calls == [["docker", "context", "inspect", "hearth-prd"]]
+
+
+def test_a_docker_context_docker_does_not_know_names_the_ones_it_does(monkeypatch):
+    _docker_knowing(monkeypatch, "default", "hearth-dev")
+
+    assert ComposeIntegration().target_context_problem("hearth-prd", {}) == (
+        "compose_docker_context_missing",
+        "Docker has no such context (contexts: 'default', 'hearth-dev').",
+    )
+
+
+def test_docker_host_or_another_docker_context_is_a_conflict_without_asking_docker(monkeypatch):
+    calls = _docker_knowing(monkeypatch, "hearth-prd")
+    integration = ComposeIntegration()
+
+    host = integration.target_context_problem("hearth-prd", {DOCKER_HOST_ENV: "ssh://deploy@hearth"})
+    other = integration.target_context_problem("hearth-prd", {DOCKER_CONTEXT_ENV: "hearth-dev"})
+
+    assert host is not None and host[0] == "compose_docker_context_conflict"
+    assert other is not None and other[0] == "compose_docker_context_conflict"
+    assert calls == []
+    assert integration.target_context_problem("hearth-prd", {DOCKER_CONTEXT_ENV: "hearth-prd"}) is None
+
+
+@pytest.mark.skipif(not shutil.which("docker"), reason="docker is not installed")
+def test_real_docker_resolves_contexts_the_way_the_pin_relies_on(tmp_path: Path):
+    """`docker context inspect` fails for an unknown context, and DOCKER_HOST silently beats DOCKER_CONTEXT.
+
+    The second is why a pinned deployment rejects DOCKER_HOST; a Docker release that changes either shows up here.
+    Runs in a scratch DOCKER_CONFIG, so the user's own contexts are not touched.
+    """
+    environ = {k: v for k, v in os.environ.items() if k not in (DOCKER_HOST_ENV, DOCKER_CONTEXT_ENV)}
+    environ["DOCKER_CONFIG"] = str(tmp_path)
+
+    def docker(*args: str, **extra: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["docker", *args], capture_output=True, text=True, env={**environ, **extra}, timeout=60)
+
+    assert docker("context", "inspect", "strata-probe").returncode != 0
+    assert docker("context", "create", "strata-probe", "--docker", "host=tcp://127.0.0.1:2").returncode == 0
+    assert docker("context", "inspect", "strata-probe").returncode == 0
+    assert docker("context", "show", DOCKER_CONTEXT="strata-probe").stdout.strip() == "strata-probe"
+    shown = docker("context", "show", DOCKER_CONTEXT="strata-probe", DOCKER_HOST="tcp://127.0.0.1:1")
+    assert shown.stdout.strip() == "default"

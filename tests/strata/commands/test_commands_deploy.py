@@ -607,7 +607,8 @@ def test_deploy_setup_gracefully_skips_container_capable_step(runner, tmp_path, 
     assert result.exit_code == EXIT_SUCCESS, result.output
     tf_commands = [call[1] for call in _stub_terraform if call[0] == "terraform"]
     assert tf_commands == ["init"]
-    assert not any(call[0] == "helm" for call in _stub_terraform)
+    # Only the preflight's version probe (ADR-0055); the Helm step itself is skipped.
+    assert [call[1:] for call in _stub_terraform if call[0] == "helm"] == [["version"]]
 
 
 # ---------------------------------------------------------------------------

@@ -42,12 +42,17 @@ from strata.integrations.base import Integration
 from strata.integrations.capabilities import ImageFindingsIntegration, KeyValueStoreIntegration, ReleaseGateIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.git_push import FETCH_METHODS, credential_keys
-from strata.integrations.helm import REGISTRY_AUTH_METHODS
+from strata.integrations.helm import (
+    REGISTRY_AUTH_METHODS,
+    kubernetes_namespace_problem,
+    release_identity,
+    release_name_problem,
+)
 from strata.integrations.registry import get_class as get_integration_class
 from strata.logging.config import get_logger
 from strata.models.asset_model import AssetModel
 from strata.models.attributeconfig_model import AttributeConfigModel
-from strata.models.common_models import PlatformBaseModel, PlatformKind, SourceModel
+from strata.models.common_models import ModuleReferenceModel, PlatformBaseModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
@@ -144,6 +149,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_paths(index, root))
     diagnostics.extend(_check_version_workspace(index, resolved))
     diagnostics.extend(_check_dns_records(index))
+    diagnostics.extend(_check_helm_release_names(index))
     diagnostics.extend(_check_integration_versions(index))
     diagnostics.extend(_check_integration_required_disabled(index))
     return diagnostics
@@ -179,6 +185,59 @@ def _check_deployments(
             source=str(entry.source),
         )
         diagnostics.extend(_check_deployment_fetch_credentials(index, deployment, solution), source=str(entry.source))
+        diagnostics.extend(_check_deployment_target_contexts(index, deployment), source=str(entry.source))
+    return diagnostics
+
+
+def _pinnable_steps(index: DocumentIndex, workspace: WorkspaceModel) -> dict[str, tuple[str, list[str]]]:
+    """The workspace's execution steps whose tool deploys to a target context, by the deployment field that pins it.
+
+    Each value is `(integration type, step names)`. The tool is the type of the provisioner's named integration, else
+    its `tool`; an unknown type is skipped (reported elsewhere).
+    """
+    provisioners = {provisioner.name: provisioner for provisioner in workspace.spec.provisioners}
+    pinnable: dict[str, tuple[str, list[str]]] = {}
+    for step in workspace.spec.execution or []:
+        provisioner = provisioners.get(step.provisioner)
+        if provisioner is None:
+            continue
+        tool = provisioner.tool
+        if provisioner.integration:
+            entry = index.get(PlatformKind.INTEGRATION, provisioner.integration)
+            tool = cast(IntegrationModel, entry.model).spec.type if entry is not None else tool
+        try:
+            integration_class = get_integration_class(tool)
+        except IntegrationError:
+            continue
+        field = getattr(integration_class, "TARGET_CONTEXT_FIELD", None)
+        if field:
+            pinnable.setdefault(field, (integration_class.TYPE, []))[1].append(step.name)
+    return pinnable
+
+
+def _check_deployment_target_contexts(index: DocumentIndex, deployment: DeploymentModel) -> Diagnostics:
+    """A deployment that runs Helm or Compose names the context each deploys to (docs/work/compose-docker-context.md).
+
+    Without it the step deploys to whatever the environment points at: a warning, since it worked that way before
+    the fields existed. A partial base is not deployed, so only the deployments built from it are warned.
+    """
+    diagnostics = Diagnostics()
+    if deployment.spec.partial:
+        return diagnostics
+    workspace = deployment_workspace(index, deployment)
+    if workspace is None:
+        return diagnostics
+    for field, (tool, steps) in _pinnable_steps(index, workspace).items():
+        if getattr(deployment.spec, field) is not None:
+            continue
+        label = field.replace("_", " ")
+        diagnostics.warning(
+            f"Deployment '{deployment.meta.name}' runs {tool.capitalize()} in "
+            f"{'step' if len(steps) == 1 else 'steps'} {_quoted(steps)} with no spec.{field}, so it deploys to "
+            f"whichever {label} is active. Set spec.{field} to the {label} of the deployment's target.",
+            location=f"spec.{field}",
+            code=f"{tool}_{field}_unset",
+        )
     return diagnostics
 
 
@@ -967,6 +1026,7 @@ def _check_workspaces(index: DocumentIndex) -> Diagnostics:
         diagnostics.extend(_check_workspace_key_value_store_supports_cas(index, workspace), source=str(entry.source))
         diagnostics.extend(_check_workspace_security_gates(index, workspace), source=str(entry.source))
         diagnostics.extend(_check_provisioner_integrations(index, workspace), source=str(entry.source))
+        diagnostics.extend(_check_workspace_helm_releases(index, workspace), source=str(entry.source))
         if security is not None:
             diagnostics.extend(
                 _check_workspace_key_value_store_allowed(index, workspace, security), source=str(entry.source)
@@ -1914,3 +1974,136 @@ def _check_dns_records(index: DocumentIndex) -> Diagnostics:
                 code="dns_zone_declared_twice",
             )
     return diagnostics
+
+
+# ---------------------------------------------------------------------------
+# Helm module references -> the release name and Kubernetes namespace Helm
+# receives (docs/work/helm-release-names.md)
+# ---------------------------------------------------------------------------
+
+
+def _helm_references(
+    index: DocumentIndex, namespace_entries: list[IndexEntry]
+) -> list[tuple[IndexEntry, ModuleReferenceModel, IndexEntry]]:
+    """`(namespace entry, reference, module entry)` for every enabled reference to a `type: helm` module."""
+    found = []
+    for namespace_entry in namespace_entries:
+        namespace = cast(NamespaceModel, namespace_entry.model)
+        for reference in namespace.spec.modules or []:
+            module_entry = index.get(PlatformKind.MODULE, reference.module)
+            if not reference.enabled or module_entry is None:
+                continue
+            if cast(ModuleModel, module_entry.model).spec.type == "helm":
+                found.append((namespace_entry, reference, module_entry))
+    return found
+
+
+def _token_note(value: str) -> str:
+    return " Value tokens are not resolved in this field." if "${" in value else ""
+
+
+def _check_helm_release_names(index: DocumentIndex) -> Diagnostics:
+    """Every Helm module reference deploys under a release name Helm accepts, into a namespace Kubernetes accepts.
+
+    Checks the names `meta.yaml` will carry (`release_identity()`), defaults included: the defaults are strata
+    names, which allow `_` and up to 64 characters. Helm would reject the release at `helm upgrade`, and the API
+    server the namespace, so both are errors here. A name set in a module's own field is reported once on that
+    module; a default once on the namespace (one reference name, or the namespace name for all its references).
+    """
+    diagnostics = Diagnostics()
+    reported_fields: set[tuple[str, str]] = set()
+    namespace_defaults: dict[str, tuple[IndexEntry, list[str], list[str]]] = {}
+
+    for namespace_entry, reference, module_entry in _helm_references(index, index.all_of(PlatformKind.NAMESPACE)):
+        namespace_name = namespace_entry.ref.name
+        module_name = module_entry.ref.name
+        identity = release_identity(namespace_name, reference.name, cast(ModuleModel, module_entry.model))
+
+        release_problem = release_name_problem(identity.release)
+        if release_problem is not None and identity.release_from_field:
+            if (module_name, "release_name") not in reported_fields:
+                reported_fields.add((module_name, "release_name"))
+                diagnostics.error(
+                    f"Module '{module_name}' (type helm): spec.release_name '{identity.release}' is not a valid "
+                    f"Helm release name: {release_problem}.{_token_note(identity.release)}",
+                    source=str(module_entry.source),
+                    location="spec.release_name",
+                    code="helm_release_name_invalid",
+                )
+        elif release_problem is not None:
+            diagnostics.error(
+                f"Namespace '{namespace_name}', module reference '{reference.name}' (module '{module_name}', type "
+                f"helm): release name '{identity.release}' is not a valid Helm release name: {release_problem}. "
+                f"It is the reference name; rename the reference or set spec.release_name on module "
+                f"'{module_name}'.",
+                source=str(namespace_entry.source),
+                location="spec.modules",
+                code="helm_release_name_invalid",
+            )
+
+        namespace_problem = kubernetes_namespace_problem(identity.kubernetes_namespace)
+        if namespace_problem is not None and identity.namespace_from_field:
+            if (module_name, "kubernetes_namespace") not in reported_fields:
+                reported_fields.add((module_name, "kubernetes_namespace"))
+                diagnostics.error(
+                    f"Module '{module_name}' (type helm): spec.kubernetes_namespace "
+                    f"'{identity.kubernetes_namespace}' is not a valid Kubernetes namespace: {namespace_problem}."
+                    f"{_token_note(identity.kubernetes_namespace)}",
+                    source=str(module_entry.source),
+                    location="spec.kubernetes_namespace",
+                    code="helm_kubernetes_namespace_invalid",
+                )
+        elif namespace_problem is not None:
+            _, references, modules = namespace_defaults.setdefault(namespace_name, (namespace_entry, [], []))
+            references.append(reference.name)
+            if module_name not in modules:
+                modules.append(module_name)
+
+    for namespace_name, (namespace_entry, references, modules) in namespace_defaults.items():
+        diagnostics.error(
+            f"Namespace '{namespace_name}': it is the Kubernetes namespace of its Helm module references "
+            f"{_quoted(references)}, and '{namespace_name}' is not a valid Kubernetes namespace: "
+            f"{kubernetes_namespace_problem(namespace_name)}. Rename the namespace, or set "
+            f"spec.kubernetes_namespace on module {_quoted(modules)}.",
+            source=str(namespace_entry.source),
+            location="meta.name",
+            code="helm_kubernetes_namespace_invalid",
+        )
+    return diagnostics
+
+
+def _check_workspace_helm_releases(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
+    """No two Helm module references in `workspace` install the same release into the same Kubernetes namespace.
+
+    The second deploy would upgrade the first one's release with another chart. The workspace is the scope because
+    it is what one deployment deploys; two deployments of it reuse the names by design. A pair with an invalid name
+    is skipped, since `_check_helm_release_names()` already reports it.
+    """
+    diagnostics = Diagnostics()
+    namespace_entries = [
+        entry for name in workspace.spec.namespaces or [] if (entry := index.get(PlatformKind.NAMESPACE, name))
+    ]
+    installers: dict[tuple[str, str], list[str]] = {}
+    for namespace_entry, reference, module_entry in _helm_references(index, namespace_entries):
+        identity = release_identity(namespace_entry.ref.name, reference.name, cast(ModuleModel, module_entry.model))
+        if release_name_problem(identity.release) or kubernetes_namespace_problem(identity.kubernetes_namespace):
+            continue
+        installers.setdefault((identity.kubernetes_namespace, identity.release), []).append(
+            f"namespace '{namespace_entry.ref.name}', reference '{reference.name}' (module '{module_entry.ref.name}')"
+        )
+
+    for (kubernetes_namespace, release), names in installers.items():
+        if len(names) > 1:
+            diagnostics.error(
+                f"Workspace '{workspace.meta.name}': release '{release}' in Kubernetes namespace "
+                f"'{kubernetes_namespace}' is installed by {' and '.join(names)}. Each deploy would upgrade the "
+                "same release with another chart. Set spec.release_name or spec.kubernetes_namespace on all but "
+                "one of the modules.",
+                location="spec.namespaces",
+                code="helm_release_conflict",
+            )
+    return diagnostics
+
+
+def _quoted(names: list[str]) -> str:
+    return ", ".join(f"'{name}'" for name in names)

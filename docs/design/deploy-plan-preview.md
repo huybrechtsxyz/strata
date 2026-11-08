@@ -107,10 +107,11 @@ deploy_namespace()` keep one `dry_run: bool` parameter; only the internal
 `if dry_run:` branch differs from a real deploy:
 
 - **Helm**: resolves `resolved_values`/`secrets` and (when non-empty)
-  writes `values.yaml` — a preview needs the same real rendered file on
+  writes `strata-values.yaml` — a preview needs the same real rendered file on
   disk a real `helm upgrade` would use, just not followed by one. Calls
   `self.plan_or_warn(values_file, ..., release=..., namespace=...,
-  chart=..., set_string=..., line_callback=...)` instead of `deploy()`.
+  chart=..., secret_values=...)` instead of `deploy()`, and reports a
+  `Kind/name` summary rather than streaming the manifest.
 - **Compose**: same shape — writes the resolved compose file, then
   `self.plan_or_warn(compose_file, ..., env={**(env or {}), **secrets},
   line_callback=...)` instead of `deploy()`.
@@ -189,11 +190,15 @@ mean different things elsewhere.
 ### Secret redaction for streamed output
 
 Some tools echo their own rendered input verbatim regardless of any
-streaming flag — concretely, `helm upgrade --dry-run` prints the full
-rendered manifest, which can embed a `--set-string`-substituted secret
-value anywhere a chart template places it. `--follow` would otherwise
-display this live; before streaming existed this text was only ever
-captured in `CommandResult.stdout` and never printed anywhere.
+streaming flag. `--follow` would otherwise display this live; before
+streaming existed this text was only ever captured in
+`CommandResult.stdout` and never printed anywhere.
+
+Redaction masks a secret only as plain text. `helm upgrade --dry-run`
+prints the full rendered manifest, where a Kubernetes Secret holds the
+value base64-encoded, so Helm's preview is not streamed at all: it is
+summarised to `Kind/name` lines instead
+([helm-chart-deployment.md](helm-chart-deployment.md)).
 
 `merge_environment_models(environments)` already returns `variables,
 secrets, features` as three distinct dicts keyed by declared name —

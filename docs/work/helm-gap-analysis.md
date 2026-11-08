@@ -1,6 +1,6 @@
 # Helm gap analysis - Work
 
-- Status: draft
+- Status: in-progress
 - Last updated: 2026-11-07
 
 ## Overview
@@ -27,16 +27,16 @@ not run end to end (no cluster).
 
 | #  | Gap                                                                    | Kind        | Impact | Evidence    |
 | -- | ---------------------------------------------------------------------- | ----------- | ------ | ----------- |
-| 1  | A local chart loses its own default values                             | correctness | high   | verified    |
-| 2  | Secret values are passed on the `helm` command line                    | security    | high   | by reading  |
-| 3  | `deploy plan` / `--dry-run` streams the rendered manifest with Secrets | security    | medium | by reading  |
-| 4  | A registry chart with no services or configuration cannot deploy       | correctness | medium | verified    |
-| 5  | Stage timeouts do not reach a Helm upgrade; `--timeout 5m` is fixed    | operability | medium | by reading  |
+| 1  | A local chart loses its own default values (fixed)                     | correctness | high   | verified    |
+| 2  | Secret values are passed on the `helm` command line (fixed)            | security    | high   | by reading  |
+| 3  | `deploy plan` / `--dry-run` streams the rendered manifest (fixed)      | security    | medium | by reading  |
+| 4  | A registry chart with no values cannot deploy (fixed)                  | correctness | medium | verified    |
+| 5  | Stage timeouts do not reach a Helm upgrade (fixed)                     | operability | medium | by reading  |
 | 6  | The cluster is whatever kube context is active                         | safety      | medium | by design   |
-| 7  | Release and Kubernetes namespace names are not validated               | validation  | low    | by reading  |
-| 8  | Registry charts get no check before deploy                             | validation  | low    | by reading  |
-| 9  | Local chart dependencies are never built                               | correctness | low    | by reading  |
-| 10 | Helm 4 compatibility is unknown                                        | risk        | low    | to verify   |
+| 7  | Release and Kubernetes namespace names are not validated (fixed)       | validation  | low    | by reading  |
+| 8  | Registry charts get no check before deploy (fixed)                     | validation  | low    | by reading  |
+| 9  | Local chart dependencies are never built (fixed)                       | correctness | low    | by reading  |
+| 10 | Helm 4 compatibility is unknown (fixed)                                | risk        | low    | verified    |
 
 #### 1. A local chart loses its own default values
 
@@ -56,9 +56,11 @@ haven's 19 local charts pass today, probably because v1 had the same behaviour a
 the charts need. Fixing this adds defaults back, so a chart whose default conflicts with an intent the module
 expressed by omission would change. Helm merges maps and replaces lists, so the risk is small.
 
-Fix: leave the chart's `values.yaml` alone and write strata's values to a separate file (for example
-`values.strata.yaml`), passed with `-f`. The lint overlay and the key check already read the chart's file and need
-only the new file name.
+**Done (2026-11-07), together with gap 4.** `prepare_namespace()` writes `strata-values.yaml` beside `meta.yaml` and
+leaves the chart's `values.yaml` alone; deploy passes `-f strata-values.yaml`. A module directory without it (a build
+from before this change) is an error, not a deploy without values. A real-Helm test renders a chart whose defaults
+the module does not repeat. Still open: the haven comparison in the open questions, since a module that relied on
+dropped defaults now gets them.
 
 #### 2. Secret values are passed on the `helm` command line
 
@@ -67,12 +69,15 @@ other users of the machine (`ps`, Task Manager, process auditing on CI agents). 
 exactly this reason, and states that `run_command()` forbids that leak class. Registry passwords follow that rule;
 module secrets do not.
 
-Second defect on the same path: `--set-string` treats a dot in a key as nesting, so an environment variable named
-`A.B` becomes `env.A.B`. Only secret leaves are affected, because non-secret ones are written to the file.
+A dot inside a key was not a problem: the paths escape it as `\.`, which `--set-string` also reads as a literal dot.
+A secret inside a list was: the path `extraEnv.1.value` made `--set-string` create a map key `1` instead of
+setting a list item. No consumer had one.
 
-Fix: write the secret leaves as a second values document and pass it on stdin with `-f -`, through the existing
-`Integration.run(input=)`. Verified: `helm template ... -f -` reads values from stdin in 3.13.2. Nothing reaches argv
-or disk, and keys are taken literally.
+**Done (2026-11-07).** The secret leaves are a second values document on stdin (`-f strata-values.yaml -f -`), through the
+existing `Integration.run(input=)`. Only the branches that lead to a secret are sent, and a list holding one is sent
+whole, because Helm replaces lists. `_set_string_args()` and `_escape_set_value()` are removed. Verified with
+`helm template` 3.13.2: the stdin value replaces the token left in the file, special characters survive, and `0123`
+stays a string.
 
 #### 3. `deploy plan` / `--dry-run` streams the rendered manifest with Secrets
 
@@ -81,8 +86,11 @@ The dry-run calls `helm upgrade --dry-run`, which prints the full rendered manif
 `Secret`'s `data`, which is base64. [deploy-destroy.md](../design/deploy-destroy.md) (D7) avoids this for the destroy
 preview by showing only `Kind/name`. The deploy preview does not.
 
-Fix: summarise the dry-run like the destroy preview, as one `Kind/name` line per resource plus the chart and version.
-A real diff (the `helm diff` plugin) is a separate feature; see the open questions.
+**Done (2026-11-07).** The dry-run is not streamed. `summarise_dry_run()` reads its `HOOKS:` and `MANIFEST:` sections
+and the step reports one `Kind/name` line per resource (hooks marked) through `on_step`, which `deploy_namespace()` now
+takes, so the summary is shown without `--follow` too. `NOTES:` are dropped, because they are rendered from the same
+values. A failed preview still reports Helm's stderr, which holds an error, not the manifest. A real diff (the
+`helm diff` plugin) is a separate feature; see the open questions.
 
 #### 4. A registry chart with no services or configuration cannot deploy
 
@@ -91,7 +99,7 @@ A real diff (the `helm diff` plugin) is a separate feature; see the open questio
 fails with `open .../values.yaml: ... cannot find the path` (verified). `helm lint` skips registry charts, so nothing
 catches it before deploy.
 
-Fix: omit `-f` when there is no file, or always write `{}`. Add a test for a bare `chart_name` module.
+**Done (2026-11-07).** `strata-values.yaml` is always written, `{}` when the module sets nothing (see gap 1).
 
 #### 5. Stage timeouts do not reach a Helm upgrade
 
@@ -101,8 +109,10 @@ database migration hook) is rolled back by `--atomic`, and neither `stage.timeou
 `STRATA_TIMEOUT_<STEP>_APPLY` can change that. [ADR-0032](../decisions/0032-deploy-time-step-timeout-overrides.md)
 deferred this. [cli-timeout.md](../design/cli-timeout.md) already calls the two timeouts a footgun.
 
-Fix: pass the apply and plan timeouts through. Derive Helm's `--timeout` from the stage timeout, with the process
-timeout a margin above it, so Helm's own rollback runs before strata kills the process.
+**Done (2026-11-07).** `deploy_run()` passes the `plan` (dry-run) or `apply` timeout to `deploy_namespace()`, for
+Compose too, which had the same gap. For Helm it is per release: N seconds is the process timeout and `--timeout` gets
+N/2 (`_upgrade_timeouts()`), because `--atomic` waits again while it rolls back. That keeps the defaults as the N = 600
+case (600 s and `5m`), so nothing changes without an override. A dry-run gets the process timeout only.
 
 #### 6. The cluster is whatever kube context is active
 
@@ -115,6 +125,12 @@ Options, smallest first: print the active context at the start of a Helm step; a
 per deployment stage, checked before any `helm` call; or strata passing `--kube-context` and `--kubeconfig`
 itself. The second keeps the ADR-0020 split and only adds a guard.
 
+**Done (2026-11-07)**, as designed in [helm-kube-context.md](helm-kube-context.md): an optional `kube_context` on the
+deployment, which pins every `helm` call to that context through `HELM_KUBECONTEXT`, with a check before the first
+step that the kubeconfig defines it. `strata validate` warns when a deployment with a Helm step has none. Compose has the
+same gap with `DOCKER_HOST`, closed the same way by `docker_context`
+([compose-docker-context.md](compose-docker-context.md)).
+
 #### 7. Release and Kubernetes namespace names are not validated
 
 `release_name` (default: the module reference name) and `kubernetes_namespace` (default: the strata namespace name)
@@ -123,8 +139,9 @@ label for the namespace. A name like `My_App` passes `strata validate` and fails
 that end up with the same release name in the same Kubernetes namespace (possible through `kubernetes_namespace`)
 would install one over the other, and nothing detects it.
 
-Fix: format checks on the model, and a `strata validate` check that the (Kubernetes namespace, release) pair is unique
-within a deployment.
+**Done (2026-11-07)**, as designed in [helm-release-names.md](helm-release-names.md). Helm modules only for now (Argo CD later), and strict:
+both rules are errors in `strata validate`, defaults included, and the (Kubernetes namespace, release) pair must be
+unique within a workspace.
 
 #### 8. Registry charts get no check before deploy
 
@@ -135,6 +152,11 @@ Fix, at the check phase (which may use the network, unlike `build run`): `helm s
 `helm template` with the overlay for a lint equivalent. Both need the registry login from ADR-0042, so they belong
 inside the same isolated configuration.
 
+**Done (2026-11-07)**, redesigned under [ADR-0054](../decisions/0054-build-fetches-release-inputs-never-targets.md):
+`build run` pulls registry charts into `.strata/helm/` and records their version and digest, they get the key check and
+`helm lint`, and the deploy verifies and installs that archive. A machine without `helm` or the credentials leaves the
+chart unpinned, and the deploy refuses it. See [helm-registry-chart-checks.md](helm-registry-chart-checks.md).
+
 #### 9. Local chart dependencies are never built
 
 A local chart that declares `dependencies:` in `Chart.yaml` and does not vendor them in `charts/` fails lint and
@@ -142,11 +164,46 @@ install with "found in Chart.yaml, but missing in charts/ directory". Strata nev
 [sbom-generation.md](sbom-generation.md) notes the same need for rendering. Whether any haven chart has
 unvendored dependencies is not checked; if none does, documenting "vendor your dependencies" may be enough.
 
+**Done (2026-11-08)**, see [helm-chart-dependencies.md](helm-chart-dependencies.md). Correction: `helm lint` only
+warns about missing dependencies; the failure is at `helm upgrade`. A `file://` dependency also breaks, because the
+chart is copied alone into the build directory. Most OMP charts with dependencies commit no `Chart.lock`, so the
+build resolves dependencies itself into the gap 8 cache instead of running `helm dependency build`.
+
 #### 10. Helm 4 compatibility is unknown
 
 The argv shapes were copied from v1 and tested with Helm 3. Helm 4 changed some upgrade flags (it renamed
 `--atomic`, for example). Nothing checks the Helm version. This needs a run against Helm 4 to know whether anything
 breaks.
+
+**Checked (2026-11-08)** against Helm 4.3.1 (get.helm.sh, checksum verified) beside 3.13.2, with a kubeconfig that
+points at a dead address. Helm 3 gets security patches until February 2027. Nothing breaks today:
+
+- Every flag strata passes is accepted. All 1101 tests in the Helm test files pass with Helm 4 first on `PATH`,
+  including the real-Helm ones: the values overlay render, release names, lint with the overlay, a credentialed
+  `repo add --password-stdin` and pull against a basic-auth server, `HELM_KUBECONTEXT`, the chart cache, and gap 9's
+  dependencies with `dependency list` and `template`.
+- The outputs strata parses keep their shape: the dry-run `HOOKS:`/`MANIFEST:`/`NOTES:` sections, the
+  `dependency list` table, and `version`. Lint now puts an `[ERROR]`'s cause on the following lines, which
+  `_error_findings()` already joins.
+
+What changes:
+
+| strata passes        | Helm 4.3.1                                                                    | Helm 3.13.2                     |
+| -------------------- | ----------------------------------------------------------------------------- | ------------------------------- |
+| `--atomic`           | works, warns "use --rollback-on-failure"                                      | `--rollback-on-failure` unknown |
+| bare `--dry-run`     | works, warns "replace with --dry-run=client"                                  | `--dry-run=client` accepted     |
+| bare `--wait`        | means `watcher` (kstatus, needs the `watch` verb); `--wait=legacy` is 3.x's   | `--wait=legacy` rejected        |
+| (no flag)            | `--server-side auto`: server-side apply for a new release, the previous method for an existing one | no such flag |
+
+So `--rollback-on-failure` and `--wait=legacy` need the major version, and `--dry-run=client` needs Helm 3.13 or later.
+Design: [helm-4-support.md](helm-4-support.md) (Helm 4 by default; Helm 3, deprecated, only when a `helm`
+integration's `spec.version` excludes Helm 4; [ADR-0055](../decisions/0055-helm-4-by-default-helm-3-only-when-declared.md)).
+
+**Done (2026-11-08)**: Helm 4's flags (`--dry-run=client`, `--wait=watcher`, `--rollback-on-failure`) by default; a
+`helm` integration whose `spec.version` allows no Helm 4 keeps the v1 flags with a `helm_3_deprecated` warning; every
+deploy reads `helm version` first and stops undeclared Helm 3 (`helm_3_not_declared`, a warning under `deploy destroy`);
+the version and path are printed and recorded in the deployment manifest. Checked with the real 4.3.1 and 3.13.2
+binaries. A breaking change for undeclared Helm 3.
 
 ### Smaller notes
 
@@ -171,26 +228,40 @@ breaks.
 
 ### Proposed order
 
-- [ ] 1. Gap 1: write strata's values to their own file; check the ADR-0043 haven failure against it
-- [ ] 2. Gap 2: secrets on stdin with `-f -`
-- [ ] 3. Gap 4: no `-f` without a values file, plus a test
-- [ ] 4. Gap 3: summarise the dry-run instead of streaming the manifest
-- [ ] 5. Gap 5: stage timeouts for plan and apply
-- [ ] 6. Gap 7: name checks and the release uniqueness check in `strata validate`
-- [ ] 7. Gap 6: decide on the context guard
-- [ ] 8. Gaps 8, 9 and 10: on demand, after checking haven
+- [x] 1. Gap 1: write strata's values to their own file
+- [ ] 1a. Check the ADR-0043 haven failure and haven's local charts against gap 1
+- [x] 2. Gap 2: secrets on stdin with `-f -`
+- [x] 3. Gap 4: always write the values file
+- [x] 4. Gap 3: summarise the dry-run instead of streaming the manifest
+- [x] 5. Gap 5: stage timeouts for plan and apply
+- [x] 6. Gap 7: name checks and the release uniqueness check in `strata validate`
+- [x] 7. Gap 6: the kube context pin
+- [x] 8. Gap 8: registry charts pinned at build, checked, and installed from the pinned archive
+- [x] 9. Gap 9: local chart dependencies placed at build
+- [x] 10. Gap 10: Helm 4 by default, Helm 3 on request ([helm-4-support.md](helm-4-support.md))
 
 ### Open questions
 
 - **Gap 1 compatibility.** Does any haven module depend on the chart defaults being dropped? A `build run` of haven
   followed by `helm template` for each local chart, with and without the fix, answers it.
-- **Gap 6 shape.** A per-stage expected context, or a per-deployment one? A stage is the unit that names Helm steps,
-  but a context belongs to an environment.
+- **Gap 6 shape.** Decided: per deployment (one deployment is one environment, so one cluster). A per-stage override
+  waits for a workspace whose Helm steps target two clusters.
 - **A real plan diff.** Should `deploy plan` show what would change in the cluster (`helm diff upgrade`)? It needs a
   plugin, so it would be optional, with the summary from gap 3 as the fallback.
 - **Release status and rollback.** No `deploy status` or rollback exists for Helm. No consumer has asked for either.
 
 ## Changelog
+
+- 2026-11-08: gap 10 fixed (Helm 4 flags by default, Helm 3 only when declared, ADR-0055).
+- 2026-11-08: gap 10 checked against Helm 4.3.1: nothing breaks; deprecation warnings and a `--wait` behaviour
+  change remain.
+- 2026-11-08: gap 9 fixed (local chart dependencies placed at build); lint finding corrected.
+- 2026-11-07: gap 8 fixed (registry charts pinned at build, ADR-0054).
+- 2026-11-07: gap 7 fixed (Helm only; Argo CD later).
+- 2026-11-07: gap 5 fixed (Helm and Compose plan/apply timeouts).
+- 2026-11-07: gaps 1 and 4 fixed (`strata-values.yaml`).
+- 2026-11-07: gaps 2 and 3 fixed on `feature/helm-improvements`. Corrected gap 2: a dot in a key was handled; a list
+  index was not.
 
 - 2026-11-07: created. Gaps 1 and 4 and the `-f -` fix for gap 2 verified with `helm` 3.13.2 and a test chart; the
   rest from reading the source.

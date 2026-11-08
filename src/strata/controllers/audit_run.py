@@ -41,7 +41,7 @@ misconfigured audit sink never takes down a deploy that already succeeded.
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, cast
@@ -73,6 +73,7 @@ from strata.models.audit_manifest_model import (
     ManifestChartModel,
     ManifestImageModel,
     ManifestPlatformReferenceModel,
+    ManifestProviderModel,
     ManifestRepositoryModel,
     ManifestSbomReferenceModel,
 )
@@ -117,6 +118,7 @@ def finalize_and_distribute_deploy_audit(
     change_url: str | None = None,
     change_approved_by: str | None = None,
     change_approved_at: str | None = None,
+    providers: Sequence[ManifestProviderModel] = (),
 ) -> Diagnostics:
     """Finalize the manifest + metrics for a `deploy run` invocation, write
     them locally, then distribute to every configured sink.
@@ -162,6 +164,8 @@ def finalize_and_distribute_deploy_audit(
         change_approved_at: `deploy run --change-approved-at` — ISO-8601
             timestamp of the approval itself (in the tracker), never
             auto-derived from this run's own clock.
+        providers: One entry per provisioner the run used, with the tool version and path its preflight found
+            (`deploy_run(on_tool=...)`, docs/work/helm-4-support.md); `artifacts.providers` is omitted when empty.
 
     Returns:
         Findings from finalizing/writing/distributing only — never
@@ -215,7 +219,11 @@ def finalize_and_distribute_deploy_audit(
         dry_run=False,
         deployed_by=actor,
         artifacts=ManifestArtifactsModel(
-            platform=platform_ref, repositories=repositories, images=images, charts=charts
+            platform=platform_ref,
+            repositories=repositories,
+            images=images,
+            charts=charts,
+            providers=list(providers) or None,
         ),
         sbom=_sbom_reference(build_path),
         change_reference=change_reference,

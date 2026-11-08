@@ -26,7 +26,7 @@ exits 2 instead of returning an empty list.
 | `strata policy check D` | Evaluates the workspace's policies now and records the results. Optional (see below).                           | Scanners, and gate credentials if a gate policy is set. |
 | `strata deploy run D`   | Executes the rendered output: `terraform plan` and `apply`, or the Helm and Compose equivalent.                 | The tools on `PATH`, and every store credential.        |
 
-Four things worth knowing:
+Five things worth knowing:
 
 - **`build run` does not resolve secrets** unless you pass `--resolve`. It only reads `constant` and
   `environment` values, so a build job needs almost no credentials. `--resolve` is a full pre-deploy
@@ -34,6 +34,10 @@ Four things worth knowing:
   ones that fail, without writing any of them down.
 - **`build run` already evaluates `cve_policy` and `checkov_policy`**, so Trivy or Grype, and Checkov,
   must be on `PATH` before the build step if the workspace configures them.
+- **`build run` pins registry Helm charts**, so it needs `helm` on `PATH` and the registries'
+  credentials when the workspace has any. Without them the build still succeeds, but leaves those
+  charts unpinned, and the deploy stops at them. Keeping `.strata/helm/` from the build job lets the
+  deploy job skip the registry ([chart-registries.md](../integrations/chart-registries.md)).
 - **`deploy run` already runs `release_gate_policy` and `image_gate_policy`**, after values resolve and
   before any provisioner. A separate `policy check` step is only worth having when you want the
   gate as its own step or job, for example before an approval, or in a pull request check that never

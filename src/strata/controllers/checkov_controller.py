@@ -36,11 +36,15 @@ equivalent at build time in v2. Re-scoped instead to a distinction that
   namespace's modules.
 """
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from strata.controllers.integration_resolution import bind_integration_config
+from strata.controllers.remote_credentials import RemoteCredentialResolver
+from strata.controllers.remote_resolution import RemoteResolutionError
 from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.source_sync import SourceSyncError, source_repo_root
 from strata.controllers.workload_controller import resolve_module
 from strata.integrations.checkov import CheckovIntegration
 from strata.integrations.errors import IntegrationError
@@ -50,12 +54,15 @@ from strata.models.checkov_model import (
     CheckovPolicyModel,
     CheckovScanResultModel,
 )
+from strata.models.common_models import SourceModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
+from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.builtin_types import TERRAFORM_COMPATIBLE_TYPES, ProvisionerType
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
+from strata.utils.path_safety import resolve_within
 
 #: `checkov_policy.framework` -> the real `ProvisionerModel.tool` values it
 #: scans. `helm` is deliberately absent — resolved via namespace modules
@@ -135,12 +142,12 @@ def evaluate_checkov_policy(
         return diagnostics
 
     scanner = _checkov(index)
-    for target in targets:
+    for target in _with_config(policy, targets):
         if target.path is None:
             _report_missing_data(diagnostics, policy.on_missing_data, target.missing or "", scope=target.label)
             continue
         try:
-            result = _scan(scanner, policy, target.path)
+            result = _scan(scanner, policy, target)
         except IntegrationError as exc:
             _report_missing_data(diagnostics, policy.on_missing_data, str(exc), scope=target.label)
             continue
@@ -220,12 +227,12 @@ def checkov_findings(
     scanner = _checkov(index)
     version: str | None = None
     rows: list[CheckovTargetFindings] = []
-    for target in targets:
+    for target in _with_config(policy, targets):
         if target.path is None:
             rows.append(CheckovTargetFindings(target.label, None, target.missing, ()))
             continue
         try:
-            result = _scan(scanner, policy, target.path)
+            result = _scan(scanner, policy, target)
         except IntegrationError as exc:
             raise SystemError(f"checkov_policy: {target.label}: {exc}") from None
         version = result.scanner_version
@@ -240,21 +247,93 @@ def checkov_findings(
 
 _NOT_MATERIALISED = "not materialised during this build"
 
+#: Where `snapshot_checkov_configs()` copies each target's `config_file`, under the build output.
+CHECKOV_CONFIG_DIR = "checkov-config"
+
 
 @dataclass(frozen=True)
 class _Target:
     label: str
     path: Path | None
     missing: str | None = None
+    #: The provisioner's or module's source; `None` means the solution's own repository.
+    source: SourceModel | None = None
+    #: Where this target's `config_file` snapshot lives in the build output.
+    config: Path | None = None
 
 
-def _scan(scanner: CheckovIntegration, policy: CheckovPolicyModel, path: Path) -> CheckovScanResultModel:
+def _config_snapshot(build_path: Path, *parts: str) -> Path:
+    *parents, name = parts
+    return build_path.joinpath(CHECKOV_CONFIG_DIR, *parents, f"{name}.yaml")
+
+
+def snapshot_checkov_configs(
+    build_path: Path,
+    workspace: WorkspaceModel,
+    provisioner_source_paths: dict[str, Path | None],
+    root: Path,
+    remotes: dict[str, SolutionRemoteModel],
+    *,
+    namespaces: dict[str, NamespaceModel] | None = None,
+    index: DocumentIndex | None = None,
+    credentials: RemoteCredentialResolver | None = None,
+) -> None:
+    """Copy `checkov_policy.config_file` from each scanned target's source repository into the build output.
+
+    Run by `build run` once every source is materialised, so the gate and `strata policy
+    check`/`findings` read the same file from the build output and never resolve a remote
+    themselves. A repository without the file gets no snapshot; the gate then reports that
+    target through `on_missing_data`. Stale snapshots from an earlier build are removed first.
+    """
+    shutil.rmtree(build_path / CHECKOV_CONFIG_DIR, ignore_errors=True)
+    policy = workspace.spec.checkov_policy
+    if policy is None or policy.config_file is None:
+        return
+    targets, _ = _targets(policy, workspace, provisioner_source_paths, build_path, namespaces, index)
+    for target in targets:
+        if target.path is None or target.config is None:
+            continue
+        try:
+            repo_root = (
+                source_repo_root(root, target.source, remotes, credentials=credentials)
+                if target.source is not None
+                else root
+            )
+            origin = resolve_within(repo_root, repo_root / policy.config_file)
+        except (SourceSyncError, RemoteResolutionError, ValueError):
+            continue
+        if origin.is_file():
+            target.config.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(origin, target.config)
+
+
+def _with_config(policy: CheckovPolicyModel, targets: list[_Target]) -> list[_Target]:
+    """Mark a target missing when `config_file` is set but `build run` found none to snapshot for it."""
+    if policy.config_file is None:
+        return targets
+    return [
+        _Target(
+            target.label,
+            None,
+            f"config_file '{policy.config_file}' not found in its source repository",
+            target.source,
+            target.config,
+        )
+        if target.path is not None and (target.config is None or not target.config.is_file())
+        else target
+        for target in targets
+    ]
+
+
+def _scan(scanner: CheckovIntegration, policy: CheckovPolicyModel, target: _Target) -> CheckovScanResultModel:
+    assert target.path is not None
     return scanner.scan(
-        path,
+        target.path,
         framework=policy.framework,
         skip_checks=policy.skip_checks,
         include_checks=policy.include_checks,
         custom_checks_dir=policy.custom_checks_dir,
+        config_file=target.config if policy.config_file is not None else None,
         timeout=policy.timeout,
     )
 
@@ -278,7 +357,8 @@ def _targets(
         # `None` covers both "never reached" and a source-less dependency.
         source_path = provisioner_source_paths.get(provisioner.name)
         missing = None if source_path is not None else _NOT_MATERIALISED
-        targets.append(_Target(f"provisioner '{provisioner.name}'", source_path, missing))
+        config = _config_snapshot(build_path, "provisioners", provisioner.name)
+        targets.append(_Target(f"provisioner '{provisioner.name}'", source_path, missing, provisioner.source, config))
     return targets, None
 
 
@@ -327,8 +407,11 @@ def _helm_targets(
                 targets.append(_Target(label, None, "registry-pulled chart has no local source to scan"))
                 continue
             module_dir = build_path / namespace.meta.name / reference.name
+            config = _config_snapshot(build_path, "modules", namespace.meta.name, reference.name)
             targets.append(
-                _Target(label, module_dir) if module_dir.is_dir() else _Target(label, None, _NOT_MATERIALISED)
+                _Target(label, module_dir, None, module.spec.source, config)
+                if module_dir.is_dir()
+                else _Target(label, None, _NOT_MATERIALISED)
             )
     if not targets:
         # Every module disabled or not helm-typed: never let "never scanned" look like "scanned clean".

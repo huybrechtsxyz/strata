@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 """Tests for `workload_controller` (ADR-0022 D5-D7)."""
 
+import functools
+import gzip
+import http.server
+import io
+import os
+import shutil
+import subprocess
+import tarfile
+import threading
 from pathlib import Path
 
 import pytest
@@ -14,6 +23,7 @@ from strata.controllers.workload_controller import (
     resolve_artifact_services,
     resolve_module,
 )
+from strata.integrations.helm_cache import archive_digest, entry_path
 from strata.integrations.resolved_context import ValueResolution
 from strata.models.artifact_model import ArtifactMetaModel, ArtifactModel, ArtifactSpecModel
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
@@ -23,6 +33,7 @@ from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, Na
 from strata.models.version_model import VersionMetaModel, VersionModel, VersionSpecModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
+from strata.utils.transport import CommandResult
 
 
 def _write(path: Path, content: str = "") -> None:
@@ -389,7 +400,7 @@ def test_build_workload_modules_materialises_source_and_writes_helm_output(tmp_p
 
     module_dir = build_path / "apps" / "auth"
     assert (module_dir / "Chart.yaml").read_text() == "name: authentik"
-    assert (module_dir / "values.yaml").exists()
+    assert (module_dir / "strata-values.yaml").exists()
     meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
     # releaseName defaults to the reference name ("auth"), not module.meta.name ("authentik").
     assert meta["releaseName"] == "auth"
@@ -434,8 +445,10 @@ def test_build_workload_modules_warns_on_configuration_keys_a_local_chart_does_n
     assert "'replicaCnt'" in messages[0] and "did you mean 'replicaCount'" in messages[0]
     assert "'image.tagg'" in messages[1] and "did you mean 'image.tag'" in messages[1]
     assert {item.code for item in diagnostics.items} == {"helm_unknown_configuration_key"}
-    # The check read the chart's own defaults, not the values.yaml prepare_namespace() then overwrote.
-    assert "replicaCnt" in (tmp_path / "build" / "apps" / "app" / "values.yaml").read_text()
+    # The module's values go beside the chart's own defaults, which stay as they were copied.
+    module_dir = tmp_path / "build" / "apps" / "app"
+    assert "replicaCnt" in (module_dir / "strata-values.yaml").read_text()
+    assert (module_dir / "values.yaml").read_text() == "replicaCount: 1\nimage:\n  tag: latest\n"
 
 
 def test_build_workload_modules_is_quiet_when_every_configuration_key_is_declared(tmp_path: Path):
@@ -452,12 +465,568 @@ def test_build_workload_modules_skips_the_key_check_without_chart_defaults(tmp_p
     assert _build_with_chart_defaults(tmp_path, module, None).items == []
 
 
-def test_build_workload_modules_skips_the_key_check_for_a_registry_chart(tmp_path: Path):
+def test_build_workload_modules_cannot_key_check_an_unpinned_registry_chart(tmp_path: Path):
     module = _helm_module_with_configuration(
         {"anything": 1}, source=SourceModel(chart_repository="https://charts.example.com", chart_name="app")
     )
 
-    assert _build_with_chart_defaults(tmp_path, module, "replicaCount: 1\n").items == []
+    diagnostics = _build_with_chart_defaults(tmp_path, module, "replicaCount: 1\n")
+
+    assert diagnostics.ok
+    assert [item.code for item in diagnostics.items] == ["helm_chart_not_pinned"]
+
+
+# ---------------------------------------------------------------------------
+# Registry charts pinned at build (docs/work/helm-registry-chart-checks.md, Phase 3)
+# ---------------------------------------------------------------------------
+
+_REPOSITORY = "https://charts.example.com"
+
+
+def _packaged_chart(destination: Path, name: str, version: str, values: str) -> Path:
+    def add(tar: tarfile.TarFile, member: str, text: str) -> None:
+        data = text.encode()
+        info = tarfile.TarInfo(member)
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+
+    archive = destination / f"{name}-{version}.tgz"
+    # A fixed gzip timestamp: a registry serves the same bytes on every pull.
+    with gzip.GzipFile(archive, "wb", mtime=0) as packed, tarfile.open(fileobj=packed, mode="w") as tar:
+        add(tar, f"{name}/Chart.yaml", f"apiVersion: v2\nname: {name}\nversion: {version}\nappVersion: '9.1'\n")
+        add(tar, f"{name}/values.yaml", values)
+        add(tar, f"{name}/charts/redis/Chart.yaml", "apiVersion: v2\nname: redis\nversion: 19.0.1\n")
+    return archive
+
+
+def _fake_helm(monkeypatch, *, version: str = "1.4.2", values: str = "replicaCount: 1\n", fail: str | None = None):
+    """`helm` on PATH whose `pull` writes a packaged chart; returns every call's argv."""
+    import strata.integrations.base as base_module
+
+    calls: list[list[str]] = []
+
+    def _run(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        if args[1] == "pull":
+            if fail is not None:
+                return CommandResult(returncode=1, stdout="", stderr=fail)
+            _packaged_chart(Path(args[args.index("--destination") + 1]), "app", version, values)
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(base_module, "run_command", _run)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return calls
+
+
+def _registry_build(tmp_path: Path, *, version: str | None = "^1.4.0", configuration=None, **kwargs):
+    module = _helm_module_with_configuration(
+        configuration or {}, source=SourceModel(chart_repository=_REPOSITORY, chart_name="app", chart_version=version)
+    )
+    steps: list[str] = []
+    diagnostics = build_workload_modules(
+        _index(module),
+        tmp_path / "sln",
+        remotes={},
+        namespace=_namespace(ModuleReferenceModel(name="app", module="app")),
+        resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build",
+        on_step=steps.append,
+        **kwargs,
+    )
+    meta_file = tmp_path / "build" / "apps" / "app" / "meta.yaml"
+    meta = yaml.safe_load(meta_file.read_text()) if meta_file.exists() else None
+    return diagnostics, meta, steps
+
+
+def _cache(tmp_path: Path) -> Path:
+    return tmp_path / "sln" / ".strata" / "helm"
+
+
+@pytest.mark.chart_pulls
+def test_a_registry_chart_is_pulled_and_pinned_in_meta_yaml(tmp_path: Path, monkeypatch):
+    calls = _fake_helm(monkeypatch)
+
+    diagnostics, meta, steps = _registry_build(tmp_path)
+
+    assert diagnostics.items == []
+    [pull] = [call for call in calls if call[1] == "pull"]
+    assert pull[-2:] == ["--version", "^1.4.0"]
+    [source] = [path.name for path in _cache(tmp_path).iterdir()]
+    archive = entry_path(_cache(tmp_path), source, "app", "1.4.2") / "app-1.4.2.tgz"
+    assert meta == {
+        "releaseName": "app",
+        "namespace": "apps",
+        "chartName": "app",
+        "chartRepository": _REPOSITORY,
+        "chartVersion": "1.4.2",
+        "chartVersionConstraint": "^1.4.0",
+        "chartDigest": archive_digest(archive),
+        "chartAppVersion": "9.1",
+        "chartSubcharts": [{"name": "redis", "version": "19.0.1"}],
+    }
+    assert (
+        f"pinned chart 'app' (^1.4.0) at 1.4.2 ({archive_digest(archive)}) for Namespace 'apps', module 'app'" in steps
+    )
+
+
+@pytest.mark.chart_pulls
+def test_a_pull_runs_in_an_isolated_helm_configuration(tmp_path: Path, monkeypatch):
+    import strata.integrations.base as base_module
+
+    envs: list[dict] = []
+    _fake_helm(monkeypatch)
+    real = base_module.run_command
+
+    def _recording(args, *, env=None, **kwargs):
+        envs.append(dict(env or {}))
+        return real(args, env=env, **kwargs)
+
+    monkeypatch.setattr(base_module, "run_command", _recording)
+
+    _registry_build(tmp_path)
+
+    assert envs and all("HELM_REPOSITORY_CONFIG" in env for env in envs)
+
+
+@pytest.mark.chart_pulls
+def test_an_exact_version_is_written_without_a_constraint(tmp_path: Path, monkeypatch):
+    _fake_helm(monkeypatch)
+
+    _, meta, _ = _registry_build(tmp_path, version="1.4.2")
+
+    assert meta["chartVersion"] == "1.4.2"
+    assert "chartVersionConstraint" not in meta
+
+
+@pytest.mark.chart_pulls
+def test_a_cached_exact_version_needs_no_helm(tmp_path: Path, monkeypatch):
+    _fake_helm(monkeypatch)
+    _registry_build(tmp_path, version="1.4.2")
+    calls = _fake_helm(monkeypatch)
+    monkeypatch.setattr("strata.controllers.workload_controller.can_pull_charts", lambda integration: False)
+
+    diagnostics, meta, steps = _registry_build(tmp_path, version="1.4.2")
+
+    assert calls == []
+    assert diagnostics.items == []
+    assert meta["chartDigest"].startswith("sha256:")
+    assert "using cached chart 'app' (1.4.2) for Namespace 'apps', module 'app'" in steps
+
+
+@pytest.mark.chart_pulls
+def test_a_range_is_pulled_again_on_every_build(tmp_path: Path, monkeypatch):
+    _fake_helm(monkeypatch)
+    _registry_build(tmp_path)
+    calls = _fake_helm(monkeypatch)
+
+    _registry_build(tmp_path)
+
+    assert [call[1] for call in calls if call[1] == "pull"] == ["pull"]
+
+
+@pytest.mark.chart_pulls
+def test_a_pinned_registry_chart_gets_the_configuration_key_check(tmp_path: Path, monkeypatch):
+    _fake_helm(monkeypatch, values="replicaCount: 1\n")
+
+    diagnostics, _, _ = _registry_build(tmp_path, configuration={"replicaCnt": 2})
+
+    [finding] = diagnostics.items
+    assert finding.code == "helm_unknown_configuration_key"
+    assert "'replicaCnt'" in finding.message and "did you mean 'replicaCount'" in finding.message
+
+
+def test_without_helm_a_registry_chart_is_left_unpinned(tmp_path: Path):
+    diagnostics, meta, _ = _registry_build(tmp_path)
+
+    assert diagnostics.ok
+    [warning] = diagnostics.items
+    assert warning.code == "helm_chart_not_pinned"
+    assert warning.message == (
+        "Namespace 'apps', module 'app': chart 'app' (^1.4.0) is not pinned: 'helm' is not installed. A deploy of "
+        "this build stops at this chart; build again where the chart can be pulled."
+    )
+    assert meta["chartVersion"] == "^1.4.0"
+    assert "chartDigest" not in meta
+
+
+@pytest.mark.chart_pulls
+def test_offline_pulls_nothing_and_leaves_an_uncached_chart_unpinned(tmp_path: Path, monkeypatch):
+    calls = _fake_helm(monkeypatch)
+
+    diagnostics, meta, _ = _registry_build(tmp_path, offline=True)
+
+    assert calls == []
+    [warning] = diagnostics.items
+    assert "is not pinned: --offline was given and it is not in .strata/helm/" in warning.message
+    assert "chartDigest" not in meta
+
+
+@pytest.mark.chart_pulls
+def test_offline_still_pins_a_cached_exact_version(tmp_path: Path, monkeypatch):
+    _fake_helm(monkeypatch)
+    _registry_build(tmp_path, version="1.4.2")
+
+    diagnostics, meta, _ = _registry_build(tmp_path, version="1.4.2", offline=True)
+
+    assert diagnostics.items == []
+    assert "chartDigest" in meta
+
+
+@pytest.mark.chart_pulls
+def test_a_failed_pull_is_an_error(tmp_path: Path, monkeypatch):
+    _fake_helm(monkeypatch, fail='Error: chart "app" matching ^1.4.0 not found')
+
+    diagnostics, _, _ = _registry_build(tmp_path)
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_chart_pull_failed"
+    assert error.message == (
+        "Namespace 'apps', module 'app': could not pull chart 'app' (^1.4.0) — "
+        'Error: chart "app" matching ^1.4.0 not found'
+    )
+
+
+@pytest.mark.chart_pulls
+def test_a_dry_run_reports_the_pull_and_pulls_nothing(tmp_path: Path, monkeypatch):
+    calls = _fake_helm(monkeypatch)
+
+    diagnostics, meta, steps = _registry_build(tmp_path, dry_run=True)
+
+    assert calls == [] and meta is None and diagnostics.items == []
+    assert "would pull chart 'app' (^1.4.0) for Namespace 'apps', module 'app'" in steps
+
+
+class _Credentials:
+    """A `RemoteCredentialResolver` stand-in for the registry path."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+
+    def for_registry(self, name, *, owner):
+        if self.error is not None:
+            raise self.error
+        return None
+
+
+@pytest.mark.chart_pulls
+@pytest.mark.parametrize(
+    ("error", "severity_code"),
+    [
+        ("needs-resolve", ("warning", "helm_chart_not_pinned")),
+        ("invalid", ("error", "helm_registry_credentials_invalid")),
+    ],
+)
+def test_registry_credentials_that_need_resolve_unpin_and_broken_ones_fail(tmp_path, monkeypatch, error, severity_code):
+    from strata.controllers.remote_credentials import CredentialsNeedResolveError, RemoteCredentialError
+    from strata.models.solution_model import SolutionRemoteModel
+
+    calls = _fake_helm(monkeypatch)
+    raised = (
+        CredentialsNeedResolveError(
+            "remote 'charts' (integration 'reg'): 'PW' is stored in 'infisical'; pass --resolve"
+        )
+        if error == "needs-resolve"
+        else RemoteCredentialError("remote 'charts' (integration 'reg'): integration 'reg' not found")
+    )
+    module = _helm_module_with_configuration(
+        {}, source=SourceModel(remote="charts", chart_name="app", chart_version="1.4.2")
+    )
+    remote = SolutionRemoteModel(name="charts", type="helm", url=_REPOSITORY, integration="reg")
+
+    diagnostics = build_workload_modules(
+        _index(module),
+        tmp_path / "sln",
+        remotes={"charts": remote},
+        namespace=_namespace(ModuleReferenceModel(name="app", module="app")),
+        resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build",
+        credentials=_Credentials(raised),  # type: ignore[arg-type]
+    )
+
+    [finding] = diagnostics.items
+    assert (finding.severity.value, finding.code) == severity_code
+    assert calls == []
+
+
+# ---------------------------------------------------------------------------
+# Local chart dependencies placed at build (docs/work/helm-chart-dependencies.md, Phase 2)
+# ---------------------------------------------------------------------------
+
+
+def _fake_dependency_helm(monkeypatch, *, resolved: str = "19.0.4", dependency_list: str = ""):
+    """`helm` on PATH whose `pull` writes the chart the ref names, at an exact `--version` or else `resolved`."""
+    import strata.integrations.base as base_module
+
+    calls: list[list[str]] = []
+
+    def _run(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        if args[1] == "pull":
+            name = args[2].rsplit("/", 1)[-1]
+            asked = args[args.index("--version") + 1] if "--version" in args else None
+            version = asked if asked and asked[0].isdigit() else resolved
+            _packaged_chart(Path(args[args.index("--destination") + 1]), name, version, "")
+        if args[1:3] == ["dependency", "list"]:
+            return CommandResult(returncode=0, stdout=dependency_list, stderr="")
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(base_module, "run_command", _run)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return calls
+
+
+def _dependent_build(tmp_path: Path, dependencies: str, *, lock: str | None = None, configuration=None, **kwargs):
+    root = tmp_path / "sln"
+    _write(
+        root / "charts" / "app" / "Chart.yaml",
+        f"apiVersion: v2\nname: app\nversion: 1.0.0\ndependencies:\n{dependencies}",
+    )
+    _write(root / "charts" / "app" / "values.yaml", "replicaCount: 1\n")
+    if lock is not None:
+        _write(root / "charts" / "app" / "Chart.lock", lock)
+    module = _helm_module_with_configuration(configuration or {})
+    steps: list[str] = []
+    diagnostics = build_workload_modules(
+        _index(module),
+        root,
+        remotes=kwargs.pop("remotes", {}),
+        namespace=_namespace(ModuleReferenceModel(name="app", module="app")),
+        resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build",
+        on_step=steps.append,
+        **kwargs,
+    )
+    module_dir = tmp_path / "build" / "apps" / "app"
+    meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
+    return diagnostics, meta, steps, module_dir
+
+
+_SEPV = f"  - name: sepv\n    version: 99.99.343\n    repository: {_REPOSITORY}\n"
+
+
+@pytest.mark.chart_pulls
+def test_an_exact_dependency_is_pulled_into_charts_and_recorded(tmp_path: Path, monkeypatch):
+    calls = _fake_dependency_helm(monkeypatch)
+
+    diagnostics, meta, steps, module_dir = _dependent_build(tmp_path, _SEPV)
+
+    assert diagnostics.items == []
+    [pull] = [call for call in calls if call[1] == "pull"]
+    assert pull[-2:] == ["--version", "99.99.343"]
+    archive = module_dir / "charts" / "sepv-99.99.343.tgz"
+    assert archive.is_file()
+    assert meta["chartDependencies"] == [
+        {
+            "name": "sepv",
+            "version": "99.99.343",
+            "repository": _REPOSITORY,
+            "digest": archive_digest(archive),
+            "origin": "pulled",
+        }
+    ]
+    assert "chartDependenciesUnpinned" not in meta
+    # Strata never writes Helm's lock, in the source or in the build copy.
+    assert not (tmp_path / "sln" / "charts" / "app" / "Chart.lock").exists()
+    assert not (module_dir / "Chart.lock").exists()
+    assert ["dependency", "list", str(module_dir)] == [call for call in calls if call[1] == "dependency"][0][1:]
+
+
+@pytest.mark.chart_pulls
+def test_a_cached_exact_dependency_needs_no_helm(tmp_path: Path, monkeypatch):
+    _fake_dependency_helm(monkeypatch)
+    _dependent_build(tmp_path, _SEPV)
+    calls = _fake_dependency_helm(monkeypatch)
+    monkeypatch.setattr("strata.controllers.workload_controller.can_pull_charts", lambda integration: False)
+
+    diagnostics, meta, steps, module_dir = _dependent_build(tmp_path, _SEPV)
+
+    assert calls == []
+    assert diagnostics.items == []
+    assert meta["chartDependencies"][0]["origin"] == "cache"
+    assert (module_dir / "charts" / "sepv-99.99.343.tgz").is_file()
+    assert "using cached dependency 'sepv' (99.99.343) for Namespace 'apps', module 'app'" in steps
+
+
+@pytest.mark.chart_pulls
+def test_a_range_dependency_is_resolved_and_its_constraint_recorded(tmp_path: Path, monkeypatch):
+    _fake_dependency_helm(monkeypatch, resolved="19.0.4")
+
+    diagnostics, meta, _, module_dir = _dependent_build(
+        tmp_path, f"  - name: redis\n    version: ~19.0\n    repository: {_REPOSITORY}\n"
+    )
+
+    assert diagnostics.items == []
+    [record] = meta["chartDependencies"]
+    assert (record["version"], record["versionConstraint"]) == ("19.0.4", "~19.0")
+    assert (module_dir / "charts" / "redis-19.0.4.tgz").is_file()
+
+
+@pytest.mark.chart_pulls
+def test_a_committed_lock_decides_the_pulled_version(tmp_path: Path, monkeypatch):
+    calls = _fake_dependency_helm(monkeypatch)
+
+    diagnostics, meta, _, _ = _dependent_build(
+        tmp_path,
+        f"  - name: redis\n    version: ~19.0\n    repository: {_REPOSITORY}\n",
+        lock=f"dependencies:\n- name: redis\n  repository: {_REPOSITORY}\n  version: 19.0.2\n",
+    )
+
+    assert diagnostics.items == []
+    [pull] = [call for call in calls if call[1] == "pull"]
+    assert pull[-2:] == ["--version", "19.0.2"]
+    assert meta["chartDependencies"][0]["versionConstraint"] == "~19.0"
+
+
+def test_without_helm_a_dependency_is_left_unpinned(tmp_path: Path):
+    diagnostics, meta, _, module_dir = _dependent_build(tmp_path, _SEPV)
+
+    assert diagnostics.ok
+    [warning] = diagnostics.items
+    assert warning.code == "helm_chart_dependency_not_pinned"
+    assert warning.message == (
+        "Namespace 'apps', module 'app': dependency 'sepv' (99.99.343) is not pinned: 'helm' is not installed. A "
+        "deploy of this build stops at this chart; build again where the dependency can be pulled."
+    )
+    assert meta["chartDependenciesUnpinned"] == ["sepv"]
+    assert not (module_dir / "charts").exists()
+
+
+def test_a_file_dependency_is_copied_without_helm(tmp_path: Path):
+    root = tmp_path / "sln"
+    _write(root / "charts" / "common" / "Chart.yaml", "apiVersion: v2\nname: common\nversion: 0.1.0\n")
+
+    diagnostics, meta, _, module_dir = _dependent_build(
+        tmp_path, "  - name: common\n    version: 0.1.0\n    repository: file://../common\n"
+    )
+
+    assert diagnostics.items == []
+    assert (module_dir / "charts" / "common" / "Chart.yaml").is_file()
+    assert meta["chartDependencies"] == [
+        {"name": "common", "version": "0.1.0", "repository": "file://../common", "origin": "file"}
+    ]
+
+
+def test_a_file_dependency_may_not_leave_the_repository(tmp_path: Path):
+    _write(tmp_path / "outside" / "Chart.yaml", "apiVersion: v2\nname: outside\nversion: 0.1.0\n")
+
+    diagnostics, _, _, _ = _dependent_build(
+        tmp_path, "  - name: outside\n    version: 0.1.0\n    repository: file://../../../outside\n"
+    )
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_chart_dependency_outside_source"
+
+
+def test_a_committed_dependency_is_recorded_and_not_pulled(tmp_path: Path):
+    _write(tmp_path / "sln" / "charts" / "app" / "charts" / "sepv" / "Chart.yaml", "name: sepv\nversion: 99.99.343\n")
+
+    diagnostics, meta, _, _ = _dependent_build(tmp_path, _SEPV)
+
+    assert diagnostics.items == []
+    assert meta["chartDependencies"] == [
+        {"name": "sepv", "version": "99.99.343", "repository": _REPOSITORY, "origin": "committed"}
+    ]
+
+
+@pytest.mark.chart_pulls
+def test_a_dependency_on_a_declared_remotes_url_uses_its_credentials(tmp_path: Path, monkeypatch):
+    from strata.models.solution_model import SolutionRemoteModel
+
+    _fake_dependency_helm(monkeypatch)
+    asked: list[str] = []
+
+    class _Recording(_Credentials):
+        def for_registry(self, name, *, owner):
+            asked.append(owner)
+            return None
+
+    remote = SolutionRemoteModel(name="feed", type="helm", url=_REPOSITORY + "/", integration="reg")
+
+    diagnostics, meta, _, _ = _dependent_build(tmp_path, _SEPV, remotes={"feed": remote}, credentials=_Recording())
+
+    assert diagnostics.items == []
+    assert asked == ["remote 'feed' (integration 'reg')"]
+    assert meta["chartDependencies"][0]["repository"] == _REPOSITORY
+
+
+@pytest.mark.chart_pulls
+def test_a_dependency_helm_lists_as_wrong_version_is_an_error(tmp_path: Path, monkeypatch):
+    _fake_dependency_helm(
+        monkeypatch,
+        dependency_list="NAME\tVERSION\tREPOSITORY\tSTATUS\nsepv\t99.99.343\thttps://x\twrong version\n",
+    )
+
+    diagnostics, _, _, _ = _dependent_build(tmp_path, _SEPV)
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_chart_dependency_wrong_version"
+    assert "dependency 'sepv' is 'wrong version'" in error.message
+
+
+def test_an_out_of_sync_lock_is_an_error(tmp_path: Path):
+    diagnostics, _, _, _ = _dependent_build(
+        tmp_path, _SEPV, lock="dependencies:\n- name: other\n  repository: https://x\n  version: 1.0.0\n"
+    )
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_chart_dependency_lock_out_of_sync"
+
+
+@pytest.mark.chart_pulls
+@pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+def test_real_helm_installs_from_the_dependencies_the_build_placed(tmp_path: Path):
+    """A remote dependency served over local HTTP and a `file://` one; `helm template` then renders the build copy."""
+    root = tmp_path / "sln"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    helm_home = tmp_path / "helm-home"
+    env = {
+        **os.environ,
+        "HELM_REPOSITORY_CONFIG": str(helm_home / "repositories.yaml"),
+        "HELM_REPOSITORY_CACHE": str(helm_home / "cache"),
+        "HELM_CACHE_HOME": str(helm_home / "cache-home"),
+    }
+
+    def helm(*args: str) -> str:
+        return subprocess.run(["helm", *args], check=True, capture_output=True, text=True, env=env, timeout=60).stdout
+
+    _write(tmp_path / "src" / "sub" / "Chart.yaml", "apiVersion: v2\nname: sub\nversion: 1.2.0\n")
+    _write(tmp_path / "src" / "sub" / "templates" / "cm.yaml", "kind: ConfigMap\nmetadata:\n  name: sub\n")
+    helm("package", str(tmp_path / "src" / "sub"), "--destination", str(repo))
+    _write(root / "charts" / "common" / "Chart.yaml", "apiVersion: v2\nname: common\nversion: 0.1.0\n")
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(_QuietHandler, directory=str(repo)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}"
+        helm("repo", "index", str(repo), "--url", url)
+        diagnostics, meta, _, module_dir = _dependent_build(
+            tmp_path,
+            f"  - name: sub\n    version: ~1.2.0\n    repository: {url}\n"
+            "  - name: common\n    version: 0.1.0\n    repository: file://../common\n",
+        )
+    finally:
+        server.shutdown()
+
+    assert diagnostics.items == [], diagnostics.messages()
+    assert [(d["name"], d["version"], d["origin"]) for d in meta["chartDependencies"]] == [
+        ("sub", "1.2.0", "pulled"),
+        ("common", "0.1.0", "file"),
+    ]
+    assert "name: sub" in helm("template", "x", str(module_dir))
+
+
+class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, format: str, *args) -> None:  # noqa: A002 - the base class's parameter name
+        del format, args
+
+
+def test_configuration_for_a_subchart_is_not_an_unknown_key(tmp_path: Path):
+    diagnostics, _, _, _ = _dependent_build(
+        tmp_path, _SEPV, configuration={"sepv": {"enabled": True}, "global": {"domain": "x"}, "replicaCnt": 2}
+    )
+
+    keys = [item for item in diagnostics.items if item.code == "helm_unknown_configuration_key"]
+    assert len(keys) == 1 and "'replicaCnt'" in keys[0].message
 
 
 def test_build_workload_modules_dry_run_writes_nothing(tmp_path: Path):
@@ -557,7 +1126,7 @@ def test_build_workload_modules_writes_helm_output_for_a_registry_chart_module(t
     )
 
     module_dir = build_path / "apps" / "auth"
-    assert (module_dir / "values.yaml").exists()
+    assert (module_dir / "strata-values.yaml").exists()
     meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
     assert meta["chartName"] == "authentik"
 
@@ -806,7 +1375,7 @@ def test_build_workload_modules_renders_enabled_references_alongside_a_disabled_
     )
 
     assert not (build_path / "apps" / "auth").exists()
-    assert (build_path / "apps" / "proxy" / "values.yaml").exists()
+    assert (build_path / "apps" / "proxy" / "strata-values.yaml").exists()
 
 
 def test_build_workload_modules_disabled_reference_does_not_need_to_resolve(tmp_path: Path):

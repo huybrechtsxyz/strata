@@ -131,8 +131,13 @@ Read directly from `.github/workflows/*.yml` in both reference repos
   v1's real `DeployerFactory.resolve_type()`: the step's own provisioner
   picks the tool, never inferred from namespace linkage). `HelmIntegration.
   deploy_namespace()` reads each module's `meta.yaml`, resolves the chart
-  reference (OCI/Helm-registry remotes), and delivers secrets via
-  `--set-string`. `ComposeIntegration.deploy_namespace()` resolves the
+  reference (OCI/Helm-registry remotes), and delivers secrets as a
+  values document on stdin (`-f -`). A deployment's `kube_context`
+  / `docker_context` pins every Helm / Compose step to that context,
+  checked once per tool before the first step, through the
+  integration's own `TARGET_CONTEXT_FIELD`, `target_context_env()` and
+  `target_context_problem()` (docs/work/compose-docker-context.md), so
+  the orchestrator still names no tool. `ComposeIntegration.deploy_namespace()` resolves the
   namespace's already-merged compose file and does one `docker stack
   deploy` for the whole namespace. The orchestrator dispatches purely on
   `integration.CAPABILITIES` — never a tool-name string comparison.

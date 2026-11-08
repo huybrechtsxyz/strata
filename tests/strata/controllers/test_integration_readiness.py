@@ -2,6 +2,7 @@
 """Tests for `integration_readiness.py` (docs/work/integration-readiness.md D5-D18, R1-R11)."""
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,7 +18,7 @@ from strata.controllers.integration_readiness import (
 )
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.integrations.aikido import AikidoIntegration
-from strata.integrations.base import Integration
+from strata.integrations.base import Integration, ReadinessProblem
 from strata.models.common_models import PlatformKind
 from strata.models.integration_model import IntegrationModel
 from strata.utils.errors import UsageError
@@ -198,6 +199,91 @@ def test_an_unsupported_transport_is_a_configuration_problem():
     readiness = assess_integration(_cli()(_document(transport="http")))
     assert _codes(readiness) == ["integration_configuration_invalid"]
     assert not readiness.local_tool and readiness.available is None
+
+
+def _versioned(version_output: str | None = "3.13.2", **kwargs) -> type[Integration]:
+    """A tool that asks for its version (`READ_VERSION`) and judges it: 3.x is a flags-only problem, 2.x a notice."""
+    base = _cli(version_output, **kwargs)
+
+    class _Versioned(base):  # type: ignore[valid-type, misc]
+        READ_VERSION = True
+
+        def version_problems(self, installed):
+            return (
+                [ReadinessProblem("widget_three", f"widget {installed}", flags_only=True)]
+                if installed[0] == "3"
+                else []
+            )
+
+        def version_notices(self, installed):
+            return [ReadinessProblem("widget_two", f"widget {installed} is old")] if installed[0] == "2" else []
+
+    return _Versioned
+
+
+def test_read_version_reads_without_a_constraint_and_hands_the_version_to_the_class():
+    readiness = assess_integration(_versioned("3.13.2")(None))
+    assert readiness.installed_version == "3.13.2"
+    assert readiness.problems == (ReadinessProblem("widget_three", "widget 3.13.2", flags_only=True),)
+    assert not readiness.ok and readiness.warnings == ()
+
+
+def test_a_notice_is_a_warning_and_keeps_the_integration_usable():
+    readiness = assess_integration(_versioned("2.0.0")(None))
+    assert readiness.ok and [notice.code for notice in readiness.warnings] == ["widget_two"]
+    for used, required in ((False, False), (True, False), (False, True)):
+        diagnostics = readiness_diagnostics(replace(readiness, required=required), used=used)
+        assert [d.code for d in diagnostics.warnings] == ["widget_two"] and not diagnostics.errors
+
+
+def test_version_hooks_also_run_beside_a_constraint():
+    readiness = assess_integration(_versioned("3.13.2")(_document(version=">= 4")))
+    assert _codes(readiness) == ["integration_version_mismatch", "widget_three"]
+
+
+def test_read_version_false_skips_the_version_hooks_too():
+    readiness = assess_integration(_versioned("3.13.2")(None), read_version=False)
+    assert readiness.ok and readiness.installed_version is None
+
+
+def test_an_unreadable_version_reaches_no_hook():
+    readiness = assess_integration(_versioned(None)(None))
+    assert readiness.ok and readiness.installed_version is None and readiness.warnings == ()
+
+
+@pytest.mark.parametrize(("output", "reported"), [("1.9.2", "1.9.2"), ("Welcome to the wrapper", None)])
+def test_only_a_real_version_is_reported(output, reported):
+    readiness = assess_integration(_versioned(output)(None))
+    assert readiness.installed_version is not None and readiness.reported_version == reported
+
+
+def test_flags_only_problems_can_be_warnings_and_others_cannot():
+    readiness = replace(
+        assess_integration(_versioned("3.13.2")(None)),
+        required=True,
+        problems=(ReadinessProblem("flags", "f", flags_only=True), ReadinessProblem("broken", "b")),
+    )
+    assert [d.code for d in readiness_diagnostics(readiness).errors] == ["flags", "broken"]
+    relaxed = readiness_diagnostics(readiness, flags_only_as_warning=True)
+    assert [d.code for d in relaxed.errors] == ["broken"] and [d.code for d in relaxed.warnings] == ["flags"]
+
+
+def test_integration_preflight_passes_the_flags_only_rule_on(monkeypatch):
+    index = _index(_doc("helm", "helm", ["container"], required=True))
+    monkeypatch.setattr(
+        "strata.integrations.helm.HelmIntegration.version_problems",
+        lambda self, v: [ReadinessProblem("helm_3_not_declared", "h", flags_only=True)],
+    )
+    monkeypatch.setattr("strata.integrations.helm.HelmIntegration.get_version", lambda self: "3.13.2")
+    monkeypatch.setattr("strata.integrations.base.shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+    assert [d.code for d in integration_preflight(index).errors] == ["helm_3_not_declared"]
+    relaxed = integration_preflight(index, flags_only_as_warning=True)
+    assert not relaxed.errors and [d.code for d in relaxed.warnings] == ["helm_3_not_declared"]
+
+
+def test_the_tool_path_is_where_the_command_resolved():
+    assert assess_integration(_cli()(None)).tool_path is not None
+    assert assess_integration(_cli(command="no-such-tool-xyz")(None)).tool_path is None
 
 
 def test_a_networked_integration_is_not_a_local_tool_and_cannot_pin_a_version(monkeypatch):

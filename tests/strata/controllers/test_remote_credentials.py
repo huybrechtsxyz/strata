@@ -8,12 +8,14 @@ import pytest
 from strata.controllers import remote_credentials as remote_credentials_module
 from strata.controllers.remote_credentials import (
     AMBIENT,
+    CredentialsNeedResolveError,
     FetchCredentials,
     RemoteCredentialError,
     RemoteCredentialResolver,
 )
 from strata.controllers.solution_context import open_solution
 from strata.integrations.capabilities import StoreIntegration
+from strata.integrations.helm import RegistryCredentials
 
 MANIFEST = "apiVersion: strata.huybrechts.xyz/v2\nkind: solution\nmeta:\n  name: test-solution\nspec: {}\n"
 
@@ -257,7 +259,7 @@ def _vault_backed(tmp_path, monkeypatch, *, allow_stores: bool) -> RemoteCredent
 
 def test_integration_backed_credential_needs_resolve_for_a_plain_build(tmp_path, monkeypatch):
     resolver = _vault_backed(tmp_path, monkeypatch, allow_stores=False)
-    with pytest.raises(RemoteCredentialError, match=r"stored in 'infisical'.*unless you pass --resolve"):
+    with pytest.raises(CredentialsNeedResolveError, match=r"stored in 'infisical'.*unless you pass --resolve"):
         resolver.for_integration("customer-git", owner=OWNER)
 
 
@@ -306,3 +308,66 @@ def test_redact_leaves_a_value_too_short_to_be_a_secret(tmp_path, monkeypatch):
     resolver = _token_resolver(tmp_path, monkeypatch, token="abc")
     resolver.for_integration("customer-git", owner=OWNER)
     assert resolver.redact("abc abc") == "abc abc"
+
+
+# ---------------------------------------------------------------------------
+# Chart registries (docs/work/helm-registry-chart-checks.md, Phase 2)
+# ---------------------------------------------------------------------------
+
+
+def test_a_token_integration_gives_registry_credentials(tmp_path, monkeypatch):
+    resolver = _token_resolver(tmp_path, monkeypatch)
+
+    credentials = resolver.for_registry("customer-git", owner=OWNER)
+
+    assert credentials == RegistryCredentials(username="build-bot", password=TOKEN)
+
+
+@pytest.mark.parametrize("auth", ["", "  authentication:\n    method: cli\n    cli: {}\n"])
+def test_a_registry_integration_with_no_authentication_or_cli_uses_helms_own_login(tmp_path, auth):
+    resolver = _with_integration(_resolver(tmp_path), tmp_path, auth=auth)
+    assert resolver.for_registry("customer-git", owner=OWNER) is None
+    assert resolver.for_registry(None, owner=OWNER) is None
+
+
+def test_a_registry_integration_is_resolved_once_per_build(tmp_path, monkeypatch):
+    resolver = _token_resolver(tmp_path, monkeypatch)
+    calls: list[list[str]] = []
+    real = remote_credentials_module.resolve_values
+
+    def _counting(context, deployment_name, keys, **kwargs):
+        calls.append(list(keys))
+        return real(context, deployment_name, keys, **kwargs)
+
+    monkeypatch.setattr(remote_credentials_module, "resolve_values", _counting)
+
+    resolver.for_registry("customer-git", owner="remote 'a'")
+    resolver.for_registry("customer-git", owner="remote 'b'")
+
+    assert calls == [["CUSTOMER_GIT_TOKEN"]]
+
+
+def test_a_method_that_cannot_authenticate_a_registry_is_an_error(tmp_path):
+    resolver = _with_integration(_resolver(tmp_path), tmp_path, auth=SSH_AUTH)
+    with pytest.raises(RemoteCredentialError, match=r"method 'ssh_key'.*chart registry \(supported: token, cli\)"):
+        resolver.for_registry("customer-git", owner=OWNER)
+
+
+def test_a_registry_token_without_a_username_is_an_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("CUSTOMER_REPOS_PAT", TOKEN)
+    resolver = _resolver(tmp_path, secrets={"CUSTOMER_GIT_TOKEN": ("environment", "CUSTOMER_REPOS_PAT")})
+    auth = "  authentication:\n    method: token\n    token:\n      token: CUSTOMER_GIT_TOKEN\n"
+    resolver = _with_integration(resolver, tmp_path, auth=auth)
+    with pytest.raises(RemoteCredentialError, match="needs 'username' beside the token"):
+        resolver.for_registry("customer-git", owner=OWNER)
+
+
+def test_a_vault_held_registry_password_needs_resolve(tmp_path, monkeypatch):
+    resolver = _vault_backed(tmp_path, monkeypatch, allow_stores=False)
+    with pytest.raises(CredentialsNeedResolveError, match="unless you pass --resolve"):
+        resolver.for_registry("customer-git", owner=OWNER)
+
+    resolver = _vault_backed(tmp_path, monkeypatch, allow_stores=True)
+    assert resolver.for_registry("customer-git", owner=OWNER) == RegistryCredentials(
+        username="build-bot", password="vault-value-for-customer-git-token"
+    )

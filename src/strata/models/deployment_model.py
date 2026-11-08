@@ -330,6 +330,7 @@ class DeploymentSpecModel(PlatformBaseModel):
     schema_rules: ClassVar[tuple[str, ...]] = (
         "A step may have `stages` parameters declared only once.",
         "An environment may be listed only once, and a provider slot or asset slot may be bound only once.",
+        "`kube_context` and `docker_context` are context names as written; a value token is rejected.",
         "A deployable document needs `workspace` and at least one entry in `environments`. A "
         "`partial: true` document, or one with `extends`, is exempt because its missing fields "
         "come from the base.",
@@ -364,6 +365,24 @@ class DeploymentSpecModel(PlatformBaseModel):
         None,
         description="Name of the Tenant this deployment belongs to. Omit for shared/platform deployments "
         "that serve all tenants.",
+    )
+    kube_context: str | None = Field(
+        None,
+        min_length=1,
+        description="Name of the context in the caller's kubeconfig that this deployment's Helm steps deploy to. "
+        "When set, every `helm` call runs against this context, whichever context is active, and the deploy "
+        "stops before the first `helm` call when the kubeconfig has no such context. The caller still provides "
+        "the kubeconfig. Omit to use the active context; `strata validate` then warns for a deployment with a "
+        "Helm step. Value tokens are not allowed here.",
+    )
+    docker_context: str | None = Field(
+        None,
+        min_length=1,
+        description="Name of the Docker context (`docker context create`) that this deployment's Compose steps "
+        "deploy to. When set, every `docker` call runs against this context, and the deploy stops before the first "
+        "step when Docker has no such context or `DOCKER_HOST` is set (it would override the context). Omit to use "
+        "whatever engine the environment points at; `strata validate` then warns for a deployment with a Compose "
+        "step. Value tokens are not allowed here.",
     )
     configurations: list[Annotated[PlatformName, References(PlatformKind.CONFIGURATION)]] | None = Field(
         None,
@@ -428,6 +447,14 @@ class DeploymentSpecModel(PlatformBaseModel):
         "as one JSON-encoded `TF_VAR_custom` env var for the whole merged dict — not "
         "split into a separate env var per key.",
     )
+
+    @field_validator("kube_context", "docker_context")
+    @classmethod
+    def validate_literal_context(cls, v: str | None) -> str | None:
+        """A context name is used as written: a value token would reach the tool as its literal text."""
+        if v is not None and "${" in v:
+            raise ValueError(f"'{v}' contains a value token, which is not resolved here; write the context name")
+        return v
 
     @model_validator(mode="after")
     def validate_unique_stage_steps(self) -> "DeploymentSpecModel":

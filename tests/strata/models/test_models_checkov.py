@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Tests for the Checkov models (docs/archive/checkov-integration.md)."""
 
+import pytest
+from pydantic import ValidationError
+
 from strata.models.checkov_model import (
     CHECKOV_SEVERITY_ORDER,
     CheckovFindingModel,
@@ -78,6 +81,17 @@ def test_checkov_policy_defaults():
     assert policy.skip_checks is None
     assert policy.include_checks is None
     assert policy.custom_checks_dir is None
+    assert policy.config_file is None
     assert policy.timeout == 120
     assert policy.enforcement == "deny"
     assert policy.on_missing_data == "block"
+
+
+def test_checkov_policy_config_file_is_normalised_repo_relative():
+    assert CheckovPolicyModel(config_file="config\\.checkov.yaml").config_file == "config/.checkov.yaml"
+
+
+@pytest.mark.parametrize("value", ["/etc/.checkov.yaml", "../other/.checkov.yaml"])
+def test_checkov_policy_config_file_rejects_escaping_paths(value: str):
+    with pytest.raises(ValidationError):
+        CheckovPolicyModel(config_file=value)

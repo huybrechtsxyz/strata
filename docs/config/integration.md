@@ -44,7 +44,10 @@ real integration (Infisical, Azure Key Vault, Azure App Configuration).
   `~= 1.9`, `>= 1.7, < 2.0`) or Terraform's `~> 1.9` (read as `~= 1.9`). Checked by every `strata
   deploy` command before any step runs (not under `--smoke-test`, which never runs a tool). Only for
   CLI tools: on a networked integration (e.g. `azure-keyvault`, `aikido`) it is a validation error,
-  since strata cannot read a remote service's version
+  since strata cannot read a remote service's version. On a `helm` integration it also chooses the
+  flags: a constraint that allows no Helm 4 (`"<4"`) keeps Helm 3's flags, which are deprecated;
+  anything else, or no `helm` document, gets Helm 4's
+  ([helm-chart-deployment.md](../design/helm-chart-deployment.md#helm-versions))
 - `spec.command` — override the class's default executable
 - `spec.endpoints` — address, for a networked transport
 - `spec.lifecycle` — hook scripts (`.py` only)
@@ -93,7 +96,9 @@ spec:
   with nothing arbitrating between them.
 - `strata integration check NAME [--deployment D]` changes nothing. It first checks local readiness,
   the same check every `strata deploy` command runs before any step: enabled, tool on PATH,
-  installed version against `spec.version`. For a type with a connection check (`aikido` today) it
+  installed version against `spec.version`, plus the type's own version rules (`helm` reads its
+  version every time: undeclared Helm 3 is an error, declared Helm 3 a warning). The description
+  names where the tool resolved on PATH. For a type with a connection check (`aikido` today) it
   then verifies credentials and reachability; with `--deployment`, the `authentication` key
   references resolve through that deployment. NAME is a document name or an integration type
   (`strata integration check terraform` checks what a `tool: terraform` provisioner would bind).

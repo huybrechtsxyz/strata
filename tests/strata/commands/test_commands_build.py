@@ -327,3 +327,26 @@ def test_env_file_supplies_an_environment_store_variable(runner, solution, monke
     assert result.exit_code == EXIT_SUCCESS, result.output
     manifest = (solution / "build" / "app" / "resolved.yaml").read_text()
     assert "hello-from-cli-test" in manifest
+
+
+# ---------------------------------------------------------------------------
+# --offline (docs/work/helm-registry-chart-checks.md)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("args", "offline"), [((), False), (("--offline",), True)])
+def test_offline_flag_reaches_the_build(runner, solution, monkeypatch, args, offline):
+    from strata.utils.diagnostics import Diagnostics
+
+    seen: dict = {}
+
+    def _build_run(*positional, **kwargs):
+        seen.update(kwargs)
+        return Diagnostics()
+
+    monkeypatch.setattr("strata.commands.build_command.build_run", _build_run)
+
+    result = _run(runner, "app", "--path", solution, *args)
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert seen["offline"] is offline

@@ -23,7 +23,7 @@ from strata.controllers.policy_results import write_policy_results
 from strata.controllers.solution_context import open_solution
 from strata.integrations.capabilities import AuditSinkIntegration
 from strata.integrations.errors import IntegrationError
-from strata.models.audit_manifest_model import ManifestPolicyResultModel
+from strata.models.audit_manifest_model import ManifestPolicyResultModel, ManifestProviderModel
 from strata.models.integration_model import Capability
 from strata.utils import layout
 from strata.utils.diagnostics import Diagnostics
@@ -168,6 +168,30 @@ def test_zero_config_writes_manifest_and_metrics_locally(tmp_path: Path, _terraf
     assert len(manifest_files) == 1
     assert len(metrics_files) == 1
     assert manifest_files[0].parent.parent == layout.audit_dir(root) / "main" / "app"
+
+
+def test_manifest_records_each_provisioners_tool_version_and_path(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    provider = ManifestProviderModel(name="p1", type="terraform", tool_version="1.9.2", tool_path="/usr/bin/terraform")
+
+    assert _finalize(root, build_path, providers=[provider]).ok
+
+    [manifest_file] = layout.audit_dir(root).rglob("_manifest.json")
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    [recorded] = manifest["artifacts"]["providers"]
+    assert recorded["name"] == "p1" and recorded["type"] == "terraform"
+    assert recorded["tool_version"] == "1.9.2" and recorded["tool_path"] == "/usr/bin/terraform"
+
+
+def test_manifest_without_providers_omits_them(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    assert _finalize(root, build_path).ok
+
+    [manifest_file] = layout.audit_dir(root).rglob("_manifest.json")
+    assert json.loads(manifest_file.read_text(encoding="utf-8"))["artifacts"].get("providers") is None
 
 
 def test_zero_config_manifest_reflects_run_outcome(tmp_path: Path, _terraform_stub):

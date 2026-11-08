@@ -10,7 +10,9 @@ Corrected here for the same reason Compose was: this class owns its argv,
 matching Terraform's own class rather than v1's inconsistency.
 
 Argv shapes (flag ordering) copied exactly from v1's real
-`HelmDeployer.plan()`/`.apply()`/`.destroy()` — proven, not redesigned.
+`HelmDeployer.plan()`/`.apply()`/`.destroy()` — proven, not redesigned. Helm 4 gets its own flags
+(`--dry-run=client`, `--wait=watcher`, `--rollback-on-failure`); v1's (`--dry-run`, `--wait`, `--atomic`) are kept
+for a Helm integration whose `spec.version` excludes Helm 4 (ADR-0055, docs/work/helm-4-support.md).
 
 Chart reference resolution (`meta.yaml` parsing, OCI-vs-HTTP-vs-local,
 repo aliasing) and value substitution (`${var:}/${secret:}/${feature:}`
@@ -20,16 +22,17 @@ already-resolved values file, same split Phase 5 drew for `TF_VAR_`
 injection.
 
 `prepare_namespace()` (ADR-0022 D6/D7) is the *build*-time half of that
-split: it writes `values.yaml`/`meta.yaml` with `${var:}`/`${secret:}`/
+split: it writes `strata-values.yaml`/`meta.yaml` with `${var:}`/`${secret:}`/
 `${feature:}` tokens still in place, verbatim — resolving them is `deploy
 run`'s job, not `build run`'s (ADR-0023's value-substitution table), and no
 `deploy run` exists yet.
 """
 
 import hashlib
+import os
 import re
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from difflib import get_close_matches
@@ -39,21 +42,45 @@ from urllib.parse import urlsplit
 
 import yaml
 
+from strata.integrations.base import ReadinessProblem
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.errors import IntegrationError, RegistryAuthError
+from strata.integrations.helm_cache import ChartPin, ChartPullError, pull_chart
+
+#: A registry chart with no archive verified against the build's pin (docs/work/helm-registry-chart-checks.md).
+CHART_NOT_PINNED = "helm_chart_not_pinned"
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.models.auth_models import AuthenticationModel
+from strata.models.common_models import SourceModel
 from strata.models.integration_model import Capability
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
-from strata.utils.value_tokens import referenced_output_keys, resolve_value_tokens_tracking_secrets
+from strata.utils.value_tokens import (
+    escape_path_segment,
+    referenced_output_keys,
+    resolve_value_tokens_tracking_secrets,
+)
+from strata.utils.version_constraints import parse_version_constraint
+
+#: Helm 3 installed where strata passes Helm 4's flags (ADR-0055).
+HELM_3_NOT_DECLARED = "helm_3_not_declared"
+#: Helm 3 installed and declared: it works, and is deprecated (ADR-0055).
+HELM_3_DEPRECATED = "helm_3_deprecated"
+
+#: A `spec.version` that matches neither allows no Helm 4, so it chooses Helm 3's flags. A heuristic: a constraint
+#: built to dodge both is misread, and the `spec.version` check then catches the Helm on `PATH`.
+_HELM_4_PROBES = ("4.0.0", "4.999.999")
 
 #: What Helm prints when asked about a release it does not have (`uninstall` and `get manifest` both end this
 #: way), matched instead of `--ignore-not-found`, whose first Helm version was not verified.
 _RELEASE_NOT_FOUND = "release: not found"
+
+#: The module's values, written beside `meta.yaml` and given to Helm with `-f`. Not `values.yaml`: in a local
+#: chart that is the chart's own defaults, which Helm reads as the base the `-f` files overlay.
+VALUES_FILE = "strata-values.yaml"
 
 
 class HelmIntegration(InfraIntegration):
@@ -64,11 +91,68 @@ class HelmIntegration(InfraIntegration):
     TRANSPORTS = frozenset({"cli"})
     COMMAND = "helm"
     VERSION_ARGS = ("version",)
+    #: The readiness check reads `helm version` on every run, so Helm 3 without a declaration stops before anything
+    #: applies instead of failing at `helm upgrade` with "unknown flag" (ADR-0055).
+    READ_VERSION = True
+
+    TARGET_CONTEXT_FIELD = "kube_context"
+
+    def target_context_env(self, context: str) -> dict[str, str]:
+        """Helm reads `HELM_KUBECONTEXT` as the default for `--kube-context`, for every subcommand."""
+        return {KUBE_CONTEXT_ENV: context}
+
+    def target_context_problem(self, context: str, environ: Mapping[str, str]) -> tuple[str, str] | None:
+        """See `kube_context_problem()`; the kubeconfig is read, the cluster is not contacted."""
+        return kube_context_problem(context, environ)
 
     def parse_version(self, raw: str) -> str:
         """Extract `X.Y.Z` from `'version.BuildInfo{Version:"v3.14.0",...}'`."""
         match = re.search(r"v?(\d+\.\d+\.\d+)", raw)
         return match.group(1) if match else raw.strip()
+
+    def helm_major_declared(self) -> int:
+        """3 when this integration's `spec.version` allows no Helm 4, else 4: which flags `plan()`/`deploy()` pass.
+
+        Taken from the configuration, never from the Helm on `PATH`, so one configuration gives the same command on
+        every machine (ADR-0055).
+        """
+        declared = self.config.spec.version if self.config is not None else None
+        if declared is None:
+            return 4
+        allowed = parse_version_constraint(declared)
+        return 4 if any(allowed.contains(probe, prereleases=True) for probe in _HELM_4_PROBES) else 3
+
+    def version_problems(self, installed: str) -> list[ReadinessProblem]:
+        """Helm 3 where Helm 4's flags would be passed. Only the flags are wrong, so `deploy destroy` (`helm
+        uninstall`, no such flag) treats it as a warning."""
+        if _major(installed) != 3 or self.helm_major_declared() == 3:
+            return []
+        declared = self.config.spec.version if self.config is not None else None
+        if declared is None:
+            reason = "strata uses Helm 4 flags unless a helm integration declares Helm 3"
+            fix = 'declare spec.version: "<4" on a helm integration'
+        else:
+            reason = f"spec.version '{declared}' allows Helm 4, so strata uses Helm 4 flags"
+            fix = 'narrow it to "<4"'
+        return [
+            ReadinessProblem(
+                HELM_3_NOT_DECLARED,
+                f"Helm {installed} found, but {reason}. Install Helm 4, or {fix} (Helm 3 is deprecated).",
+                flags_only=True,
+            )
+        ]
+
+    def version_notices(self, installed: str) -> list[ReadinessProblem]:
+        """Declared Helm 3: it works, and is deprecated. No date: the release that removes it decides (ADR-0055)."""
+        if _major(installed) != 3 or self.helm_major_declared() != 3:
+            return []
+        return [
+            ReadinessProblem(
+                HELM_3_DEPRECATED,
+                f"Helm {installed} is deprecated in strata and will stop being supported in a later release. "
+                "Install Helm 4 and remove the Helm 3 spec.version.",
+            )
+        ]
 
     def prepare_namespace(
         self,
@@ -77,19 +161,24 @@ class HelmIntegration(InfraIntegration):
         *,
         resolved: ValueResolution,
     ) -> None:
-        """Write one `values.yaml` + one `meta.yaml` per module (ADR-0022
+        """Write one `VALUES_FILE` + one `meta.yaml` per module (ADR-0022
         D6/D7) — Helm never merges, unlike Compose.
+
+        `VALUES_FILE` is always written, `{}` when the module sets nothing,
+        so a deploy can always pass it. A local chart's own `values.yaml`
+        is left alone: it holds the chart's defaults, and replacing it
+        dropped every default the module did not repeat.
 
         `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` tokens inside a
         service's `environment[].value` are written verbatim, unresolved.
         Helm's own value substitution happens at *deploy* time — secrets
-        via `--set-string` (never written to disk), variables/features via
-        a rewritten values file (ADR-0023's value-substitution table) —
+        via a values document on stdin (never on disk or in argv),
+        variables/features via a rewritten values file —
         never during `build run` (`resolved` is accepted for signature
         symmetry with every other `InfraIntegration` rendering method, but
         genuinely unused here for that reason).
 
-        Each module's own `values.yaml`/`meta.yaml` land directly in its
+        Each module's own `VALUES_FILE`/`meta.yaml` land directly in its
         `ResolvedModule.source_path` — already computed and, for a
         git-based `source`, already populated with the module's chart
         directory by the orchestrator (`workload_controller.py`) before
@@ -98,10 +187,9 @@ class HelmIntegration(InfraIntegration):
         del resolved
         for item in modules:
             values = _render_values(item.module)
-            if values:
-                (item.source_path / "values.yaml").write_text(
-                    yaml.safe_dump(values, sort_keys=False, default_flow_style=False)
-                )
+            (item.source_path / VALUES_FILE).write_text(
+                yaml.safe_dump(values, sort_keys=False, default_flow_style=False)
+            )
 
             meta = _render_meta(namespace, item)
             (item.source_path / "meta.yaml").write_text(yaml.safe_dump(meta, sort_keys=False, default_flow_style=False))
@@ -113,50 +201,56 @@ class HelmIntegration(InfraIntegration):
         *,
         tokens: dict[str, str],
         dry_run: bool,
-        remotes: dict[str, SolutionRemoteModel] | None = None,
         env: dict[str, str] | None = None,
         line_callback: Callable[[str, str], None] | None = None,
-        registry_credentials: Mapping[str, "RegistryCredentials"] | None = None,
+        chart_archives: Mapping[Path, ChartPin] | None = None,
+        on_step: Callable[[str], None] | None = None,
+        timeout: int | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
         """Deploy every Helm module in `modules` (docs/design/gap_fit_v1.md gap #13).
 
         One `helm upgrade` per module — `prepare_namespace()`'s own
-        already-written `values.yaml`/`meta.yaml` are this method's real
+        already-written `VALUES_FILE`/`meta.yaml` are this method's real
         input, never re-rendered from scratch: `meta.yaml` supplies
         release/namespace/chart coordinates exactly as v1's real
         `HelmDeployer` reads them back (zero new schema needed);
-        `values.yaml`'s tokens are resolved via `resolve_module_values()`
+        `VALUES_FILE`'s tokens are resolved via `resolve_module_values()`
         (gap #9 Phase 4) and rewritten in place for non-secret leaves,
-        while secret-shaped leaves are delivered via `--set-string`,
-        never written to disk.
+        while secret-shaped leaves go to Helm as a second values document
+        on stdin (`-f -`), never written to disk or put in argv.
 
-        `dry_run`: still writes the resolved `values.yaml` (a preview
+        `dry_run`: still writes the resolved `VALUES_FILE` (a preview
         needs the same real input a `helm upgrade` would use) then calls
         `self.plan_or_warn(...)` (`helm upgrade --dry-run --install`)
         instead of `self.deploy(...)` — never both. A tool-unsupported
         preview is a warning, not a failure (`plan_or_warn()`'s own
-        contract); a real plan failure is still an error.
+        contract); a real plan failure is still an error. The preview's
+        output is never streamed: it is the rendered manifest, whose Secret
+        `data` is base64 and so beyond the output redaction. `on_step` gets
+        one `Kind/name` line per resource instead, as the destroy preview
+        does (docs/design/deploy-destroy.md, D7).
 
-        `registry_credentials` (ADR-0042), keyed by remote name: a module whose
-        `chartRemote` has an entry authenticates to that registry (password on stdin only) inside a
-        temporary Helm config that every helm call for the module shares and that is removed when this
-        returns, so the password never reaches the user's own Helm config. A failed login is an error
-        for that module (`helm_registry_auth_failed`); the others still run.
+        `chart_archives`, keyed by module build directory: the registry charts `deploy_run()` verified
+        against the pin `build run` recorded (docs/work/helm-registry-chart-checks.md). A registry-chart
+        module is installed from that archive, so no repository or registry is contacted here; one with
+        no verified archive is an error (`helm_chart_not_pinned`) and the others still run.
+
+        `timeout` (seconds, the stage's `plan` or `apply` timeout; docs/design/cli-timeout.md) limits each
+        module's `helm upgrade` (see `_upgrade_timeouts()`). `None` keeps the defaults.
         """
         del kwargs
-        with ExitStack() as isolated:
-            return self._deploy_modules(
-                namespace,
-                modules,
-                tokens=tokens,
-                dry_run=dry_run,
-                remotes=remotes or {},
-                env=env,
-                line_callback=line_callback,
-                registry_credentials=registry_credentials or {},
-                isolated=isolated,
-            )
+        return self._deploy_modules(
+            namespace,
+            modules,
+            tokens=tokens,
+            dry_run=dry_run,
+            env=env,
+            line_callback=line_callback,
+            chart_archives=chart_archives or {},
+            say=on_step or (lambda message: None),
+            timeouts=_upgrade_timeouts(timeout, dry_run=dry_run),
+        )
 
     def _deploy_modules(
         self,
@@ -165,20 +259,22 @@ class HelmIntegration(InfraIntegration):
         *,
         tokens: dict[str, str],
         dry_run: bool,
-        remotes: dict[str, SolutionRemoteModel],
         env: dict[str, str] | None,
         line_callback: Callable[[str, str], None] | None,
-        registry_credentials: Mapping[str, "RegistryCredentials"],
-        isolated: ExitStack,
+        chart_archives: Mapping[Path, ChartPin],
+        say: Callable[[str], None],
+        timeouts: dict[str, Any],
     ) -> Diagnostics:
         diagnostics = Diagnostics()
         for item in modules:
             meta_file = item.source_path / "meta.yaml"
-            values_file = item.source_path / "values.yaml"
-            if not meta_file.exists():
+            values_file = item.source_path / VALUES_FILE
+            missing_files = [path.name for path in (meta_file, values_file) if not path.exists()]
+            if missing_files:
+                # A build from before `VALUES_FILE` has `meta.yaml` only, and deploying it would drop every value.
                 diagnostics.error(
                     f"Namespace '{namespace.meta.name}', module '{item.reference.name}': "
-                    "meta.yaml not found — run 'strata build run' first.",
+                    f"{' and '.join(missing_files)} not found — run 'strata build run' first.",
                     location=item.reference.name,
                 )
                 continue
@@ -187,39 +283,22 @@ class HelmIntegration(InfraIntegration):
             release = str(meta.get("releaseName") or item.reference.name)
             release_namespace = str(meta.get("namespace") or namespace.meta.name)
 
-            credentials = None
-            if meta.get("chartRemote") is not None:
-                credentials = registry_credentials.get(str(meta["chartRemote"]))
-            module_env = {**(env or {}), **_isolated_helm_env(isolated)} if credentials is not None else env
-
             if meta.get("chartName") is None:
                 # A git-based/local chart `source` (`_render_meta()` omits
                 # chart coordinates entirely for this case) — the module's
                 # own already-materialised directory *is* the chart.
-                chart: str | None = str(item.source_path)
-                chart_error: str | None = None
-                chart_error_code: str | None = None
+                chart = str(item.source_path)
             else:
-                chart_error_code = None
-                try:
-                    chart, chart_error = _resolve_chart(
-                        self,
-                        meta,
-                        remotes,
-                        env=module_env,
-                        diagnostics=diagnostics,
+                pin = chart_archives.get(item.source_path)
+                if pin is None:
+                    diagnostics.error(
+                        f"Namespace '{namespace.meta.name}', module '{item.reference.name}': chart "
+                        f"'{meta['chartName']}' has no archive verified against the build's pin, so it is not deployed.",
                         location=item.reference.name,
-                        credentials=credentials,
+                        code=CHART_NOT_PINNED,
                     )
-                except RegistryAuthError as exc:
-                    chart, chart_error, chart_error_code = None, str(exc), "helm_registry_auth_failed"
-            if chart_error:
-                diagnostics.error(
-                    f"Namespace '{namespace.meta.name}', module '{item.reference.name}': {chart_error}",
-                    location=item.reference.name,
-                    code=chart_error_code,
-                )
-                continue
+                    continue
+                chart = str(pin.archive)
 
             # Output pre-flight (docs/design/output-declarations.md Phase
             # 3) — every '${output:STEP.KEY}' this module's own rendered
@@ -252,16 +331,14 @@ class HelmIntegration(InfraIntegration):
                     location=item.reference.name,
                 )
                 continue
-            set_string = list(secrets.items())
-            chart_version = str(meta["chartVersion"]) if meta.get("chartVersion") is not None else None
-
             if resolved_values:
                 values_file.write_text(yaml.safe_dump(resolved_values, sort_keys=False, default_flow_style=False))
 
             if dry_run:
                 # Real preview, not a skip — `plan()` needs the same
                 # rendered file on disk a real `deploy()` would use, just
-                # not followed by one.
+                # not followed by one. No `line_callback`: the output is
+                # the rendered manifest, Secrets included.
                 plan_result = self.plan_or_warn(
                     values_file,
                     diagnostics=diagnostics,
@@ -269,10 +346,9 @@ class HelmIntegration(InfraIntegration):
                     release=release,
                     namespace=release_namespace,
                     chart=chart,
-                    version=chart_version,
-                    set_string=set_string,
-                    env=module_env,
-                    line_callback=line_callback,
+                    secret_values=secrets,
+                    env=env,
+                    **timeouts,
                 )
                 if plan_result is not None and not plan_result.is_successful:
                     diagnostics.error(
@@ -280,6 +356,14 @@ class HelmIntegration(InfraIntegration):
                         f"helm plan (dry-run) failed — {plan_result.stderr}",
                         location=item.reference.name,
                     )
+                elif plan_result is not None:
+                    resources = summarise_dry_run(plan_result.stdout)
+                    say(
+                        f"would upgrade release '{release}' (namespace '{release_namespace}'): "
+                        f"{len(resources)} resource(s)"
+                    )
+                    for resource in resources:
+                        say(f"  {resource}")
                 continue
 
             result = self.deploy(
@@ -287,10 +371,10 @@ class HelmIntegration(InfraIntegration):
                 release=release,
                 namespace=release_namespace,
                 chart=chart,
-                version=chart_version,
-                set_string=set_string,
-                env=module_env,
+                secret_values=secrets,
+                env=env,
                 line_callback=line_callback,
+                **timeouts,
             )
             if not result.is_successful:
                 diagnostics.error(
@@ -309,16 +393,18 @@ class HelmIntegration(InfraIntegration):
         env: dict[str, str] | None = None,
         line_callback: Callable[[str, str], None] | None = None,
         timeout: int = 60,
+        chart_archives: Mapping[Path, ChartPin] | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
-        """`helm lint` every local-chart module in `modules` (ADR-0043).
+        """`helm lint` every module in `modules` (ADR-0043).
 
         Lints the built module directory with a temporary `-f` overlay of the resolved non-secret values,
         so it sees what `deploy_namespace()` will. Secret-shaped leaves stay as literal tokens: lint needs no
         secret, so none reaches disk or argv. The overlay lives outside the build directory, which a check
         must not alter. A `${output:}` whose upstream step has not applied yet gets a placeholder, because a
-        check must not depend on infrastructure that does not exist yet. Registry charts are skipped: `helm
-        lint` cannot lint a remote chart. Only `[ERROR]` findings fail (lint exits non-zero on nothing else).
+        check must not depend on infrastructure that does not exist yet. A registry chart is linted from its
+        verified archive in `chart_archives` (docs/work/helm-registry-chart-checks.md) and skipped without one.
+        Only `[ERROR]` findings fail (lint exits non-zero on nothing else).
         """
         del kwargs
         diagnostics = Diagnostics()
@@ -330,8 +416,12 @@ class HelmIntegration(InfraIntegration):
                     f"{label}: meta.yaml not found — run 'strata build run' first.", location=item.reference.name
                 )
                 continue
+            chart_dir = item.source_path
             if (yaml.safe_load(meta_file.read_text()) or {}).get("chartName") is not None:
-                continue
+                pin = (chart_archives or {}).get(item.source_path)
+                if pin is None:
+                    continue
+                chart_dir = pin.chart_dir
 
             missing = referenced_output_keys(_render_values(item.module)) - tokens.keys()
             try:
@@ -343,9 +433,7 @@ class HelmIntegration(InfraIntegration):
             with tempfile.TemporaryDirectory(prefix="strata-lint-") as tmp:
                 overlay = Path(tmp) / "values.yaml"
                 overlay.write_text(yaml.safe_dump(resolved_values, sort_keys=False, default_flow_style=False))
-                result = self.lint(
-                    overlay, chart=str(item.source_path), timeout=timeout, env=env, line_callback=line_callback
-                )
+                result = self.lint(overlay, chart=str(chart_dir), timeout=timeout, env=env, line_callback=line_callback)
             if not result.is_successful:
                 lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
                 # Without `[ERROR]` lines (a missing Chart.yaml, say) lint's own message is on stdout, not stderr.
@@ -366,13 +454,16 @@ class HelmIntegration(InfraIntegration):
         namespace: str | None = None,
         chart: str | None = None,
         version: str | None = None,
-        set_string: Sequence[tuple[str, str]] | None = None,
+        secret_values: Mapping[str, Any] | None = None,
         timeout: int = 600,
         env: Mapping[str, str] | None = None,
         line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
-        """`helm upgrade --dry-run --install --namespace ns -f path [--set-string ...] release chart [--version v]`.
+        """`helm upgrade --dry-run=client --install --namespace ns -f path [-f -] release chart [--version v]`;
+        a bare `--dry-run` for declared Helm 3 (`helm_major_declared()`), which has no `=client` before 3.13.
+
+        `secret_values`: a values document read from stdin (`-f -`), after `path` so it wins.
 
         Raises:
             IntegrationError: `release`/`namespace`/`chart` were not all given.
@@ -381,12 +472,15 @@ class HelmIntegration(InfraIntegration):
                 `**kwargs: Any` signature.
         """
         release, namespace, chart = self._require(release=release, namespace=namespace, chart=chart)
-        args = ["upgrade", "--dry-run", "--install", "--namespace", namespace, "-f", str(path)]
-        args.extend(_set_string_args(set_string))
+        dry_run = "--dry-run=client" if self.helm_major_declared() >= 4 else "--dry-run"
+        args = ["upgrade", dry_run, "--install", "--namespace", namespace, "-f", str(path)]
+        stdin = _stdin_values(secret_values)
+        if stdin is not None:
+            args.extend(["-f", "-"])
         args.extend([release, chart])
         if version:
             args.extend(["--version", version])
-        return self.run(*args, cwd=path.parent, env=env, timeout=timeout, line_callback=line_callback)
+        return self.run(*args, cwd=path.parent, env=env, timeout=timeout, input=stdin, line_callback=line_callback)
 
     def deploy(
         self,
@@ -396,7 +490,7 @@ class HelmIntegration(InfraIntegration):
         namespace: str | None = None,
         chart: str | None = None,
         version: str | None = None,
-        set_string: Sequence[tuple[str, str]] | None = None,
+        secret_values: Mapping[str, Any] | None = None,
         create_namespace: bool = True,
         wait: bool = True,
         atomic: bool = True,
@@ -406,26 +500,33 @@ class HelmIntegration(InfraIntegration):
         line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
-        """`helm upgrade --install [--create-namespace] [--wait] [--atomic] --timeout T
-        --namespace ns -f path [--set-string ...] release chart [--version v]`.
+        """`helm upgrade --install [--create-namespace] [--wait=watcher] [--rollback-on-failure] --timeout T
+        --namespace ns -f path [-f -] release chart [--version v]`; `--wait` and `--atomic` instead for declared
+        Helm 3 (`helm_major_declared()`). `--wait=watcher` is named because `--rollback-on-failure` would otherwise
+        pick a wait mode itself.
+
+        `secret_values`: a values document read from stdin (`-f -`), after `path` so it wins.
 
         Raises:
             IntegrationError: `release`/`namespace`/`chart` were not all given.
         """
         release, namespace, chart = self._require(release=release, namespace=namespace, chart=chart)
+        helm_4 = self.helm_major_declared() >= 4
         args = ["upgrade", "--install"]
         if create_namespace:
             args.append("--create-namespace")
         if wait:
-            args.append("--wait")
+            args.append("--wait=watcher" if helm_4 else "--wait")
         if atomic:
-            args.append("--atomic")
+            args.append("--rollback-on-failure" if helm_4 else "--atomic")
         args.extend(["--timeout", deploy_timeout, "--namespace", namespace, "-f", str(path)])
-        args.extend(_set_string_args(set_string))
+        stdin = _stdin_values(secret_values)
+        if stdin is not None:
+            args.extend(["-f", "-"])
         args.extend([release, chart])
         if version:
             args.extend(["--version", version])
-        return self.run(*args, cwd=path.parent, env=env, timeout=timeout, line_callback=line_callback)
+        return self.run(*args, cwd=path.parent, env=env, timeout=timeout, input=stdin, line_callback=line_callback)
 
     def destroy(
         self,
@@ -553,6 +654,56 @@ class HelmIntegration(InfraIntegration):
             "lint", "-f", str(path), chart, cwd=path.parent, env=env, timeout=timeout, line_callback=line_callback
         )
 
+    def pull_registry_chart(
+        self,
+        meta: Mapping[str, Any],
+        remotes: Mapping[str, SolutionRemoteModel],
+        *,
+        version: str | None,
+        cache_root: Path,
+        credentials: "RegistryCredentials | None" = None,
+        expected_digest: str | None = None,
+        diagnostics: Diagnostics | None = None,
+        location: str | None = None,
+    ) -> ChartPin:
+        """Pull the registry chart `meta` names into the `.strata/helm/` cache (docs/work/helm-registry-chart-checks.md).
+
+        Always in an isolated Helm configuration, credentialed or not, so neither `build run` nor the deploy's
+        verification touches the user's own repositories or registry logins. `version` may be a range at build;
+        the deploy passes the pinned version and `expected_digest`.
+
+        Raises:
+            ChartPullError: the chart reference does not resolve, or the pull fails or differs from `expected_digest`.
+            RegistryAuthError: logging in with `credentials` failed.
+        """
+        with ExitStack() as isolated:
+            env = _isolated_helm_env(isolated)
+            ref, error = _resolve_chart(
+                self,
+                dict(meta),
+                dict(remotes),
+                env=env,
+                diagnostics=diagnostics,
+                location=location,
+                credentials=credentials,
+            )
+            if ref is None:
+                raise ChartPullError(error or "the chart reference did not resolve")
+            return pull_chart(
+                self,
+                ref,
+                chart=str(meta["chartName"]),
+                version=version,
+                cache_root=cache_root,
+                source=chart_cache_source(meta),
+                env=env,
+                expected_digest=expected_digest,
+            )
+
+    def dependency_list(self, chart_dir: Path, *, timeout: int = 60) -> CommandResult:
+        """`helm dependency list chart_dir`: each dependency's status in `charts/`, read offline."""
+        return self.run("dependency", "list", str(chart_dir), timeout=timeout)
+
     def get_manifest(
         self, *, release: str, namespace: str, timeout: int = 60, env: Mapping[str, str] | None = None
     ) -> CommandResult:
@@ -593,6 +744,25 @@ def summarise_manifest(text: str) -> list[str]:
     return lines
 
 
+def summarise_dry_run(text: str) -> list[str]:
+    """`Kind/name` for every resource `helm upgrade --dry-run` would apply, hooks marked, and nothing else.
+
+    The output holds the rendered `HOOKS:` and `MANIFEST:` sections and then `NOTES:`; only the first two are
+    read, through `summarise_manifest()`. The notes are a rendered template too, so they are never shown.
+    """
+    sections: dict[str, list[str]] = {"HOOKS:": [], "MANIFEST:": []}
+    current: list[str] | None = None
+    for line in text.splitlines():
+        if line in sections:
+            current = sections[line]
+        elif line == "NOTES:":
+            current = None
+        elif current is not None:
+            current.append(line)
+    hooks = [f"{resource} (hook)" for resource in summarise_manifest("\n".join(sections["HOOKS:"]))]
+    return summarise_manifest("\n".join(sections["MANIFEST:"])) + hooks
+
+
 def read_chart_values(chart_dir: Path) -> dict[str, Any]:
     """A local chart's own `values.yaml` as a dict; `{}` when absent, unparseable or not a mapping."""
     try:
@@ -602,15 +772,21 @@ def read_chart_values(chart_dir: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def check_configuration_keys(configuration: Mapping[str, Any], chart_values: Mapping[str, Any]) -> list[str]:
+def check_configuration_keys(
+    configuration: Mapping[str, Any], chart_values: Mapping[str, Any], subchart_keys: Iterable[str] = ()
+) -> list[str]:
     """Findings for `configuration` keys a chart's default `values.yaml` does not declare.
 
     Ported from v1's `check_helm_values()` (warnings only): top-level keys plus one nested level, with a
     close-match suggestion. An empty default mapping (`env: {}`) is a free-form bag, so its children are not
-    checked. No chart defaults means nothing to check against.
+    checked. No chart defaults means nothing to check against. `subchart_keys` (each dependency's name or alias,
+    and `global`) pass Helm on to subcharts, so they and their children are not checked
+    (docs/work/helm-chart-dependencies.md).
     """
     if not chart_values:
         return []
+    passed_on = set(subchart_keys)
+    configuration = {key: value for key, value in configuration.items() if key not in passed_on}
 
     def _unknown(key: str, known: Mapping[str, Any], path: str) -> str:
         message = f"configuration key '{path}' is not in the chart's values.yaml"
@@ -651,7 +827,7 @@ def _error_findings(lines: "Sequence[str]") -> list[str]:
 
 
 def _render_values(module: ModuleModel) -> dict[str, Any]:
-    """Build the `values.yaml` payload for one Helm module.
+    """Build the `VALUES_FILE` payload for one Helm module.
 
     Adapted from v1's real `HelmBuilder._render_module_artifacts()`, ported
     to v2's schema: v1 spread a Value binding across four optional
@@ -662,11 +838,7 @@ def _render_values(module: ModuleModel) -> dict[str, Any]:
     on which kind of reference it is.
 
     Returns `{}` when the module has neither `spec.services` nor
-    `spec.configuration` — `prepare_namespace()` then skips writing the
-    file entirely, so a local chart's own shipped `values.yaml` (copied in
-    by `workload_controller.sync_module_source()`) is left untouched
-    rather than overwritten with an empty document (matches v1's own
-    "omit when there is nothing to render" rule).
+    `spec.configuration`; `prepare_namespace()` still writes it.
     """
     module_name = str(module.meta.name)
     values: dict[str, Any] = {}
@@ -707,7 +879,7 @@ def _render_values(module: ModuleModel) -> dict[str, Any]:
 
 
 def resolve_module_values(module: ModuleModel, values: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
-    """Resolve Value tokens in one module's rendered `values.yaml` payload
+    """Resolve Value tokens in one module's rendered `VALUES_FILE` payload
     for deploy-time delivery (docs/design/gap_fit_v1.md gap #9, docs/design/
     value-token-resolution.md's Full Solution Phase 4).
 
@@ -716,40 +888,186 @@ def resolve_module_values(module: ModuleModel, values: dict[str, str]) -> tuple[
     what `prepare_namespace()` already wrote to disk) and
     `resolve_value_tokens_tracking_secrets()` (`value_tokens.py`, Phase 3)
     to split it: non-secret leaves resolve in place, safe to rewrite into
-    `values.yaml`; secret-shaped leaves are reported as `{dotted_path:
-    resolved_value}` instead, for a caller to deliver via `helm upgrade
-    --set-string <path>=<value>` — never written to disk.
+    `VALUES_FILE`; secret-shaped leaves are returned as a second values
+    document instead, for a caller to give `helm upgrade` on stdin
+    (`-f -`) — never written to disk, never in argv.
 
     Deliberately pure and side-effect-free (matches `_render_values()`'s own
     "testable without touching disk" convention) — writing the resolved
-    `values.yaml` back and assembling `helm upgrade`'s actual argv are a
-    caller's job, not this function's. That caller doesn't exist yet:
-    `deploy_run()`'s step loop has no release/namespace/chart derivation
-    for a Helm module at all (docs/design/gap_fit_v1.md gap #13) — this function only
-    supplies the resolution primitive gap #9 needs, same reasoning gap #9's
-    own design already gave for `helm.py`'s docstring naming `--set-string`
-    as the intended mechanism before the path-tracking to make it buildable
-    existed.
+    `VALUES_FILE` back and assembling `helm upgrade`'s actual argv are a
+    caller's job (`deploy_namespace()`), not this function's.
 
     Returns:
-        `(resolved_values, secrets)` — `resolved_values` is what
-        `values.yaml` should be rewritten to; `secrets` is every
-        secret-shaped leaf's dotted path and resolved value.
+        `(resolved_values, secret_values)` — `resolved_values` is what
+        `VALUES_FILE` should be rewritten to; `secret_values` holds only
+        the branches that lead to a secret-shaped leaf, resolved (`{}`
+        when there is none). Helm merges maps but replaces lists, so a
+        list that holds a secret is carried whole, every item resolved.
     """
     payload = _render_values(module)
-    return resolve_value_tokens_tracking_secrets(payload, values)
+    resolved, secrets = resolve_value_tokens_tracking_secrets(payload, values)
+    return resolved, _secret_overlay(resolved, secrets)
+
+
+def _secret_overlay(node: Any, secrets: Mapping[str, str], path: str = "", *, prune: bool = True) -> Any:
+    """The parts of `node` that lead to a path in `secrets` (dotted as `resolve_value_tokens_tracking_secrets()`
+    writes them), with each such path's resolved value in place. Below a list nothing is pruned."""
+
+    def _join(segment: str) -> str:
+        return f"{path}.{segment}" if path else segment
+
+    if isinstance(node, dict):
+        overlay = {}
+        for key, value in node.items():
+            child = _join(escape_path_segment(key))
+            if not prune or any(secret == child or secret.startswith(f"{child}.") for secret in secrets):
+                overlay[key] = _secret_overlay(value, secrets, child, prune=prune)
+        return overlay
+    if isinstance(node, list):
+        return [_secret_overlay(value, secrets, _join(str(index)), prune=False) for index, value in enumerate(node)]
+    return secrets.get(path, node)
+
+
+#: Helm's own release name rule (`chartutil.ValidateReleaseName`); checked with `helm template` 3.13.2.
+_RELEASE_NAME = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
+RELEASE_NAME_MAX_LENGTH = 53
+#: A Kubernetes namespace is a DNS-1123 label; the API server rejects anything else.
+_KUBERNETES_NAMESPACE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+KUBERNETES_NAMESPACE_MAX_LENGTH = 63
+
+
+@dataclass(frozen=True)
+class ReleaseIdentity:
+    """Where one module reference is installed: its release name and Kubernetes namespace, as `meta.yaml` has them.
+
+    `release_from_field`/`namespace_from_field` say whether each came from the module's own field or from a default
+    (the reference name, the strata namespace name), because the fix for a bad name differs.
+    """
+
+    release: str
+    kubernetes_namespace: str
+    release_from_field: bool
+    namespace_from_field: bool
+
+
+def release_identity(namespace_name: str, reference_name: str, module: ModuleModel) -> ReleaseIdentity:
+    """The release name and Kubernetes namespace a Helm module reference deploys as.
+
+    The release defaults to the reference name, not `module.meta.name` (v1's default): one Module document can
+    be attached to a namespace more than once under different reference names (`ModuleReferenceModel`), and two
+    live releases can never share a name. The namespace defaults to the strata namespace name. Both values are
+    used verbatim; a `${...}` token in either field is not resolved.
+    """
+    return ReleaseIdentity(
+        release=module.spec.release_name or reference_name,
+        kubernetes_namespace=module.spec.kubernetes_namespace or namespace_name,
+        release_from_field=module.spec.release_name is not None,
+        namespace_from_field=module.spec.kubernetes_namespace is not None,
+    )
+
+
+def release_name_problem(name: str) -> str | None:
+    """Why Helm rejects `name` as a release name, or `None` when it accepts it."""
+    if len(name) > RELEASE_NAME_MAX_LENGTH:
+        return f"it is {len(name)} characters long, and Helm allows at most {RELEASE_NAME_MAX_LENGTH}"
+    if not _RELEASE_NAME.match(name):
+        return (
+            "a Helm release name has only lowercase letters, digits, '-' and '.', and starts and ends with a "
+            "letter or digit"
+        )
+    return None
+
+
+def kubernetes_namespace_problem(name: str) -> str | None:
+    """Why Kubernetes rejects `name` as a namespace, or `None` when it accepts it."""
+    if len(name) > KUBERNETES_NAMESPACE_MAX_LENGTH:
+        return f"it is {len(name)} characters long, and Kubernetes allows at most {KUBERNETES_NAMESPACE_MAX_LENGTH}"
+    if not _KUBERNETES_NAMESPACE.match(name):
+        return (
+            "a Kubernetes namespace has only lowercase letters, digits and '-', and starts and ends with a "
+            "letter or digit"
+        )
+    return None
+
+
+#: Helm's default for `--kube-context`; set for every helm call of a deployment that names `kube_context`.
+KUBE_CONTEXT_ENV = "HELM_KUBECONTEXT"
+#: Overrides the server of whichever context Helm uses, so a deployment pinned to a context cannot allow it.
+KUBE_API_SERVER_ENV = "HELM_KUBEAPISERVER"
+
+
+@dataclass(frozen=True)
+class KubeconfigContexts:
+    """The context names the caller's kubeconfig defines, and the files they were read from."""
+
+    files: list[Path]
+    names: list[str]
+    unreadable: list[Path]
+
+
+def kubeconfig_context_names(environ: Mapping[str, str]) -> KubeconfigContexts:
+    """The context names in the kubeconfig Helm reads: the `KUBECONFIG` files, else `~/.kube/config`.
+
+    Only `contexts[].name` is read. A file that does not exist is skipped, as Helm skips it; a file that is not
+    valid YAML is listed in `unreadable`.
+    """
+    listed = [part for part in environ.get("KUBECONFIG", "").split(os.pathsep) if part]
+    files = [Path(part) for part in listed] if listed else [Path.home() / ".kube" / "config"]
+    names: list[str] = []
+    unreadable: list[Path] = []
+    for path in files:
+        if not path.is_file():
+            continue
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            unreadable.append(path)
+            continue
+        contexts = document.get("contexts") if isinstance(document, dict) else None
+        for context in contexts if isinstance(contexts, list) else []:
+            name = context.get("name") if isinstance(context, dict) else None
+            if isinstance(name, str) and name not in names:
+                names.append(name)
+    return KubeconfigContexts(files=files, names=names, unreadable=unreadable)
+
+
+def kube_context_problem(kube_context: str, environ: Mapping[str, str]) -> tuple[str, str] | None:
+    """Why Helm cannot be pinned to `kube_context` in this environment, as `(code, reason)`, or `None`.
+
+    The caller's own `HELM_KUBECONTEXT` may only repeat the same context, and `HELM_KUBEAPISERVER` would point the
+    context at another server. Otherwise the context must be defined in the kubeconfig.
+    """
+    caller_context = environ.get(KUBE_CONTEXT_ENV)
+    if caller_context and caller_context != kube_context:
+        return (
+            "helm_kube_context_conflict",
+            f"{KUBE_CONTEXT_ENV} is set to '{caller_context}' in the environment. Unset it, or deploy with a "
+            "deployment that names that context.",
+        )
+    if environ.get(KUBE_API_SERVER_ENV):
+        return (
+            "helm_kube_context_conflict",
+            f"{KUBE_API_SERVER_ENV} is set in the environment, which overrides the server of the context. Unset it.",
+        )
+    kubeconfig = kubeconfig_context_names(environ)
+    if kube_context in kubeconfig.names:
+        return None
+    files = ", ".join(str(path) for path in kubeconfig.files)
+    source = f"KUBECONFIG={files}" if environ.get("KUBECONFIG") else files
+    known = ", ".join(f"'{name}'" for name in kubeconfig.names) or "none"
+    unreadable = (
+        f" Not valid YAML: {', '.join(str(path) for path in kubeconfig.unreadable)}." if kubeconfig.unreadable else ""
+    )
+    return (
+        "helm_kube_context_missing",
+        f"it is not in the kubeconfig ({source}; contexts: {known}).{unreadable}",
+    )
 
 
 def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, Any]:
     """Build the `meta.yaml` payload for one Helm module.
 
-    `releaseName` defaults to `item.reference.name`, not `module.meta.name`
-    (v1's real default) — the same Module document can be attached to a
-    namespace more than once under different reference names
-    (`ModuleReferenceModel`'s own docstring), and two live Helm releases
-    can never share a name, so the one identifier guaranteed unique per
-    attachment (the reference name) is the only safe default; `module.meta.name`
-    is not, and would silently collide if that ever happens.
+    `releaseName`/`namespace` are `release_identity()`, the same names `strata validate` checks.
 
     Chart coordinates (`chartName`/`chartVersion`/`chartRemote`/
     `chartRepository`) are included only for a chart-based `source`
@@ -763,30 +1081,54 @@ def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, A
     most one is ever written.
     """
     module = item.module
-    meta: dict[str, Any] = {
-        "releaseName": module.spec.release_name or item.reference.name,
-        "namespace": module.spec.kubernetes_namespace or str(namespace.meta.name),
-    }
+    identity = release_identity(str(namespace.meta.name), item.reference.name, module)
+    meta: dict[str, Any] = {"releaseName": identity.release, "namespace": identity.kubernetes_namespace}
 
     source = module.spec.source
     if source.chart_name is not None:
-        meta["chartName"] = source.chart_name
-        if source.chart_version is not None:
+        meta.update(chart_coordinates(source))
+        pin = item.chart_pin
+        if pin is not None:
+            meta["chartVersion"] = pin.version
+            if source.chart_version != pin.version:
+                meta["chartVersionConstraint"] = source.chart_version
+            meta["chartDigest"] = pin.digest
+            if pin.app_version is not None:
+                meta["chartAppVersion"] = pin.app_version
+            if pin.subcharts:
+                meta["chartSubcharts"] = [{"name": sub.name, "version": sub.version} for sub in pin.subcharts]
+        elif source.chart_version is not None:
             meta["chartVersion"] = source.chart_version
-        if source.remote is not None:
-            meta["chartRemote"] = source.remote
-        elif source.chart_repository is not None:
-            meta["chartRepository"] = source.chart_repository
+    else:
+        if item.chart_dependencies:
+            meta["chartDependencies"] = [record.to_meta() for record in item.chart_dependencies]
+        if item.unpinned_dependencies:
+            meta["chartDependenciesUnpinned"] = list(item.unpinned_dependencies)
 
     return meta
 
 
+def chart_coordinates(source: SourceModel) -> dict[str, Any]:
+    """`chartName` and where it comes from (`chartRemote` or `chartRepository`), as `meta.yaml` records them."""
+    coordinates: dict[str, Any] = {"chartName": source.chart_name}
+    if source.remote is not None:
+        coordinates["chartRemote"] = source.remote
+    elif source.chart_repository is not None:
+        coordinates["chartRepository"] = source.chart_repository
+    return coordinates
+
+
+def chart_cache_source(meta: Mapping[str, Any]) -> str:
+    """The `.strata/helm/` directory a chart's source maps to: the remote name, else the repository's alias."""
+    if meta.get("chartRemote") is not None:
+        return str(meta["chartRemote"])
+    return _repo_alias(str(meta.get("chartRepository") or ""))
+
+
 # ----------------------------------------------------------------------
-# deploy_namespace() helpers — chart reference resolution + --set-string
-# argv assembly (docs/design/gap_fit_v1.md gap #13). Ported from v1's real
-# `helm_deployer.py` (`_escape_set_value()`), not redesigned — same
-# evidence-over-assumption reasoning as the argv shapes
-# `plan()`/`deploy()`/`destroy()` already copied verbatim.
+# deploy_namespace() helpers — chart reference resolution, registry
+# credentials, and the stdin values document for secrets
+# (docs/design/gap_fit_v1.md gap #13).
 # ----------------------------------------------------------------------
 
 
@@ -847,29 +1189,38 @@ def _repo_alias(url: str) -> str:
     return f"{prefix}-{digest}"
 
 
-def _escape_set_value(value: str) -> str:
-    """Backslash-escape characters with special meaning in Helm's `--set`
-    mini-language, so a value survives as a literal string instead of
-    being parsed as additional `--set` assignments or nested paths.
+def _major(version: str) -> int | None:
+    """The major number of `X.Y.Z`, or `None` when `version` does not start with one."""
+    match = re.match(r"(\d+)\.", version)
+    return int(match.group(1)) if match else None
 
-    Ported verbatim from v1's real `helm_deployer.py`. Order matters: `\\`
-    must be escaped first, or characters escaped afterwards would have
-    their own backslash re-escaped.
+
+def _upgrade_timeouts(timeout: int | None, *, dry_run: bool) -> dict[str, Any]:
+    """`plan()`/`deploy()` keyword arguments for a stage timeout of `timeout` seconds; `{}` keeps their defaults.
+
+    The stage timeout is the most one `helm upgrade` may take, so it is the process timeout. Helm's own
+    `--timeout` gets half of it: the rollback (`--rollback-on-failure`, or `--atomic` on Helm 3) waits that long
+    again while it rolls a failed release back, and
+    strata must not kill Helm in the middle of a rollback. The defaults (600 s and `5m`) are the same rule for
+    600 s. A dry-run waits for nothing, so it gets the process timeout only.
     """
-    for ch in ("\\", ",", ".", "=", "{", "}", "[", "]"):
-        value = value.replace(ch, f"\\{ch}")
-    return value
+    if timeout is None:
+        return {}
+    if dry_run:
+        return {"timeout": timeout}
+    return {"timeout": timeout, "deploy_timeout": f"{max(timeout // 2, 1)}s"}
 
 
-def _set_string_args(set_string: "Sequence[tuple[str, str]] | None") -> list[str]:
-    """`["--set-string", "path=value", ...]` for every `(path, value)` pair —
-    the value escaped for Helm's `--set` mini-language (`_escape_set_value()`),
-    the path left as-is (a dotted `values.yaml` path, already Helm's own
-    `--set` path syntax, e.g. `authentik-server.env.DB_PASSWORD`)."""
-    args: list[str] = []
-    for path, value in set_string or []:
-        args.extend(["--set-string", f"{path}={_escape_set_value(value)}"])
-    return args
+def _stdin_values(secret_values: Mapping[str, Any] | None) -> str | None:
+    """The YAML document `-f -` reads from stdin, or `None` when there is nothing secret to send.
+
+    Replaces v1's `--set-string path=value`, which put every secret in argv (visible in `ps` and Task Manager,
+    the leak ADR-0042 rules out) and read a list index in a path as a map key. YAML quotes a string that looks
+    like a number or a boolean, so every value still arrives as a string, as `--set-string` guaranteed.
+    """
+    if not secret_values:
+        return None
+    return yaml.safe_dump(dict(secret_values), sort_keys=False, default_flow_style=False)
 
 
 def _isolated_helm_env(stack: ExitStack) -> dict[str, str]:

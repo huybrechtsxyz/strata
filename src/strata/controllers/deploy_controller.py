@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import jinja2
+import yaml
 
 from strata.controllers.build_controller import build_resolved_workspace_graph, ordered_by_depends_on
 from strata.controllers.deployment_output_store import (
@@ -57,9 +58,16 @@ from strata.controllers.value_controller import (
 )
 from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
-from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError
-from strata.integrations.helm import RegistryCredentials, credentials_from_authentication
-from strata.integrations.resolved_context import ResolvedModule, ValueResolution
+from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError, RegistryAuthError
+from strata.integrations.helm import (
+    CHART_NOT_PINNED,
+    HelmIntegration,
+    RegistryCredentials,
+    chart_cache_source,
+    credentials_from_authentication,
+)
+from strata.integrations.helm_cache import DIGEST_CHANGED, ChartPin, ChartPullError, cached_pin
+from strata.integrations.resolved_context import ResolvedModule, ResolvedWorkspaceGraph, ValueResolution
 from strata.integrations.terraform_projection import (
     build_strata_assets,
     build_strata_payload,
@@ -67,8 +75,9 @@ from strata.integrations.terraform_projection import (
 )
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
-from strata.models.deployment_model import DeploymentStageModel
+from strata.models.deployment_model import DeploymentSpecModel, DeploymentStageModel
 from strata.models.integration_model import Capability, IntegrationModel
+from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.models.workspace_model import (
@@ -85,6 +94,7 @@ from strata.services.workspace_service import effective_assets
 from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
+from strata.utils.layout import helm_cache_dir
 from strata.utils.transport import CommandResult
 from strata.utils.value_tokens import (
     deployment_token_values,
@@ -294,6 +304,17 @@ def collect_step_outputs(
             if entry.get("sensitive") is True:
                 sensitive_keys.add(key)
     return values, sensitive_keys
+
+
+def _target_context(spec: DeploymentSpecModel, integration: InfraIntegration) -> str | None:
+    """The context the deployment pins `integration` to (`kube_context`, `docker_context`), or `None`."""
+    field = integration.TARGET_CONTEXT_FIELD
+    return cast(str | None, getattr(spec, field)) if field else None
+
+
+def _target_context_label(integration: InfraIntegration) -> str:
+    """`kube context`, `docker context`: the deployment field, as the messages name it."""
+    return (integration.TARGET_CONTEXT_FIELD or "context").replace("_", " ")
 
 
 def _upstream_step_names(step_name: str, steps: list[ProvisioningStepModel]) -> set[str]:
@@ -596,6 +617,116 @@ def _destroy_step(
     return True
 
 
+def _targeted_namespaces(
+    step: ProvisioningStepModel,
+    resources_by_name: dict[str, WorkspaceResourceModel],
+    topologies_by_name: dict[str, TopologySpecModel],
+    graph: ResolvedWorkspaceGraph,
+) -> list[NamespaceModel]:
+    """The namespaces a container step deploys (direct plus topology-expanded), in a stable order."""
+    _, namespaces_eff = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
+    # sorted(): namespaces_eff is a set (hash order, not declaration order) — deploy order
+    # must stay deterministic across runs, not vary with PYTHONHASHSEED.
+    return [graph.namespaces[name] for name in sorted(namespaces_eff) if name in graph.namespaces]
+
+
+def _verify_registry_charts(
+    integration: HelmIntegration,
+    targets: list[tuple[str, ResolvedModule]],
+    *,
+    index: DocumentIndex,
+    remotes: Mapping[str, SolutionRemoteModel],
+    values: Mapping[str, str],
+    cache_root: Path,
+    step_name: str,
+    smoke_test: bool,
+    diagnostics: Diagnostics,
+    on_step: Callable[[str], None],
+) -> dict[Path, ChartPin]:
+    """The archive of every registry chart in `targets`, verified against the pin `build run` recorded.
+
+    docs/work/helm-registry-chart-checks.md (ADR-0054, condition 5): a chart the build did not pin is refused; a
+    pinned one comes from the `.strata/helm/` cache, else is pulled again at exactly its version, and either way
+    its digest must match. A local chart is refused when the build left any of its dependencies unpinned
+    (docs/work/helm-chart-dependencies.md); its pinned dependencies are already in the build's `charts/`. Every problem is an error on `diagnostics`; the caller stops before any step runs.
+    `targets` pairs each module with its namespace name. Keyed by module build directory.
+    """
+    verified: dict[Path, ChartPin] = {}
+    pending: list[tuple[str, ResolvedModule, dict[str, Any]]] = []
+    for namespace_name, item in targets:
+        meta_file = item.source_path / "meta.yaml"
+        if not meta_file.exists():
+            continue  # deploy_namespace() reports a build that is missing
+        meta = yaml.safe_load(meta_file.read_text()) or {}
+        label = f"Namespace '{namespace_name}', module '{item.reference.name}'"
+        if meta.get("chartName") is None:
+            # A local chart: its dependencies are in the build's charts/, unless the build could not fetch them.
+            for name in meta.get("chartDependenciesUnpinned") or []:
+                diagnostics.error(
+                    f"{label}: dependency '{name}' was not pinned by the build, so the chart cannot be deployed. "
+                    "Build again where the dependency can be pulled (helm installed, its registry credentials "
+                    "readable, without --offline).",
+                    location=item.reference.name,
+                    code=CHART_NOT_PINNED,
+                )
+            continue
+        chart, version, digest = str(meta["chartName"]), meta.get("chartVersion"), meta.get("chartDigest")
+        wanted = f"chart '{chart}'" + (f" {version}" if version else "")
+        if digest is None or version is None:
+            diagnostics.error(
+                f"{label}: {wanted} was not pinned by the build, so it cannot be deployed. Build again where the "
+                "chart can be pulled (helm installed, its registry credentials readable, without --offline).",
+                location=item.reference.name,
+                code=CHART_NOT_PINNED,
+            )
+            continue
+        if smoke_test:
+            on_step(f"would verify {wanted} ({digest}) for {label}")
+            continue
+        pin = cached_pin(cache_root, chart_cache_source(meta), chart, str(version))
+        if pin is None:
+            pending.append((label, item, meta))
+        elif pin.digest != digest:
+            diagnostics.error(
+                f"{label}: {wanted} in {pin.archive.parent} is {pin.digest}, but the build pinned {digest}",
+                location=item.reference.name,
+                code=DIGEST_CHANGED,
+            )
+        else:
+            verified[item.source_path] = pin
+            on_step(f"verified {wanted} from the cache for {label}")
+
+    if not pending:
+        return verified
+    credentials = _chart_registry_credentials(
+        index, remotes, [item for _, item, _ in pending], values, step_name=step_name, diagnostics=diagnostics
+    )
+    if not diagnostics.ok:
+        return verified
+    for label, item, meta in pending:
+        remote = meta.get("chartRemote")
+        try:
+            pin = integration.pull_registry_chart(
+                meta,
+                remotes,
+                version=str(meta["chartVersion"]),
+                cache_root=cache_root,
+                credentials=credentials.get(str(remote)) if remote is not None else None,
+                expected_digest=str(meta["chartDigest"]),
+                diagnostics=diagnostics,
+                location=item.reference.name,
+            )
+        except RegistryAuthError as exc:
+            diagnostics.error(f"{label}: {exc}", location=item.reference.name, code="helm_registry_auth_failed")
+            continue
+        except ChartPullError as exc:
+            diagnostics.error(f"{label}: {exc}", location=item.reference.name, code=exc.code)
+            continue
+        verified[item.source_path] = pin
+        on_step(f"pulled and verified chart '{meta['chartName']}' {meta['chartVersion']} for {label}")
+    return verified
+
+
 def _chart_registry_credentials(
     index: DocumentIndex,
     remotes: Mapping[str, SolutionRemoteModel],
@@ -665,6 +796,7 @@ def deploy_run(
     pin: str | None = None,
     output_max_age: int | None = None,
     destroy: bool = False,
+    on_tool: Callable[[str, IntegrationReadiness], None] | None = None,
 ) -> Diagnostics:
     """Execute `deployment_name`'s workspace provisioners against `build_path`
     (already rendered by a prior `build run` — this never re-renders it).
@@ -770,7 +902,11 @@ def deploy_run(
             `dry_run`), a container-capable step calls `destroy_namespace()`, and after a fully successful
             real run the destroyed steps' recorded outputs are cleared. Needs `force` (destroy), `dry_run`
             (preview) or `smoke_test` (report what would be destroyed with no tool or output store contact), and
-            cannot be combined with `stop_after` or `use_saved_plan`.
+            cannot be combined with `stop_after` or `use_saved_plan`. A readiness problem marked `flags_only` is a
+            warning here, and its step still runs.
+        on_tool: Called as `(provisioner name, readiness)` for every step the preflight lets run, so the caller
+            can record which tool, version and path deployed it (docs/work/helm-4-support.md). Called before any
+            step runs, also when a later step then fails.
 
     Returns:
         Diagnostics accumulated while resolving values, preflight-
@@ -851,7 +987,7 @@ def deploy_run(
     # here, once, and redacted out of every streamed line before a caller
     # (console
     # `--follow`, a future NDJSON writer) ever sees it. This one set also
-    # covers Helm/Compose's own per-module `--set-string` secrets for
+    # covers Helm/Compose's own per-module secrets for
     # free — `resolve_module_values()`/`resolve_compose_values()` derive
     # those from `${secret:KEY}` tokens resolved against this exact same
     # `resolved.values` dict, so no second mechanism is needed.
@@ -1023,20 +1159,30 @@ def deploy_run(
         if readiness is None:
             readiness = assess_integration(integration, read_version=not smoke_test)
             readiness_by_tool[tool_key] = readiness
+            label = f"Provisioner '{provisioner.name}' (step '{step.name}')"
             for problem in readiness.problems:
-                diagnostics.error(
-                    f"Provisioner '{provisioner.name}' (step '{step.name}'): {problem.message}",
-                    location=step.name,
-                    code=problem.code,
-                )
+                # `uninstall`/`destroy` pass none of the flags a `flags_only` problem is about
+                # (docs/work/helm-4-support.md), so a teardown is not blocked by it.
+                report = diagnostics.warning if destroy and problem.flags_only else diagnostics.error
+                report(f"{label}: {problem.message}", location=step.name, code=problem.code)
+            for notice in readiness.warnings:
+                diagnostics.warning(f"{label}: {notice.message}", location=step.name, code=notice.code)
+            if readiness.reported_version is not None:
+                where = f" ({readiness.tool_path})" if readiness.tool_path else ""
+                _step(f"{integration.TYPE} {readiness.reported_version}{where}")
             if smoke_test and readiness.required_version is not None and readiness.available:
                 _step(f"would check {integration.TYPE} '{integration.name}' version '{readiness.required_version}'")
-        if readiness.ok:
+        if readiness.ok or (destroy and all(problem.flags_only for problem in readiness.problems)):
             resolved_steps.append((step, provisioner, integration))
+            if on_tool is not None:
+                on_tool(provisioner.name, readiness)
     # Every other enabled integration (docs/work/integration-readiness.md D22): required ones must be ready too.
     diagnostics.extend(
         integration_preflight(
-            index, exclude=frozenset(name for name, _ in readiness_by_tool), read_version=not smoke_test
+            index,
+            exclude=frozenset(name for name, _ in readiness_by_tool),
+            read_version=not smoke_test,
+            flags_only_as_warning=destroy,
         )
     )
     if not diagnostics.ok:
@@ -1053,6 +1199,59 @@ def deploy_run(
                     location=step.name,
                     code="saved_plan_unsupported",
                 )
+        if not diagnostics.ok:
+            return diagnostics
+
+    # A tool with a target context (Helm's `kube_context`, Compose's `docker_context`) runs against the one the
+    # deployment names (docs/work/compose-docker-context.md). Checked once per tool, before any step, so a wrong
+    # environment stops the run before anything has changed.
+    checked_tools: set[tuple[str, str | None]] = set()
+    for _, _, integration in resolved_steps:
+        target_context = _target_context(deployment.spec, integration)
+        tool_key = (integration.name, integration.command)
+        if target_context is None or tool_key in checked_tools:
+            continue
+        checked_tools.add(tool_key)
+        label = _target_context_label(integration)
+        if smoke_test:
+            _step(f"would check {label} '{target_context}'")
+            continue
+        context_problem = integration.target_context_problem(target_context, os.environ)
+        if context_problem is not None:
+            code, reason = context_problem
+            diagnostics.error(
+                f"Deployment '{deployment.meta.name}' deploys {integration.TYPE.capitalize()} to {label} "
+                f"'{target_context}', but {reason}",
+                code=code,
+            )
+            return diagnostics
+
+    # Registry charts are installed from the archive the build pinned (docs/work/helm-registry-chart-checks.md).
+    # Each is verified once, before any step, so an unpinned or changed chart stops the run before anything changes.
+    chart_archives: dict[Path, ChartPin] = {}
+    if not destroy and stop_after != "setup":
+        for step, _, integration in resolved_steps:
+            if not isinstance(integration, HelmIntegration):
+                continue
+            targets = [
+                (str(namespace.meta.name), item)
+                for namespace in _targeted_namespaces(step, resources_by_name, topologies_by_name, graph)
+                for item in resolve_namespace_modules(index, namespace, build_path).get(integration.TYPE, [])
+            ]
+            chart_archives.update(
+                _verify_registry_charts(
+                    integration,
+                    targets,
+                    index=index,
+                    remotes=remotes,
+                    values=resolved.values,
+                    cache_root=helm_cache_dir(context.root),
+                    step_name=step.name,
+                    smoke_test=smoke_test,
+                    diagnostics=diagnostics,
+                    on_step=_step,
+                )
+            )
         if not diagnostics.ok:
             return diagnostics
 
@@ -1124,6 +1323,9 @@ def deploy_run(
             continue
 
         env = tf_var_env(resolved, integration.ENV_VAR_PREFIX)
+        target_context = _target_context(deployment.spec, integration)
+        if target_context is not None:
+            env.update(integration.target_context_env(target_context))
 
         upstream = upstream_by_step.get(step.name, set())
         visible_outputs = {
@@ -1173,12 +1375,7 @@ def deploy_run(
             if stop_after == "setup":
                 _step(f"step '{step.name}' via {integration_type} has no setup phase (container-capable) — skipped")
                 continue
-            _, namespaces_eff = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
-            # sorted(): namespaces_eff is a set (hash order, not declaration order) — deploy order
-            # must stay deterministic across runs, not vary with PYTHONHASHSEED.
-            namespaces_targeted = [
-                graph.namespaces[name] for name in sorted(namespaces_eff) if name in graph.namespaces
-            ]
+            namespaces_targeted = _targeted_namespaces(step, resources_by_name, topologies_by_name, graph)
             if not namespaces_targeted:
                 diagnostics.error(
                     f"Step '{step.name}': provisioner '{provisioner.name}' ({integration_type}) is "
@@ -1192,6 +1389,10 @@ def deploy_run(
                 if (modules := resolve_namespace_modules(index, namespace, build_path).get(integration.TYPE, []))
             ]
             _step(f"running step '{step.name}' via {integration_type}")
+            if target_context is not None:
+                _step(
+                    f"step '{step.name}' via {integration_type}: {_target_context_label(integration)} '{target_context}'"
+                )
             if destroy:
                 for namespace, modules in reversed(container_targets):
                     diagnostics.extend(
@@ -1221,6 +1422,7 @@ def deploy_run(
                             tokens=tokens,
                             env=env,
                             line_callback=_line,
+                            chart_archives=chart_archives,
                             **_timeout_kwargs(step, deployment_stage, "check"),
                         )
                     except CheckPhaseUnsupportedError:
@@ -1244,16 +1446,6 @@ def deploy_run(
                     else:
                         _step(f"step '{step.name}' via {integration_type} has no modules to check — skipped")
                     continue
-            chart_credentials = _chart_registry_credentials(
-                index,
-                remotes,
-                [item for _, modules in container_targets for item in modules],
-                resolved.values,
-                step_name=step.name,
-                diagnostics=diagnostics,
-            )
-            if not diagnostics.ok:
-                return diagnostics
             for namespace, modules in container_targets:
                 diagnostics.extend(
                     integration.deploy_namespace(
@@ -1261,10 +1453,11 @@ def deploy_run(
                         modules,
                         tokens=tokens,
                         dry_run=dry_run,
-                        remotes=remotes,
                         env=env,
                         line_callback=_line,
-                        registry_credentials=chart_credentials,
+                        chart_archives=chart_archives,
+                        on_step=_step,
+                        **_timeout_kwargs(step, deployment_stage, "plan" if dry_run else "apply"),
                     )
                 )
             if not diagnostics.ok:

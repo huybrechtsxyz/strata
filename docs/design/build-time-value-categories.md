@@ -71,7 +71,7 @@ flowchart TB
     PROP --> WRITE
 
     BR --> WORKLOAD["build_workload_modules - per namespace, unaffected"]
-    WORKLOAD --> HELM["Helm: values.yaml + meta.yaml per module"]
+    WORKLOAD --> HELM["Helm: strata-values.yaml + meta.yaml per module"]
     WORKLOAD --> COMPOSE["Compose: one docker-compose.yml per namespace"]
 ```
 
@@ -150,7 +150,7 @@ flowchart TB
     PROP --> WRITE
 
     BR --> WORKLOAD["build_workload_modules - per namespace, entirely unaffected"]
-    WORKLOAD --> HELM["Helm: values.yaml + meta.yaml per module"]
+    WORKLOAD --> HELM["Helm: strata-values.yaml + meta.yaml per module"]
     WORKLOAD --> COMPOSE["Compose: one docker-compose.yml per namespace"]
 ```
 
