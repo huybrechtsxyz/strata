@@ -149,3 +149,136 @@ def test_collect_declarative_and_file_based_results_merge_and_dedup(tmp_path: Pa
 
     assert len(result.components) == 1
     assert result.components[0].source_collector == "helm"
+
+
+# ---------------------------------------------------------------------------
+# Registry charts pinned by the build (docs/work/helm-registry-chart-checks.md, Phase 5)
+# ---------------------------------------------------------------------------
+
+
+def _built_meta(build_path: Path, reference: str, meta: dict) -> None:
+    import yaml
+
+    module_dir = build_path / "apps" / reference
+    module_dir.mkdir(parents=True, exist_ok=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": reference, "namespace": "apps", **meta}))
+
+
+_DIGEST = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+
+
+def test_a_pinned_chart_is_recorded_at_its_exact_version_with_its_digest(tmp_path: Path):
+    _built_meta(
+        tmp_path,
+        "auth",
+        {
+            "chartName": "authentik",
+            "chartVersion": "2024.12.3",
+            "chartVersionConstraint": "^2024.12.0",
+            "chartDigest": f"sha256:{_DIGEST}",
+            "chartAppVersion": "2024.12.3",
+            "chartSubcharts": [{"name": "postgresql", "version": "15.5.38"}, {"name": "redis", "version": "19.0.1"}],
+            "chartRemote": "goauthentik",
+        },
+    )
+    module = _chart_module("authentik", chart_name="authentik", chart_version="^2024.12.0")
+
+    chart, postgresql, redis = HelmCollector().collect(_graph(), [module], tmp_path).components
+
+    assert (chart.name, chart.version) == ("authentik", "2024.12.3")
+    assert chart.purl.startswith("pkg:helm/authentik@2024.12.3")
+    assert chart.hashes == {"SHA-256": _DIGEST}
+    assert chart.properties == {
+        "strata:version-constraint": "^2024.12.0",
+        "strata:app-version": "2024.12.3",
+        "strata:used-by": "module:authentik",
+    }
+    assert (postgresql.name, postgresql.version, postgresql.purl) == (
+        "postgresql",
+        "15.5.38",
+        "pkg:helm/postgresql@15.5.38",
+    )
+    assert postgresql.properties == {"strata:subchart-of": "authentik@2024.12.3"}
+    assert (redis.name, redis.version) == ("redis", "19.0.1")
+
+
+def test_an_exact_pinned_version_has_no_constraint_property(tmp_path: Path):
+    _built_meta(
+        tmp_path, "auth", {"chartName": "authentik", "chartVersion": "2024.12.3", "chartDigest": f"sha256:{_DIGEST}"}
+    )
+    module = _chart_module("authentik", chart_name="authentik", chart_version="2024.12.3")
+
+    [chart] = HelmCollector().collect(_graph(), [module], tmp_path).components
+
+    assert chart.version == "2024.12.3"
+    assert "strata:version-constraint" not in chart.properties
+    assert chart.hashes == {"SHA-256": _DIGEST}
+
+
+def test_a_chart_the_build_could_not_pin_keeps_its_declaration_and_says_so(tmp_path: Path):
+    _built_meta(tmp_path, "auth", {"chartName": "authentik", "chartVersion": "^2024.12.0"})
+    module = _chart_module("authentik", chart_name="authentik", chart_version="^2024.12.0")
+
+    [chart] = HelmCollector().collect(_graph(), [module], tmp_path).components
+
+    assert chart.version == "^2024.12.0"
+    assert chart.hashes == {}
+    assert chart.properties == {"strata:pinned": "false", "strata:used-by": "module:authentik"}
+
+
+def _local_chart_with_dependencies(build_path: Path, meta: dict) -> None:
+    _built_meta(build_path, "app", meta)
+    (build_path / "apps" / "app" / "Chart.yaml").write_text(
+        "apiVersion: v2\nname: app\nversion: 1.0.0\ndependencies:\n"
+        "  - name: redis\n    version: ~19.0\n    repository: https://charts.example.com\n"
+        "  - name: common\n    version: 0.1.0\n    repository: file://../common\n"
+    )
+
+
+def test_a_local_charts_placed_dependencies_are_recorded_at_their_exact_versions(tmp_path: Path):
+    _local_chart_with_dependencies(
+        tmp_path,
+        {
+            "chartDependencies": [
+                {
+                    "name": "redis",
+                    "version": "19.0.4",
+                    "versionConstraint": "~19.0",
+                    "repository": "https://charts.example.com",
+                    "digest": f"sha256:{_DIGEST}",
+                    "origin": "pulled",
+                },
+                {"name": "common", "version": "0.1.0", "repository": "file://../common", "origin": "file"},
+            ]
+        },
+    )
+
+    components = HelmCollector().collect(_graph(), [], tmp_path).components
+
+    by_name = {(c.name, c.version): c for c in components}
+    assert set(by_name) == {("redis", "19.0.4"), ("common", "0.1.0"), ("app", "1.0.0")}
+    redis = by_name[("redis", "19.0.4")]
+    assert redis.hashes == {"SHA-256": _DIGEST}
+    assert redis.properties == {"strata:subchart-of": "app@1.0.0", "strata:version-constraint": "~19.0"}
+    assert redis.purl.startswith("pkg:helm/redis@19.0.4")
+    common = by_name[("common", "0.1.0")]
+    assert common.purl == "pkg:helm/common@0.1.0"
+    assert common.hashes == {}
+
+
+def test_a_dependency_the_build_could_not_pin_keeps_its_declaration_and_says_so(tmp_path: Path):
+    _local_chart_with_dependencies(
+        tmp_path,
+        {
+            "chartDependencies": [
+                {"name": "common", "version": "0.1.0", "repository": "file://../common", "origin": "file"}
+            ],
+            "chartDependenciesUnpinned": ["redis"],
+        },
+    )
+
+    components = HelmCollector().collect(_graph(), [], tmp_path).components
+
+    [redis] = [c for c in components if c.name == "redis"]
+    assert redis.version == "~19.0"
+    assert redis.properties == {"strata:pinned": "false"}

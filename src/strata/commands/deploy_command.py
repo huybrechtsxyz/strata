@@ -32,7 +32,9 @@ from strata.commands.options import output_option, quiet_option, resolve_work_pa
 from strata.commands.run import command_run
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.deploy_controller import deploy_run
+from strata.controllers.integration_readiness import IntegrationReadiness
 from strata.controllers.solution_context import open_solution
+from strata.models.audit_manifest_model import ManifestProviderModel
 from strata.utils.errors import UsageError
 from strata.utils.layout import build_dir
 
@@ -123,6 +125,25 @@ def _shared_deploy_options(follow_default: str | None = None) -> Callable[[_F], 
         return f
 
     return _decorate
+
+
+def _provider_recorder() -> tuple[dict[str, ManifestProviderModel], Callable[[str, IntegrationReadiness], None]]:
+    """`deploy_run(on_tool=...)` and what it collects: one manifest entry per provisioner, with the tool version
+    and path its preflight found (docs/work/helm-4-support.md)."""
+    providers: dict[str, ManifestProviderModel] = {}
+
+    def _record(provisioner: str, readiness: IntegrationReadiness) -> None:
+        providers.setdefault(
+            provisioner,
+            ManifestProviderModel(
+                name=provisioner,
+                type=readiness.type,
+                tool_version=readiness.reported_version,
+                tool_path=readiness.tool_path,
+            ),
+        )
+
+    return providers, _record
 
 
 def _line_follow_callbacks(
@@ -431,6 +452,7 @@ def deploy_run_command(
         # flat message string, not a separate step name/tool (ndjson-output.md's
         # own "Per-line event shape" design question).
         on_step, on_line = _line_follow_callbacks(follow, output, run.step)
+        providers, on_tool = _provider_recorder()
 
         diagnostics = deploy_run(
             context,
@@ -445,6 +467,7 @@ def deploy_run_command(
             on_line=on_line,
             pin=pin,
             output_max_age=output_max_age,
+            on_tool=on_tool,
         )
 
         # Audit trail — finalize + write locally + distribute (docs/design/
@@ -470,6 +493,7 @@ def deploy_run_command(
             change_url=change_url,
             change_approved_by=change_approved_by,
             change_approved_at=change_approved_at,
+            providers=list(providers.values()),
         )
         diagnostics.extend(audit_diagnostics)
 
@@ -741,6 +765,7 @@ def deploy_apply_command(
         started_at = datetime.now(timezone.utc)
 
         on_step, on_line = _line_follow_callbacks(follow, output, run.step)
+        providers, on_tool = _provider_recorder()
 
         diagnostics = deploy_run(
             context,
@@ -754,6 +779,7 @@ def deploy_apply_command(
             on_line=on_line,
             pin=pin,
             output_max_age=output_max_age,
+            on_tool=on_tool,
         )
 
         # Audit trail — same as `deploy run` (docs/design/audit-trail.md's
@@ -779,6 +805,7 @@ def deploy_apply_command(
             change_url=change_url,
             change_approved_by=change_approved_by,
             change_approved_at=change_approved_at,
+            providers=list(providers.values()),
         )
         diagnostics.extend(audit_diagnostics)
 
@@ -897,6 +924,7 @@ def deploy_destroy_command(
         started_at = datetime.now(timezone.utc)
 
         on_step, on_line = _line_follow_callbacks(follow, output, run.step)
+        providers, on_tool = _provider_recorder()
 
         diagnostics = deploy_run(
             context,
@@ -912,6 +940,7 @@ def deploy_destroy_command(
             on_line=on_line,
             pin=pin,
             output_max_age=output_max_age,
+            on_tool=on_tool,
         )
 
         # A preview or a smoke test changes nothing, so only a real destroy gets an audit record.
@@ -934,6 +963,7 @@ def deploy_destroy_command(
                 change_url=change_url,
                 change_approved_by=change_approved_by,
                 change_approved_at=change_approved_at,
+                providers=list(providers.values()),
             )
             diagnostics.extend(audit_diagnostics)
 

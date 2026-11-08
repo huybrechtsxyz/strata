@@ -19,29 +19,57 @@ handing an `InfraIntegration` a `ResolvedModule` list — `HelmIntegration`/
 remote directly.
 """
 
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
 from strata.controllers.integration_resolution import resolve_module_integration
-from strata.controllers.remote_credentials import RemoteCredentialResolver
+from strata.controllers.remote_credentials import (
+    CredentialsNeedResolveError,
+    RemoteCredentialError,
+    RemoteCredentialResolver,
+)
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import describe_source, sync_module_source
 from strata.controllers.value_controller import resolve_artifact_field
 from strata.controllers.version_pins import log_pin_applied
-from strata.integrations.errors import IntegrationError
-from strata.integrations.helm import check_configuration_keys, read_chart_values
+from strata.integrations.errors import IntegrationError, RegistryAuthError
+from strata.integrations.helm import (
+    CHART_NOT_PINNED,
+    HelmIntegration,
+    chart_cache_source,
+    chart_coordinates,
+    check_configuration_keys,
+    read_chart_values,
+)
+from strata.integrations.helm_cache import ChartPin, ChartPullError, cached_pin, is_exact_version, read_chart_yaml
+from strata.integrations.helm_dependencies import (
+    DEPENDENCY_MISSING,
+    DEPENDENCY_NOT_PINNED,
+    OUTSIDE_SOURCE,
+    WRONG_VERSION,
+    Action,
+    Dependency,
+    DependencyRecord,
+    committed_subcharts,
+    dependency_list_problems,
+    plan_dependencies,
+    values_keys,
+)
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.models.common_models import ModuleReferenceModel, PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
-from strata.models.solution_model import SolutionRemoteModel
+from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.models.version_model import VersionModel
 from strata.services.version_service import VersionService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
+from strata.utils.layout import helm_cache_dir
+from strata.utils.path_safety import resolve_within
 
 
 def resolve_module(index: DocumentIndex, reference: ModuleReferenceModel) -> ModuleModel:
@@ -182,6 +210,7 @@ def build_workload_modules(
     dry_run: bool = False,
     on_step: Callable[[str], None] | None = None,
     credentials: RemoteCredentialResolver | None = None,
+    offline: bool = False,
 ) -> Diagnostics:
     """Render every module `namespace` declares (ADR-0022 D6).
 
@@ -242,11 +271,13 @@ def build_workload_modules(
         on_step: Called with a one-line progress message per module
             materialised and per type-group rendered — real work when
             `dry_run` is `False`, planned work when it's `True`.
-        credentials: Resolves `remote.integration`'s credentials when a module's source needs a clone;
-            `None` (default) clones with ambient git credentials only.
+        credentials: Resolves `remote.integration`'s credentials when a module's source needs a clone or its
+            registry chart a pull; `None` (default) uses ambient git credentials and Helm's own login only.
+        offline: Pull no registry chart; one that is not cached is left unpinned (ADR-0054).
 
     Returns:
-        Warnings only (a `configuration` key a local Helm chart does not declare) — never an error.
+        Warnings (a `configuration` key a Helm chart does not declare, a registry chart left unpinned) and
+        errors (a registry chart that could not be pulled).
 
     Raises:
         UsageError: a module reference does not resolve, `module.spec.type`
@@ -276,24 +307,70 @@ def build_workload_modules(
             )
 
         module_dir = build_path / namespace.meta.name / reference.name
+        copied = None
         if dry_run:
             _step(
                 f"would materialise module '{reference.name}' ({describe_source(module.spec.source)}) "
                 f"for namespace '{namespace.meta.name}'"
             )
         else:
-            sync_module_source(root, module_dir, module.spec.source, remotes, credentials=credentials)
+            copied = sync_module_source(root, module_dir, module.spec.source, remotes, credentials=credentials)
             _step(f"materialised module '{reference.name}' for namespace '{namespace.meta.name}' at {module_dir}")
-            if module.spec.type == "helm" and module.spec.source.chart_name is None and module.spec.configuration:
-                for finding in check_configuration_keys(module.spec.configuration, read_chart_values(module_dir)):
-                    diagnostics.warning(
-                        f"Namespace '{namespace.meta.name}', module '{reference.name}': {finding}",
-                        location=reference.name,
-                        code="helm_unknown_configuration_key",
-                    )
+
+        label = f"Namespace '{namespace.meta.name}', module '{reference.name}'"
+        dependency_records: list[DependencyRecord] = []
+        unpinned_dependencies: list[str] = []
+        if module.spec.type == "helm" and copied is not None and (module_dir / "Chart.yaml").is_file():
+            repo_root, origin = copied
+            dependency_records, unpinned_dependencies = _place_chart_dependencies(
+                index,
+                root,
+                remotes,
+                module_dir,
+                origin=origin,
+                repo_root=repo_root,
+                label=label,
+                location=reference.name,
+                offline=offline,
+                credentials=credentials,
+                diagnostics=diagnostics,
+                on_step=_step,
+            )
+            if dependency_records and not unpinned_dependencies and diagnostics.ok:
+                _check_dependency_list(index, module_dir, label=label, location=reference.name, diagnostics=diagnostics)
+        chart_pin = None
+        if module.spec.type == "helm" and module.spec.source.chart_name is not None:
+            chart_pin = _pin_registry_chart(
+                index,
+                root,
+                remotes,
+                module,
+                label=label,
+                location=reference.name,
+                dry_run=dry_run,
+                offline=offline,
+                credentials=credentials,
+                diagnostics=diagnostics,
+                on_step=_step,
+            )
+        chart_dir = module_dir if module.spec.source.chart_name is None else (chart_pin and chart_pin.chart_dir)
+        if not dry_run and module.spec.type == "helm" and chart_dir and module.spec.configuration:
+            for finding in check_configuration_keys(
+                module.spec.configuration, read_chart_values(chart_dir), values_keys(chart_dir)
+            ):
+                diagnostics.warning(
+                    f"{label}: {finding}", location=reference.name, code="helm_unknown_configuration_key"
+                )
 
         by_type.setdefault(module.spec.type, []).append(
-            ResolvedModule(reference=reference, module=module, source_path=module_dir)
+            ResolvedModule(
+                reference=reference,
+                module=module,
+                source_path=module_dir,
+                chart_pin=chart_pin,
+                chart_dependencies=tuple(dependency_records),
+                unpinned_dependencies=tuple(unpinned_dependencies),
+            )
         )
 
     for module_type, group in by_type.items():
@@ -313,6 +390,353 @@ def build_workload_modules(
             raise UsageError(f"Namespace '{namespace.meta.name}', module type '{module_type}': {exc}") from exc
         _step(f"rendered {module_type} workload for namespace '{namespace.meta.name}'")
     return diagnostics
+
+
+def can_pull_charts(integration: HelmIntegration) -> bool:
+    """Whether `helm` is installed to pull registry charts with.
+
+    Its own function so the test suite can close it: a build test must not pull from the network just because the
+    machine running it has `helm` (tests/conftest.py).
+    """
+    return integration.is_available()
+
+
+def _pin_registry_chart(
+    index: DocumentIndex,
+    root: Path,
+    remotes: dict[str, SolutionRemoteModel],
+    module: ModuleModel,
+    *,
+    label: str,
+    location: str,
+    dry_run: bool,
+    offline: bool,
+    credentials: RemoteCredentialResolver | None,
+    diagnostics: Diagnostics,
+    on_step: Callable[[str], None],
+) -> ChartPin | None:
+    """Pin a registry chart: from the `.strata/helm/` cache, else by pulling it (ADR-0054).
+
+    A pull the machine cannot attempt (`--offline`, no `helm`, a credential that needs `--resolve`) leaves the
+    chart unpinned with a warning, since only a deploy needs the pin and the deploy refuses an unpinned chart. A
+    pull that fails is an error. Returns `None` for an unpinned chart and in a dry run that would pull.
+    """
+    source = module.spec.source
+    wanted = f"chart '{source.chart_name}'" + (f" ({source.chart_version})" if source.chart_version else "")
+
+    def unpinned(reason: str) -> None:
+        diagnostics.warning(
+            f"{label}: {wanted} is not pinned: {reason}. A deploy of this build stops at this chart; build again "
+            "where the chart can be pulled.",
+            location=location,
+            code=CHART_NOT_PINNED,
+        )
+
+    pin, _ = _pin_chart(
+        index,
+        root,
+        remotes,
+        chart_coordinates(source),
+        source.chart_version,
+        wanted=wanted,
+        label=label,
+        location=location,
+        dry_run=dry_run,
+        offline=offline,
+        credentials=credentials,
+        diagnostics=diagnostics,
+        on_step=on_step,
+        unpinned=unpinned,
+    )
+    return pin
+
+
+def _pin_chart(
+    index: DocumentIndex,
+    root: Path,
+    remotes: dict[str, SolutionRemoteModel],
+    meta: dict[str, Any],
+    version: str | None,
+    *,
+    wanted: str,
+    label: str,
+    location: str,
+    dry_run: bool,
+    offline: bool,
+    credentials: RemoteCredentialResolver | None,
+    diagnostics: Diagnostics,
+    on_step: Callable[[str], None],
+    unpinned: Callable[[str], None],
+) -> tuple[ChartPin | None, bool]:
+    """The chart `meta` names at `version`, from the cache or pulled; and whether it came from the cache.
+
+    Shared by registry charts and local charts' dependencies. `unpinned` reports a pull the machine cannot attempt;
+    a failed pull is an error on `diagnostics`. `meta` is `chart_coordinates()`'s shape; credentials come from its
+    `chartRemote`, if that remote names an integration.
+    """
+    chart = str(meta["chartName"])
+    cache_root = helm_cache_dir(root)
+
+    if version is not None and is_exact_version(version):
+        pin = cached_pin(cache_root, chart_cache_source(meta), chart, version)
+        if pin is not None:
+            on_step(f"{'would use' if dry_run else 'using'} cached {wanted} for {label}")
+            return pin, True
+    if dry_run:
+        on_step(f"would pull {wanted} for {label}")
+        return None, False
+
+    if offline:
+        unpinned("--offline was given and it is not in .strata/helm/")
+        return None, False
+    integration = resolve_module_integration(index, "helm")
+    if not isinstance(integration, HelmIntegration):
+        unpinned(f"module type 'helm' resolves to {type(integration).__name__}, which cannot pull a chart")
+        return None, False
+    if not can_pull_charts(integration):
+        unpinned(f"'{integration.command}' is not installed")
+        return None, False
+
+    registry_credentials = None
+    remote_name = meta.get("chartRemote")
+    remote = remotes.get(str(remote_name)) if remote_name is not None else None
+    if remote is not None and remote.integration and credentials is not None:
+        owner = f"remote '{remote.name}' (integration '{remote.integration}')"
+        try:
+            registry_credentials = credentials.for_registry(remote.integration, owner=owner)
+        except CredentialsNeedResolveError as exc:
+            unpinned(str(exc))
+            return None, False
+        except RemoteCredentialError as exc:
+            diagnostics.error(f"{label}: {exc}", location=location, code="helm_registry_credentials_invalid")
+            return None, False
+
+    try:
+        pin = integration.pull_registry_chart(
+            meta,
+            remotes,
+            version=version,
+            cache_root=cache_root,
+            credentials=registry_credentials,
+            diagnostics=diagnostics,
+            location=location,
+        )
+    except RegistryAuthError as exc:
+        diagnostics.error(f"{label}: {exc}", location=location, code="helm_registry_auth_failed")
+        return None, False
+    except ChartPullError as exc:
+        diagnostics.error(f"{label}: {exc}", location=location, code=exc.code)
+        return None, False
+    on_step(f"pinned {wanted} at {pin.version} ({pin.digest}) for {label}")
+    return pin, False
+
+
+#: How deep `file://` dependencies may nest before the build assumes a cycle.
+_MAX_FILE_DEPENDENCY_DEPTH = 10
+
+
+def _place_chart_dependencies(
+    index: DocumentIndex,
+    root: Path,
+    remotes: dict[str, SolutionRemoteModel],
+    chart_dir: Path,
+    *,
+    origin: Path,
+    repo_root: Path,
+    label: str,
+    location: str,
+    offline: bool,
+    credentials: RemoteCredentialResolver | None,
+    diagnostics: Diagnostics,
+    on_step: Callable[[str], None],
+    depth: int = 0,
+) -> tuple[list[DependencyRecord], list[str]]:
+    """Fill the build copy `chart_dir`'s `charts/` with its dependencies (docs/work/helm-chart-dependencies.md).
+
+    `origin` is where the chart was copied from and `repo_root` the repository it lives in, so a `file://`
+    dependency resolves as Helm would resolve it next to the source, and may not leave that repository. A
+    `file://` chart's own dependencies are placed the same way. Returns what was placed or found, and the names of
+    the dependencies the machine could not fetch (ADR-0054's unpinned rule).
+    """
+    records: list[DependencyRecord] = []
+    missing: list[str] = []
+    # Planned from the source, not the build copy: a copy kept by `--no-clean` holds what an earlier build placed.
+    committed = committed_subcharts(origin)
+    for plan in plan_dependencies(origin):
+        dependency = plan.dependency
+        if plan.action is Action.ERROR:
+            diagnostics.error(f"{label}: {plan.message}", location=location, code=plan.code)
+        elif plan.action is Action.COMMITTED:
+            records.append(
+                DependencyRecord(
+                    dependency.name,
+                    committed[dependency.name].version,
+                    "committed",
+                    repository=dependency.repository,
+                )
+            )
+        elif plan.action is Action.FILE:
+            assert dependency.repository is not None  # FILE is planned only for a file:// repository
+            try:
+                target = resolve_within(repo_root, origin / dependency.repository.removeprefix("file://"))
+            except ValueError as exc:
+                diagnostics.error(
+                    f"{label}: dependency '{dependency.name}' ({dependency.repository}) is outside the chart's "
+                    f"repository: {exc}",
+                    location=location,
+                    code=OUTSIDE_SOURCE,
+                )
+                continue
+            if not (target / "Chart.yaml").is_file():
+                diagnostics.error(
+                    f"{label}: dependency '{dependency.name}' ({dependency.repository}) is not a chart directory",
+                    location=location,
+                    code=DEPENDENCY_MISSING,
+                )
+                continue
+            if depth >= _MAX_FILE_DEPENDENCY_DEPTH:
+                diagnostics.error(
+                    f"{label}: file:// dependencies nest deeper than {_MAX_FILE_DEPENDENCY_DEPTH} levels at "
+                    f"'{dependency.name}'; is there a cycle?",
+                    location=location,
+                    code=DEPENDENCY_MISSING,
+                )
+                continue
+            placed = chart_dir / "charts" / dependency.name
+            shutil.copytree(target, placed, dirs_exist_ok=True)
+            version = read_chart_yaml(target / "Chart.yaml").get("version")
+            records.append(
+                DependencyRecord(dependency.name, str(version or ""), "file", repository=dependency.repository)
+            )
+            on_step(f"copied dependency '{dependency.name}' ({dependency.repository}) for {label}")
+            nested, nested_missing = _place_chart_dependencies(
+                index,
+                root,
+                remotes,
+                placed,
+                origin=target,
+                repo_root=repo_root,
+                label=label,
+                location=location,
+                offline=offline,
+                credentials=credentials,
+                diagnostics=diagnostics,
+                on_step=on_step,
+                depth=depth + 1,
+            )
+            records.extend(nested)
+            missing.extend(nested_missing)
+        else:
+            record = _pull_dependency(
+                index,
+                root,
+                remotes,
+                chart_dir,
+                dependency,
+                plan.version,
+                label=label,
+                location=location,
+                offline=offline,
+                credentials=credentials,
+                diagnostics=diagnostics,
+                on_step=on_step,
+                missing=missing,
+            )
+            if record is not None:
+                records.append(record)
+    return records, missing
+
+
+def _pull_dependency(
+    index: DocumentIndex,
+    root: Path,
+    remotes: dict[str, SolutionRemoteModel],
+    chart_dir: Path,
+    dependency: Dependency,
+    version: str | None,
+    *,
+    label: str,
+    location: str,
+    offline: bool,
+    credentials: RemoteCredentialResolver | None,
+    diagnostics: Diagnostics,
+    on_step: Callable[[str], None],
+    missing: list[str],
+) -> DependencyRecord | None:
+    """Pin one repository dependency through the chart cache and copy its archive into `chart_dir/charts/`."""
+    wanted = f"dependency '{dependency.name}'" + (f" ({version})" if version else "")
+
+    def unpinned(reason: str) -> None:
+        missing.append(dependency.name)
+        diagnostics.warning(
+            f"{label}: {wanted} is not pinned: {reason}. A deploy of this build stops at this chart; build again "
+            "where the dependency can be pulled.",
+            location=location,
+            code=DEPENDENCY_NOT_PINNED,
+        )
+
+    pin, cached = _pin_chart(
+        index,
+        root,
+        remotes,
+        _dependency_coordinates(dependency, remotes),
+        version,
+        wanted=wanted,
+        label=label,
+        location=location,
+        dry_run=False,
+        offline=offline,
+        credentials=credentials,
+        diagnostics=diagnostics,
+        on_step=on_step,
+        unpinned=unpinned,
+    )
+    if pin is None:
+        return None
+    charts = chart_dir / "charts"
+    charts.mkdir(exist_ok=True)
+    shutil.copy2(pin.archive, charts / pin.archive.name)
+    return DependencyRecord(
+        dependency.name,
+        pin.version,
+        "cache" if cached else "pulled",
+        repository=dependency.repository,
+        constraint=dependency.version if dependency.version != pin.version else None,
+        digest=pin.digest,
+    )
+
+
+def _dependency_coordinates(dependency: Dependency, remotes: dict[str, SolutionRemoteModel]) -> dict[str, Any]:
+    """`chart_coordinates()`'s shape for a dependency: a declared helm/oci remote with the same URL, so its
+    credentials apply, else the repository URL itself."""
+    url = str(dependency.repository).rstrip("/")
+    for remote in remotes.values():
+        if remote.type in (RemoteType.HELM, RemoteType.OCI) and remote.url.rstrip("/") == url:
+            return {"chartName": dependency.name, "chartRemote": remote.name}
+    return {"chartName": dependency.name, "chartRepository": dependency.repository}
+
+
+def _check_dependency_list(
+    index: DocumentIndex, chart_dir: Path, *, label: str, location: str, diagnostics: Diagnostics
+) -> None:
+    """`helm dependency list` on the filled `charts/`, when `helm` is installed: every dependency must be in place."""
+    integration = resolve_module_integration(index, "helm")
+    if not isinstance(integration, HelmIntegration) or not can_pull_charts(integration):
+        return
+    result = integration.dependency_list(chart_dir)
+    if not result.is_successful:
+        detail = result.stderr.strip() or f"exit code {result.returncode}"
+        diagnostics.error(
+            f"{label}: 'helm dependency list' failed — {detail}", location=location, code=DEPENDENCY_MISSING
+        )
+        return
+    for name, status in dependency_list_problems(result.stdout):
+        diagnostics.error(
+            f"{label}: dependency '{name}' is '{status}' in the chart's charts/ directory "
+            "(helm dependency list); check Chart.yaml against Chart.lock and charts/",
+            location=location,
+            code=DEPENDENCY_MISSING if status == "missing" else WRONG_VERSION,
+        )
 
 
 def resolve_namespace_modules(

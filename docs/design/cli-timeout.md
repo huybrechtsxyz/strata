@@ -78,14 +78,15 @@ both mechanisms above apply.
 | Phase     | Helm (`helm.py`)                                           | Compose (`compose.py`)              |
 | --------- | ---------------------------------------------------------- | ----------------------------------- |
 | `check`   | `helm lint` per local chart, default 60s                   | no check phase                      |
-| `plan`    | `helm upgrade --dry-run` per module, default 600s          | `docker stack config`, default 60s  |
+| `plan`    | `helm upgrade --dry-run=client` per module, default 600s   | `docker stack config`, default 60s  |
 | `apply`   | `helm upgrade` per module, default 600s and `--timeout 5m` | `docker stack deploy`, default 300s |
 | `destroy` | `helm uninstall` per module, default 300s                  | `docker stack rm`, default 300s     |
 
 The timeout applies to each Helm release separately, not to the step as a
 whole. A real `helm upgrade` has two timeouts: strata's process timeout
-and Helm's own `--timeout`, after which `--atomic` rolls the release back,
-waiting again. So an `apply` timeout of N seconds sets the process timeout
+and Helm's own `--timeout`, after which `--rollback-on-failure` (`--atomic`
+on a declared Helm 3, [helm-chart-deployment.md](helm-chart-deployment.md#helm-versions))
+rolls the release back, waiting again. So an `apply` timeout of N seconds sets the process timeout
 to N and `--timeout` to N/2, leaving the other half for the rollback.
 The defaults are that rule for N = 600. A dry-run waits for nothing and
 gets the process timeout only. Chart repository and registry calls

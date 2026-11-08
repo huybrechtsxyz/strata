@@ -1,7 +1,7 @@
 # SBOM Generation (CycloneDX) - Design
 
 - Status: current
-- Last updated: 2026-11-06
+- Last updated: 2026-11-07
 
 ## Overview
 
@@ -76,7 +76,7 @@ they choose a commit to judge, not the one checked out. Outside git the property
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `image`     | `spec.services[].image` of every resolved module, plus artifact images (`graph.images`)                                                   | `container`, `pkg:docker/...`                    |
 | `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                                    | `container`, `pkg:docker/...`                    |
-| `helm`      | Chart modules' `source.{chart_name,chart_version,chart_repository}`, every rendered `Chart.yaml` and its `dependencies[]`                 | `library`, `pkg:helm/...`                        |
+| `helm`      | Chart modules' `source.{chart_name,chart_version,chart_repository}` and their built `meta.yaml`, every rendered `Chart.yaml` and its `dependencies[]` | `library`, `pkg:helm/...`                        |
 | `terraform` | `required_providers {}` and `module "x" {}` blocks in every `*.tf` (one `python-hcl2` pass), and each root module's `.terraform.lock.hcl` | `library`, `pkg:terraform/...`, `pkg:github/...` |
 
 The file-based collectors scan the whole build path with `rglob()`; no wiring inside the
@@ -88,6 +88,23 @@ build path itself is routinely named `build`.
 
 The `helm` collector dedupes by chart name and version, first one kept, so a declared chart (which
 knows its repository) is not repeated by the `Chart.yaml` it was materialised to (which does not).
+
+A registry chart `build run` pinned ([helm-registry-chart-checks.md](../work/helm-registry-chart-checks.md))
+is recorded from its module's `meta.yaml`, which the build writes before the SBOM: the exact
+`chartVersion` (the purl version, even when the module declared a range), `hashes` `SHA-256` from
+`chartDigest` (strata's SHA-256 of the archive), `strata:version-constraint` when the declared
+version was a range, `strata:app-version`, and one component per chart packaged in its `charts/`
+(`chartSubcharts`, exact versions, `strata:subchart-of: <chart>@<version>`). A chart the build could
+not pin keeps its declared version and gets `strata:pinned: false`. The collector reads the build
+path only, never the `.strata/helm/` cache.
+
+A local chart's dependencies are recorded the same way from its `meta.yaml`'s `chartDependencies`
+([helm-chart-dependencies.md](../work/helm-chart-dependencies.md)): the exact version the build placed
+in `charts/`, `hashes` `SHA-256` for a pulled archive, `strata:version-constraint` when `Chart.yaml`
+declared something else, and `strata:subchart-of: <chart>@<version>`. They replace the declared
+`dependencies[]` entries of that `Chart.yaml`. A `file://` dependency gets no repository in its purl.
+A dependency the build could not pin (`chartDependenciesUnpinned`) keeps its declared form with
+`strata:pinned: false`.
 
 A floating image tag (no tag, a mutable alias such as `latest`/`main`/`dev`, or a tag that is not
 semver-shaped) gets the property `strata:tag-stability: floating`. An artifact image whose tag a
@@ -183,10 +200,13 @@ mechanism as `strata.integrations` (ADR-0021 D10).
   `terraform init`, and Terraform has no lock file for modules. A range stays a property.
 - A standalone `strata sbom scan`/`inventory`/`validate` command: no evidence of use outside
   `build run`; `cyclonedx-cli`, Trivy, Grype and Dependency-Track read the file directly.
-- Looking up a tag's digest in its registry: it needs network access and registry credentials at
-  build time, and makes `build run` depend on the registry. It would fill the same `hashes` field.
-- Hashes for charts and Terraform. A provider's `h1:`/`zh:` lock file hashes are not CycloneDX
-  algorithms (`h1:` hashes a directory, `zh:` a zip per platform) and would mislead a consumer.
+- Looking up a tag's digest in its registry: not built yet. Network access at build time is no
+  longer the reason: [ADR-0054](../decisions/0054-build-fetches-release-inputs-never-targets.md)
+  allows a build to fetch an input it can pin, and an image digest is one. It would fill the same
+  `hashes` field.
+- Hashes for Terraform. A provider's `h1:`/`zh:` lock file hashes are not CycloneDX algorithms
+  (`h1:` hashes a directory, `zh:` a zip per platform) and would mislead a consumer. A pinned
+  registry chart has one: the SHA-256 of its archive.
 
 ## Related Decisions
 
@@ -194,6 +214,8 @@ mechanism as `strata.integrations` (ADR-0021 D10).
   confirmed consumer" framing was too narrow: v1 generates the SBOM on every build.
 - [ADR-0021](../decisions/0021-integration-layer.md) D10 - the entry-point plugin registry the
   collector registry copies.
+- [ADR-0054](../decisions/0054-build-fetches-release-inputs-never-targets.md) - the build may fetch
+  what a release deploys, which pins registry charts.
 
 ## History
 

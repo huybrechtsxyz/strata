@@ -147,6 +147,10 @@ class ManifestProviderModel(PlatformBaseModel):
     type: str = Field(description="IaC tool: terraform | ansible | compose | helm | script")
     backend: dict[str, Any] | None = Field(default=None, description="State backend config, when stateful")
     details: dict[str, Any] | None = Field(default=None, description="Type-specific metadata")
+    tool_version: str | None = Field(
+        default=None, description="Installed version of the tool that ran, when the readiness check read it"
+    )
+    tool_path: str | None = Field(default=None, description="Where the tool resolved on PATH")
 
 
 class ManifestArtifactsModel(PlatformBaseModel):

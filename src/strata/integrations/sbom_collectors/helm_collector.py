@@ -8,7 +8,9 @@ keys collectors 1:1, so the same "model + file" pairing lives in one file
 instead, components still share `source_collector="helm"`).
 """
 
+from collections.abc import Collection
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -38,6 +40,14 @@ class HelmCollector(SbomCollector):
     kept: a declared chart knows its repository, the `Chart.yaml` it was
     materialised to does not. A declared chart lists the modules that use it
     in a `strata:used-by` property (`module:NAME`).
+
+    A registry chart `build run` pinned (docs/work/helm-registry-chart-checks.md) is recorded from its module's
+    `meta.yaml`: the exact version, the archive's SHA-256, its `appVersion`, and every chart packaged in its
+    `charts/`. One the build could not pin keeps its declared form and gets `strata:pinned: false`.
+
+    A local chart's dependencies the build placed in its `charts/` (docs/work/helm-chart-dependencies.md) come from
+    its `meta.yaml`'s `chartDependencies` at their exact versions, instead of its `Chart.yaml`'s declared ones; those
+    in `chartDependenciesUnpinned` keep the declared form with `strata:pinned: false`.
     """
 
     def collect(self, graph: ResolvedWorkspaceGraph, modules: list[ModuleModel], build_path: Path) -> CollectorResult:
@@ -46,37 +56,62 @@ class HelmCollector(SbomCollector):
         seen: set[tuple[str, str | None]] = set()
         uses: dict[tuple[str, str | None], list[str]] = {}
         chart_pins = (graph.version.spec.pins.charts or {}) if graph.version is not None else {}
+        built = self._built_registry_charts(build_path)
 
         for module in modules:
             source = module.spec.source
             if source.chart_name is None:
                 continue
-            key = (source.chart_name, source.chart_version)
+            meta = built.get((source.chart_name, source.chart_version))
+            pinned = meta is not None and meta.get("chartDigest") is not None
+            version = str(meta["chartVersion"]) if meta is not None and pinned else source.chart_version
+            key = (source.chart_name, version)
             used = uses.setdefault(key, [])
             if f"module:{module.meta.name}" not in used:
                 used.append(f"module:{module.meta.name}")
             if key in seen:
                 continue
             seen.add(key)
-            purl = helm_chart_to_purl(source.chart_name, source.chart_version, source.chart_repository)
+            properties: dict[str, str] = {}
+            if graph.version is not None and module.meta.name in chart_pins:
+                properties["strata:pinned-by"] = graph.version.meta.name
+            hashes: dict[str, str] = {}
+            if meta is not None and pinned:
+                if source.chart_version is not None and source.chart_version != version:
+                    properties["strata:version-constraint"] = source.chart_version
+                if meta.get("chartAppVersion") is not None:
+                    properties["strata:app-version"] = str(meta["chartAppVersion"])
+                hashes["SHA-256"] = str(meta["chartDigest"]).removeprefix("sha256:")
+            elif meta is not None:
+                properties["strata:pinned"] = "false"
             components.append(
                 SbomComponentModel(
                     component_type="library",
                     name=source.chart_name,
-                    version=source.chart_version,
-                    purl=purl,
-                    properties=(
-                        {"strata:pinned-by": graph.version.meta.name}
-                        if graph.version is not None and module.meta.name in chart_pins
-                        else {}
-                    ),
+                    version=version,
+                    purl=helm_chart_to_purl(source.chart_name, version, source.chart_repository),
+                    properties=properties,
+                    hashes=hashes,
                     source_collector="helm",
                 )
             )
+            if meta is not None and pinned:
+                self._collect_subcharts(meta, f"{source.chart_name}@{version}", components, seen)
 
         if build_path.exists():
+            local = self._built_local_charts(build_path)
+            for module_dir, meta in local.items():
+                self._collect_dependencies(module_dir, meta, components, seen)
             for chart_file in self._find_chart_files(build_path):
-                self._collect_chart_file(chart_file, components, diagnostics, seen)
+                meta = local.get(chart_file.parent, {})
+                self._collect_chart_file(
+                    chart_file,
+                    components,
+                    diagnostics,
+                    seen,
+                    recorded={str(entry.get("name")) for entry in meta.get("chartDependencies") or []},
+                    unpinned={str(name) for name in meta.get("chartDependenciesUnpinned") or []},
+                )
 
         components = [
             c.model_copy(update={"properties": {**c.properties, "strata:used-by": ", ".join(uses[key])}})
@@ -85,6 +120,104 @@ class HelmCollector(SbomCollector):
             for c in components
         ]
         return CollectorResult(components=components, diagnostics=diagnostics)
+
+    @staticmethod
+    def _built_registry_charts(build_path: Path) -> dict[tuple[str, str | None], dict[str, Any]]:
+        """Every registry chart's `meta.yaml` in the build, keyed by chart name and the version its module declared."""
+        found: dict[tuple[str, str | None], dict[str, Any]] = {}
+        if not build_path.is_dir():
+            return found
+        for meta_file in sorted(build_path.glob("*/*/meta.yaml")):
+            try:
+                meta = yaml.safe_load(meta_file.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError):
+                continue
+            if not isinstance(meta, dict) or meta.get("chartName") is None:
+                continue
+            # A pinned range keeps the declaration in chartVersionConstraint; otherwise chartVersion is what was declared.
+            declared = meta["chartVersionConstraint"] if "chartVersionConstraint" in meta else meta.get("chartVersion")
+            found.setdefault((str(meta["chartName"]), str(declared) if declared is not None else None), meta)
+        return found
+
+    @staticmethod
+    def _collect_subcharts(
+        meta: dict[str, Any],
+        parent: str,
+        components: list[SbomComponentModel],
+        seen: set[tuple[str, str | None]],
+    ) -> None:
+        """The charts packaged in a pinned chart's `charts/`, at their exact versions."""
+        for subchart in meta.get("chartSubcharts") or []:
+            if not isinstance(subchart, dict) or not subchart.get("name") or not subchart.get("version"):
+                continue
+            key = (str(subchart["name"]), str(subchart["version"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            components.append(
+                SbomComponentModel(
+                    component_type="library",
+                    name=key[0],
+                    version=key[1],
+                    purl=helm_chart_to_purl(key[0], key[1]),
+                    properties={"strata:subchart-of": parent},
+                    source_collector="helm",
+                )
+            )
+
+    @staticmethod
+    def _built_local_charts(build_path: Path) -> dict[Path, dict[str, Any]]:
+        """Every local chart's `meta.yaml` in the build that records dependencies, keyed by its module directory."""
+        found: dict[Path, dict[str, Any]] = {}
+        for meta_file in sorted(build_path.glob("*/*/meta.yaml")):
+            try:
+                meta = yaml.safe_load(meta_file.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError):
+                continue
+            if not isinstance(meta, dict) or meta.get("chartName") is not None:
+                continue
+            if meta.get("chartDependencies") or meta.get("chartDependenciesUnpinned"):
+                found[meta_file.parent] = meta
+        return found
+
+    @staticmethod
+    def _collect_dependencies(
+        module_dir: Path,
+        meta: dict[str, Any],
+        components: list[SbomComponentModel],
+        seen: set[tuple[str, str | None]],
+    ) -> None:
+        """The dependencies `build run` placed in a local chart's `charts/`, at their exact versions
+        (docs/work/helm-chart-dependencies.md)."""
+        try:
+            chart = yaml.safe_load((module_dir / "Chart.yaml").read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            chart = None
+        parent = f"{chart.get('name')}@{chart.get('version')}" if isinstance(chart, dict) else module_dir.name
+        for entry in meta.get("chartDependencies") or []:
+            if not isinstance(entry, dict) or not entry.get("name") or not entry.get("version"):
+                continue
+            key = (str(entry["name"]), str(entry["version"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            properties = {"strata:subchart-of": parent}
+            if entry.get("versionConstraint") is not None:
+                properties["strata:version-constraint"] = str(entry["versionConstraint"])
+            repository = entry.get("repository")
+            components.append(
+                SbomComponentModel(
+                    component_type="library",
+                    name=key[0],
+                    version=key[1],
+                    purl=helm_chart_to_purl(
+                        key[0], key[1], None if str(repository or "").startswith("file://") else repository
+                    ),
+                    properties=properties,
+                    hashes=({"SHA-256": str(entry["digest"]).removeprefix("sha256:")} if entry.get("digest") else {}),
+                    source_collector="helm",
+                )
+            )
 
     @staticmethod
     def _find_chart_files(root: Path) -> list[Path]:
@@ -112,7 +245,12 @@ class HelmCollector(SbomCollector):
         components: list[SbomComponentModel],
         diagnostics: list[Diagnostic],
         seen: set[tuple[str, str | None]],
+        *,
+        recorded: Collection[str] = (),
+        unpinned: Collection[str] = (),
     ) -> None:
+        """One `Chart.yaml` and its declared dependencies; those in `recorded` are already listed at their exact
+        version from `meta.yaml`, and those in `unpinned` get `strata:pinned: false`."""
         try:
             with chart_file.open("r", encoding="utf-8") as fh:
                 data = yaml.safe_load(fh)
@@ -150,7 +288,7 @@ class HelmCollector(SbomCollector):
             if not isinstance(dependency, dict):
                 continue
             dep_name = dependency.get("name")
-            if not dep_name:
+            if not dep_name or str(dep_name) in recorded:
                 continue
             dep_version = dependency.get("version")
             key = (str(dep_name), str(dep_version) if dep_version else None)
@@ -163,7 +301,7 @@ class HelmCollector(SbomCollector):
                     name=key[0],
                     version=key[1],
                     purl=helm_chart_to_purl(key[0], key[1], dependency.get("repository")),
-                    properties={},
+                    properties={"strata:pinned": "false"} if key[0] in unpinned else {},
                     source_collector="helm",
                 )
             )

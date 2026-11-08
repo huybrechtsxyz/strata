@@ -10,6 +10,19 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- The deploy commands print the version and path of each tool whose version they read (`helm 4.3.1
+  (/usr/bin/helm)`), and `deploy run`, `apply` and `destroy` record them in the deployment manifest's
+  `artifacts.providers` (`tool_version`, `tool_path`, one entry per provisioner). `strata integration check` shows the
+  path, and `check`/`list --output json` carry `tool_path` and a new `warnings` list.
+- `build run` places a local Helm chart's dependencies in the built chart's `charts/`: the version in a committed
+  `Chart.lock`, else the declared version (a range resolved at each build), pulled through the `.strata/helm/` cache;
+  a `file://` dependency is copied from beside the source chart. Before, a chart that did not commit its dependencies
+  failed at `helm upgrade`. Strata never writes a `Chart.lock`. A dependency whose repository URL matches a declared
+  helm or oci remote uses that remote's credentials. `meta.yaml` and the SBOM record each dependency's exact version and
+  digest. A dependency the machine cannot pull (no `helm`, credentials that need `--resolve`, `--offline`) is a
+  `helm_chart_dependency_not_pinned` warning, and the deploy refuses that chart before any step. New build errors:
+  `helm_chart_dependency_lock_out_of_sync`, `helm_chart_dependency_missing`, `helm_chart_dependency_wrong_version`,
+  `helm_chart_dependency_repository_name`, `helm_chart_dependency_outside_source`.
 - `strata validate` checks the release name and Kubernetes namespace of every enabled Helm module reference, defaults
   included, and fails on what Helm or Kubernetes would reject: `helm_release_name_invalid` (lowercase letters,
   digits, `-` and `.`, at most 53 characters), `helm_kubernetes_namespace_invalid` (lowercase letters, digits and
@@ -34,8 +47,44 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   repository without the file is reported through `on_missing_data`. Flags strata sets itself (`skip_checks`,
   `include_checks`, `framework`, ...) win over the same keys in the file.
 
+- `build run` pins every registry Helm chart: it pulls the chart into `.strata/helm/` (in an isolated Helm
+  configuration, with the remote integration's credentials) and records the exact version, the archive's SHA-256 and
+  its subcharts in the module's `meta.yaml`. An exact `chart_version` already cached needs no network and no `helm`.
+  Registry charts now get the configuration key check at build and `helm lint` in the check phase, and the SBOM
+  records their exact version, `SHA-256` hash, `appVersion` and subcharts. When the build cannot pull (no `helm`, a
+  credential that needs `--resolve`, or the new `build run --offline`), the chart is left unpinned with a
+  `helm_chart_not_pinned` warning and the build still succeeds (ADR-0054).
+
 ### Changed
 
+- **Breaking:** strata passes Helm 4's flags by default: `helm upgrade --wait=watcher --rollback-on-failure` and
+  `--dry-run=client` instead of `--wait --atomic` and `--dry-run`, so Helm 4 no longer prints deprecation warnings.
+  Helm 3 is deprecated and needs a declaration: a `helm` integration whose `spec.version` allows no Helm 4 keeps the
+  old flags (and gets a `helm_3_deprecated` warning). A deploy command whose steps include a Helm step, and any
+  command that checks a declared `helm` integration, now reads `helm version` first; Helm 3 without the declaration
+  stops there with `helm_3_not_declared`, before any step (a warning under `deploy destroy`, which runs only
+  `helm uninstall`). To stay on Helm 3, add:
+
+  ```yaml
+  apiVersion: strata.huybrechts.xyz/v2
+  kind: integration
+  meta:
+    name: helm
+  spec:
+    type: helm
+    capabilities: [container]
+    version: "<4"
+  ```
+
+  With Helm 4 the wait uses kstatus (`watcher`), so the deploy identity needs the `watch` verb on the chart's
+  resources ([ADR-0055](../docs/decisions/0055-helm-4-by-default-helm-3-only-when-declared.md)).
+- The Helm configuration key check no longer warns about a key named after a chart dependency (or its `alias`) or
+  `global`: Helm passes those to subcharts.
+- `deploy run`, `plan` and `apply` install a registry Helm chart from the archive the build pinned, not from the
+  registry: before the first step they take it from `.strata/helm/` or pull exactly that version again, and stop on an
+  unpinned chart (`helm_chart_not_pinned`) or a different archive (`helm_chart_digest_changed`). A build made before
+  this release has no pin, so rebuild before deploying. A CI build job needs `helm` (strata's image does not ship it)
+  and the registry credentials for its registry charts to be pinned.
 - Helm and Compose steps honour a stage's `timeouts.plan` and `timeouts.apply` (and `STRATA_TIMEOUT_<STEP>_PLAN` /
   `_APPLY`); before, only `check` and `destroy` reached them. For Helm the timeout is per release: an `apply` timeout
   of N seconds sets Helm's `--timeout` to N/2, leaving the other half for `--atomic` to roll back. Without an override

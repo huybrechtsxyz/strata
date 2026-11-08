@@ -14,6 +14,8 @@ from click.testing import CliRunner
 from strata.commands.cli import cli
 from strata.commands.exit_codes import EXIT_FAILURE, EXIT_SUCCESS, EXIT_USAGE, EXIT_VALIDATION
 from strata.integrations import aikido as aikido_module
+from strata.integrations.base import ReadinessProblem
+from strata.integrations.terraform import TerraformIntegration
 from strata.utils.transport import NO_RESPONSE, HttpResult
 
 TOKEN = "AIK_CI_test-token-1234567890"
@@ -167,6 +169,22 @@ def test_a_local_tool_without_a_connection_check_passes_on_local_readiness(tmp_p
     assert readiness["required_version"] == ">= 1.7" and payload["data"]["declared"]
     codes = [d["code"] for d in payload["diagnostics"]]
     assert codes == ["integration_ready", "integration_no_connection_check"]
+
+
+def test_the_tool_path_and_version_notices_are_reported(tmp_path, http, tools, monkeypatch):
+    monkeypatch.setattr(
+        TerraformIntegration,
+        "version_notices",
+        lambda self, installed: [ReadinessProblem("tf_old", f"{installed} old")],
+    )
+    result = _check(_solution(tmp_path), "terraform", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    payload = json.loads(result.output)
+    readiness = payload["data"]["readiness"]
+    assert readiness["tool_path"] == "/usr/bin/terraform" and readiness["ok"]
+    assert readiness["warnings"] == [{"code": "tf_old", "message": "1.9.2 old", "flags_only": False}]
+    assert [d["code"] for d in payload["diagnostics"] if d["severity"] == "warning"] == ["tf_old"]
+    assert "at /usr/bin/terraform" in payload["diagnostics"][0]["message"]
 
 
 def test_a_version_mismatch_is_three(tmp_path, http, tools):

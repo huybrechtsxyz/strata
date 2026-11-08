@@ -17,8 +17,10 @@ import pytest
 from strata.controllers.build_controller import build_run
 from strata.controllers.deploy_controller import deploy_run, tf_var_env
 from strata.controllers.solution_context import open_solution
-from strata.integrations.helm import _repo_alias
+from strata.integrations.base import ReadinessProblem
+from strata.integrations.helm import HelmIntegration, _repo_alias
 from strata.integrations.resolved_context import ValueResolution
+from strata.integrations.terraform import TerraformIntegration
 from strata.utils.errors import UsageError
 from strata.utils.transport import CommandResult
 
@@ -103,6 +105,13 @@ def _terraform_solution(
         f"{stages}",
     )
     return root
+
+
+@pytest.fixture(autouse=True)
+def _no_helm_version_probe(monkeypatch):
+    """These tests assert the calls a step makes; the preflight's `helm version` probe (ADR-0055) would precede them
+    in every recorded call list. The probe has its own tests below (`_helm_versioned`), which turn it back on."""
+    monkeypatch.setattr(HelmIntegration, "READ_VERSION", False)
 
 
 @pytest.fixture
@@ -361,7 +370,7 @@ def test_deploy_run_helm_dry_run_uses_the_plan_timeout(tmp_path: Path, monkeypat
     assert diagnostics.ok, diagnostics.messages()
     [(upgrade, timeout)] = [(argv, timeout) for argv, timeout in calls if argv[:2] == ["helm", "upgrade"]]
     assert timeout == 120
-    assert "--dry-run" in upgrade and "--timeout" not in upgrade
+    assert "--dry-run=client" in upgrade and "--timeout" not in upgrade
 
 
 def test_deploy_run_integration_without_a_check_phase_is_skipped_not_failed(tmp_path: Path, monkeypatch):
@@ -454,14 +463,41 @@ def _proget_solution(
     return root
 
 
-def _fake_helm_calls(monkeypatch, *, stream: str | None = None):
-    """Stub `run_command`, recording argv, env and stdin per call; `stream` is echoed to a `line_callback` if given."""
+def _packaged_chart(destination: Path, name: str, version: str, values: str = "replicaCount: 1\n") -> Path:
+    """A chart archive as `helm pull` writes it, byte for byte the same every time, as a registry serves it.
+
+    gzip's header carries a timestamp, which would give two pulls a second apart different digests.
+    """
+    import gzip
+    import io
+    import tarfile
+
+    archive = destination / f"{name}-{version}.tgz"
+    with gzip.GzipFile(archive, "wb", mtime=0) as packed, tarfile.open(fileobj=packed, mode="w") as tar:
+        for member, text in (
+            (f"{name}/Chart.yaml", f"apiVersion: v2\nname: {name}\nversion: {version}\n"),
+            (f"{name}/values.yaml", values),
+        ):
+            data = text.encode()
+            info = tarfile.TarInfo(member)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return archive
+
+
+def _fake_helm_calls(monkeypatch, *, stream: str | None = None, chart_values: str = "replicaCount: 1\n"):
+    """Stub `run_command`, recording argv, env and stdin per call; `stream` is echoed to a `line_callback` if given.
+
+    `helm pull` writes a packaged `gatus` 1.0.0 whose `values.yaml` is `chart_values`.
+    """
     calls: list[dict] = []
 
     def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
         calls.append({"args": list(args), "env": dict(env) if env is not None else None, "input": input})
         if stream is not None and line_callback is not None and args[1] == "upgrade":
             line_callback("stdout", stream)
+        if args[1] == "pull":
+            _packaged_chart(Path(args[args.index("--destination") + 1]), "gatus", "1.0.0", chart_values)
         return CommandResult(returncode=0, stdout="ok", stderr="")
 
     import strata.integrations.base as base_module
@@ -471,100 +507,195 @@ def _fake_helm_calls(monkeypatch, *, stream: str | None = None):
     return calls
 
 
-def _deploy_apps(root: Path, tmp_path: Path, **kwargs):
+def _build_apps(root: Path, tmp_path: Path):
     build_path = tmp_path / "build"
-    build_run(_context(root), "app", build_path)
+    return build_path, build_run(_context(root), "app", build_path)
+
+
+def _deploy_apps(root: Path, tmp_path: Path, **kwargs):
+    build_path, _ = _build_apps(root, tmp_path)
     return deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", **kwargs)
 
 
-def test_deploy_run_authenticates_to_a_private_chart_registry_from_the_integration(tmp_path: Path, monkeypatch):
+def _helm_cache(root: Path) -> Path:
+    return root / ".strata" / "helm"
+
+
+_PROGET_URL = "https://proget.example.com/helm/charts"
+
+
+@pytest.mark.chart_pulls
+def test_build_pins_a_private_registry_chart_with_the_integrations_credentials(tmp_path: Path, monkeypatch):
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = _deploy_apps(_proget_solution(tmp_path), tmp_path)
+    _, diagnostics = _build_apps(_proget_solution(tmp_path), tmp_path)
 
     assert diagnostics.ok, diagnostics.messages()
-    repo_add, upgrade = calls
-    url = "https://proget.example.com/helm/charts"
+    repo_add, pull = calls
     assert repo_add["args"] == [
         "helm",
         "repo",
         "add",
-        _repo_alias(url),
-        url,
+        _repo_alias(_PROGET_URL),
+        _PROGET_URL,
         "--force-update",
         "--username",
         "api",
         "--password-stdin",
     ]
     assert repo_add["input"] == _PROGET_SECRET
-    assert upgrade["args"][1] == "upgrade" and upgrade["args"][-2:] == ["--version", "1.0.0"]
-    assert upgrade["env"]["HELM_REPOSITORY_CONFIG"] == repo_add["env"]["HELM_REPOSITORY_CONFIG"]
+    assert pull["args"][1:3] == ["pull", f"{_repo_alias(_PROGET_URL)}/gatus"]
+    assert pull["args"][-2:] == ["--version", "1.0.0"]
+    assert pull["env"]["HELM_REPOSITORY_CONFIG"] == repo_add["env"]["HELM_REPOSITORY_CONFIG"]
     for call in calls:
         assert _PROGET_SECRET not in " ".join(call["args"]) + " ".join((call["env"] or {}).values())
 
 
-def test_deploy_run_dry_run_previews_with_the_same_registry_credentials(tmp_path: Path, monkeypatch):
+@pytest.mark.chart_pulls
+def test_deploy_run_installs_the_pinned_archive_without_contacting_the_registry(tmp_path: Path, monkeypatch):
+    root = _proget_solution(tmp_path)
+    _fake_helm_calls(monkeypatch)
+    build_path, _ = _build_apps(root, tmp_path)
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = _deploy_apps(_proget_solution(tmp_path), tmp_path, dry_run=True)
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
 
     assert diagnostics.ok, diagnostics.messages()
-    assert "--dry-run" in calls[1]["args"] and calls[0]["input"] == _PROGET_SECRET
+    assert [call["args"][1] for call in calls] == ["lint", "upgrade"]
+    upgrade = calls[1]
+    archive = _helm_cache(root) / "proget-charts" / "gatus" / "1.0.0" / "gatus-1.0.0.tgz"
+    assert upgrade["args"][1] == "upgrade"
+    assert str(archive) in upgrade["args"]
+    assert "--version" not in upgrade["args"]
 
 
+@pytest.mark.chart_pulls
+def test_deploy_run_pulls_a_pinned_chart_missing_from_the_cache_with_the_registry_credentials(
+    tmp_path: Path, monkeypatch
+):
+    root = _proget_solution(tmp_path)
+    _fake_helm_calls(monkeypatch)
+    build_path, _ = _build_apps(root, tmp_path)
+    shutil.rmtree(_helm_cache(root))  # a deploy job that does not share the build's cache
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [call["args"][1] for call in calls] == ["repo", "pull", "lint", "upgrade"]
+    assert calls[0]["input"] == _PROGET_SECRET
+    assert calls[1]["args"][-2:] == ["--version", "1.0.0"]
+
+
+@pytest.mark.chart_pulls
+def test_deploy_run_dry_run_previews_the_pinned_archive(tmp_path: Path, monkeypatch):
+    root = _proget_solution(tmp_path)
+    _fake_helm_calls(monkeypatch)
+    build_path, _ = _build_apps(root, tmp_path)
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", dry_run=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    [preview] = [call for call in calls if call["args"][1] == "upgrade"]
+    assert "--dry-run=client" in preview["args"] and any(arg.endswith("gatus-1.0.0.tgz") for arg in preview["args"])
+
+
+@pytest.mark.chart_pulls
 def test_deploy_run_never_streams_the_registry_password(tmp_path: Path, monkeypatch):
+    root = _proget_solution(tmp_path)
+    _fake_helm_calls(monkeypatch)
+    build_path, _ = _build_apps(root, tmp_path)
+    shutil.rmtree(_helm_cache(root))
     _fake_helm_calls(monkeypatch, stream=f"pulling with {_PROGET_SECRET}")
     lines: list[str] = []
 
-    _deploy_apps(_proget_solution(tmp_path), tmp_path, on_line=lambda tool, stream, text: lines.append(text))
+    deploy_run(
+        _context(root),
+        "app",
+        build_path,
+        force=True,
+        stage="deploy_apps",
+        on_line=lambda tool, stream, text: lines.append(text),
+    )
 
     assert lines == ["pulling with ***"]
 
 
-def test_deploy_run_remote_without_an_integration_pulls_anonymously(tmp_path: Path, monkeypatch):
+@pytest.mark.chart_pulls
+def test_build_pulls_anonymously_from_a_remote_without_an_integration(tmp_path: Path, monkeypatch):
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = _deploy_apps(_proget_solution(tmp_path, remote_integration=None), tmp_path)
+    _, diagnostics = _build_apps(_proget_solution(tmp_path, remote_integration=None), tmp_path)
 
     assert diagnostics.ok, diagnostics.messages()
     assert "--username" not in calls[0]["args"] and calls[0]["input"] is None
 
 
+@pytest.mark.chart_pulls
 @pytest.mark.parametrize(
     ("overrides", "expected"),
     [
-        ({"secrets": ""}, "no value for 'PROGET_API_KEY'"),
+        ({"secrets": ""}, "'PROGET_API_KEY' (integration 'proget') is not declared"),
         ({"authentication": "    method: token\n    token:\n      token: PROGET_API_KEY\n"}, "needs 'username'"),
         (
             {"authentication": "    method: ssh_key\n    ssh_key:\n      private_key: PROGET_API_KEY\n"},
-            "method 'ssh_key' cannot authenticate a chart registry",
+            "method 'ssh_key', which cannot authenticate a chart registry",
         ),
     ],
 )
-def test_deploy_run_unusable_registry_credentials_fail_before_any_helm_call(
+def test_build_unusable_registry_credentials_fail_before_any_helm_call(
     tmp_path: Path, monkeypatch, overrides, expected
 ):
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = _deploy_apps(_proget_solution(tmp_path, **overrides), tmp_path)
+    _, diagnostics = _build_apps(_proget_solution(tmp_path, **overrides), tmp_path)
 
     assert not diagnostics.ok
-    [error] = diagnostics.items
+    [error] = diagnostics.errors
     assert error.code == "helm_registry_credentials_invalid"
-    assert error.message.startswith("Step 'deploy_apps': remote 'proget-charts' (integration 'proget'): ")
+    assert error.message.startswith("Namespace 'apps', module 'auth': remote 'proget-charts' (integration 'proget'): ")
     assert expected in error.message
     assert calls == []
 
 
-def test_deploy_run_check_phase_does_not_need_the_registry_credentials(tmp_path: Path, monkeypatch):
+@pytest.mark.chart_pulls
+def test_deploy_run_unusable_registry_credentials_fail_before_any_helm_call(tmp_path: Path, monkeypatch):
+    root = _proget_solution(tmp_path)
+    _fake_helm_calls(monkeypatch)
+    build_path, _ = _build_apps(root, tmp_path)
+    shutil.rmtree(_helm_cache(root))
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = _deploy_apps(_proget_solution(tmp_path, secrets=""), tmp_path, stop_after="check")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_registry_credentials_invalid"
+    assert error.message.startswith("Step 'deploy_apps': remote 'proget-charts' (integration 'proget'): ")
+    assert calls == []
+
+
+@pytest.mark.chart_pulls
+def test_deploy_run_check_phase_lints_the_pinned_registry_chart(tmp_path: Path, monkeypatch):
+    root = _proget_solution(tmp_path)
+    _fake_helm_calls(monkeypatch)
+    build_path, _ = _build_apps(root, tmp_path)
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check")
 
     assert diagnostics.ok, diagnostics.messages()
-    assert [call["args"][1] for call in calls] == []  # a registry chart is not linted, and nothing was pulled
+    [lint] = calls
+    assert lint["args"][1] == "lint"
+    assert lint["args"][-1] == str(_helm_cache(root) / "proget-charts" / "gatus" / "1.0.0" / "gatus")
 
 
+@pytest.mark.chart_pulls
 def test_deploy_run_only_resolves_credentials_for_remotes_a_module_pulls_from(tmp_path: Path, monkeypatch):
     calls = _fake_helm_calls(monkeypatch)
     root = _proget_solution(tmp_path)
@@ -587,11 +718,106 @@ def test_deploy_run_only_resolves_credentials_for_remotes_a_module_pulls_from(tm
         "  type: proget\n  capabilities: [sources]\n  authentication:\n    method: token\n"
         "    token:\n      token: NOT_DECLARED_ANYWHERE\n      username: api\n",
     )
+    build_path, _ = _build_apps(root, tmp_path)
+    shutil.rmtree(_helm_cache(root))
 
-    diagnostics = _deploy_apps(root, tmp_path)
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
 
     assert diagnostics.ok, diagnostics.messages()
     assert calls[0]["input"] == _PROGET_SECRET
+
+
+def test_deploy_run_refuses_a_registry_chart_the_build_did_not_pin(tmp_path: Path, monkeypatch):
+    root = _proget_solution(tmp_path)
+    build_path, build_diagnostics = _build_apps(root, tmp_path)
+    assert [item.code for item in build_diagnostics.items] == ["helm_chart_not_pinned"]
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_chart_not_pinned"
+    assert error.message == (
+        "Namespace 'apps', module 'auth': chart 'gatus' 1.0.0 was not pinned by the build, so it cannot be "
+        "deployed. Build again where the chart can be pulled (helm installed, its registry credentials readable, "
+        "without --offline)."
+    )
+    assert calls == []
+
+
+def test_deploy_run_refuses_a_local_chart_whose_dependency_the_build_did_not_pin(tmp_path: Path, monkeypatch):
+    root = _helm_solution(tmp_path)
+    _write(
+        root,
+        "charts/authentik/Chart.yaml",
+        "apiVersion: v2\nname: authentik\nversion: 1.0.0\ndependencies:\n"
+        "  - name: redis\n    version: 19.0.1\n    repository: https://charts.example.com\n",
+    )
+    build_path, build_diagnostics = _build_apps(root, tmp_path)
+    assert [item.code for item in build_diagnostics.items] == ["helm_chart_dependency_not_pinned"]
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_chart_not_pinned"
+    assert error.message == (
+        "Namespace 'apps', module 'auth': dependency 'redis' was not pinned by the build, so the chart cannot be "
+        "deployed. Build again where the dependency can be pulled (helm installed, its registry credentials "
+        "readable, without --offline)."
+    )
+    assert calls == []
+
+
+@pytest.mark.chart_pulls
+def test_deploy_run_stops_when_the_registry_serves_a_different_archive(tmp_path: Path, monkeypatch):
+    root = _proget_solution(tmp_path)
+    _fake_helm_calls(monkeypatch)
+    build_path, _ = _build_apps(root, tmp_path)
+    shutil.rmtree(_helm_cache(root))
+    calls = _fake_helm_calls(monkeypatch, chart_values="replicaCount: 2\n")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_chart_digest_changed"
+    assert "but the build pinned sha256:" in error.message
+    assert "upgrade" not in [call["args"][1] for call in calls]
+    assert not (_helm_cache(root) / "proget-charts" / "gatus" / "1.0.0").exists()
+
+
+@pytest.mark.chart_pulls
+def test_deploy_run_stops_when_the_cached_archive_differs_from_the_pin(tmp_path: Path, monkeypatch):
+    root = _proget_solution(tmp_path)
+    _fake_helm_calls(monkeypatch)
+    build_path, _ = _build_apps(root, tmp_path)
+    entry = _helm_cache(root) / "proget-charts" / "gatus" / "1.0.0"
+    (entry / "gatus-1.0.0.tgz").unlink()
+    _packaged_chart(entry, "gatus", "1.0.0", "tampered: true\n")
+    calls = _fake_helm_calls(monkeypatch)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_chart_digest_changed"
+    assert calls == []
+
+
+@pytest.mark.chart_pulls
+def test_deploy_run_smoke_test_only_says_it_would_verify_the_chart(tmp_path: Path, monkeypatch):
+    root = _proget_solution(tmp_path)
+    _fake_helm_calls(monkeypatch)
+    build_path, _ = _build_apps(root, tmp_path)
+    calls = _fake_helm_calls(monkeypatch)
+    steps: list[str] = []
+
+    diagnostics = deploy_run(
+        _context(root), "app", build_path, force=True, stage="deploy_apps", smoke_test=True, on_step=steps.append
+    )
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert calls == []
+    assert any(step.startswith("would verify chart 'gatus' 1.0.0 (sha256:") for step in steps)
 
 
 def test_deploy_run_use_saved_plan_hard_errors_when_plan_file_missing(tmp_path: Path, _capture):
@@ -1686,6 +1912,94 @@ def test_deploy_run_smoke_test_reports_the_version_check_without_running_the_too
     assert diagnostics.ok, diagnostics.messages()
     assert calls == []
     assert "would check terraform 'terraform' version '>= 1.7'" in steps
+
+
+def test_deploy_run_names_each_tool_version_once_and_reports_every_step_to_on_tool(tmp_path: Path, monkeypatch):
+    root, build_path, _, stubs = _versioned_terraform(tmp_path, "1.9.2", second_step=True)
+    _install(monkeypatch, stubs)
+    monkeypatch.setattr(
+        TerraformIntegration, "version_notices", lambda self, v: [ReadinessProblem("tf_notice", f"{v} is noted")]
+    )
+    steps: list[str] = []
+    tools: list[tuple[str, str | None, str | None]] = []
+
+    diagnostics = deploy_run(
+        _context(root),
+        "app",
+        build_path,
+        force=True,
+        on_step=steps.append,
+        on_tool=lambda provisioner, r: tools.append((provisioner, r.installed_version, r.tool_path)),
+    )
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert steps.count("terraform 1.9.2 (/usr/bin/terraform)") == 1
+    assert [w.code for w in diagnostics.warnings] == ["tf_notice"]
+    assert [(version, path) for _, version, path in tools] == [("1.9.2", "/usr/bin/terraform")] * 2
+
+
+def test_deploy_run_smoke_test_names_no_tool_version(tmp_path: Path, monkeypatch):
+    root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.9.2")
+    _install(monkeypatch, stubs)
+    steps: list[str] = []
+    tools: list[str | None] = []
+
+    deploy_run(
+        _context(root),
+        "app",
+        build_path,
+        force=True,
+        smoke_test=True,
+        on_step=steps.append,
+        on_tool=lambda provisioner, r: tools.append(r.installed_version),
+    )
+
+    assert calls == [] and not any(step.startswith("terraform 1.") for step in steps)
+    assert tools == [None]
+
+
+def _flags_only_problem(monkeypatch) -> None:
+    monkeypatch.setattr(
+        TerraformIntegration,
+        "version_problems",
+        lambda self, v: [ReadinessProblem("tf_flags", f"{v} needs other flags", flags_only=True)],
+    )
+
+
+def test_a_flags_only_problem_stops_a_deploy(tmp_path: Path, monkeypatch):
+    root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.9.2")
+    _install(monkeypatch, stubs)
+    _flags_only_problem(monkeypatch)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert [e.code for e in diagnostics.errors] == ["tf_flags"]
+    assert calls == [["terraform", "version"]]
+
+
+def test_a_flags_only_problem_is_a_warning_under_destroy_and_the_step_runs(tmp_path: Path, monkeypatch):
+    root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.9.2")
+    _install(monkeypatch, stubs)
+    _flags_only_problem(monkeypatch)
+    tools: list[str] = []
+
+    diagnostics = deploy_run(
+        _context(root), "app", build_path, force=True, destroy=True, on_tool=lambda p, r: tools.append(p)
+    )
+
+    assert "tf_flags" in [w.code for w in diagnostics.warnings]
+    assert "tf_flags" not in [e.code for e in diagnostics.errors]
+    assert len(tools) == 1 and any("destroy" in call for call in calls)
+
+
+def test_a_problem_not_flags_only_still_stops_a_destroy(tmp_path: Path, monkeypatch):
+    root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.5.7")
+    _install(monkeypatch, stubs)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, destroy=True)
+
+    assert [e.code for e in diagnostics.errors] == ["integration_version_mismatch"]
+    assert calls == [["terraform", "version"]]
 
 
 def test_deploy_run_resolves_backend_configuration_tokens(tmp_path: Path):
@@ -3861,8 +4175,8 @@ def test_deploy_run_dispatches_container_capable_step_to_deploy_namespace(tmp_pa
         "upgrade",
         "--install",
         "--create-namespace",
-        "--wait",
-        "--atomic",
+        "--wait=watcher",
+        "--rollback-on-failure",
         "--timeout",
         "5m",
         "--namespace",
@@ -3872,6 +4186,132 @@ def test_deploy_run_dispatches_container_capable_step_to_deploy_namespace(tmp_pa
         "auth",
         str(module_dir),
     ]
+
+
+def _helm_versioned(
+    tmp_path: Path, monkeypatch, installed: str, *, declared: str | None = None, required: bool = False
+):
+    """`_helm_solution()` with `helm version` reporting `installed`, the version probe on (ADR-0055), and an
+    optional `helm` integration declaring `declared`. Returns the solution root, the build path and every call.
+
+    The document is written after the build: the build's own preflight would otherwise read the real `helm` on `PATH`.
+    """
+    monkeypatch.setattr(HelmIntegration, "READ_VERSION", True)
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    if declared is not None:
+        _write(
+            root,
+            "integration.yaml",
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: helm\nspec:\n"
+            f"  type: helm\n  capabilities: [container]\n  version: '{declared}'\n  required: {str(required).lower()}\n",
+        )
+    calls: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append(list(args))
+        version = f'version.BuildInfo{{Version:"v{installed}", GoVersion:"go1.24"}}'
+        return CommandResult(returncode=0, stdout=version if args[:2] == ["helm", "version"] else "ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return root, build_path, calls
+
+
+def test_undeclared_helm_3_stops_the_deploy_before_any_step_runs(tmp_path: Path, monkeypatch):
+    root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    [error] = diagnostics.errors
+    assert error.code == "helm_3_not_declared" and "deploy_apps" in error.message
+    assert [call for call in calls if call[0] == "helm"] == [["helm", "version"]]
+    assert not any(call[0] == "terraform" and call[1] == "apply" for call in calls)
+
+
+def test_declared_helm_3_deploys_with_the_v1_flags_and_a_deprecation_warning(tmp_path: Path, monkeypatch):
+    root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2", declared="<4")
+    steps: list[str] = []
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, on_step=steps.append)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [w.code for w in diagnostics.warnings] == ["helm_3_deprecated"]
+    [upgrade] = [call for call in calls if call[:2] == ["helm", "upgrade"]]
+    assert upgrade[2:6] == ["--install", "--create-namespace", "--wait", "--atomic"]
+    assert "helm 3.13.2 (/usr/bin/helm)" in steps
+
+
+def test_helm_4_deploys_with_its_own_flags_and_no_finding(tmp_path: Path, monkeypatch):
+    root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "4.3.1")
+    steps: list[str] = []
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, on_step=steps.append)
+
+    assert diagnostics.ok and not diagnostics.warnings, diagnostics.messages()
+    [upgrade] = [call for call in calls if call[:2] == ["helm", "upgrade"]]
+    assert upgrade[2:6] == ["--install", "--create-namespace", "--wait=watcher", "--rollback-on-failure"]
+    assert "helm 4.3.1 (/usr/bin/helm)" in steps
+
+
+def test_declared_helm_3_with_helm_4_installed_stops_on_the_spec_version(tmp_path: Path, monkeypatch):
+    root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "4.3.1", declared="<4")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert [e.code for e in diagnostics.errors] == ["integration_version_mismatch"]
+    assert not any(call[:2] == ["helm", "upgrade"] for call in calls)
+
+
+def test_a_required_helm_document_does_not_block_a_destroy_of_other_steps(tmp_path: Path, monkeypatch):
+    # The Helm step is filtered out, so the document is checked by the integration preflight, not the step loop.
+    root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2", declared=">=3", required=True)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, destroy=True, stage="apply_infra")
+
+    assert "helm_3_not_declared" in [w.code for w in diagnostics.warnings]
+    assert not diagnostics.errors, diagnostics.messages()
+    assert any(call[:2] == ["terraform", "destroy"] for call in calls)
+
+
+def test_a_required_helm_document_still_blocks_a_deploy_of_other_steps(tmp_path: Path, monkeypatch):
+    root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2", declared=">=3", required=True)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="apply_infra")
+
+    assert [e.code for e in diagnostics.errors] == ["helm_3_not_declared"]
+    assert not any(call[:2] == ["terraform", "apply"] for call in calls)
+
+
+def test_an_unparseable_tool_version_is_not_printed(tmp_path: Path, monkeypatch):
+    root, build_path, _ = _helm_versioned(tmp_path, monkeypatch, "4.3.1")
+    monkeypatch.setattr(HelmIntegration, "get_version", lambda self: "Welcome to the wrapper")
+    steps: list[str] = []
+    tools: list[str | None] = []
+
+    deploy_run(
+        _context(root),
+        "app",
+        build_path,
+        force=True,
+        on_step=steps.append,
+        on_tool=lambda provisioner, r: tools.append(r.reported_version),
+    )
+
+    assert not any(step.startswith("helm ") for step in steps) and None in tools
+
+
+def test_undeclared_helm_3_still_destroys(tmp_path: Path, monkeypatch):
+    root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, destroy=True)
+
+    assert "helm_3_not_declared" in [w.code for w in diagnostics.warnings]
+    assert "helm_3_not_declared" not in [e.code for e in diagnostics.errors]
+    assert any(call[:2] == ["helm", "uninstall"] for call in calls)
 
 
 def test_deploy_run_dry_run_previews_container_capable_step_via_plan(tmp_path: Path, _capture):
@@ -3898,7 +4338,7 @@ def test_deploy_run_dry_run_previews_container_capable_step_via_plan(tmp_path: P
     assert helm_calls[1] == [
         "helm",
         "upgrade",
-        "--dry-run",
+        "--dry-run=client",
         "--install",
         "--namespace",
         "apps",
@@ -4275,7 +4715,7 @@ def test_a_helm_dry_run_runs_against_the_deployments_kube_context(tmp_path: Path
 
     assert diagnostics.ok, diagnostics.messages()
     [upgrade] = [(argv, env) for argv, env in calls if argv[:2] == ["helm", "upgrade"]]
-    assert "--dry-run" in upgrade[0]
+    assert "--dry-run=client" in upgrade[0]
     assert upgrade[1]["HELM_KUBECONTEXT"] == "forge-prd"
 
 

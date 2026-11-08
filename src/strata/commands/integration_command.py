@@ -105,6 +105,8 @@ def check_command(
         diagnostics.info(_describe(readiness), code="integration_ready")
         for problem in readiness.problems:
             diagnostics.error(problem.message, code=problem.code)
+        for notice in readiness.warnings:
+            diagnostics.warning(notice.message, code=notice.code)
 
         lines: list[str] = []
         if readiness.ok and readiness.connection_check:
@@ -249,10 +251,11 @@ def _version(readiness: IntegrationReadiness) -> str:
 
 def _readiness_json(readiness: IntegrationReadiness) -> dict[str, object]:
     return {
-        **{key: value for key, value in asdict(readiness).items() if key != "problems"},
+        **{key: value for key, value in asdict(readiness).items() if key not in ("problems", "warnings")},
         "ok": readiness.ok,
         "credential_holder": readiness.credential_holder,
         "problems": [asdict(problem) for problem in readiness.problems],
+        "warnings": [asdict(notice) for notice in readiness.warnings],
     }
 
 
@@ -308,6 +311,8 @@ def _describe(readiness: IntegrationReadiness) -> str:
         parts.append("no integration class")
     elif readiness.local_tool:
         parts.append(f"'{readiness.command}' {'on PATH' if readiness.available else 'not on PATH'}")
+        if readiness.tool_path is not None:
+            parts.append(f"at {readiness.tool_path}")
         if readiness.installed_version is not None:
             parts.append(f"version {readiness.installed_version}")
         if readiness.required_version is not None:

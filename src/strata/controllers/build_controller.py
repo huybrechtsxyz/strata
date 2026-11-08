@@ -489,6 +489,7 @@ def build_run(
     resolve: bool = False,
     env_files: list[Path] | None = None,
     pin: str | None = None,
+    offline: bool = False,
 ) -> Diagnostics:
     """Render `deployment_name`'s workspace provisioners into `build_path`.
 
@@ -814,6 +815,7 @@ def build_run(
             dry_run=dry_run,
             on_step=on_step,
             credentials=credentials,
+            offline=offline,
         )
         diagnostics.extend(workload_diagnostics)
 

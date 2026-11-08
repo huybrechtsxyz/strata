@@ -2008,7 +2008,11 @@ auditor actually tests them:
   covers most of the compliance value at none of this cost.
 - **`artifacts.repositories`/`images`/`providers` full population** —
   completeness nice-to-have; the platform+SBOM hash already anchors "what
-  was deployed" for audit purposes.
+  was deployed" for audit purposes. (2026-11-08: `artifacts.providers` is
+  now filled by `deploy run`/`apply`/`destroy` with one entry per
+  provisioner the run used: `name`, `type`, and the new `tool_version`/
+  `tool_path` its preflight found; `backend`/`details` stay empty.
+  docs/work/helm-4-support.md.)
 - **A v1-style global policy gate** layered over the per-sink `events`
   filter — noise/volume control, not a compliance gap; per-sink filtering
   already exists.

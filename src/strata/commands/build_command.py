@@ -67,6 +67,13 @@ def build_command() -> None:
     "with or without this flag. Off by default: no network call beyond fetching sources.",
 )
 @click.option(
+    "--offline",
+    is_flag=True,
+    default=False,
+    help="Pull no registry Helm chart. A chart already in .strata/helm/ is pinned from there; any other is "
+    "left unpinned with a warning, and a deploy of this build stops at it (ADR-0054).",
+)
+@click.option(
     "--env-file",
     "env_files",
     multiple=True,
@@ -94,6 +101,7 @@ def build_run_command(
     clean: bool | None,
     dry_run: bool,
     resolve: bool,
+    offline: bool,
     env_files: tuple[Path, ...],
     pin: str | None,
     output: str,
@@ -123,6 +131,12 @@ def build_run_command(
     such as a CI secret); a token held in Key Vault or another integration-backed store needs
     --resolve. Nothing is read for a source that is not cloned (--dry-run, an existing checkout,
     fetch: external).
+
+    A registry Helm chart is pulled into .strata/helm/ and pinned: its exact version and digest go
+    into the module's meta.yaml, and the deploy installs exactly that archive. Pulling needs helm
+    and the registry's credentials (read like a clone's). Without either, or with --offline, a chart
+    that is not cached is left unpinned with a warning: the build succeeds, and a deploy of it stops
+    at that chart before any step runs.
     """
     with command_run("build run", output=output, quiet=quiet, verbose=verbose) as run:
         context = open_solution(resolve_work_path(path)).require_valid()
@@ -147,6 +161,7 @@ def build_run_command(
             resolve=resolve,
             env_files=list(env_files),
             pin=pin,
+            offline=offline,
         )
         if not dry_run:
             run.step(f"rendered to {target}")

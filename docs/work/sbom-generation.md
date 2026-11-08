@@ -96,11 +96,13 @@ that reason, and the same holds for `values.yaml`. Rendering is exact for the ch
 
 ### Step 3 - remote charts (opt-in, later)
 
-A chart from a remote or a repository would need `helm pull` at build time: network access, registry credentials
-(`RegistryCredentials` exist for deploy) and a dependency on the repository being up, which `build run` avoids
-today. If a consumer needs it, it is an opt-in (a workspace or solution setting), and it reuses step 2's renderer
-on the pulled chart. Until then, a remote chart's images reach the SBOM only when declared, and step 1 marks those
-as declared-only.
+Superseded on 2026-11-07 by [ADR-0054](../decisions/0054-build-fetches-release-inputs-never-targets.md) and
+[helm-registry-chart-checks.md](helm-registry-chart-checks.md): `build run` now pulls every registry chart into
+`.strata/helm/<source>/<chart>/<version>/` and pins it, with no opt-in. The SBOM already records the pinned chart's
+exact version, digest, `appVersion` and subcharts. What remains of this step is the images: step 2's renderer can
+run on the unpacked chart in the cache. A chart the build could not pin (no `helm`, credentials that need `--resolve`,
+`--offline`) has no cached copy, so its images reach the SBOM only when declared, and step 1 marks those as
+declared-only.
 
 ## Rollout and risk
 

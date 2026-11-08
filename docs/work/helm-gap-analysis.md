@@ -34,9 +34,9 @@ not run end to end (no cluster).
 | 5  | Stage timeouts do not reach a Helm upgrade (fixed)                     | operability | medium | by reading  |
 | 6  | The cluster is whatever kube context is active                         | safety      | medium | by design   |
 | 7  | Release and Kubernetes namespace names are not validated (fixed)       | validation  | low    | by reading  |
-| 8  | Registry charts get no check before deploy                             | validation  | low    | by reading  |
-| 9  | Local chart dependencies are never built                               | correctness | low    | by reading  |
-| 10 | Helm 4 compatibility is unknown                                        | risk        | low    | to verify   |
+| 8  | Registry charts get no check before deploy (fixed)                     | validation  | low    | by reading  |
+| 9  | Local chart dependencies are never built (fixed)                       | correctness | low    | by reading  |
+| 10 | Helm 4 compatibility is unknown (fixed)                                | risk        | low    | verified    |
 
 #### 1. A local chart loses its own default values
 
@@ -152,6 +152,11 @@ Fix, at the check phase (which may use the network, unlike `build run`): `helm s
 `helm template` with the overlay for a lint equivalent. Both need the registry login from ADR-0042, so they belong
 inside the same isolated configuration.
 
+**Done (2026-11-07)**, redesigned under [ADR-0054](../decisions/0054-build-fetches-release-inputs-never-targets.md):
+`build run` pulls registry charts into `.strata/helm/` and records their version and digest, they get the key check and
+`helm lint`, and the deploy verifies and installs that archive. A machine without `helm` or the credentials leaves the
+chart unpinned, and the deploy refuses it. See [helm-registry-chart-checks.md](helm-registry-chart-checks.md).
+
 #### 9. Local chart dependencies are never built
 
 A local chart that declares `dependencies:` in `Chart.yaml` and does not vendor them in `charts/` fails lint and
@@ -159,11 +164,46 @@ install with "found in Chart.yaml, but missing in charts/ directory". Strata nev
 [sbom-generation.md](sbom-generation.md) notes the same need for rendering. Whether any haven chart has
 unvendored dependencies is not checked; if none does, documenting "vendor your dependencies" may be enough.
 
+**Done (2026-11-08)**, see [helm-chart-dependencies.md](helm-chart-dependencies.md). Correction: `helm lint` only
+warns about missing dependencies; the failure is at `helm upgrade`. A `file://` dependency also breaks, because the
+chart is copied alone into the build directory. Most OMP charts with dependencies commit no `Chart.lock`, so the
+build resolves dependencies itself into the gap 8 cache instead of running `helm dependency build`.
+
 #### 10. Helm 4 compatibility is unknown
 
 The argv shapes were copied from v1 and tested with Helm 3. Helm 4 changed some upgrade flags (it renamed
 `--atomic`, for example). Nothing checks the Helm version. This needs a run against Helm 4 to know whether anything
 breaks.
+
+**Checked (2026-11-08)** against Helm 4.3.1 (get.helm.sh, checksum verified) beside 3.13.2, with a kubeconfig that
+points at a dead address. Helm 3 gets security patches until February 2027. Nothing breaks today:
+
+- Every flag strata passes is accepted. All 1101 tests in the Helm test files pass with Helm 4 first on `PATH`,
+  including the real-Helm ones: the values overlay render, release names, lint with the overlay, a credentialed
+  `repo add --password-stdin` and pull against a basic-auth server, `HELM_KUBECONTEXT`, the chart cache, and gap 9's
+  dependencies with `dependency list` and `template`.
+- The outputs strata parses keep their shape: the dry-run `HOOKS:`/`MANIFEST:`/`NOTES:` sections, the
+  `dependency list` table, and `version`. Lint now puts an `[ERROR]`'s cause on the following lines, which
+  `_error_findings()` already joins.
+
+What changes:
+
+| strata passes        | Helm 4.3.1                                                                    | Helm 3.13.2                     |
+| -------------------- | ----------------------------------------------------------------------------- | ------------------------------- |
+| `--atomic`           | works, warns "use --rollback-on-failure"                                      | `--rollback-on-failure` unknown |
+| bare `--dry-run`     | works, warns "replace with --dry-run=client"                                  | `--dry-run=client` accepted     |
+| bare `--wait`        | means `watcher` (kstatus, needs the `watch` verb); `--wait=legacy` is 3.x's   | `--wait=legacy` rejected        |
+| (no flag)            | `--server-side auto`: server-side apply for a new release, the previous method for an existing one | no such flag |
+
+So `--rollback-on-failure` and `--wait=legacy` need the major version, and `--dry-run=client` needs Helm 3.13 or later.
+Design: [helm-4-support.md](helm-4-support.md) (Helm 4 by default; Helm 3, deprecated, only when a `helm`
+integration's `spec.version` excludes Helm 4; [ADR-0055](../decisions/0055-helm-4-by-default-helm-3-only-when-declared.md)).
+
+**Done (2026-11-08)**: Helm 4's flags (`--dry-run=client`, `--wait=watcher`, `--rollback-on-failure`) by default; a
+`helm` integration whose `spec.version` allows no Helm 4 keeps the v1 flags with a `helm_3_deprecated` warning; every
+deploy reads `helm version` first and stops undeclared Helm 3 (`helm_3_not_declared`, a warning under `deploy destroy`);
+the version and path are printed and recorded in the deployment manifest. Checked with the real 4.3.1 and 3.13.2
+binaries. A breaking change for undeclared Helm 3.
 
 ### Smaller notes
 
@@ -196,7 +236,9 @@ breaks.
 - [x] 5. Gap 5: stage timeouts for plan and apply
 - [x] 6. Gap 7: name checks and the release uniqueness check in `strata validate`
 - [x] 7. Gap 6: the kube context pin
-- [ ] 8. Gaps 8, 9 and 10: on demand, after checking haven
+- [x] 8. Gap 8: registry charts pinned at build, checked, and installed from the pinned archive
+- [x] 9. Gap 9: local chart dependencies placed at build
+- [x] 10. Gap 10: Helm 4 by default, Helm 3 on request ([helm-4-support.md](helm-4-support.md))
 
 ### Open questions
 
@@ -210,6 +252,11 @@ breaks.
 
 ## Changelog
 
+- 2026-11-08: gap 10 fixed (Helm 4 flags by default, Helm 3 only when declared, ADR-0055).
+- 2026-11-08: gap 10 checked against Helm 4.3.1: nothing breaks; deprecation warnings and a `--wait` behaviour
+  change remain.
+- 2026-11-08: gap 9 fixed (local chart dependencies placed at build); lint finding corrected.
+- 2026-11-07: gap 8 fixed (registry charts pinned at build, ADR-0054).
 - 2026-11-07: gap 7 fixed (Helm only; Argo CD later).
 - 2026-11-07: gap 5 fixed (Helm and Compose plan/apply timeouts).
 - 2026-11-07: gaps 1 and 4 fixed (`strata-values.yaml`).

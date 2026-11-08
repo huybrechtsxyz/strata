@@ -6,6 +6,7 @@ PEP 440 specifiers, plus Terraform's `~>`: `~> 1.9` means `>= 1.9, < 2.0`, which
 """
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 
 def parse_version_constraint(text: str) -> SpecifierSet:
@@ -29,3 +30,12 @@ def version_satisfies(installed: str, constraint: str) -> bool:
         ValueError: `constraint` is not a valid constraint.
     """
     return parse_version_constraint(constraint).contains(installed, prereleases=True)
+
+
+def is_version(text: str) -> bool:
+    """Whether `text` is a version (`1.9.2`, `v3.13.2`), not tool output that `parse_version()` could not pick apart."""
+    try:
+        Version(text)
+    except InvalidVersion:
+        return False
+    return True

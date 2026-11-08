@@ -395,6 +395,14 @@ exits 0 with only the warning. `config/` still validates.
 
 ## Changelog
 
+- 2026-11-08: Per-class version rules ([helm-4-support.md](helm-4-support.md), ADR-0055): an integration class can set
+  `READ_VERSION` (the version is read without `spec.version`) and return `version_problems()` (readiness problems)
+  and `version_notices()` (the new `IntegrationReadiness.warnings`, always warnings, never counted against `ok`).
+  `ReadinessProblem` moved to `integrations/base.py` (re-exported here) and gained `flags_only`: a problem about the
+  flags strata passes, which `deploy destroy` reports as a warning and lets the step run. Readiness also records
+  `tool_path` (where the command resolved on `PATH`); the deploy preflight prints `TYPE VERSION (PATH)` once per tool,
+  `deploy_run(on_tool=...)` hands each step's readiness to the deployment manifest, and `strata integration
+  check`/`list` show the path and the warnings. Helm is the first user.
 - 2026-10-27: Phase 9 built: `strata validate` reports a step's provisioner bound to a disabled
   Integration (`provisioner_integration_disabled`, error; `depends_on`-only provisioners are not
   reported, as deploy never resolves them) and `required: true` on a disabled one

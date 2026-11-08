@@ -460,7 +460,7 @@ def sync_module_source(
     remotes: dict[str, SolutionRemoteModel],
     *,
     credentials: RemoteCredentialResolver | None = None,
-) -> None:
+) -> tuple[Path, Path] | None:
     """Materialise a workload module's chart source into `module_dir`
     (ADR-0022 D6/D7), if it has one to copy.
 
@@ -496,6 +496,10 @@ def sync_module_source(
         credentials: Resolves `remote.integration`'s credentials for a clone; `None` (default) clones
             with ambient git credentials only.
 
+    Returns:
+        `(repository root, copied origin)` for a copied source, so a local chart's `file://` dependencies can be
+        resolved against where it came from (docs/work/helm-chart-dependencies.md); `None` for a chart-based one.
+
     Raises:
         SourceSyncError: `source` names a remote that is not declared, its
             `source_path` does not exist under the resolved remote, or the
@@ -503,7 +507,7 @@ def sync_module_source(
     """
     if source.chart_name is not None:
         module_dir.mkdir(parents=True, exist_ok=True)
-        return
+        return None
 
     repo_root = source_repo_root(root, source, remotes, credentials=credentials)
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
@@ -525,3 +529,4 @@ def sync_module_source(
             shutil.copy2(origin, module_dir / origin.name)
     except OSError as exc:
         raise SourceSyncError(f"Failed to copy '{origin}' to '{module_dir}': {exc}") from exc
+    return repo_root, origin

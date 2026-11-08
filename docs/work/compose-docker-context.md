@@ -151,11 +151,11 @@ one check, keeping the existing `helm_kube_context_*` codes and adding the `comp
 - [x] 3. `deploy_run()`: replace the Helm-only block with the generic one (check once per pair, before the first step;
   add the variable per step; print the context line)
 - [x] 4. Semantic checks: generalise `_check_deployment_kube_context()` to every integration type with a
-  `TARGET_CONTEXT_FIELD` (`*_unset` warning, `*_token` error)
+  `TARGET_CONTEXT_FIELD` (`*_unset` warning; the token check is a schema error)
 - [x] 5. Tests: every Compose call (deploy, dry-run, `stack rm`, `stack services`) gets `DOCKER_CONTEXT`; a missing
   context, `DOCKER_HOST` set, another `DOCKER_CONTEXT` each stop the run before any tool runs (including a dry-run);
   the same `DOCKER_CONTEXT` is accepted; `--smoke-test` and a run without a Compose step skip the check; a deployment
-  with Helm and Compose steps pins each to its own context; the validate warning and token error for Compose; the
+  with Helm and Compose steps pins each to its own context; the validate warning for Compose and the schema token error; the
   existing Helm tests still pass unchanged; one real `docker` run with `DOCKER_CONFIG` in a temporary directory that
   confirms `docker context inspect` fails for an unknown context and `DOCKER_HOST` overrides `DOCKER_CONTEXT` (so a
   Docker change in that order shows up as a failing test)
