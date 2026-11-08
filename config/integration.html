@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Integration (kind: integration) &mdash; strata 2.3.3 documentation</title>
+  <title>Integration (kind: integration) &mdash; strata 2.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/documentation_options.js?v=4d935f96"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -174,7 +174,10 @@ class’s own supported transports at runtime, not schema time</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.version</span></code> — the version the local tool must satisfy: a PEP 440 constraint (<code class="docutils literal notranslate"><span class="pre">&gt;=</span> <span class="pre">1.7</span></code>,
 <code class="docutils literal notranslate"><span class="pre">~=</span> <span class="pre">1.9</span></code>, <code class="docutils literal notranslate"><span class="pre">&gt;=</span> <span class="pre">1.7,</span> <span class="pre">&lt;</span> <span class="pre">2.0</span></code>) or Terraform’s <code class="docutils literal notranslate"><span class="pre">~&gt;</span> <span class="pre">1.9</span></code> (read as <code class="docutils literal notranslate"><span class="pre">~=</span> <span class="pre">1.9</span></code>). Checked by every <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code> command before any step runs (not under <code class="docutils literal notranslate"><span class="pre">--smoke-test</span></code>, which never runs a tool). Only for
 CLI tools: on a networked integration (e.g. <code class="docutils literal notranslate"><span class="pre">azure-keyvault</span></code>, <code class="docutils literal notranslate"><span class="pre">aikido</span></code>) it is a validation error,
-since strata cannot read a remote service’s version</p></li>
+since strata cannot read a remote service’s version. On a <code class="docutils literal notranslate"><span class="pre">helm</span></code> integration it also chooses the
+flags: a constraint that allows no Helm 4 (<code class="docutils literal notranslate"><span class="pre">&quot;&lt;4&quot;</span></code>) keeps Helm 3’s flags, which are deprecated;
+anything else, or no <code class="docutils literal notranslate"><span class="pre">helm</span></code> document, gets Helm 4’s
+(<span class="xref myst">helm-chart-deployment.md</span>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.command</span></code> — override the class’s default executable</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.endpoints</span></code> — address, for a networked transport</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.lifecycle</span></code> — hook scripts (<code class="docutils literal notranslate"><span class="pre">.py</span></code> only)</p></li>
@@ -223,7 +226,9 @@ places (<code class="docutils literal notranslate"><span class="pre">Integration
 with nothing arbitrating between them.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">integration</span> <span class="pre">check</span> <span class="pre">NAME</span> <span class="pre">[--deployment</span> <span class="pre">D]</span></code> changes nothing. It first checks local readiness,
 the same check every <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code> command runs before any step: enabled, tool on PATH,
-installed version against <code class="docutils literal notranslate"><span class="pre">spec.version</span></code>. For a type with a connection check (<code class="docutils literal notranslate"><span class="pre">aikido</span></code> today) it
+installed version against <code class="docutils literal notranslate"><span class="pre">spec.version</span></code>, plus the type’s own version rules (<code class="docutils literal notranslate"><span class="pre">helm</span></code> reads its
+version every time: undeclared Helm 3 is an error, declared Helm 3 a warning). The description
+names where the tool resolved on PATH. For a type with a connection check (<code class="docutils literal notranslate"><span class="pre">aikido</span></code> today) it
 then verifies credentials and reachability; with <code class="docutils literal notranslate"><span class="pre">--deployment</span></code>, the <code class="docutils literal notranslate"><span class="pre">authentication</span></code> key
 references resolve through that deployment. NAME is a document name or an integration type
 (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">integration</span> <span class="pre">check</span> <span class="pre">terraform</span></code> checks what a <code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">terraform</span></code> provisioner would bind).

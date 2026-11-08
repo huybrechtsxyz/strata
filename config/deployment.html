@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deployment (kind: deployment) &mdash; strata 2.3.3 documentation</title>
+  <title>Deployment (kind: deployment) &mdash; strata 2.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/documentation_options.js?v=4d935f96"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -90,6 +90,11 @@
 <li class="toctree-l2"><a class="reference internal" href="#rebinding-a-provider">Rebinding a provider</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#rebinding-an-asset">Rebinding an asset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#tokens-from-the-deployment">Tokens from the deployment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#choosing-the-target">Choosing the target</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#kubernetes-kube-context">Kubernetes (<code class="docutils literal notranslate"><span class="pre">kube_context</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#docker-docker-context">Docker (<code class="docutils literal notranslate"><span class="pre">docker_context</span></code>)</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
@@ -144,6 +149,10 @@ with what runtime behavior</em>. <code class="docutils literal notranslate"><spa
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.workspace</span></code> — the <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">workspace</span></code></span></a> document this deployment instantiates</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.environments[]</span></code> — <a class="reference internal" href="environment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">environment</span></code></span></a> documents, merged left-to-right (later wins)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> — optional <a class="reference internal" href="tenant.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">tenant</span></code></span></a> reference; its defaults merge in first</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.kube_context</span></code> — the context in the caller’s kubeconfig that this deployment’s Helm steps deploy to — see
+“Choosing the target” below</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.docker_context</span></code> — the Docker context that this deployment’s Compose steps deploy to — see “Choosing the
+target” below</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> — another deployment document (typically <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code>) whose spec is merged
 in before this one’s (child wins; nested blocks deep-merge; stages merge by step name and
 <code class="docutils literal notranslate"><span class="pre">providers</span></code> and <code class="docutils literal notranslate"><span class="pre">assets</span></code> by slot; <code class="docutils literal notranslate"><span class="pre">environments</span></code> lists append base-first; other lists are replaced)</p></li>
@@ -284,6 +293,56 @@ it from the deployment that is:</p>
 “Terraform backend” in <a class="reference internal" href="workspace.html"><span class="std std-doc">workspace</span></a>). <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks them for every deployment that
 reaches the document: <code class="docutils literal notranslate"><span class="pre">${deployment:tenant}</span></code> on a deployment without a tenant is an error, as is any other key. A
 <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> base is judged only once a deployment extends it.</p>
+</section>
+<section id="choosing-the-target">
+<h2>Choosing the target<a class="headerlink" href="#choosing-the-target" title="Link to this heading"></a></h2>
+<p>Helm and Compose steps deploy to whatever cluster or Docker engine the caller’s environment points at. Without a
+named target, a wrong active context sends a production deployment somewhere else. Name it on the deployment:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forge-base</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prd</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">kube_context</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forge-prd</span><span class="w">      </span><span class="c1"># Helm steps</span>
+<span class="w">  </span><span class="nt">docker_context</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hearth-prd</span><span class="w">   </span><span class="c1"># Compose steps</span>
+</pre></div>
+</div>
+<p>Both fields work the same way: every call of that tool uses the named context, it is checked before the first step
+runs, and the run stops before anything changes if it cannot be used. Without the field nothing changes at deploy,
+and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> warns for a deployment with a step of that tool (<code class="docutils literal notranslate"><span class="pre">helm_kube_context_unset</span></code>,
+<code class="docutils literal notranslate"><span class="pre">compose_docker_context_unset</span></code>). A partial base is not warned; the deployments extending it are, unless the base sets
+the field. The value is a literal: a <code class="docutils literal notranslate"><span class="pre">${...}</span></code> token is a schema error. Strata never changes the caller’s own
+configuration: it does not set <code class="docutils literal notranslate"><span class="pre">KUBECONFIG</span></code> or <code class="docutils literal notranslate"><span class="pre">DOCKER_HOST</span></code>, write the kubeconfig, create a Docker context, or switch
+the active context.</p>
+<section id="kubernetes-kube-context">
+<h3>Kubernetes (<code class="docutils literal notranslate"><span class="pre">kube_context</span></code>)<a class="headerlink" href="#kubernetes-kube-context" title="Link to this heading"></a></h3>
+<p>A Helm step deploys to a Kubernetes cluster through the kubeconfig the caller provides (<code class="docutils literal notranslate"><span class="pre">KUBECONFIG</span></code>, else
+<code class="docutils literal notranslate"><span class="pre">~/.kube/config</span></code>). <code class="docutils literal notranslate"><span class="pre">kube_context</span></code> names a context in it:</p>
+<ul class="simple">
+<li><p>Every <code class="docutils literal notranslate"><span class="pre">helm</span></code> call of the deployment then runs against that context (<code class="docutils literal notranslate"><span class="pre">HELM_KUBECONTEXT</span></code>), whichever one is active:
+deploy, <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> preview, uninstall and destroy preview.</p></li>
+<li><p>Before the first step runs, strata checks that the kubeconfig defines the context. If it does not, the deploy stops
+with <code class="docutils literal notranslate"><span class="pre">helm_kube_context_missing</span></code>, listing the contexts it found. A <code class="docutils literal notranslate"><span class="pre">HELM_KUBECONTEXT</span></code> set to another context, or a
+<code class="docutils literal notranslate"><span class="pre">HELM_KUBEAPISERVER</span></code>, in the caller’s environment stops it with <code class="docutils literal notranslate"><span class="pre">helm_kube_context_conflict</span></code>.</p></li>
+<li><p>Context names are local to a kubeconfig. Every machine that deploys (CI and laptops) must use the same context name
+for the cluster; <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">config</span> <span class="pre">rename-context</span></code> changes it.</p></li>
+</ul>
+</section>
+<section id="docker-docker-context">
+<h3>Docker (<code class="docutils literal notranslate"><span class="pre">docker_context</span></code>)<a class="headerlink" href="#docker-docker-context" title="Link to this heading"></a></h3>
+<p>A Compose step runs <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stack</span></code> against the engine Docker picks: <code class="docutils literal notranslate"><span class="pre">DOCKER_HOST</span></code>, else <code class="docutils literal notranslate"><span class="pre">DOCKER_CONTEXT</span></code>, else the
+context chosen with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">context</span> <span class="pre">use</span></code>. Create a context for each engine once
+(<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">context</span> <span class="pre">create</span> <span class="pre">hearth-prd</span> <span class="pre">--docker</span> <span class="pre">host=ssh://deploy&#64;hearth</span></code>) and name it:</p>
+<ul class="simple">
+<li><p>Every <code class="docutils literal notranslate"><span class="pre">docker</span></code> call of the deployment’s Compose steps runs with <code class="docutils literal notranslate"><span class="pre">DOCKER_CONTEXT</span></code> set to it: <code class="docutils literal notranslate"><span class="pre">stack</span> <span class="pre">deploy</span></code>, the
+<code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> preview (<code class="docutils literal notranslate"><span class="pre">stack</span> <span class="pre">config</span></code>), <code class="docutils literal notranslate"><span class="pre">stack</span> <span class="pre">rm</span></code> and the destroy preview (<code class="docutils literal notranslate"><span class="pre">stack</span> <span class="pre">services</span></code>).</p></li>
+<li><p>Before the first step runs, strata asks Docker (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">context</span> <span class="pre">inspect</span></code>, which contacts no engine) whether the
+context exists. If not, the deploy stops with <code class="docutils literal notranslate"><span class="pre">compose_docker_context_missing</span></code>, listing the contexts Docker has. This
+also covers <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>, whose <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stack</span> <span class="pre">config</span></code> never looks at the context.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">DOCKER_HOST</span></code> silently overrides <code class="docutils literal notranslate"><span class="pre">DOCKER_CONTEXT</span></code>, so a set <code class="docutils literal notranslate"><span class="pre">DOCKER_HOST</span></code> stops the deploy with
+<code class="docutils literal notranslate"><span class="pre">compose_docker_context_conflict</span></code>, as does a <code class="docutils literal notranslate"><span class="pre">DOCKER_CONTEXT</span></code> naming another context. Replace a <code class="docutils literal notranslate"><span class="pre">DOCKER_HOST</span></code> in a
+workflow with a context created from the same host.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">docker_context:</span> <span class="pre">default</span></code> is the local engine.</p></li>
+</ul>
+</section>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>

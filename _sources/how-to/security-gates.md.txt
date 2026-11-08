@@ -149,7 +149,9 @@ scanner is available or the scan fails.
 - `cve_policy` is checked by `strata policy check` against the build path's `sbom.json`, with the
   same scanner, allowlist and `on_missing_data` as `strata build run`, and its result replaces the
   build's entry in `policy_results.json`. `checkov_policy` is checked the same way against the
-  rendered sources in the build path; `.terraform/` left by a deploy is not scanned.
+  rendered sources in the build path; `.terraform/` left by a deploy is not scanned. With
+  `config_file` set it uses the copy `build run` took into `checkov-config/`, never the source
+  repository, so a re-check judges the same config as the build did.
 - Open-source Checkov (no API key) reports no severity. `checkov_policy` counts such an unrated
   failed check at any `severity_gate`, so a `deny` policy fails on it; use `enforcement: warn`,
   `skip_checks` or `include_checks` to relax it. `strata policy findings --policy checkov_policy`

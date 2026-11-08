@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Module (kind: module) &mdash; strata 2.3.3 documentation</title>
+  <title>Module (kind: module) &mdash; strata 2.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/documentation_options.js?v=4d935f96"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -135,20 +135,34 @@
 from either a Helm chart or a Compose-style service list, sourced from a remote.</p>
 <section id="schema">
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
-<ul class="simple">
+<ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.source</span></code> — a <a class="reference internal" href="solution.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">SourceModel</span></code></span></a> reference: <code class="docutils literal notranslate"><span class="pre">remote</span></code> + either <code class="docutils literal notranslate"><span class="pre">chart_name</span></code>/
 <code class="docutils literal notranslate"><span class="pre">chart_version</span></code> (Helm) or <code class="docutils literal notranslate"><span class="pre">source_path</span></code> (Compose/copied files)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.type</span></code> — the deployer tool (e.g. <code class="docutils literal notranslate"><span class="pre">helm</span></code>, <code class="docutils literal notranslate"><span class="pre">compose</span></code>, <code class="docutils literal notranslate"><span class="pre">argocd</span></code>, or a custom provisioner
 plugin name) — required for service deployment commands</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.release_name</span></code> — optional Helm release/ArgoCD Application name (defaults to <code class="docutils literal notranslate"><span class="pre">meta.name</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.release_name</span></code> — optional Helm release/ArgoCD Application name (defaults to the module
+reference name in the namespace, not <code class="docutils literal notranslate"><span class="pre">meta.name</span></code>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.kubernetes_namespace</span></code> — optional target namespace override (defaults to the strata
-namespace name)</p></li>
+namespace name)</p>
+<p>For a <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">helm</span></code> module, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks the names Helm will receive, defaults included,
+and reports an error when Helm or Kubernetes would reject them:</p>
+<ul class="simple">
+<li><p>the release name: lowercase letters, digits, <code class="docutils literal notranslate"><span class="pre">-</span></code> and <code class="docutils literal notranslate"><span class="pre">.</span></code>, starting and ending with a letter or
+digit, at most 53 characters (<code class="docutils literal notranslate"><span class="pre">helm_release_name_invalid</span></code>)</p></li>
+<li><p>the Kubernetes namespace: lowercase letters, digits and <code class="docutils literal notranslate"><span class="pre">-</span></code>, starting and ending with a letter
+or digit, at most 63 characters (<code class="docutils literal notranslate"><span class="pre">helm_kubernetes_namespace_invalid</span></code>). A strata namespace name may
+contain <code class="docutils literal notranslate"><span class="pre">_</span></code>, which Kubernetes rejects: set <code class="docutils literal notranslate"><span class="pre">spec.kubernetes_namespace</span></code> or rename the namespace.</p></li>
+<li><p>two module references in one workspace that would install the same release into the same
+Kubernetes namespace (<code class="docutils literal notranslate"><span class="pre">helm_release_conflict</span></code>)</p></li>
+</ul>
+<p>Value tokens (<code class="docutils literal notranslate"><span class="pre">${var:...}</span></code>) are not resolved in either field.</p>
+</li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.compose_file</span></code> — reference an external <code class="docutils literal notranslate"><span class="pre">docker-compose.yml</span></code> verbatim instead of generating
 one from <code class="docutils literal notranslate"><span class="pre">spec.services</span></code> — mutually exclusive with <code class="docutils literal notranslate"><span class="pre">spec.services</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.files[]</span></code> — files/globs copied verbatim into the module’s build output, each <code class="docutils literal notranslate"><span class="pre">{source,</span> <span class="pre">target}</span></code>
 (<code class="docutils literal notranslate"><span class="pre">source</span></code> supports <code class="docutils literal notranslate"><span class="pre">&#64;repo/...</span></code> cross-remote references)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.services[]</span></code> — one per container/process, each:</p>
-<ul>
+<ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">image</span></code> (or <code class="docutils literal notranslate"><span class="pre">artifact</span></code> — an <a class="reference internal" href="artifact.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">artifact</span></code></span></a> document name; mutually exclusive
 with <code class="docutils literal notranslate"><span class="pre">image</span></code>), <code class="docutils literal notranslate"><span class="pre">restart</span></code>, <code class="docutils literal notranslate"><span class="pre">command</span></code>, <code class="docutils literal notranslate"><span class="pre">depends_on[]</span></code>, <code class="docutils literal notranslate"><span class="pre">ports[]</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">environment[]</span></code> — each <code class="docutils literal notranslate"><span class="pre">{key,</span> <span class="pre">value}</span></code>; <code class="docutils literal notranslate"><span class="pre">value</span></code> is a literal or a

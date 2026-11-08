@@ -1,6 +1,6 @@
 # Chart registries (`capabilities: [sources]`)
 
-Lets `strata deploy` pull a Helm chart from a registry that needs a login: an HTTP chart repository
+Lets strata pull a Helm chart from a registry that needs a login: an HTTP chart repository
 (a ProGet Helm feed, Nexus, Artifactory, ChartMuseum) or an OCI registry (a ProGet container feed, a
 private GHCR or ACR repository). A public registry needs none of this; a module can name it inline
 with `chart_repository` and no credentials.
@@ -13,9 +13,12 @@ remote does ([git.md](git.md)).
 
 - A username and a password, token or API key with read access to the feed.
 - That secret declared in an [`environment`](../config/environment.md) the deployment reaches.
-  `deploy` resolves every declared value before it runs a step, so any store works: an environment
-  variable, a constant, or an integration-backed store such as Key Vault.
-- `helm` 3.x on `PATH` (the same one `deploy` already needs).
+  `build run` pulls the chart, and reads only `constant` and `environment` stores unless you pass
+  `--resolve`, so a secret in Key Vault or another integration-backed store needs
+  `build run --resolve`. Without it the chart is left unpinned and the deploy refuses it.
+- `helm` on `PATH` wherever `build run` runs, as well as where `deploy` runs: Helm 4, or Helm 3 (deprecated) declared
+  with `spec.version: "<4"` on a `helm` integration
+  ([helm-chart-deployment.md](../design/helm-chart-deployment.md#helm-versions)).
 
 ## Configuring the `kind: integration` document
 
@@ -86,21 +89,29 @@ spec:
 A private registry has to be a named `remote`. The inline `chart_repository` form has nowhere to name an
 integration, so it is always anonymous.
 
-## What deploy does
+## What build and deploy do
 
-- Credentials are read only for the registries a step's modules actually pull charts from. A remote
-  nothing deploys from is never looked at, so a mistake in it cannot fail a run.
+`build run` pulls each registry chart into `.strata/helm/` and pins it: the module's `meta.yaml`
+records the exact version and the archive's SHA-256. The deploy installs that archive, so the registry
+is contacted at deploy only when the cache is missing (a deploy job that does not share the build's
+`.strata/`), and then only to pull the pinned version again and compare it
+([helm-chart-deployment.md](../design/helm-chart-deployment.md)).
+
+- Credentials are read only for the registries the modules actually pull charts from. A remote
+  nothing pulls from is never looked at, so a mistake in it cannot fail a run. An exact
+  `chart_version` already in the cache is not pulled at all.
+- A local chart's `dependencies` are pulled the same way, into the built chart's `charts/`
+  ([helm-chart-dependencies.md](../work/helm-chart-dependencies.md)). To give a private dependency
+  repository credentials, declare a `helm` or `oci` remote with the same URL as the dependency's
+  `repository` and an `integration`; any other dependency repository is pulled anonymously.
 - For an HTTP repository: `helm repo add <alias> <url> --force-update --username <user> --password-stdin`.
   For an OCI registry: `helm registry login <host> --username <user> --password-stdin`.
 - The password reaches Helm **only on stdin**. It is never on a command line, in an environment
   variable, in the output, or in an error message: a failed login's text has it replaced by `***`.
-- Each module that needs credentials gets its own temporary Helm configuration (repository list,
-  index cache and registry login). The module's login, its `--dry-run` preview and its `helm upgrade`
-  all share it, and it is deleted when the namespace has been deployed, or when Helm fails. Your own
-  Helm configuration is never touched, so the password is not left behind in it.
-- `deploy plan` and `deploy run --dry-run` authenticate the same way. `deploy check` only lints local
-  charts, so it needs no secret, and `build run` never pulls a chart.
-- A rejected login is an error for that module only; the others still deploy.
+- Every pull gets its own temporary Helm configuration (repository list, index cache and registry
+  login), deleted when the pull ends, also when Helm fails. Your own Helm configuration is never
+  touched, so the password is not left behind in it.
+- A rejected login is an error for that module.
 
 ## Validation
 
@@ -118,7 +129,7 @@ nothing else uses a chart registry's integration, so each is a definite deploy f
 For a git remote the `disabled` and `auth_unsupported` findings are warnings instead, because GitOps and
 audit pushes also use a git remote's integration ([git.md](git.md)).
 
-`deploy` reports two more, each before it runs any `helm` command for the step:
+`build run`, and a deploy that has to pull again, report two more, before any `helm` command for that pull:
 
 | Code                                | Meaning                                                                                                                                                                           |
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -136,7 +147,7 @@ audit pushes also use a git remote's integration ([git.md](git.md)).
 
 ## How far this has been tested
 
-Verified with Helm 3.13.2 against a local chart server and a registry endpoint that require HTTP Basic
+Verified with Helm 3.13.2, and the same pulls again with Helm 4.3.1, against a local chart server and a registry endpoint that require HTTP Basic
 authentication: the login and chart pull succeed with the credentials, fail without them, nothing is put
 on the command line, and the user's own Helm configuration is byte-identical afterwards. It has **not**
 been run against a real ProGet instance, and an authenticated OCI chart pull is untested. Confirm

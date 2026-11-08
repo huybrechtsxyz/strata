@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workspace (kind: workspace) &mdash; strata 2.3.3 documentation</title>
+  <title>Workspace (kind: workspace) &mdash; strata 2.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=f4302432"></script>
+      <script src="../_static/documentation_options.js?v=4d935f96"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -186,7 +186,12 @@ need to also list them directly on the step.
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.cve_policy</span></code> — fail <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> when the SBOM’s CVE findings at or above <code class="docutils literal notranslate"><span class="pre">max_severity</span></code>
 exceed <code class="docutils literal notranslate"><span class="pre">max_count</span></code> (scanned with Trivy or Grype)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.checkov_policy</span></code> — fail <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> on Checkov findings at or above <code class="docutils literal notranslate"><span class="pre">severity_gate</span></code>; a
-finding with no severity (open-source Checkov reports none) always counts</p></li>
+finding with no severity (open-source Checkov reports none) always counts. <code class="docutils literal notranslate"><span class="pre">config_file</span></code> names a
+Checkov config file (e.g. <code class="docutils literal notranslate"><span class="pre">.checkov.yaml</span></code>) relative to the root of the repository each scanned
+provisioner or Helm module comes from; <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> copies it to <code class="docutils literal notranslate"><span class="pre">checkov-config/</span></code> in the build path
+and passes it as <code class="docutils literal notranslate"><span class="pre">--config-file</span></code>. A repository without that file is handled by <code class="docutils literal notranslate"><span class="pre">on_missing_data</span></code>.
+Without <code class="docutils literal notranslate"><span class="pre">config_file</span></code> strata passes none, and Checkov may still pick up a <code class="docutils literal notranslate"><span class="pre">.checkov.yaml</span></code> from the
+scanned directory or the directory strata runs in</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.release_gate_policy</span></code> — at deploy, ask a <code class="docutils literal notranslate"><span class="pre">release_gate</span></code> <a class="reference internal" href="integration.html"><span class="std std-doc">integration</span></a> for its
 verdict on <code class="docutils literal notranslate"><span class="pre">repository</span></code> at the deployed commit</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.image_gate_policy</span></code> — at deploy, count an <code class="docutils literal notranslate"><span class="pre">image_findings</span></code> integration’s open issues for every

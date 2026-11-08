@@ -10,6 +10,10 @@ with what runtime behavior*. `strata build run`/`strata deploy run` both take a 
 - `spec.workspace` — the [`workspace`](workspace.md) document this deployment instantiates
 - `spec.environments[]` — [`environment`](environment.md) documents, merged left-to-right (later wins)
 - `spec.tenant` — optional [`tenant`](tenant.md) reference; its defaults merge in first
+- `spec.kube_context` — the context in the caller's kubeconfig that this deployment's Helm steps deploy to — see
+  "Choosing the target" below
+- `spec.docker_context` — the Docker context that this deployment's Compose steps deploy to — see "Choosing the
+  target" below
 - `spec.extends` — another deployment document (typically `partial: true`) whose spec is merged
   in before this one's (child wins; nested blocks deep-merge; stages merge by step name and
   `providers` and `assets` by slot; `environments` lists append base-first; other lists are replaced)
@@ -148,6 +152,56 @@ The usual use is a Terraform state key, `key: ${deployment:name}.tfstate`, in th
 "Terraform backend" in [workspace](workspace.md)). `strata validate` checks them for every deployment that
 reaches the document: `${deployment:tenant}` on a deployment without a tenant is an error, as is any other key. A
 `partial: true` base is judged only once a deployment extends it.
+
+## Choosing the target
+
+Helm and Compose steps deploy to whatever cluster or Docker engine the caller's environment points at. Without a
+named target, a wrong active context sends a production deployment somewhere else. Name it on the deployment:
+
+```yaml
+spec:
+  extends: forge-base
+  environments: [prd]
+  kube_context: forge-prd      # Helm steps
+  docker_context: hearth-prd   # Compose steps
+```
+
+Both fields work the same way: every call of that tool uses the named context, it is checked before the first step
+runs, and the run stops before anything changes if it cannot be used. Without the field nothing changes at deploy,
+and `strata validate` warns for a deployment with a step of that tool (`helm_kube_context_unset`,
+`compose_docker_context_unset`). A partial base is not warned; the deployments extending it are, unless the base sets
+the field. The value is a literal: a `${...}` token is a schema error. Strata never changes the caller's own
+configuration: it does not set `KUBECONFIG` or `DOCKER_HOST`, write the kubeconfig, create a Docker context, or switch
+the active context.
+
+### Kubernetes (`kube_context`)
+
+A Helm step deploys to a Kubernetes cluster through the kubeconfig the caller provides (`KUBECONFIG`, else
+`~/.kube/config`). `kube_context` names a context in it:
+
+- Every `helm` call of the deployment then runs against that context (`HELM_KUBECONTEXT`), whichever one is active:
+  deploy, `--dry-run` preview, uninstall and destroy preview.
+- Before the first step runs, strata checks that the kubeconfig defines the context. If it does not, the deploy stops
+  with `helm_kube_context_missing`, listing the contexts it found. A `HELM_KUBECONTEXT` set to another context, or a
+  `HELM_KUBEAPISERVER`, in the caller's environment stops it with `helm_kube_context_conflict`.
+- Context names are local to a kubeconfig. Every machine that deploys (CI and laptops) must use the same context name
+  for the cluster; `kubectl config rename-context` changes it.
+
+### Docker (`docker_context`)
+
+A Compose step runs `docker stack` against the engine Docker picks: `DOCKER_HOST`, else `DOCKER_CONTEXT`, else the
+context chosen with `docker context use`. Create a context for each engine once
+(`docker context create hearth-prd --docker host=ssh://deploy@hearth`) and name it:
+
+- Every `docker` call of the deployment's Compose steps runs with `DOCKER_CONTEXT` set to it: `stack deploy`, the
+  `--dry-run` preview (`stack config`), `stack rm` and the destroy preview (`stack services`).
+- Before the first step runs, strata asks Docker (`docker context inspect`, which contacts no engine) whether the
+  context exists. If not, the deploy stops with `compose_docker_context_missing`, listing the contexts Docker has. This
+  also covers `--dry-run`, whose `docker stack config` never looks at the context.
+- `DOCKER_HOST` silently overrides `DOCKER_CONTEXT`, so a set `DOCKER_HOST` stops the deploy with
+  `compose_docker_context_conflict`, as does a `DOCKER_CONTEXT` naming another context. Replace a `DOCKER_HOST` in a
+  workflow with a context created from the same host.
+- `docker_context: default` is the local engine.
 
 ## Notes
 
