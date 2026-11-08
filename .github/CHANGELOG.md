@@ -8,6 +8,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-11-08
+
 ### Added
 
 - The deploy commands print the version and path of each tool whose version they read (`helm 4.3.1
@@ -321,7 +323,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.3.3...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/huybrechtsxyz/strata/compare/v2.3.3...v2.4.0
 [2.3.3]: https://github.com/huybrechtsxyz/strata/compare/v2.3.2...v2.3.3
 [2.3.2]: https://github.com/huybrechtsxyz/strata/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/huybrechtsxyz/strata/compare/v2.3.0...v2.3.1

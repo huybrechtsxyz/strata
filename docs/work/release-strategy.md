@@ -246,6 +246,15 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-08: **Built 2.4.0** - bumped `VERSION.txt` from `2.3.3` to `2.4.0`. The Helm gap analysis
+  (docs/work/helm-gap-analysis.md): chart values in `strata-values.yaml`, secrets on stdin, no streamed dry-run
+  manifest, stage timeouts for Helm and Compose, release-name and namespace validation, `kube_context` and
+  `docker_context`, registry charts and local chart dependencies pinned at build (ADR-0054), and Helm 4 flags by
+  default (ADR-0055). A minor, not a major, as 2.3.0 set the precedent for breaking behaviour in 2.x: undeclared
+  Helm 3 now stops deploys (declare `spec.version: "<4"`), names with `_` fail `validate`, and a build from before
+  this release must be rebuilt before deploying. Built on `feature/helm-improvements`, for a pull request to `main`.
+  Tag only after `ci-build` is green on the merge commit; check the OMP pipelines still on Helm 3 first.
+
 - 2026-11-06: **Built 2.3.3** - bumped `VERSION.txt` from `2.3.2` to `2.3.3`. SBOM improvements: image purls with
   the registry in `repository_url` and one purl per Docker Hub image, `metadata.component`/`metadata.tools`, purl
   `bom-ref`s with one component per purl, a chart's repository taken from its `type: helm` remote, and Terraform
