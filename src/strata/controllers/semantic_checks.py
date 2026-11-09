@@ -92,6 +92,7 @@ from strata.services.workspace_service import WorkspaceService, effective_assets
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import manifest_path
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
+from strata.utils.report_template import check_report_template
 
 log = get_logger(__name__)
 
@@ -186,6 +187,56 @@ def _check_deployments(
         )
         diagnostics.extend(_check_deployment_fetch_credentials(index, deployment, solution), source=str(entry.source))
         diagnostics.extend(_check_deployment_target_contexts(index, deployment), source=str(entry.source))
+        diagnostics.extend(_check_deployment_documentation(index, deployment, root), source=str(entry.source))
+    return diagnostics
+
+
+def _check_deployment_documentation(
+    index: DocumentIndex, deployment: DeploymentModel, root: Path | None
+) -> Diagnostics:
+    """`spec.documentation` (docs/work/deployment-documentation.md, section 4): every gap shows up before a deploy,
+    not at the end of one. The document is built from the `output_store`; `sink: audit` needs an enabled `git`
+    audit sink, the only kind that stores files; a `template` must exist and use only the report's data.
+    """
+    diagnostics = Diagnostics()
+    documentation = deployment.spec.documentation
+    if documentation is None or deployment.spec.partial:
+        return diagnostics
+    name = deployment.meta.name
+    workspace = deployment_workspace(index, deployment)
+    if workspace is not None and not (workspace.spec.output_store or workspace.spec.output_store_integration):
+        diagnostics.error(
+            f"Deployment '{name}' sets spec.documentation, but workspace '{workspace.meta.name}' sets no "
+            "output_store: the document is built from what deploy run records there.",
+            location="spec.documentation",
+            code="documentation_needs_output_store",
+        )
+    if documentation.sink == "audit":
+        configuration = _single_configuration(index)
+        audit = configuration.spec.audit if configuration is not None else None
+        git_sinks = [sink for sink in ((audit.sinks or []) if audit else []) if sink.enabled and sink.git is not None]
+        if not git_sinks:
+            diagnostics.error(
+                f"Deployment '{name}' sets spec.documentation with sink 'audit', but no enabled git audit sink is "
+                "configured (Configuration spec.audit.sinks[].git). Only a git sink stores files.",
+                location="spec.documentation.sink",
+                code="documentation_needs_git_audit_sink",
+            )
+    if documentation.template and root is not None:
+        template_path = root / documentation.template
+        if not template_path.is_file():
+            diagnostics.error(
+                f"Deployment '{name}': spec.documentation.template '{documentation.template}' does not exist.",
+                location="spec.documentation.template",
+                code="documentation_template_missing",
+            )
+        else:
+            for problem in check_report_template(template_path.read_text(encoding="utf-8")):
+                diagnostics.error(
+                    f"Deployment '{name}': spec.documentation.template '{documentation.template}': {problem}",
+                    location="spec.documentation.template",
+                    code="documentation_template_invalid",
+                )
     return diagnostics
 
 
@@ -1340,6 +1391,7 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
         service = EnvironmentService.from_model(environment)
         diagnostics.extend(service.validate_artifact_references(artifact_names), source=str(entry.source))
         diagnostics.extend(service.validate_store_value_tokens(), source=str(entry.source))
+        diagnostics.extend(service.validate_secret_store_values(), source=str(entry.source))
         if security is not None:
             diagnostics.extend(service.validate_allowed_stores(security), source=str(entry.source))
     return diagnostics

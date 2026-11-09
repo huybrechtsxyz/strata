@@ -64,6 +64,7 @@ class DeploymentStatusRecord:
     deployed_by: str
     completed_at: str
     change_reference: ChangeReferenceModel | None
+    commit_sha: str | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,7 @@ class DeploymentChangeRecord:
     deployed_by: str
     version: str
     change_reference: ChangeReferenceModel | None
+    commit_sha: str | None = None
 
 
 def resolve_readable_sink(audit_config: AuditConfigModel | None) -> AuditGitSinkTargetModel:
@@ -277,6 +279,7 @@ def list_latest_per_deployment(
             deployed_by=manifest.deployed_by or "unknown",
             completed_at=manifest.completed_at or manifest.started_at,
             change_reference=manifest.change_reference,
+            commit_sha=manifest.commit_sha,
         )
         for manifest in sorted(latest_by_deployment.values(), key=lambda m: m.deployment)
     ]
@@ -343,6 +346,7 @@ def list_manifests_in_range(
             deployed_by=manifest.deployed_by or "unknown",
             version=manifest.version or "unknown",
             change_reference=manifest.change_reference,
+            commit_sha=manifest.commit_sha,
         )
         for manifest in sorted(matches, key=lambda m: datetime.fromisoformat(m.started_at))
     ]

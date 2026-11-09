@@ -890,7 +890,7 @@ def test_deploy_run_use_saved_plan_cross_invocation_output_handoff(tmp_path: Pat
     # First separate invocation: apply only apply_infra, from its saved plan.
     diagnostics_a = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="apply_infra")
     assert diagnostics_a.ok, diagnostics_a.messages()
-    assert "strata/deployment-outputs/app" in backend_cls.shared_data
+    assert "strata/step-outputs/app/apply_infra" in backend_cls.shared_data
 
     # Second, SEPARATE invocation (fresh deploy_run() call, no shared
     # in-memory state with the first) — apply_apps' backend.configuration
@@ -3821,9 +3821,52 @@ def test_deploy_run_records_step_output_to_the_configured_output_store(tmp_path:
     diagnostics = deploy_run(_context(root), "app", build_path)
 
     assert diagnostics.ok, diagnostics.messages()
-    record_bytes, _version = backend_cls.shared_data["strata/deployment-outputs/app"]
+    record_bytes, _version = backend_cls.shared_data["strata/step-outputs/app/apply_infra"]
     record = json.loads(record_bytes)
-    assert record["apply_infra"]["values"] == {"vm_ip": "10.0.0.5"}
+    assert record["values"] == {"vm_ip": "10.0.0.5"}
+
+
+@pytest.mark.parametrize(
+    ("value_length", "expected"),
+    [
+        (8_500, "close to the 10000 bytes"),  # above 8 KB: recorded, with a warning
+        (10_500, "could not durably record output"),  # above the limit: not recorded, still a warning
+    ],
+)
+def test_deploy_run_warns_about_an_output_record_near_or_over_the_backends_limit(
+    tmp_path: Path, monkeypatch, value_length: int, expected: str
+):
+    """ADR-0057: the size check reaches the run's diagnostics, and never fails a step that already deployed."""
+    backend_cls = _register_fake_output_store_backend(monkeypatch)
+    monkeypatch.setattr(backend_cls, "MAX_VALUE_BYTES", 10_000, raising=False)
+    root = _output_chained_solution(tmp_path)
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "spec:\n  providers:", "spec:\n  output_store: fake-output-store\n  providers:"
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "output":
+            if cwd is not None and cwd.name == "infra_a":
+                payload = json.dumps({"vm_ip": {"value": "x" * value_length, "type": "string", "sensitive": False}})
+                return CommandResult(returncode=0, stdout=payload, stderr="")
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert any(expected in warning.message for warning in diagnostics.warnings), diagnostics.messages()
 
 
 def test_deploy_run_resolves_output_token_from_a_durable_record_not_produced_this_invocation(
@@ -4990,3 +5033,136 @@ def test_helm_and_compose_steps_are_each_pinned_to_their_own_context(tmp_path: P
     assert upgrade.get("HELM_KUBECONTEXT") == "forge-prd" and "DOCKER_CONTEXT" not in upgrade
     [deploy] = [env for argv, env in calls if argv[:3] == ["docker", "stack", "deploy"]]
     assert deploy.get("DOCKER_CONTEXT") == "hearth-prd" and "HELM_KUBECONTEXT" not in deploy
+
+
+# ---------------------------------------------------------------------------
+# The report record (docs/work/deployment-documentation.md, release 2): sensitive output names and the root
+# module's output descriptions, next to the output record, never a value.
+# ---------------------------------------------------------------------------
+
+_DESCRIBED_OUTPUTS_TF = (
+    'output "vm_ip" {\n  value = "x"\n  description = "Public IP of the VM"\n}\n'
+    'output "admin_password" {\n  value = "x"\n  sensitive = true\n  description = "Also in kv-web as vm-admin"\n}\n'
+    'output "not_returned" {\n  value = "x"\n  description = "Declared, but not in terraform output"\n}\n'
+)
+
+
+def _report_record_solution(tmp_path: Path, monkeypatch):
+    backend_cls = _register_fake_output_store_backend(monkeypatch)
+    root = _output_chained_solution(tmp_path)
+    (root / "infra_a" / "main.tf").write_text(_DESCRIBED_OUTPUTS_TF, encoding="utf-8")
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "spec:\n  providers:", "spec:\n  output_store: fake-output-store\n  providers:"
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "output":
+            if cwd is not None and cwd.name == "infra_a":
+                payload = json.dumps(
+                    {
+                        "vm_ip": {"value": "10.0.0.5", "type": "string", "sensitive": False},
+                        "admin_password": {"value": "s3cr3t-Pa55word", "type": "string", "sensitive": True},
+                    }
+                )
+                return CommandResult(returncode=0, stdout=payload, stderr="")
+            return CommandResult(returncode=0, stdout="{}", stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    return backend_cls, root
+
+
+def test_deploy_run_records_sensitive_names_and_descriptions_but_no_value(tmp_path: Path, monkeypatch):
+    backend_cls, root = _report_record_solution(tmp_path, monkeypatch)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    report = json.loads(backend_cls.shared_data["strata/deployment-report/app/apply_infra"][0])
+    output = json.loads(backend_cls.shared_data["strata/step-outputs/app/apply_infra"][0])
+    assert report["sensitive"] == ["admin_password"]
+    # Only outputs the step returned; a description is source code, kept for a sensitive output too.
+    assert report["d"] == {"admin_password": "Also in kv-web as vm-admin", "vm_ip": "Public IP of the VM"}
+    assert report["collected_at"] == output["collected_at"]
+    assert "s3cr3t-Pa55word" not in json.dumps({k: v[0].decode() for k, v in backend_cls.shared_data.items()})
+    # A step without .tf outputs still gets a record: "recorded, nothing sensitive", not "not recorded".
+    assert json.loads(backend_cls.shared_data["strata/deployment-report/app/apply_apps"][0]).keys() == {
+        "collected_at",
+        "secrets",
+    }
+
+
+def test_deploy_run_dry_run_writes_no_report_record(tmp_path: Path, monkeypatch):
+    backend_cls, root = _report_record_solution(tmp_path, monkeypatch)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    deploy_run(_context(root), "app", build_path, dry_run=True)
+
+    assert not any(key.startswith("strata/deployment-report/") for key in backend_cls.shared_data)
+
+
+def test_deploy_run_warns_and_still_succeeds_when_the_report_record_cannot_be_written(tmp_path: Path, monkeypatch):
+    from strata.integrations.errors import IntegrationError
+
+    backend_cls, root = _report_record_solution(tmp_path, monkeypatch)
+    original_put = backend_cls.put
+
+    def _put(self, key, value, *, if_version=None):
+        if key.startswith("strata/deployment-report/"):
+            raise IntegrationError("store unavailable")
+        return original_put(self, key, value, if_version=if_version)
+
+    monkeypatch.setattr(backend_cls, "put", _put)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert any(
+        warning.code == "report_store_record" and "store unavailable" in warning.message
+        for warning in diagnostics.warnings
+    )
+    assert "strata/step-outputs/app/apply_infra" in backend_cls.shared_data
+
+
+def test_deploy_run_destroy_marks_the_report_record_destroyed(tmp_path: Path, monkeypatch):
+    backend_cls, root = _report_record_solution(tmp_path, monkeypatch)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    assert deploy_run(_context(root), "app", build_path).ok
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, destroy=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    report = json.loads(backend_cls.shared_data["strata/deployment-report/app/apply_infra"][0])
+    assert report.keys() == {"destroyed_at"}
+
+
+def test_build_run_estimates_the_report_record_and_warns_near_the_limit(tmp_path: Path, monkeypatch):
+    backend_cls, root = _report_record_solution(tmp_path, monkeypatch)
+    monkeypatch.setattr(backend_cls, "MAX_VALUE_BYTES", 10_000, raising=False)
+    long_outputs = "".join(f'output "o{i}" {{\n  value = "x"\n  description = "{"d" * 400}"\n}}\n' for i in range(21))
+    (root / "infra_a" / "main.tf").write_text(long_outputs, encoding="utf-8")
+    steps: list[str] = []
+
+    diagnostics = build_run(_context(root), "app", tmp_path / "build", on_step=steps.append)
+
+    assert any(
+        "step 'apply_infra': 21 output(s) declared, 0 secret(s) used, report record" in step for step in steps
+    ), steps
+    assert any(
+        warning.code == "report_record_size" and "close to the 10000 bytes" in warning.message
+        for warning in diagnostics.warnings
+    ), diagnostics.messages()
+    assert not any(key.startswith("strata/") for key in backend_cls.shared_data)  # build never writes

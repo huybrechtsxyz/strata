@@ -88,6 +88,9 @@ strata deploy output DEPLOYMENT [STEP | STEP.KEY] [--format table|raw] [--path P
 - Each step's `collected_at` is shown in the table. Descriptions are not: the table stays as short as Terraform's.
   The JSON data carries them.
 - No secret locations, images or audit information. That is `deploy report`.
+- Exit codes: 2 (usage) for an unknown `STEP` or `STEP.KEY`, for `--format raw` on a sensitive output, and for a
+  `STEP.KEY` in a step that has no record yet. 3 (validation) when the workspace has no `output_store`. Listing all
+  outputs never fails because of a missing record; that step shows "no outputs recorded".
 
 #### `strata deploy report`: the handover document
 
@@ -115,7 +118,8 @@ strata deploy report DEPLOYMENT [--format table|markdown] [--template PATH] [--o
 1. **Step outputs** from the durable record, for every execution step (or only `--step`), with each step's
    `collected_at` and each output's `description` (section 3). Only Terraform and OpenTofu steps (and GitOps steps)
    produce outputs: `collect_step_outputs()` calls the tool's `terraform output -json`, Helm has no outputs, and
-   Compose steps never reach that call. A Helm or Compose step is listed as "no outputs (the tool has none)".
+   Compose steps never reach that call. A Helm or Compose step is listed as "no outputs (the tool has none)", but it
+   still gets a record for the secrets it used (see "How Helm and Compose steps get a record" below).
 2. **Sensitive output names** and descriptions for each step (section 3); their values are always `********`.
 3. **Secrets each step used**, each with its location and description, also from the durable record (section 2).
    Only secrets a step actually used: a secret declared in a reachable environment but never used is left out. With
@@ -128,8 +132,115 @@ walk would have to know exactly which documents each tool reads, and a document 
 the document without any warning. At deploy time strata already scans each step's real input for `${output:}`
 tokens (`referenced_output_keys()`, [output-declarations.md](../design/output-declarations.md)): the Terraform step
 payload and backend configuration, each Helm module's rendered values, the merged Compose document. A sibling
-`referenced_secret_keys()` scans the same input for `${secret:KEY}` tokens, plus script provisioner `args`. Secrets
-reach every tool only through these tokens, so this is the exact set.
+`referenced_secret_keys()` scans the same input for `${secret:KEY}` tokens, plus script provisioner `args`. Tokens
+are not the only path: `deploy run` also sets `TF_VAR_<key>` for every resolved value, and a script without
+`script.values` gets every value in `STRATA_VALUES`. So a Terraform step also counts the secrets whose key is a
+`variable` its root module declares, and such a script counts as using every secret (release 3 notes in the plan).
+
+**Two records, both one key per step.** Both live in the `output_store` backend:
+
+- The **output record** holds the values a later deploy consumes (ADR-0036). Today it is one key per deployment
+  holding every step. It moves to one key per step, `strata/step-outputs/<deployment>/<step>`
+  ([ADR-0057](../decisions/0057-output-record-one-key-per-step.md), which replaces ADR-0036 D3's "one record per
+  deployment"). A new prefix, because on a Blob container with a hierarchical namespace the old key is a file and
+  nothing can be created under it. Each step writes only its own key with a plain `put()`: there is nothing to merge.
+  `strata validate` still requires a backend with compare-and-swap, for the transition mirror below.
+- The **report record** holds what this work adds, which only `deploy output` and `deploy report` read:
+  `strata/deployment-report/<deployment>/<step>`.
+
+Moving to per-step keys, for the output record:
+
+- **Reads fall back to the old key.** When a step's own key does not exist, `read()` looks the step up in the old
+  per-deployment key `strata/deployment-outputs/<deployment>`. So a deployment keeps working without redeploying
+  every step.
+- **Older strata versions keep reading current values.** While the old key exists, `record()` also writes the step
+  into it (compare-and-swap, as before). A deployment that never had the old key never gets one. When the old record
+  would be too large, the step is removed from it instead, so an older strata finds nothing rather than an outdated
+  value. A failed mirror is a warning. The fallback and the mirror are removed together in a later release, which
+  says so in the changelog.
+- **`clear()`** writes the destroyed marker to the step's key and, as today, removes the step from the old key if it
+  is there.
+- **Staleness is unchanged:** each step key carries its own `collected_at`, and `output_store_max_age` applies per
+  step, exactly as it does per entry today.
+
+The report record:
+
+- **Written once per step, by that step, with a plain `put()`.** Each key has one writer (the step that just
+  deployed), and a lost race only loses document metadata, never a value a deploy consumes. So no compare-and-swap.
+- **It holds:** the step's `collected_at`, the names of its sensitive outputs, output descriptions, and the secrets
+  it used (key, location, description, `declared_in`). Never a value, sensitive or not: values stay in the output
+  record.
+- **A failed write is a warning, not a failed deploy.** The infrastructure is deployed and the output record is
+  written; only the document is missing information, which the next deploy of that step fills in. `deploy report`
+  shows such a step as "report data not recorded".
+- **Read:** one `get()` per step in the deployment's step list. No listing, which the key-value interface does not
+  have.
+- **Destroy:** the key-value interface has no delete either, so destroy overwrites each destroyed step's key with
+  `{"destroyed_at": ...}`. The report lists that step as destroyed.
+
+**Size.** The limit per key depends on the backend (checked 2026-11-09):
+
+| Backend           | Limit per key                                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `azure-appconfig` | 10 KB, including key, label, content type and tags; every tier ([source](https://learn.microsoft.com/en-us/azure/azure-app-configuration/concept-key-value)) |
+| `azure-blob`      | 5,000 MiB in one `Put Blob` ([source](https://learn.microsoft.com/en-us/rest/api/storageservices/put-blob))                                                 |
+
+Each backend declares its limit (`MAX_VALUE_BYTES` on `KeyValueStoreIntegration`, `None` for no practical limit).
+Per step, 10 KB is a lot: 30 outputs with 100-character descriptions and 15 secret rows come to about 8 KB of compact
+JSON. Both records stay small because of these rules:
+
+- Compact JSON: no indentation, short field names (`d` for description, `loc` for location), and fields left out
+  when empty.
+- The report record repeats no values, and sensitive outputs are a list of names.
+- A secret's location is the structured location (store, integration, name), not a rendered sentence; the report
+  renders the sentence.
+- No compression (gzip plus base64): it would roughly halve the size, but the record would no longer be readable in
+  the Azure portal.
+
+Before each write, the record is measured against the backend's limit:
+
+- **Above 8 KB:** a warning naming the deployment, the step, the record and its size. Only on a backend with a
+  limit; on `azure-blob` there is nothing to warn about.
+- **Above the limit, report record:** descriptions are shortened to 200 characters and the step is marked
+  `"truncated": true`, which the report shows. If it is still too large, descriptions are dropped. Names and
+  locations are always kept: those are what the handover needs.
+- **Above the limit, output record:** values cannot be shortened, so the write fails with an error naming the step,
+  its size and the backend's limit, instead of the backend's own error. The deploy reports it like any other failed
+  output write today.
+
+**Estimating the size before a deploy.** `strata build run` is the right place, not `strata validate`:
+
+- `validate` reads only the YAML. It renders no Terraform and fetches no modules, so it has neither output names nor
+  their descriptions, and cannot size either record.
+- `build run` has the rendered step: the `.tf` files (which the SBOM collector already parses with `python-hcl2`),
+  the step's payload with its `${secret:}` tokens, Helm module values, and the merged `docker-compose.yml` it writes
+  for Compose. Locations come from the configuration. So build computes the **report record exactly**, with the same
+  code the deploy uses (only `collected_at` is missing), and gives the same warning above 8 KB and the same notice
+  when descriptions would be shortened.
+- The **output record** cannot be sized before the apply: output values only exist after it, and one output (a
+  kubeconfig, a certificate) can be several KB on its own. Build reports the number of outputs per step; the real
+  check is the one at deploy time.
+
+**How Helm and Compose steps get a record.** Today only the Terraform path reaches `output_store.record()`
+(`deploy_controller.py`, after `collect_step_outputs()`). Container steps take an earlier branch: per namespace,
+`check_namespace()` and `deploy_namespace()`, then `continue`. Their secret tokens are resolved inside the integration,
+so the controller never sees which ones a step used. Container steps only need a report record (they have no
+outputs), and the fix does not change `deploy_namespace()`, which returns `Diagnostics`:
+
+- The container integration base class (`capabilities.py`) gets `referenced_secret_keys(namespace, modules) ->
+  set[str]`. Helm scans `_render_values(module)` for each module, the same input its `${output:}` pre-flight scans
+  (`helm.py`). Compose scans the merged compose document, which its own pre-flight reads from disk (`compose.py`).
+  It is the same input as the existing scans, so it is the same exact set.
+- The controller calls it in the container branch, after every namespace deployed without an error and only outside
+  `--dry-run`, then writes the step's report record with the secrets it used. The output record is not touched. The
+  call goes from controller to integration, which ADR-0003 allows.
+- A failed step records nothing: Helm reports a skipped module as an error diagnostic, so the controller returns
+  before recording, as the Terraform path does today.
+
+**Records written by an older strata.** An older strata writes the output record but never the report record. A
+step whose report record is missing, or older than its output record's `collected_at`, is shown as "report data from
+an earlier deploy" or "report data not recorded", never as "no secrets", so a missing record never looks like an
+empty list.
 
 One exception: a provisioner's `output.template` receives every declared secret (`capabilities.py`), not only
 tokens. The names a template uses come from `_referenced_keys()` (`utils/templater.py`), the helper behind
@@ -269,7 +380,9 @@ the file into the audit sink, so each deploy leaves a dated handover document in
 addition on top of section 1 and should be built after it.
 
 - `strata validate` rejects `spec.documentation` when the workspace has no `output_store`, or when `sink: audit` is
-  set and no git audit sink is configured. Both gaps show up before a deploy, not at the end of one.
+  set and no git audit sink is configured. Both gaps show up before a deploy, not at the end of one. Only a git sink
+  can carry the document: it pushes a dict of files (`_manifest.json`, and `_metrics.json` when admitted,
+  `audit_run.py`), so the document is one more entry. An integration sink sends events, not files, and does not count.
 - Rendering runs after every step has applied. If it fails (a template error at render time, the audit push
   failing), `deploy run` reports a warning and still exits 0: the infrastructure is deployed, and failing the run
   would invite a redeploy that changes nothing. `strata deploy report` can render the document again afterwards.
@@ -321,7 +434,7 @@ only, so this does not expose secrets.
 **Recommendation.** Do not make PowerShell a dependency of strata itself. Strata is a cross-platform Python CLI, and
 `pwsh` is not on every runner.
 
-1. Document the PSDocs pipe above in the how-to (implementation plan step 6). This costs nothing and
+1. Document the PSDocs pipe above in the how-to (implementation plan step 11). This costs nothing and
    gives Azure teams their familiar tool.
 2. Treat PSDocs for Azure in `build run` as an optional later step (Deferred item 1). It only applies to `bicep` (and
    ARM) provisioners. Terraform, Helm and Compose would need their own equivalents (for example `terraform-docs` for
@@ -411,7 +524,7 @@ confirms what was written:
   "command": "deploy report",
   "summary": { "errors": 0, "warnings": 1, "info": 0 },
   "diagnostics": [
-    { "severity": "warning", "code": "secret_in_source",
+    { "severity": "warning", "code": "secret_held_in_source",
       "message": "Secret 'LEGACY_API_TOKEN' is held in source (environments/web-prd.yaml); it cannot be handed over by location. Move it to a vault." }
   ],
   "data": { "deployment": "web-prd", "written_to": "out/web-prd-handover.md", "format": "markdown" }
@@ -529,6 +642,18 @@ Document 'Handover' {
 
 None open.
 
+**Decided:**
+
+- An older strata reading after a newer strata wrote: during the transition, `record()` mirrors the step into the
+  old key when it exists (option a; section 1, ADR-0057).
+- Exit codes for `deploy output` (section 1).
+- The report data is a separate record, one key per step (section 1).
+- The output record also moves to one key per step, with a read fallback to the old key (section 1, ADR-0057).
+- A warning above 8 KB for both records on a backend with a limit. Above the limit, the report record shortens
+  descriptions and the output record fails with a clear error (section 1).
+- The size estimate runs in `build run`, not `validate` (section 1).
+- Key Vault is not a report store. It was only a comparison; the report record uses the `output_store` backend.
+
 ## Deferred
 
 Not part of this work. Revisit only when the trigger named for the item happens.
@@ -552,27 +677,116 @@ Not part of this work. Revisit only when the trigger named for the item happens.
 
 ## Implementation plan
 
-0. Two `strata validate` checks, independent of the rest, can ship first: a warning for a secret that sets `version`
-   (it has no effect yet; the latest version is read), and an error for an `azure-keyvault` secret whose `value` is a
-   URL (a secret name is expected; use a `variable` if the address itself is wanted).
-1. `StoreIntegration.location(key)` on the Key Vault and Infisical resolvers, plus built-in locations for
+Shipped as four releases. Each release updates its own documentation, the agent skill template
+(`src/strata/templates/agent/strata/SKILL.md`, ADR-0046), generated JSON Schemas (ADR-0053) and
+`.github/CHANGELOG.md` `[Unreleased]`; documentation is not left to the end.
+
+All four releases were implemented on 2026-11-09. What changed from the design while building is noted under
+each release.
+
+**Release 1: storage (no new commands). Implemented 2026-11-09.**
+
+0. Two `strata validate` checks: a warning for a secret that sets `version` (it has no effect yet; the latest version
+   is read), and an error for an `azure-keyvault` secret whose `value` is a URL (a secret name is expected; use a
+   `variable` if the address itself is wanted). Independent of everything else.
+1. Output record per step ([ADR-0057](../decisions/0057-output-record-one-key-per-step.md)):
+   - `DeploymentOutputStore` writes `strata/step-outputs/<deployment>/<step>` with a plain `put()`.
+   - `read()` falls back to the old per-deployment key only when the step key does not exist. A step key holding the
+     destroyed marker is "not found" and does **not** fall back: otherwise destroy would bring back the old values.
+   - `clear()` writes the marker to each step key that exists and removes the step from the old key, as before.
+   - `MAX_VALUE_BYTES` on `KeyValueStoreIntegration`: 10,000 for `azure-appconfig`, 25,000 for `azure-keyvault`,
+     `None` for `azure-blob`. The size measured is the key plus the serialised value, because App Configuration
+     counts the key too. A warning above 8,000 bytes and a clear error above the limit; `deploy run` reports both as
+     warnings (code `output_store_record` for the first).
+   - The transition mirror into the old key (section 1).
+   - Tests, with the existing `_FakeKeyValueStore` (`tests/strata/controllers/test_deployment_output_store.py`):
+     write and read per step, fallback to the old key, the marker stopping the fallback, staleness per step, the
+     8 KB warning, the error above the limit, and a deploy that consumes outputs written by the old format.
+
+**Release 2: `strata deploy output`. Implemented 2026-11-09.**
+
+2. Report record, outputs part (section 1): `strata/deployment-report/<deployment>/<step>`, written with a plain
+   `put()` after the output record, never under `--dry-run`. It holds `collected_at`, `sensitive_keys` (names only)
+   and `descriptions` read from the step's root module `.tf` files with `python-hcl2`, for steps whose outputs come
+   from `terraform output`. Size rules: the 8 KB warning, then shorten and drop descriptions. A failed write is a
+   warning. Destroy writes the marker. Reads ignore `output_store_max_age`.
+3. `build run` computes the same report record from the rendered step and gives the same size warning (no secrets
+   yet; release 3 adds them).
+4. `strata deploy output`: all outputs, one step, one `STEP.KEY`, `--format raw`, `--output json`, exit codes as in
+   section 1. Steps come from the deployment's current step list, so a step removed from the configuration is not
+   shown even if the store still has it.
+
+   As built: both records of a deploy carry the same `collected_at`, so a report record from an earlier deploy is
+   recognised (`report: older`) and its sensitive names are not shown, with a warning, rather than shown out of date.
+   A step whose `.tf` files declare no outputs still gets a report record, so "nothing sensitive" is not mistaken for
+   "not recorded". Under `--format raw` the run's report goes to stderr (`command_run(stream=...)`), so stdout carries
+   only the value, as `terraform output -raw` does. Descriptions come from the top-level `*.tf` and `*.tf.json`
+   files; child modules are not read, and a description that is an expression is kept as written.
+
+**Release 3: `strata deploy report`. Implemented 2026-11-09.**
+
+5. `StoreIntegration.location(key)` on the Key Vault and Infisical resolvers, plus built-in locations for
    `environment`, `github` and `constant`. Unit tests check that no credential or token ends up in a location.
-2. `referenced_secret_keys()` next to `referenced_output_keys()` in `utils/value_tokens.py`, called on the same
-   per-step input (Terraform payload and backend configuration, Helm module values, the merged Compose document,
-   script `args`), plus `_referenced_keys()` for an `output.template`. A test checks that every secret a deploy
-   resolves for a step is in that step's set.
-3. `DeploymentOutputStore` records per step: `sensitive_keys` (names only), `descriptions` (read from the step's
-   root module `.tf` files with `python-hcl2`), and the secrets the step used with their location, description and
-   `declared_in`. Every step gets a record, including Helm and Compose steps, which have no outputs. Reading an older
-   record without these fields still works, and a read for a document ignores `output_store_max_age`.
-4. `strata deploy output`: all outputs, one step, one `STEP.KEY`, `--format raw`, `--output json`. Needs only
-   step 3's outputs, sensitive names and descriptions, so it can ship before the secret work in steps 1–2.
-5. `strata deploy report` with `--format table`, and `--output json`.
-6. Built-in Markdown format and `--template` for `deploy report`, with the template checked by `strata validate`.
-7. `spec.documentation` on the deployment, its two `strata validate` checks, and writing the document to the audit
-   sink (a render failure is a warning).
-8. Documentation: `docs/config/deployment.md` and a how-to for the Password Pusher handover workflow, including
-   rendering the JSON envelope with PSDocs.
+6. `referenced_secret_keys()` next to `referenced_output_keys()` in `utils/value_tokens.py`, on the same per-step
+   input (Terraform payload and backend configuration, script `args`), plus `_referenced_keys()` for an
+   `output.template`. For container steps, `referenced_secret_keys(namespace, modules)` on the container integration
+   base class, implemented by Helm (each module's `_render_values()`) and Compose (the merged `docker-compose.yml`).
+   A test checks that every `${secret:}` token substituted into a step's input is in that step's set. (Not "every
+   secret the deploy resolves": some paths, such as git audit sink credentials, resolve every declared key.)
+7. Report record, secrets part: the secrets each step used, with location, description and `declared_in`, for every
+   step type. Container steps are recorded in the container branch of `deploy_controller.py` (section 1). `build
+   run`'s size estimate includes them. A missing or older report record is shown as such, not as "no secrets".
+8. `strata deploy report` with `--format table` and `--output json`. An end-to-end test runs a deploy with a
+   Terraform step and a Helm step against the fake key-value store, then checks the report: outputs, sensitive
+   names, secret locations, and that no secret value appears anywhere in the output.
+
+   As built:
+   - **Terraform receives more than its tokens.** `deploy run` sets `TF_VAR_<key>` for every resolved value
+     (`tf_var_env()`), so tokens alone would miss a secret Terraform reads as a variable. Terraform only reads a
+     `TF_VAR_` for a declared `variable`, so a Terraform step also counts every secret whose key is a `variable` in its
+     root module (`read_declared_variables()`). A script without `script.values` gets every value in
+     `STRATA_VALUES`, so it counts as using every secret (`all_secrets`). A GitOps step counts the tokens in its
+     remote's authentication. The rule is "more, never fewer" (`controllers/step_secrets.py`).
+   - Locations come from `StoreIntegration.location()` on a resolver constructed exactly as `resolve_values()`
+     constructs it (`value_controller.secret_records()`); nothing is contacted. A setting that is not set is `null`
+     in the record and `unknown` in the report, with a warning.
+   - The report record always writes `secrets` (an empty list when none), so a release 2 record, which has no
+     `secrets` field, reads as "secrets not recorded" with a warning, never as "no secrets".
+   - `build run`'s estimate includes secrets for non-container steps, counted from the whole strata payload rather
+     than the step's claimed part, so it can only over-count. Container steps are estimated after the workload
+     pipeline, with the same scan.
+   - The audit entry (`deployed_by`, `commit_sha`) from section 1 item 4 came in release 4 and its follow-up.
+
+**Release 4: documents. Implemented 2026-11-09.**
+
+9. Built-in Markdown format and `--template` for `deploy report`, with the template checked by `strata validate`.
+10. `spec.documentation` on the deployment, its two `strata validate` checks, and writing the document to the git
+    audit sink as one more file (a render failure is a warning).
+11. A how-to for the Password Pusher handover workflow, including rendering the JSON envelope with PSDocs, and
+    `docs/config/deployment.md`.
+
+    As built:
+    - One renderer (`controllers/deployment_document.py`) for `deploy report --format markdown` and
+      `spec.documentation`; the built-in Markdown is itself a template (`templates/report/handover.md.j2`). Templates
+      run in Jinja2's sandbox with `StrictUndefined`, and receive `deploy report --output json`'s data plus `audit`,
+      `generated_at` and `MASK`. The environment and the name check live in `utils/report_template.py`, so
+      `strata validate` can use them without importing the report controllers.
+    - The data shape is the one release 3 shipped (`steps[].outputs[]` rows, `secrets[].where`), not the sketch in
+      section 7, and `secrets[].value` is `********` rather than absent.
+    - The audit entry: at the end of a deploy it is that run's manifest (`execution_id`, `deployed_by`,
+      `completed_at`, `commit_sha`). `deploy run` also keeps it in the output store,
+      `strata/deployment-audit/<deployment>`, after every successful deploy, so `deploy report` shows it without
+      reading the git audit sink. The manifest's `commit_sha` was declared but never filled; it is now
+      (`built_commit_sha()`: the CI commit variable, else `git rev-parse HEAD`), and `audit status`/`audit changes`
+      carry it.
+    - `--template` and `--output-path` imply `--format markdown`; with `--format table` they are a usage error. A
+      template that does not render is exit 2.
+    - The document is `_handover.md` in the audit record's directory, written only for a successful `deploy`, not
+      a destroy or a dry run.
+
+Documentation per release: release 1 `docs/config/workspace.md` (`output_store` layout and limits); release 2 the CLI
+tables in `docs/README.md` and `docs/design/deploy-command.md`; release 3 `deploy report` in the same tables and
+`docs/config/workspace.md` (`output_store` is a prerequisite for both commands); release 4 item 11.
 
 ## Changelog
 
@@ -610,3 +824,43 @@ Not part of this work. Revisit only when the trigger named for the item happens.
 - 2026-11-09: decided Key Vault `value` is only ever a secret name; `strata validate` rejects a URL (implementation
   plan step 0). Fixed the `config/` example: `APPGW_CERT_SECRET_ID` is now a variable, because App Gateway needs the
   secret's address, not its content. No open questions left.
+- 2026-11-09: implementation plan review. Container (Helm, Compose) steps never reached `output_store.record()`;
+  section 1 now records them in the container branch, via a new `referenced_secret_keys()` on the container
+  integrations, without changing `deploy_namespace()`. Step 3 split into 3a (outputs metadata, enough for `deploy
+  output`) and 3b (secrets used). A record written by an older strata shows "secrets not recorded". Section 4 says
+  only a git audit sink can carry the document. Step 8 lists the docs, schema, skill and changelog updates. New open
+  questions: 1 (record size on `azure-appconfig`), 2 (exit codes for `deploy output`).
+- 2026-11-09: decided the exit codes for `deploy output` (section 1). Checked the Azure App Configuration limit:
+  10 KB per key-value on every tier, including key, label, content type and tags. The existing values-only record is
+  already exposed to it, with no size check. Open question 1 now has options a–c, with b plus a size check
+  recommended.
+- 2026-11-09: the report data is a separate record: one key per step, written with a plain `put()` (no
+  compare-and-swap), a failed write is a warning, destroy writes a marker. The output record (ADR-0036) is unchanged.
+  Added the per-backend size limits (App Configuration 10 KB, Key Vault 25 KB, Blob 5,000 MiB) and the rules that
+  keep a step's record small. Open questions now: 1 Key Vault as report store, 2 size check for the existing output
+  record.
+- 2026-11-09: decided: the output record also moves to one key per step (ADR-0057, replacing ADR-0036 D3), with a
+  read fallback to the old per-deployment key. Both records warn above 8 KB on a backend with a limit; above it, the
+  report record shortens descriptions and the output record fails with a clear error. `build run` computes the report
+  record's size exactly; `validate` cannot, and the output record can only be sized at deploy. Key Vault dropped as a
+  report store (it was only a comparison). Implementation plan step 3o added. No open questions left.
+- 2026-11-09: plan review. Regrouped into four releases, each with its own documentation (no documentation step at
+  the end). Fixes: the destroyed marker stops the fallback to the old key; the size measured includes the key; the
+  secret-set test checks substituted tokens, not every resolved secret; ADR-0036 now has a "partly replaced by ADR-0057" line;
+  `build run`'s estimate grows with release 3. New open question 1: an older strata reading the old key after a newer
+  strata wrote per-step keys.
+- 2026-11-09: release 1 implemented. Decided open question 1 (option a: mirror into the old key while it exists).
+  Per-step keys use the prefix `strata/step-outputs/` (a Blob container with a hierarchical namespace cannot hold
+  keys under the old key's file), and are written with a plain `put()`.
+- 2026-11-09: release 2 implemented: the report record (outputs part), `build run`'s size estimate and `strata deploy
+  output`. Notes on what was built are under release 2 in the plan.
+- 2026-11-09: release 3 implemented: secret locations, the secrets each step used (including the `TF_VAR_` path
+  the design had missed), the secrets part of the report record, and `strata deploy report` with an end-to-end test.
+  The audit entry is not in the report yet. Notes under release 3 in the plan.
+- 2026-11-09: release 4 implemented: Markdown and `--template` for `deploy report`, `--output-path`,
+  `spec.documentation` with its `strata validate` checks and the `_handover.md` audit file, and the how-to
+  (`docs/how-to/deployment-handover.md`). Notes under release 4 in the plan.
+- 2026-11-09: follow-up fixes. The audit entry comes from the output store (`strata/deployment-audit/<deployment>`),
+  written after each successful deploy, with the manifest's `commit_sha` now filled; `--with-audit` removed.
+  `*.tf.json` outputs and variables are read. `build run` estimates Helm and Compose report records too.
+  `values get --format raw|env|export` keeps stdout to the values. All four releases ship as one version, 2.6.0.

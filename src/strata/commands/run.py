@@ -29,6 +29,7 @@ import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TextIO
 
 import click
 
@@ -176,6 +177,7 @@ def command_run(
     verbose: bool = False,
     compact: bool = False,
     context: Mapping[str, str] | None = None,
+    stream: TextIO | None = None,
 ) -> Iterator[CommandRun]:
     """Run `name`, reporting and exiting consistently.
 
@@ -192,6 +194,8 @@ def command_run(
             stdout ahead of it (`--follow ndjson`). No effect under
             `console` or plain `json`.
         context: Facts for the header known before the command runs.
+        stream: Where the report goes; stdout when omitted. A command whose stdout must carry only its result
+            (`deploy output --format raw`) passes `sys.stderr`.
 
     Yields:
         The run, for describing, stepping and reporting.
@@ -205,7 +209,7 @@ def command_run(
     run_id = uuid.uuid4().hex
     bind_run(run_id)
 
-    run = CommandRun(make_reporter(name, output, quiet=quiet, compact=compact), run_id, output)
+    run = CommandRun(make_reporter(name, output, quiet=quiet, compact=compact, stream=stream), run_id, output)
     if context:
         run.describe(**context)
 

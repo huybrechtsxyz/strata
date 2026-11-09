@@ -24,7 +24,7 @@ import os
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -37,6 +37,7 @@ from strata.controllers.deployment_output_store import (
     OutputRecordNotFoundError,
     OutputRecordStaleError,
 )
+from strata.controllers.deployment_report_store import DeploymentReportStore, SecretUse
 from strata.controllers.image_tag_policy import check_image_tag_policy
 from strata.controllers.integration_readiness import IntegrationReadiness, assess_integration, integration_preflight
 from strata.controllers.integration_resolution import (
@@ -49,12 +50,14 @@ from strata.controllers.security_gate_controller import evaluate_security_gates
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import SourceSyncError, resolved_asset_info
+from strata.controllers.step_secrets import secret_uses, step_secret_keys
 from strata.controllers.value_controller import (
     build_value_references,
     reachable_environments,
     resolve_deployment_workspace,
     resolve_tenant,
     resolve_values,
+    secret_records,
 )
 from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
@@ -95,6 +98,7 @@ from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
 from strata.utils.layout import helm_cache_dir
+from strata.utils.terraform_outputs import read_declared_outputs
 from strata.utils.transport import CommandResult
 from strata.utils.value_tokens import (
     deployment_token_values,
@@ -306,6 +310,47 @@ def collect_step_outputs(
     return values, sensitive_keys
 
 
+def _record_report(
+    report_store: DeploymentReportStore,
+    step_name: str,
+    path: Path,
+    values: dict[str, str],
+    sensitive_keys: set[str],
+    collected_at: datetime,
+    diagnostics: Diagnostics,
+    secrets: list[SecretUse],
+    all_secrets: bool,
+) -> None:
+    """Write `step_name`'s report record: its sensitive output names, the descriptions its root module's
+    `output` blocks declare (for the outputs it actually returned), and the secrets it used, by location
+    (docs/work/deployment-documentation.md).
+
+    A failed write is a warning, never a failed deploy: the step has deployed and its output record is written;
+    only document metadata is missing, which the next deploy of the step fills in.
+    """
+    declared = read_declared_outputs(path)
+    descriptions = {
+        name: output.description for name, output in declared.items() if output.description and name in values
+    }
+    try:
+        for warning in report_store.record(
+            step_name,
+            sensitive_keys=sensitive_keys,
+            descriptions=descriptions,
+            collected_at=collected_at,
+            secrets=secrets,
+            all_secrets=all_secrets,
+        ):
+            diagnostics.warning(warning, location=step_name, code="report_store_record")
+    except (SystemError, IntegrationError) as exc:
+        diagnostics.warning(
+            f"Step '{step_name}': could not record its report data (sensitive output names, descriptions, secret "
+            f"locations) — {exc}",
+            location=step_name,
+            code="report_store_record",
+        )
+
+
 def _target_context(spec: DeploymentSpecModel, integration: InfraIntegration) -> str | None:
     """The context the deployment pins `integration` to (`kube_context`, `docker_context`), or `None`."""
     field = integration.TARGET_CONTEXT_FIELD
@@ -384,7 +429,7 @@ def _merge_durable_outputs(
             durable_values = output_store.read(upstream_step)
         except OutputRecordNotFoundError:
             continue
-        except (OutputRecordStaleError, IntegrationError) as exc:
+        except (OutputRecordStaleError, IntegrationError, SystemError) as exc:
             diagnostics.error(
                 f"Step '{step_name}': durable output for upstream step '{upstream_step}' is unusable — {exc}",
                 location=step_name,
@@ -494,7 +539,7 @@ def _destroy_preflight(
                     unusable[upstream_name] = "none is recorded"
                 except OutputRecordStaleError as exc:
                     unusable[upstream_name] = f"{exc} (--output-max-age accepts an older record)"
-                except IntegrationError as exc:
+                except (IntegrationError, SystemError) as exc:
                     unusable[upstream_name] = f"the output store could not be read - {exc}"
         return None, unusable[upstream_name]
 
@@ -956,6 +1001,9 @@ def deploy_run(
         if output_store_backend
         else None
     )
+    # The report record (docs/work/deployment-documentation.md): what `deploy output` and `deploy report` read,
+    # in the same backend, under its own keys.
+    report_store = DeploymentReportStore(output_store_backend, deployment_name) if output_store_backend else None
 
     diagnostics = Diagnostics()
 
@@ -976,6 +1024,8 @@ def deploy_run(
     variables, secrets, features = merge_environment_models(environments)
     all_keys = sorted({**variables, **secrets, **features})
     resolved = resolve_values(context, deployment_name, all_keys, version_pin=pin)
+    # What the report record keeps per secret (store, location, description, declaring file); never a value.
+    secret_info = secret_records(context, environments, secrets) if report_store is not None else {}
     diagnostics.extend(resolved.diagnostics)
     if not resolved.diagnostics.ok:
         return diagnostics
@@ -1462,6 +1512,33 @@ def deploy_run(
                 )
             if not diagnostics.ok:
                 return diagnostics
+            if report_store is not None and not dry_run:
+                # A container step has no outputs, only a report record: the secrets its modules used.
+                container_keys: set[str] = set()
+                container_all = False
+                for namespace, modules in container_targets:
+                    found = integration.referenced_secret_keys(namespace, modules)
+                    if found is None:
+                        container_all = True
+                    else:
+                        container_keys |= found
+                container_used = set(secrets) if container_all else container_keys & set(secrets)
+                try:
+                    for warning in report_store.record(
+                        step.name,
+                        sensitive_keys=(),
+                        descriptions={},
+                        collected_at=datetime.now(timezone.utc),
+                        secrets=secret_uses(container_used, secret_info),
+                        all_secrets=container_all,
+                    ):
+                        diagnostics.warning(warning, location=step.name, code="report_store_record")
+                except (SystemError, IntegrationError) as exc:
+                    diagnostics.warning(
+                        f"Step '{step.name}': could not record its report data (secret locations) — {exc}",
+                        location=step.name,
+                        code="report_store_record",
+                    )
             _step(f"deployed step '{step.name}' via {integration_type}")
             continue
 
@@ -1756,6 +1833,7 @@ def deploy_run(
             for key, value in step_outputs[step.name].items()
             if key in step_sensitive_outputs[step.name] and len(value) >= _MIN_REDACT_LENGTH
         )
+        collected_at = datetime.now(timezone.utc)
         if output_store is not None:
             # Per step, immediately after collection — not batched to the
             # end of the run (docs/work/cross-run-step-output-delivery.md)
@@ -1767,12 +1845,36 @@ def deploy_run(
             # later invocation's `${output:}` reference unresolved, same
             # as losing the in-memory collection would.
             try:
-                output_store.record(step.name, step_outputs[step.name], step_sensitive_outputs[step.name])
+                for warning in output_store.record(
+                    step.name, step_outputs[step.name], step_sensitive_outputs[step.name], collected_at=collected_at
+                ):
+                    diagnostics.warning(warning, location=step.name, code="output_store_record")
             except (SystemError, IntegrationError) as exc:
                 diagnostics.warning(
                     f"Step '{step.name}': could not durably record output for later invocations — {exc}",
                     location=step.name,
                 )
+        if report_store is not None:
+            used, all_secrets = step_secret_keys(
+                provisioner=provisioner,
+                integration=integration,
+                path=path,
+                declared=set(secrets),
+                root=context.root,
+                payload=step_payload,
+                auth=auth,
+            )
+            _record_report(
+                report_store,
+                step.name,
+                path,
+                step_outputs[step.name],
+                step_sensitive_outputs[step.name],
+                collected_at,
+                diagnostics,
+                secret_uses(used, secret_info),
+                all_secrets,
+            )
 
         _step(f"deployed step '{step.name}' via {integration_type}")
 
@@ -1787,5 +1889,14 @@ def deploy_run(
                 "later 'deploy run' could read them.",
                 code="output_store_clear_failed",
             )
+        if report_store is not None:
+            try:
+                report_store.clear(destroyed)
+            except (SystemError, IntegrationError) as exc:
+                diagnostics.warning(
+                    f"Could not mark the destroyed steps' report data as destroyed - {exc}. 'deploy output' may "
+                    "still show their sensitive output names.",
+                    code="report_store_clear_failed",
+                )
 
     return diagnostics

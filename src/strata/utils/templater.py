@@ -94,6 +94,40 @@ def _referenced_keys(ast: nodes.Template) -> dict[str, set[str]]:
     return result
 
 
+def template_secret_keys(source: str) -> set[str] | None:
+    """The `secrets` keys `source` (an `output.template`) reads, or `None` when it reads `secrets` in a way that
+    cannot be checked statically (`secrets[name]`, `secrets.items()`, `secrets` passed on whole): such a template
+    counts as using every secret (docs/work/deployment-documentation.md, section 1).
+
+    A template that does not parse also returns `None`: build already rejects it, so this only matters for a
+    deploy that runs without a build check, and "every secret" is the safe answer.
+    """
+    try:
+        ast = _ENV.parse(source)
+    except TemplateSyntaxError:
+        return None
+    keys: set[str] = set()
+    covered: set[int] = set()
+    for node in ast.find_all((nodes.Getattr, nodes.Getitem)):
+        if not isinstance(node, (nodes.Getattr, nodes.Getitem)):
+            continue
+        if not isinstance(node.node, nodes.Name) or node.node.name != "secrets":
+            continue
+        if isinstance(node, nodes.Getattr):
+            if node.attr in {"items", "keys", "values", "get"}:
+                return None
+            keys.add(node.attr)
+        elif isinstance(node.arg, nodes.Const) and isinstance(node.arg.value, str):
+            keys.add(node.arg.value)
+        else:
+            return None
+        covered.add(id(node.node))
+    for name in ast.find_all(nodes.Name):
+        if name.name == "secrets" and id(name) not in covered:
+            return None
+    return keys
+
+
 def render_template(source: str, context: dict[str, Any]) -> str:
     """Render `source` (a Jinja2 template) with `context` — the deploy-time
     counterpart to `validate_template_references()`'s build-time,

@@ -862,3 +862,23 @@ def test_real_docker_resolves_contexts_the_way_the_pin_relies_on(tmp_path: Path)
     assert docker("context", "show", DOCKER_CONTEXT="strata-probe").stdout.strip() == "strata-probe"
     shown = docker("context", "show", DOCKER_CONTEXT="strata-probe", DOCKER_HOST="tcp://127.0.0.1:1")
     assert shown.stdout.strip() == "default"
+
+
+def test_referenced_secret_keys_scans_the_merged_compose_file(tmp_path: Path):
+    """docs/work/deployment-documentation.md: the merged docker-compose.yml `deploy_namespace()` resolves."""
+    namespace_dir = tmp_path / "hearth"
+    (namespace_dir / "caddy").mkdir(parents=True)
+    (namespace_dir / "docker-compose.yml").write_text(
+        "services:\n  caddy:\n    environment:\n      TOKEN: ${secret:CADDY_TOKEN}\n      TZ: ${var:TZ}\n",
+        encoding="utf-8",
+    )
+    caddy = _module("caddy", services=[ModuleServiceModel(name="caddy", image="caddy:2-alpine")])
+    modules = [_resolved("caddy", caddy, namespace_dir / "caddy")]
+
+    assert ComposeIntegration().referenced_secret_keys(_namespace("hearth"), modules) == {"CADDY_TOKEN"}
+
+
+def test_referenced_secret_keys_without_the_merged_file_cannot_tell(tmp_path: Path):
+    caddy = _module("caddy", services=[ModuleServiceModel(name="caddy", image="caddy:2-alpine")])
+    modules = [_resolved("caddy", caddy, tmp_path / "hearth" / "caddy")]
+    assert ComposeIntegration().referenced_secret_keys(_namespace("hearth"), modules) is None

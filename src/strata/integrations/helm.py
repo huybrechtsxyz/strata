@@ -61,6 +61,7 @@ from strata.utils.transport import CommandResult
 from strata.utils.value_tokens import (
     escape_path_segment,
     referenced_output_keys,
+    referenced_secret_keys,
     resolve_value_tokens_tracking_secrets,
 )
 from strata.utils.version_constraints import parse_version_constraint
@@ -383,6 +384,14 @@ class HelmIntegration(InfraIntegration):
                     location=item.reference.name,
                 )
         return diagnostics
+
+    def referenced_secret_keys(self, namespace: NamespaceModel, modules: list[ResolvedModule]) -> set[str] | None:
+        """Every `${secret:KEY}` in each module's rendered values, the input `deploy_namespace()` resolves."""
+        del namespace
+        keys: set[str] = set()
+        for item in modules:
+            keys |= referenced_secret_keys(_render_values(item.module))
+        return keys
 
     def check_namespace(
         self,

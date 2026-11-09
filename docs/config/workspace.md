@@ -232,6 +232,41 @@ provisioners:
 A worked example, with the script, is in [how-to/script-provisioner.md](../how-to/script-provisioner.md).
 The design is in [script-provisioner.md](../design/script-provisioner.md).
 
+## Output store
+
+`spec.output_store` (a backend type, such as `azure-appconfig` or `azure-blob`) or `spec.output_store_integration`
+(an Integration document) keeps each step's outputs after `deploy run`, so a later run can resolve
+`${output:STEP.KEY}` for a step it does not run. `spec.output_store_max_age` (seconds) rejects a record older than
+that; `deploy run --output-max-age` overrides it for one run. The backend must support compare-and-swap.
+
+- Each step has its own key, `strata/step-outputs/<deployment>/<step>`, holding when it was collected and its
+  non-sensitive values. A sensitive output is never stored. Destroy marks the step's key as destroyed.
+- A backend can limit the size of one key. `azure-appconfig` allows 10 KB, counting the key itself; `azure-blob` has
+  no practical limit. Above 8,000 bytes, `deploy run` warns (`output_store_record`); above the backend's limit, the
+  step's outputs are not recorded and `deploy run` warns with the step, its size and the limit. A step's deploy
+  never fails over this. To fix it, make the largest outputs smaller, mark them sensitive, or use `azure-blob`.
+- Next to it, `strata/deployment-report/<deployment>/<step>` holds what only `strata deploy output` and `strata deploy
+  report` read: the names of the step's sensitive outputs, the `description` of each output from the root module's
+  `output` blocks, and the secrets the step used, each with its store, location, `description` and the environment
+  file that declares it. Never a value. Helm and Compose steps get one too (secrets only: they have no outputs).
+- `strata/deployment-audit/<deployment>` holds the last successful deploy's audit summary (who, when, the commit,
+  the audit record's id), which `strata deploy report` shows at the top. Above the backend's limit, descriptions are shortened to 200 characters, then left out
+  (`report_store_record` warning); names are always kept. `strata build run` sizes this record from the rendered
+  `.tf` files and warns early (`report_record_size`). A failed write is a warning, never a failed deploy.
+- `strata deploy report DEPLOYMENT` shows the handover document: outputs, every secret a step used by location
+  (`********` for the value, always), and the images. `output_store` is a prerequisite for it, as for `deploy output`.
+  A location comes from the resolver's own settings where the deploy ran (`AZURE_KEYVAULT_URL`, `INFISICAL_*`), so
+  it says where the deploy actually read the secret.
+- `strata deploy output DEPLOYMENT [STEP | STEP.KEY]` shows the recorded outputs, like `terraform output`; it needs
+  `output_store` and access to it, but no Terraform state. A sensitive output shows as `<sensitive>`. A record older
+  than `output_store_max_age` is shown with a warning, not refused.
+- Records written by strata 2.5 and earlier sit under one key per deployment, `strata/deployment-outputs/<deployment>`.
+  They are still read for a step that has no key of its own, and while that key exists each deploy updates it too,
+  so an older strata version reading it never gets an outdated value. A later release stops both.
+
+The design is in [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md) and
+[ADR-0057](../decisions/0057-output-record-one-key-per-step.md).
+
 ## Image tag policy
 
 `spec.image_tag_policy` is an opt-in guard rail over the images `strata deploy images` lists: the artifacts a

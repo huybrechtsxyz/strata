@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for `DeploymentOutputStore` (docs/work/cross-run-step-output-delivery.md's
-Implementation Plan steps 2-3)."""
+Implementation Plan steps 2-3, and ADR-0057: one key per step)."""
 
 import json
 from datetime import datetime, timedelta, timezone
@@ -9,14 +9,23 @@ import pytest
 
 from strata.controllers.deployment_output_store import (
     _MAX_CAS_RETRIES,
+    SIZE_WARNING_BYTES,
     DeploymentOutputStore,
     OutputRecordNotFoundError,
     OutputRecordStaleError,
+    OutputRecordTooLargeError,
 )
 from strata.integrations.capabilities import NEW_KEY_VERSION, KeyValueStoreIntegration
-from strata.integrations.errors import KeyValueConflictError
+from strata.integrations.errors import IntegrationError, KeyValueConflictError
 from strata.integrations.resolved_context import KeyValueEntry
 from strata.utils.errors import SystemError
+
+_DEPLOYMENT = "prd-deployment"
+_LEGACY_KEY = f"strata/deployment-outputs/{_DEPLOYMENT}"
+
+
+def _step_key(step: str, deployment: str = _DEPLOYMENT) -> str:
+    return f"strata/step-outputs/{deployment}/{step}"
 
 
 class _FakeKeyValueStore(KeyValueStoreIntegration):
@@ -31,6 +40,7 @@ class _FakeKeyValueStore(KeyValueStoreIntegration):
         self._data: dict[str, tuple[bytes, str]] = {}
         self._version_counter = 0
         self.put_call_count = 0
+        self.put_keys: list[str] = []
 
     def get(self, key: str) -> KeyValueEntry | None:
         if key not in self._data:
@@ -40,6 +50,7 @@ class _FakeKeyValueStore(KeyValueStoreIntegration):
 
     def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
         self.put_call_count += 1
+        self.put_keys.append(key)
         existing = self._data.get(key)
         if if_version == NEW_KEY_VERSION:
             if existing is not None:
@@ -54,163 +65,29 @@ class _FakeKeyValueStore(KeyValueStoreIntegration):
         return new_version
 
 
+class _LimitedStore(_FakeKeyValueStore):
+    """A backend with App Configuration's per-key limit."""
+
+    MAX_VALUE_BYTES = 10_000
+
+
 class _AlwaysConflictingStore(_FakeKeyValueStore):
-    """Every put() call raises KeyValueConflictError, unconditionally —
-    for the retry-exhaustion test."""
+    """Every conditional put() raises KeyValueConflictError; an unconditional one succeeds."""
 
     def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
+        if if_version is None:
+            return super().put(key, value)
         self.put_call_count += 1
         raise KeyValueConflictError("always busy")
 
 
-class _ConflictOnceStore(_FakeKeyValueStore):
-    """The first put() call raises KeyValueConflictError, every call after
-    that behaves normally — simulates exactly one concurrent writer
-    winning the race first."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._first_call_done = False
+class _LegacyWriteFailsStore(_FakeKeyValueStore):
+    """Writes to the old per-deployment key fail as if the backend were unreachable."""
 
     def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
-        if not self._first_call_done:
-            self._first_call_done = True
-            self.put_call_count += 1
-            raise KeyValueConflictError("lost the race this time")
+        if key == _LEGACY_KEY:
+            raise IntegrationError("unreachable")
         return super().put(key, value, if_version=if_version)
-
-
-def test_record_key_is_namespaced_by_deployment_name():
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-
-    assert "strata/deployment-outputs/prd-deployment" in backend._data
-
-
-def test_record_then_read_round_trips_the_values():
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-
-    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
-
-
-def test_record_filters_sensitive_keys_entirely():
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-
-    store.record("step1", {"vm_ip": "10.0.0.5", "admin_password": "hunter2"}, sensitive_keys={"admin_password"})
-
-    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
-
-
-def test_record_merges_with_an_existing_different_step():
-    """One shared record per deployment, not one per step — recording
-    step2 must not erase step1's own already-recorded entry."""
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-    store.record("step2", {"db_host": "db.internal"}, sensitive_keys=set())
-
-    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
-    assert store.read("step2") == {"db_host": "db.internal"}
-
-
-def test_record_overwrites_the_same_step_on_rerun():
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-    store.record("step1", {"vm_ip": "10.0.0.6"}, sensitive_keys=set())
-
-    assert store.read("step1") == {"vm_ip": "10.0.0.6"}
-
-
-def test_record_retries_once_on_a_single_conflict_and_still_succeeds():
-    backend = _ConflictOnceStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-
-    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
-    assert backend.put_call_count == 2
-
-
-def test_record_raises_system_error_after_max_retries_exhausted():
-    backend = _AlwaysConflictingStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-
-    with pytest.raises(SystemError, match="conflicting writes"):
-        store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-
-
-def test_read_raises_not_found_when_no_record_exists_at_all():
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-
-    with pytest.raises(OutputRecordNotFoundError, match="No durable output record exists"):
-        store.read("step1")
-
-
-def test_read_raises_not_found_when_step_not_in_an_existing_record():
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-
-    with pytest.raises(OutputRecordNotFoundError, match="No durable output recorded for step 'step2'"):
-        store.read("step2")
-
-
-def _backdate_step_record(backend: _FakeKeyValueStore, deployment_name: str, step: str, collected_at: datetime) -> None:
-    """Directly rewrite a step's collected_at, bypassing record()'s own
-    always-now() timestamp — the only way to construct a genuinely stale
-    fixture for the staleness tests."""
-    key = f"strata/deployment-outputs/{deployment_name}"
-    value, version = backend._data[key]
-    record = json.loads(value)
-    record[step]["collected_at"] = collected_at.isoformat()
-    backend._data[key] = (json.dumps(record).encode("utf-8"), version)
-
-
-def test_read_raises_stale_when_past_the_trust_window():
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment", max_age=timedelta(hours=1))
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-    _backdate_step_record(backend, "prd-deployment", "step1", datetime.now(timezone.utc) - timedelta(hours=2))
-
-    with pytest.raises(OutputRecordStaleError, match="older than the"):
-        store.read("step1")
-
-
-def test_read_succeeds_when_within_the_trust_window():
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment", max_age=timedelta(hours=1))
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-    _backdate_step_record(backend, "prd-deployment", "step1", datetime.now(timezone.utc) - timedelta(minutes=5))
-
-    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
-
-
-def test_read_ignores_staleness_when_max_age_is_none():
-    """max_age unset (None) means no staleness check at all — not even
-    for a record collected far in the past."""
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-    _backdate_step_record(backend, "prd-deployment", "step1", datetime.now(timezone.utc) - timedelta(days=365))
-
-    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
-
-
-# ---------------------------------------------------------------------------
-# clear() (docs/design/deploy-destroy.md) — forget a destroyed step's outputs
-# ---------------------------------------------------------------------------
-
-_RECORD_KEY = "strata/deployment-outputs/prd-deployment"
 
 
 class _ConflictOnNextPutStore(_FakeKeyValueStore):
@@ -221,16 +98,20 @@ class _ConflictOnNextPutStore(_FakeKeyValueStore):
         super().__init__()
         self._armed = False
         self.rival: dict | None = None
+        self.arm_for_key: str | None = None
 
     def arm(self) -> None:
         self._armed = True
 
     def put(self, key: str, value: bytes, *, if_version: str | None = None) -> str:
+        if self.arm_for_key == key:
+            self.arm_for_key = None
+            self._armed = True
         if self._armed:
             self._armed = False
             self.put_call_count += 1
             if self.rival is not None:
-                stored, version = self._data[key]
+                stored, _version = self._data[key]
                 record = json.loads(stored)
                 record.update(self.rival)
                 self._version_counter += 1
@@ -239,72 +120,394 @@ class _ConflictOnNextPutStore(_FakeKeyValueStore):
         return super().put(key, value, if_version=if_version)
 
 
-def test_clear_removes_only_the_named_steps():
+def _seed_legacy(backend: _FakeKeyValueStore, steps: dict[str, dict[str, str]], *, collected_at: str | None = None):
+    """Write the old per-deployment record, as a strata version before ADR-0057 did."""
+    stamp = collected_at or datetime.now(timezone.utc).isoformat()
+    record = {step: {"collected_at": stamp, "values": values} for step, values in steps.items()}
+    backend._data[_LEGACY_KEY] = (json.dumps(record).encode("utf-8"), "legacy-1")
+
+
+def _legacy(backend: _FakeKeyValueStore) -> dict:
+    return json.loads(backend._data[_LEGACY_KEY][0])
+
+
+def _backdate(backend: _FakeKeyValueStore, step: str, collected_at: datetime) -> None:
+    """Rewrite a step key's collected_at, bypassing record()'s always-now() timestamp."""
+    value, version = backend._data[_step_key(step)]
+    record = json.loads(value)
+    record["collected_at"] = collected_at.isoformat()
+    backend._data[_step_key(step)] = (json.dumps(record).encode("utf-8"), version)
+
+
+# ---------------------------------------------------------------------------
+# record() and read() — one key per step
+# ---------------------------------------------------------------------------
+
+
+def test_each_step_gets_its_own_key():
     backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+    store.record("step2", {"db_host": "db.internal"}, sensitive_keys=set())
+
+    assert set(backend._data) == {_step_key("step1"), _step_key("step2")}
+
+
+def test_a_fresh_deployment_never_gets_the_old_key():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+
+    assert _LEGACY_KEY not in backend._data
+
+
+def test_record_then_read_round_trips_the_values():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    warnings = store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+
+    assert warnings == []
+    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
+
+
+def test_record_writes_compact_json():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+
+    stored = backend._data[_step_key("step1")][0]
+    assert b": " not in stored and b", " not in stored
+
+
+def test_record_filters_sensitive_keys_entirely():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.record("step1", {"vm_ip": "10.0.0.5", "admin_password": "hunter2"}, sensitive_keys={"admin_password"})
+
+    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
+    assert b"hunter2" not in backend._data[_step_key("step1")][0]
+
+
+def test_recording_one_step_leaves_another_step_untouched():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+    before = backend._data[_step_key("step1")]
+
+    store.record("step2", {"db_host": "db.internal"}, sensitive_keys=set())
+
+    assert backend._data[_step_key("step1")] == before
+    assert store.read("step2") == {"db_host": "db.internal"}
+
+
+def test_record_overwrites_the_same_step_on_rerun():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+    store.record("step1", {"vm_ip": "10.0.0.6"}, sensitive_keys=set())
+
+    assert store.read("step1") == {"vm_ip": "10.0.0.6"}
+
+
+def test_two_deployments_never_share_a_key():
+    backend = _FakeKeyValueStore()
+    mine = DeploymentOutputStore(backend, _DEPLOYMENT)
+    other = DeploymentOutputStore(backend, "dev-deployment")
+
+    mine.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+    other.record("step1", {"vm_ip": "10.9.9.9"}, sensitive_keys=set())
+
+    assert mine.read("step1") == {"vm_ip": "10.0.0.5"}
+    assert other.read("step1") == {"vm_ip": "10.9.9.9"}
+
+
+def test_read_raises_not_found_when_nothing_is_recorded():
+    store = DeploymentOutputStore(_FakeKeyValueStore(), _DEPLOYMENT)
+
+    with pytest.raises(OutputRecordNotFoundError, match="No durable output recorded for step 'step1'"):
+        store.read("step1")
+
+
+def test_read_raises_not_found_for_a_step_that_never_ran():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+
+    with pytest.raises(OutputRecordNotFoundError, match="No durable output recorded for step 'step2'"):
+        store.read("step2")
+
+
+@pytest.mark.parametrize("stored", [b"not json", b"[1, 2]"])
+def test_read_raises_a_clear_error_for_a_record_that_is_not_a_json_object(stored: bytes):
+    backend = _FakeKeyValueStore()
+    backend._data[_step_key("step1")] = (stored, "1")
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    with pytest.raises(SystemError, match="not a valid JSON object"):
+        store.read("step1")
+
+
+def test_read_raises_stale_when_past_the_trust_window():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT, max_age=timedelta(hours=1))
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+    _backdate(backend, "step1", datetime.now(timezone.utc) - timedelta(hours=2))
+
+    with pytest.raises(OutputRecordStaleError, match="older than the"):
+        store.read("step1")
+
+
+def test_read_succeeds_when_within_the_trust_window():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT, max_age=timedelta(hours=1))
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+    _backdate(backend, "step1", datetime.now(timezone.utc) - timedelta(minutes=5))
+
+    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
+
+
+def test_read_ignores_staleness_when_max_age_is_none():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+    _backdate(backend, "step1", datetime.now(timezone.utc) - timedelta(days=365))
+
+    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
+
+
+# ---------------------------------------------------------------------------
+# Reading the old per-deployment key (ADR-0057's transition)
+# ---------------------------------------------------------------------------
+
+
+def test_read_falls_back_to_the_old_key_when_the_step_has_no_key_of_its_own():
+    backend = _FakeKeyValueStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
+
+
+def test_the_step_key_wins_over_the_old_key():
+    backend = _FakeKeyValueStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    backend._data[_step_key("step1")] = (
+        json.dumps({"collected_at": datetime.now(timezone.utc).isoformat(), "values": {"vm_ip": "10.0.0.6"}}).encode(),
+        "1",
+    )
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    assert store.read("step1") == {"vm_ip": "10.0.0.6"}
+
+
+def test_staleness_applies_to_a_record_read_from_the_old_key():
+    backend = _FakeKeyValueStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}}, collected_at="2020-01-01T00:00:00+00:00")
+    store = DeploymentOutputStore(backend, _DEPLOYMENT, max_age=timedelta(hours=1))
+
+    with pytest.raises(OutputRecordStaleError):
+        store.read("step1")
+
+
+def test_read_raises_not_found_when_the_old_key_does_not_have_the_step():
+    backend = _FakeKeyValueStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    with pytest.raises(OutputRecordNotFoundError, match="step 'step2'"):
+        store.read("step2")
+
+
+# ---------------------------------------------------------------------------
+# Mirroring into the old key while older strata versions may still read it
+# ---------------------------------------------------------------------------
+
+
+def test_record_mirrors_into_an_existing_old_key():
+    backend = _FakeKeyValueStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}, "step2": {"k": "v"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    warnings = store.record("step1", {"vm_ip": "10.0.0.6"}, sensitive_keys={"secret"})
+
+    assert warnings == []
+    assert _legacy(backend)["step1"]["values"] == {"vm_ip": "10.0.0.6"}
+    assert _legacy(backend)["step2"]["values"] == {"k": "v"}
+    assert store.read("step1") == {"vm_ip": "10.0.0.6"}
+
+
+def test_the_mirror_never_carries_a_sensitive_value():
+    backend = _FakeKeyValueStore()
+    _seed_legacy(backend, {})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.record("step1", {"vm_ip": "10.0.0.5", "admin_password": "hunter2"}, sensitive_keys={"admin_password"})
+
+    assert b"hunter2" not in backend._data[_LEGACY_KEY][0]
+
+
+def test_a_mirror_that_would_be_too_large_removes_the_step_from_the_old_key_instead():
+    """An older strata then finds nothing for the step, which fails loudly, instead of an outdated value."""
+    backend = _LimitedStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}, "step2": {"big": "x" * 6_000}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.record("step1", {"blob": "y" * 5_000}, sensitive_keys=set())
+
+    assert set(_legacy(backend)) == {"step2"}
+    assert store.read("step1") == {"blob": "y" * 5_000}
+
+
+def test_a_failed_mirror_is_a_warning_and_the_step_key_is_still_written():
+    backend = _LegacyWriteFailsStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    warnings = store.record("step1", {"vm_ip": "10.0.0.6"}, sensitive_keys=set())
+
+    assert len(warnings) == 1 and "older strata version may read an outdated value" in warnings[0]
+    assert store.read("step1") == {"vm_ip": "10.0.0.6"}
+
+
+def test_a_mirror_that_keeps_conflicting_is_a_warning():
+    backend = _AlwaysConflictingStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    warnings = store.record("step1", {"vm_ip": "10.0.0.6"}, sensitive_keys=set())
+
+    assert len(warnings) == 1 and "conflicting writes" in warnings[0]
+    assert store.read("step1") == {"vm_ip": "10.0.0.6"}
+
+
+def test_a_mirror_into_a_corrupt_old_key_is_a_warning():
+    backend = _FakeKeyValueStore()
+    backend._data[_LEGACY_KEY] = (b"not json", "1")
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    warnings = store.record("step1", {"vm_ip": "10.0.0.6"}, sensitive_keys=set())
+
+    assert len(warnings) == 1 and "not a valid JSON object" in warnings[0]
+
+
+def test_a_mirror_retries_once_on_a_conflict_and_keeps_the_rival_update():
+    backend = _ConflictOnNextPutStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    backend.rival = {"step3": {"collected_at": "2026-11-04T00:00:00+00:00", "values": {"k": "v"}}}
+    backend.arm_for_key = _LEGACY_KEY
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    warnings = store.record("step1", {"vm_ip": "10.0.0.6"}, sensitive_keys=set())
+
+    assert warnings == []
+    assert set(_legacy(backend)) == {"step1", "step3"}
+    assert _legacy(backend)["step1"]["values"] == {"vm_ip": "10.0.0.6"}
+
+
+# ---------------------------------------------------------------------------
+# Size (ADR-0057): a warning above 8 KB, an error above the backend's limit
+# ---------------------------------------------------------------------------
+
+
+def test_a_record_above_8_kb_on_a_limited_backend_is_written_with_a_warning():
+    backend = _LimitedStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    warnings = store.record("step1", {"kubeconfig": "x" * 8_500}, sensitive_keys=set())
+
+    assert len(warnings) == 1
+    assert "step1" in warnings[0] and "10000 bytes" in warnings[0]
+    assert store.read("step1") == {"kubeconfig": "x" * 8_500}
+
+
+def test_a_record_above_the_limit_raises_and_writes_nothing():
+    backend = _LimitedStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    with pytest.raises(OutputRecordTooLargeError, match="Step 'step1'.*more than the 10000 bytes"):
+        store.record("step1", {"kubeconfig": "x" * 10_500}, sensitive_keys=set())
+
+    assert backend._data == {}
+
+
+def test_the_size_counts_the_key_too():
+    """App Configuration counts the key towards its limit: a value that fits alone can still be too large."""
+    backend = _LimitedStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+    overhead = len(_step_key("step1")) + len(b'{"collected_at":"2026-11-09T00:00:00.000000+00:00","values":{"k":""}}')
+    value = "x" * (10_000 - overhead + 5)
+
+    with pytest.raises(OutputRecordTooLargeError):
+        store.record("step1", {"k": value}, sensitive_keys=set())
+
+
+def test_sensitive_values_do_not_count_towards_the_size():
+    backend = _LimitedStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    warnings = store.record("step1", {"vm_ip": "10.0.0.5", "cert": "x" * 20_000}, sensitive_keys={"cert"})
+
+    assert warnings == []
+
+
+def test_a_backend_without_a_limit_never_warns_about_size():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    warnings = store.record("step1", {"kubeconfig": "x" * (SIZE_WARNING_BYTES * 4)}, sensitive_keys=set())
+
+    assert warnings == []
+
+
+# ---------------------------------------------------------------------------
+# clear() (docs/design/deploy-destroy.md) — forget a destroyed step's outputs
+# ---------------------------------------------------------------------------
+
+
+def test_clear_marks_the_step_key_destroyed():
+    backend = _FakeKeyValueStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
     store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
     store.record("step2", {"db_host": "db.internal"}, sensitive_keys=set())
 
     store.clear(["step1"])
 
-    with pytest.raises(OutputRecordNotFoundError, match="No durable output recorded for step 'step1'"):
+    assert "destroyed_at" in json.loads(backend._data[_step_key("step1")][0])
+    with pytest.raises(OutputRecordNotFoundError, match="step 'step1': it was destroyed"):
         store.read("step1")
     assert store.read("step2") == {"db_host": "db.internal"}
 
 
-def test_clear_leaves_the_other_steps_entries_and_timestamps_untouched():
+def test_the_destroyed_marker_stops_the_fallback_to_the_old_key():
+    """Otherwise a destroyed step's values from before the upgrade would come back."""
     backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-    store.record("step2", {"db_host": "db.internal"}, sensitive_keys=set())
-    before = json.loads(backend._data[_RECORD_KEY][0])
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    backend._data[_step_key("step1")] = (json.dumps({"destroyed_at": "2026-11-09T00:00:00+00:00"}).encode(), "1")
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
 
-    store.clear(["step1"])
-
-    assert json.loads(backend._data[_RECORD_KEY][0]) == {"step2": before["step2"]}
-
-
-def test_clear_removes_every_named_step_in_one_write():
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-    for step in ("step1", "step2", "step3"):
-        store.record(step, {"k": step}, sensitive_keys=set())
-    writes_before = backend.put_call_count
-
-    store.clear(["step1", "step3"])
-
-    assert backend.put_call_count == writes_before + 1
-    assert set(json.loads(backend._data[_RECORD_KEY][0])) == {"step2"}
-
-
-def test_clear_the_last_step_leaves_an_empty_record_not_a_deleted_one():
-    """The capability has no delete: an empty record is what "nothing recorded" looks like."""
-    backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-
-    store.clear(["step1"])
-
-    assert backend._data[_RECORD_KEY][0] == b"{}"
-    with pytest.raises(OutputRecordNotFoundError, match="No durable output recorded for step 'step1'"):
+    with pytest.raises(OutputRecordNotFoundError, match="destroyed"):
         store.read("step1")
 
 
-def test_clear_a_name_that_is_not_recorded_writes_nothing():
+def test_clear_writes_no_marker_for_a_step_without_a_key():
     backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-    writes_before = backend.put_call_count
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
 
-    store.clear(["ghost"])
+    store.clear(["step1"])
 
-    assert backend.put_call_count == writes_before
-    assert store.read("step1") == {"vm_ip": "10.0.0.5"}
+    assert backend.put_call_count == 0
+    assert backend._data == {}
 
 
 def test_clear_with_no_steps_does_not_even_read_the_store():
     backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
 
     store.clear([])
 
@@ -312,59 +515,91 @@ def test_clear_with_no_steps_does_not_even_read_the_store():
     assert backend._data == {}
 
 
-def test_clear_with_no_record_at_all_is_a_no_op():
+def test_clear_removes_only_the_named_steps_from_the_old_key():
     backend = _FakeKeyValueStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}, "step2": {"db_host": "db.internal"}})
+    before = _legacy(backend)
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
 
     store.clear(["step1"])
 
+    assert _legacy(backend) == {"step2": before["step2"]}
+    with pytest.raises(OutputRecordNotFoundError):
+        store.read("step1")
+    assert store.read("step2") == {"db_host": "db.internal"}
+
+
+def test_clear_rewrites_the_old_key_once_for_every_named_step():
+    backend = _FakeKeyValueStore()
+    _seed_legacy(backend, {"step1": {"k": "1"}, "step2": {"k": "2"}, "step3": {"k": "3"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.clear(["step1", "step3"])
+
+    assert backend.put_keys == [_LEGACY_KEY]
+    assert set(_legacy(backend)) == {"step2"}
+
+
+def test_clear_the_last_step_leaves_an_empty_old_record_not_a_deleted_one():
+    backend = _FakeKeyValueStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.clear(["step1"])
+
+    assert backend._data[_LEGACY_KEY][0] == b"{}"
+
+
+def test_clear_a_name_that_is_not_recorded_writes_nothing():
+    backend = _FakeKeyValueStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    store.clear(["ghost"])
+
     assert backend.put_call_count == 0
-    assert backend._data == {}
 
 
 def test_clear_retries_on_a_conflict_and_still_removes():
     backend = _ConflictOnNextPutStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
-    store.record("step2", {"db_host": "db.internal"}, sensitive_keys=set())
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}, "step2": {"db_host": "db.internal"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
     backend.arm()
-    writes_before = backend.put_call_count
 
     store.clear(["step1"])
 
-    assert backend.put_call_count == writes_before + 2
-    assert set(json.loads(backend._data[_RECORD_KEY][0])) == {"step2"}
+    assert backend.put_call_count == 2
+    assert set(_legacy(backend)) == {"step2"}
 
 
 def test_clear_a_one_shot_iterable_still_removes_everything_after_a_retry():
     """A generator can be consumed only once, and the retry loop reads its argument on every pass."""
     backend = _ConflictOnNextPutStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-    for step in ("step1", "step2", "step3"):
-        store.record(step, {"k": step}, sensitive_keys=set())
+    _seed_legacy(backend, {"step1": {"k": "1"}, "step2": {"k": "2"}, "step3": {"k": "3"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
     backend.arm()
 
     store.clear(step for step in ("step1", "step2"))
 
-    assert set(json.loads(backend._data[_RECORD_KEY][0])) == {"step3"}
+    assert set(_legacy(backend)) == {"step3"}
 
 
 def test_clear_keeps_a_concurrent_writers_update_instead_of_overwriting_it():
     backend = _ConflictOnNextPutStore()
-    store = DeploymentOutputStore(backend, "prd-deployment")
-    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
     backend.rival = {"step3": {"collected_at": "2026-11-04T00:00:00+00:00", "values": {"k": "v"}}}
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
     backend.arm()
 
     store.clear(["step1"])
 
-    assert set(json.loads(backend._data[_RECORD_KEY][0])) == {"step3"}
+    assert set(_legacy(backend)) == {"step3"}
 
 
 def test_clear_raises_system_error_after_max_retries_exhausted():
     backend = _AlwaysConflictingStore()
-    backend._data[_RECORD_KEY] = (json.dumps({"step1": {"collected_at": "x", "values": {}}}).encode("utf-8"), "1")
-    store = DeploymentOutputStore(backend, "prd-deployment")
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
 
     with pytest.raises(SystemError, match="conflicting writes"):
         store.clear(["step1"])
@@ -373,10 +608,10 @@ def test_clear_raises_system_error_after_max_retries_exhausted():
 
 
 @pytest.mark.parametrize("stored", [b"not json", b"[1, 2]"])
-def test_clear_raises_a_clear_error_for_a_record_that_is_not_a_json_object(stored: bytes):
+def test_clear_raises_a_clear_error_for_an_old_record_that_is_not_a_json_object(stored: bytes):
     backend = _FakeKeyValueStore()
-    backend._data[_RECORD_KEY] = (stored, "1")
-    store = DeploymentOutputStore(backend, "prd-deployment")
+    backend._data[_LEGACY_KEY] = (stored, "1")
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
 
     with pytest.raises(SystemError, match="not a valid JSON object"):
         store.clear(["step1"])
@@ -384,9 +619,9 @@ def test_clear_raises_a_clear_error_for_a_record_that_is_not_a_json_object(store
     assert backend.put_call_count == 0
 
 
-def test_clear_never_touches_another_deployments_record():
+def test_clear_never_touches_another_deployments_records():
     backend = _FakeKeyValueStore()
-    mine = DeploymentOutputStore(backend, "prd-deployment")
+    mine = DeploymentOutputStore(backend, _DEPLOYMENT)
     other = DeploymentOutputStore(backend, "dev-deployment")
     mine.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
     other.record("step1", {"vm_ip": "10.9.9.9"}, sensitive_keys=set())

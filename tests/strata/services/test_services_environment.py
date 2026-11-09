@@ -590,3 +590,55 @@ def test_other_token_kinds_are_not_this_functions_business():
 def test_every_deployment_token_in_one_document_is_checked():
     result = unresolved_deployment_tokens(_dns("${deployment:tenant}/${deployment:bogus}"), "prd-shared", None)
     assert sorted(d.code for d in result.errors) == ["unavailable_deployment_token", "unknown_deployment_token"]
+
+
+# ---------------------------------------------------------------------------
+# validate_secret_store_values() — `version` has no effect yet, and a Key Vault
+# secret's value is a name, never a URL (docs/work/deployment-documentation.md)
+# ---------------------------------------------------------------------------
+
+
+def _environment_with_secret(**secret: object) -> EnvironmentService:
+    service = EnvironmentService(
+        data={"meta": {"name": "prd"}, "spec": {"secrets": [{"key": "APP_SECRET", **secret}]}},
+    )
+    service.validate()
+    return service
+
+
+def test_a_secret_with_a_version_gets_a_warning_not_an_error():
+    result = _environment_with_secret(
+        store="azure-keyvault", value="app-secret", version="3"
+    ).validate_secret_store_values()
+    assert result.ok
+    assert [d.code for d in result.warnings] == ["secret_version_ignored"]
+    assert result.warnings[0].location == "spec.secrets[0].version"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "https://kv-example.vault.azure.net/secrets/appgw-cert",
+        "HTTPS://kv-example.vault.azure.net/secrets/appgw-cert/0123",
+        "http://localhost/secrets/x",
+    ],
+)
+def test_a_keyvault_secret_whose_value_is_a_url_is_an_error(value):
+    result = _environment_with_secret(store="azure-keyvault", value=value).validate_secret_store_values()
+    assert [d.code for d in result.errors] == ["keyvault_secret_value_is_url"]
+    assert result.errors[0].location == "spec.secrets[0].value"
+    assert "variable" in result.messages()[0]
+
+
+def test_a_keyvault_secret_name_passes():
+    result = _environment_with_secret(store="azure-keyvault", value="appgw-cert").validate_secret_store_values()
+    assert result.ok
+    assert not result.warnings
+
+
+def test_a_url_in_another_store_is_not_this_checks_business():
+    """A `constant` secret may legitimately be a URL with credentials in it; only Key Vault names are checked."""
+    result = _environment_with_secret(
+        store="constant", value="https://user:pw@example.com"
+    ).validate_secret_store_values()
+    assert result.ok

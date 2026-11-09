@@ -51,10 +51,15 @@ from strata.controllers.audit_event_rendering import render_manifest_event, rend
 from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
 from strata.controllers.build_controller import apply_remote_version_pins
+from strata.controllers.deployment_document import DocumentTemplateError, render_document
+from strata.controllers.deployment_report_store import DeploymentReportStore
+from strata.controllers.deployment_report_view import deployment_report
 from strata.controllers.deployment_resolution import deployment_workspace
 from strata.controllers.effective_images import effective_images
+from strata.controllers.integration_resolution import resolve_output_store_integration
 from strata.controllers.policy_results import read_policy_results
 from strata.controllers.sbom_controller import SBOM_FORMAT
+from strata.controllers.security_gate_controller import built_commit_sha
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import (
     reachable_environments,
@@ -90,12 +95,15 @@ from strata.services.environment_service import merge_environment_models
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
 from strata.utils.diagnostics import Diagnostics, Severity
+from strata.utils.errors import StrataError
 from strata.utils.transport import run_command
 
 #: Public — `controllers/audit_read.py` (docs/design/audit-commands.md) reads
 #: this back and must glob for the exact same filename this module writes.
 MANIFEST_FILENAME = "_manifest.json"
 _METRICS_FILENAME = "_metrics.json"
+#: The handover document `spec.documentation` writes next to the manifest (docs/work/deployment-documentation.md).
+HANDOVER_FILENAME = "_handover.md"
 _GIT_REV_PARSE_TIMEOUT = 30
 
 
@@ -218,6 +226,7 @@ def finalize_and_distribute_deploy_audit(
         status=status,
         dry_run=False,
         deployed_by=actor,
+        commit_sha=built_commit_sha(context.root),
         artifacts=ManifestArtifactsModel(
             platform=platform_ref,
             repositories=repositories,
@@ -248,6 +257,13 @@ def finalize_and_distribute_deploy_audit(
     metrics_path = local_dir / _METRICS_FILENAME
     manifest_path.write_text(manifest.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
     metrics_path.write_text(metrics.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
+    if action == "deploy" and status == "success":
+        _record_last_deploy(context, deployment, manifest, diagnostics)
+    handover_path = (
+        _write_handover(context, deployment, manifest, local_dir / HANDOVER_FILENAME, diagnostics)
+        if action == "deploy" and status == "success" and deployment.spec.documentation is not None
+        else None
+    )
 
     audit_config = configuration.spec.audit if configuration is not None else None
     if audit_config is None or not audit_config.sinks:
@@ -286,9 +302,77 @@ def finalize_and_distribute_deploy_audit(
             api_version=deployment.apiVersion,
             diagnostics=diagnostics,
             git_sink_values=git_sink_values,
+            handover_path=handover_path,
         )
 
     return diagnostics
+
+
+def audit_summary(manifest: DeploymentManifestModel) -> dict[str, str | None]:
+    """What the handover document says about a run (its `audit` data): never a value, only who, when, which
+    commit and which audit record."""
+    return {
+        "deployed_by": manifest.deployed_by,
+        "completed_at": manifest.completed_at,
+        "status": manifest.status,
+        "action": manifest.action,
+        "version": manifest.version,
+        "execution_id": manifest.execution_id,
+        "commit_sha": manifest.commit_sha,
+    }
+
+
+def _record_last_deploy(
+    context: SolutionContext, deployment: DeploymentModel, manifest: DeploymentManifestModel, diagnostics: Diagnostics
+) -> None:
+    """Keep this successful deploy's audit summary in the workspace's `output_store`, so `strata deploy report`
+    can say who deployed it, when and from which commit without reading the git audit sink. A no-op without an
+    `output_store`; a failed write is a warning."""
+    workspace = deployment_workspace(context.controller.index, deployment)
+    if workspace is None:
+        return
+    try:
+        backend = resolve_output_store_integration(context.controller.index, workspace)
+        if backend is not None:
+            DeploymentReportStore(backend, deployment.meta.name).record_last_deploy(audit_summary(manifest))
+    except (StrataError, IntegrationError) as exc:
+        diagnostics.warning(
+            f"Deployment '{deployment.meta.name}': could not record this deploy's audit summary in the output "
+            f"store - {exc}. 'deploy report' will show the previous one.",
+            code="report_store_record",
+        )
+
+
+def _write_handover(
+    context: SolutionContext,
+    deployment: DeploymentModel,
+    manifest: DeploymentManifestModel,
+    path: Path,
+    diagnostics: Diagnostics,
+) -> Path | None:
+    """Render `spec.documentation`'s handover document into `path`, with this run's own audit entry, and return
+    `path`; `None` with a warning when it cannot be rendered. Never fails the run: the deploy has succeeded, and
+    failing now would invite a redeploy that changes nothing. `strata deploy report` can render it again.
+    """
+    documentation = deployment.spec.documentation
+    assert documentation is not None
+    audit = audit_summary(manifest)
+    try:
+        template_source = (
+            (context.root / documentation.template).read_text(encoding="utf-8") if documentation.template else None
+        )
+        report = deployment_report(context, deployment.meta.name)
+        document = render_document(report, template_source=template_source, audit=audit)
+        path.write_text(document, encoding="utf-8")
+    except (StrataError, IntegrationError, DocumentTemplateError, OSError) as exc:
+        diagnostics.warning(
+            f"Deployment '{deployment.meta.name}': the handover document (spec.documentation) was not written - "
+            f"{exc}. The deploy succeeded; run 'strata deploy report --format markdown' to render it.",
+            location="spec.documentation",
+            code="documentation_render_failed",
+        )
+        return None
+    return path
 
 
 def _dispatch_sink(
@@ -305,8 +389,10 @@ def _dispatch_sink(
     api_version: PlatformVersion,
     diagnostics: Diagnostics,
     git_sink_values: Mapping[str, str] | None,
+    handover_path: Path | None = None,
 ) -> None:
-    """Admission + dispatch for one sink — appends findings to `diagnostics` in place."""
+    """Admission + dispatch for one sink — appends findings to `diagnostics` in place. A git sink also pushes
+    the handover document, when `spec.documentation` wrote one."""
     if not sink.enabled:
         return
     sink_events = [t for t in admitted_types if sink.events is None or t in sink.events]
@@ -332,6 +418,8 @@ def _dispatch_sink(
     files = {MANIFEST_FILENAME: manifest_path}
     if "deployment.measured" in sink_events:
         files[_METRICS_FILENAME] = metrics_path
+    if handover_path is not None:
+        files[HANDOVER_FILENAME] = handover_path
 
     auth = _resolve_git_sink_auth(context, sink.git)
     result = push_audit_files(

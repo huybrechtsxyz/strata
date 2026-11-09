@@ -228,6 +228,25 @@ def referenced_output_keys(node: object) -> set[str]:
     return set()
 
 
+def referenced_secret_keys(node: object) -> set[str]:
+    """Return every ``${secret:KEY}`` token's ``KEY`` found anywhere in `node`, with the same walk as
+    `referenced_output_keys()`. Used to record which secrets a step's real input uses
+    (docs/work/deployment-documentation.md, section 1)."""
+    if isinstance(node, str):
+        return {key for kind, key in extract_value_tokens(node) if kind == "secret"}
+    if isinstance(node, dict):
+        keys: set[str] = set()
+        for value in node.values():
+            keys |= referenced_secret_keys(value)
+        return keys
+    if isinstance(node, list):
+        keys = set()
+        for item in node:
+            keys |= referenced_secret_keys(item)
+        return keys
+    return set()
+
+
 def validate_cidr_or_token(value: str) -> None:
     """Validate a CIDR/IP-or-Value-binding string.
 

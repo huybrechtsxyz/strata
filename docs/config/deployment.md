@@ -25,6 +25,8 @@ with what runtime behavior*. `strata build run`/`strata deploy run` both take a 
 - `spec.assets[]` — rebind [`workspace`](workspace.md) asset slots for this deployment, each
   `{slot, asset}`: the workspace's `spec.assets[].slot` and the [`asset`](asset.md) document to use
   instead of the slot's default — see "Rebinding an asset" below
+- `spec.documentation` — render the handover document after each successful `deploy run` and store it with the
+  audit record — see "Handover document" below
 - `spec.locking` — deployment lock configuration
 - `spec.layers` — deployment layer/scope segments
 - `spec.stages[]` — runtime parameters per provisioning step, each:
@@ -202,6 +204,34 @@ context chosen with `docker context use`. Create a context for each engine once
   `compose_docker_context_conflict`, as does a `DOCKER_CONTEXT` naming another context. Replace a `DOCKER_HOST` in a
   workflow with a context created from the same host.
 - `docker_context: default` is the local engine.
+
+## Handover document
+
+`spec.documentation` renders the handover document at the end of every successful `deploy run`: each step's outputs,
+the secrets each step used with where to find them, and the images. It is the same document as
+`strata deploy report --format markdown`, with that run's audit entry at the top. No secret value is ever in it:
+every secret and every sensitive output shows as `********`.
+
+```yaml
+spec:
+  documentation:
+    sink: audit                     # the only sink: `_handover.md` next to the audit manifest
+    template: docs/handover.md.j2   # optional; the built-in Markdown when unset
+```
+
+- `sink: audit` writes `_handover.md` next to `_manifest.json` and pushes it with every enabled `git` audit sink
+  (Configuration `spec.audit.sinks[].git`). An integration sink sends events, not files, and does not carry it.
+- `template` is a Jinja2 template relative to the solution root. It receives the data of
+  `strata deploy report --output json`: `deployment`, `workspace`, `environments`, `steps`, `secrets`, `images`,
+  `audit`, `generated_at`, and `MASK` (`********`). It runs sandboxed, and an unknown name fails.
+- `strata validate` rejects it when the workspace has no `output_store` (`documentation_needs_output_store`), when
+  no enabled git audit sink is configured (`documentation_needs_git_audit_sink`), or when the template is missing or
+  uses a name the report does not have (`documentation_template_missing`, `documentation_template_invalid`).
+- A render failure at the end of a deploy is a warning (`documentation_render_failed`), never a failed deploy:
+  `strata deploy report` can render the document again.
+
+The workflow, including handing a secret over with Password Pusher, is in
+[deployment-handover.md](../how-to/deployment-handover.md).
 
 ## Notes
 

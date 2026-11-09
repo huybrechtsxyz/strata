@@ -39,10 +39,15 @@ from typing import Any, cast
 import yaml
 
 from strata.controllers.checkov_controller import evaluate_checkov_policy, snapshot_checkov_configs
+from strata.controllers.deployment_report_store import DeploymentReportStore, SecretUse
 from strata.controllers.effective_images import effective_images
 from strata.controllers.image_tag_policy import check_image_tag_policy
 from strata.controllers.integration_readiness import integration_preflight
-from strata.controllers.integration_resolution import find_provisioner, resolve_integration
+from strata.controllers.integration_resolution import (
+    find_provisioner,
+    resolve_integration,
+    resolve_output_store_integration,
+)
 from strata.controllers.policy_results import checkov_policy_result as build_checkov_policy_result
 from strata.controllers.policy_results import cve_policy_result as build_cve_policy_result
 from strata.controllers.policy_results import image_tag_policy_result as build_image_tag_policy_result
@@ -65,6 +70,7 @@ from strata.controllers.source_sync import (
     sync_asset,
     sync_source,
 )
+from strata.controllers.step_secrets import secret_uses, step_secret_keys
 from strata.controllers.value_controller import (
     build_value_references,
     reachable_environments,
@@ -72,9 +78,10 @@ from strata.controllers.value_controller import (
     resolve_tenant,
     resolve_values,
     resolve_version,
+    secret_records,
 )
 from strata.controllers.version_pins import log_pin_applied
-from strata.controllers.workload_controller import build_workload_modules
+from strata.controllers.workload_controller import build_workload_modules, resolve_namespace_modules
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import (
     EffectiveImage,
@@ -83,11 +90,13 @@ from strata.integrations.resolved_context import (
     ValueReference,
     ValueResolution,
 )
+from strata.integrations.terraform_projection import build_strata_payload
 from strata.models.asset_model import AssetModel
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
 from strata.models.firewall_model import FirewallModel
+from strata.models.integration_model import Capability
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.network_model import NetworkModel
@@ -97,7 +106,7 @@ from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import SolutionRemoteModel
 from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
-from strata.models.workspace_model import WorkspaceModel
+from strata.models.workspace_model import WorkspaceModel, effective_resources_and_namespaces
 from strata.services.environment_service import (
     merge_environment_models,
     merge_workspace_environment_deployment_properties,
@@ -108,6 +117,7 @@ from strata.utils.dependency_order import topological_order
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import SystemError, UsageError
+from strata.utils.terraform_outputs import read_declared_outputs
 
 
 class BuildCleanError(SystemError):
@@ -478,6 +488,45 @@ def expected_source_paths(build_path: Path, workspace: WorkspaceModel) -> dict[s
     return {name: path if path is not None and path.exists() else None for name, path in paths.items()}
 
 
+def _estimate_report_record(
+    report_store: DeploymentReportStore,
+    step_name: str,
+    root: Path | None,
+    diagnostics: Diagnostics,
+    on_step: Callable[[str], None],
+    secrets: list[SecretUse],
+    all_secrets: bool,
+) -> None:
+    """Size the report record `deploy run` will write for `step_name`, from the `output` blocks its rendered root
+    module declares and the secrets it uses, and warn now when it is close to or over the output store's per-key
+    limit.
+
+    The same code the deploy uses. Close to exact: the secrets are counted from the whole strata payload, not the
+    step's claimed part, so build may count a secret the deploy then leaves out (never the other way round). The
+    output record holds values, which only exist after the apply, so build only counts the outputs.
+    """
+    declared = read_declared_outputs(root) if root is not None else {}
+    if not declared and not secrets:
+        return
+    try:
+        prepared = report_store.prepare(
+            step_name,
+            sensitive_keys=[name for name, output in declared.items() if output.sensitive],
+            descriptions={name: output.description for name, output in declared.items() if output.description},
+            secrets=secrets,
+            all_secrets=all_secrets,
+        )
+    except SystemError as exc:
+        diagnostics.warning(str(exc), location=step_name, code="report_record_size")
+        return
+    for warning in prepared.warnings:
+        diagnostics.warning(warning, location=step_name, code="report_record_size")
+    on_step(
+        f"step '{step_name}': {len(declared)} output(s) declared, {len(secrets)} secret(s) used, report record "
+        f"{prepared.size} bytes"
+    )
+
+
 def build_run(
     context: SolutionContext,
     deployment_name: str,
@@ -691,6 +740,17 @@ def build_run(
         # (`build_strata_assets()`, docs/design/asset-management.md Phase 4).
         graph = replace(graph, resolved_assets=resolved_assets)
 
+    # The report record `deploy run` will write per step (docs/work/deployment-documentation.md): sized here,
+    # where the rendered root module is on disk, with the same code the deploy uses. Offline: constructing the
+    # backend contacts nothing.
+    output_store_backend = resolve_output_store_integration(index, workspace)
+    report_store = DeploymentReportStore(output_store_backend, deployment_name) if output_store_backend else None
+    declared_secrets = merge_environment_models(environments)[1]
+    secret_info = secret_records(context, environments, declared_secrets) if report_store is not None else {}
+    estimate_payload = build_strata_payload(graph) if report_store is not None else None
+
+    # Helm and Compose steps: estimated after the workload pipeline below has rendered their modules.
+    container_steps: list[tuple[ProvisioningStepModel, Any]] = []
     materialised: dict[str, Path | None] = {}
     for step in ordered_by_depends_on(workspace.spec.execution or []):
         provisioner = find_provisioner(workspace, step.provisioner)
@@ -707,6 +767,8 @@ def build_run(
                 credentials=credentials,
             )
         integration = resolve_integration(index, provisioner)
+        if Capability.CONTAINER in integration.CAPABILITIES:
+            container_steps.append((step, integration))
         integration_type = type(integration).__name__
 
         template_path: Path | None = None
@@ -795,6 +857,17 @@ def build_run(
             _step(f"validated output.template for provisioner '{step.name}' — render deferred to deploy")
         else:
             _step(f"rendered provisioner '{step.name}' via {integration_type}")
+        if report_store is not None and Capability.CONTAINER not in integration.CAPABILITIES:
+            used, all_secrets = step_secret_keys(
+                provisioner=provisioner,
+                integration=integration,
+                path=source_path,
+                declared=set(declared_secrets),
+                root=context.root,
+                payload=estimate_payload,
+            )
+            uses = secret_uses(used, secret_info)
+            _estimate_report_record(report_store, step.name, source_path, diagnostics, _step, uses, all_secrets)
 
     # Workload pipeline (ADR-0022 D5-D7) — a second, disconnected input shape
     # (Namespace.spec.modules, never ProvisionerModel/ProvisioningStepModel),
@@ -818,6 +891,32 @@ def build_run(
             offline=offline,
         )
         diagnostics.extend(workload_diagnostics)
+
+    if report_store is not None and not dry_run:
+        # A container step's report record holds only the secrets its modules use: the same
+        # `referenced_secret_keys()` scan `deploy run` records, over what was just rendered.
+        resources_by_name = {r.name: r for r in (workspace.spec.resources or []) if r.enabled}
+        topologies_by_name = {t.name: t for t in (workspace.spec.topology or [])}
+        for step, integration in container_steps:
+            _, namespace_names = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
+            keys: set[str] = set()
+            every = False
+            for name in sorted(namespace_names):
+                target = graph.namespaces.get(name)
+                if target is None:
+                    continue
+                modules = resolve_namespace_modules(index, target, build_path).get(integration.TYPE, [])
+                if not modules:
+                    continue
+                found = integration.referenced_secret_keys(target, modules)
+                if found is None:
+                    every = True
+                else:
+                    keys |= found
+            used = set(declared_secrets) if every else keys & set(declared_secrets)
+            _estimate_report_record(
+                report_store, step.name, None, diagnostics, _step, secret_uses(used, secret_info), every
+            )
 
     # SBOM generation (docs/design/sbom-generation.md Phase 1) — runs dead
     # last, after every provisioner/workload module is materialised and

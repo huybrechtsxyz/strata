@@ -44,7 +44,7 @@ class/instance split as `WorkspaceResourceModel.resource` and
 `ModuleReferenceModel.module`.
 """
 
-from typing import Annotated, Any, ClassVar
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -220,6 +220,35 @@ class DeploymentStageModel(PlatformBaseModel):
         if self.health_checks:
             check_unique_names([h.name for h in self.health_checks], f"health check names in stage '{self.step}'")
         return self
+
+
+class DeploymentDocumentationModel(PlatformBaseModel):
+    """Render the handover document at the end of every successful `deploy run` and store it with the audit
+    record: the same document `strata deploy report --format markdown` renders, with the run's own audit entry.
+    Secret values are never in it; secrets are listed by where to find them.
+
+    Design notes:
+    docs/work/deployment-documentation.md, section 4. A render or push failure is a warning: the deploy has
+    succeeded, and `strata deploy report` can render the document again.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "Needs the workspace's `output_store`: the document is built from what it recorded.",
+        "`sink: audit` needs an enabled `git` audit sink in the Configuration: only a git sink stores files.",
+        "`template` must exist and may only use the report's data (`deployment`, `workspace`, `environments`, "
+        "`steps`, `secrets`, `images`, `audit`, `generated_at`, `MASK`).",
+    )
+
+    template: str | None = Field(
+        None,
+        description="A Jinja2 template, relative to the solution root, that replaces the built-in Markdown. It "
+        "receives the same data as `strata deploy report --output json`; no field in it holds a secret value.",
+    )
+    sink: Literal["audit"] = Field(
+        "audit",
+        description="Where the document goes. `audit`: written as `_handover.md` next to the audit manifest and "
+        "pushed with it by every enabled `git` audit sink.",
+    )
 
 
 class DeploymentLockingModel(PlatformBaseModel):
@@ -402,6 +431,11 @@ class DeploymentSpecModel(PlatformBaseModel):
         description="Hierarchy position: a path convention to follow and the segment values for "
         "it.\n\n"
         "Design notes: Hierarchy position (inert in v2 — see DeploymentLayersModel)",
+    )
+    documentation: DeploymentDocumentationModel | None = Field(
+        None,
+        description="Render the handover document (step outputs, secrets by location, images) at the end of each "
+        "successful `deploy run` and store it with the audit record. Off when unset.",
     )
     locking: DeploymentLockingModel | None = Field(
         None,

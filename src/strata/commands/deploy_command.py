@@ -28,6 +28,8 @@ import click
 
 from strata.commands.deploy_images_command import deploy_images_command
 from strata.commands.deploy_list_command import deploy_list_command
+from strata.commands.deploy_output_command import deploy_output_command
+from strata.commands.deploy_report_command import deploy_report_command
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
@@ -48,6 +50,8 @@ def deploy_command() -> None:
 
 deploy_command.add_command(deploy_list_command)
 deploy_command.add_command(deploy_images_command)
+deploy_command.add_command(deploy_output_command)
+deploy_command.add_command(deploy_report_command)
 
 
 def _shared_deploy_options(follow_default: str | None = None) -> Callable[[_F], _F]:

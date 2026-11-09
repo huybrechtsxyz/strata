@@ -56,7 +56,11 @@ from strata.models.module_model import ModuleCheckModel, ModuleMountModel
 from strata.models.namespace_model import NamespaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
-from strata.utils.value_tokens import referenced_output_keys, resolve_value_tokens_renaming_secrets
+from strata.utils.value_tokens import (
+    referenced_output_keys,
+    referenced_secret_keys,
+    resolve_value_tokens_renaming_secrets,
+)
 
 #: Docker's context for every command; set for the Compose steps of a deployment that names `docker_context`.
 DOCKER_CONTEXT_ENV = "DOCKER_CONTEXT"
@@ -162,6 +166,17 @@ class ComposeIntegration(InfraIntegration):
         (namespace_dir / "docker-compose.yml").write_text(
             yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
         )
+
+    def referenced_secret_keys(self, namespace: NamespaceModel, modules: list[ResolvedModule]) -> set[str] | None:
+        """Every `${secret:KEY}` in the namespace's merged `docker-compose.yml`, the document `deploy_namespace()`
+        resolves. `None` when the file is missing (`deploy_namespace()` then fails first anyway)."""
+        del namespace
+        if not modules:
+            return set()
+        compose_file = modules[0].source_path.parent / "docker-compose.yml"
+        if not compose_file.exists():
+            return None
+        return referenced_secret_keys(yaml.safe_load(compose_file.read_text()) or {})
 
     def deploy_namespace(
         self,
