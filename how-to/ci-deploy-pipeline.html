@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Run strata in a CI pipeline &mdash; strata 2.4.0 documentation</title>
+  <title>How To: Run strata in a CI pipeline &mdash; strata 2.5.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=4d935f96"></script>
+      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -207,7 +207,7 @@ credentials.</p>
 </section>
 <section id="install-strata">
 <h2>2. Install strata<a class="headerlink" href="#install-strata" title="Link to this heading"></a></h2>
-<p>strata needs Python 3.13. While v2 is in release-candidate, <strong>pin the version</strong>: an unpinned
+<p>strata needs Python 3.12 or later (tested on 3.12, 3.13 and 3.14). While v2 is in release-candidate, <strong>pin the version</strong>: an unpinned
 <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">xyz-strata</span></code> still resolves to the last v1 release.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">astral-sh/setup-uv@v8.1.0</span>
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uv tool install "xyz-strata==2.0.0rc2"</span>
