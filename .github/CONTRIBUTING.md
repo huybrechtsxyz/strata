@@ -178,8 +178,8 @@ uv run pytest tests/ --cov=strata --cov-report=term-missing
 
 ### Nox (all checks in one command)
 
-[`nox`](https://nox.thea.codes/) runs all tools in isolated environments, once per supported Python version (3.12
-and 3.13, from the `classifiers` in `pyproject.toml`). A version that is not installed is skipped.
+[`nox`](https://nox.thea.codes/) runs all tools in isolated environments, once per supported Python version (3.12,
+3.13 and 3.14, from the `classifiers` in `pyproject.toml`). A version that is not installed is skipped.
 
 ```bash
 nox              # run everything (lint + tests + build)

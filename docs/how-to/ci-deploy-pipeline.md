@@ -56,7 +56,7 @@ credentials.
 
 ## 2. Install strata
 
-strata needs Python 3.12 or later (tested on 3.12 and 3.13). While v2 is in release-candidate, **pin the version**: an unpinned
+strata needs Python 3.12 or later (tested on 3.12, 3.13 and 3.14). While v2 is in release-candidate, **pin the version**: an unpinned
 `pip install xyz-strata` still resolves to the last v1 release.
 
 ```yaml

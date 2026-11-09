@@ -2,7 +2,7 @@
 # Script Name   : ci-build.yaml
 # Author        : Vincent Huybrechts
 # Version       : 1.0.0
-# Python Version: 3.12+ (tested on 3.12 and 3.13; packaged on 3.13)
+# Python Version: 3.12+ (tested on 3.12, 3.13 and 3.14; packaged on 3.13)
 # Description   : GitHub Actions workflow for CI build: lint, format-check,
 #                 type-check, pytest, and Sphinx docs validation. Triggered on
 #                 push to main/v2 and on pull requests targeting them
@@ -52,7 +52,7 @@ jobs:
       # Report every supported version, not just the first one to fail.
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       # Checkout the code

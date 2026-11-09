@@ -12,9 +12,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
-- strata runs on Python 3.12 as well as 3.13 (`requires-python = ">=3.12"`). No behaviour changes: the full test
-  suite passes on both, and CI now tests every pull request on both versions. Type checking and linting target 3.12,
-  so code that needs 3.13 fails the checks instead of a 3.12 install.
+- strata runs on Python 3.12 and 3.14 as well as 3.13 (`requires-python = ">=3.12"`). No behaviour changes: the
+  full test suite passes on all three, and CI now tests every pull request on each of them. Type checking and linting
+  target 3.12, the oldest, so code that needs a newer Python fails the checks instead of a 3.12 install.
 
 ## [2.4.0] - 2026-11-08
 
