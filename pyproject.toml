@@ -7,7 +7,14 @@ name = "xyz-strata"
 dynamic = ["version"]
 description = "Strata v2 - Infrastructure as Code Platform"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
+# nox reads these to run its sessions on every supported version (noxfile.py).
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = [
     "click>=8.0",
     "pydantic>=2.0",
@@ -92,7 +99,8 @@ python_files = ["test_*.py", "*_test.py"]
 addopts = "-v"
 
 [tool.mypy]
-python_version = "3.13"
+# The oldest supported version, so a 3.13-only standard library API fails the check.
+python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 mypy_path = "src"
@@ -148,7 +156,8 @@ exclude = [
 ]
 line-length = 120
 indent-width = 4
-target-version = "py313"
+# The oldest supported version, so 3.13-only syntax fails the check.
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "B", "I", "N"]

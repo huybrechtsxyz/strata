@@ -2,7 +2,7 @@
 # Script Name   : ci-build.yaml
 # Author        : Vincent Huybrechts
 # Version       : 1.0.0
-# Python Version: 3.13+
+# Python Version: 3.12+ (tested on 3.12, 3.13 and 3.14; packaged on 3.13)
 # Description   : GitHub Actions workflow for CI build: lint, format-check,
 #                 type-check, pytest, and Sphinx docs validation. Triggered on
 #                 push to main/v2 and on pull requests targeting them
@@ -34,6 +34,7 @@ defaults:
 
 # Environment variables
 env:
+  # The version the package is built on and docs run on; the build job also tests the other supported versions.
   PYTHON_VERSION: "3.13"
 
 # Trigger on push to main/v2 and on pull requests targeting them
@@ -45,8 +46,13 @@ on:
 
 jobs:
   build:
-    name: Build and Test
+    name: Build and Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      # Report every supported version, not just the first one to fail.
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       # Checkout the code
@@ -57,18 +63,20 @@ jobs:
       - name: Setup Python
         uses: ./.github/actions/setup-python
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
 
       # Lint, type-check, and test
       - name: Test Python
         uses: ./.github/actions/test-python
 
-      # Build the Python package (wheel + sdist)
+      # Build the Python package (wheel + sdist) once; the wheel is the same for every version
       - name: Build package
+        if: matrix.python-version == env.PYTHON_VERSION
         run: uv build
 
       # Upload dist artifact for use by ci-release
       - name: Upload dist artifact
+        if: matrix.python-version == env.PYTHON_VERSION
         uses: actions/upload-artifact@v7
         with:
           name: dist

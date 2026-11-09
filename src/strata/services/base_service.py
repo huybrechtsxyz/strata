@@ -83,7 +83,7 @@ class BaseService(ABC, Generic[ModelT]):
         Returns the concrete subclass (`DeploymentService.from_model(...)`
         gives back a `DeploymentService`, not a bare `BaseService`) via the
         standard bound-`TypeVar` idiom, not `typing.Self` (available since
-        3.11, this project's floor is 3.13) — `ServiceT` is kept for now
+        3.11, this project's floor is 3.12) — `ServiceT` is kept for now
         since nothing forced the switch yet, not because `Self` is
         unavailable.
 

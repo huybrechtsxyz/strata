@@ -246,6 +246,15 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-09: **Built 2.5.0** - bumped `VERSION.txt` from `2.4.0` to `2.5.0`. Python 3.12 support:
+  `requires-python >=3.12`, classifiers for 3.12 and 3.13 (nox runs per version), mypy and ruff target 3.12, and
+  `ci-build` tests on both versions (the package is still built once, on 3.13). Before the change the full suite was
+  run on CPython 3.12.12 with no failures, and mypy and ruff against 3.12 were clean: no code needed changing. Built
+  on `feature/python-3.12-support`, for a pull request to `main`. Tag only after `ci-build` is green on the merge
+  commit (all matrix legs). Python 3.14 added to the same release: on CPython 3.14.2 every dependency installs from a
+  wheel, the full suite passes with the same warnings as on 3.13, and mypy against 3.14 is clean; it is a third
+  matrix leg and classifier, with no change to the floor or the 3.12 check targets.
+
 - 2026-11-08: **Built 2.4.0** - bumped `VERSION.txt` from `2.3.3` to `2.4.0`. The Helm gap analysis
   (docs/work/helm-gap-analysis.md): chart values in `strata-values.yaml`, secrets on stdin, no streamed dry-run
   manifest, stage timeouts for Helm and Compose, release-name and namespace validation, `kube_context` and
