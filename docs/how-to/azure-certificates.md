@@ -4,8 +4,8 @@ You are deploying an Azure Application Gateway v2 (WAF_v2) with Bicep/Terraform 
 listener needs a certificate. This guide covers what the IaC actually automates, what stays a
 manual (or separately-automated) step, and how it maps onto strata's own model — see the
 worked example in [`config/`](../../config/README.md): `resources/networking.yaml`
-(`key-vault`, `app-gateway-waf`), `integrations/azure-keyvault.yaml`, and the
-`APPGW_CERT_SECRET_ID` secret in `environments/prd.yaml`.
+(`key-vault`, `app-gateway-waf`) and the `APPGW_CERT_SECRET_ID` variable in
+`environments/prd.yaml`.
 
 ## The short answer
 
@@ -178,12 +178,17 @@ The `config/` example encodes exactly this split:
 - `resources/networking.yaml`'s `key-vault` resource — the Key Vault Terraform creates.
 - `resources/networking.yaml`'s `app-gateway-waf` resource — declares a capability
   `dependencies[]` entry on `key_vault`, and its `configuration.key_vault_secret_id` is
-  `${secret:APPGW_CERT_SECRET_ID}` — never a literal PFX/password.
-- `environments/prd.yaml`'s `APPGW_CERT_SECRET_ID` secret (`store: azure-keyvault`) — names the
-  *existing* secret; its own `description` field is where you record which of Options A/B/C
-  above populates it, since strata itself never issues or rotates the certificate.
-- `integrations/azure-keyvault.yaml` — the integration that resolves that token at deploy time.
+  `${var:APPGW_CERT_SECRET_ID}` — never a literal PFX/password.
+- `environments/prd.yaml`'s `APPGW_CERT_SECRET_ID` **variable** (`store: constant`) — the address
+  of the *existing* Key Vault secret; its own `description` field is where you record which of
+  Options A/B/C above populates it, since strata itself never issues or rotates the certificate.
 
-`strata build run`/`deploy run` only ever read the secret's identifier — issuing or renewing the
-certificate stays entirely outside strata's own responsibility, same as it stays outside
-Terraform/Bicep's.
+It is a variable, not a secret, on purpose. App Gateway needs the secret's address, and reads and
+rotates the certificate itself. A `secret` with `store: azure-keyvault` would make strata fetch
+the secret's *content* — the certificate — and pass that where Terraform expects an address. A
+Key Vault secret's `value` is always the secret's name in the vault the `azure-keyvault`
+integration points at, never a URL.
+
+`strata build run`/`deploy run` only ever pass the secret's address along — reading, issuing or
+renewing the certificate stays entirely outside strata's own responsibility, same as it stays
+outside Terraform/Bicep's.
