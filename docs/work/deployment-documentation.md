@@ -47,9 +47,24 @@ Verified against the source on 2026-11-09.
 A read-only command. It never calls a provisioner and never writes infrastructure.
 
 ```text
-strata deploy output DEPLOYMENT [--format console|json|markdown] [--template PATH] [--out FILE]
-                                [--step NAME]... [--path PATH]
+strata deploy output DEPLOYMENT [--format table|markdown] [--template PATH] [--output-path FILE]
+                                [--step NAME]... [--path PATH] [--output console|json]
 ```
+
+The flags follow [ADR-0056](../decisions/0056-output-is-the-result-format-is-the-content.md): `--output` for the
+run, `--format` for the content, `--output-path` for a file:
+
+- `--output console|json` (or `STRATA_OUTPUT`) is the **command's return value**, the same envelope and exit codes as
+  every other command. With `--output json`, the envelope carries the structured data below (the template context).
+  That is what a CI pipeline or another tool such as PSDocs consumes.
+- `--format table|markdown` is the **document**: how a person reads it. `table` is console tables, the same style as
+  `values list`. `markdown` is the built-in Markdown document, and `--template` replaces it with a Jinja2 template the
+  user provides.
+- `--output-path FILE` writes the document to a file, as `promote view` does. The two then work together: the
+  document goes to the file and the envelope goes to stdout (with `--output json`, a small confirmation naming the
+  file, not a second copy of the document). Without `--output-path`, the document goes to
+  stdout under `--output console`. Under `--output json`, stdout must stay a single JSON document, so `--format` is
+  ignored, exactly as in `values get`.
 
 It gathers, without resolving any secret value:
 
@@ -60,12 +75,6 @@ It gathers, without resolving any secret value:
    environment, each with its location (section 2).
 4. **Deployment context**: deployment name, environment, effective images (the `deploy images` rows), and the latest
    audit manifest entry if a git audit sink is configured (who deployed, when, from which commit).
-
-Output formats:
-
-- `console`: tables, the same style as `values list`.
-- `json`: one envelope, as for every other command. This is the input a template sees.
-- `markdown`: a built-in default document. `--template` replaces it with a Jinja2 template the user provides.
 
 Why a command rather than an execution step: a provisioner step changes infrastructure and has plan, apply and
 destroy behaviour, which a document does not. A step would also only see the outputs from steps that ran in that
@@ -137,11 +146,50 @@ addition on top of section 1 and should be built after it.
 
 ### 5. Templates
 
-- The template receives the `--format json` envelope: `deployment`, `steps[].outputs`, `steps[].sensitive_keys`,
+- The template receives the same data as the `--output json` envelope: `deployment`, `steps[].outputs`, `steps[].sensitive_keys`,
   `secrets[]` (with `location`), `images[]`, `audit`.
 - There is no variable in that context that holds a secret value, so a template cannot print one even by mistake.
 - `strata validate` checks the template with `validate_template_references()`, so a typo fails before a deploy, not
   after.
+
+### 6. PSDocs and PSDocs for Azure (PowerShell)
+
+Teams on Azure may already use [PSDocs](https://github.com/microsoft/PSDocs), a PowerShell engine that generates
+Markdown from objects using document definitions (`*.Doc.ps1`), and its module
+[PSDocs for Azure](https://azure.github.io/PSDocs.Azure/overview), which generates Markdown from ARM templates
+(parameters, outputs, resources, with descriptions from template metadata). They cover two different things:
+
+| Tool               | Documents                                                       | When          | Fit with strata                                                                                     |
+| ------------------ | --------------------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------- |
+| PSDocs             | Any object, rendered by a PowerShell document definition        | After deploy  | An alternative to the Jinja2 template: it renders the `deploy output --output json` envelope.       |
+| PSDocs for Azure   | An ARM template: what it takes and produces, not deployed values | Before deploy | Documents the template a `bicep` provisioner deploys. Complements the handover document, does not replace it. |
+
+**PSDocs as a renderer (no strata code needed).** The JSON envelope is the contract, so PSDocs works without
+changes to strata:
+
+```powershell
+Import-Module PSDocs
+strata deploy output prd-deployment --output json |
+    ConvertFrom-Json |
+    Invoke-PSDocument -Path ./docs/handover.Doc.ps1 -OutputPath ./out/docs
+```
+
+The secret rule still holds, because the envelope has no secret values for a PowerShell definition to print either.
+
+**PSDocs for Azure for `bicep` provisioners.** PSDocs for Azure reads ARM JSON, so a Bicep source is compiled first
+(`bicep build`), then passed to `Invoke-PSDocument -Module PSDocs.Azure -InputObject <template.json>`. Strata
+could run this during `build run` for each `bicep` provisioner and link the resulting template document from the
+handover document ("what this step deploys" next to "what it produced"). A `secureString` parameter appears by name
+only, so this does not expose secrets.
+
+**Recommendation.** Do not make PowerShell a dependency of strata itself. Strata is a cross-platform Python CLI, and
+`pwsh` is not on every runner.
+
+1. Document the PSDocs pipe above in the how-to (implementation plan step 6). This costs nothing and
+   gives Azure teams their familiar tool.
+2. Treat PSDocs for Azure in `build run` as an optional later step (open question 7). It only applies to `bicep` (and
+   ARM) provisioners. Terraform, Helm and Compose would need their own equivalents (for example `terraform-docs` for
+   Terraform modules).
 
 ## Remaining Work / Open Questions
 
@@ -161,6 +209,10 @@ addition on top of section 1 and should be built after it.
    values, which this design deliberately avoids.
 6. **GitHub repository name.** Whether the repository for a `github` secret can be found reliably (from the git
    remote or `GITHUB_REPOSITORY`), or should simply be left out.
+7. **Template documentation per provisioner.** Should `build run` generate template-level documentation for each
+   provisioner (PSDocs for Azure for `bicep`, `terraform-docs` for Terraform) as an optional, opt-in step that only
+   runs when the tool is installed? Or should that stay outside strata, in the team's own pipeline? Needs a real team
+   asking for it first.
 
 ## Implementation plan
 
@@ -171,8 +223,13 @@ addition on top of section 1 and should be built after it.
 3. `strata deploy output` with `console` and `json` formats.
 4. Built-in Markdown format and `--template`, with the template checked by `strata validate`.
 5. `spec.documentation` on the deployment and writing the document to the audit sink.
-6. Documentation: `docs/config/deployment.md` and a how-to for the Password Pusher handover workflow.
+6. Documentation: `docs/config/deployment.md` and a how-to for the Password Pusher handover workflow, including
+   rendering the JSON envelope with PSDocs.
 
 ## Changelog
 
 - 2026-11-09: created.
+- 2026-11-09: added section 6 (PSDocs and PSDocs for Azure), open question 7 and the PSDocs how-to in step 6.
+- 2026-11-09: split the flags: `--output console|json` is the command's return value, `--format table|markdown` is
+  the document (the convention `values get` already follows). Renamed `--out` to `--output-path`, matching
+  `promote view`. Both now follow ADR-0056.
