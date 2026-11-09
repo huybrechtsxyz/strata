@@ -8,6 +8,14 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-11-09
+
+### Added
+
+- strata runs on Python 3.12 as well as 3.13 (`requires-python = ">=3.12"`). No behaviour changes: the full test
+  suite passes on both, and CI now tests every pull request on both versions. Type checking and linting target 3.12,
+  so code that needs 3.13 fails the checks instead of a 3.12 install.
+
 ## [2.4.0] - 2026-11-08
 
 ### Added
@@ -323,7 +331,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/huybrechtsxyz/strata/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/huybrechtsxyz/strata/compare/v2.3.3...v2.4.0
 [2.3.3]: https://github.com/huybrechtsxyz/strata/compare/v2.3.2...v2.3.3
 [2.3.2]: https://github.com/huybrechtsxyz/strata/compare/v2.3.1...v2.3.2

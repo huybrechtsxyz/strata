@@ -75,7 +75,7 @@ _INTEGRATION_SCRIPT_EXTENSIONS = frozenset({".py"})
 
 class Capability(StrEnum):
     """The core, closed capability vocabulary (ADR-0021 D9) — a `StrEnum`
-    (project floor is Python 3.13, `pyproject.toml`'s own `requires-python`)
+    (`StrEnum` since Python 3.11; the project floor is 3.12, `pyproject.toml`'s `requires-python`)
     so every dispatch site (`if Capability.CONTAINER in
     integration.CAPABILITIES`) checks a named member instead of a bare
     string literal a typo could slip past unnoticed, while still comparing

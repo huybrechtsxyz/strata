@@ -52,13 +52,13 @@ task-focused guide; that one is the up-to-date status table.
 
 ## Prerequisites
 
-| Tool                                                   | Version | Required for                                       |
-| ------------------------------------------------------ | ------- | -------------------------------------------------- |
-| Python                                                 | 3.13+   | CLI runtime (`requires-python >=3.13`)             |
-| [uv](https://docs.astral.sh/uv/)                       | latest  | Package and environment management                 |
-| [Terraform](https://developer.hashicorp.com/terraform) | 1.5+    | Only if a workspace uses a `terraform` provisioner |
-| [Helm](https://helm.sh/)                               | 3.x     | Only if a workspace uses a `helm` provisioner      |
-| [Docker Compose](https://docs.docker.com/compose/)     | v2      | Only if a workspace uses a `compose` provisioner   |
+| Tool                                                   | Version | Required for                                                    |
+| ------------------------------------------------------ | ------- | --------------------------------------------------------------- |
+| Python                                                 | 3.12+   | CLI runtime (`requires-python >=3.12`; tested on 3.12 and 3.13) |
+| [uv](https://docs.astral.sh/uv/)                       | latest  | Package and environment management                              |
+| [Terraform](https://developer.hashicorp.com/terraform) | 1.5+    | Only if a workspace uses a `terraform` provisioner              |
+| [Helm](https://helm.sh/)                               | 3.x     | Only if a workspace uses a `helm` provisioner                   |
+| [Docker Compose](https://docs.docker.com/compose/)     | v2      | Only if a workspace uses a `compose` provisioner                |
 
 ## Installation
 
