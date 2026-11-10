@@ -323,7 +323,7 @@ def test_status_rows_one_row_per_pin_on_a_multi_pin_document(tmp_path):
         _version(
             "api-prd",
             promotion="    ring: prd\n    order: 3",
-            pins='  pins:\n    images:\n      api: "1.0.0"\n    charts:\n      api: "2.0.0"\n',
+            pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n    charts:\n      api: "2.0.0"\n',
         ),
     )
     _write(root, "deployment.yaml", _deployment("dep", version="api-prd"))
@@ -334,7 +334,7 @@ def test_status_rows_one_row_per_pin_on_a_multi_pin_document(tmp_path):
 
     assert len(rows) == 2
     targets = {(r.category, r.target, r.value) for r in rows}
-    assert targets == {("images", "api", "1.0.0"), ("charts", "api", "2.0.0")}
+    assert targets == {("images", "api", "acme/api:1.0.0"), ("charts", "api", "2.0.0")}
     assert all(r.status == "current" for r in rows)
     assert all(r.behind is False for r in rows)
 
@@ -347,7 +347,7 @@ def test_status_rows_marks_the_lower_semver_sibling_as_behind(tmp_path):
         _version(
             "api-canary",
             promotion="    ring: prd\n    order: 3\n    wave: canary",
-            pins='  pins:\n    images:\n      api: "1.1.0"\n',
+            pins='  pins:\n    images:\n      api: "acme/api:1.1.0"\n',
         ),
     )
     _write(
@@ -356,7 +356,7 @@ def test_status_rows_marks_the_lower_semver_sibling_as_behind(tmp_path):
         _version(
             "api-general",
             promotion="    ring: prd\n    order: 3\n    wave: general",
-            pins='  pins:\n    images:\n      api: "1.0.0"\n',
+            pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n',
         ),
     )
     _write(root, "deployment-canary.yaml", _deployment("canary-dep", version="api-canary"))
@@ -370,6 +370,38 @@ def test_status_rows_marks_the_lower_semver_sibling_as_behind(tmp_path):
     general_row = next(r for r in rows if r.wave == "general")
     assert canary_row.behind is False
     assert general_row.behind is True
+
+
+@pytest.mark.parametrize(
+    ("category", "canary", "general", "behind"),
+    [
+        # The same image however it is written: ordered by tag.
+        ("images", "docker.io/acme/api:1.1.0", "acme/api:1.0.0", True),
+        # Two different images: their tags do not order against each other.
+        ("images", "acme/api:1.1.0", "acme/other:1.0.0", False),
+        # An artifact pin of tag@digest orders by its tag.
+        ("artifacts", "1.1.0@sha256:" + "ab" * 32, "1.0.0@sha256:" + "cd" * 32, True),
+    ],
+)
+def test_status_rows_order_an_image_pin_by_its_tag(tmp_path, category, canary, general, behind):
+    root = _base(tmp_path)
+    for wave, value in (("canary", canary), ("general", general)):
+        _write(
+            root,
+            f"version-{wave}.yaml",
+            _version(
+                f"api-{wave}",
+                promotion=f"    ring: prd\n    order: 3\n    wave: {wave}",
+                pins=f'  pins:\n    {category}:\n      api: "{value}"\n',
+            ),
+        )
+        _write(root, f"deployment-{wave}.yaml", _deployment(f"{wave}-dep", version=f"api-{wave}"))
+
+    view, _diagnostics = build_promotion_view("api", _resolve(root).controller.index)
+    rows = build_status_rows(view)
+
+    assert next(r for r in rows if r.wave == "general").behind is behind
+    assert next(r for r in rows if r.wave == "canary").behind is False
 
 
 def test_status_rows_does_not_guess_behind_for_non_semver_values(tmp_path):
@@ -410,7 +442,11 @@ def test_status_rows_single_wave_never_marked_behind(tmp_path):
     _write(
         root,
         "version.yaml",
-        _version("api-prd", promotion="    ring: prd\n    order: 3", pins='  pins:\n    images:\n      api: "1.0.0"\n'),
+        _version(
+            "api-prd",
+            promotion="    ring: prd\n    order: 3",
+            pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n',
+        ),
     )
     _write(root, "deployment.yaml", _deployment("dep", version="api-prd"))
 
@@ -437,7 +473,11 @@ def _worked_example_b_for_apply(root: Path, *, general_pins: str) -> None:
     _write(
         root,
         "version-qas.yaml",
-        _version("api-qas", promotion="    ring: qas\n    order: 2", pins='  pins:\n    images:\n      api: "1.2.0"\n'),
+        _version(
+            "api-qas",
+            promotion="    ring: qas\n    order: 2",
+            pins='  pins:\n    images:\n      api: "acme/api:1.2.0"\n',
+        ),
     )
     _write(
         root,
@@ -445,7 +485,7 @@ def _worked_example_b_for_apply(root: Path, *, general_pins: str) -> None:
         _version(
             "api-prd-canary",
             promotion="    ring: prd\n    order: 3\n    wave: canary",
-            pins='  pins:\n    images:\n      api: "1.1.0"\n',
+            pins='  pins:\n    images:\n      api: "acme/api:1.1.0"\n',
         ),
     )
     _write(
@@ -471,7 +511,7 @@ def test_apply_copies_common_keys_and_resets_status_and_reviewed(tmp_path):
     _worked_example_b_for_apply(
         root,
         general_pins=(
-            '  pins:\n    images:\n      api:\n        version: "1.0.0"\n        status: held\n'
+            '  pins:\n    images:\n      api:\n        version: "acme/api:1.0.0"\n        status: held\n'
             '        reason: "waiting on canary bake time"\n        reviewed: 2026-01-01\n'
         ),
     )
@@ -482,12 +522,12 @@ def test_apply_copies_common_keys_and_resets_status_and_reviewed(tmp_path):
 
     assert result.source_version == "api-qas"
     assert result.target_version == "api-prd"
-    assert result.copied == [("images", "api", "1.2.0")]
+    assert result.copied == [("images", "api", "acme/api:1.2.0")]
     assert result.ring == "prd" and result.order == 3 and result.wave == "general"
 
     written = _load_version(result.path)
     pin = written.spec.pins.images["api"]
-    assert pin.version == "1.2.0"
+    assert pin.version == "acme/api:1.2.0"
     assert pin.status.value == "current"
     assert pin.reviewed == date.today()
     assert pin.reason is None
@@ -511,7 +551,7 @@ def test_apply_only_copies_keys_common_to_both_documents(tmp_path):
 
 def test_apply_requires_wave_when_target_ring_has_multiple_waves(tmp_path):
     root = _base(tmp_path)
-    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "1.0.0"\n')
+    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n')
     context = _resolve(root)
 
     with pytest.raises(UsageError, match="more than one wave"):
@@ -520,7 +560,7 @@ def test_apply_requires_wave_when_target_ring_has_multiple_waves(tmp_path):
 
 def test_apply_rejects_an_unknown_wave_for_the_target(tmp_path):
     root = _base(tmp_path)
-    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "1.0.0"\n')
+    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n')
     context = _resolve(root)
 
     with pytest.raises(UsageError, match="no wave named 'ghost'"):
@@ -532,7 +572,7 @@ def test_apply_rejects_a_wave_for_a_single_wave_target_ring(tmp_path):
     one occupant still rejects a `--wave` that doesn't match it — no
     silent "closest match" guessing."""
     root = _base(tmp_path)
-    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "1.0.0"\n')
+    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n')
     context = _resolve(root)
 
     with pytest.raises(UsageError, match="no wave named 'ghost'"):
@@ -544,7 +584,7 @@ def test_apply_from_a_waveless_source_ignores_the_targets_wave_name(tmp_path):
     source for prd's split canary/general waves (worked example B's own
     shape); no wave-name match is required from a single-occupant ring."""
     root = _base(tmp_path)
-    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "1.0.0"\n')
+    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n')
     context = _resolve(root)
 
     result = apply_promotion("api", "qas", context.controller.index)  # qas is waveless; no --wave needed
@@ -555,7 +595,7 @@ def test_apply_from_a_waveless_source_ignores_the_targets_wave_name(tmp_path):
 
 def test_apply_raises_when_the_ring_has_no_preceding_order(tmp_path):
     root = _base(tmp_path)
-    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "1.0.0"\n')
+    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n')
     context = _resolve(root)
 
     with pytest.raises(UsageError, match="no preceding order"):
@@ -564,7 +604,7 @@ def test_apply_raises_when_the_ring_has_no_preceding_order(tmp_path):
 
 def test_apply_raises_for_an_unknown_ring(tmp_path):
     root = _base(tmp_path)
-    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "1.0.0"\n')
+    _worked_example_b_for_apply(root, general_pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n')
     context = _resolve(root)
 
     with pytest.raises(UsageError, match="No ring named 'ghost'"):

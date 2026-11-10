@@ -10,7 +10,10 @@ promotion/rollback/canary/floating-pin machinery is not carried over (zero real 
 
 ## Schema
 
-- `spec.pins.images` — image tag/digest pins, keyed by name
+- `spec.pins.images` — replaces a module service's whole `image`, keyed by the service name. The value is a whole
+  image reference with a tag, a digest or both (`docker.io/library/postgres:16-alpine`, `postgres@sha256:<hex>`),
+  never a tag alone: `db: 16-alpine` would run the image `16-alpine`. Another value is an error
+  (`image_pin_invalid`), and `strata version set` refuses to write it. `available` is free text
 - `spec.pins.charts` — Helm chart version pins, keyed by chart/module name
 - `spec.pins.remotes` — overrides a [solution.md](solution.md) remote's `reference` (only valid
   when that remote is `fetch: strata` — an `fetch: external` remote is placed by CI before strata
@@ -73,7 +76,10 @@ This is `config/versions/prd.yaml`, the working example in this repository.
   expects lives on the [`provisioner`](workspace.md)'s `integration` binding instead, as an
   assertion strata checks, not an install instruction.
 - `strata validate` checks pin existence/applicability: a pin naming no module service, chart
-  module, remote, artifact or asset is a `stale_pin` warning. `images`, `charts`, `remotes` and
+  module, remote, artifact or asset is a `stale_pin` warning. An `images` pin is also a warning when it names
+  another image than the service runs (`image_pin_renamed`; `postgres` and `docker.io/library/postgres` are the same
+  image), or when the service declares no `image` (`pin_not_applicable`: nothing to replace; a service with an
+  `artifact` is pinned under `artifacts`). `images`, `charts`, `remotes` and
   `assets` pins are applied by `build run`; `artifacts` pins are applied wherever the artifact is
   resolved (`store: artifact`, build and deploy). `--pin NAME` on `build run`/`deploy run`
   overrides a deployment's `spec.version` for that run only.

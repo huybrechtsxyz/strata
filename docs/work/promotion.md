@@ -822,7 +822,10 @@ doc's own Phase 1 can start.
     — a git ref, commit SHA, or floating tag cannot be safely ordered,
     and this doc's own "skip rather than guess" rule applies here exactly
     as everywhere else: no marker, not a guessed one, when values aren't
-    comparable.
+    comparable. An `images` pin is a whole reference (`acme/api:1.2.0`),
+    so its tag is what is compared, and only when every sibling names the
+    same image; an `artifacts` pin of `tag@digest` compares its tag
+    ([image-pin-validation.md](image-pin-validation.md)).
   Tests:
   [test_promotion_controller.py](../../tests/strata/controllers/test_promotion_controller.py)
   (5 new, for the new `build_status_rows()` — the placeholder row, one
@@ -1284,3 +1287,5 @@ doc's own Phase 1 can start.
   `promote status` printed 753 rows. Decided: no customer dimension in the model; a repeatable
   `--pin` glob on `category/target` for `apply` and `status`, `--dry-run`, and an opt-in
   `--changed-only`; a wave per customer rejected.
+- 2026-11-10: `← behind` compares an `images` pin by its tag, as it is a whole image reference;
+  before, a valid pin (`acme/api:1.2.0`) never parsed as a version, so no image pin was ever marked behind.

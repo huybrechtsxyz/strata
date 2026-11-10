@@ -440,7 +440,7 @@ def test_set_refuses_held_pin_without_force(tmp_path):
     path = _pin_file(tmp_path)
 
     with pytest.raises(UsageError, match="held.*--force"):
-        set_version_pin(path, "images", "db", "17.0-alpine", available=None, force=False)
+        set_version_pin(path, "images", "db", "postgres:17.0-alpine", available=None, force=False)
 
     # Untouched on refusal.
     assert "docker.io/library/postgres:16-alpine" in path.read_text(encoding="utf-8")
@@ -449,10 +449,10 @@ def test_set_refuses_held_pin_without_force(tmp_path):
 def test_set_held_pin_with_force_changes_version_only(tmp_path):
     path = _pin_file(tmp_path)
 
-    updated = set_version_pin(path, "images", "db", "17.0-alpine", available=None, force=True)
+    updated = set_version_pin(path, "images", "db", "postgres:17.0-alpine", available=None, force=True)
 
     pin = updated.spec.pins.images["db"]
-    assert pin.version == "17.0-alpine"
+    assert pin.version == "postgres:17.0-alpine"
     assert pin.status is VersionPinStatus.HELD
     assert pin.reason == "postgres majors need pg_upgrade/dump-restore"
     assert pin.reviewed is not None
@@ -472,7 +472,7 @@ def test_set_available_only_is_allowed_on_an_unverified_pin_without_force(tmp_pa
 def test_set_never_touches_reason_or_reviewed(tmp_path):
     path = _pin_file(tmp_path)
 
-    updated = set_version_pin(path, "images", "db", "17.0-alpine", available="19.0-alpine", force=True)
+    updated = set_version_pin(path, "images", "db", "postgres:17.0-alpine", available="19.0-alpine", force=True)
 
     pin = updated.spec.pins.images["db"]
     assert pin.reason == "postgres majors need pg_upgrade/dump-restore"

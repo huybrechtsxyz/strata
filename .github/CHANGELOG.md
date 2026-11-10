@@ -44,6 +44,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   An `artifacts` pin of another shape is an error in `strata validate` (`artifact_tag_invalid`), and
   `strata version set` refuses to write one. Before this, `1.4.2@sha256:...` gave `name@1.4.2@sha256:...`, which
   no runtime pulls.
+- An `images` pin must be a whole image reference with a tag, a digest or both (`postgres:16-alpine`); another
+  value is an error in `strata validate` (`image_pin_invalid`), and `strata version set` refuses to write one. A pin
+  replaces the service's whole image, so `db: 16-alpine` ran the image `16-alpine` from Docker Hub, and
+  `db: postgres` floated on `latest`. Two warnings join it: `image_pin_renamed` when the pin names another image
+  than the service runs (`postgres` and `docker.io/library/postgres` are the same image), and `pin_not_applicable`
+  when the service declares no `image`, so the pin changed nothing. `--available` is not checked.
 - In `strata deploy images -o json`, `data.images[].image_tag` is now only the tag part. A digest is in
   `image_digest`, so a digest-only image has `image_tag: null` where it had the digest. The same split
   applies to a module service's literal `name:tag@sha256:...`. An image with a digest is never floating in the SBOM,
@@ -62,6 +68,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Fixed
 
+- `strata promote status` marks an `images` pin `← behind` by its tag. An image pin is a whole reference
+  (`acme/api:1.2.0`), which never parsed as a version, so no image pin was ever marked behind. Siblings that pin
+  different images are not compared, and an `artifacts` pin of `tag@digest` compares its tag.
 - A registry chart pull on Windows no longer fails with a bare `PermissionError` when another process (a virus
   scanner reading the new archive) briefly holds a file in its staging directory. Removing that directory is best
   effort, so the pull's own result stands, such as `helm_chart_digest_changed`. A failure to store the entry is

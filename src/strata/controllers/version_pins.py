@@ -17,6 +17,9 @@ Two severities, both decided in ADR-0019:
 - **Error** — a `remotes` pin naming a `fetch: external` remote. CI already
   placed that remote before strata ran; the pin cannot take effect, so
   resolution rejects it rather than silently ignoring it.
+- **Error** — a pin whose value has the wrong shape: an `artifacts` pin that is
+  not a tag, a digest or both (`artifact_tag_invalid`), an `images` pin that is
+  not a whole image reference with a tag or digest (`image_pin_invalid`).
 - **Warning** — everything else that does not resolve: "a stale pin for a
   deleted module is the likeliest real failure," and should be visible
   without failing the build over it.
@@ -28,11 +31,11 @@ from strata.controllers.solution_controller import DocumentIndex
 from strata.logging.config import get_logger
 from strata.models.asset_model import AssetModel
 from strata.models.common_models import PlatformKind
-from strata.models.module_model import ModuleModel
+from strata.models.module_model import ModuleModel, ModuleServiceModel
 from strata.models.solution_model import RemoteFetch, SolutionModel
 from strata.models.version_model import VersionModel
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.sbom_utils import image_tag_problem
+from strata.utils.sbom_utils import canonical_image_name, image_pin_problem, image_tag_problem, parse_image_ref
 
 log = get_logger(__name__)
 
@@ -77,10 +80,12 @@ def check_version_pins(index: DocumentIndex, solution: SolutionModel | None) -> 
 
     Returns:
         One warning per pin whose target does not exist or cannot be pinned
-        this way; one error per pin naming a `fetch: external` remote.
+        this way, or an `images` pin naming another image than its service
+        runs; one error per pin naming a `fetch: external` remote or holding
+        a value of the wrong shape.
     """
     diagnostics = Diagnostics()
-    known_services = _known_service_names(index)
+    services_by_name = _services_by_name(index)
     remotes_by_name = {remote.name: remote for remote in (solution.spec.remotes or [])} if solution else {}
 
     for entry in index.all_of(PlatformKind.VERSION):
@@ -89,13 +94,14 @@ def check_version_pins(index: DocumentIndex, solution: SolutionModel | None) -> 
             location = f"spec.pins.{category}.{name}"
 
             if category == "images":
-                if name not in known_services:
-                    diagnostics.warning(
-                        f"image pin '{name}' matched no module service",
-                        source=str(entry.source),
-                        location=location,
-                        code="stale_pin",
-                    )
+                _check_image_pin(
+                    name,
+                    pin.version,
+                    services_by_name.get(name, []),
+                    source=str(entry.source),
+                    location=location,
+                    diagnostics=diagnostics,
+                )
 
             elif category == "charts":
                 module_entry = index.get(PlatformKind.MODULE, name)
@@ -185,16 +191,70 @@ def _check_asset_pin(index: DocumentIndex, name: str, *, source: str, location: 
         )
 
 
-def _known_service_names(index: DocumentIndex) -> set[str]:
-    """Every `ModuleServiceModel.name` across every indexed Module document.
+def _check_image_pin(
+    name: str,
+    value: str,
+    services: list[tuple[str, ModuleServiceModel]],
+    *,
+    source: str,
+    location: str,
+    diagnostics: Diagnostics,
+) -> None:
+    """One `images` pin: a whole image reference with a tag or digest, for a service that has an `image` to replace,
+    and naming the image that service runs (`docs/work/image-pin-validation.md`).
+
+    `services` holds every `(module name, service)` whose service is called `name`.
+    """
+    declared = [(module, service.image) for module, service in services if service.image]
+    problem = image_pin_problem(value, name_hint=parse_image_ref(declared[0][1])[0] if declared else None)
+    if problem is not None:
+        diagnostics.error(
+            f"image pin '{name}': {problem}", source=source, location=f"{location}.version", code="image_pin_invalid"
+        )
+    if not services:
+        diagnostics.warning(
+            f"image pin '{name}' matched no module service", source=source, location=location, code="stale_pin"
+        )
+        return
+    if not declared:
+        modules = ", ".join(f"'{module}'" for module, _ in services)
+        hint = (
+            " A service with an `artifact` is pinned under pins.artifacts."
+            if any(service.artifact for _, service in services)
+            else ""
+        )
+        diagnostics.warning(
+            f"image pin '{name}' targets a service that declares no image (module {modules}), so the pin "
+            f"changes nothing.{hint}",
+            source=source,
+            location=location,
+            code="pin_not_applicable",
+        )
+        return
+    if problem is not None:
+        return
+    pinned = canonical_image_name(parse_image_ref(value)[0])
+    if all(canonical_image_name(parse_image_ref(image)[0]) != pinned for _, image in declared):
+        runs = ", ".join(f"'{parse_image_ref(image)[0]}' (module '{module}')" for module, image in declared)
+        diagnostics.warning(
+            f"image pin '{name}' pulls '{parse_image_ref(value)[0]}', but service '{name}' runs {runs}. An image pin "
+            "is meant to move the tag; to run another image, change the module's `image`.",
+            source=source,
+            location=f"{location}.version",
+            code="image_pin_renamed",
+        )
+
+
+def _services_by_name(index: DocumentIndex) -> dict[str, list[tuple[str, ModuleServiceModel]]]:
+    """Every `ModuleServiceModel` across every indexed Module document, by service name, with its module's name.
 
     Flat and global, matching the pin key's own scope (`VersionPinsModel`'s
     docstring: "Key = ModuleServiceModel.name", not module-qualified) — the
     same flat namespace v1's real production file used.
     """
-    names: set[str] = set()
+    services: dict[str, list[tuple[str, ModuleServiceModel]]] = {}
     for entry in index.all_of(PlatformKind.MODULE):
         module = cast(ModuleModel, entry.model)
         for service in module.spec.services or []:
-            names.add(service.name)
-    return names
+            services.setdefault(service.name, []).append((module.meta.name, service))
+    return services

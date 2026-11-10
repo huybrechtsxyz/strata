@@ -120,7 +120,7 @@ def _worked_example_b(solution) -> None:
         _version(
             "api-dev",
             promotion="    ring: dev\n    order: 1",
-            pins='  pins:\n    images:\n      api: "1.3.0-rc2"\n',
+            pins='  pins:\n    images:\n      api: "acme/api:1.3.0-rc2"\n',
         ),
     )
     _write(
@@ -129,7 +129,7 @@ def _worked_example_b(solution) -> None:
         _version(
             "api-qas",
             promotion="    ring: qas\n    order: 2",
-            pins='  pins:\n    images:\n      api: "1.2.0"\n',
+            pins='  pins:\n    images:\n      api: "acme/api:1.2.0"\n',
         ),
     )
     _write(
@@ -138,7 +138,7 @@ def _worked_example_b(solution) -> None:
         _version(
             "api-prd-canary",
             promotion="    ring: prd\n    order: 3\n    wave: canary",
-            pins='  pins:\n    images:\n      api: "1.1.0"\n',
+            pins='  pins:\n    images:\n      api: "acme/api:1.1.0"\n',
         ),
     )
     _write(
@@ -147,7 +147,7 @@ def _worked_example_b(solution) -> None:
         _version(
             "api-prd",
             promotion="    ring: prd\n    order: 3\n    wave: general",
-            pins='  pins:\n    images:\n      api: "1.0.0"\n',
+            pins='  pins:\n    images:\n      api: "acme/api:1.0.0"\n',
         ),
     )
     _write(solution, "deployment-dev.yaml", _deployment("dev-dep", version="api-dev"))
@@ -183,19 +183,19 @@ def test_multi_ring_json_output_carries_every_row(runner, solution):
     rows = envelope["data"]["rows"]
     assert len(rows) == 4
 
-    general_row = next(r for r in rows if r["value"] == "1.0.0")
+    general_row = next(r for r in rows if r["value"] == "acme/api:1.0.0")
     assert general_row == {
         "ring": "prd",
         "order": 3,
         "wave": "general",
         "category": "images",
         "target": "api",
-        "value": "1.0.0",
+        "value": "acme/api:1.0.0",
         "status": "current",
         "behind": True,
     }
 
-    canary_row = next(r for r in rows if r["value"] == "1.1.0")
+    canary_row = next(r for r in rows if r["value"] == "acme/api:1.1.0")
     assert canary_row["behind"] is False
 
 
@@ -251,10 +251,10 @@ def test_apply_copies_the_preceding_orders_common_pin_into_the_target(runner, so
 
     assert result.exit_code == EXIT_SUCCESS
     assert "'api-qas'" in result.output
-    assert "images.api = 1.2.0" in result.output
+    assert "images.api = acme/api:1.2.0" in result.output
 
     written = (solution / "version-prd-general.yaml").read_text(encoding="utf-8")
-    assert "version: 1.2.0" in written
+    assert "version: acme/api:1.2.0" in written
     assert "status: current" in written
 
 
@@ -270,7 +270,7 @@ def test_apply_json_output_reports_every_copied_pin(runner, solution):
     assert envelope["data"]["wave"] == "general"
     assert envelope["data"]["source_version"] == "api-qas"
     assert envelope["data"]["target_version"] == "api-prd"
-    assert envelope["data"]["copied"] == [{"category": "images", "target": "api", "value": "1.2.0"}]
+    assert envelope["data"]["copied"] == [{"category": "images", "target": "api", "value": "acme/api:1.2.0"}]
 
 
 def test_apply_requires_wave_for_a_multi_wave_ring(runner, solution):

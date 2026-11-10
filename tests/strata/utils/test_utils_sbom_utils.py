@@ -4,10 +4,13 @@
 import pytest
 
 from strata.utils.sbom_utils import (
+    canonical_image_name,
     compose_image_ref,
     exact_version,
     helm_chart_to_purl,
     image_digest_hash,
+    image_pin_problem,
+    image_ref_problem,
     image_tag_problem,
     image_to_purl,
     is_floating_tag,
@@ -356,3 +359,87 @@ def test_terraform_provider_purl_leaves_out_the_default_registry_and_qualifies_a
         "pkg:terraform/hashicorp/null@3.2.1?repository_url=registry.opentofu.org"
     )
     assert terraform_provider_to_purl("hashicorp/azurerm") == "pkg:terraform/hashicorp/azurerm"
+
+
+# ---------------------------------------------------------------------------
+# Image references and image pins
+# ---------------------------------------------------------------------------
+
+_REF_DIGEST = "sha256:" + "ab" * 32
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "nginx",
+        "nginx:1.27",
+        "library/nginx:1.27-alpine",
+        "ghcr.io/org/my-app:v1.2.3",
+        "registry:5000/team/app__x:1",
+        "localhost/app:1",
+        f"nginx@{_REF_DIGEST}",
+        f"nginx:1.27@{_REF_DIGEST}",
+    ],
+)
+def test_image_ref_problem_accepts_a_docker_reference(value):
+    assert image_ref_problem(value) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [
+        ("", "it has no image name"),
+        (":1.27", "it has no image name"),
+        ("Nginx:1.27", "the name 'Nginx'"),
+        ("org//app:1", "the name 'org//app'"),
+        ("app-:1", "the name 'app-'"),
+        ("nginx:", "nothing follows ':'"),
+        ("nginx@", "nothing follows '@'"),
+        ("nginx:.1", "the tag '.1'"),
+        ("nginx@sha256:XYZ", "the digest 'sha256:XYZ'"),
+        ("-bad.io:x/app:1", "the registry '-bad.io:x'"),
+    ],
+)
+def test_image_ref_problem_names_what_is_wrong(value, reason):
+    problem = image_ref_problem(value)
+    assert problem is not None
+    assert problem.startswith(
+        f"'{value}' is not an image reference (NAME:TAG, NAME@sha256:<hex> or NAME:TAG@sha256:<hex>)"
+    )
+    assert reason in problem
+
+
+def test_image_pin_problem_needs_a_tag_or_a_digest():
+    assert image_pin_problem("nginx:1.27") is None
+    assert image_pin_problem(f"nginx@{_REF_DIGEST}") is None
+    assert "no tag or digest" in (image_pin_problem("nginx") or "")
+    assert "may hold only lowercase" in (image_pin_problem("Nginx") or "")
+
+
+@pytest.mark.parametrize(
+    ("value", "hint", "fix"),
+    [
+        ("16-alpine", "docker.io/library/postgres", "for example 'docker.io/library/postgres:16-alpine'"),
+        ("postgres", "docker.io/library/postgres", "Add the tag, for example 'docker.io/library/postgres:<tag>'"),
+        ("16-alpine", None, "NAME:TAG, for example 'postgres:16-alpine'"),
+    ],
+)
+def test_image_pin_problem_suggests_a_fix_from_the_service_image(value, hint, fix):
+    assert fix in (image_pin_problem(value, name_hint=hint) or "")
+
+
+@pytest.mark.parametrize(
+    ("name", "canonical"),
+    [
+        ("postgres", "docker.io/library/postgres"),
+        ("library/postgres", "docker.io/library/postgres"),
+        ("docker.io/library/postgres", "docker.io/library/postgres"),
+        ("index.docker.io/bitnami/redis", "docker.io/bitnami/redis"),
+        ("bitnami/redis", "docker.io/bitnami/redis"),
+        ("ghcr.io/org/app", "ghcr.io/org/app"),
+        ("GHCR.io/org/app", "ghcr.io/org/app"),
+        ("registry:5000/app", "registry:5000/app"),
+    ],
+)
+def test_canonical_image_name_is_the_name_a_runtime_pulls(name, canonical):
+    assert canonical_image_name(name) == canonical
