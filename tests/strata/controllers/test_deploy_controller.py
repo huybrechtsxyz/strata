@@ -4486,7 +4486,7 @@ def test_deploy_run_dispatches_compose_step_to_deploy_namespace(tmp_path: Path, 
     # straight to one `docker stack deploy` for the whole namespace.
     docker_calls = [call for call in _capture if call[0] == "docker"]
     assert len(docker_calls) == 1
-    compose_file = build_path / "apps" / "docker-compose.yml"
+    compose_file = build_path / "apps" / "docker-compose.deploy.yml"
     assert docker_calls[0] == [
         "docker",
         "stack",
@@ -4633,7 +4633,7 @@ def test_deploy_run_resolves_a_deployment_token_in_a_compose_module(tmp_path: Pa
     diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok, diagnostics.messages()
-    compose_text = (build_path / "apps" / "docker-compose.yml").read_text(encoding="utf-8")
+    compose_text = (build_path / "apps" / "docker-compose.deploy.yml").read_text(encoding="utf-8")
     assert "label-app" in compose_text
     assert "${deployment:name}" not in compose_text
 
@@ -5036,7 +5036,7 @@ def test_helm_and_compose_steps_are_each_pinned_to_their_own_context(tmp_path: P
 
 
 # ---------------------------------------------------------------------------
-# The report record (docs/work/deployment-documentation.md, release 2): sensitive output names and the root
+# The report record (docs/design/deployment-documentation.md, section 1): sensitive output names and the root
 # module's output descriptions, next to the output record, never a value.
 # ---------------------------------------------------------------------------
 
@@ -5166,3 +5166,111 @@ def test_build_run_estimates_the_report_record_and_warns_near_the_limit(tmp_path
         for warning in diagnostics.warnings
     ), diagnostics.messages()
     assert not any(key.startswith("strata/") for key in backend_cls.shared_data)  # build never writes
+
+
+def test_deploy_run_records_the_secrets_a_compose_step_used(tmp_path: Path, monkeypatch, _capture):
+    """The scan reads the built docker-compose.yml, whose `${secret:KEY}` tokens a deploy leaves as they are."""
+    backend_cls = _register_fake_output_store_backend(monkeypatch)
+    root = _compose_solution(tmp_path)
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  secrets:\n    - key: DB_PWD\n      store: environment\n      value: APP_DB_PWD\n"
+        "    - key: UNUSED\n      store: environment\n      value: APP_UNUSED\n",
+    )
+    monkeypatch.setenv("APP_DB_PWD", "hunter2")
+    monkeypatch.setenv("APP_UNUSED", "x")
+    module = root / "module.yaml"
+    module.write_text(
+        module.read_text(encoding="utf-8").replace(
+            "image: portainer/portainer-ce\n",
+            "image: portainer/portainer-ce\n"
+            "      environment:\n        - key: DB_PASSWORD\n          value: ${secret:DB_PWD}\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    workspace = root / "workspace.yaml"
+    workspace.write_text(
+        workspace.read_text(encoding="utf-8").replace(
+            "spec:\n  providers:", "spec:\n  output_store: fake-output-store\n  providers:"
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "${secret:DB_PWD}" not in (build_path / "apps" / "docker-compose.deploy.yml").read_text(encoding="utf-8")
+    report = json.loads(backend_cls.shared_data["strata/deployment-report/app/deploy_apps"][0])
+    assert [secret["k"] for secret in report["secrets"]] == ["DB_PWD"]
+    assert "hunter2" not in json.dumps(report)
+
+
+def test_build_run_skips_the_report_estimate_with_a_warning_when_the_output_store_cannot_be_resolved(
+    tmp_path: Path, monkeypatch
+):
+    """The estimate is best-effort: an output store type installed only on the deploy runner must not fail the
+    build that only wanted to size a record."""
+    import strata.controllers.build_controller as build_module
+    from strata.utils.errors import UsageError
+
+    _, root = _report_record_solution(tmp_path, monkeypatch)
+
+    def _unknown_type(index, workspace):
+        raise UsageError("Integration type 'fake-output-store' is not installed.")
+
+    monkeypatch.setattr(build_module, "resolve_output_store_integration", _unknown_type)
+    steps: list[str] = []
+
+    diagnostics = build_run(_context(root), "app", tmp_path / "build", on_step=steps.append)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [w.code for w in diagnostics.warnings if w.code == "report_estimate_skipped"] == ["report_estimate_skipped"]
+    assert not any("report record" in step for step in steps), steps
+
+
+def test_a_compose_deploy_after_a_dry_run_still_delivers_its_secrets(tmp_path: Path, monkeypatch):
+    """`deploy run --dry-run` then `deploy run` on one build: the second must not start from the first's
+    resolved docker-compose.yml, where `${secret:DB_PWD}` is already `${DB_PWD}` and no token is left."""
+    root = _compose_solution(tmp_path)
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  secrets:\n    - key: DB_PWD\n      store: environment\n      value: APP_DB_PWD\n",
+    )
+    monkeypatch.setenv("APP_DB_PWD", "hunter2")
+    module = root / "module.yaml"
+    module.write_text(
+        module.read_text(encoding="utf-8").replace(
+            "image: portainer/portainer-ce\n",
+            "image: portainer/portainer-ce\n"
+            "      environment:\n        - key: DB_PASSWORD\n          value: ${secret:DB_PWD}\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    calls: list[tuple[list[str], dict[str, str] | None]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append((list(args), env))
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    assert deploy_run(_context(root), "app", build_path, force=True, dry_run=True).ok
+    calls.clear()
+    assert deploy_run(_context(root), "app", build_path, force=True).ok
+
+    stack_deploys = [env for args, env in calls if args[:3] == ["docker", "stack", "deploy"]]
+    assert len(stack_deploys) == 1
+    assert (stack_deploys[0] or {}).get("DB_PWD") == "hunter2"

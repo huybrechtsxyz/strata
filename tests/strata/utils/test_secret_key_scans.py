@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the scans that find which secrets an input uses (docs/work/deployment-documentation.md)."""
+"""Tests for the scans that find which secrets an input uses (docs/design/deployment-documentation.md)."""
 
 from pathlib import Path
 

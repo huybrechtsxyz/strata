@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `read_declared_outputs()` (docs/work/deployment-documentation.md, section 3)."""
+"""Tests for `read_declared_outputs()` (docs/design/deployment-documentation.md, section 3)."""
 
 from pathlib import Path
 

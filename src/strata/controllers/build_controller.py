@@ -70,7 +70,7 @@ from strata.controllers.source_sync import (
     sync_asset,
     sync_source,
 )
-from strata.controllers.step_secrets import secret_uses, step_secret_keys
+from strata.controllers.step_secrets import container_secret_keys, secret_uses, step_secret_keys
 from strata.controllers.value_controller import (
     build_value_references,
     reachable_environments,
@@ -116,7 +116,7 @@ from strata.services.workspace_service import effective_assets, effective_provid
 from strata.utils.dependency_order import topological_order
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
-from strata.utils.errors import SystemError, UsageError
+from strata.utils.errors import StrataError, SystemError, UsageError
 from strata.utils.terraform_outputs import read_declared_outputs
 
 
@@ -740,14 +740,27 @@ def build_run(
         # (`build_strata_assets()`, docs/design/asset-management.md Phase 4).
         graph = replace(graph, resolved_assets=resolved_assets)
 
-    # The report record `deploy run` will write per step (docs/work/deployment-documentation.md): sized here,
+    # The report record `deploy run` will write per step (docs/design/deployment-documentation.md): sized here,
     # where the rendered root module is on disk, with the same code the deploy uses. Offline: constructing the
-    # backend contacts nothing.
-    output_store_backend = resolve_output_store_integration(index, workspace)
-    report_store = DeploymentReportStore(output_store_backend, deployment_name) if output_store_backend else None
+    # backend contacts nothing. Only an estimate, so it never fails the build: an output store type installed
+    # only where the deploy runs, say, skips it with a warning.
     declared_secrets = merge_environment_models(environments)[1]
-    secret_info = secret_records(context, environments, declared_secrets) if report_store is not None else {}
-    estimate_payload = build_strata_payload(graph) if report_store is not None else None
+    report_store: DeploymentReportStore | None = None
+    secret_info: dict[str, dict[str, Any]] = {}
+    estimate_payload: Any = None
+    try:
+        output_store_backend = resolve_output_store_integration(index, workspace)
+        if output_store_backend is not None:
+            secret_info = secret_records(context, environments, declared_secrets)
+            estimate_payload = build_strata_payload(graph)
+            report_store = DeploymentReportStore(output_store_backend, deployment_name)
+    except (StrataError, IntegrationError) as exc:
+        diagnostics.warning(
+            f"Workspace '{workspace.meta.name}': the report record size estimate was skipped - {exc}. The build "
+            "is not affected; 'deploy run' still records the report.",
+            location=str(workspace.meta.name),
+            code="report_estimate_skipped",
+        )
 
     # Helm and Compose steps: estimated after the workload pipeline below has rendered their modules.
     container_steps: list[tuple[ProvisioningStepModel, Any]] = []
@@ -899,21 +912,12 @@ def build_run(
         topologies_by_name = {t.name: t for t in (workspace.spec.topology or [])}
         for step, integration in container_steps:
             _, namespace_names = effective_resources_and_namespaces(step, resources_by_name, topologies_by_name)
-            keys: set[str] = set()
-            every = False
-            for name in sorted(namespace_names):
-                target = graph.namespaces.get(name)
-                if target is None:
-                    continue
-                modules = resolve_namespace_modules(index, target, build_path).get(integration.TYPE, [])
-                if not modules:
-                    continue
-                found = integration.referenced_secret_keys(target, modules)
-                if found is None:
-                    every = True
-                else:
-                    keys |= found
-            used = set(declared_secrets) if every else keys & set(declared_secrets)
+            targets = [
+                (target, resolve_namespace_modules(index, target, build_path).get(integration.TYPE, []))
+                for target in (graph.namespaces.get(name) for name in sorted(namespace_names))
+                if target is not None
+            ]
+            used, every = container_secret_keys(integration, targets, set(declared_secrets))
             _estimate_report_record(
                 report_store, step.name, None, diagnostics, _step, secret_uses(used, secret_info), every
             )

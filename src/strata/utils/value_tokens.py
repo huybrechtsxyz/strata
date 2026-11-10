@@ -231,7 +231,7 @@ def referenced_output_keys(node: object) -> set[str]:
 def referenced_secret_keys(node: object) -> set[str]:
     """Return every ``${secret:KEY}`` token's ``KEY`` found anywhere in `node`, with the same walk as
     `referenced_output_keys()`. Used to record which secrets a step's real input uses
-    (docs/work/deployment-documentation.md, section 1)."""
+    (docs/design/deployment-documentation.md, section 1)."""
     if isinstance(node, str):
         return {key for kind, key in extract_value_tokens(node) if kind == "secret"}
     if isinstance(node, dict):

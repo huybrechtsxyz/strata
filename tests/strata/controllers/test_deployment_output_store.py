@@ -12,6 +12,7 @@ from strata.controllers.deployment_output_store import (
     SIZE_WARNING_BYTES,
     DeploymentOutputStore,
     OutputRecordNotFoundError,
+    OutputRecordOmittedError,
     OutputRecordStaleError,
     OutputRecordTooLargeError,
 )
@@ -426,14 +427,49 @@ def test_a_record_above_8_kb_on_a_limited_backend_is_written_with_a_warning():
     assert store.read("step1") == {"kubeconfig": "x" * 8_500}
 
 
-def test_a_record_above_the_limit_raises_and_writes_nothing():
+def test_a_record_above_the_limit_raises_and_writes_only_the_omitted_marker():
     backend = _LimitedStore()
     store = DeploymentOutputStore(backend, _DEPLOYMENT)
 
     with pytest.raises(OutputRecordTooLargeError, match="Step 'step1'.*more than the 10000 bytes"):
         store.record("step1", {"kubeconfig": "x" * 10_500}, sensitive_keys=set())
 
-    assert backend._data == {}
+    assert set(backend._data) == {_step_key("step1")}
+    marker = json.loads(backend._data[_step_key("step1")][0])
+    assert set(marker) == {"omitted_at", "size"}
+    with pytest.raises(OutputRecordOmittedError) as raised:
+        store.read("step1")
+    assert raised.value.omitted_at == marker["omitted_at"]
+
+
+def test_a_too_large_record_hides_the_previous_deploys_values():
+    """The step's own key held the previous deploy's values: after an oversized deploy they are not read."""
+    backend = _LimitedStore()
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+    store.record("step1", {"vm_ip": "10.0.0.5"}, sensitive_keys=set())
+
+    with pytest.raises(OutputRecordTooLargeError):
+        store.record("step1", {"vm_ip": "10.0.0.6", "kubeconfig": "x" * 10_500}, sensitive_keys=set())
+
+    with pytest.raises(OutputRecordOmittedError, match="larger than the output store accepts"):
+        store.read("step1")
+    with pytest.raises(OutputRecordNotFoundError):  # what a consuming deploy catches
+        store.read_record("step1")
+
+
+def test_a_too_large_record_removes_the_step_from_the_old_key():
+    """Only the old per-deployment key held the step: without the marker, read() would fall back to it."""
+    backend = _LimitedStore()
+    _seed_legacy(backend, {"step1": {"vm_ip": "10.0.0.5"}, "step2": {"x": "1"}})
+    store = DeploymentOutputStore(backend, _DEPLOYMENT)
+
+    with pytest.raises(OutputRecordTooLargeError):
+        store.record("step1", {"kubeconfig": "x" * 10_500}, sensitive_keys=set())
+
+    assert set(_legacy(backend)) == {"step2"}
+    with pytest.raises(OutputRecordOmittedError):
+        store.read("step1")
+    assert store.read("step2") == {"x": "1"}
 
 
 def test_the_size_counts_the_key_too():

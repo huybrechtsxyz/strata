@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """`strata deploy report DEPLOYMENT` - the handover document: step outputs, the secrets each step used and where
-each lives, and the images (docs/work/deployment-documentation.md).
+each lives, and the images (docs/design/deployment-documentation.md).
 
 Reads the workspace's `output_store` and the solution only. Never reads a secret value: every secret, and every
 sensitive output, shows as `********`. `--output` is the command's result (ADR-0056); `--format` is the document,
@@ -16,6 +16,7 @@ from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.deployment_document import DocumentTemplateError, render_document
+from strata.controllers.deployment_output_view import status_line
 from strata.controllers.deployment_report_view import MASK, DeploymentReport, deployment_report
 from strata.controllers.solution_context import open_solution
 from strata.utils.errors import UsageError
@@ -148,14 +149,8 @@ def _print_report(report: DeploymentReport) -> None:
     click.echo("Step outputs")
     for step in report.steps:
         outputs = step.outputs
-        if outputs.status == "destroyed":
-            click.echo(f"{step.step}  destroyed {outputs.destroyed_at}")
-            continue
-        if outputs.status != "recorded":
-            click.echo(f"{step.step}  no outputs recorded")
-            continue
-        click.echo(f"{step.step}  collected {outputs.collected_at}")
-        if outputs.outputs:
+        click.echo(status_line(outputs))
+        if outputs.status == "recorded" and outputs.outputs:
             _table(
                 ("OUTPUT", "VALUE", "DESCRIPTION"),
                 [
@@ -177,7 +172,7 @@ def _print_report(report: DeploymentReport) -> None:
     else:
         click.echo("  (none used)")
     for step in report.steps:
-        if step.secrets in ("not_recorded", "older") and step.outputs.status == "recorded":
+        if step.secrets in ("not_recorded", "mismatch") and step.outputs.status == "recorded":
             click.echo(f"  {step.step}: secrets not recorded")
         elif step.all_secrets:
             click.echo(f"  {step.step}: receives every declared secret")

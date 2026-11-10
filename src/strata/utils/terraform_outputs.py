@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Read the `output` blocks a Terraform or OpenTofu root module declares: each output's `description` and
-`sensitive` flag (docs/work/deployment-documentation.md, section 3).
+`sensitive` flag (docs/design/deployment-documentation.md, section 3).
 
 `terraform output -json` returns `value`, `type` and `sensitive`, but not the description, so it is read from the
 root module's own `.tf` files with `python-hcl2`, the parser the SBOM Terraform collector already uses. Only the

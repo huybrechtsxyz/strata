@@ -78,6 +78,15 @@ class OutputRecordDestroyedError(OutputRecordNotFoundError):
         self.destroyed_at = destroyed_at
 
 
+class OutputRecordOmittedError(OutputRecordNotFoundError):
+    """The step's key holds the omitted marker: its last deploy's outputs were larger than the backend accepts, so
+    none were recorded. A reader fails instead of reading the values from an earlier deploy."""
+
+    def __init__(self, message: str, omitted_at: str) -> None:
+        super().__init__(message)
+        self.omitted_at = omitted_at
+
+
 class OutputRecordStaleError(UsageError):
     """A durable record exists for the requested step, but its
     `collected_at` is older than the configured trust window — a hard
@@ -86,7 +95,8 @@ class OutputRecordStaleError(UsageError):
 
 class OutputRecordTooLargeError(SystemError):
     """A step's record is larger than the backend accepts for one key (ADR-0057). Output values cannot be
-    shortened, so nothing is written and the error names the step, the size and the limit."""
+    shortened, so no value is written: the step's key gets the omitted marker instead, and the error names the
+    step, the size and the limit."""
 
 
 @dataclass(frozen=True)
@@ -163,6 +173,7 @@ class DeploymentOutputStore:
 
         Raises:
             OutputRecordDestroyedError: the step's key holds the destroyed marker.
+            OutputRecordOmittedError: the step's last deploy had outputs too large to record.
             OutputRecordNotFoundError: nothing is recorded for `step`.
             strata.utils.errors.SystemError: the stored record is not valid JSON.
             strata.integrations.errors.IntegrationError: the backend itself is unreachable or unauthenticated.
@@ -176,6 +187,14 @@ class DeploymentOutputStore:
                 raise OutputRecordDestroyedError(
                     f"No durable output recorded for step '{step}': it was destroyed at {record['destroyed_at']}.",
                     str(record["destroyed_at"]),
+                )
+            if "omitted_at" in record:
+                # Nor here: the old key may still hold the values from the deploy before this one.
+                raise OutputRecordOmittedError(
+                    f"No durable output recorded for step '{step}': its deploy at {record['omitted_at']} produced "
+                    "outputs larger than the output store accepts for one key, so none were recorded. Make them "
+                    "smaller and deploy the step again.",
+                    str(record["omitted_at"]),
                 )
             return DeploymentStepOutputs(
                 collected_at=datetime.fromisoformat(record["collected_at"]), values=record["values"]
@@ -217,7 +236,9 @@ class DeploymentOutputStore:
             limit, or the transition mirror into the old key failed.
 
         Raises:
-            OutputRecordTooLargeError: the record is larger than the backend's `MAX_VALUE_BYTES`.
+            OutputRecordTooLargeError: the record is larger than the backend's `MAX_VALUE_BYTES`. The step's key
+                then holds the omitted marker and the step is gone from the old key, so no reader gets the
+                values of an earlier deploy.
             strata.integrations.errors.IntegrationError: the backend
                 itself is unreachable or unauthenticated.
         """
@@ -232,9 +253,13 @@ class DeploymentOutputStore:
         limit = self._backend.MAX_VALUE_BYTES
         size = len(key.encode("utf-8")) + len(data)
         if limit is not None and size > limit:
+            # Never leave an earlier deploy's values readable: they no longer describe what is deployed.
+            self._backend.put(key, dump_record({"omitted_at": payload["collected_at"], "size": size}))
+            self._mirror_into_legacy(step, None)
             raise OutputRecordTooLargeError(
                 f"Step '{step}': its outputs take {size} bytes, more than the {limit} bytes the "
-                f"'{self._backend.TYPE}' output store accepts for one key. Nothing was recorded. Make the "
+                f"'{self._backend.TYPE}' output store accepts for one key. No value was recorded, and a later step "
+                f"that reads one of its outputs fails until it is deployed again with smaller outputs. Make the "
                 "largest outputs smaller, mark them sensitive (they are then never stored), or use an "
                 "'azure-blob' output store."
             )
@@ -251,12 +276,13 @@ class DeploymentOutputStore:
             warnings.append(mirror_warning)
         return warnings
 
-    def _mirror_into_legacy(self, step: str, payload: dict[str, Any]) -> str | None:
+    def _mirror_into_legacy(self, step: str, payload: dict[str, Any] | None) -> str | None:
         """During the transition, keep the old per-deployment key current for older strata versions that read
         only that key — so they never read a value from before this deploy. Only when the old key exists.
 
-        When the mirrored record would be too large, the step is removed from the old key instead: an older
-        strata then finds nothing for it, which fails loudly, instead of an old value, which would not.
+        When the mirrored record would be too large, or `payload` is `None`, the step is removed from the old
+        key instead: an older strata then finds nothing for it, which fails loudly, instead of an old value,
+        which would not.
 
         Returns:
             A warning when the mirror could not be written, else `None`.
@@ -268,9 +294,11 @@ class DeploymentOutputStore:
                 if entry is None:
                     return None
                 record = load_record_object(entry.value, self._legacy_key)
+                if payload is None and step not in record:
+                    return None
                 record[step] = payload
                 data = dump_record(record)
-                if limit is not None and len(self._legacy_key.encode("utf-8")) + len(data) > limit:
+                if payload is None or (limit is not None and len(self._legacy_key.encode("utf-8")) + len(data) > limit):
                     del record[step]
                     data = dump_record(record)
                 try:

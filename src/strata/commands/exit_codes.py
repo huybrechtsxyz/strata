@@ -21,6 +21,7 @@ from strata.controllers.build_controller import BuildCleanError
 from strata.controllers.deployment_output_store import (
     OutputRecordDestroyedError,
     OutputRecordNotFoundError,
+    OutputRecordOmittedError,
     OutputRecordStaleError,
     OutputRecordTooLargeError,
 )
@@ -59,6 +60,7 @@ EXIT_CODE_BY_ERROR: dict[type[StrataError], int] = {
     AuditReadError: EXIT_FAILURE,
     OutputRecordDestroyedError: EXIT_USAGE,
     OutputRecordNotFoundError: EXIT_USAGE,
+    OutputRecordOmittedError: EXIT_USAGE,
     OutputRecordStaleError: EXIT_USAGE,
     OutputRecordTooLargeError: EXIT_FAILURE,
     StrataError: EXIT_FAILURE,

@@ -97,7 +97,7 @@ def _referenced_keys(ast: nodes.Template) -> dict[str, set[str]]:
 def template_secret_keys(source: str) -> set[str] | None:
     """The `secrets` keys `source` (an `output.template`) reads, or `None` when it reads `secrets` in a way that
     cannot be checked statically (`secrets[name]`, `secrets.items()`, `secrets` passed on whole): such a template
-    counts as using every secret (docs/work/deployment-documentation.md, section 1).
+    counts as using every secret (docs/design/deployment-documentation.md, section 1).
 
     A template that does not parse also returns `None`: build already rejects it, so this only matters for a
     deploy that runs without a build check, and "every secret" is the safe answer.

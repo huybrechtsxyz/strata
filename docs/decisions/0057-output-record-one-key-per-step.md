@@ -4,7 +4,7 @@
 - Date: 2026-11-09
 - Replaces: [ADR-0036](0036-cross-run-key-value-output-store.md) D3's "one record per deployment". The rest of D3
   (staleness is a hard failure) and all other ADR-0036 decisions stay.
-- Related: [docs/work/deployment-documentation.md](../work/deployment-documentation.md) (the report record, which
+- Related: [docs/design/deployment-documentation.md](../design/deployment-documentation.md) (the report record, which
   uses the same layout, and the size rules)
 
 ## Context and Problem Statement
@@ -34,8 +34,10 @@ The deployment documentation work adds a report record next to it, and needed to
    has no practical limit): `azure-appconfig` 10,000, `azure-keyvault` 25,000, `azure-blob` none. Where a provider
    says "10 KB" without saying 1,000 or 1,024, the smaller number is used. Before a write, the record is measured,
    key included: above 8,000 bytes on a backend with a limit, the write goes ahead with a warning naming the step and
-   the size; above the limit, nothing is written and the error names the step, its size and the limit. `deploy run`
-   reports both as warnings, as it already did for a failed output write: the step has deployed.
+   the size; above the limit, no value is written and the error names the step, its size and the limit. `deploy run`
+   reports both as warnings, as it already did for a failed output write: the step has deployed. Above the limit the
+   step's key gets a small `{"omitted_at", "size"}` marker and the step is removed from the old key, so no reader
+   falls back to the values of an earlier deploy: a read fails, saying why.
 5. Staleness (`output_store_max_age`) applies per step key, exactly as it applied per entry.
 
 **Transition**, removed together in a later release that says so in the changelog:

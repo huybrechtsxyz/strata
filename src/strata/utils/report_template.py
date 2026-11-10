@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The Jinja2 environment for handover document templates (docs/work/deployment-documentation.md, section 5),
+"""The Jinja2 environment for handover document templates (docs/design/deployment-documentation.md, section 5),
 and the check `strata validate` and `deploy report --template` run on a template.
 
 In `utils` so `semantic_checks` can use the check without importing the report controllers. The renderer itself

@@ -2308,7 +2308,7 @@ def test_real_helm_refuses_a_kube_context_its_kubeconfig_does_not_define(tmp_pat
 
 
 def test_referenced_secret_keys_scans_each_modules_rendered_values(tmp_path: Path):
-    """docs/work/deployment-documentation.md: the same input `deploy_namespace()` resolves."""
+    """docs/design/deployment-documentation.md: the same input `deploy_namespace()` resolves."""
     module = _module(
         services=[
             ModuleServiceModel(

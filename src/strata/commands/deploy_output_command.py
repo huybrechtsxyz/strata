@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """`strata deploy output DEPLOYMENT [STEP | STEP.KEY]` - the `terraform output` equivalent.
 
-docs/work/deployment-documentation.md, section 1. Reads the workspace's `output_store` only: no build directory,
+docs/design/deployment-documentation.md, section 1. Reads the workspace's `output_store` only: no build directory,
 no provisioner, no Terraform state, no secret. `--format raw` prints one bare value for `$(...)` in a script;
 `--output json` carries every output, with descriptions, in the envelope's `data` (ADR-0056).
 """
@@ -19,6 +19,7 @@ from strata.controllers.deployment_output_view import (
     SENSITIVE_PLACEHOLDER,
     StepOutputs,
     deployment_outputs,
+    status_line,
 )
 from strata.controllers.solution_context import open_solution
 from strata.utils.errors import UsageError
@@ -110,13 +111,9 @@ def _print_steps(steps: list[StepOutputs]) -> None:
         click.echo("  (no execution steps)")
         return
     for step in steps:
-        if step.status == "destroyed":
-            click.echo(f"{step.step}  destroyed {step.destroyed_at}")
-            continue
+        click.echo(status_line(step))
         if step.status != "recorded":
-            click.echo(f"{step.step}  no outputs recorded")
             continue
-        click.echo(f"{step.step}  collected {step.collected_at}")
         if not step.outputs:
             click.echo("  (no outputs)")
             continue

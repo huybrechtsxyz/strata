@@ -13,6 +13,8 @@ Generated {{ generated_at }} from the outputs recorded by `deploy run`: a snapsh
 ### {{ step.step }}
 {% if step.status == "destroyed" %}
 Destroyed {{ step.destroyed_at }}.
+{% elif step.status == "too_large" %}
+No outputs recorded: its deploy at {{ step.omitted_at }} produced more than the output store accepts.
 {% elif step.status != "recorded" %}
 No outputs recorded.
 {% elif not step.outputs %}
@@ -26,8 +28,9 @@ Collected {{ step.collected_at }}.
 | {{ row.name | md_cell }} | {{ MASK if row.sensitive else (row.value | md_cell) }} | {{ row.description | md_cell }} |
 {% endfor -%}
 {% endif -%}
-{% if step.secrets in ("not_recorded", "older") and step.status == "recorded" %}
-Secrets used by this step are not recorded (deployed by an earlier strata version); deploy it again to record them.
+{% if step.secrets in ("not_recorded", "mismatch") and step.status == "recorded" %}
+Secrets used by this step are not recorded for the deploy that recorded its outputs (an earlier strata version
+deployed it, or a write failed); deploy it again to record them.
 {% elif step.all_secrets %}
 This step receives every declared secret.
 {% endif -%}

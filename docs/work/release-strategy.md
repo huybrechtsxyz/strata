@@ -247,7 +247,7 @@ Execution order (each its own small, checked phase per repo convention —
 ## Changelog
 
 - 2026-11-09: **Built 2.6.0** - bumped `VERSION.txt` from `2.5.0` to `2.6.0`. Deployment documentation
-  (docs/work/deployment-documentation.md), planned as four releases and shipped as one: the per-step output store
+  (docs/design/deployment-documentation.md), planned as four releases and shipped as one: the per-step output store
   with size limits (ADR-0057), `strata deploy output`, `strata deploy report` (Markdown, `--template`,
   `--output-path`), `spec.documentation`, two `strata validate` checks for secrets, the manifest `commit_sha`, and
   `values get` shell formats keeping stdout clean. A minor release: everything new is opt-in, and the output store

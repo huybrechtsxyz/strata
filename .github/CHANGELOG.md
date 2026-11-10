@@ -11,7 +11,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 ## [2.6.0] - 2026-11-09
 
 Deployment documentation: `strata deploy output`, `strata deploy report` and `spec.documentation`, built on a
-per-step output store ([docs/work/deployment-documentation.md](../docs/work/deployment-documentation.md)).
+per-step output store ([docs/design/deployment-documentation.md](../docs/design/deployment-documentation.md)).
 
 ### Changed
 
@@ -22,7 +22,10 @@ per-step output store ([docs/work/deployment-documentation.md](../docs/work/depl
   it too, so an older strata version reading it never gets an outdated value. A later release removes both.
 - `deploy run` warns when a step's recorded outputs pass 8,000 bytes on a backend with a size limit
   (`output_store_record`), and when they pass the limit it names the step, its size and the limit instead of
-  passing on the backend's own error. The step's deploy still succeeds, as before.
+  passing on the backend's own error. The step's deploy still succeeds, as before. No value is recorded then, and
+  the step's earlier values are no longer read either: its key holds an "omitted" marker and it is removed from the
+  old key, so a later step reading one of its outputs fails with that reason instead of getting a value from an
+  earlier deploy. `deploy output` shows it as "too large for the output store".
 - `strata values get --format raw|env|export` writes the run's header, findings and footer to stderr, so stdout
   holds only the values and `$(strata values get app KEY --format raw)` captures just the value. `--format table`
   and `--output json` are unchanged.
@@ -37,13 +40,15 @@ per-step output store ([docs/work/deployment-documentation.md](../docs/work/depl
   access to the store. A sensitive output shows as `<sensitive>`: strata never stores its value, so `--format raw`
   on it fails (exit 2) and shows its description instead. `--format raw` prints one bare value on stdout, with the
   run's report on stderr, for `$(...)` in a script. With `-o json`, each output carries its description. Exit 2 for
-  an unknown step or key, 3 when the workspace has no `output_store`.
+  an unknown step or key, 3 when the workspace has no `output_store`. A report record from a different deploy than
+  the values (`report: mismatch`) is not applied to them.
 - `deploy run` also records a report record per step, `strata/deployment-report/<deployment>/<step>`: the names of
   its sensitive outputs and each output's `description`, read from the root module's `output` blocks (`*.tf` and
   `*.tf.json`). Never a value.
   Above the backend's size limit, descriptions are shortened, then left out (`report_store_record` warning). A failed
   write is a warning. Destroy marks it destroyed. `strata build run` sizes it from the rendered `.tf` files and warns
-  early (`report_record_size`).
+  early (`report_record_size`); when the output store cannot be resolved where the build runs, it skips the estimate
+  with a warning (`report_estimate_skipped`) and the build goes on.
 - `strata deploy report DEPLOYMENT [--step NAME]...`, the handover document: each step's outputs, the secrets each
   step used with where to find them, and the deployment's images. No secret value is ever read or shown: every secret
   and every sensitive output is `********`. A secret is listed by location: the vault URL and name for
@@ -62,7 +67,8 @@ per-step output store ([docs/work/deployment-documentation.md](../docs/work/depl
 - `spec.documentation` on a deployment: after each successful `deploy run`, the handover document is written as
   `_handover.md` next to the audit manifest and pushed with it by every enabled git audit sink. `strata validate`
   rejects it without an `output_store`, without an enabled git audit sink, or with a missing or invalid template. A
-  render failure is a warning, never a failed deploy.
+  render failure, any error a template raises included, is a warning, never a failed deploy. Under `deploy run
+  --pin`, the document lists the pinned version's images.
 - `deploy run` now records the secrets each step used in the report record, for Helm and Compose steps too.
   `build run` includes them in its size estimate, for every step type.
 - `strata validate` warns about a secret that sets `version` (`secret_version_ignored`): no store reads it yet, so
@@ -70,6 +76,15 @@ per-step output store ([docs/work/deployment-documentation.md](../docs/work/depl
 - `strata validate` rejects an `azure-keyvault` secret whose `value` is a URL (`keyvault_secret_value_is_url`). The
   value is the secret's name in the vault the integration points at. A resource that needs the secret's address,
   such as App Gateway's `key_vault_secret_id`, takes it as a variable.
+
+### Fixed
+
+- A Compose step deployed twice from one build (`deploy run --dry-run` then `deploy run`, or a retry) deployed its
+  stack with every secret empty: the first run rewrote the built `docker-compose.yml` with its tokens resolved, so
+  the second found no `${secret:}` token to deliver, and Docker substituted an empty string with only a warning.
+  Every `${var:}` and `${output:}` value was also the first run's. `deploy run` now writes the resolved document to
+  `docker-compose.deploy.yml` next to it and deploys that, leaving the built file as `build run` wrote it. Like
+  before, the file holds no secret value: a secret is `${KEY}`, its value in the `docker stack` process environment.
 
 ## [2.5.0] - 2026-11-09
 

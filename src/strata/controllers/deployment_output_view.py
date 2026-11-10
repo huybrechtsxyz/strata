@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """What `strata deploy output` shows: each step's recorded outputs, read from the workspace's `output_store`
-(docs/work/deployment-documentation.md, section 1). The `terraform output` equivalent.
+(docs/design/deployment-documentation.md, section 1). The `terraform output` equivalent.
 
 Read-only. Never calls a provisioner, never reads Terraform state, never reads a secret. Values come from the output
 record (ADR-0057); sensitive output names and descriptions from the report record. A sensitive value is never
@@ -18,11 +18,14 @@ from strata.controllers.deployment_output_store import (
     DeploymentOutputStore,
     OutputRecordDestroyedError,
     OutputRecordNotFoundError,
+    OutputRecordOmittedError,
 )
 from strata.controllers.deployment_report_store import DeploymentReportStore, StepReport
 from strata.controllers.integration_resolution import resolve_output_store_integration
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import resolve_deployment_workspace
+from strata.models.deployment_model import DeploymentModel
+from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError, ValidationError
 
@@ -44,19 +47,32 @@ class OutputRow:
 class StepOutputs:
     """One step's outputs.
 
-    `status`: `recorded`, `not_recorded` (never deployed with an output store) or `destroyed`.
-    `report`: the report record, which holds sensitive names and descriptions: `recorded`, `not_recorded` (an
-    older strata deployed the step, or its write failed), `older` (from an earlier deploy than the values) or
+    `status`: `recorded`, `not_recorded` (never deployed with an output store), `too_large` (its last deploy's
+    outputs were larger than the output store accepts, so none were recorded; `omitted_at` says when) or
     `destroyed`.
+    `report`: the report record, which holds sensitive names and descriptions: `recorded`, `not_recorded` (an
+    older strata deployed the step, or its write failed), `mismatch` (from a different deploy than the values:
+    an earlier one, or a later one whose output write failed) or `destroyed`.
     """
 
     step: str
     status: str
     collected_at: str | None = None
     destroyed_at: str | None = None
+    omitted_at: str | None = None
     report: str = "not_recorded"
     truncated: bool = False
     outputs: list[OutputRow] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class OutputStores:
+    """A deployment, its workspace, and the two stores `deploy run` writes for it."""
+
+    deployment: DeploymentModel
+    workspace: WorkspaceModel
+    outputs: DeploymentOutputStore
+    reports: DeploymentReportStore
 
 
 @dataclass
@@ -64,6 +80,17 @@ class DeploymentOutputs:
     deployment: str
     steps: list[StepOutputs]
     diagnostics: Diagnostics
+
+
+def status_line(step: StepOutputs) -> str:
+    """The one console line that opens a step in `deploy output` and `deploy report`."""
+    if step.status == "destroyed":
+        return f"{step.step}  destroyed {step.destroyed_at}"
+    if step.status == "too_large":
+        return f"{step.step}  no outputs recorded: too large for the output store (deploy at {step.omitted_at})"
+    if step.status != "recorded":
+        return f"{step.step}  no outputs recorded"
+    return f"{step.step}  collected {step.collected_at}"
 
 
 def parse_output_address(address: str | None, step_names: list[str]) -> tuple[str | None, str | None]:
@@ -98,7 +125,26 @@ def deployment_outputs(context: SolutionContext, deployment_name: str, address: 
         strata.utils.errors.SystemError: a stored record is not valid JSON.
         strata.integrations.errors.IntegrationError: the output store is unreachable or unauthenticated.
     """
-    deployment, workspace = resolve_deployment_workspace(context, deployment_name)
+    stores = open_output_stores(context, deployment_name)
+    step_names = [step.name for step in stores.workspace.spec.execution or []]
+    step_filter, key_filter = parse_output_address(address, step_names)
+    steps, _, diagnostics = read_steps(stores, [name for name in step_names if step_filter in (None, name)])
+    if key_filter is not None:
+        steps = [_only_key(step, key_filter) for step in steps]
+    return DeploymentOutputs(deployment=stores.deployment.meta.name, steps=steps, diagnostics=diagnostics)
+
+
+def open_output_stores(
+    context: SolutionContext, deployment_name: str, *, version_pin: str | None = None
+) -> OutputStores:
+    """Resolve `deployment_name` (with `version_pin`, as `deploy run --pin` does) and open its output and report
+    stores.
+
+    Raises:
+        UsageError: the deployment does not exist, or names no workspace.
+        ValidationError: the workspace sets no `output_store`.
+    """
+    deployment, workspace = resolve_deployment_workspace(context, deployment_name, version_pin=version_pin)
     backend = resolve_output_store_integration(context.controller.index, workspace)
     if backend is None:
         missing = Diagnostics()
@@ -109,34 +155,47 @@ def deployment_outputs(context: SolutionContext, deployment_name: str, address: 
             code="output_store_missing",
         )
         raise ValidationError(missing, missing.errors[0].message)
-    step_names = [step.name for step in workspace.spec.execution or []]
-    step_filter, key_filter = parse_output_address(address, step_names)
+    return OutputStores(
+        deployment=deployment,
+        workspace=workspace,
+        outputs=DeploymentOutputStore(backend, deployment.meta.name),
+        reports=DeploymentReportStore(backend, deployment.meta.name),
+    )
 
-    output_store = DeploymentOutputStore(backend, deployment.meta.name)
-    report_store = DeploymentReportStore(backend, deployment.meta.name)
-    max_age = workspace.spec.output_store_max_age
+
+def read_steps(
+    stores: OutputStores, names: list[str]
+) -> tuple[list[StepOutputs], dict[str, StepReport | None], Diagnostics]:
+    """Each named step's outputs, and its report record as read: one read of each record per step.
+
+    Raises:
+        strata.utils.errors.SystemError: a stored record is not valid JSON.
+        strata.integrations.errors.IntegrationError: the output store is unreachable or unauthenticated.
+    """
+    max_age = stores.workspace.spec.output_store_max_age
     diagnostics = Diagnostics()
     steps: list[StepOutputs] = []
-    for name in step_names:
-        if step_filter is not None and name != step_filter:
-            continue
-        step = _read_step(output_store, report_store, name)
+    reports: dict[str, StepReport | None] = {}
+    for name in names:
+        step, reports[name] = _read_step(stores.outputs, stores.reports, name)
         _add_warnings(step, max_age, diagnostics)
-        if key_filter is not None:
-            step = _only_key(step, key_filter)
         steps.append(step)
-    return DeploymentOutputs(deployment=deployment.meta.name, steps=steps, diagnostics=diagnostics)
+    return steps, reports, diagnostics
 
 
-def _read_step(output_store: DeploymentOutputStore, report_store: DeploymentReportStore, name: str) -> StepOutputs:
+def _read_step(
+    output_store: DeploymentOutputStore, report_store: DeploymentReportStore, name: str
+) -> tuple[StepOutputs, StepReport | None]:
+    report = report_store.read(name)
     try:
         record = output_store.read_record(name)
     except OutputRecordDestroyedError as exc:
-        return StepOutputs(step=name, status="destroyed", destroyed_at=exc.destroyed_at, report="destroyed")
+        return StepOutputs(step=name, status="destroyed", destroyed_at=exc.destroyed_at, report="destroyed"), report
+    except OutputRecordOmittedError as exc:
+        return StepOutputs(step=name, status="too_large", omitted_at=exc.omitted_at), report
     except OutputRecordNotFoundError:
-        return StepOutputs(step=name, status="not_recorded")
+        return StepOutputs(step=name, status="not_recorded"), report
 
-    report = report_store.read(name)
     report_state = _report_state(report, record.collected_at)
     current = report if report_state == "recorded" else None
     sensitive = set(current.sensitive_keys) if current else set()
@@ -150,7 +209,7 @@ def _read_step(output_store: DeploymentOutputStore, report_store: DeploymentRepo
         )
         for key in sorted(set(record.values) | sensitive)
     ]
-    return StepOutputs(
+    step = StepOutputs(
         step=name,
         status="recorded",
         collected_at=record.collected_at.isoformat(),
@@ -158,6 +217,7 @@ def _read_step(output_store: DeploymentOutputStore, report_store: DeploymentRepo
         truncated=bool(current and current.truncated),
         outputs=rows,
     )
+    return step, report
 
 
 def _report_state(report: StepReport | None, collected_at: datetime) -> str:
@@ -165,8 +225,9 @@ def _report_state(report: StepReport | None, collected_at: datetime) -> str:
         return "not_recorded"
     if report.destroyed_at is not None:
         return "destroyed"
-    if report.collected_at is None or report.collected_at < collected_at:
-        return "older"
+    # One deploy writes both records with the same `collected_at`: any difference means two deploys.
+    if report.collected_at != collected_at:
+        return "mismatch"
     return "recorded"
 
 

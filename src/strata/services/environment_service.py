@@ -166,7 +166,7 @@ class EnvironmentService(BaseService[EnvironmentModel]):
         return diagnostics
 
     def validate_secret_store_values(self) -> Diagnostics:
-        """Two checks on each secret's own declaration (docs/work/deployment-documentation.md, section 2):
+        """Two checks on each secret's own declaration (docs/design/deployment-documentation.md, section 2):
 
         - A secret that sets `version` gets a warning: no resolver reads it, so the latest version is always used.
         - An `azure-keyvault` secret whose `value` is a URL is an error. The value is the secret's name in the vault

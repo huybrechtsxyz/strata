@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the handover document template environment (docs/work/deployment-documentation.md, section 5)."""
+"""Tests for the handover document template environment (docs/design/deployment-documentation.md, section 5)."""
 
 import pytest
 from jinja2.exceptions import SecurityError

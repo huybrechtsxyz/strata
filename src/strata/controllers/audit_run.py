@@ -51,7 +51,7 @@ from strata.controllers.audit_event_rendering import render_manifest_event, rend
 from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
 from strata.controllers.build_controller import apply_remote_version_pins
-from strata.controllers.deployment_document import DocumentTemplateError, render_document
+from strata.controllers.deployment_document import render_document
 from strata.controllers.deployment_report_store import DeploymentReportStore
 from strata.controllers.deployment_report_view import deployment_report
 from strata.controllers.deployment_resolution import deployment_workspace
@@ -102,7 +102,7 @@ from strata.utils.transport import run_command
 #: this back and must glob for the exact same filename this module writes.
 MANIFEST_FILENAME = "_manifest.json"
 _METRICS_FILENAME = "_metrics.json"
-#: The handover document `spec.documentation` writes next to the manifest (docs/work/deployment-documentation.md).
+#: The handover document `spec.documentation` writes next to the manifest (docs/design/deployment-documentation.md).
 HANDOVER_FILENAME = "_handover.md"
 _GIT_REV_PARSE_TIMEOUT = 30
 
@@ -260,7 +260,7 @@ def finalize_and_distribute_deploy_audit(
     if action == "deploy" and status == "success":
         _record_last_deploy(context, deployment, manifest, diagnostics)
     handover_path = (
-        _write_handover(context, deployment, manifest, local_dir / HANDOVER_FILENAME, diagnostics)
+        _write_handover(context, deployment, manifest, local_dir / HANDOVER_FILENAME, diagnostics, pin=pin)
         if action == "deploy" and status == "success" and deployment.spec.documentation is not None
         else None
     )
@@ -349,6 +349,8 @@ def _write_handover(
     manifest: DeploymentManifestModel,
     path: Path,
     diagnostics: Diagnostics,
+    *,
+    pin: str | None = None,
 ) -> Path | None:
     """Render `spec.documentation`'s handover document into `path`, with this run's own audit entry, and return
     `path`; `None` with a warning when it cannot be rendered. Never fails the run: the deploy has succeeded, and
@@ -361,10 +363,10 @@ def _write_handover(
         template_source = (
             (context.root / documentation.template).read_text(encoding="utf-8") if documentation.template else None
         )
-        report = deployment_report(context, deployment.meta.name)
+        report = deployment_report(context, deployment.meta.name, version_pin=pin)
         document = render_document(report, template_source=template_source, audit=audit)
         path.write_text(document, encoding="utf-8")
-    except (StrataError, IntegrationError, DocumentTemplateError, OSError) as exc:
+    except Exception as exc:  # the deploy succeeded: nothing here may fail it
         diagnostics.warning(
             f"Deployment '{deployment.meta.name}': the handover document (spec.documentation) was not written - "
             f"{exc}. The deploy succeeded; run 'strata deploy report --format markdown' to render it.",

@@ -646,8 +646,11 @@ real problems, both now fixed above:
    `${DB_PASSWORD}`). `resolve_compose_values()` (`compose.py`) is the thin,
    tool-specific wrapper (mirrors `resolve_module_values()`'s own
    placement); its caller, `ComposeIntegration.deploy_namespace()`
-   (gap #13), rewrites the namespace's already-merged `docker-compose.yml`
-   and delivers the renamed secrets as the `docker stack deploy` subprocess's
+   (gap #13), writes the resolved namespace document to
+   `docker-compose.deploy.yml`, next to the built `docker-compose.yml` it
+   leaves untouched (until 2.6.0 it rewrote that file in place, so a second
+   deploy of one build found no token left and delivered no secret), and
+   delivers the renamed secrets as the `docker stack deploy` subprocess's
    own environment — no `.env` file needed (`Integration.run()`'s `env`
    kwarg already merges per-call onto `os.environ`, simpler than v1's real
    `inject_compose_env()` context-manager-mutates-`os.environ` approach).

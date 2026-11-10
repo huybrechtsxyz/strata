@@ -194,7 +194,7 @@ def _check_deployments(
 def _check_deployment_documentation(
     index: DocumentIndex, deployment: DeploymentModel, root: Path | None
 ) -> Diagnostics:
-    """`spec.documentation` (docs/work/deployment-documentation.md, section 4): every gap shows up before a deploy,
+    """`spec.documentation` (docs/design/deployment-documentation.md, section 4): every gap shows up before a deploy,
     not at the end of one. The document is built from the `output_store`; `sink: audit` needs an enabled `git`
     audit sink, the only kind that stores files; a `template` must exist and use only the report's data.
     """

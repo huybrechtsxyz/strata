@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `DeploymentReportStore` (docs/work/deployment-documentation.md, section 1: the report record)."""
+"""Tests for `DeploymentReportStore` (docs/design/deployment-documentation.md, section 1: the report record)."""
 
 import json
 from datetime import datetime, timezone
@@ -8,6 +8,7 @@ import pytest
 
 from strata.controllers.deployment_output_store import SIZE_WARNING_BYTES, OutputRecordTooLargeError
 from strata.controllers.deployment_report_store import (
+    AUDIT_SUMMARY_KEYS,
     SHORT_DESCRIPTION_LENGTH,
     DeploymentReportStore,
     SecretUse,
@@ -204,3 +205,28 @@ def test_prepare_sizes_without_writing():
     assert store.data == {}
     assert prepared.key == _KEY
     assert prepared.size == len(_KEY) + len(prepared.data)
+
+
+def test_the_audit_summary_always_has_every_key():
+    """A deploy without a commit SHA still stores `commit_sha` (null), and a record missing a key reads back with it:
+    a template under StrictUndefined can test any field."""
+    backend = _Store()
+    store = DeploymentReportStore(backend, "prd")
+
+    store.record_last_deploy({"deployed_by": "ci", "completed_at": "2026-11-09T14:28:00+00:00", "commit_sha": None})
+
+    stored = json.loads(backend.data["strata/deployment-audit/prd"])
+    assert "commit_sha" in stored and stored["commit_sha"] is None
+    summary = store.read_last_deploy()
+    assert summary is not None
+    assert set(summary) == set(AUDIT_SUMMARY_KEYS)
+    assert summary["deployed_by"] == "ci" and summary["execution_id"] is None
+
+
+def test_an_audit_summary_missing_keys_reads_back_with_them():
+    backend = _Store()
+    backend.data["strata/deployment-audit/prd"] = b'{"deployed_by":"ci"}'
+
+    summary = DeploymentReportStore(backend, "prd").read_last_deploy()
+
+    assert summary == {key: ("ci" if key == "deployed_by" else None) for key in AUDIT_SUMMARY_KEYS}

@@ -596,7 +596,7 @@ def secret_records(
     context: SolutionContext, environments: list[EnvironmentModel], secrets: dict[str, SecretStoreModel]
 ) -> dict[str, dict[str, Any]]:
     """For each declared secret, what the report record keeps about it: store, location, description and the
-    document that declares it (docs/work/deployment-documentation.md, section 2). Never a value.
+    document that declares it (docs/design/deployment-documentation.md, section 2). Never a value.
 
     The location comes from the store's own resolver (`StoreIntegration.location()`), constructed the same way
     `resolve_values()` constructs it, so it names where the deploy actually read the secret. Constructing a

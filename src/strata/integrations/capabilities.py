@@ -91,7 +91,7 @@ class StoreIntegration(Integration):
 
     def location(self, key: str) -> dict[str, str | None]:
         """Where secret `key` lives, as non-secret connection settings only: no credential, no token, never the
-        value (docs/work/deployment-documentation.md, section 2). `deploy run` records it in the report record
+        value (docs/design/deployment-documentation.md, section 2). `deploy run` records it in the report record
         with the same configuration the resolver just used, so it says where the deploy actually read the secret.
 
         Never contacts the store. A setting that is not configured is `None`, which a report shows as `unknown`.
@@ -500,7 +500,7 @@ class InfraIntegration(Integration):
 
     def referenced_secret_keys(self, namespace: NamespaceModel, modules: list[ResolvedModule]) -> set[str] | None:
         """The `${secret:KEY}` keys `deploy_namespace()` substitutes into `modules`, scanned from the same input
-        its own `${output:}` pre-flight reads (docs/work/deployment-documentation.md, section 1). Nothing is
+        its own `${output:}` pre-flight reads (docs/design/deployment-documentation.md, section 1). Nothing is
         resolved and nothing is contacted.
 
         Returns `None` when this integration cannot tell (the base default): the caller then counts every

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `strata deploy output` (docs/work/deployment-documentation.md, section 1)."""
+"""Tests for `strata deploy output` (docs/design/deployment-documentation.md, section 1)."""
 
 import json
 from dataclasses import dataclass, field
@@ -252,3 +252,36 @@ def test_a_corrupt_record_is_a_system_failure(tmp_path):
     root = _solution(tmp_path)
     _Backend.data["strata/step-outputs/app/infra"] = b"not json"
     assert _invoke(root).exit_code == EXIT_FAILURE
+
+
+def test_a_step_whose_outputs_were_too_large_says_so_and_shows_no_earlier_value(tmp_path):
+    root = _solution(tmp_path)
+    _deploy_infra()
+    # What `record()` leaves when the next deploy's outputs are over the backend's limit.
+    _Backend.data["strata/step-outputs/app/infra"] = b'{"omitted_at":"2026-11-10T09:00:00+00:00","size":12000}'
+
+    steps = {step["step"]: step for step in _data(_invoke(root, "-o", "json"))["steps"]}
+    assert (steps["infra"]["status"], steps["infra"]["omitted_at"]) == ("too_large", "2026-11-10T09:00:00+00:00")
+    assert steps["infra"]["outputs"] == []
+    table = _invoke(root)
+    assert "infra  no outputs recorded: too large for the output store" in table.output
+    assert "sql.example.net" not in table.output
+    assert _invoke(root, "infra.fqdn").exit_code == EXIT_USAGE
+
+
+@pytest.mark.parametrize("report_offset", [timedelta(hours=-1), timedelta(hours=1)])
+def test_a_report_record_from_another_deploy_is_not_applied_to_the_values(tmp_path, report_offset):
+    """Older (the report write failed) or newer (the output write failed, the report write did not): either way
+    its descriptions and sensitive names belong to other values."""
+    root = _solution(tmp_path)
+    at = datetime.now(timezone.utc) - timedelta(hours=2)
+    _deploy_infra(collected_at=at, report=False)
+    DeploymentReportStore(_Backend(), "app").record(
+        "infra", sensitive_keys={"fqdn"}, descriptions={"fqdn": "from another deploy"}, collected_at=at + report_offset
+    )
+
+    payload = json.loads(_invoke(root, "infra", "-o", "json").output)
+
+    infra = payload["data"]["steps"][0]
+    assert infra["report"] == "mismatch"
+    assert [(row["name"], row["sensitive"], row["description"]) for row in infra["outputs"]] == [("fqdn", False, None)]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End to end for `strata deploy report` (docs/work/deployment-documentation.md, release 3).
+"""End to end for `strata deploy report` (docs/design/deployment-documentation.md, section 1).
 
 A real `deploy run` of a Terraform step and a Helm step, with every tool call faked and a fake key-value
 `output_store`, then `deploy report`: outputs, sensitive names, the secrets each step used with their locations,
@@ -337,6 +337,9 @@ def test_a_custom_template_receives_the_json_data(tmp_path):
     [
         ("{{ secret_values }}", "'secret_values' is not in the report data"),
         ("{{ steps.__class__.__mro__ }}", "does not render"),
+        # Not Jinja2 errors: Python's own, raised by the expression.
+        ("{{ steps | length / 0 }}", "ZeroDivisionError"),
+        ("{{ deployment + 1 }}", "TypeError"),
     ],
 )
 def test_a_template_that_cannot_render_is_a_usage_error(tmp_path, source, message):
@@ -411,12 +414,19 @@ def test_a_successful_deploy_pushes_the_handover_document_with_the_audit_record(
         assert value not in document, value
 
 
-def test_a_failed_render_is_a_warning_and_the_audit_record_is_still_pushed(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "source",
+    [
+        "{{ steps[99].step }}",  # passes validate, fails to render (a Jinja2 error)
+        "{{ steps | length / 0 }}",  # a Python error, not a Jinja2 one
+    ],
+)
+def test_a_failed_render_is_a_warning_and_the_audit_record_is_still_pushed(tmp_path, monkeypatch, source):
     import strata.controllers.audit_run as audit_run_module
     from strata.controllers.audit_push import PushResult
 
     root = _solution(tmp_path, git_sink=True, documentation="    template: docs/handover.md.j2\n")
-    _write(root, "docs/handover.md.j2", "{{ steps[99].step }}")  # passes validate, fails to render
+    _write(root, "docs/handover.md.j2", source)
     _deploy(tmp_path, root)
     pushed: dict[str, Path] = {}
     monkeypatch.setattr(audit_run_module, "push_audit_files", lambda *a, **k: pushed.update(a[3]) or PushResult(True))
@@ -477,3 +487,61 @@ def test_build_estimates_the_report_record_of_a_helm_step_too(tmp_path):
     build_run(open_solution(root).require_valid(), "app", tmp_path / "build", on_step=steps.append)
 
     assert any("step 'deploy_apps': 0 output(s) declared, 1 secret(s) used" in step for step in steps), steps
+
+
+def test_a_deploy_without_a_commit_sha_still_renders_the_document(tmp_path, monkeypatch):
+    """Outside a git checkout and without a CI commit variable the summary has `commit_sha: null`; the built-in
+    template, under StrictUndefined, must still render."""
+    import strata.controllers.audit_run as audit_run_module
+
+    monkeypatch.setattr(audit_run_module, "built_commit_sha", lambda root: None)
+    root = _solution(tmp_path)
+    _deploy(tmp_path, root)
+    audit_run_module.finalize_and_distribute_deploy_audit(
+        open_solution(root).require_valid(),
+        "app",
+        tmp_path / "build",
+        execution_id="33333333-3333-3333-3333-333333333333",
+        started_at=datetime.now(timezone.utc) - timedelta(seconds=5),
+        run_diagnostics=Diagnostics(),
+    )
+
+    result = _report(root, "--format", "markdown")
+    assert result.exit_code == 0, result.output
+    assert "from commit" not in result.stdout
+    assert "audit record `33333333-3333-3333-3333-333333333333`" in result.stdout
+    assert json.loads(_report(root, "-o", "json").output)["data"]["audit"]["commit_sha"] is None
+
+
+def test_the_handover_document_describes_the_pinned_deploy(tmp_path, monkeypatch):
+    """`deploy run --pin v1`: the document pushed with the audit record lists what was deployed, the pinned
+    version's images, not whatever `spec.version` says on disk."""
+    import strata.controllers.audit_run as audit_run_module
+    import strata.controllers.deployment_report_view as report_view_module
+    from strata.controllers.audit_push import PushResult
+
+    root = _solution(tmp_path, git_sink=True, documentation="    sink: audit\n")
+    _write(root, "version.yaml", _H.format(kind="version", name="v1") + "  pins:\n    artifacts:\n      x: '1.0.0'\n")
+    _deploy(tmp_path, root)
+    monkeypatch.setattr(audit_run_module, "push_audit_files", lambda *a, **k: PushResult(True))
+    seen: list[tuple[str | None, bool]] = []
+    real_effective_images = report_view_module.effective_images
+
+    def _spy(context, deployment, *, pinned_by_flag=False):
+        seen.append((deployment.spec.version, pinned_by_flag))
+        return real_effective_images(context, deployment, pinned_by_flag=pinned_by_flag)
+
+    monkeypatch.setattr(report_view_module, "effective_images", _spy)
+
+    diagnostics = audit_run_module.finalize_and_distribute_deploy_audit(
+        open_solution(root).require_valid(),
+        "app",
+        tmp_path / "build",
+        execution_id="44444444-4444-4444-4444-444444444444",
+        started_at=datetime.now(timezone.utc) - timedelta(seconds=5),
+        run_diagnostics=Diagnostics(),
+        pin="v1",
+    )
+
+    assert not diagnostics.warnings, diagnostics.messages()
+    assert seen == [("v1", True)]

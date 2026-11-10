@@ -228,7 +228,7 @@ class DeploymentDocumentationModel(PlatformBaseModel):
     Secret values are never in it; secrets are listed by where to find them.
 
     Design notes:
-    docs/work/deployment-documentation.md, section 4. A render or push failure is a warning: the deploy has
+    docs/design/deployment-documentation.md, section 4. A render or push failure is a warning: the deploy has
     succeeded, and `strata deploy report` can render the document again.
     """
 

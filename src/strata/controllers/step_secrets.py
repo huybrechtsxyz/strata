@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which declared secrets a provisioning step used (docs/work/deployment-documentation.md, section 1).
+"""Which declared secrets a provisioning step used (docs/design/deployment-documentation.md, section 1).
 
 Worked out from the step's real input at deploy time, not from the YAML afterwards. Per delivery path:
 
@@ -10,6 +10,8 @@ Worked out from the step's real input at deploy time, not from the YAML afterwar
 - A script: tokens in `script.args`, plus the keys `script.values` lists. Without `script.values`, `STRATA_VALUES`
   holds every resolved value, so the step counts as using every secret.
 - A GitOps step: tokens in the remote integration's authentication.
+- A Helm or Compose step (`container_secret_keys()`): tokens in what each namespace renders, scanned by the
+  integration's own `referenced_secret_keys()`.
 - An `output.template`: the `secrets` keys it reads (`template_secret_keys()`); dynamic access counts as every
   secret.
 
@@ -17,11 +19,14 @@ The answer errs towards more, never fewer: a secret a step receives but might no
 document never leaves out a secret the step had.
 """
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 from strata.controllers.deployment_report_store import SecretUse
 from strata.integrations.capabilities import InfraIntegration
+from strata.integrations.resolved_context import ResolvedModule
+from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
 from strata.utils.templater import template_secret_keys
 from strata.utils.terraform_outputs import read_declared_variables
@@ -78,6 +83,26 @@ def step_secret_keys(
             keys |= used
     if every:
         return set(declared), True
+    return keys & declared, False
+
+
+def container_secret_keys(
+    integration: InfraIntegration,
+    targets: Iterable[tuple[NamespaceModel, list[ResolvedModule]]],
+    declared: set[str],
+) -> tuple[set[str], bool]:
+    """The declared secrets a Helm or Compose step's namespaces use, and whether that is every secret (an
+    integration whose scan returns `None`). Scans the rendered modules, so call it before `deploy_namespace()`,
+    which may rewrite them with the tokens resolved.
+    """
+    keys: set[str] = set()
+    for namespace, modules in targets:
+        if not modules:
+            continue
+        found = integration.referenced_secret_keys(namespace, modules)
+        if found is None:
+            return set(declared), True
+        keys |= found
     return keys & declared, False
 
 

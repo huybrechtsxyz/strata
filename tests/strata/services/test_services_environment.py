@@ -594,7 +594,7 @@ def test_every_deployment_token_in_one_document_is_checked():
 
 # ---------------------------------------------------------------------------
 # validate_secret_store_values() — `version` has no effect yet, and a Key Vault
-# secret's value is a name, never a URL (docs/work/deployment-documentation.md)
+# secret's value is a name, never a URL (docs/design/deployment-documentation.md)
 # ---------------------------------------------------------------------------
 
 

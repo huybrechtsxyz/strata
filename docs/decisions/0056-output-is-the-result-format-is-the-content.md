@@ -4,7 +4,7 @@
 - Date: 2026-11-09
 - Related: [ADR-0020](0020-v1-consumer-feature-priority.md) (`--output json` and `STRATA_OUTPUT` as the CI contract),
   [ADR-0033](0033-ndjson-streaming-follow-trigger.md) (why `--output` gained no `ndjson` value),
-  [docs/work/deployment-documentation.md](../work/deployment-documentation.md) (`deploy report`, the first new command
+  [docs/design/deployment-documentation.md](../design/deployment-documentation.md) (`deploy report`, the first new command
   to need all three flags, and `deploy output`)
 
 ## Context and Problem Statement

@@ -8,7 +8,7 @@ strata never reads a secret value for this. Every secret, and every sensitive Te
 `********`. The document says **where** a secret is (vault and name, environment variable); whoever holds access
 fetches it and passes it on.
 
-The design is in [deployment-documentation.md](../work/deployment-documentation.md).
+The design is in [deployment-documentation.md](../design/deployment-documentation.md).
 
 ## 1. Prerequisite: an output store
 

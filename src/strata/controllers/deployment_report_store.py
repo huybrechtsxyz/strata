@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """`DeploymentReportStore`: the report record, what `strata deploy output` and `strata deploy report` read and a
-deploy never consumes (docs/work/deployment-documentation.md, section 1).
+deploy never consumes (docs/design/deployment-documentation.md, section 1).
 
 One key per step, next to the output record (ADR-0057), in the same `output_store` backend:
 
@@ -48,6 +48,9 @@ _REPORT_KEY_PREFIX = "strata/deployment-report/"
 #: The last successful deploy's audit summary: `strata/deployment-audit/<deployment>`. Its own prefix, so it can
 #: never collide with a step's key.
 _AUDIT_KEY_PREFIX = "strata/deployment-audit/"
+
+#: The audit summary's fields: always all present (`None` when unknown), so a template can use any of them.
+AUDIT_SUMMARY_KEYS = ("deployed_by", "completed_at", "status", "action", "version", "execution_id", "commit_sha")
 
 #: Above the backend's limit, descriptions are first shortened to this many characters.
 SHORT_DESCRIPTION_LENGTH = 200
@@ -268,11 +271,12 @@ class DeploymentReportStore:
         """
         self._backend.put(
             f"{_AUDIT_KEY_PREFIX}{self._deployment}",
-            dump_record({key: value for key, value in summary.items() if value is not None}),
+            dump_record({key: summary.get(key) for key in AUDIT_SUMMARY_KEYS}),
         )
 
     def read_last_deploy(self) -> dict[str, Any] | None:
-        """The last successful deploy's audit summary, or `None` when none was recorded.
+        """The last successful deploy's audit summary, or `None` when none was recorded. Every key in
+        `AUDIT_SUMMARY_KEYS` is present, `None` when the record lacks it.
 
         Raises:
             strata.utils.errors.SystemError: the stored record is not valid JSON.
@@ -280,7 +284,10 @@ class DeploymentReportStore:
         """
         key = f"{_AUDIT_KEY_PREFIX}{self._deployment}"
         entry = self._backend.get(key)
-        return load_record_object(entry.value, key) if entry is not None else None
+        if entry is None:
+            return None
+        record = load_record_object(entry.value, key)
+        return {name: record.get(name) for name in AUDIT_SUMMARY_KEYS}
 
     def clear(self, steps: Iterable[str]) -> None:
         """Overwrite each destroyed step's report key with `{"destroyed_at": ...}`, when the key exists.

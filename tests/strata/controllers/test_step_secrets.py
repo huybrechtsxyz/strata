@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `step_secret_keys()` (docs/work/deployment-documentation.md, section 1): which declared secrets a
+"""Tests for `step_secret_keys()` (docs/design/deployment-documentation.md, section 1): which declared secrets a
 non-container step used, per delivery path."""
 
 from pathlib import Path

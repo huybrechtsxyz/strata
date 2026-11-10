@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`StoreIntegration.location()` (docs/work/deployment-documentation.md, section 2): connection settings only,
+"""`StoreIntegration.location()` (docs/design/deployment-documentation.md, section 2): connection settings only,
 never a credential or token, and never a store call."""
 
 import json

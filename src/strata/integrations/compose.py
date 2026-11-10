@@ -63,6 +63,14 @@ from strata.utils.value_tokens import (
 )
 
 #: Docker's context for every command; set for the Compose steps of a deployment that names `docker_context`.
+#: What `build run` writes per namespace: every module merged, tokens kept. Never rewritten by a deploy.
+COMPOSE_FILE = "docker-compose.yml"
+
+#: What each `deploy run` resolves `COMPOSE_FILE` into and hands to `docker stack`: non-secret tokens as their
+#: values, `${secret:KEY}` as `${KEY}` (the value goes in the process environment, never on disk). Next to
+#: `COMPOSE_FILE`, because Docker resolves a relative path in it (a bind mount, `env_file`) from its folder.
+DEPLOY_FILE = "docker-compose.deploy.yml"
+
 DOCKER_CONTEXT_ENV = "DOCKER_CONTEXT"
 #: Overrides `DOCKER_CONTEXT` without a word, so a deployment pinned to a context cannot allow it.
 DOCKER_HOST_ENV = "DOCKER_HOST"
@@ -163,17 +171,16 @@ class ComposeIntegration(InfraIntegration):
 
         namespace_dir = modules[0].source_path.parent
         namespace_dir.mkdir(parents=True, exist_ok=True)
-        (namespace_dir / "docker-compose.yml").write_text(
-            yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
-        )
+        (namespace_dir / COMPOSE_FILE).write_text(yaml.safe_dump(document, sort_keys=False, default_flow_style=False))
 
     def referenced_secret_keys(self, namespace: NamespaceModel, modules: list[ResolvedModule]) -> set[str] | None:
         """Every `${secret:KEY}` in the namespace's merged `docker-compose.yml`, the document `deploy_namespace()`
-        resolves. `None` when the file is missing (`deploy_namespace()` then fails first anyway)."""
+        resolves (into `DEPLOY_FILE`; this one keeps its tokens). `None` when the file is missing
+        (`deploy_namespace()` then fails first anyway)."""
         del namespace
         if not modules:
             return set()
-        compose_file = modules[0].source_path.parent / "docker-compose.yml"
+        compose_file = modules[0].source_path.parent / COMPOSE_FILE
         if not compose_file.exists():
             return None
         return referenced_secret_keys(yaml.safe_load(compose_file.read_text()) or {})
@@ -228,10 +235,10 @@ class ComposeIntegration(InfraIntegration):
             return diagnostics
         timeouts: dict[str, Any] = {} if timeout is None else {"timeout": timeout}
 
-        compose_file = modules[0].source_path.parent / "docker-compose.yml"
+        compose_file = modules[0].source_path.parent / COMPOSE_FILE
         if not compose_file.exists():
             diagnostics.error(
-                f"Namespace '{namespace.meta.name}': docker-compose.yml not found — run 'strata build run' first.",
+                f"Namespace '{namespace.meta.name}': {COMPOSE_FILE} not found — run 'strata build run' first.",
                 location=str(namespace.meta.name),
             )
             return diagnostics
@@ -264,14 +271,17 @@ class ComposeIntegration(InfraIntegration):
             diagnostics.error(f"Namespace '{namespace.meta.name}': {exc}", location=str(namespace.meta.name))
             return diagnostics
 
-        compose_file.write_text(yaml.safe_dump(resolved_document, sort_keys=False, default_flow_style=False))
+        # Never back into `compose_file`: a later deploy of the same build (after a dry run, a retry) would find
+        # no token left in it, so deliver no secret and reuse this run's values.
+        deploy_file = compose_file.with_name(DEPLOY_FILE)
+        deploy_file.write_text(yaml.safe_dump(resolved_document, sort_keys=False, default_flow_style=False))
 
         if dry_run:
             # Real preview, not a skip — `docker stack config` needs the
             # same rendered file on disk a real `deploy()` would use, just
             # not followed by one.
             plan_result = self.plan_or_warn(
-                compose_file,
+                deploy_file,
                 diagnostics=diagnostics,
                 location=str(namespace.meta.name),
                 env={**(env or {}), **secrets},
@@ -286,7 +296,7 @@ class ComposeIntegration(InfraIntegration):
             return diagnostics
 
         result = self.deploy(
-            compose_file,
+            deploy_file,
             namespace=str(namespace.meta.name),
             env={**(env or {}), **secrets},
             line_callback=line_callback,
@@ -401,7 +411,7 @@ class ComposeIntegration(InfraIntegration):
             return diagnostics
         say = on_step or (lambda message: None)
         stack = str(namespace.meta.name)
-        compose_file = modules[0].source_path.parent / "docker-compose.yml"
+        compose_file = modules[0].source_path.parent / COMPOSE_FILE
 
         if dry_run:
             listing = self.output(compose_file, namespace=stack, env=env)

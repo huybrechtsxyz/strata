@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""What `strata deploy report` shows: the handover document's data (docs/work/deployment-documentation.md,
+"""What `strata deploy report` shows: the handover document's data (docs/design/deployment-documentation.md,
 sections 1 and 2).
 
-Read-only, like `deploy output`, and built on it: the step outputs come from `deployment_outputs()`. On top of
+Read-only, like `deploy output`, and built on it: the step outputs come from `read_steps()`. On top of
 that, each step's report record says which secrets it used and where each lives, and the deployment's effective
 images come from `effective_images()` (offline). Nothing here reads a secret value, so nothing here can print
 one: every secret row's value is `MASK`, for every store, also an empty or unresolvable one.
@@ -12,12 +12,10 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
-from strata.controllers.deployment_output_view import StepOutputs, deployment_outputs
-from strata.controllers.deployment_report_store import DeploymentReportStore, StepReport
+from strata.controllers.deployment_output_view import StepOutputs, open_output_stores, read_steps
+from strata.controllers.deployment_report_store import StepReport
 from strata.controllers.effective_images import effective_images
-from strata.controllers.integration_resolution import resolve_output_store_integration
 from strata.controllers.solution_context import SolutionContext
-from strata.controllers.value_controller import resolve_deployment_workspace
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 
@@ -44,7 +42,7 @@ class ReportStep:
     """One step: its outputs (as `deploy output` shows them) and the state of its secrets record.
 
     `secrets`: `recorded`, `not_recorded` (never deployed with this output store, an earlier strata version
-    deployed it, or the write failed), `older` (from an earlier deploy than the outputs) or `destroyed`.
+    deployed it, or the write failed), `mismatch` (from a different deploy than the outputs) or `destroyed`.
     `all_secrets`: the step receives every declared secret (a script without `script.values`, a template that
     reads `secrets` dynamically, or a container tool that cannot tell).
     """
@@ -90,9 +88,14 @@ class DeploymentReport:
 
 
 def deployment_report(
-    context: SolutionContext, deployment_name: str, steps: list[str] | None = None
+    context: SolutionContext,
+    deployment_name: str,
+    steps: list[str] | None = None,
+    *,
+    version_pin: str | None = None,
 ) -> DeploymentReport:
-    """Gather the handover data for `deployment_name`, for every execution step or only `steps`.
+    """Gather the handover data for `deployment_name`, for every execution step or only `steps`. `version_pin` is
+    the `--pin` the deploy ran with, so the images are the ones it deployed.
 
     Raises:
         UsageError: the deployment does not exist, or `steps` names a step that is not in its workspace.
@@ -100,31 +103,26 @@ def deployment_report(
         strata.utils.errors.SystemError: a stored record is not valid JSON.
         strata.integrations.errors.IntegrationError: the output store is unreachable or unauthenticated.
     """
-    deployment, workspace = resolve_deployment_workspace(context, deployment_name)
-    outputs = deployment_outputs(context, deployment_name)
-    known = [step.step for step in outputs.steps]
+    stores = open_output_stores(context, deployment_name, version_pin=version_pin)
+    deployment, workspace = stores.deployment, stores.workspace
+    known = [step.name for step in workspace.spec.execution or []]
     unknown = sorted(set(steps or []) - set(known))
     if unknown:
         raise UsageError(
             f"No execution step {', '.join(repr(name) for name in unknown)} in this deployment's workspace. "
             f"Steps: {', '.join(known) or 'none'}."
         )
-    selected = [step for step in outputs.steps if not steps or step.step in steps]
-
-    backend = resolve_output_store_integration(context.controller.index, workspace)
-    assert backend is not None  # deployment_outputs() already raised without one
-    report_store = DeploymentReportStore(backend, deployment.meta.name)
-    diagnostics = outputs.diagnostics
+    selected, reports, diagnostics = read_steps(stores, [name for name in known if not steps or name in steps])
 
     report_steps: list[ReportStep] = []
     rows: dict[str, SecretRow] = {}
     for step in selected:
-        report = report_store.read(step.step)
+        report = reports[step.step]
         state = _secrets_state(step, report)
-        if state in ("not_recorded", "older") and (step.status == "recorded" or report is not None):
+        if state in ("not_recorded", "mismatch") and (step.status == "recorded" or report is not None):
             diagnostics.warning(
                 f"Step '{step.step}': which secrets it used is not recorded"
-                + (" for its last deploy" if state == "older" else "")
+                + (" for the deploy that recorded its outputs" if state == "mismatch" else "")
                 + " (an earlier strata version deployed it, or the write failed). Deploy the step again to record "
                 "them; until then this document may leave out secrets it uses.",
                 location=step.step,
@@ -172,7 +170,7 @@ def deployment_report(
                 code="secret_location_unknown",
             )
 
-    images = [asdict(image) for image in effective_images(context, deployment, pinned_by_flag=False)]
+    images = [asdict(image) for image in effective_images(context, deployment, pinned_by_flag=version_pin is not None)]
     return DeploymentReport(
         deployment=str(deployment.meta.name),
         workspace=str(workspace.meta.name),
@@ -181,7 +179,7 @@ def deployment_report(
         secrets=secrets,
         images=images,
         diagnostics=diagnostics,
-        audit=report_store.read_last_deploy(),
+        audit=stores.reports.read_last_deploy(),
     )
 
 
@@ -190,10 +188,8 @@ def _secrets_state(step: StepOutputs, report: StepReport | None) -> str:
         return "not_recorded"
     if report.destroyed_at is not None:
         return "destroyed"
-    if step.collected_at is not None and (
-        report.collected_at is None or report.collected_at < datetime.fromisoformat(step.collected_at)
-    ):
-        return "older"
+    if step.collected_at is not None and report.collected_at != datetime.fromisoformat(step.collected_at):
+        return "mismatch"
     return "recorded"
 
 

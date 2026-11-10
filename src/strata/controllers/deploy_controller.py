@@ -50,7 +50,7 @@ from strata.controllers.security_gate_controller import evaluate_security_gates
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import SourceSyncError, resolved_asset_info
-from strata.controllers.step_secrets import secret_uses, step_secret_keys
+from strata.controllers.step_secrets import container_secret_keys, secret_uses, step_secret_keys
 from strata.controllers.value_controller import (
     build_value_references,
     reachable_environments,
@@ -323,7 +323,7 @@ def _record_report(
 ) -> None:
     """Write `step_name`'s report record: its sensitive output names, the descriptions its root module's
     `output` blocks declare (for the outputs it actually returned), and the secrets it used, by location
-    (docs/work/deployment-documentation.md).
+    (docs/design/deployment-documentation.md).
 
     A failed write is a warning, never a failed deploy: the step has deployed and its output record is written;
     only document metadata is missing, which the next deploy of the step fills in.
@@ -1001,7 +1001,7 @@ def deploy_run(
         if output_store_backend
         else None
     )
-    # The report record (docs/work/deployment-documentation.md): what `deploy output` and `deploy report` read,
+    # The report record (docs/design/deployment-documentation.md): what `deploy output` and `deploy report` read,
     # in the same backend, under its own keys.
     report_store = DeploymentReportStore(output_store_backend, deployment_name) if output_store_backend else None
 
@@ -1496,6 +1496,12 @@ def deploy_run(
                     else:
                         _step(f"step '{step.name}' via {integration_type} has no modules to check — skipped")
                     continue
+            # From the built modules, which `deploy_namespace()` leaves as they are.
+            container_used, container_all = (
+                container_secret_keys(integration, container_targets, set(secrets))
+                if report_store is not None and not dry_run
+                else (set(), False)
+            )
             for namespace, modules in container_targets:
                 diagnostics.extend(
                     integration.deploy_namespace(
@@ -1514,15 +1520,6 @@ def deploy_run(
                 return diagnostics
             if report_store is not None and not dry_run:
                 # A container step has no outputs, only a report record: the secrets its modules used.
-                container_keys: set[str] = set()
-                container_all = False
-                for namespace, modules in container_targets:
-                    found = integration.referenced_secret_keys(namespace, modules)
-                    if found is None:
-                        container_all = True
-                    else:
-                        container_keys |= found
-                container_used = set(secrets) if container_all else container_keys & set(secrets)
                 try:
                     for warning in report_store.record(
                         step.name,
