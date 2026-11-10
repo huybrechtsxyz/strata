@@ -390,7 +390,7 @@ def test_merge_properties_multiple_environments_merge_in_order():
 
 
 # ---------------------------------------------------------------------------
-# validate_artifact_references() (docs/design/artifact-references.md's
+# validate_artifact_references() (docs/archive/artifact-references.md's
 # full-review finding — store: artifact's value had no cross-reference check)
 # ---------------------------------------------------------------------------
 

@@ -3,18 +3,19 @@
 
 An `Artifact` is a pinnable, named reference to something external strata
 does not fetch or deploy itself — a container image today, possibly a chart
-or other identifier later (docs/work/artifact-references.md). Referenced
-by identity (ADR-0015) from anywhere in the solution: a `store: artifact`
-variable (an opaque external provisioner's own input, e.g. scheduler_api's
-`api_container_image_tag`) or a `ModuleServiceModel.artifact` (a
-strata-owned Compose/Helm service).
+or other identifier later (docs/config/artifact.md). Referenced by identity (ADR-0015)
+from anywhere in the solution: an `${artifact:NAME.FIELD}` token in any
+field resolved at deploy, a `store: artifact` variable (an opaque external
+provisioner's own input, e.g. scheduler_api's `api_container_image_tag`)
+or a `ModuleServiceModel.artifact` (a strata-owned Compose/Helm service).
 
 Deliberately NOT built on `SourceModel`, despite the surface similarity to
 its chart mode (`chart_name`/`chart_version`) — `SourceModel.remote` is
 fetch-oriented (`SolutionRemoteModel.fetch: strata|external` = "who
 materialises bytes on disk"), and strata never fetches a container image at
 all; the registry pulls it at deploy time, not strata at build time. See
-the design doc's "Shape correction" changelog entry for the full reasoning.
+the "Shape correction" changelog entry in docs/archive/artifact-references.md
+for the full reasoning.
 
 No chart mode: real chart pins exist (`haven/versions/prd.yaml`'s
 `pins.charts`), but every one targets a real `kind: module` document's own

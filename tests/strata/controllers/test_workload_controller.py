@@ -222,7 +222,7 @@ def test_apply_version_pins_logs_each_application():
 
 
 # ---------------------------------------------------------------------------
-# resolve_artifact_services() (docs/work/artifact-references.md Path 1)
+# resolve_artifact_services() (docs/archive/artifact-references.md Path 1)
 # ---------------------------------------------------------------------------
 
 
@@ -1192,7 +1192,7 @@ def test_build_workload_modules_applies_image_pin_end_to_end(tmp_path: Path):
 
 def test_build_workload_modules_resolves_artifact_reference_end_to_end(tmp_path: Path):
     """A service's `.artifact` reference reaches the real rendered
-    `docker-compose.yml` as a resolved `.image` string (docs/work/
+    `docker-compose.yml` as a resolved `.image` string (docs/archive/
     artifact-references.md Path 1)."""
     root = tmp_path / "sln"
     _write(root / "services" / "scheduler" / "docker-compose.yml", "# stand-in\n")

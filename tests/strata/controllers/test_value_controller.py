@@ -371,7 +371,7 @@ def test_resolve_values_version_pin_affects_store_artifact_resolution(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# resolve_artifact() / resolve_artifact_field() (docs/design/artifact-references.md)
+# resolve_artifact() / resolve_artifact_field() (docs/config/artifact.md)
 # ---------------------------------------------------------------------------
 
 

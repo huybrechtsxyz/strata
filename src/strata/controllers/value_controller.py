@@ -237,7 +237,7 @@ def resolve_version(context: SolutionContext, deployment: DeploymentModel) -> Ve
 
 def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactModel | None:
     """The `ArtifactModel` named `artifact_name`, or `None` if unresolvable
-    (docs/work/artifact-references.md).
+    (docs/config/artifact.md).
 
     A missing artifact reference silently returns `None` — `validate_references`
     is the layer that reports a bad reference, not this function, matching
@@ -261,7 +261,7 @@ def resolve_artifact_field(
     context: SolutionContext, deployment: DeploymentModel, artifact_name: str, field: str
 ) -> str | None:
     """Resolve one `(artifact_name, field)` pair to a plain string
-    (docs/work/artifact-references.md's `store: artifact` mechanism).
+    (docs/config/artifact.md's `store: artifact` variable).
 
     `field` is one of `image_name`/`image_tag`/`image_ref`:
 
@@ -272,7 +272,7 @@ def resolve_artifact_field(
       neither a pin nor the artifact supplies one.
     - `image_ref` is `compose_image_ref()` of the name and effective tag —
       adminapp's real combined Terraform variable shape
-      (docs/work/artifact-references.md).
+      (docs/archive/artifact-references.md).
 
     Returns `None` only when `artifact_name` doesn't resolve — same
     silently-return-None treatment as `resolve_artifact()`/`resolve_tenant()`.
@@ -342,7 +342,7 @@ def build_value_references(
     casting, `VariableStoreModel.value`/`FeatureStoreModel.value` are not
     cross-validated against `type` in v2 either), `environment` (a local
     `os.environ` read - not network I/O), and `artifact` (an in-solution
-    document lookup, docs/work/artifact-references.md - variables only,
+    document lookup, docs/config/artifact.md - variables only,
     never features/secrets) stores. Every other store type, and every
     secret regardless of store type, gets `value=None` - structurally,
     never resolved here (Q5: integration-backed resolution is deploy's

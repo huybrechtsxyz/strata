@@ -1,6 +1,6 @@
 # Artifact gap analysis - Work
 
-- Status: in-progress (all designs agreed; designs 1 and 3 built, the rest not started)
+- Status: in-progress (all designs agreed; release 1, designs 1, 3 and 10, built; the rest not started)
 - Last updated: 2026-11-10
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
@@ -365,6 +365,21 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 `semantic_checks.py` and `environment_service.py`, five tests, and the docs listed by
 `git grep artifact-references.md`. Done in the same change as design 1.
 
+**Implementation plan** (refines the decision above after reading every reference):
+
+- The docs already link `../archive/artifact-references.md`; only `version-pin-overlay.md` names the file without a
+  link. The stale ones are 21 docstrings and comments in `src/` and `tests/`, four of them wrapped over two lines, so
+  a plain `git grep docs/work/artifact-references.md` misses them.
+- One rule per reference: a citation of **what an artifact is or does now** (a model, field or resolver docstring,
+  and the schema description of `ModuleServiceModel.artifact`, which `strata schema` exports) points to
+  `docs/config/artifact.md`. A citation of **why or when** something was decided (`Path 1`, "the full-review
+  finding", "deferred until real usage", the "Shape correction" entry) points to
+  `docs/archive/artifact-references.md`.
+- `artifact_model.py`'s module docstring also lists the ways an artifact is referenced; it gains the token.
+- Out of scope: the same drift for other moved docs (`gap_fit_v1.md`, `audit-trail.md`,
+  `cross-run-step-output-delivery.md` and five more, 135 citations in all). Listed as a follow-up, with a guard
+  test that would have caught all of it.
+
 ### Smaller notes
 
 - **`pins.images` is keyed by service name alone** (by reading), so two modules with a service of the same name share
@@ -392,6 +407,9 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
   `strata validate` checks (`controllers/reachable_documents.py`), leaving out modules reached only through a
   disabled namespace reference; each use is `token:<kind>/<name>`. `${value:artifact.N.spec.image_name}` is now
   rejected, with the token in the message.
+- **Design 10, built 2026-11-10** (not released), as planned: 21 citations in 14 source and test files, plus the
+  one unlinked mention in `version-pin-overlay.md`. Nothing in `src/` or `tests/` cites `docs/work/` or
+  `docs/design/artifact-references.md` any more.
 
 ### Implementation order
 
@@ -421,3 +439,4 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: a design for each finding; the open questions from the review decided as recommendations.
 - 2026-11-10: designs agreed. Design 1 implemented (`${artifact:NAME.FIELD}`), with its implementation plan.
 - 2026-11-10: design 3 implemented: token uses counted as images, `${value:}` on an artifact's image rejected.
+- 2026-11-10: design 10 implemented: the stale `artifact-references.md` citations, by the rule "now" -> reference, "why" -> archive.

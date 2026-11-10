@@ -235,7 +235,7 @@ class ModuleServiceModel(PlatformBaseModel):
         "(image_name[:image_tag], kind: version's pins.artifacts-pinnable). Mutually "
         "exclusive with `image` — use `image` for a literal, unpinned string; use "
         "`artifact` to source it from a named, pinnable reference "
-        "(docs/work/artifact-references.md).",
+        "(docs/config/artifact.md).",
     )
     command: list[str] | None = Field(
         None,

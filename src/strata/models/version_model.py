@@ -201,8 +201,8 @@ class VersionPinsModel(PlatformBaseModel):
       remote is `fetch: strata`. A `fetch: external` remote is placed by CI
       before strata runs, so pinning it cannot take effect — resolution
       rejects such a pin rather than ignoring it silently.
-    - ``artifacts`` -> `ArtifactSpecModel.image_tag` (docs/design/
-      artifact-references.md). A separate category from `images`, not an
+    - ``artifacts`` -> `ArtifactSpecModel.image_tag` (docs/config/
+      artifact.md). A separate category from `images`, not an
       overload of it — `images` stays unambiguously `ModuleServiceModel.
       name`, no disambiguation logic needed. `image_name` is identity and
       is never overlaid by a pin here, same as `charts` never overlays

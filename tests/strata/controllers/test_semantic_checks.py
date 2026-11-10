@@ -2508,7 +2508,7 @@ spec:
 
 
 # ---------------------------------------------------------------------------
-# Environment -> Artifact: store: artifact references (docs/design/
+# Environment -> Artifact: store: artifact references (docs/archive/
 # artifact-references.md's full-review finding)
 # ---------------------------------------------------------------------------
 

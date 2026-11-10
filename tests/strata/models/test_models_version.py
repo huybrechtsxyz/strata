@@ -123,7 +123,7 @@ def test_pin_rejects_unknown_status():
 
 def test_all_categories_are_supported():
     """images/charts/remotes map to something strata itself materialises;
-    artifacts is the one deliberate exception (docs/design/
+    artifacts is the one deliberate exception (docs/archive/
     artifact-references.md) — a pinnable reference to something strata
     never fetches or deploys itself."""
     model = VersionModel.model_validate(
