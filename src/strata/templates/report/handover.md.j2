@@ -1,0 +1,62 @@
+{#- Built-in handover document for `strata deploy report --format markdown` and `spec.documentation`.
+    Receives the `deploy report --output json` data; no field in it holds a secret value. -#}
+# {{ deployment }} — deployment handover
+
+{% if audit -%}
+Deployed {{ audit.completed_at }} by `{{ audit.deployed_by }}`{% if audit.commit_sha %} from commit `{{ audit.commit_sha[:7] }}`{% endif %}{% if audit.execution_id %}, audit record `{{ audit.execution_id }}`{% endif %}.
+{% endif -%}
+Workspace `{{ workspace }}`, environments {% for name in environments %}`{{ name }}`{{ ", " if not loop.last }}{% endfor %}.
+Generated {{ generated_at }} from the outputs recorded by `deploy run`: a snapshot, not a live view.
+
+## Step outputs
+{% for step in steps %}
+### {{ step.step }}
+{% if step.status == "destroyed" %}
+Destroyed {{ step.destroyed_at }}.
+{% elif step.status == "too_large" %}
+No outputs recorded: its deploy at {{ step.omitted_at }} produced more than the output store accepts.
+{% elif step.status != "recorded" %}
+No outputs recorded.
+{% elif not step.outputs %}
+Collected {{ step.collected_at }}. No outputs.
+{% else %}
+Collected {{ step.collected_at }}.
+
+| Output | Value | Description |
+| ------ | ----- | ----------- |
+{% for row in step.outputs -%}
+| {{ row.name | md_cell }} | {{ MASK if row.sensitive else (row.value | md_cell) }} | {{ row.description | md_cell }} |
+{% endfor -%}
+{% endif -%}
+{% if step.secrets in ("not_recorded", "mismatch") and step.status == "recorded" %}
+Secrets used by this step are not recorded for the deploy that recorded its outputs (an earlier strata version
+deployed it, or a write failed); deploy it again to record them.
+{% elif step.all_secrets %}
+This step receives every declared secret.
+{% endif -%}
+{% endfor %}
+## Secrets
+
+Values are never included. Ask the operator for a one-time link, or fetch the secret from the location below if you
+have access.
+
+{% if secrets -%}
+| Secret | Value | Store | Where to find it | Used by | Description |
+| ------ | ----- | ----- | ---------------- | ------- | ----------- |
+{% for row in secrets -%}
+| {{ row.key | md_cell }} | {{ MASK }} | {{ row.store }} | {{ row.where | md_cell }} | {{ row.used_by | join(", ") }} | {{ row.description | md_cell }} |
+{% endfor -%}
+{% else -%}
+No secrets used.
+{% endif %}
+## Images
+
+{% if images -%}
+| Name | Image | Tag | Source |
+| ---- | ----- | --- | ------ |
+{% for image in images -%}
+| {{ image.name | md_cell }} | {{ image.image_name | md_cell }} | {{ (image.image_tag or "-") | md_cell }} | {{ image.tag_source | md_cell }} |
+{% endfor -%}
+{% else -%}
+No images.
+{% endif -%}

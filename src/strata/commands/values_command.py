@@ -14,6 +14,7 @@ I/O instead — Phase 2 of the design doc's Implementation Plan).
 
 import json
 import shlex
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -201,7 +202,8 @@ def _print_value_list(rows: list[ValueListRow], *, show_store: bool) -> None:
     default="table",
     show_default=True,
     help="Rendering: table (key/value), raw (bare value, exactly one KEY), env (KEY=value), "
-    "export (export KEY='value'). Ignored when --output json.",
+    "export (export KEY='value'). With raw, env and export the run's report goes to stderr, so stdout holds only "
+    "the values. Ignored when --output json.",
 )
 @output_option
 @quiet_option
@@ -224,7 +226,11 @@ def values_get(
       3  the solution is invalid, or one or more keys failed to resolve
       1  system failure
     """
-    with command_run("values get", output=output, quiet=quiet, verbose=verbose) as run:
+    # raw/env/export are read by a shell (`$(...)`, `eval`): stdout carries the values only, the report goes to stderr.
+    for_shell = value_format != "table" and output == "console"
+    with command_run(
+        "values get", output=output, quiet=quiet, verbose=verbose, stream=sys.stderr if for_shell else None
+    ) as run:
         if value_format == "raw" and len(keys) != 1:
             raise UsageError("--format raw requires exactly one KEY.")
 

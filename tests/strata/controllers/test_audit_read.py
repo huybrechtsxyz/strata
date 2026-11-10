@@ -48,6 +48,7 @@ def _manifest_json(
     started_at: str,
     status: str = "success",
     action: str = "deploy",
+    commit_sha: str | None = None,
 ) -> str:
     return json.dumps(
         {
@@ -61,6 +62,7 @@ def _manifest_json(
             "deployed_by": "ci-runner",
             "version": "2.4.1",
             "artifacts": {"platform": {"hash": "sha256:abc123", "path": "resolved.yaml"}},
+            **({"commit_sha": commit_sha} if commit_sha else {}),
         }
     )
 
@@ -686,3 +688,13 @@ def test_changes_report_each_records_action_oldest_to_newest(tmp_path: Path):
     )
 
     assert [record.action for record in records] == ["deploy", "destroy"]
+
+
+def test_list_latest_per_deployment_carries_the_commit_sha(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(tmp_path / "records", "app/1", started_at="2026-10-05T14:00:00+00:00", commit_sha="a" * 40)
+
+    records = list_latest_per_deployment(tmp_path, sink, deployment=None, diagnostics=Diagnostics())
+
+    assert [record.commit_sha for record in records] == ["a" * 40]

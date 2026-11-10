@@ -20,6 +20,7 @@ strata-v2
    how-to/ci-deploy-pipeline
    how-to/composite-variable-fragments
    how-to/deploy-run-streaming
+   how-to/deployment-handover
    how-to/generate-per-instance-terraform-blocks
    how-to/migrate-v1-workspace-topology-provisioning
    how-to/sbom-generation

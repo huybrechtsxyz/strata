@@ -5,7 +5,7 @@ meta:
 spec:
   type: azure-keyvault
   capabilities: [secrets]
-  description: "Azure Key Vault - resolves ${secret:KEY} tokens whose store is azure-keyvault (e.g. the app-gateway-waf resource's TLS certificate secret). Certificate issuance/rotation itself happens outside strata - see resources/networking.yaml's annotation."
+  description: "Azure Key Vault - resolves ${secret:KEY} tokens whose store is azure-keyvault; such a secret's value is the secret's name in this vault, never a URL. (The app-gateway-waf resource's certificate is passed by address as a variable instead, so App Gateway reads it itself - see docs/how-to/azure-certificates.md.)"
   required: false
   enabled: true
   authentication:

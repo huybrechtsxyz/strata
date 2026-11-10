@@ -246,6 +246,14 @@ Execution order (each its own small, checked phase per repo convention —
 
 ## Changelog
 
+- 2026-11-09: **Built 2.6.0** - bumped `VERSION.txt` from `2.5.0` to `2.6.0`. Deployment documentation
+  (docs/design/deployment-documentation.md), planned as four releases and shipped as one: the per-step output store
+  with size limits (ADR-0057), `strata deploy output`, `strata deploy report` (Markdown, `--template`,
+  `--output-path`), `spec.documentation`, two `strata validate` checks for secrets, the manifest `commit_sha`, and
+  `values get` shell formats keeping stdout clean. A minor release: everything new is opt-in, and the output store
+  reads records written by 2.5 and earlier. Built on `feature/deployment-documentation`, for a pull request to
+  `main`. Tag only after `ci-build` is green on the merge commit.
+
 - 2026-11-09: **Built 2.5.0** - bumped `VERSION.txt` from `2.4.0` to `2.5.0`. Python 3.12 support:
   `requires-python >=3.12`, classifiers for 3.12 and 3.13 (nox runs per version), mypy and ruff target 3.12, and
   `ci-build` tests on both versions (the package is still built once, on 3.13). Before the change the full suite was

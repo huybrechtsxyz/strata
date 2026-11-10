@@ -96,6 +96,16 @@ class InfisicalResolver(StoreIntegration):
         self._client_secret = environ.get("INFISICAL_CLIENT_SECRET")
         self._cache: dict[str, str] | None = None
 
+    def location(self, key: str) -> dict[str, str | None]:
+        """Address, project, environment, path and secret name. Never the token or client credentials."""
+        return {
+            "address": self._addr,
+            "project_id": self._project_id,
+            "environment": self._environment,
+            "path": "/",
+            "name": key,
+        }
+
     def resolve(self, key: str) -> str:
         """Return the value for `key`.
 

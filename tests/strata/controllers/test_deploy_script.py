@@ -790,9 +790,9 @@ def test_a_sensitive_script_output_is_never_recorded_to_the_output_store(tmp_pat
     diagnostics = deploy_run(_context(root), "app", build_path)
 
     assert diagnostics.ok, diagnostics.messages()
-    record_bytes, _version = data["strata/deployment-outputs/app"]
+    record_bytes, _version = data["strata/step-outputs/app/run_script"]
     record = json.loads(record_bytes)
-    assert record["run_script"]["values"] == {"address": "10.0.0.5"}
+    assert record["values"] == {"address": "10.0.0.5"}
     assert TOKEN_OUTPUT not in record_bytes.decode("utf-8")
 
 

@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-12
+- Partly replaced: D3's "one record per deployment" by [ADR-0057](0057-output-record-one-key-per-step.md) (one key per step). D3's staleness rule still applies.
 - Related: [ADR-0021](0021-integration-layer.md) (D2's registry/auto-bind
   mechanism, D9's closed-capability-vocabulary rule — both reused here
   unchanged, not reopened), [ADR-0022](0022-strata-build-run.md) (D2's

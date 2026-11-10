@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Service for loading and validating environment configuration."""
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -8,7 +9,13 @@ from strata.models.common_models import PlatformBaseModel
 from strata.models.configuration_model import ConfigurationSecurityModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
-from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel, VariableStoreType
+from strata.models.store_model import (
+    FeatureStoreModel,
+    SecretStoreModel,
+    SecretStoreType,
+    VariableStoreModel,
+    VariableStoreType,
+)
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
@@ -27,6 +34,9 @@ _STORE_BY_TOKEN_KIND = {"var": "variables", "secret": "secrets", "feature": "fea
 
 #: Token kinds a store's own `value` is never resolved against (only `${value:}` is).
 _UNSUPPORTED_STORE_VALUE_TOKEN_KINDS = frozenset({"var", "secret", "feature", "output", "deployment"})
+
+#: A value that is a URL rather than a name (`validate_secret_store_values()`).
+_URL_PATTERN = re.compile(r"^[a-z][a-z0-9+.-]*://", re.IGNORECASE)
 
 
 class EnvironmentService(BaseService[EnvironmentModel]):
@@ -153,6 +163,38 @@ class EnvironmentService(BaseService[EnvironmentModel]):
                             location=f"spec.{section}[{position}].value",
                             code="store_value_token_unsupported",
                         )
+        return diagnostics
+
+    def validate_secret_store_values(self) -> Diagnostics:
+        """Two checks on each secret's own declaration (docs/design/deployment-documentation.md, section 2):
+
+        - A secret that sets `version` gets a warning: no resolver reads it, so the latest version is always used.
+        - An `azure-keyvault` secret whose `value` is a URL is an error. The value is the secret's name in the vault
+          the `azure-keyvault` integration points at; a full URL is sent to Key Vault as a name and fails. A
+          resource that needs the secret's address (App Gateway's `key_vault_secret_id`) takes it as a variable.
+
+        Returns:
+            One warning per secret with a `version`, one error per Key Vault secret whose value is a URL.
+        """
+        diagnostics = Diagnostics()
+        self._ensure_validated()
+        assert self.model is not None
+        for position, secret in enumerate(self.model.spec.secrets or []):
+            if secret.version is not None:
+                diagnostics.warning(
+                    f"Secret '{secret.key}': 'version' has no effect yet; the latest version of the secret is "
+                    "always read. Remove it, or keep it as documentation only.",
+                    location=f"spec.secrets[{position}].version",
+                    code="secret_version_ignored",
+                )
+            if secret.store == SecretStoreType.AZURE_KEYVAULT and _URL_PATTERN.match(str(secret.value)):
+                diagnostics.error(
+                    f"Secret '{secret.key}': an 'azure-keyvault' value is the secret's name in the vault the "
+                    f"integration points at, not a URL ('{secret.value}'). Use the name only. If a resource needs "
+                    "the secret's address instead of its content, declare the address as a variable.",
+                    location=f"spec.secrets[{position}].value",
+                    code="keyvault_secret_value_is_url",
+                )
         return diagnostics
 
     def validate_allowed_stores(self, security: ConfigurationSecurityModel) -> Diagnostics:

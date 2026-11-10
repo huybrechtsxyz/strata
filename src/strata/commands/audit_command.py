@@ -134,6 +134,7 @@ def _to_json(record: DeploymentStatusRecord) -> dict[str, Any]:
         "version": record.version,
         "deployed_by": record.deployed_by,
         "completed_at": record.completed_at,
+        "commit_sha": record.commit_sha,
         "change_reference": record.change_reference.model_dump(exclude_none=True) if record.change_reference else None,
     }
 
@@ -270,5 +271,6 @@ def _change_to_json(record: DeploymentChangeRecord) -> dict[str, Any]:
         "completed_at": record.completed_at,
         "deployed_by": record.deployed_by,
         "version": record.version,
+        "commit_sha": record.commit_sha,
         "change_reference": record.change_reference.model_dump(exclude_none=True) if record.change_reference else None,
     }

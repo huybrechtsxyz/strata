@@ -59,6 +59,9 @@ class AzureKeyVaultResolver(StoreIntegration, KeyValueStoreIntegration):
     #: front instead of discovering it only once `put(if_version=...)`
     #: actually raises.
     SUPPORTS_CAS = False
+    #: "a maximum size of 25 KB" per secret value
+    #: (https://learn.microsoft.com/en-us/azure/key-vault/secrets/about-secrets, checked 2026-11-09).
+    MAX_VALUE_BYTES = 25_000
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
         super().__init__(config)
@@ -75,6 +78,10 @@ class AzureKeyVaultResolver(StoreIntegration, KeyValueStoreIntegration):
         if self._client is None:
             self._client = SecretClient(vault_url=self._vault_url, credential=DefaultAzureCredential())
         return self._client
+
+    def location(self, key: str) -> dict[str, str | None]:
+        """The vault URL and the secret name. Always the latest version: `resolve()` reads no other."""
+        return {"vault": self._vault_url, "name": key}
 
     def resolve(self, key: str) -> str:
         """Return the value of secret `key`.

@@ -592,6 +592,56 @@ def _resolve_store_value(
     return value
 
 
+def secret_records(
+    context: SolutionContext, environments: list[EnvironmentModel], secrets: dict[str, SecretStoreModel]
+) -> dict[str, dict[str, Any]]:
+    """For each declared secret, what the report record keeps about it: store, location, description and the
+    document that declares it (docs/design/deployment-documentation.md, section 2). Never a value.
+
+    The location comes from the store's own resolver (`StoreIntegration.location()`), constructed the same way
+    `resolve_values()` constructs it, so it names where the deploy actually read the secret. Constructing a
+    resolver contacts nothing. A `constant` secret has no location: its `value` is the secret. `environment` and
+    `github` name the environment variable. A store with no resolver yet (`vault`, `bitwarden`) names only the
+    secret.
+
+    `declared_in` follows the merge order: the last environment in `environments` that declares the key wins, so
+    that is the one named, as the path of its file relative to the solution root.
+    """
+    resolvers = _Resolvers(context.controller.index)
+    declared_in: dict[str, str] = {}
+    for environment in environments:
+        entry = context.controller.index.get(PlatformKind.ENVIRONMENT, environment.meta.name)
+        where = str(environment.meta.name)
+        if entry is not None:
+            try:
+                where = entry.source.relative_to(context.root).as_posix()
+            except ValueError:
+                where = entry.source.as_posix()
+        for secret in environment.spec.secrets or []:
+            declared_in[secret.key] = where
+
+    records: dict[str, dict[str, Any]] = {}
+    for key, store in secrets.items():
+        store_type = store.store
+        location: dict[str, str | None]
+        if store_type == SecretStoreType.CONSTANT:
+            location = {}
+        elif store_type in (SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB):
+            location = {"env": str(store.value)}
+        else:
+            try:
+                location = resolvers.get(store_type.value).location(str(store.value))
+            except (IntegrationNotFoundError, IntegrationError, ValueResolutionError, UsageError):
+                location = {"name": str(store.value)}
+        records[key] = {
+            "store": store_type.value,
+            "location": location,
+            "description": store.description,
+            "declared_in": declared_in.get(key),
+        }
+    return records
+
+
 #: `values list --type` choices — matches v1's `--type variables|secrets|features`.
 VALUE_TYPE_FILTERS = ("variables", "secrets", "features")
 

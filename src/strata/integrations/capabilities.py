@@ -89,6 +89,16 @@ class StoreIntegration(Integration):
         """
         raise IntegrationError(f"{self.name} does not report secret metadata")
 
+    def location(self, key: str) -> dict[str, str | None]:
+        """Where secret `key` lives, as non-secret connection settings only: no credential, no token, never the
+        value (docs/design/deployment-documentation.md, section 2). `deploy run` records it in the report record
+        with the same configuration the resolver just used, so it says where the deploy actually read the secret.
+
+        Never contacts the store. A setting that is not configured is `None`, which a report shows as `unknown`.
+        The base default is the key alone; a resolver that knows more overrides it.
+        """
+        return {"name": key}
+
 
 #: Reserved `KeyValueStoreIntegration.put(if_version=...)` sentinel meaning
 #: "this key must not already exist" — the create-only guard a lock's first
@@ -142,6 +152,14 @@ class KeyValueStoreIntegration(Integration):
     #: since `DeploymentOutputStore.record()` needs the update case on
     #: every write after the first.
     SUPPORTS_CAS: ClassVar[bool] = True
+
+    #: The largest key-plus-value, in bytes, one `put()` may store, or `None`
+    #: when the backend has no practical limit (ADR-0057). A caller measures
+    #: before writing, so an oversized record gets a clear error naming what
+    #: is too large instead of the backend's own rejection. Conservative:
+    #: when a provider documents "10 KB" without saying 1,000 or 1,024, use
+    #: the smaller number.
+    MAX_VALUE_BYTES: ClassVar[int | None] = None
 
     @abstractmethod
     def get(self, key: str) -> KeyValueEntry | None:
@@ -479,6 +497,17 @@ class InfraIntegration(Integration):
         raise CheckPhaseUnsupportedError(
             f"{self.name} does not support namespace-scoped module checking (check_namespace)."
         )
+
+    def referenced_secret_keys(self, namespace: NamespaceModel, modules: list[ResolvedModule]) -> set[str] | None:
+        """The `${secret:KEY}` keys `deploy_namespace()` substitutes into `modules`, scanned from the same input
+        its own `${output:}` pre-flight reads (docs/design/deployment-documentation.md, section 1). Nothing is
+        resolved and nothing is contacted.
+
+        Returns `None` when this integration cannot tell (the base default): the caller then counts every
+        declared secret as used, never none.
+        """
+        del namespace, modules
+        return None
 
     def destroy_namespace(
         self,

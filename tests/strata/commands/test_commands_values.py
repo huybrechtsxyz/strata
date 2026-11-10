@@ -849,3 +849,15 @@ def test_mask_json_includes_show_and_char(runner):
 def test_mask_rejects_a_multi_character_replacement(runner):
     result = runner.invoke(cli, ["values", "mask", "abcdefgh", "--char", "**"])
     assert result.exit_code == EXIT_USAGE
+
+
+@pytest.mark.parametrize(
+    ("value_format", "expected"),
+    [("raw", "westeurope\n"), ("env", "REGION=westeurope\n"), ("export", "export REGION=westeurope\n")],
+)
+def test_shell_formats_keep_stdout_to_the_values_only(runner, solution, value_format, expected):
+    """`$(strata values get ... --format raw)` must not capture the run's header or footer."""
+    result = _run(runner, "app", "REGION", "--path", solution, "--format", value_format)
+    assert result.exit_code == 0, result.output
+    assert result.stdout == expected
+    assert "values get" in result.stderr

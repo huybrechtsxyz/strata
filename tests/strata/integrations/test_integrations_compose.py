@@ -423,7 +423,7 @@ def test_resolve_compose_values_does_not_touch_disk():
 # ---------------------------------------------------------------------------
 
 
-def test_deploy_namespace_rewrites_the_compose_file_and_deploys_the_stack(monkeypatch, tmp_path: Path):
+def test_deploy_namespace_writes_the_deploy_file_and_deploys_the_stack(monkeypatch, tmp_path: Path):
     captured = _capture(monkeypatch)
     module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
     namespace_dir = tmp_path / "hearth"
@@ -455,15 +455,43 @@ def test_deploy_namespace_rewrites_the_compose_file_and_deploys_the_stack(monkey
         "deploy",
         "--with-registry-auth",
         "-c",
-        str(namespace_dir / "docker-compose.yml"),
+        str(namespace_dir / "docker-compose.deploy.yml"),
         "hearth",
     ]
     assert captured["env"] == {"db_password": "hunter2"}
-    document = yaml.safe_load((namespace_dir / "docker-compose.yml").read_text())
+    document = yaml.safe_load((namespace_dir / "docker-compose.deploy.yml").read_text())
     assert document["services"]["portainer"]["environment"] == {
         "TZ": "Europe/Brussels",
         "DB_PASSWORD": "${db_password}",
     }
+    # The build's file keeps its tokens, so the next deploy of this build resolves them again.
+    built = yaml.safe_load((namespace_dir / "docker-compose.yml").read_text())
+    assert built["services"]["portainer"]["environment"]["DB_PASSWORD"] == "${secret:db_password}"
+
+
+def test_deploy_namespace_twice_delivers_the_secrets_and_current_values_both_times(monkeypatch, tmp_path: Path):
+    """A retry, or a deploy after a dry run, of the same build: the second run starts from the built file too."""
+    captured = _capture(monkeypatch)
+    module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
+    namespace_dir = tmp_path / "hearth"
+    namespace_dir.mkdir(parents=True)
+    (namespace_dir / "docker-compose.yml").write_text(
+        yaml.safe_dump({"services": {"portainer": {"environment": {"HOST": "${var:host}", "PWD": "${secret:pwd}"}}}})
+    )
+    resolved_module = _resolved("portainer", module, namespace_dir / "portainer")
+    integration = ComposeIntegration()
+
+    integration.deploy_namespace(
+        _namespace("hearth"), [resolved_module], tokens={"host": "old", "pwd": "hunter2"}, dry_run=True
+    )
+    diagnostics = integration.deploy_namespace(
+        _namespace("hearth"), [resolved_module], tokens={"host": "new", "pwd": "hunter2"}, dry_run=False
+    )
+
+    assert diagnostics.ok
+    assert captured["env"] == {"pwd": "hunter2"}
+    document = yaml.safe_load((namespace_dir / "docker-compose.deploy.yml").read_text())
+    assert document["services"]["portainer"]["environment"] == {"HOST": "new", "PWD": "${pwd}"}
 
 
 def test_deploy_namespace_merges_caller_env_with_secrets(monkeypatch, tmp_path: Path):
@@ -604,9 +632,10 @@ def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: P
     )
 
     assert diagnostics.ok
-    assert captured["args"] == ["docker", "stack", "config", "-c", str(namespace_dir / "docker-compose.yml")]
+    assert captured["args"] == ["docker", "stack", "config", "-c", str(namespace_dir / "docker-compose.deploy.yml")]
     # A real preview needs the same real, resolved input a deploy would use.
-    assert (namespace_dir / "docker-compose.yml").read_text() != contents_before
+    assert (namespace_dir / "docker-compose.yml").read_text() == contents_before
+    assert (namespace_dir / "docker-compose.deploy.yml").read_text() != contents_before
 
 
 def test_deploy_namespace_dry_run_plan_failure_is_reported_as_an_error(monkeypatch, tmp_path: Path):
@@ -862,3 +891,23 @@ def test_real_docker_resolves_contexts_the_way_the_pin_relies_on(tmp_path: Path)
     assert docker("context", "show", DOCKER_CONTEXT="strata-probe").stdout.strip() == "strata-probe"
     shown = docker("context", "show", DOCKER_CONTEXT="strata-probe", DOCKER_HOST="tcp://127.0.0.1:1")
     assert shown.stdout.strip() == "default"
+
+
+def test_referenced_secret_keys_scans_the_merged_compose_file(tmp_path: Path):
+    """docs/design/deployment-documentation.md: the merged docker-compose.yml `deploy_namespace()` resolves."""
+    namespace_dir = tmp_path / "hearth"
+    (namespace_dir / "caddy").mkdir(parents=True)
+    (namespace_dir / "docker-compose.yml").write_text(
+        "services:\n  caddy:\n    environment:\n      TOKEN: ${secret:CADDY_TOKEN}\n      TZ: ${var:TZ}\n",
+        encoding="utf-8",
+    )
+    caddy = _module("caddy", services=[ModuleServiceModel(name="caddy", image="caddy:2-alpine")])
+    modules = [_resolved("caddy", caddy, namespace_dir / "caddy")]
+
+    assert ComposeIntegration().referenced_secret_keys(_namespace("hearth"), modules) == {"CADDY_TOKEN"}
+
+
+def test_referenced_secret_keys_without_the_merged_file_cannot_tell(tmp_path: Path):
+    caddy = _module("caddy", services=[ModuleServiceModel(name="caddy", image="caddy:2-alpine")])
+    modules = [_resolved("caddy", caddy, tmp_path / "hearth" / "caddy")]
+    assert ComposeIntegration().referenced_secret_keys(_namespace("hearth"), modules) is None

@@ -41,8 +41,11 @@ utils/        ← Pure utilities (no business logic, no service imports)
 3. For commands that work without an initialized workspace (no `solution.json` required), override `_initialize()` to call `self._initialize_session()` and return its result.
 4. Wire it up in `src/strata/commands/cli_<group>.py` with Click decorators.
 5. Register the group in `src/strata/cli.py` if it's new.
-6. Use `@click_work_path`, `@click_output_format`, `@click_output_verbose`, `@click_output_quiet` from `cli_common.py`.
-7. Use `@click_file` from `cli_common.py` for `--file` options (includes `STRATA_FILE` env var automatically).
+6. Use `@output_option`, `@quiet_option` and `@verbose_option` from `commands/options.py`, and `resolve_work_path()` for `--path`.
+7. Keep the output flags apart ([ADR-0056](../docs/decisions/0056-output-is-the-result-format-is-the-content.md)):
+   - `-o/--output console|json` is the command's result (envelope, diagnostics, exit codes). Never add a value to it.
+   - `--format` picks the shape of the command's content (`table`, `markdown`, `env`, ...) when it has more than one. Under `--output json` stdout stays one JSON document, so `--format` does not apply there.
+   - `--output-path PATH` writes that content to a file; the envelope still goes to stdout. Never `--out` or `--output FILE`.
 8. Never use `sys.exit()` — raise `click.exceptions.Exit(code)`.
 
 ### Adding a new integration

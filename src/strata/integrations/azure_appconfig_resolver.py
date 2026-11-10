@@ -51,6 +51,10 @@ class AzureAppConfigResolver(StoreIntegration, KeyValueStoreIntegration):
     TYPE = "azure-appconfig"
     CAPABILITIES = frozenset({Capability.VARIABLES, Capability.FEATURES, Capability.KEY_VALUE})
     TRANSPORTS = frozenset({"sdk"})
+    #: "There's a combined size limit of 10 KB on a key-value. This limit includes all characters in the key,
+    #: its value, and all associated optional attributes" — every tier
+    #: (https://learn.microsoft.com/en-us/azure/azure-app-configuration/concept-key-value, checked 2026-11-09).
+    MAX_VALUE_BYTES = 10_000
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
         super().__init__(config)

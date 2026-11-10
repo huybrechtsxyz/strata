@@ -2305,3 +2305,21 @@ def test_real_helm_refuses_a_kube_context_its_kubeconfig_does_not_define(tmp_pat
 
     assert result.returncode != 0
     assert 'context "forge-prd" does not exist' in result.stderr
+
+
+def test_referenced_secret_keys_scans_each_modules_rendered_values(tmp_path: Path):
+    """docs/design/deployment-documentation.md: the same input `deploy_namespace()` resolves."""
+    module = _module(
+        services=[
+            ModuleServiceModel(
+                name="server",
+                environment=[
+                    ModuleServiceEnvironmentModel(key="DB_PASSWORD", value="${secret:DB_PASSWORD}"),
+                    ModuleServiceEnvironmentModel(key="REGION", value="${var:REGION}"),
+                ],
+            )
+        ],
+    )
+    resolved_module = _resolved_module("authentik", module, tmp_path)
+
+    assert HelmIntegration().referenced_secret_keys(_namespace(), [resolved_module]) == {"DB_PASSWORD"}
