@@ -4851,3 +4851,82 @@ def test_a_value_token_in_a_context_field_is_a_schema_error(tmp_path, field):
     [finding] = context.diagnostics.errors
     assert finding.location == f"spec.{field}"
     assert "'${var:cluster}' contains a value token, which is not resolved here" in finding.message
+
+
+# ---------------------------------------------------------------------------
+# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1) - end to end through
+# `strata validate`: judged per deployment, its version's pins applied
+# ---------------------------------------------------------------------------
+
+_ARTIFACT_TOKEN_CODES = {"unknown_artifact_token", "unavailable_artifact_token"}
+
+
+def _artifact_token_solution(tmp_path: Path, key: str, *, image_tag: str | None, pin: str | None = None) -> Path:
+    """The base solution with one artifact, `api`, and a backend `key` that uses `key`; `pin` adds a version that
+    pins the artifact and points the deployment at it."""
+    root = _backend_key_solution(tmp_path, key)
+    tag_line = f'  image_tag: "{image_tag}"\n' if image_tag else ""
+    _write(
+        root,
+        "artifact.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: api\n"
+        f"spec:\n  image_name: example/api\n{tag_line}",
+    )
+    if pin is not None:
+        _write(
+            root,
+            "version.yaml",
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\n"
+            f'spec:\n  pins:\n    artifacts:\n      api: "{pin}"\n',
+        )
+        path = root / "deployment.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("spec:\n", "spec:\n  version: prd\n", 1), encoding="utf-8"
+        )
+    return root
+
+
+def _artifact_token_codes(context) -> list[str]:
+    return [d.code for d in context.diagnostics.errors if d.code in _ARTIFACT_TOKEN_CODES]
+
+
+def test_an_artifact_token_with_a_declared_tag_passes_validate(tmp_path):
+    context = _resolve(_artifact_token_solution(tmp_path, "${artifact:api.image_tag}.tfstate", image_tag="1.0.0"))
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_the_tag_of_an_untagged_artifact_is_caught_for_the_deployment(tmp_path):
+    context = _resolve(_artifact_token_solution(tmp_path, "${artifact:api.image_tag}.tfstate", image_tag=None))
+    assert not context.ok
+    assert _artifact_token_codes(context) == ["unavailable_artifact_token"]
+    assert any("prd-deployment" in m for m in context.diagnostics.messages())
+
+
+def test_a_pin_supplies_the_tag_an_artifact_lacks(tmp_path):
+    root = _artifact_token_solution(tmp_path, "${artifact:api.image_tag}.tfstate", image_tag=None, pin="2.0.0")
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_the_image_ref_of_an_untagged_artifact_passes(tmp_path):
+    context = _resolve(_artifact_token_solution(tmp_path, "${artifact:api.image_ref}", image_tag=None))
+    assert context.ok, context.diagnostics.messages()
+
+
+@pytest.mark.parametrize("token", ["${artifact:ghost.image_tag}", "${artifact:api.digest}"])
+def test_an_unknown_artifact_or_field_is_caught(tmp_path, token):
+    context = _resolve(_artifact_token_solution(tmp_path, token, image_tag="1.0.0"))
+    assert not context.ok
+    assert _artifact_token_codes(context) == ["unknown_artifact_token"]
+
+
+def test_an_artifact_token_in_an_environment_store_value_is_caught(tmp_path):
+    root = _artifact_token_solution(tmp_path, "state.tfstate", image_tag="1.0.0")
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace('value: "1.2.3.4"', 'value: "${artifact:api.image_tag}"'),
+        encoding="utf-8",
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "store_value_token_unsupported" for d in context.diagnostics.errors)

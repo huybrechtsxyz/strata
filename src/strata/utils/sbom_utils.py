@@ -36,6 +36,18 @@ def exact_version(constraint: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+def compose_image_ref(image_name: str, image_tag: str | None) -> str:
+    """`name:tag`, `name@algo:digest` for a digest, or the bare name when there is no tag; the reverse of
+    `parse_image_ref()`.
+
+    A tag never contains `:`, so a value that does is a digest (`sha256:...`).
+    """
+    if not image_tag:
+        return image_name
+    separator = "@" if ":" in image_tag else ":"
+    return f"{image_name}{separator}{image_tag}"
+
+
 def is_floating_tag(tag: str | None) -> bool:
     """Return True when the image tag is mutable / not pinned.
 

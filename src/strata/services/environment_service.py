@@ -21,19 +21,23 @@ from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.dict_merge import deep_merge
 from strata.utils.value_tokens import (
+    ARTIFACT_TOKEN_FIELDS,
     DEPLOYMENT_TOKEN_KEYS,
     VALUE_TOKEN_KINDS,
+    artifact_key,
+    artifact_token_problem,
     deployment_token_values,
     extract_value_tokens,
     find_malformed_value_tokens,
     resolve_value_tokens,
+    split_artifact_token_key,
 )
 
 #: Maps a Value token's kind to the environment store that declares it.
 _STORE_BY_TOKEN_KIND = {"var": "variables", "secret": "secrets", "feature": "features"}
 
 #: Token kinds a store's own `value` is never resolved against (only `${value:}` is).
-_UNSUPPORTED_STORE_VALUE_TOKEN_KINDS = frozenset({"var", "secret", "feature", "output", "deployment"})
+_UNSUPPORTED_STORE_VALUE_TOKEN_KINDS = frozenset({"var", "secret", "feature", "output", "deployment", "artifact"})
 
 #: A value that is a URL rather than a name (`validate_secret_store_values()`).
 _URL_PATTERN = re.compile(r"^[a-z][a-z0-9+.-]*://", re.IGNORECASE)
@@ -328,6 +332,8 @@ def unresolved_value_tokens(
         for kind, key in extract_value_tokens(text):
             if kind == "deployment":
                 continue  # judged per deployment by `unresolved_deployment_tokens()`
+            if kind == "artifact":
+                continue  # judged per deployment by `unresolved_artifact_tokens()`
             if kind == "value":
                 # Existence/path/scalar/target-is-literal checks for this
                 # kind are a `DocumentIndex` lookup
@@ -418,6 +424,47 @@ def unresolved_deployment_tokens(model: PlatformBaseModel, deployment_name: str,
                     location=path,
                     code="unavailable_deployment_token",
                 )
+    return diagnostics
+
+
+def unresolved_artifact_tokens(
+    model: PlatformBaseModel, artifact_values: dict[str, str], deployment_name: str
+) -> Diagnostics:
+    """Check every ``${artifact:NAME.FIELD}`` token in `model` against the deployment being validated.
+
+    The counterpart of `unresolved_deployment_tokens()`: an artifact token is not declared in an environment, so it
+    is judged against `artifact_values`, the entries `deploy run` puts in its token map for the same deployment
+    (`controllers/artifact_tokens.artifact_token_values()`), so the two cannot disagree.
+
+    Args:
+        model: Any already-validated strata document reachable from the deployment.
+        artifact_values: `artifact_token_values()` for the deployment, its pins applied.
+        deployment_name: The deployment's `meta.name`, for the message.
+
+    Returns:
+        One error per token that names no artifact or no field (`unknown_artifact_token`), and one per
+        ``image_tag`` of an artifact that has no tag and no pin for this deployment (`unavailable_artifact_token`),
+        each located at the field path where the token was written.
+    """
+    diagnostics = Diagnostics()
+    dumped = model.model_dump(by_alias=True, mode="json")
+    dumped.pop("meta", None)
+    for path, text in _iter_strings(dumped):
+        for kind, key in extract_value_tokens(text):
+            if kind != "artifact":
+                continue
+            problem = artifact_token_problem(key, artifact_values)
+            if problem is None:
+                continue
+            name, field = split_artifact_token_key(key)
+            if field in ARTIFACT_TOKEN_FIELDS and artifact_key(name, "image_name") in artifact_values:
+                diagnostics.error(
+                    f"{problem} (deployment '{deployment_name}')",
+                    location=path,
+                    code="unavailable_artifact_token",
+                )
+            else:
+                diagnostics.error(problem, location=path, code="unknown_artifact_token")
     return diagnostics
 
 

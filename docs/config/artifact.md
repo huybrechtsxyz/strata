@@ -2,8 +2,9 @@
 
 A pinnable, named reference to something external strata doesn't fetch or deploy itself — a
 container image today, possibly other identifiers later. Referenced by identity from anywhere in
-the solution: a `store: artifact` variable (an external provisioner's own input) or a module
-service's `artifact` field (see [`module`](module.md)).
+the solution: an `${artifact:NAME.FIELD}` token in any field strata resolves at deploy, a
+`store: artifact` variable (to hand a Terraform root a variable), or a module service's `artifact`
+field (see [`module`](module.md)).
 
 ## Schema
 
@@ -34,9 +35,38 @@ spec:
   registry: cdn-feeds.acme.com
 ```
 
-Referenced from an environment's `variables`. `field` is required: `image_name`, `image_tag` (with
-any [`version`](version.md) pin applied; `""` when there is no tag) or `image_ref` (`image_name:image_tag`,
-`image_name@sha256:...` for a digest, or just `image_name` when the tag is blank):
+### The `${artifact:NAME.FIELD}` token
+
+Read an artifact directly, with no variable to declare:
+
+| Token                         | Value                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `${artifact:NAME.image_name}` | `spec.image_name`, never pinned                                                                         |
+| `${artifact:NAME.image_tag}`  | the tag after the deployment's [`version`](version.md) pin, else `spec.image_tag`                       |
+| `${artifact:NAME.image_ref}`  | `image_name:image_tag`, `image_name@sha256:...` for a digest, or just `image_name` when there is no tag |
+
+```yaml
+# A Helm module: the chart's own keys, the pinned values
+spec:
+  configuration:
+    image:
+      repository: "${artifact:scheduler-api.image_name}"
+      tag: "${artifact:scheduler-api.image_tag}"
+```
+
+- It resolves at deploy, in every field a `${var:}` token resolves in: a Terraform payload or backend, Helm values,
+  a Compose file, a script's arguments. `--pin NAME` on `deploy run` picks the version, as for every other pin.
+- `${artifact:NAME.image_tag}` on an artifact with no `image_tag` and no pin for the deployment is an error
+  (`unavailable_artifact_token`), never an empty tag. An unknown artifact or field is `unknown_artifact_token`.
+  `strata validate` judges both per deployment, and `deploy run` stops on them before the step's tool runs.
+- An environment store's own `value` cannot use it: a store value is resolved before a deployment is chosen.
+- Write `$${artifact:...}` for a literal.
+
+### A `store: artifact` variable
+
+To hand the value to a Terraform root as a variable (`strata.variables` and `TF_VAR_<key>`), or to
+override it per environment, declare a variable. `field` is required: `image_name`, `image_tag` (with
+any [`version`](version.md) pin applied; `""` when there is no tag) or `image_ref`:
 
 ```yaml
 variables:
@@ -46,9 +76,8 @@ variables:
     field: image_tag
 ```
 
-The pinned tag is also what a build writes to `strata.variables`. Read it with a `${var:KEY}` token
-in `spec.properties` and it resolves at deploy. `${value:artifact.<name>.spec.image_tag}` is
-rejected, as it would read the unpinned tag.
+The pinned tag is also what a build writes to `strata.variables`. `${value:artifact.<name>.spec.image_tag}` is
+rejected, as it would read the unpinned tag; use the token.
 
 To see which images a deployment runs, with the tag after the pin and where it came from, run
 `strata deploy images DEPLOYMENT [--pin NAME] -o json`. It reads the solution only (no build, no

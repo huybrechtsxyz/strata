@@ -22,7 +22,6 @@ from typing import cast
 from strata.controllers.deployment_resolution import deployment_workspace
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import (
-    compose_image_ref,
     reachable_environments,
     resolve_artifact,
     resolve_artifact_tag,
@@ -36,7 +35,7 @@ from strata.models.namespace_model import NamespaceModel
 from strata.models.store_model import VariableStoreType
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
-from strata.utils.sbom_utils import parse_image_ref
+from strata.utils.sbom_utils import compose_image_ref, parse_image_ref
 
 
 def effective_images(

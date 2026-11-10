@@ -8,6 +8,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- `${artifact:NAME.FIELD}`, a token for an artifact's `image_name`, `image_tag` or `image_ref`, with the
+  deployment's version pin applied. It works in every field a `${var:}` token resolves in at deploy (a Terraform
+  payload or backend, Helm values, a Compose file, a script's arguments), so an artifact no longer needs a
+  `store: artifact` variable declared only to pass one field along. `${artifact:NAME.image_tag}` on an artifact with
+  no tag and no pin is an error (`unavailable_artifact_token`), never an empty tag; an unknown artifact or field is
+  `unknown_artifact_token`. `strata validate` judges both per deployment. A `store: artifact` variable still gives
+  Terraform the value as a variable.
+
 ## [2.6.0] - 2026-11-09
 
 Deployment documentation: `strata deploy output`, `strata deploy report` and `spec.documentation`, built on a

@@ -24,14 +24,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from sys import stdin
-from typing import Any, Literal, cast
+from typing import Any, cast
 
+from strata.controllers.artifact_tokens import ArtifactTag, effective_artifact_tag
 from strata.controllers.deployment_resolution import deployment_workspace, resolve_deployment_chains
 from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.value_references import resolve_document_value_references
-from strata.controllers.version_pins import log_pin_applied
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.integrations.registry import IntegrationNotFoundError
@@ -53,9 +53,9 @@ from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
-from strata.services.version_service import VersionService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
+from strata.utils.sbom_utils import compose_image_ref
 from strata.utils.secret_generator import generate_secret, mask_secret
 from strata.utils.value_tokens import has_value_tokens, resolve_value_tokens
 
@@ -249,54 +249,12 @@ def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactMo
     return cast(ArtifactModel, entry.model)
 
 
-@dataclass(frozen=True)
-class ArtifactTag:
-    """An artifact's effective tag and where it came from.
-
-    `source` is `pin` (a `kind: version` pin won), `declared` (the artifact's own `image_tag`) or `none`
-    (neither supplied one; `value` is `None`). `version` names the version document for a `pin`.
-    """
-
-    value: str | None
-    source: Literal["pin", "declared", "none"]
-    version: str | None = None
-
-
 def resolve_artifact_tag(
     context: SolutionContext, deployment: DeploymentModel, artifact_name: str
 ) -> ArtifactTag | None:
-    """The effective tag of `artifact_name` for `deployment`, or `None` when the artifact does not exist.
-
-    Consults `deployment.spec.version` -> `VersionModel.spec.pins.artifacts[artifact_name]` first (via
-    `VersionService.resolve()`, the single shared pin lookup every overlay category uses,
-    docs/design/version-pin-overlay.md), then the artifact's own `image_tag`. Every pin application is
-    logged (ADR-0019 decision 7). `None` means "no such artifact", never "no tag": that is an
-    `ArtifactTag` with `source="none"`.
-    """
-    artifact = resolve_artifact(context, artifact_name)
-    if artifact is None:
-        return None
-    declared = artifact.spec.image_tag or None
-    if deployment.spec.version:
-        version_entry = context.controller.index.get(PlatformKind.VERSION, deployment.spec.version)
-        if version_entry is not None:
-            version = cast(VersionModel, version_entry.model)
-            pin = VersionService.from_model(version).resolve("artifacts", artifact_name)
-            if pin is not None:
-                log_pin_applied("artifacts", artifact_name, declared, pin.version, version.meta.name)
-                return ArtifactTag(pin.version, "pin", version.meta.name)
-    return ArtifactTag(declared, "declared" if declared else "none")
-
-
-def compose_image_ref(image_name: str, image_tag: str | None) -> str:
-    """`name:tag`, `name@algo:digest` for a digest, or the bare name when there is no tag.
-
-    A tag never contains `:`, so a value that does is a digest (`sha256:...`).
-    """
-    if not image_tag:
-        return image_name
-    separator = "@" if ":" in image_tag else ":"
-    return f"{image_name}{separator}{image_tag}"
+    """The effective tag of `artifact_name` for `deployment`, or `None` when the artifact does not exist; a pin
+    that wins is logged. See `artifact_tokens.effective_artifact_tag()`, the one pin lookup for artifacts."""
+    return effective_artifact_tag(context.controller.index, deployment, artifact_name)
 
 
 def resolve_artifact_field(

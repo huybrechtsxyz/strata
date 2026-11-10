@@ -5274,3 +5274,100 @@ def test_a_compose_deploy_after_a_dry_run_still_delivers_its_secrets(tmp_path: P
     stack_deploys = [env for args, env in calls if args[:3] == ["docker", "stack", "deploy"]]
     assert len(stack_deploys) == 1
     assert (stack_deploys[0] or {}).get("DB_PWD") == "hunter2"
+
+
+# ---------------------------------------------------------------------------
+# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1): the artifacts' pinned
+# images are in the deploy-time token map
+# ---------------------------------------------------------------------------
+
+
+def _write_artifact(root: Path, *, image_tag: str | None, pin: str | None = None) -> None:
+    """Artifact `api` (`example/api`), and with `pin` a version `prd` pinning it (selected with `--pin prd`)."""
+    tag_line = f'  image_tag: "{image_tag}"\n' if image_tag else ""
+    _write(
+        root,
+        "artifact.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: api\n"
+        f"spec:\n  image_name: example/api\n{tag_line}",
+    )
+    if pin is not None:
+        _write(
+            root,
+            "version.yaml",
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\n"
+            f'spec:\n  pins:\n    artifacts:\n      api: "{pin}"\n',
+        )
+
+
+def test_deploy_run_resolves_an_artifact_tag_in_a_backend(tmp_path: Path, _capture):
+    root = _backend_key_solution(tmp_path, "${artifact:api.image_tag}.tfstate")
+    _write_artifact(root, image_tag="1.0.0")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "key=1.0.0.tfstate" in _init_call(_capture)
+
+
+def test_deploy_run_applies_the_pin_to_an_artifact_token(tmp_path: Path, _capture, monkeypatch):
+    """`--pin` picks the version; the pin is logged once for the run."""
+    import strata.controllers.artifact_tokens as artifact_tokens
+
+    logged: list[str] = []
+
+    def _spy(_category: str, name: str, *_rest: object) -> None:
+        logged.append(name)
+
+    monkeypatch.setattr(artifact_tokens, "log_pin_applied", _spy)
+    root = _backend_key_solution(tmp_path, "${artifact:api.image_tag}.tfstate")
+    _write_artifact(root, image_tag="1.0.0", pin="2.0.0")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path, pin="prd")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "key=2.0.0.tfstate" in _init_call(_capture)
+    assert logged == ["api"]
+
+
+def test_deploy_run_reports_an_untagged_artifact_before_running_anything(tmp_path: Path, _capture):
+    """`deploy run` does not run `validate`, so a tag that is missing for this deployment fails here, cleanly."""
+    root = _backend_key_solution(tmp_path, "${artifact:api.image_tag}.tfstate")
+    _write_artifact(root, image_tag=None)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert "${artifact:api.image_tag}" in diagnostics.messages()[0]
+    assert "has no image_tag" in diagnostics.messages()[0]
+    assert _capture == []
+
+
+def test_deploy_run_resolves_an_artifact_token_in_a_compose_module(tmp_path: Path, _capture):
+    root = _compose_solution(tmp_path)
+    _write_artifact(root, image_tag="1.0.0")
+    module = root / "module.yaml"
+    module.write_text(
+        module.read_text(encoding="utf-8").replace(
+            "image: portainer/portainer-ce\n",
+            "image: portainer/portainer-ce\n"
+            "      environment:\n        - key: API_IMAGE\n          value: ${artifact:api.image_ref}\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    compose_text = (build_path / "apps" / "docker-compose.deploy.yml").read_text(encoding="utf-8")
+    assert "example/api:1.0.0" in compose_text
+    assert "${artifact:" not in compose_text

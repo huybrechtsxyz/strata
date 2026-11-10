@@ -123,7 +123,8 @@ one `-backend-config key=value` each. The `backend "azurerm" {}` block itself st
 `type` is not sent to Terraform.
 
 The values are resolved when `deploy run` starts the step, so they may contain `${var:}`, `${secret:}`,
-`${feature:}` and `${output:STEP.KEY}` tokens, and two tokens for the deployment being run. A workspace is shared
+`${feature:}`, `${output:STEP.KEY}` and [`${artifact:NAME.FIELD}`](artifact.md) tokens, and two tokens for the
+deployment being run. A workspace is shared
 by every deployment, so these are the way to give each deployment its own state without typing a key into every
 deployment's environment:
 

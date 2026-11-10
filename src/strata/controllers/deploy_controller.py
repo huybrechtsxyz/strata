@@ -31,6 +31,7 @@ from typing import Any, Literal, cast
 import jinja2
 import yaml
 
+from strata.controllers.artifact_tokens import artifact_token_values
 from strata.controllers.build_controller import build_resolved_workspace_graph, ordered_by_depends_on
 from strata.controllers.deployment_output_store import (
     DeploymentOutputStore,
@@ -1329,6 +1330,10 @@ def deploy_run(
         if not diagnostics.ok:
             return diagnostics
 
+    # `${artifact:NAME.FIELD}` (docs/work/artifact-gap-analysis.md, design 1): once per run, so each pin that wins
+    # is logged once, not once per step.
+    artifact_tokens = artifact_token_values(index, deployment, log=True)
+
     for step, provisioner, integration in resolved_steps:
         # Matches `build_run()`'s own `source_path` resolution exactly
         # (`source_sync.sync_source()`'s `destination = build_path /
@@ -1403,11 +1408,13 @@ def deploy_run(
             output_store, upstream, step_outputs, visible_outputs, step_name=step.name, diagnostics=diagnostics
         ):
             return diagnostics
-        # The deployment's own entries go last and cannot collide: their keys hold a colon (value_tokens.py).
+        # The deployment's and the artifacts' entries go last and cannot collide: their keys hold a colon
+        # (value_tokens.py).
         tokens = {
             **resolved.values,
             **visible_outputs,
             **deployment_token_values(deployment.meta.name, deployment.spec.tenant),
+            **artifact_tokens,
         }
 
         # Helm/Compose dispatch (docs/design/gap_fit_v1.md gap #13): a

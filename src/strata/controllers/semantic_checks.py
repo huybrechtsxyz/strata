@@ -35,6 +35,7 @@ from typing import Any, cast
 from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
+from strata.controllers.artifact_tokens import artifact_token_values
 from strata.controllers.deployment_resolution import deployment_workspace
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
@@ -82,6 +83,7 @@ from strata.services.environment_service import (
     EnvironmentService,
     merge_environment_models,
     merge_workspace_environment_deployment_properties,
+    unresolved_artifact_tokens,
     unresolved_deployment_tokens,
     unresolved_value_tokens,
 )
@@ -1437,6 +1439,8 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     `${deployment:}` tokens are judged here too, by `unresolved_deployment_tokens()`, in the same documents but
     separately: they need no environment, so they are checked even when the deployment resolves none, and a
     `partial: true` base is skipped because its tenant is only known once a deployment extends it.
+    `${artifact:}` tokens follow the same rule (`unresolved_artifact_tokens()`), against the artifact entries
+    `deploy run` builds for the deployment, its version's pins applied.
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
@@ -1450,6 +1454,7 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
             continue  # no resolvable environment — nothing to check tokens against
 
         owner = "+".join(deployment.spec.environments or []) or "(none)"
+        artifact_values = artifact_token_values(index, deployment) if check_deployment_tokens else {}
         documents: list[tuple[PlatformBaseModel, bool, Path]] = _documents_reachable_from_workspace(
             index, deployment.spec.workspace, deployment
         )
@@ -1472,6 +1477,10 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
             if check_deployment_tokens:
                 diagnostics.extend(
                     unresolved_deployment_tokens(document, deployment.meta.name, deployment.spec.tenant),
+                    source=str(doc_source),
+                )
+                diagnostics.extend(
+                    unresolved_artifact_tokens(document, artifact_values, deployment.meta.name),
                     source=str(doc_source),
                 )
     return diagnostics

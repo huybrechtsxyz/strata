@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from strata.controllers.artifact_tokens import artifact_token_values
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import (
     build_value_references,
-    compose_image_ref,
     is_direct_store,
     list_values,
     reachable_environments,
@@ -41,6 +41,7 @@ from strata.models.store_model import (
     VariableStoreType,
 )
 from strata.utils.errors import UsageError
+from strata.utils.sbom_utils import compose_image_ref
 
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
@@ -555,6 +556,60 @@ def test_resolve_artifact_tag_with_no_tag_and_no_pin_is_none_not_a_missing_artif
 def test_resolve_artifact_tag_is_none_for_an_unknown_artifact(tmp_path):
     context, deployment = _tag_context(tmp_path)
     assert resolve_artifact_tag(context, deployment, "ghost") is None
+
+
+# `${artifact:NAME.FIELD}` entries (docs/work/artifact-gap-analysis.md, design 1)
+
+
+def test_artifact_token_values_apply_the_deployments_pin(tmp_path):
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"}, version=True)
+    assert artifact_token_values(context.controller.index, deployment) == {
+        "artifact:api_container.image_name": "int/api",
+        "artifact:api_container.image_tag": "2.0.0",
+        "artifact:api_container.image_ref": "int/api:2.0.0",
+    }
+
+
+def test_artifact_token_values_use_the_declared_tag_without_a_pin(tmp_path):
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0")
+    values = artifact_token_values(context.controller.index, deployment)
+    assert values["artifact:api_container.image_tag"] == "1.0.0"
+
+
+@pytest.mark.parametrize("declared", [None, ""])
+def test_artifact_token_values_leave_out_a_missing_tag(tmp_path, declared):
+    """So `${artifact:NAME.image_tag}` fails instead of becoming `""`; `image_ref` is the bare name."""
+    context, deployment = _tag_context(tmp_path, image_tag=declared)
+    values = artifact_token_values(context.controller.index, deployment)
+    assert "artifact:api_container.image_tag" not in values
+    assert values["artifact:api_container.image_ref"] == "int/api"
+
+
+def test_artifact_token_values_follow_a_pin_override(tmp_path):
+    """`--pin` reaches the tokens through `resolve_deployment()`, as it reaches every other pin."""
+    context, _ = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"})
+    deployment = resolve_deployment(context, "app", version_pin="prd")
+    assert artifact_token_values(context.controller.index, deployment)["artifact:api_container.image_tag"] == "2.0.0"
+
+
+@pytest.mark.parametrize("field", ["image_name", "image_tag", "image_ref"])
+def test_artifact_token_values_agree_with_a_store_artifact_variable(tmp_path, field):
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"}, version=True)
+    values = artifact_token_values(context.controller.index, deployment)
+    assert values[f"artifact:api_container.{field}"] == resolve_artifact_field(
+        context, deployment, "api_container", field
+    )
+
+
+@pytest.mark.parametrize(("log", "expected"), [(False, []), (True, ["api_container"])])
+def test_artifact_token_values_log_a_pin_only_when_asked(tmp_path, monkeypatch, log, expected):
+    import strata.controllers.artifact_tokens as artifact_tokens
+
+    logged: list[str] = []
+    monkeypatch.setattr(artifact_tokens, "log_pin_applied", lambda _category, name, *_args: logged.append(name))
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"}, version=True)
+    artifact_token_values(context.controller.index, deployment, log=log)
+    assert logged == expected
 
 
 @pytest.mark.parametrize("declared", [None, ""])

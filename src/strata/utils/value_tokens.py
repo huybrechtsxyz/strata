@@ -32,6 +32,13 @@ other token's key (the regex excludes it), so a variable, secret, feature or
 step output can never collide with these entries. `deployment_token_values()`
 builds them.
 
+A 7th kind, ``${artifact:NAME.FIELD}`` (``FIELD`` is ``image_name``,
+``image_tag`` or ``image_ref``), is a built-in for an artifact's image as the
+deployment being run pins it (docs/work/artifact-gap-analysis.md, design 1).
+It is stored the same way, under ``artifact:NAME.FIELD``; this module only
+knows the key shape (`artifact_key()`), the controllers build the entries
+(`controllers/artifact_tokens.py`), since a pin needs the document index.
+
 Lives in `strata.utils` (below `strata.models` in the layered architecture,
 ADR-0003): pure regex/string logic, no Pydantic dependency, reused across
 many model files (dns, module, network, firewall...) — same reasoning as
@@ -42,9 +49,11 @@ import ipaddress
 import re
 from typing import Any
 
-VALUE_TOKEN_KINDS = ("var", "secret", "feature", "output", "value", "deployment")
+VALUE_TOKEN_KINDS = ("var", "secret", "feature", "output", "value", "deployment", "artifact")
 
-VALUE_TOKEN_PATTERN = re.compile(r"\$\{(?P<kind>var|secret|feature|output|value|deployment):(?P<key>[A-Za-z0-9_.-]+)\}")
+VALUE_TOKEN_PATTERN = re.compile(
+    r"\$\{(?P<kind>var|secret|feature|output|value|deployment|artifact):(?P<key>[A-Za-z0-9_.-]+)\}"
+)
 
 _VALUE_TOKEN_CANDIDATE_PATTERN = re.compile(r"\$\{[^}]*\}")
 
@@ -65,7 +74,7 @@ _ESCAPED_VALUE_TOKEN_PATTERN = re.compile(r"\$\$(\{[^}]*\})")
 #: stray literal "$" prepended to the resolved value).
 _RESOLVE_VALUE_TOKEN_PATTERN = re.compile(
     r"\$\$(?P<escaped>\{[^}]*\})"
-    r"|\$\{(?P<kind>var|secret|feature|output|value|deployment):(?P<key>[A-Za-z0-9_.-]+)\}"
+    r"|\$\{(?P<kind>var|secret|feature|output|value|deployment|artifact):(?P<key>[A-Za-z0-9_.-]+)\}"
 )
 
 
@@ -73,6 +82,42 @@ _RESOLVE_VALUE_TOKEN_PATTERN = re.compile(
 DEPLOYMENT_TOKEN_KEYS = ("name", "tenant")
 
 _DEPLOYMENT_PREFIX = "deployment"
+
+#: The fields ``${artifact:NAME.FIELD}`` accepts, the same three a `store: artifact` variable's `field` takes.
+ARTIFACT_TOKEN_FIELDS = ("image_name", "image_tag", "image_ref")
+
+_ARTIFACT_PREFIX = "artifact"
+
+
+def artifact_key(name: str, field: str) -> str:
+    """The flat-map key of one artifact entry, ``artifact:NAME.FIELD``; the colon keeps it apart from every other
+    kind, as for a deployment entry."""
+    return f"{_ARTIFACT_PREFIX}:{name}.{field}"
+
+
+def split_artifact_token_key(key: str) -> tuple[str, str | None]:
+    """``NAME.FIELD`` as written in a token, split at the first ``.`` (an artifact name has none); ``FIELD`` is
+    `None` when the key has no ``.`` or nothing after it."""
+    name, dot, field = key.partition(".")
+    return name, (field if dot and field else None)
+
+
+def referenced_artifact_keys(node: object) -> set[str]:
+    """Every ``${artifact:NAME.FIELD}`` token's ``"NAME.FIELD"`` found anywhere in `node`, with the same walk as
+    `referenced_output_keys()`."""
+    if isinstance(node, str):
+        return {key for kind, key in extract_value_tokens(node) if kind == _ARTIFACT_PREFIX}
+    if isinstance(node, dict):
+        keys: set[str] = set()
+        for value in node.values():
+            keys |= referenced_artifact_keys(value)
+        return keys
+    if isinstance(node, list):
+        keys = set()
+        for item in node:
+            keys |= referenced_artifact_keys(item)
+        return keys
+    return set()
 
 
 def _deployment_key(key: str) -> str:
@@ -99,19 +144,48 @@ def is_deployment_entry(key: str) -> bool:
     return key.startswith(f"{_DEPLOYMENT_PREFIX}:")
 
 
-def _unresolved_message(kind: str, key: str, lookup: str) -> str:
-    """Why a token did not resolve; a deployment token says what is missing instead of naming the internal key."""
+def _unresolved_message(kind: str, key: str, lookup: str, values: dict[str, str]) -> str:
+    """Why a token did not resolve; a deployment or artifact token says what is missing instead of naming the
+    internal key."""
     token = f"${{{kind}:{key}}}"
     if kind == _DEPLOYMENT_PREFIX:
         if key in DEPLOYMENT_TOKEN_KEYS:
             return f"Value token '{token}' needs a {key}, but the deployment being run has none."
         return f"Value token '{token}' is not a deployment token. Available: {sorted(DEPLOYMENT_TOKEN_KEYS)}"
+    if kind == _ARTIFACT_PREFIX:
+        return artifact_token_problem(key, values) or f"Value token '{token}' did not resolve to a value."
     return f"Value token '{token}' references key '{lookup}', which did not resolve to a value."
 
 
+def artifact_token_problem(key: str, values: dict[str, str]) -> str | None:
+    """Why ``${artifact:KEY}`` does not resolve against `values` (a flat token map), or `None` when it does.
+
+    Every artifact has an ``image_name`` entry, so a name without one is not an artifact; a known artifact without
+    an ``image_tag`` entry has no tag and no pin.
+    """
+    token = f"${{artifact:{key}}}"
+    name, field = split_artifact_token_key(key)
+    if field not in ARTIFACT_TOKEN_FIELDS:
+        return f"'{token}' is not NAME.FIELD with FIELD one of {list(ARTIFACT_TOKEN_FIELDS)}."
+    if artifact_key(name, "image_name") not in values:
+        prefix = f"{_ARTIFACT_PREFIX}:"
+        known = sorted({k.removeprefix(prefix).partition(".")[0] for k in values if k.startswith(prefix)})
+        return f"'{token}': there is no artifact named '{name}'. Artifacts: {known or 'none'}."
+    if artifact_key(name, field) not in values:
+        return (
+            f"'{token}': artifact '{name}' has no image_tag, and the deployment's version pins none. Set "
+            f"`spec.image_tag` on the artifact, or pin it under `pins.artifacts.{name}`."
+        )
+    return None
+
+
 def _lookup_key(kind: str, key: str) -> str:
-    """The flat-map key a token resolves against: `key` itself, except for ``deployment``."""
-    return _deployment_key(key) if kind == _DEPLOYMENT_PREFIX else key
+    """The flat-map key a token resolves against: `key` itself, except for ``deployment`` and ``artifact``."""
+    if kind == _DEPLOYMENT_PREFIX:
+        return _deployment_key(key)
+    if kind == _ARTIFACT_PREFIX:
+        return f"{_ARTIFACT_PREFIX}:{key}"
+    return key
 
 
 def strip_escaped_value_tokens(value: str) -> str:
@@ -321,7 +395,7 @@ def resolve_value_tokens(value: str, values: dict[str, str]) -> str:
         key = match.group("key")
         lookup = _lookup_key(kind, key)
         if lookup not in values:
-            raise ValueError(_unresolved_message(kind, key, lookup))
+            raise ValueError(_unresolved_message(kind, key, lookup, values))
         return values[lookup]
 
     return _RESOLVE_VALUE_TOKEN_PATTERN.sub(_substitute, value)
@@ -516,7 +590,7 @@ def resolve_value_tokens_renaming_secrets(
         key = match.group("key")
         lookup = _lookup_key(kind, key)
         if lookup not in values:
-            raise ValueError(_unresolved_message(kind, key, lookup))
+            raise ValueError(_unresolved_message(kind, key, lookup, values))
         if kind == "secret":
             secrets[key] = values[key]
             return f"${{{key}}}"
