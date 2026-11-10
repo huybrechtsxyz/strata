@@ -118,6 +118,9 @@ class EffectiveImage:
     `image_tag` is `None` when neither a pin nor the declaration supplies one, and `image_ref` is then the
     bare name. `tag_source` is `pin`, `declared` or `none`; `pin_version` names the version document of a
     pin, and `pin_flag` is true when that came from `--pin` rather than the deployment's `spec.version`.
+
+    `integration` is an artifact's `spec.integration`, by name only (docs/work/artifact-gap-analysis.md,
+    design 6): it tells a pipeline that copies the image which credentials to use. Nothing is resolved from it.
     """
 
     origin: str
@@ -133,6 +136,7 @@ class EffectiveImage:
     configuration: dict[str, Any] | None = None
     pin_version: str | None = None
     pin_flag: bool = False
+    integration: str | None = None
 
 
 @dataclass(frozen=True)

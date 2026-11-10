@@ -27,6 +27,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - `strata validate` warns `artifact_registry_mismatch` when an artifact's `registry` names another registry than
   its `image_name` is pulled from (an `image_name` with no host is Docker Hub). `registry` is documentation: strata
   never adds it to the image reference, so the runtime pulls `image_name` as written. Put the host in `image_name`.
+- `strata deploy images` reports an artifact's `integration`, by name: an `INTEGRATION` column when any image
+  has one, and `data.images[].integration` in JSON, so a pipeline that copies the images knows which
+  credentials each one needs. Nothing is resolved from it, so no credential appears.
 
 ### Changed
 

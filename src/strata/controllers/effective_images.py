@@ -130,6 +130,7 @@ def effective_images(
                 configuration=artifact.spec.configuration,
                 pin_version=artifact_tag.version,
                 pin_flag=artifact_tag.source == "pin" and pinned_by_flag,
+                integration=artifact.spec.integration,
             )
         )
     return [*artifact_rows, *service_rows]

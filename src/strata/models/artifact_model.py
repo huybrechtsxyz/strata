@@ -69,8 +69,9 @@ class ArtifactSpecModel(PlatformBaseModel):
     )
     integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         None,
-        description="Reserved. Must name an existing Integration, but nothing reads it: no registry "
-        "credentials are resolved from it. Supply them to whatever pulls or copies the image.",
+        description="The Integration that holds this image's registry credentials. `strata deploy images` "
+        "reports its name, so a pipeline that copies the image knows which credentials to use; strata "
+        "resolves nothing from it and never logs in.",
     )
     description: str | None = Field(None, description="Optional description for documentation purposes")
     properties: dict[str, Any] | None = Field(

@@ -1,6 +1,6 @@
 # Artifact gap analysis - Work
 
-- Status: in-progress (all designs agreed; designs 1, 2, 3, 5, 9 and 10 built; ADR-0058 written; the rest not started)
+- Status: in-progress (all designs agreed; designs 1, 2, 3, 5, 6 step 1, 9 and 10 built; ADR-0058 written; the rest not started)
 - Last updated: 2026-11-10
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
@@ -18,7 +18,8 @@ a design for each gap. It reads the code (`models/artifact_model.py`, `controlle
 in `config/`.
 
 An artifact is a named, pinnable container image reference: `image_name`, an optional `image_tag` that a
-`kind: version` pin (`pins.artifacts`) overrides, a documentation-only `registry`, a reserved `integration`, and
+`kind: version` pin (`pins.artifacts`) overrides, a documentation-only `registry`, an `integration` reported by
+name only, and
 free-form `properties` / `configuration` / `custom`. Strata never fetches the image.
 
 ## Current Design / Progress
@@ -345,6 +346,19 @@ always passes `--with-registry-auth`). Strata never logs in.
 **Changes (step 1).** `EffectiveImage.integration`, `deploy images` table and JSON, `artifact.md`. Step 2 gets its
 own design when triggered.
 
+**Implementation plan, step 1** (refines the changes above after reading the code):
+
+1. `EffectiveImage.integration: str | None = None`, the artifact's `spec.integration`; `None` for a module
+   service's literal image, which has no such field. The name only: nothing is resolved, so no credential can
+   reach a row.
+2. `effective_images()` fills it for artifact rows.
+3. `deploy images`: `data.images[].integration` in JSON. In the table an `INTEGRATION` column, shown only when some
+   row has one, so the common output does not gain a column of `-`.
+4. Other readers: `deploy report`'s `images[]` gains the field through `asdict()` (the built-in template does not
+   show it); the audit manifest and the SBOM build their own shapes and are unchanged.
+5. Docs: `artifact.md` (`spec.integration` is reported by `deploy images`, still never resolved), the
+   `deploy images` help text, `effective-images.md`'s field list, the changelog.
+
 ### 7. Count a `store: artifact` variable only where it is used
 
 **Problem.** `effective_images()` reads the merged environment declarations, not the uses, so a `store: artifact`
@@ -469,6 +483,9 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
   `config/artifacts/example-api.yaml`, and the same one in the `artifact.md` example and the schema example; all
   three now carry the host in `image_name`. The `image_name` and `registry` descriptions say the host belongs in
   `image_name`.
+- **Design 6 step 1, built 2026-11-10** (not released), as planned. `deploy images` shows `INTEGRATION`
+  only when some image names one; `deploy report`'s `images[]` carries the field too. Step 2 (a Compose
+  `docker login`) waits for a real private-registry consumer.
 
 ### Implementation order
 
@@ -498,6 +515,7 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: a design for each finding; the open questions from the review decided as recommendations.
 - 2026-11-10: designs agreed. Design 1 implemented (`${artifact:NAME.FIELD}`), with its implementation plan.
 - 2026-11-10: design 3 implemented: token uses counted as images, `${value:}` on an artifact's image rejected.
+- 2026-11-10: design 6 step 1 implemented: `deploy images` names an artifact's `integration`.
 - 2026-11-10: design 5 implemented (`artifact_registry_mismatch`).
 - 2026-11-10: design 9 implemented: the example solution uses an artifact all three ways.
 - 2026-11-10: ADR-0058 written for designs 1 and 3. Design 2 implemented (`artifact_not_delivered`).

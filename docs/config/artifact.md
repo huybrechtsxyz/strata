@@ -19,9 +19,11 @@ field (see [`module`](module.md)).
   reference: `image_name` holds the full path the runtime pulls, registry host included. `strata validate`
   warns when the two name different registries (`artifact_registry_mismatch`), counting an `image_name`
   with no host as Docker Hub
-- `spec.integration` — reserved. Must name an existing [`integration`](integration.md), but
-  nothing reads it: no registry credentials are resolved from it. Supply registry credentials to
-  whatever pulls or copies the image (your pipeline, the runtime)
+- `spec.integration` — names an existing [`integration`](integration.md) that holds the registry's
+  credentials. `strata deploy images` reports it per image (`INTEGRATION`, `data.images[].integration`),
+  so a pipeline that copies the image knows which credentials to use. Strata resolves nothing from it
+  and never logs in: supply the credentials to whatever pulls or copies the image (your pipeline, the
+  runtime)
 - `spec.properties` / `spec.configuration` / `spec.custom` — free-form/passthrough data, never
   merged and never read by strata. Reach a literal field from another document's string with
   `${value:artifact.<name>.spec.configuration.<key>}`. `spec.image_name` and `spec.image_tag` cannot be

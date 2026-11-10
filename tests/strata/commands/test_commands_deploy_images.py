@@ -16,8 +16,9 @@ def _write(root: Path, relative: str, kind: str, name: str, spec: str) -> None:
     (root / relative).write_text(_HEADER.format(kind=kind, name=name) + spec, encoding="utf-8")
 
 
-def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "") -> Path:
-    """Deployment `app` (version `prd`, pinning `catalog` to 2.0.0) and `other` (no version)."""
+def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "", integration: bool = False) -> Path:
+    """Deployment `app` (version `prd`, pinning `catalog` to 2.0.0) and `other` (no version). With `integration`,
+    `catalog` names the integration `feed` that holds its registry's credentials."""
     root = tmp_path / "sln"
     root.mkdir()
     (root / "strata.yaml").write_text(_HEADER.format(kind="solution", name="s") + "  {}\n", encoding="utf-8")
@@ -46,8 +47,22 @@ def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "") -> Pat
         "  default_labels:\n    app: apps\n  modules:\n    - name: stack\n      module: stack\n",
     )
     tag = "  image_tag: '1.0.0'\n" if with_tag else ""
+    if integration:
+        tag += "  integration: feed\n"
+        _write(
+            root,
+            "integration.yaml",
+            "integration",
+            "feed",
+            "  type: proget\n  capabilities: [sources]\n"
+            "  authentication:\n    method: token\n    token:\n      token: FEED_API_KEY\n      username: api\n",
+        )
     _write(
-        root, "artifact.yaml", "artifact", "catalog", f"  image_name: int/catalog\n  registry: cdn.example.com\n{tag}"
+        root,
+        "artifact.yaml",
+        "artifact",
+        "catalog",
+        f"  image_name: int/catalog\n  registry: cdn.example.com\n{tag}",
     )
     _write(
         root,
@@ -192,3 +207,46 @@ def test_the_policy_judges_the_deployment_under_pin(tmp_path):
     root = _solution(tmp_path, with_tag=False, policy=_DENY)
     assert _invoke(root, "other").exit_code == EXIT_VALIDATION
     assert _invoke(root, "other", "--pin", "prd").exit_code == EXIT_SUCCESS
+
+
+# `integration` (docs/work/artifact-gap-analysis.md, design 6 step 1): which credentials a copy needs, by name.
+
+
+def _rows(result) -> dict:
+    return {row["name"]: row for row in _data(result)["images"]}
+
+
+def test_json_names_an_artifacts_integration(tmp_path):
+    rows = _rows(_invoke(_solution(tmp_path, integration=True), "app", "-o", "json"))
+    assert rows["catalog"]["integration"] == "feed"
+    assert rows["redis"]["integration"] is None
+
+
+def test_json_reports_no_integration_when_the_artifact_names_none(tmp_path):
+    assert _rows(_invoke(_solution(tmp_path), "app", "-o", "json"))["catalog"]["integration"] is None
+
+
+def test_the_table_shows_an_integration_column_only_when_an_image_has_one(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    with_integration = _invoke(_solution(tmp_path / "a", integration=True), "app")
+    without = _invoke(_solution(tmp_path / "b"), "app")
+
+    assert with_integration.exit_code == EXIT_SUCCESS, with_integration.output
+    lines = with_integration.output.splitlines()
+    header = next(line for line in lines if "NAME" in line and "ORIGIN" in line)
+    assert header.split() == ["NAME", "ORIGIN", "IMAGE", "TAG", "SOURCE", "INTEGRATION", "USED", "BY"]
+    column = header.index("INTEGRATION")
+
+    def _cell(name: str) -> str:
+        return next(line for line in lines if line.strip().startswith(name))[column:].split()[0]
+
+    assert (_cell("catalog"), _cell("redis")) == ("feed", "-")
+    assert without.exit_code == EXIT_SUCCESS, without.output
+    assert "INTEGRATION" not in without.output
+
+
+def test_the_integration_never_carries_a_credential(tmp_path):
+    """Only the name: nothing is resolved, so not even the key the integration reads its token from appears."""
+    result = _invoke(_solution(tmp_path, integration=True), "app", "-o", "json")
+    assert "FEED_API_KEY" not in result.output

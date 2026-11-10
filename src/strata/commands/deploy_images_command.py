@@ -56,7 +56,8 @@ def deploy_images_command(
     Nothing is built, resolved against a store or sent anywhere, so it is safe to run before
     `build run`: a pipeline can use it to copy the images to a registry first. With -o json,
     `data.images[]` carries origin, name, artifact, module, via, image_name, image_tag, image_ref,
-    registry, configuration, tag_source, pin_version and pin_flag.
+    registry, configuration, tag_source, pin_version, pin_flag and integration (an artifact's
+    `spec.integration`, by name: which credentials a copy needs; never resolved, so never a secret).
 
     \b
     Exit codes:
@@ -110,9 +111,20 @@ def _print_rows(rows: list[EffectiveImage]) -> None:
     if not rows:
         click.echo("  (no images)")
         return
-    headers = ("NAME", "ORIGIN", "IMAGE", "TAG", "SOURCE", "USED BY")
+    # INTEGRATION only when an artifact names one, so the usual table does not gain a column of "-".
+    with_integration = any(row.integration for row in rows)
+    headers: tuple[str, ...] = ("NAME", "ORIGIN", "IMAGE", "TAG", "SOURCE")
+    headers += ("INTEGRATION", "USED BY") if with_integration else ("USED BY",)
     table = [
-        (row.name, row.origin, row.image_name, row.image_tag or "-", _source(row), ", ".join(row.via) or "-")
+        (
+            row.name,
+            row.origin,
+            row.image_name,
+            row.image_tag or "-",
+            _source(row),
+            *((row.integration or "-",) if with_integration else ()),
+            ", ".join(row.via) or "-",
+        )
         for row in rows
     ]
     widths = [max(len(header), *(len(line[i]) for line in table)) for i, header in enumerate(headers[:-1])]
