@@ -100,29 +100,42 @@ def _is_active(entry: ImageTagAllowEntryModel, today: date) -> bool:
     return entry.expires is None or date.fromisoformat(entry.expires) >= today
 
 
-def _is_digest(tag: str) -> bool:
-    """A tag never contains `:`, so a value that does is a digest (`sha256:...`)."""
-    return ":" in tag
-
-
 def _problems(
     image: EffectiveImage, policy: ImageTagPolicyModel, rejected: set[str], pattern: re.Pattern[str] | None
 ) -> list[tuple[str, str]]:
-    tag = image.image_tag
-    if not tag:
-        if policy.require_tag:
-            return [("image_without_tag", f"has no tag. {_fix(image)}")]
-        return [("image_not_pinned", f"is not pinned. {_fix(image)}")] if policy.require_pin else []
+    """`image_tag` is the tag part only and `image_digest` the digest part, so the tag rules judge a tag and never
+    a digest, and a digest alone satisfies `require_tag`."""
+    tag, digest = image.image_tag, image.image_digest
+    if not tag and not digest:
+        problems = [("image_without_tag", f"has no tag. {_fix(image)}")] if policy.require_tag else []
+        if not problems and policy.require_pin:
+            problems.append(("image_not_pinned", f"is not pinned. {_fix(image)}"))
+        if policy.require_digest:
+            problems.append(("image_without_digest", f"has no digest. {_fix_digest(image)}"))
+        return problems
 
-    problems: list[tuple[str, str]] = []
-    if not _is_digest(tag):
+    problems = []
+    if tag:
         if tag.lower() in rejected:
             problems.append(("image_floating_tag", f"has the floating tag '{tag}'. {_fix(image)}"))
         if pattern is not None and pattern.search(tag) is None:
             problems.append(("image_tag_pattern", f"has the tag '{tag}', which does not match '{pattern.pattern}'."))
+    if policy.require_digest and not digest:
+        problems.append(("image_without_digest", f"has the tag '{tag}' but no digest. {_fix_digest(image)}"))
     if policy.require_pin and image.tag_source != "pin":
-        problems.append(("image_not_pinned", f"is not pinned (its tag '{tag}' is {_source(image)}). {_fix(image)}"))
+        shown = "@".join(part for part in (tag, digest) if part)
+        problems.append(("image_not_pinned", f"is not pinned (its tag '{shown}' is {_source(image)}). {_fix(image)}"))
     return problems
+
+
+def _fix_digest(image: EffectiveImage) -> str:
+    """Where to put the digest, in the form that keeps the tag."""
+    if image.origin == "artifact":
+        return (
+            f"Pin it as TAG@sha256:<hex> under spec.pins.artifacts.{image.name} of a kind: version document, or in "
+            "the artifact's image_tag."
+        )
+    return f"Write the service's image as NAME:TAG@sha256:<hex>, or pin it so under spec.pins.images.{image.name}."
 
 
 def _describe(image: EffectiveImage) -> str:

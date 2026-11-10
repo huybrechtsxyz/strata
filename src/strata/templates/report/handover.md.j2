@@ -55,7 +55,7 @@ No secrets used.
 | Name | Image | Tag | Source |
 | ---- | ----- | --- | ------ |
 {% for image in images -%}
-| {{ image.name | md_cell }} | {{ image.image_name | md_cell }} | {{ (image.image_tag or "-") | md_cell }} | {{ image.tag_source | md_cell }} |
+| {{ image.name | md_cell }} | {{ image.image_name | md_cell }} | {{ ([image.image_tag, image.image_digest] | select | join("@") or "-") | md_cell }} | {{ image.tag_source | md_cell }} |
 {% endfor -%}
 {% else -%}
 No images.

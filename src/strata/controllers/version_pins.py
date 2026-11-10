@@ -32,6 +32,7 @@ from strata.models.module_model import ModuleModel
 from strata.models.solution_model import RemoteFetch, SolutionModel
 from strata.models.version_model import VersionModel
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.sbom_utils import image_tag_problem
 
 log = get_logger(__name__)
 
@@ -84,7 +85,7 @@ def check_version_pins(index: DocumentIndex, solution: SolutionModel | None) -> 
 
     for entry in index.all_of(PlatformKind.VERSION):
         version = cast(VersionModel, entry.model)
-        for category, name, _pin in version.spec.pins.iter_pins():
+        for category, name, pin in version.spec.pins.iter_pins():
             location = f"spec.pins.{category}.{name}"
 
             if category == "images":
@@ -135,6 +136,14 @@ def check_version_pins(index: DocumentIndex, solution: SolutionModel | None) -> 
                     )
 
             elif category == "artifacts":
+                problem = image_tag_problem(pin.version) if pin.version else None
+                if problem is not None:
+                    diagnostics.error(
+                        f"artifact pin '{name}': {problem}",
+                        source=str(entry.source),
+                        location=f"{location}.version",
+                        code="artifact_tag_invalid",
+                    )
                 if index.get(PlatformKind.ARTIFACT, name) is None:
                     diagnostics.warning(
                         f"artifact pin '{name}' matched no artifact document",

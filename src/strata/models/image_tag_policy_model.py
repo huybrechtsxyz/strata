@@ -72,20 +72,26 @@ class ImageTagPolicyModel(PlatformBaseModel):
     )
     require_tag: bool = Field(
         default=True,
-        description="Fail an image that has no tag and no `kind: version` pin to take one from",
+        description="Fail an image that has no tag and no `kind: version` pin to take one from. A digest "
+        "(`sha256:...`) counts as a tag here: it pins the image even more firmly.",
+    )
+    require_digest: bool = Field(
+        default=False,
+        description="Fail an image whose reference has no digest (`name@sha256:...` or "
+        "`name:tag@sha256:...`), so what runs is fixed byte for byte, not by a tag a registry can move",
     )
     reject_tags: list[Annotated[str, Field(min_length=1)]] | None = Field(
         None,
         description="Tags that are not allowed, compared without regard to case. Omit to reject the mutable "
         "aliases `latest`, `main`, `master`, `dev`, `develop`, `staging`, `edge`, `nightly` and `canary`. Set an "
         "empty list to reject none. A digest is never rejected, and neither is a tag that merely is not a "
-        "semantic version, such as a build number.",
+        "semantic version, such as a build number. With `tag@digest` only the tag is compared.",
     )
     tag_pattern: str | None = Field(
         None,
         min_length=1,
         description="Regular expression a tag must match, searched anywhere in the tag (anchor it with `^` and "
-        "`$`). A digest is not checked against it.",
+        "`$`). A digest is not checked against it; with `tag@digest` the tag is.",
     )
     require_pin: bool = Field(
         default=False,

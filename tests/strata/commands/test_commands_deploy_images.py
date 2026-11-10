@@ -16,8 +16,10 @@ def _write(root: Path, relative: str, kind: str, name: str, spec: str) -> None:
     (root / relative).write_text(_HEADER.format(kind=kind, name=name) + spec, encoding="utf-8")
 
 
-def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "", integration: bool = False) -> Path:
-    """Deployment `app` (version `prd`, pinning `catalog` to 2.0.0) and `other` (no version). With `integration`,
+def _solution(
+    tmp_path: Path, *, with_tag: bool = True, policy: str = "", integration: bool = False, pin: str = "2.0.0"
+) -> Path:
+    """Deployment `app` (version `prd`, pinning `catalog` to `pin`) and `other` (no version). With `integration`,
     `catalog` names the integration `feed` that holds its registry's credentials."""
     root = tmp_path / "sln"
     root.mkdir()
@@ -72,7 +74,7 @@ def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "", integr
         "prd",
         "  variables:\n    - key: CATALOG_TAG\n      store: artifact\n      value: catalog\n      field: image_tag\n",
     )
-    _write(root, "version.yaml", "version", "prd", "  pins:\n    artifacts:\n      catalog: '2.0.0'\n")
+    _write(root, "version.yaml", "version", "prd", f"  pins:\n    artifacts:\n      catalog: '{pin}'\n")
     _write(root, "app.yaml", "deployment", "app", "  workspace: main\n  version: prd\n  environments:\n    - prd\n")
     _write(root, "other.yaml", "deployment", "other", "  workspace: main\n  environments:\n    - prd\n")
     return root
@@ -142,6 +144,45 @@ def test_console_prints_a_table_with_the_tag_source(tmp_path):
         line.split()[:5] == ["catalog", "artifact", "int/catalog", "2.0.0", "pin"]
         for line in result.output.splitlines()
     )
+
+
+# A tag and a digest (docs/work/artifact-gap-analysis.md, design 4).
+
+_DIGEST = "sha256:" + "9f86d081" * 8
+
+
+def test_a_pinned_tag_at_digest_is_listed_as_its_two_parts(tmp_path):
+    rows = {
+        row["name"]: row
+        for row in _data(_invoke(_solution(tmp_path, pin=f"2.0.0@{_DIGEST}"), "app", "-o", "json"))["images"]
+    }
+    catalog = rows["catalog"]
+    assert (catalog["image_tag"], catalog["image_digest"]) == ("2.0.0", _DIGEST)
+    assert catalog["image_ref"] == f"int/catalog:2.0.0@{_DIGEST}"
+    assert rows["redis"]["image_digest"] is None
+
+
+def test_console_adds_a_digest_column_only_when_a_row_has_one(tmp_path):
+    result = _invoke(_solution(tmp_path, pin=f"2.0.0@{_DIGEST}"), "app")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    header = next(line for line in result.output.splitlines() if line.strip().startswith("NAME"))
+    assert header.split()[:6] == ["NAME", "ORIGIN", "IMAGE", "TAG", "DIGEST", "SOURCE"]
+    assert any(
+        line.split()[:6] == ["catalog", "artifact", "int/catalog", "2.0.0", _DIGEST, "pin"]
+        for line in result.output.splitlines()
+    )
+    assert any(
+        line.split()[:5] == ["redis", "module-service", "redis", "7", "-"] for line in result.output.splitlines()
+    )
+
+
+def test_a_digest_without_a_tag_is_not_a_row_with_no_tag(tmp_path):
+    result = _invoke(_solution(tmp_path, pin=_DIGEST), "app", "-o", "json")
+    envelope = json.loads(result.output)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    catalog = next(row for row in envelope["data"]["images"] if row["name"] == "catalog")
+    assert (catalog["image_tag"], catalog["image_digest"]) == (None, _DIGEST)
+    assert envelope["diagnostics"] == []
 
 
 def test_it_requires_a_valid_solution(tmp_path):

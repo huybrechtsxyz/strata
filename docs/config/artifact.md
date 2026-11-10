@@ -11,9 +11,9 @@ field (see [`module`](module.md)).
 - `spec.image_name` — the full path the runtime pulls, registry host included (e.g.
   `ghcr.io/example/scheduler-api`; no host means Docker Hub) — identity, never overridden by a
   [`version`](version.md) pin
-- `spec.image_tag` — the tag/digest to deploy; optional, omit it when a [`version`](version.md) pin
-  always supplies it. Overridden by `kind: version`'s `spec.pins.artifacts[name]` when set; with
-  neither, the tag is blank
+- `spec.image_tag` — what to deploy, in one of three shapes (see [Tag and digest](#tag-and-digest));
+  optional, omit it when a [`version`](version.md) pin always supplies it. Overridden by `kind: version`'s
+  `spec.pins.artifacts[name]` when set; with neither, the tag is blank
 - `spec.registry` — free-text registry host, documentation only — **not** a remote reference
   (strata never fetches an image; the runtime pulls it at deploy time). It is not added to the image
   reference: `image_name` holds the full path the runtime pulls, registry host included. `strata validate`
@@ -42,15 +42,36 @@ spec:
   registry: cdn-feeds.acme.com
 ```
 
+### Tag and digest
+
+`spec.image_tag`, and a pin under `pins.artifacts`, take one of three shapes:
+
+| Value                | Image reference              |
+| -------------------- | ---------------------------- |
+| `1.4.2`              | `name:1.4.2`                 |
+| `sha256:<hex>`       | `name@sha256:<hex>`          |
+| `1.4.2@sha256:<hex>` | `name:1.4.2@sha256:<hex>`    |
+
+- A tag is letters, digits, `_`, `.` and `-`, at most 128 characters, not starting with `.` or `-`. A digest is
+  an algorithm, `:` and at least 32 lowercase hex characters.
+- Anything else fails: an artifact's `image_tag` when the document loads, a pin in `strata validate`
+  (`artifact_tag_invalid`), and `strata version set NAME artifacts TARGET VALUE` before it writes the file.
+- Pin both together. One string moves the tag and the digest at once, so they cannot drift apart.
+- `strata deploy images` shows the digest in a `DIGEST` column (`data.images[].image_digest`); `image_tag` there is
+  the tag part only. `image_tag_policy` judges the tag part, and `require_digest` fails an image with no digest
+  ([workspace](workspace.md)).
+
 ### The `${artifact:NAME.FIELD}` token
 
 Read an artifact directly, with no variable to declare:
 
-| Token                         | Value                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `${artifact:NAME.image_name}` | `spec.image_name`, never pinned                                                                         |
-| `${artifact:NAME.image_tag}`  | the tag after the deployment's [`version`](version.md) pin, else `spec.image_tag`                       |
-| `${artifact:NAME.image_ref}`  | `image_name:image_tag`, `image_name@sha256:...` for a digest, or just `image_name` when there is no tag |
+| Token                             | Value                                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `${artifact:NAME.image_name}`     | `spec.image_name`, never pinned                                                                |
+| `${artifact:NAME.image_tag}`      | the whole value after the deployment's [`version`](version.md) pin, else `spec.image_tag`      |
+| `${artifact:NAME.image_ref}`      | the image reference built from both, as in the table above, or just `image_name` with no value |
+| `${artifact:NAME.image_tag_name}` | the tag part of `1.4.2@sha256:<hex>` (`1.4.2`)                                                 |
+| `${artifact:NAME.image_digest}`   | the digest part (`sha256:<hex>`)                                                               |
 
 ```yaml
 # A Helm module: the chart's own keys, the pinned values
@@ -67,7 +88,9 @@ spec:
 - It resolves at deploy, in every field a `${var:}` token resolves in: a Terraform payload or backend, Helm values,
   a Compose file, a script's arguments. `--pin NAME` on `deploy run` picks the version, as for every other pin.
 - `${artifact:NAME.image_tag}` on an artifact with no `image_tag` and no pin for the deployment is an error
-  (`unavailable_artifact_token`), never an empty tag. An unknown artifact or field is `unknown_artifact_token`.
+  (`unavailable_artifact_token`), never an empty tag. So is `image_tag_name` or `image_digest` when the value
+  has no such part: a chart that takes `image.digest` needs the pin to carry one. An unknown artifact or field
+  is `unknown_artifact_token`.
   `strata validate` judges both per deployment, and `deploy run` stops on them before the step's tool runs.
 - An environment store's own `value` cannot use it: a store value is resolved before a deployment is chosen.
 - Write `$${artifact:...}` for a literal.
@@ -76,7 +99,8 @@ spec:
 
 To hand the value to a Terraform root as a variable (`strata.variables` and `TF_VAR_<key>`), or to
 override it per environment, declare a variable. `field` is required: `image_name`, `image_tag` (with
-any [`version`](version.md) pin applied; `""` when there is no tag) or `image_ref`:
+any [`version`](version.md) pin applied; `""` when there is no tag), `image_ref`, `image_tag_name` or
+`image_digest` (each `""` when the value has no such part):
 
 ```yaml
 variables:

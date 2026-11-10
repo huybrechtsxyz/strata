@@ -15,17 +15,21 @@ from strata.integrations.resolved_context import EffectiveImage
 from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Severity
+from strata.utils.sbom_utils import compose_image_ref, split_image_tag
 
 _DIGEST = "sha256:" + "a" * 64
 
 
 def _image(name="api", tag="1.2.3", *, origin="artifact", source=None, via=("variable:IMAGE",)) -> EffectiveImage:
+    """A row as `effective_images()` gives it: `tag` is the whole value (`1.2.3`, `sha256:...`, `1.2.3@sha256:...`)."""
+    tag_name, digest = split_image_tag(tag)
     return EffectiveImage(
         origin=origin,
         name=name,
         image_name=f"registry/{name}",
-        image_tag=tag,
-        image_ref=f"registry/{name}:{tag}" if tag else f"registry/{name}",
+        image_tag=tag_name,
+        image_digest=digest,
+        image_ref=compose_image_ref(f"registry/{name}", tag),
         tag_source=source or ("declared" if tag else "none"),
         via=via,
     )
@@ -87,6 +91,42 @@ def test_an_empty_reject_tags_rejects_nothing():
 def test_a_digest_passes_the_tag_rules_but_still_needs_a_tag_source():
     policy = _policy(tag_pattern=r"^\d+\.\d+\.\d+$", reject_tags=[_DIGEST])
     assert evaluate_image_tag_policy([_image(tag=_DIGEST)], policy, None).items == []
+
+
+def test_the_tag_rules_judge_the_tag_of_a_tag_at_digest():
+    policy = _policy(tag_pattern=r"^\d+\.\d+\.\d+$")
+    assert evaluate_image_tag_policy([_image(tag=f"1.2.3@{_DIGEST}")], policy, None).items == []
+    assert _codes(evaluate_image_tag_policy([_image(tag=f"1.2@{_DIGEST}")], policy, None)) == ["image_tag_pattern"]
+    diagnostics = evaluate_image_tag_policy([_image(tag=f"latest@{_DIGEST}")], _policy(), None)
+    assert _codes(diagnostics) == ["image_floating_tag"]
+
+
+@pytest.mark.parametrize(
+    ("tag", "codes"),
+    [
+        (_DIGEST, []),
+        (f"1.2.3@{_DIGEST}", []),
+        ("1.2.3", ["image_without_digest"]),
+        (None, ["image_without_tag", "image_without_digest"]),
+    ],
+)
+def test_require_digest_fails_an_image_with_no_digest(tag, codes):
+    diagnostics = evaluate_image_tag_policy([_image(tag=tag)], _policy(require_digest=True), None)
+    assert _codes(diagnostics) == codes
+    if "image_without_digest" in codes:
+        assert "TAG@sha256:<hex> under spec.pins.artifacts.api" in diagnostics.errors[-1].message
+
+
+def test_require_digest_names_the_service_image_form_for_a_module_service():
+    diagnostics = evaluate_image_tag_policy(
+        [_image(tag="7", origin="module-service")], _policy(require_digest=True), None
+    )
+    assert "Write the service's image as NAME:TAG@sha256:<hex>" in diagnostics.errors[0].message
+
+
+def test_require_pin_shows_the_whole_value_it_found(tmp_path):
+    diagnostics = evaluate_image_tag_policy([_image(tag=f"1.2.3@{_DIGEST}")], _policy(require_pin=True), None)
+    assert f"its tag '1.2.3@{_DIGEST}' is declared on the document" in diagnostics.errors[0].message
 
 
 def test_tag_pattern_is_searched_in_the_tag():

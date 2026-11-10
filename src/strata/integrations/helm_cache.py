@@ -12,6 +12,7 @@ import re
 import shutil
 import tarfile
 import tempfile
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -93,6 +94,29 @@ def cached_pin(cache_root: Path, source: str, chart: str, version: str) -> Chart
     return _pin(chart, archives[0], chart_dirs[0])
 
 
+#: How old a `.pull-*` staging directory must be before a pull removes it. Far longer than any pull takes (the
+#: default `helm pull` timeout is 5 minutes), so a pull still running in another process keeps its directory.
+STALE_STAGING_SECONDS = 3600
+
+
+def remove_stale_staging(cache_root: Path, *, older_than: float = STALE_STAGING_SECONDS) -> list[Path]:
+    """Remove the `.pull-*` staging directories in `cache_root` last changed more than `older_than` seconds ago.
+
+    Best effort: one still locked stays for a later pull. Returns the directories removed.
+    """
+    cutoff = time.time() - older_than
+    removed: list[Path] = []
+    for path in cache_root.glob(".pull-*"):
+        try:
+            if not path.is_dir() or path.stat().st_mtime > cutoff:
+                continue
+            shutil.rmtree(path)
+        except OSError:
+            continue
+        removed.append(path)
+    return removed
+
+
 def pull_chart(
     integration: Integration,
     ref: str,
@@ -118,9 +142,10 @@ def pull_chart(
     """
     wanted = f"chart '{chart}'" + (f" ({version})" if version else "")
     cache_root.mkdir(parents=True, exist_ok=True)
+    remove_stale_staging(cache_root)
     # Removing the staging directory is best effort: on Windows another process (a virus scanner reading the new
     # archive) can hold a file open, and that must not replace the pull's own result. A leftover `.pull-*` directory
-    # is never read as an entry.
+    # is never read as an entry, and a later pull removes it once it is stale.
     with tempfile.TemporaryDirectory(prefix=".pull-", dir=cache_root, ignore_cleanup_errors=True) as tmp:
         staging = Path(tmp) / "entry"
         staging.mkdir()

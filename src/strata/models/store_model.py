@@ -230,11 +230,12 @@ class VariableStoreModel(PlatformBaseModel):
     default: str | None = Field(
         None, description="Seed the store with this value when the key is missing (integration-backed stores only)"
     )
-    field: Literal["image_name", "image_tag", "image_ref"] | None = Field(
+    field: Literal["image_name", "image_tag", "image_ref", "image_tag_name", "image_digest"] | None = Field(
         None,
         description="Which field of the `store: artifact` target to read: image_name, image_tag (kind: "
-        "version's pins.artifacts-overlaid), or the synthesised image_ref ('{image_name}:{image_tag}'). "
-        "Only valid on 'store: artifact'.",
+        "version's pins.artifacts-overlaid; a tag, a digest or `tag@digest`), the synthesised image_ref "
+        "('{image_name}:{tag}@{digest}'), or one part of image_tag: image_tag_name (the tag) or image_digest. A "
+        "part the value lacks is empty. Only valid on 'store: artifact'.",
     )
 
     @model_validator(mode="after")

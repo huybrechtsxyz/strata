@@ -91,14 +91,15 @@ class ImageCollector(SbomCollector):
                 _add(
                     str(service.name),
                     service.image,
-                    is_floating_tag(tag or digest),
+                    digest is None and is_floating_tag(tag),
                     (f"service:{module.meta.name}/{service.name}",),
                 )
 
         for image in graph.images:
             if image.origin != "artifact":
                 continue
-            floating = (
+            # A digest never moves, whatever tag travels with it.
+            floating = image.image_digest is None and (
                 is_mutable_alias_tag(image.image_tag) if image.tag_source == "pin" else is_floating_tag(image.image_tag)
             )
             _add(image.name, image.image_ref, floating, image.via)

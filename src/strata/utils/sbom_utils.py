@@ -36,16 +36,59 @@ def exact_version(constraint: str | None) -> str | None:
     return match.group(1) if match else None
 
 
-def compose_image_ref(image_name: str, image_tag: str | None) -> str:
-    """`name:tag`, `name@algo:digest` for a digest, or the bare name when there is no tag; the reverse of
-    `parse_image_ref()`.
+#: A Docker tag: what may follow `name:` in an image reference.
+_TAG_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
 
-    A tag never contains `:`, so a value that does is a digest (`sha256:...`).
+#: A content digest, `<algorithm>:<lowercase hex>`, at least 32 hex characters.
+_DIGEST_RE = re.compile(r"[a-z0-9]+(?:[+._-][a-z0-9]+)*:[0-9a-f]{32,}")
+
+
+def split_image_tag(value: str | None) -> tuple[str | None, str | None]:
+    """An artifact's `image_tag` (or `artifacts` pin) as `(tag, digest)`; either may be `None`.
+
+    The value is `tag`, `algorithm:hex` or `tag@algorithm:hex`. A tag never contains `:`, so a value with `:` and no
+    `@` is a digest only.
+
+    Examples:
+        "1.4.2" -> ("1.4.2", None)
+        "sha256:9f86..." -> (None, "sha256:9f86...")
+        "1.4.2@sha256:9f86..." -> ("1.4.2", "sha256:9f86...")
     """
-    if not image_tag:
-        return image_name
-    separator = "@" if ":" in image_tag else ":"
-    return f"{image_name}{separator}{image_tag}"
+    if not value:
+        return None, None
+    if "@" in value:
+        tag, _, digest = value.partition("@")
+        return tag or None, digest or None
+    if ":" in value:
+        return None, value
+    return value, None
+
+
+def image_tag_problem(value: str) -> str | None:
+    """Why `value` is not a valid `image_tag` (`tag`, `algorithm:hex` or `tag@algorithm:hex`), or `None`."""
+    tag, digest = split_image_tag(value)
+    shapes = "a tag (1.4.2), a digest (sha256:<hex>) or both (1.4.2@sha256:<hex>)"
+    if "@" in value and (tag is None or digest is None):
+        return f"'{value}' is not {shapes}: both sides of '@' must be set."
+    if tag is not None and _TAG_RE.fullmatch(tag) is None:
+        return (
+            f"'{value}' is not {shapes}: the tag '{tag}' may hold only letters, digits, '_', '.' and '-', must not "
+            "start with '.' or '-', and has at most 128 characters."
+        )
+    if digest is not None and _DIGEST_RE.fullmatch(digest) is None:
+        return (
+            f"'{value}' is not {shapes}: the digest '{digest}' must be an algorithm, ':' and at least 32 lowercase "
+            "hex characters."
+        )
+    return None
+
+
+def compose_image_ref(image_name: str, image_tag: str | None) -> str:
+    """`name:tag`, `name@algo:hex`, `name:tag@algo:hex`, or the bare name when there is neither; the reverse of
+    `parse_image_ref()`. `image_tag` is split with `split_image_tag()`.
+    """
+    tag, digest = split_image_tag(image_tag)
+    return image_name + (f":{tag}" if tag else "") + (f"@{digest}" if digest else "")
 
 
 def is_floating_tag(tag: str | None) -> bool:
@@ -53,12 +96,12 @@ def is_floating_tag(tag: str | None) -> bool:
 
     A tag is considered floating when it is None/empty, an exact match for a
     known mutable alias (latest, main, dev, …), or doesn't look like a
-    semantic version string. A digest reference (`sha256:...`) is never
-    floating.
+    semantic version string. A value with a digest (`sha256:...`,
+    `latest@sha256:...`) is never floating: a digest never moves.
     """
     if not tag:
         return True
-    if tag.startswith("sha256:"):
+    if split_image_tag(tag)[1] is not None:
         return False
     if tag.lower() in MUTABLE_ALIAS_TAGS:
         return True

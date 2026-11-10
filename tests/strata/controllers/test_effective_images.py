@@ -116,9 +116,39 @@ def test_an_artifact_with_no_tag_and_no_pin_has_none_and_a_bare_ref(tmp_path):
     assert row.image_ref == "example/catalog-api"
 
 
+_DIGEST = "sha256:" + "9f86d081" * 8
+
+
 def test_a_digest_tag_makes_an_at_reference(tmp_path):
-    spec = "  image_name: int/api\n  image_tag: 'sha256:abc123'\n"
-    assert _images(_solution(tmp_path, artifact_spec=spec))["catalog"].image_ref == "int/api@sha256:abc123"
+    spec = f"  image_name: int/api\n  image_tag: '{_DIGEST}'\n"
+    row = _images(_solution(tmp_path, artifact_spec=spec))["catalog"]
+    assert (row.image_ref, row.image_tag, row.image_digest) == (f"int/api@{_DIGEST}", None, _DIGEST)
+    assert row.tag_source == "declared"
+
+
+def test_a_tag_and_a_digest_make_a_tag_at_digest_reference(tmp_path):
+    spec = f"  image_name: int/api\n  image_tag: '1.4.2@{_DIGEST}'\n"
+    row = _images(_solution(tmp_path, artifact_spec=spec))["catalog"]
+    assert (row.image_ref, row.image_tag, row.image_digest) == (f"int/api:1.4.2@{_DIGEST}", "1.4.2", _DIGEST)
+
+
+def test_a_pinned_tag_at_digest_replaces_both_parts(tmp_path):
+    pins = f"    artifacts:\n      catalog: '2.0.0@{_DIGEST}'\n"
+    row = _images(_solution(tmp_path, pins=pins))["catalog"]
+    assert (row.image_tag, row.image_digest, row.tag_source) == ("2.0.0", _DIGEST, "pin")
+
+
+def test_a_module_service_image_with_a_tag_and_a_digest_keeps_them_apart(tmp_path):
+    services = f"    - name: redis\n      image: redis:7@{_DIGEST}\n"
+    row = _images(_solution(tmp_path, services=services))["redis"]
+    assert (row.image_name, row.image_tag, row.image_digest) == ("redis", "7", _DIGEST)
+
+
+def test_an_image_tag_that_is_not_a_tag_or_a_digest_fails_at_load(tmp_path):
+    root = _solution(tmp_path, artifact_spec="  image_name: int/api\n  image_tag: '1.4.2@sha256:short'\n")
+    context = open_solution(root)
+    assert not context.ok
+    assert any("the digest 'sha256:short'" in message for message in context.diagnostics.messages())
 
 
 def test_registry_and_configuration_are_carried_on_the_row(tmp_path):

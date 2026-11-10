@@ -42,6 +42,7 @@ from strata.models.store_model import (
 )
 from strata.utils.errors import UsageError
 from strata.utils.sbom_utils import compose_image_ref
+from strata.utils.value_tokens import artifact_token_problem
 
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
@@ -566,8 +567,54 @@ def test_artifact_token_values_apply_the_deployments_pin(tmp_path):
     assert artifact_token_values(context.controller.index, deployment) == {
         "artifact:api_container.image_name": "int/api",
         "artifact:api_container.image_tag": "2.0.0",
+        "artifact:api_container.image_tag_name": "2.0.0",
         "artifact:api_container.image_ref": "int/api:2.0.0",
     }
+
+
+_DIGEST = "sha256:" + "9f86d081" * 8
+
+
+def test_artifact_token_values_split_a_pinned_tag_at_digest(tmp_path):
+    pins = {"api_container": f"2.0.0@{_DIGEST}"}
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins=pins, version=True)
+    assert artifact_token_values(context.controller.index, deployment) == {
+        "artifact:api_container.image_name": "int/api",
+        "artifact:api_container.image_tag": f"2.0.0@{_DIGEST}",
+        "artifact:api_container.image_tag_name": "2.0.0",
+        "artifact:api_container.image_digest": _DIGEST,
+        "artifact:api_container.image_ref": f"int/api:2.0.0@{_DIGEST}",
+    }
+
+
+def test_artifact_token_values_leave_out_the_part_a_digest_only_value_lacks(tmp_path):
+    context, deployment = _tag_context(tmp_path, image_tag=_DIGEST)
+    values = artifact_token_values(context.controller.index, deployment)
+    assert "artifact:api_container.image_tag_name" not in values
+    assert values["artifact:api_container.image_digest"] == _DIGEST
+    assert values["artifact:api_container.image_ref"] == f"int/api@{_DIGEST}"
+
+
+@pytest.mark.parametrize(
+    ("value", "field", "part"), [(_DIGEST, "image_tag_name", "tag"), ("1.0.0", "image_digest", "digest")]
+)
+def test_a_missing_part_says_which_part_and_how_to_add_it(tmp_path, value, field, part):
+    context, deployment = _tag_context(tmp_path, image_tag=value)
+    values = artifact_token_values(context.controller.index, deployment)
+    problem = artifact_token_problem(f"api_container.{field}", values)
+    assert problem == (
+        f"'${{artifact:api_container.{field}}}': artifact 'api_container' is deployed as '{value}', which has no "
+        f"{part}. Give `spec.image_tag` or the pin under `pins.artifacts.api_container` the form `TAG@sha256:<hex>`."
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [("image_tag", ""), ("image_tag_name", ""), ("image_digest", ""), ("image_ref", "int/api")],
+)
+def test_resolve_artifact_field_gives_empty_parts_for_a_blank_tag(tmp_path, field, expected):
+    context, deployment = _tag_context(tmp_path)
+    assert resolve_artifact_field(context, deployment, "api_container", field) == expected
 
 
 def test_artifact_token_values_use_the_declared_tag_without_a_pin(tmp_path):
@@ -592,9 +639,10 @@ def test_artifact_token_values_follow_a_pin_override(tmp_path):
     assert artifact_token_values(context.controller.index, deployment)["artifact:api_container.image_tag"] == "2.0.0"
 
 
-@pytest.mark.parametrize("field", ["image_name", "image_tag", "image_ref"])
+@pytest.mark.parametrize("field", ["image_name", "image_tag", "image_ref", "image_tag_name", "image_digest"])
 def test_artifact_token_values_agree_with_a_store_artifact_variable(tmp_path, field):
-    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"}, version=True)
+    pins = {"api_container": f"2.0.0@{_DIGEST}"}
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins=pins, version=True)
     values = artifact_token_values(context.controller.index, deployment)
     assert values[f"artifact:api_container.{field}"] == resolve_artifact_field(
         context, deployment, "api_container", field

@@ -64,7 +64,8 @@ Verified against the source on 2026-11-07.
 - A pull lands in a temporary directory under `.strata/helm/` and is renamed into place, so an interrupted pull
   leaves no partial entry. The archive is unpacked by strata (`tarfile`, `data` filter). Removing the temporary
   directory is best effort: on Windows a virus scanner can hold the new archive open, and that must not replace the
-  pull's result. A leftover `.pull-*` directory is never read as an entry. A rename that fails is
+  pull's result. A leftover `.pull-*` directory is never read as an entry, and the next pull removes any older than
+  an hour (`STALE_STAGING_SECONDS`), long past any pull still running in another process. A rename that fails is
   `helm_chart_pull_failed`.
 
 ### `build run`: pin, record, check
@@ -230,4 +231,5 @@ Each phase ends with its tests passing, `ruff` and `mypy` clean.
   path were rewritten against `pull_registry_chart()`.
 - 2026-11-10: Staging cleanup is best effort (`ignore_cleanup_errors`), and a failed store is a `ChartPullError`. A
   Windows file lock on the new archive made `test_deploy_run_stops_when_the_registry_serves_a_different_archive` fail
-  now and then in the full suite, with a `PermissionError` in place of `helm_chart_digest_changed`.
+  now and then in the full suite, with a `PermissionError` in place of `helm_chart_digest_changed`. A pull removes
+  `.pull-*` leftovers older than an hour.

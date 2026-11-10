@@ -41,6 +41,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.reference_fields import References
+from strata.utils.sbom_utils import image_tag_problem
 
 
 class ArtifactSpecModel(PlatformBaseModel):
@@ -54,8 +55,9 @@ class ArtifactSpecModel(PlatformBaseModel):
     )
     image_tag: str | None = Field(
         None,
-        description="Image tag/digest to deploy. Optional: omit it when a kind: version pin always supplies "
-        "it; with neither, the tag is blank. Overridden by kind: version's pins.artifacts[name] when set.",
+        description="What to deploy: a tag (`1.4.2`), a digest (`sha256:<hex>`) or both (`1.4.2@sha256:<hex>`). "
+        "Optional: omit it when a kind: version pin always supplies it; with neither, the tag is blank. "
+        "Overridden by kind: version's pins.artifacts[name] when set.",
     )
     registry: str | None = Field(
         None,
@@ -81,6 +83,16 @@ class ArtifactSpecModel(PlatformBaseModel):
         None, description="Raw passthrough data for whatever consumes this artifact"
     )
     custom: dict[str, Any] | None = Field(None, description="Custom user-defined data for scripts or extensions")
+
+    @field_validator("image_tag")
+    @classmethod
+    def validate_image_tag_shape(cls, value: str | None) -> str | None:
+        """A tag, a digest or `tag@digest`: anything else would give a reference no runtime pulls."""
+        if value:
+            problem = image_tag_problem(value)
+            if problem is not None:
+                raise ValueError(problem)
+        return value
 
 
 class ArtifactMetaModel(PlatformBaseModel):

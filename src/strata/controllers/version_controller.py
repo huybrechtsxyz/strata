@@ -46,6 +46,7 @@ from strata.models.module_model import ModuleModel
 from strata.models.solution_model import RemoteFetch, SolutionModel
 from strata.models.version_model import PIN_CATEGORIES, VersionModel
 from strata.utils.errors import UsageError
+from strata.utils.sbom_utils import image_tag_problem
 
 
 def _image_targets(index: DocumentIndex) -> dict[str, str | None]:
@@ -304,7 +305,8 @@ def set_version_pin(
             nor `available` given; `value`/`available` given as an empty
             string; `target` does not exist yet and `value` is `None`; or
             `target` exists, is `held`/`unverified`, `value` is given, and
-            `force` is not set.
+            `force` is not set; or an `artifacts` value is not a tag, a digest or
+            `tag@digest`.
     """
     if category not in PIN_CATEGORIES:
         raise UsageError(f"Unknown pin category '{category}'. Expected one of: {', '.join(PIN_CATEGORIES)}.")
@@ -314,6 +316,11 @@ def set_version_pin(
         raise UsageError("<value> must not be empty.")
     if available is not None and not available.strip():
         raise UsageError("--available must not be empty.")
+    if category == "artifacts":
+        for what, given in (("<value>", value), ("--available", available)):
+            problem = image_tag_problem(given) if given is not None else None
+            if problem is not None:
+                raise UsageError(f"{what} {problem}")
 
     rt = _round_trip_yaml()
     data = rt.load(path.read_text(encoding="utf-8"))

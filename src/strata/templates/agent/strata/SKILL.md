@@ -104,7 +104,7 @@ so. Write `$${...}` for a literal.
 | `${output:STEP.KEY}` | An output of an earlier `deploy run` step. The producing step must be reachable through `depends_on`. |
 | `${value:kind.name.path}` | A literal field of another document, for example `${value:tenant.contoso.meta.name}`. The target must be a plain literal. |
 | `${deployment:KEY}` | The deployment being run: `name` is its `meta.name`, `tenant` its `spec.tenant` (an error when it has none). For example `key: ${deployment:name}.tfstate` in a Terraform backend. |
-| `${artifact:NAME.FIELD}` | An artifact's image as the deployment's version pins it: `image_name`, `image_tag` (an error when the artifact has no tag and no pin) or `image_ref` (`name:tag`). For example `tag: "${artifact:immich.image_tag}"` in a Helm module's `configuration`. Resolved at deploy; a `store: artifact` variable gives the same values to Terraform as a variable. |
+| `${artifact:NAME.FIELD}` | An artifact's image as the deployment's version pins it: `image_name`, `image_tag` (an error when the artifact has no tag and no pin), `image_ref` (`name:tag`, `name@sha256:...` or `name:tag@sha256:...`), or one part of a `tag@sha256:...` value: `image_tag_name` or `image_digest`. For example `tag: "${artifact:immich.image_tag}"` in a Helm module's `configuration`. Resolved at deploy; a `store: artifact` variable gives the same values to Terraform as a variable. |
 
 How values merge for a deployment:
 

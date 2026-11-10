@@ -251,18 +251,20 @@ record and its decisions are in [deployment-tokens.md](deployment-tokens.md).
 
 ## The 7th kind: `${artifact:NAME.FIELD}` (2026-11-10)
 
-An artifact's `image_name`, `image_tag` or `image_ref`, with the deployment's version pin applied. It replaces a
+An artifact's `image_name`, `image_tag`, `image_ref`, or one part of a `tag@digest` value (`image_tag_name`,
+`image_digest`, added by design 4), with the deployment's version pin applied. It replaces a
 `store: artifact` variable declared only to forward one field. The decision is
 [ADR-0058](../decisions/0058-artifact-token-for-pinned-image-fields.md), the design is design 1 in
 [artifact-gap-analysis.md](../work/artifact-gap-analysis.md); it copies `${deployment:}` point for point.
 
 - **Syntax.** `artifact` is in `VALUE_TOKEN_KINDS` and both regexes. The key is `NAME.FIELD`, split at its first `.`
   (an artifact name has none); `FIELD` is one of `ARTIFACT_TOKEN_FIELDS`.
-- **Resolution.** The entries are stored as `artifact:NAME.FIELD` (`artifact_key()`), three per artifact, built by
+- **Resolution.** The entries are stored as `artifact:NAME.FIELD` (`artifact_key()`), up to five per artifact, built by
   `controllers/artifact_tokens.artifact_token_values()` with the same pin lookup `store: artifact` uses
   (`effective_artifact_tag()`). `deploy_run()` builds them once per run, so each applied pin is logged once, and adds
   them to the same `tokens` map as the deployment entries, never to `ValueResolution.values`. `image_tag` is left out
-  when the artifact has no tag and no pin, so the token fails instead of substituting `""`.
+  when the artifact has no tag and no pin, and `image_tag_name` or `image_digest` when the value has no such part, so
+  the token fails instead of substituting `""`.
 - **Validation.** `unresolved_value_tokens()` skips the kind. `unresolved_artifact_tokens()` judges it in the same
   documents and for the same deployments as the deployment tokens: `unknown_artifact_token` for an unknown artifact
   or field, `unavailable_artifact_token` for a tag that is missing for that deployment. The kind is rejected in an

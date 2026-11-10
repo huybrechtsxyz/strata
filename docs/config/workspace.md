@@ -284,6 +284,7 @@ spec:
     reject_tags: [latest, main]    # default: latest, main, master, dev, develop, staging, edge, nightly, canary
     tag_pattern: '^\d+\.\d+\.\d+$'  # a tag must match it (searched, so anchor it); a digest is not checked
     require_pin: false             # the tag must come from a kind: version pin (or --pin)
+    require_digest: false          # the image must carry a digest (name@sha256:... or name:tag@sha256:...)
     rings: [acc, prd]              # only deployments whose version document is in these rings; default all
     allow:
       - name: redis                # the image's name as `strata deploy images` lists it
@@ -291,15 +292,18 @@ spec:
         expires: 2026-12-31        # optional ISO date, honoured through that day
 ```
 
-| Rule          | An image fails when                           | Finding code         |
-| ------------- | --------------------------------------------- | -------------------- |
-| `require_tag` | it has no tag and no pin supplies one         | `image_without_tag`  |
-| `reject_tags` | its tag is in the list, ignoring case         | `image_floating_tag` |
-| `tag_pattern` | its tag does not match the regular expression | `image_tag_pattern`  |
-| `require_pin` | its tag does not come from a version pin      | `image_not_pinned`   |
+| Rule             | An image fails when                              | Finding code           |
+| ---------------- | ------------------------------------------------ | ---------------------- |
+| `require_tag`    | it has no tag or digest and no pin supplies one  | `image_without_tag`    |
+| `reject_tags`    | its tag is in the list, ignoring case            | `image_floating_tag`   |
+| `tag_pattern`    | its tag does not match the regular expression    | `image_tag_pattern`    |
+| `require_pin`    | its tag does not come from a version pin         | `image_not_pinned`     |
+| `require_digest` | it has no digest                                 | `image_without_digest` |
 
-- A digest (`sha256:...`) is immutable, so it passes `reject_tags` and `tag_pattern`. It still has to satisfy
-  `require_tag` and `require_pin`.
+- A digest (`sha256:...`) is immutable, so a digest alone satisfies `require_tag` and is never judged by
+  `reject_tags` or `tag_pattern`. With `tag@digest` ([artifact](artifact.md#tag-and-digest)), those two judge
+  the tag part, so `latest@sha256:...` is still a floating tag name. Every image still has to satisfy
+  `require_pin`.
 - A tag that merely is not a semantic version, such as a build number (`env_sbx_20260907.11`), is not floating.
   `reject_tags` is an explicit list; use `tag_pattern` to be stricter. Set `reject_tags: []` to reject none.
 - An image with no tag gets one finding, not also `image_not_pinned`, unless `require_tag` is `false`.

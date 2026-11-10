@@ -55,9 +55,10 @@ def deploy_images_command(
 
     Nothing is built, resolved against a store or sent anywhere, so it is safe to run before
     `build run`: a pipeline can use it to copy the images to a registry first. With -o json,
-    `data.images[]` carries origin, name, artifact, module, via, image_name, image_tag, image_ref,
-    registry, configuration, tag_source, pin_version, pin_flag and integration (an artifact's
-    `spec.integration`, by name: which credentials a copy needs; never resolved, so never a secret).
+    `data.images[]` carries origin, name, artifact, module, via, image_name, image_tag (the tag part),
+    image_digest (the digest part of `tag@sha256:...`), image_ref, registry, configuration, tag_source,
+    pin_version, pin_flag and integration (an artifact's `spec.integration`, by name: which credentials
+    a copy needs; never resolved, so never a secret).
 
     \b
     Exit codes:
@@ -81,7 +82,7 @@ def deploy_images_command(
             diagnostics = check_image_tag_policy(context, resolved, workspace, images=rows)
         else:
             for row in rows:
-                if row.image_tag is None:
+                if row.image_tag is None and row.image_digest is None:
                     diagnostics.warning(
                         f"'{row.name}' has no tag: neither a version pin nor the declaration supplies one.",
                         location=row.name,
@@ -111,9 +112,10 @@ def _print_rows(rows: list[EffectiveImage]) -> None:
     if not rows:
         click.echo("  (no images)")
         return
-    # INTEGRATION only when an artifact names one, so the usual table does not gain a column of "-".
+    # DIGEST and INTEGRATION only when a row has one, so the usual table does not gain a column of "-".
+    with_digest = any(row.image_digest for row in rows)
     with_integration = any(row.integration for row in rows)
-    headers: tuple[str, ...] = ("NAME", "ORIGIN", "IMAGE", "TAG", "SOURCE")
+    headers: tuple[str, ...] = ("NAME", "ORIGIN", "IMAGE", "TAG", *(("DIGEST",) if with_digest else ()), "SOURCE")
     headers += ("INTEGRATION", "USED BY") if with_integration else ("USED BY",)
     table = [
         (
@@ -121,6 +123,7 @@ def _print_rows(rows: list[EffectiveImage]) -> None:
             row.origin,
             row.image_name,
             row.image_tag or "-",
+            *((row.image_digest or "-",) if with_digest else ()),
             _source(row),
             *((row.integration or "-",) if with_integration else ()),
             ", ".join(row.via) or "-",

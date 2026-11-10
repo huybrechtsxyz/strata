@@ -46,7 +46,7 @@ from strata.models.store_model import VariableStoreType
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
-from strata.utils.sbom_utils import compose_image_ref, parse_image_ref
+from strata.utils.sbom_utils import compose_image_ref, parse_image_ref, split_image_tag
 from strata.utils.templater import template_variable_keys
 from strata.utils.value_tokens import referenced_artifact_keys, referenced_variable_keys, split_artifact_token_key
 
@@ -101,15 +101,15 @@ def effective_images(
                 elif service.image:
                     pinned = version_service is not None and version_service.resolve("images", service.name) is not None
                     name, tag, digest = parse_image_ref(service.image)
-                    found = tag or digest
                     service_rows.append(
                         EffectiveImage(
                             origin="module-service",
                             name=str(service.name),
                             image_name=name,
-                            image_tag=found,
+                            image_tag=tag,
+                            image_digest=digest,
                             image_ref=service.image,
-                            tag_source="pin" if pinned else ("declared" if found else "none"),
+                            tag_source="pin" if pinned else ("declared" if tag or digest else "none"),
                             module=module_name,
                             via=(use,),
                             pin_version=version.meta.name if pinned and version is not None else None,
@@ -131,12 +131,14 @@ def effective_images(
         artifact_tag = resolve_artifact_tag(context, deployment, artifact_name)
         if artifact is None or artifact_tag is None:
             continue
+        tag, digest = split_image_tag(artifact_tag.value)
         artifact_rows.append(
             EffectiveImage(
                 origin="artifact",
                 name=artifact_name,
                 image_name=artifact.spec.image_name,
-                image_tag=artifact_tag.value,
+                image_tag=tag,
+                image_digest=digest,
                 image_ref=compose_image_ref(artifact.spec.image_name, artifact_tag.value),
                 tag_source=artifact_tag.source,
                 artifact=artifact_name,

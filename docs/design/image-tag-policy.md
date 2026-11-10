@@ -33,6 +33,7 @@ spec:
     reject_tags: [latest, main]      # default: the mutable alias set; [] rejects none
     tag_pattern: '^\d+\.\d+\.\d+$'   # a tag must match it (searched, so anchor it)
     require_pin: false               # the tag must come from a kind: version pin (or --pin)
+    require_digest: false            # the image must carry a digest
     rings: [acc, prd]                # only deployments in these rings; default all
     allow:
       - name: redis                  # a row name (artifact or service)
@@ -51,15 +52,18 @@ drift test ties the list in the `reject_tags` description to it.
 `effective_images()` returns, the policy and the ring, and returns `Diagnostics`. Per row whose `origin` is
 selected and whose name is not allowed:
 
-| Rule          | Fails when                                    | Code                 |
-| ------------- | --------------------------------------------- | -------------------- |
-| `require_tag` | `tag_source` is `none`                        | `image_without_tag`  |
-| `reject_tags` | the tag is in the list (case-insensitive)     | `image_floating_tag` |
-| `tag_pattern` | the tag does not match the regular expression | `image_tag_pattern`  |
-| `require_pin` | `tag_source` is not `pin`                     | `image_not_pinned`   |
+| Rule             | Fails when                                     | Code                   |
+| ---------------- | ---------------------------------------------- | ---------------------- |
+| `require_tag`    | `image_tag` and `image_digest` are both unset  | `image_without_tag`    |
+| `reject_tags`    | the tag is in the list (case-insensitive)      | `image_floating_tag`   |
+| `tag_pattern`    | the tag does not match the regular expression  | `image_tag_pattern`    |
+| `require_pin`    | `tag_source` is not `pin`                      | `image_not_pinned`     |
+| `require_digest` | `image_digest` is unset                        | `image_without_digest` |
 
-- A digest (`sha256:...`) is immutable: it passes `reject_tags` and `tag_pattern` and still has to satisfy
-  `require_tag` and `require_pin`.
+- A row carries the tag part in `image_tag` and the digest part in `image_digest`
+  (docs/work/artifact-gap-analysis.md, design 4). A digest (`sha256:...`) is immutable: a digest alone satisfies
+  `require_tag`, and `reject_tags` and `tag_pattern` judge only a tag part. Every row still has to satisfy
+  `require_pin`.
 - A tag that merely is not a semantic version, such as a build number (`env_sbx_20260907.11`), is not floating.
   `reject_tags` is an explicit list and `tag_pattern` is how to be stricter. This matches how the SBOM treats a
   pinned tag.

@@ -1,6 +1,7 @@
 # Artifact gap analysis - Work
 
-- Status: in-progress (all designs agreed; designs 1, 2, 3, 5, 6 step 1, 7, 8, 9 and 10 built; ADR-0058 written; the rest not started)
+- Status: in-progress (all designs agreed; every design built except 6 step 2, which waits for a private-registry
+  user; ADR-0058 written)
 - Last updated: 2026-11-10
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
@@ -282,6 +283,31 @@ with at least 32 hex characters.
 - Validation: `ArtifactSpecModel.image_tag` checks the shape at load; `check_version_pins()` checks an `artifacts`
   pin the same way (`artifact_tag_invalid`, error).
 
+**Implementation plan** (refines the changes above after reading the code):
+
+1. `utils/sbom_utils.py`: `split_image_tag(value) -> (tag, digest)` (`@` separates the two; a value with `:` and no
+   `@` is a digest only) and `image_tag_problem(value) -> str | None`, the one shape check. `compose_image_ref()`
+   joins the parts. `is_floating_tag()` is false for any value with a digest: a digest never moves, whatever tag
+   travels with it.
+2. `ArtifactSpecModel.image_tag`: a validator with `image_tag_problem()`, so a bad shape fails at load like any
+   schema error. Only one test uses a short fake digest (`sha256:abc123`); it gets a real-length one.
+3. `version_pins.check_version_pins()`: an `artifacts` pin with a bad shape is an error, `artifact_tag_invalid`.
+   `strata version set NAME artifacts TARGET VALUE` refuses one before writing (exit 2), so the file never holds it.
+4. Fields `image_tag_name` and `image_digest`, in `ARTIFACT_TOKEN_FIELDS`, `VariableStoreModel.field` and
+   `resolve_artifact_field()`. `artifact_token_values()` leaves out a part the value lacks, so the token fails like
+   a missing `image_tag`, and `artifact_token_problem()` says which part is missing. A `store: artifact` variable
+   gets `""`, as it does for a blank `image_tag`.
+5. `EffectiveImage.image_digest`; `image_tag` is the tag part only, for both artifact and module-service rows
+   (a module service's literal `name:tag@digest` too). `tag_source` is `declared` when either part is set.
+6. `image_tag_policy`: `require_tag` is met by a tag or a digest (a digest pins harder than a tag);
+   `reject_tags` and `tag_pattern` judge the tag part only, so `latest@sha256:...` is still a floating tag
+   name; `require_digest: bool = False` fails an image with no digest (`image_without_digest`).
+7. `deploy images`: a DIGEST column only when a row has one (as INTEGRATION); the no-tag warning only when a row
+   has neither. JSON gains `image_digest` through `asdict()`. The handover report shows the tag or the digest.
+8. The SBOM image collector: an artifact or service image with a digest is never floating.
+9. Docs: `artifact.md` (the three shapes, the two fields), `workspace.md` and `image-tag-policy.md`
+   (`require_digest`), `value-token-resolution.md`, the agent skill row, the changelog.
+
 **Tests.** The three shapes through `compose_image_ref()`, the token, `store: artifact`, a Compose service and `deploy
 images`; an invalid shape at load and in a pin; `require_digest`; the SBOM purl for `tag@digest`.
 
@@ -528,6 +554,10 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 - **Design 8, built 2026-11-10** (not released), as planned: `controllers/artifact_usage.py`, called by
   `strata validate` and `strata version update`, not a semantic check (an import cycle and no context there).
   Release 3 (designs 5, 6 step 1, 7 and 8) is complete.
+- **Design 4, built 2026-11-10** (not released), as planned, plus two things the plan found in the code: an image
+  with a digest is never floating in the SBOM (it called `latest@sha256:...` floating, and would have called a
+  digest-only row floating once `image_tag` held only the tag), and the handover report shows `tag@digest`. Release
+  4 is complete.
 
 ### Implementation order
 
@@ -557,6 +587,7 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: a design for each finding; the open questions from the review decided as recommendations.
 - 2026-11-10: designs agreed. Design 1 implemented (`${artifact:NAME.FIELD}`), with its implementation plan.
 - 2026-11-10: design 3 implemented: token uses counted as images, `${value:}` on an artifact's image rejected.
+- 2026-11-10: design 4 implemented (tag plus digest, `require_digest`); release 4 complete.
 - 2026-11-10: design 8 implemented (`artifact_unused`); release 3 complete.
 - 2026-11-10: design 7 implemented: a `store: artifact` variable counts only where it is received.
 - 2026-11-10: design 6 step 1 implemented: `deploy images` names an artifact's `integration`.

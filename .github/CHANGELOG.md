@@ -33,8 +33,21 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - `strata validate` warns `artifact_unused` for an artifact no deployment uses: no `store: artifact` variable a
   step receives, no module service `artifact` and no `${artifact:}` token in a document a deployment reaches.
   `strata version update` no longer offers a pin for such an artifact, and says which it left out.
+- An artifact's `image_tag` and an `artifacts` pin can be a tag, a digest or both: `1.4.2@sha256:<hex>` gives
+  `name:1.4.2@sha256:<hex>`. Two more fields read the parts, `image_tag_name` and `image_digest`, as a
+  `${artifact:}` token or a `store: artifact` variable's `field`. `strata deploy images` gains a `DIGEST` column and
+  `data.images[].image_digest`. `image_tag_policy` gains `require_digest` (`image_without_digest`).
 
 ### Changed
+
+- An artifact's `image_tag` must be a tag, a digest or `tag@digest`; another shape fails when the document loads.
+  An `artifacts` pin of another shape is an error in `strata validate` (`artifact_tag_invalid`), and
+  `strata version set` refuses to write one. Before this, `1.4.2@sha256:...` gave `name@1.4.2@sha256:...`, which
+  no runtime pulls.
+- In `strata deploy images -o json`, `data.images[].image_tag` is now only the tag part. A digest is in
+  `image_digest`, so a digest-only image has `image_tag: null` where it had the digest. The same split
+  applies to a module service's literal `name:tag@sha256:...`. An image with a digest is never floating in the SBOM,
+  and `image_tag_policy`'s `reject_tags` and `tag_pattern` judge the tag part of `tag@digest`.
 
 - An artifact reached only through a `store: artifact` variable is listed by `deploy images`, and judged by the
   SBOM, the image gates and `image_tag_policy`, only when the deployment can receive that variable: a `${var:KEY}`
@@ -52,7 +65,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - A registry chart pull on Windows no longer fails with a bare `PermissionError` when another process (a virus
   scanner reading the new archive) briefly holds a file in its staging directory. Removing that directory is best
   effort, so the pull's own result stands, such as `helm_chart_digest_changed`. A failure to store the entry is
-  reported as `helm_chart_pull_failed`.
+  reported as `helm_chart_pull_failed`. A later pull removes a `.pull-*` directory left in `.strata/helm/` once it
+  is more than an hour old.
 
 ## [2.6.0] - 2026-11-09
 

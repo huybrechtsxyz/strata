@@ -18,7 +18,7 @@ from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.version_model import VersionModel
 from strata.services.version_service import VersionService
-from strata.utils.sbom_utils import compose_image_ref
+from strata.utils.sbom_utils import compose_image_ref, split_image_tag
 from strata.utils.value_tokens import artifact_key
 
 
@@ -72,9 +72,11 @@ def effective_artifact_tag(
 
 
 def artifact_token_values(index: DocumentIndex, deployment: DeploymentModel, *, log: bool = False) -> dict[str, str]:
-    """The ``artifact:NAME.FIELD`` entries of the flat token map for `deployment`, three per artifact.
+    """The ``artifact:NAME.FIELD`` entries of the flat token map for `deployment`, up to five per artifact.
 
-    `image_tag` is left out when the artifact has no tag and the deployment pins none, so
+    `image_tag_name` and `image_digest` are the two parts of the effective `image_tag` (`TAG@sha256:...`); each is
+    left out when the value has no such part. `image_tag` is left out when the artifact has no tag and the
+    deployment pins none, so
     ``${artifact:NAME.image_tag}`` then fails like any other unresolved token instead of substituting an empty
     string into ``repo:${...}``; `image_ref` is the bare name then, as a `store: artifact` variable's `image_ref`
     is. One function builds the entries, so `deploy run` and `strata validate` cannot disagree about what exists.
@@ -91,8 +93,13 @@ def artifact_token_values(index: DocumentIndex, deployment: DeploymentModel, *, 
         artifact = cast(ArtifactModel, entry.model)
         name = entry.ref.name
         tag = _tag(name, artifact, version, log=log).value
+        tag_name, digest = split_image_tag(tag)
         values[artifact_key(name, "image_name")] = artifact.spec.image_name
         if tag:
             values[artifact_key(name, "image_tag")] = tag
+        if tag_name:
+            values[artifact_key(name, "image_tag_name")] = tag_name
+        if digest:
+            values[artifact_key(name, "image_digest")] = digest
         values[artifact_key(name, "image_ref")] = compose_image_ref(artifact.spec.image_name, tag)
     return values

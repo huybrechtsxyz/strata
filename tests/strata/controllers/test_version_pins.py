@@ -232,6 +232,25 @@ def test_artifact_pin_matching_no_artifact_is_a_warning(tmp_path):
     assert "catalog-api" in warning.message
 
 
+_DIGEST = "sha256:" + "9f86d081" * 8
+
+
+@pytest.mark.parametrize("value", ["1.2.3", _DIGEST, f"1.2.3@{_DIGEST}"])
+def test_an_artifact_pin_may_be_a_tag_a_digest_or_both(tmp_path, value):
+    root = _with_artifact(_solution(tmp_path, f"  pins:\n    artifacts:\n      catalog: '{value}'\n"))
+    assert _resolve(root).diagnostics.messages() == []
+
+
+def test_an_artifact_pin_of_another_shape_is_an_error(tmp_path):
+    root = _with_artifact(_solution(tmp_path, "  pins:\n    artifacts:\n      catalog: '1.2.3@sha256:abc'\n"))
+    context = _resolve(root)
+    assert not context.ok
+    [error] = context.diagnostics.errors
+    assert error.code == "artifact_tag_invalid"
+    assert error.location == "spec.pins.artifacts.catalog.version"
+    assert error.message.startswith("artifact pin 'catalog': '1.2.3@sha256:abc' is not a tag (1.4.2)")
+
+
 # ---------------------------------------------------------------------------
 # Every category is checked
 # ---------------------------------------------------------------------------

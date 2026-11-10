@@ -83,8 +83,9 @@ DEPLOYMENT_TOKEN_KEYS = ("name", "tenant")
 
 _DEPLOYMENT_PREFIX = "deployment"
 
-#: The fields ``${artifact:NAME.FIELD}`` accepts, the same three a `store: artifact` variable's `field` takes.
-ARTIFACT_TOKEN_FIELDS = ("image_name", "image_tag", "image_ref")
+#: The fields ``${artifact:NAME.FIELD}`` accepts, the same a `store: artifact` variable's `field` takes. `image_tag`
+#: is the whole value as pinned (`1.4.2@sha256:...`); `image_tag_name` and `image_digest` are its two parts.
+ARTIFACT_TOKEN_FIELDS = ("image_name", "image_tag", "image_ref", "image_tag_name", "image_digest")
 
 _ARTIFACT_PREFIX = "artifact"
 
@@ -190,6 +191,13 @@ def artifact_token_problem(key: str, values: dict[str, str]) -> str | None:
         known = sorted({k.removeprefix(prefix).partition(".")[0] for k in values if k.startswith(prefix)})
         return f"'{token}': there is no artifact named '{name}'. Artifacts: {known or 'none'}."
     if artifact_key(name, field) not in values:
+        if field != "image_tag" and artifact_key(name, "image_tag") in values:
+            part = "digest" if field == "image_digest" else "tag"
+            return (
+                f"'{token}': artifact '{name}' is deployed as '{values[artifact_key(name, 'image_tag')]}', which has "
+                f"no {part}. Give `spec.image_tag` or the pin under `pins.artifacts.{name}` the form "
+                "`TAG@sha256:<hex>`."
+            )
         return (
             f"'{token}': artifact '{name}' has no image_tag, and the deployment's version pins none. Set "
             f"`spec.image_tag` on the artifact, or pin it under `pins.artifacts.{name}`."

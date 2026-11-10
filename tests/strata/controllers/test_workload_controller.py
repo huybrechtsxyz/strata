@@ -279,6 +279,36 @@ def test_resolve_artifact_services_overrides_image_and_clears_artifact(tmp_path:
     assert service.artifact is None
 
 
+@pytest.mark.parametrize(
+    ("image_tag", "image"),
+    [
+        ("sha256:" + "ab" * 32, "example/scheduler-api@sha256:" + "ab" * 32),
+        ("1.2.3@sha256:" + "ab" * 32, "example/scheduler-api:1.2.3@sha256:" + "ab" * 32),
+    ],
+)
+def test_resolve_artifact_services_writes_a_digest_as_a_runtime_pulls_it(tmp_path: Path, image_tag, image):
+    """`1.2.3@sha256:...` gives `name:1.2.3@sha256:...`, never `name@1.2.3@sha256:...`
+    (docs/work/artifact-gap-analysis.md, design 4)."""
+    module = _module_with_artifact("scheduler", "api_container")
+    index = DocumentIndex()
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.MODULE, name="scheduler"), model=module, source=Path("scheduler.yaml")
+        )
+    )
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="api_container"),
+            model=_artifact("api_container", image_name="example/scheduler-api", image_tag=image_tag),
+            source=Path("api_container.yaml"),
+        )
+    )
+
+    resolved = resolve_artifact_services(module, _context(tmp_path, index), _deployment())
+
+    assert resolved.spec.services[0].image == image
+
+
 def test_resolve_artifact_services_leaves_other_services_untouched(tmp_path: Path):
     """A module with more than one service only overlays the one using
     `.artifact` — mirrors `apply_version_pins()`'s own multi-service

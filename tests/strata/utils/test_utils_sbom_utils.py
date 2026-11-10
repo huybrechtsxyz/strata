@@ -4,20 +4,84 @@
 import pytest
 
 from strata.utils.sbom_utils import (
+    compose_image_ref,
     exact_version,
     helm_chart_to_purl,
     image_digest_hash,
+    image_tag_problem,
     image_to_purl,
     is_floating_tag,
     is_local_module_source,
     parse_image_ref,
     pull_registry,
     registry_host,
+    split_image_tag,
     split_registry,
     terraform_module_to_purl,
     terraform_provider_address,
     terraform_provider_to_purl,
 )
+
+# ---------------------------------------------------------------------------
+# An artifact's image_tag: a tag, a digest or tag@digest (docs/work/artifact-gap-analysis.md, design 4)
+# ---------------------------------------------------------------------------
+
+_HEX = "9f86d081" * 8
+_DIGEST = f"sha256:{_HEX}"
+
+
+@pytest.mark.parametrize(
+    ("value", "parts", "ref"),
+    [
+        ("1.4.2", ("1.4.2", None), "example/api:1.4.2"),
+        (_DIGEST, (None, _DIGEST), f"example/api@{_DIGEST}"),
+        (f"1.4.2@{_DIGEST}", ("1.4.2", _DIGEST), f"example/api:1.4.2@{_DIGEST}"),
+        (None, (None, None), "example/api"),
+        ("", (None, None), "example/api"),
+    ],
+)
+def test_an_image_tag_splits_and_composes_in_three_shapes(value, parts, ref):
+    assert split_image_tag(value) == parts
+    assert compose_image_ref("example/api", value) == ref
+    if value:
+        name, tag, digest = parse_image_ref(ref)
+        assert (name, tag, digest) == ("example/api", *parts), "compose is the reverse of parse"
+
+
+def test_compose_image_ref_keeps_a_registry_port():
+    assert compose_image_ref("registry:5000/img", f"1.0@{_DIGEST}") == f"registry:5000/img:1.0@{_DIGEST}"
+
+
+@pytest.mark.parametrize(
+    "value", ["1.4.2", "v1.4.2-rc.1", "env_sbx_20260907.11", _DIGEST, f"1.4.2@{_DIGEST}", "sha512:" + "a" * 128]
+)
+def test_a_valid_image_tag_has_no_problem(value):
+    assert image_tag_problem(value) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "says"),
+    [
+        ("-1.0", "the tag '-1.0'"),
+        ("1.0+build", "the tag '1.0+build'"),
+        ("a" * 129, "at most 128 characters"),
+        ("sha256:abc123", "the digest 'sha256:abc123'"),
+        (f"sha256:{_HEX.upper()}", "lowercase hex"),
+        (f"1.4.2@{_HEX}", f"the digest '{_HEX}'"),
+        ("1.4.2@", "both sides of '@'"),
+        (f"@{_DIGEST}", "both sides of '@'"),
+    ],
+)
+def test_an_invalid_image_tag_says_what_is_wrong(value, says):
+    problem = image_tag_problem(value)
+    assert problem is not None and says in problem
+    assert "a tag (1.4.2), a digest (sha256:<hex>) or both (1.4.2@sha256:<hex>)" in problem
+
+
+def test_a_tag_with_a_digest_is_never_floating():
+    assert is_floating_tag(f"latest@{_DIGEST}") is False
+    assert is_floating_tag(_DIGEST) is False
+
 
 # ---------------------------------------------------------------------------
 # split_registry() (docs/design/security-gates.md D1)

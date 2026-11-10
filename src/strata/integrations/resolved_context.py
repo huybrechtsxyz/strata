@@ -115,9 +115,10 @@ class EffectiveImage:
     (`variable:KEY`, `service:MODULE/SERVICE`, `token:KIND/NAME` for a document holding an
     `${artifact:}` token).
 
-    `image_tag` is `None` when neither a pin nor the declaration supplies one, and `image_ref` is then the
-    bare name. `tag_source` is `pin`, `declared` or `none`; `pin_version` names the version document of a
-    pin, and `pin_flag` is true when that came from `--pin` rather than the deployment's `spec.version`.
+    `image_tag` is the tag part only and `image_digest` the digest part (`sha256:...`) of what a pin or the
+    declaration supplies (`1.4.2`, `sha256:...` or `1.4.2@sha256:...`); either is `None` when absent, and
+    `image_ref` is the bare name when both are. `tag_source` is `pin`, `declared` or `none`; `pin_version`
+    names the version document of a pin, and `pin_flag` is true when that came from `--pin` rather than the deployment's `spec.version`.
 
     `integration` is an artifact's `spec.integration`, by name only (docs/work/artifact-gap-analysis.md,
     design 6): it tells a pipeline that copies the image which credentials to use. Nothing is resolved from it.
@@ -137,6 +138,7 @@ class EffectiveImage:
     pin_version: str | None = None
     pin_flag: bool = False
     integration: str | None = None
+    image_digest: str | None = None
 
 
 @dataclass(frozen=True)

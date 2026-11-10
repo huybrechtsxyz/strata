@@ -333,6 +333,30 @@ def test_set_creates_a_new_pin(runner, solution):
     assert data["spec"]["pins"]["images"]["redis"] == "redis:7-alpine"
 
 
+_DIGEST = "sha256:" + "9f86d081" * 8
+
+
+def test_set_writes_an_artifact_pin_with_a_tag_and_a_digest(runner, solution):
+    path = _set_solution(solution)
+
+    result = _set(runner, "prd", "artifacts", "api", f"1.4.2@{_DIGEST}", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert data["spec"]["pins"]["artifacts"]["api"] == f"1.4.2@{_DIGEST}"
+
+
+@pytest.mark.parametrize("args", [("1.4.2@sha256:abc",), ("--available", "sha256:abc")])
+def test_set_refuses_an_artifact_pin_that_is_not_a_tag_or_a_digest(runner, solution, args):
+    path = _set_solution(solution)
+    before = path.read_text(encoding="utf-8")
+
+    result = _set(runner, "prd", "artifacts", "api", *args, "--path", solution)
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert "is not a tag (1.4.2), a digest (sha256:<hex>) or both" in result.output
+    assert path.read_text(encoding="utf-8") == before
+
+
 def test_set_rejects_creating_a_pin_with_only_available(runner, solution):
     _set_solution(solution)
 

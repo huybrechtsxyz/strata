@@ -55,7 +55,7 @@ from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
-from strata.utils.sbom_utils import compose_image_ref
+from strata.utils.sbom_utils import compose_image_ref, split_image_tag
 from strata.utils.secret_generator import generate_secret, mask_secret
 from strata.utils.value_tokens import has_value_tokens, resolve_value_tokens
 
@@ -263,7 +263,8 @@ def resolve_artifact_field(
     """Resolve one `(artifact_name, field)` pair to a plain string
     (docs/config/artifact.md's `store: artifact` variable).
 
-    `field` is one of `image_name`/`image_tag`/`image_ref`:
+    `field` is one of `image_name`/`image_tag`/`image_ref`/`image_tag_name`/`image_digest`
+    (the last two are the parts of `TAG@sha256:...`, `""` when the value lacks one):
 
     - `image_name` is identity — read straight off the artifact document,
       never pin-overlaid (matches `chart_name`'s treatment — a pin never
@@ -288,6 +289,11 @@ def resolve_artifact_field(
     image_tag = tag.value if tag is not None else None
     if field == "image_tag":
         return image_tag or ""
+    tag_name, digest = split_image_tag(image_tag)
+    if field == "image_tag_name":
+        return tag_name or ""
+    if field == "image_digest":
+        return digest or ""
     # field == "image_ref": synthesised, never a stored field.
     return compose_image_ref(artifact.spec.image_name, image_tag)
 

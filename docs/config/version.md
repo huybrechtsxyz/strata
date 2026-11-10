@@ -15,7 +15,9 @@ promotion/rollback/canary/floating-pin machinery is not carried over (zero real 
 - `spec.pins.remotes` — overrides a [solution.md](solution.md) remote's `reference` (only valid
   when that remote is `fetch: strata` — an `fetch: external` remote is placed by CI before strata
   runs, so pinning it can't do anything)
-- `spec.pins.artifacts` — overrides an [`artifact`](artifact.md) document's `image_tag`
+- `spec.pins.artifacts` — overrides an [`artifact`](artifact.md) document's `image_tag`: a tag, a digest
+  (`sha256:<hex>`) or both (`1.4.2@sha256:<hex>`, see [Tag and digest](artifact.md#tag-and-digest)). Another
+  shape is an error (`artifact_tag_invalid`), and `strata version set` refuses to write it
 - `spec.pins.assets` — overrides the git `reference` of an [`asset`](asset.md) that declares its own
   `spec.location`, keyed by the asset's name (only valid when its `location.fetch` is `strata`; an
   asset using a manifest remote is pinned under `remotes`)
