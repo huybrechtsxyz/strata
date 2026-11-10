@@ -48,8 +48,9 @@ class ArtifactSpecModel(PlatformBaseModel):
 
     image_name: str = Field(
         min_length=1,
-        description="Container image path (e.g. 'example/scheduler-api'). Identity — "
-        "never overridden by a kind: version pin, only image_tag is.",
+        description="The full image path the container runtime pulls, registry host included (e.g. "
+        "'ghcr.io/example/scheduler-api'; no host means Docker Hub). Identity — never overridden by a "
+        "kind: version pin, only image_tag is.",
     )
     image_tag: str | None = Field(
         None,
@@ -59,7 +60,8 @@ class ArtifactSpecModel(PlatformBaseModel):
     registry: str | None = Field(
         None,
         description="Registry host, for documentation only (for example `registry.example.com`). "
-        "Strata never pulls the image: the container runtime does that at deploy time.\n\n"
+        "Strata never pulls the image and never adds this to the reference: the container runtime pulls "
+        "`image_name` as written, so put the host there too. `strata validate` warns when the two differ.\n\n"
         "Design notes: Registry host, free text for documentation only (e.g. "
         "'cdn-feeds.acme.com') — NOT a SolutionRemoteModel reference, since strata "
         "never fetches an image (it stays in the registry and is pulled by the runtime "

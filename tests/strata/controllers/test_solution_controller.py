@@ -531,7 +531,7 @@ def test_shipped_example_shows_every_way_to_use_an_artifact():
     assert pinned["example-api"].via == ("variable:API_IMAGE_TAG", "token:workspace/main")
     assert pinned["portainer"].via == ("service:portainer/portainer",)
     assert {name: (row.image_ref, row.tag_source) for name, row in pinned.items()} == {
-        "example-api": ("example/api:1.4.2", "pin"),
+        "example-api": ("registry.example.com/example/api:1.4.2", "pin"),
         "portainer": ("portainer/portainer-ce:2.39.3-alpine", "pin"),
     }
     assert {name: row.tag_source for name, row in rows["prd-acme-deployment"].items()} == {

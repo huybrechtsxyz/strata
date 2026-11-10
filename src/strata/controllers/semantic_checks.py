@@ -52,6 +52,7 @@ from strata.integrations.helm import (
 )
 from strata.integrations.registry import get_class as get_integration_class
 from strata.logging.config import get_logger
+from strata.models.artifact_model import ArtifactModel
 from strata.models.asset_model import AssetModel
 from strata.models.attributeconfig_model import AttributeConfigModel
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
@@ -71,6 +72,7 @@ from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
+from strata.services.artifact_service import ArtifactService
 from strata.services.attributeconfig_evaluator import (
     ATTRIBUTECONFIG_INVALID_CODE,
     build_validator,
@@ -144,6 +146,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_attributeconfig_conflicts(index))
     diagnostics.extend(_check_workspaces(index))
     diagnostics.extend(_check_environments(index))
+    diagnostics.extend(_check_artifacts(index))
     diagnostics.extend(_check_deployment_value_tokens(index, resolved))
     diagnostics.extend(_check_script_values(index, resolved))
     diagnostics.extend(_check_remotes(index, solution))
@@ -1361,6 +1364,17 @@ def _check_workspace_subnets(index: DocumentIndex, workspace: WorkspaceModel) ->
 # ---------------------------------------------------------------------------
 # Environment -> Artifact: store: artifact variables reference a real artifact
 # ---------------------------------------------------------------------------
+
+
+def _check_artifacts(index: DocumentIndex) -> Diagnostics:
+    """Each artifact's `spec.registry` agrees with its `spec.image_name` (`ArtifactService.validate_registry()`,
+    docs/work/artifact-gap-analysis.md, design 5). A warning cannot come from a model validator, so it runs here,
+    once per artifact document."""
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.ARTIFACT):
+        service = ArtifactService.from_model(cast(ArtifactModel, entry.model))
+        diagnostics.extend(service.validate_registry(), source=str(entry.source))
+    return diagnostics
 
 
 def _check_environments(index: DocumentIndex) -> Diagnostics:

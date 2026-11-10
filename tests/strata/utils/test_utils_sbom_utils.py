@@ -11,6 +11,8 @@ from strata.utils.sbom_utils import (
     is_floating_tag,
     is_local_module_source,
     parse_image_ref,
+    pull_registry,
+    registry_host,
     split_registry,
     terraform_module_to_purl,
     terraform_provider_address,
@@ -32,6 +34,38 @@ def test_split_registry_recognises_registry_hosts():
 def test_split_registry_leaves_docker_hub_names_alone():
     assert split_registry("org/app") == (None, "org/app")
     assert split_registry("traefik") == (None, "traefik")
+
+
+@pytest.mark.parametrize(
+    ("image_name", "expected"),
+    [
+        ("ghcr.io/org/app", "ghcr.io"),
+        ("GHCR.io/org/app", "ghcr.io"),
+        ("registry:5000/img", "registry:5000"),
+        ("localhost/img", "localhost"),
+        ("org/app", "docker.io"),
+        ("traefik", "docker.io"),
+        ("index.docker.io/library/redis", "docker.io"),
+    ],
+)
+def test_pull_registry_names_where_the_runtime_pulls_from(image_name, expected):
+    assert pull_registry(image_name) == expected
+
+
+@pytest.mark.parametrize(
+    ("registry", "expected"),
+    [
+        ("registry.example.com", "registry.example.com"),
+        ("https://Registry.Example.com/", "registry.example.com"),
+        ("http://acr.example.io/team", "acr.example.io"),
+        ("registry:5000", "registry:5000"),
+        ("index.docker.io", "docker.io"),
+        ("", None),
+        ("https://", None),
+    ],
+)
+def test_registry_host_normalises_the_free_text_setting(registry, expected):
+    assert registry_host(registry) == expected
 
 
 # ---------------------------------------------------------------------------

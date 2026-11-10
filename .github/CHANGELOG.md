@@ -24,6 +24,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   image into a chart's values, so such an artifact (and its version pin) changes `deploy images` and the SBOM but not
   what runs. Deliver it in the chart's own keys, for example
   `configuration: {image: {repository: "${artifact:NAME.image_name}", tag: "${artifact:NAME.image_tag}"}}`.
+- `strata validate` warns `artifact_registry_mismatch` when an artifact's `registry` names another registry than
+  its `image_name` is pulled from (an `image_name` with no host is Docker Hub). `registry` is documentation: strata
+  never adds it to the image reference, so the runtime pulls `image_name` as written. Put the host in `image_name`.
 
 ### Changed
 

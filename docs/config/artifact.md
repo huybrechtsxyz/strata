@@ -8,13 +8,17 @@ field (see [`module`](module.md)).
 
 ## Schema
 
-- `spec.image_name` — the container image path (e.g. `example/scheduler-api`) —
-  identity, never overridden by a [`version`](version.md) pin
+- `spec.image_name` — the full path the runtime pulls, registry host included (e.g.
+  `ghcr.io/example/scheduler-api`; no host means Docker Hub) — identity, never overridden by a
+  [`version`](version.md) pin
 - `spec.image_tag` — the tag/digest to deploy; optional, omit it when a [`version`](version.md) pin
   always supplies it. Overridden by `kind: version`'s `spec.pins.artifacts[name]` when set; with
   neither, the tag is blank
 - `spec.registry` — free-text registry host, documentation only — **not** a remote reference
-  (strata never fetches an image; the runtime pulls it at deploy time)
+  (strata never fetches an image; the runtime pulls it at deploy time). It is not added to the image
+  reference: `image_name` holds the full path the runtime pulls, registry host included. `strata validate`
+  warns when the two name different registries (`artifact_registry_mismatch`), counting an `image_name`
+  with no host as Docker Hub
 - `spec.integration` — reserved. Must name an existing [`integration`](integration.md), but
   nothing reads it: no registry credentials are resolved from it. Supply registry credentials to
   whatever pulls or copies the image (your pipeline, the runtime)
@@ -31,7 +35,7 @@ kind: artifact
 meta:
   name: scheduler-api
 spec:
-  image_name: example/scheduler-api
+  image_name: cdn-feeds.acme.com/example/scheduler-api
   image_tag: "1.4.2"
   registry: cdn-feeds.acme.com
 ```

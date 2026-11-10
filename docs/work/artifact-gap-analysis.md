@@ -1,6 +1,6 @@
 # Artifact gap analysis - Work
 
-- Status: in-progress (all designs agreed; designs 1, 2, 3, 9 and 10 built; ADR-0058 written; the rest not started)
+- Status: in-progress (all designs agreed; designs 1, 2, 3, 5, 9 and 10 built; ADR-0058 written; the rest not started)
 - Last updated: 2026-11-10
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
@@ -306,6 +306,22 @@ images`; an invalid shape at load and in a pin; `require_digest`; the SBOM purl 
 check in `ArtifactSpecModel` if it needs no index; the host rule as a helper next to `parse_image_ref()` in
 `utils/sbom_utils.py`.
 
+**Implementation plan** (refines the changes above after reading the code):
+
+1. `utils/sbom_utils.py` already has Docker's host rule (`split_registry()`) and Docker Hub's names
+   (`_DOCKER_HUB_REGISTRIES`). A new `pull_registry(image_name)` returns the registry the runtime pulls from:
+   the host part, lower-cased, or `docker.io` when there is none or it is a Docker Hub alias. A new
+   `registry_host(registry)` normalises the free-text field the same way (scheme, trailing `/` and any path
+   dropped), so `https://registry.example.com/`, `docker.io` and `index.docker.io` compare as intended.
+2. `services/artifact_service.py` gets its first check, `validate_registry()`: a warning
+   `artifact_registry_mismatch` at `spec.registry` when the two differ, naming the registry the runtime will use
+   and the full `image_name` to write. A model validator cannot warn, so it runs as a semantic check,
+   `_check_artifacts(index)`, once per artifact document.
+3. The three artifacts that set both today and disagree are corrected: `config/artifacts/example-api.yaml`, the
+   example in `artifact.md` and the artifact schema example. The shipped-example test then expects
+   `registry.example.com/example/api`.
+4. Docs: `artifact.md` (`registry` checked against `image_name`, which must hold the full path), the changelog.
+
 **Tests.** Match, mismatch, no host in `image_name`, `localhost:5000/x`, a registry with a port.
 
 ### 6. Registry credentials (`integration`)
@@ -449,6 +465,10 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 - **Design 9, built 2026-11-10** (not released), as planned. `strata deploy images prd-deployment --path config` now
   lists `example-api` (`variable:API_IMAGE_TAG`, `token:workspace/main`) and `portainer`
   (`service:portainer/portainer`), both `pin prd`; `prd-acme-deployment` shows both as `declared`.
+- **Design 5, built 2026-11-10** (not released), as planned. It found the mismatch it was written for in
+  `config/artifacts/example-api.yaml`, and the same one in the `artifact.md` example and the schema example; all
+  three now carry the host in `image_name`. The `image_name` and `registry` descriptions say the host belongs in
+  `image_name`.
 
 ### Implementation order
 
@@ -478,6 +498,7 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: a design for each finding; the open questions from the review decided as recommendations.
 - 2026-11-10: designs agreed. Design 1 implemented (`${artifact:NAME.FIELD}`), with its implementation plan.
 - 2026-11-10: design 3 implemented: token uses counted as images, `${value:}` on an artifact's image rejected.
+- 2026-11-10: design 5 implemented (`artifact_registry_mismatch`).
 - 2026-11-10: design 9 implemented: the example solution uses an artifact all three ways.
 - 2026-11-10: ADR-0058 written for designs 1 and 3. Design 2 implemented (`artifact_not_delivered`).
 - 2026-11-10: design 10 implemented: the stale `artifact-references.md` citations, by the rule "now" -> reference, "why" -> archive.

@@ -128,6 +128,45 @@ def split_registry(name: str) -> tuple[str | None, str]:
 #: The names Docker Hub answers to; an image on any of them is written without a registry.
 _DOCKER_HUB_REGISTRIES: frozenset[str] = frozenset({"docker.io", "index.docker.io", "registry-1.docker.io"})
 
+#: How `pull_registry()` and `registry_host()` name Docker Hub.
+DOCKER_HUB = "docker.io"
+
+
+def _canonical_registry(host: str) -> str:
+    host = host.lower()
+    return DOCKER_HUB if host in _DOCKER_HUB_REGISTRIES else host
+
+
+def pull_registry(image_name: str) -> str:
+    """The registry a container runtime pulls `image_name` (no tag or digest) from: its host part, lower-cased, or
+    `docker.io` when it has none (Docker's rule, `split_registry()`) or names a Docker Hub alias.
+
+    Examples:
+        "ghcr.io/org/app" -> "ghcr.io"
+        "registry:5000/img" -> "registry:5000"
+        "org/app" -> "docker.io"
+        "index.docker.io/library/redis" -> "docker.io"
+    """
+    host, _ = split_registry(image_name)
+    return _canonical_registry(host) if host is not None else DOCKER_HUB
+
+
+def registry_host(registry: str) -> str | None:
+    """A free-text registry setting (an artifact's `spec.registry`) as `pull_registry()` would name it: scheme,
+    trailing `/` and any path dropped, lower-cased, Docker Hub aliases as `docker.io`. `None` when nothing is left.
+
+    Examples:
+        "https://Registry.Example.com/" -> "registry.example.com"
+        "acr.example.io/team" -> "acr.example.io"
+        "index.docker.io" -> "docker.io"
+    """
+    text = registry.strip()
+    for scheme in ("https://", "http://"):
+        if text.lower().startswith(scheme):
+            text = text[len(scheme) :]
+    host = text.strip("/").partition("/")[0]
+    return _canonical_registry(host) if host else None
+
 
 def image_to_purl(image: str) -> str:
     """Convert a container image reference to a Package URL string (purl-spec `docker` type).

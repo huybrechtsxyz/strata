@@ -5018,3 +5018,29 @@ def test_a_compose_service_artifact_is_delivered_by_strata(tmp_path):
     context = _resolve(_helm_artifact_solution(tmp_path, module_type="compose"))
 
     assert _delivery_findings(context) == []
+
+
+# ---------------------------------------------------------------------------
+# An artifact's registry agrees with its image_name (docs/work/artifact-gap-analysis.md, design 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("image_name", "expected"),
+    [("example/api", ["artifact_registry_mismatch"]), ("registry.example.com/example/api", [])],
+)
+def test_validate_checks_an_artifacts_registry_against_its_image_name(tmp_path, image_name, expected):
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "artifacts/api.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: api\n"
+        f"spec:\n  image_name: {image_name}\n  registry: registry.example.com\n",
+    )
+
+    context = _resolve(root)
+
+    findings = [d for d in context.diagnostics.items if d.code == "artifact_registry_mismatch"]
+    assert [d.code for d in findings] == expected
+    assert all(d.source.endswith("api.yaml") for d in findings)
+    assert context.ok
