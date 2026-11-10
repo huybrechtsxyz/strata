@@ -1,6 +1,6 @@
 # Artifact gap analysis - Work
 
-- Status: in-progress (all designs agreed; designs 1, 2, 3, 5, 6 step 1, 7, 9 and 10 built; ADR-0058 written; the rest not started)
+- Status: in-progress (all designs agreed; designs 1, 2, 3, 5, 6 step 1, 7, 8, 9 and 10 built; ADR-0058 written; the rest not started)
 - Last updated: 2026-11-10
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
@@ -407,7 +407,25 @@ offers to pin it.
 leftover or a typo in a reference. `version update` skips an unused artifact, with a note.
 
 **Changes.** A solution-wide check in `semantic_checks.py` over `effective_images()` for every non-partial
-deployment; `version_controller.py` skips the unused ones. **Tests:** used by one deployment only (no warning), used by
+deployment; `version_controller.py` skips the unused ones.
+
+**Implementation plan** (refines the changes above after reading the code):
+
+1. Not in `semantic_checks.py`: it holds only an index, and importing `effective_images()` there closes the cycle
+   `effective_images` -> `value_controller` -> `solution_context` -> `semantic_checks`. The codebase has no
+   function-level imports to break a cycle, so none is added. A new `controllers/artifact_usage.py` holds
+   `used_artifacts(context)` (the artifacts some deployment's `effective_images()` lists) and
+   `check_unused_artifacts(context)`; the commands call it.
+2. `strata validate` runs it after `context.resolve()`, only when the solution is valid: an unused artifact is a
+   lint finding, and on a broken solution it would add derived noise. Other commands do not repeat it.
+3. Every deployment that is not `partial: true` and names a workspace is evaluated, with its own `spec.version`.
+   If one cannot be evaluated, `used_artifacts()` returns `None` and nothing is reported: an artifact that
+   deployment uses would otherwise be called unused.
+4. The warning is located at the artifact's `meta.name`, in its own file, and says what would count as a use.
+5. `version update`: `reconcile_version()` takes the unused names and offers no `add` or `needs_value` row for
+   them; one info finding names them (`artifact_unused`). An existing pin on an unused artifact is not a stale
+   pin and stays: the target exists.
+6. Docs: `artifact.md`, `version.md` (what `version update` skips), the changelog. **Tests:** used by one deployment only (no warning), used by
 none, used through a token only.
 
 ### 9. Show both ways in the example solution
@@ -507,6 +525,9 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 - **Design 7, built 2026-11-10** (not released), as planned. `template_secret_keys()` is now one case of
   `template_context_keys()`. The effective-images and `deploy images` test fixtures had a Terraform
   provisioner but no `execution` step, so their variables reached nothing; they gained the step.
+- **Design 8, built 2026-11-10** (not released), as planned: `controllers/artifact_usage.py`, called by
+  `strata validate` and `strata version update`, not a semantic check (an import cycle and no context there).
+  Release 3 (designs 5, 6 step 1, 7 and 8) is complete.
 
 ### Implementation order
 
@@ -536,6 +557,7 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: a design for each finding; the open questions from the review decided as recommendations.
 - 2026-11-10: designs agreed. Design 1 implemented (`${artifact:NAME.FIELD}`), with its implementation plan.
 - 2026-11-10: design 3 implemented: token uses counted as images, `${value:}` on an artifact's image rejected.
+- 2026-11-10: design 8 implemented (`artifact_unused`); release 3 complete.
 - 2026-11-10: design 7 implemented: a `store: artifact` variable counts only where it is received.
 - 2026-11-10: design 6 step 1 implemented: `deploy images` names an artifact's `integration`.
 - 2026-11-10: design 5 implemented (`artifact_registry_mismatch`).

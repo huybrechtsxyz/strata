@@ -539,6 +539,10 @@ def test_shipped_example_shows_every_way_to_use_an_artifact():
         "portainer": "declared",
     }
 
+    from strata.controllers.artifact_usage import check_unused_artifacts
+
+    assert check_unused_artifacts(context).items == [], "every artifact in the example is used"
+
 
 def _example_backend_configuration(controller: SolutionController) -> dict:
     workspace_entry = controller.index.get(PlatformKind.WORKSPACE, "main")

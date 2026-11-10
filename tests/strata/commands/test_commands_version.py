@@ -393,10 +393,19 @@ PINNED_WEB = (
 )
 
 
+#: Uses `untagged` through a token in its own properties, so the artifact is deployed: `version update` offers a pin
+#: only for an artifact some deployment uses (docs/work/artifact-gap-analysis.md, design 8).
+USES_UNTAGGED = (
+    "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+    '  workspace: main\n  properties:\n    image: "${artifact:untagged.image_ref}"\n'
+)
+
+
 def _untagged_solution(solution: Path, version: str = PINNED_WEB) -> None:
     (solution / "versions").mkdir()
     (solution / "versions" / "prd.yaml").write_text(version, encoding="utf-8")
     (solution / "untagged.yaml").write_text(UNTAGGED_ARTIFACT, encoding="utf-8")
+    (solution / "app.yaml").write_text(USES_UNTAGGED, encoding="utf-8")
 
 
 def test_update_warns_about_an_artifact_with_no_tag_and_no_pin_and_exits_zero(runner, solution):

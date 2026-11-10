@@ -93,6 +93,9 @@ token in a document it reaches, or an execution step that gets every variable (T
 `strata.variables` and `TF_VAR_<key>`; a script without `script.values`; an `output.template` that reads it).
 A variable nothing receives does not make `deploy images` or `image_tag_policy` list the artifact.
 
+An artifact that no deployment uses in any of these ways is reported by `strata validate`
+(`artifact_unused`, a warning; `--strict` fails on it), and `strata version update` does not offer a pin for it.
+
 Every way of reaching an artifact counts as using it: `strata deploy images` lists the artifact with each use in
 `via` (`variable:KEY`, `service:MODULE/SERVICE`, or `token:KIND/NAME` for the document holding an
 `${artifact:}` token), and so the SBOM, the image gates and `image_tag_policy` judge it.

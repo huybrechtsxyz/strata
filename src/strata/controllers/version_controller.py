@@ -28,6 +28,7 @@ ordering and quote style must survive a single targeted pin edit
 untouched, which a parse-and-re-dump through plain PyYAML cannot do.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -135,7 +136,11 @@ class ReconcileRow:
 
 
 def reconcile_version(
-    index: DocumentIndex, solution: SolutionModel | None, version: VersionModel
+    index: DocumentIndex,
+    solution: SolutionModel | None,
+    version: VersionModel,
+    *,
+    unused_artifacts: Collection[str] = (),
 ) -> list[ReconcileRow]:
     """Compare `version.spec.pins` against the solution's real inventory.
 
@@ -146,6 +151,11 @@ def reconcile_version(
     nothing honest to seed it with, same rule `scaffold_version()`'s own
     `--from` cloning follows. The one exception is an artifact with no
     `image_tag`: it is reported as `needs_value`, with no seed.
+
+    An artifact in `unused_artifacts` (no deployment uses it,
+    `artifact_usage.unused_artifacts()`) is offered neither as `add` nor as
+    `needs_value`: pinning what nothing deploys changes nothing. A pin it
+    already has is not stale, since the artifact exists, and is left alone.
     """
     inventory = _inventory(index, solution)
     declared: dict[str, set[str]] = {category: set() for category in PIN_CATEGORIES}
@@ -158,6 +168,8 @@ def reconcile_version(
         for name in sorted(declared[category] - real_targets.keys()):
             rows.append(ReconcileRow(category=category, name=name, action="remove"))
         for name in sorted(real_targets.keys() - declared[category]):
+            if category == "artifacts" and name in unused_artifacts:
+                continue
             seed_value = real_targets[name]
             if seed_value is not None:
                 rows.append(ReconcileRow(category=category, name=name, action="add", seed_value=seed_value))

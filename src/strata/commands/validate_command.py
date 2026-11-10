@@ -21,6 +21,7 @@ import click
 
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
+from strata.controllers.artifact_usage import check_unused_artifacts
 from strata.controllers.solution_context import open_solution
 from strata.utils.diagnostics import Diagnostics
 
@@ -72,6 +73,9 @@ def validate_command(path: Path | None, output: str, quiet: bool, verbose: bool,
             run.step("schema validated")
             context.resolve()
             run.step("cross-document references and semantics checked")
+            if context.ok:
+                # A lint finding over every deployment's images; on a broken solution it would only add noise.
+                context.diagnostics.extend(check_unused_artifacts(context))
         else:
             # Cross-document checks run over the index, and a document that
             # failed schema validation never entered it. Running them anyway

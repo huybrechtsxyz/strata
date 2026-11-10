@@ -30,6 +30,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - `strata deploy images` reports an artifact's `integration`, by name: an `INTEGRATION` column when any image
   has one, and `data.images[].integration` in JSON, so a pipeline that copies the images knows which
   credentials each one needs. Nothing is resolved from it, so no credential appears.
+- `strata validate` warns `artifact_unused` for an artifact no deployment uses: no `store: artifact` variable a
+  step receives, no module service `artifact` and no `${artifact:}` token in a document a deployment reaches.
+  `strata version update` no longer offers a pin for such an artifact, and says which it left out.
 
 ### Changed
 

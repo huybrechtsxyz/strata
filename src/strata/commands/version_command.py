@@ -26,6 +26,7 @@ import click
 from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
+from strata.controllers.artifact_usage import unused_artifacts
 from strata.controllers.path_controller import get_path
 from strata.controllers.solution_context import open_solution
 from strata.controllers.version_controller import ReconcileRow, reconcile_version, scaffold_version, set_version_pin
@@ -128,7 +129,8 @@ def version_update(name: str, start_path: Path | None, check: bool, output: str,
 
     Candidates are findings: a stale pin is a warning (as in `strata validate`), a
     target with no pin yet is informational, and an artifact with no `image_tag` and no
-    pin is a warning (it has no tag at all; give it one with `strata version set`).
+    pin is a warning (it has no tag at all; give it one with `strata version set`). An artifact no
+    deployment uses is not offered; an info finding names it (`artifact_unused`).
     With --check every candidate is an
     error and the command fails, so a pipeline can require a complete document.
 
@@ -149,13 +151,24 @@ def version_update(name: str, start_path: Path | None, check: bool, output: str,
         if entry is None:
             raise UsageError(f"No version document named '{name}' is indexed.")
 
-        rows = reconcile_version(context.controller.index, solution, cast(VersionModel, entry.model))
+        unused = unused_artifacts(context) if context.ok else []
+        rows = reconcile_version(
+            context.controller.index, solution, cast(VersionModel, entry.model), unused_artifacts=unused
+        )
         run.step(f"found {len(rows)} candidate(s)")
 
         if output == "console":
             _print_rows(rows)
 
-        run.report(_candidate_findings(rows, source=str(entry.source), check=check), root=context.root)
+        findings = _candidate_findings(rows, source=str(entry.source), check=check)
+        if unused:
+            findings.info(
+                f"Not offered, no deployment uses {'it' if len(unused) == 1 else 'them'}: artifact "
+                f"{', '.join(repr(name) for name in unused)}. `strata validate` reports it as artifact_unused.",
+                source=str(entry.source),
+                code="artifact_unused",
+            )
+        run.report(findings, root=context.root)
         if isinstance(run.reporter, JsonReporter):
             run.reporter.data = {"name": name, "candidates": [asdict(row) for row in rows]}
         run.ok = not (check and rows)
