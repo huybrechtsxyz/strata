@@ -1,6 +1,6 @@
 # Artifact gap analysis - Work
 
-- Status: in-progress (all designs agreed; release 1, designs 1, 3 and 10, built; the rest not started)
+- Status: in-progress (all designs agreed; designs 1, 2, 3 and 10 built; ADR-0058 written; the rest not started)
 - Last updated: 2026-11-10
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
@@ -182,6 +182,21 @@ spec:
 `type: helm`, using `referenced_artifact_keys()`. Docs: `module.md` (what `image` and `artifact` mean for Helm),
 `artifact.md` (the Helm example), and helm-image-delivery.md (option C is met by the token; its option B `delivered`
 flag can read "a token for this artifact is in the values").
+
+**Implementation plan** (refines the changes above after reading the code):
+
+1. `semantic_checks.py`: `_check_helm_artifact_delivery(index)`, run beside `_check_helm_release_names()`, once per
+   `type: helm` module document (a property of the module, not of a deployment). For each service with an
+   `artifact`, the artifact counts as delivered when an `${artifact:<name>.FIELD}` token, any field, appears in the
+   module's `spec.configuration` or that service's own `configuration`: those are the two parts of
+   `_render_values()` that reach the chart as values. A token in a service's `environment` does not count: it
+   becomes an environment variable, not the chart's image. Warning `artifact_not_delivered`, located at
+   `spec.services[i].artifact`, with the chart-shaped example in the message.
+2. A literal `services[].image` on a Helm module is the same problem without an artifact; it stays with
+   helm-image-delivery.md's option B (`delivered` on the image rows), not this check.
+3. Docs: `module.md` (what `image` and `artifact` mean for Helm), `artifact.md` (the warning next to the Helm
+   example), `helm-image-delivery.md` (option C met by the token; its open question on a Helm service `artifact`
+   answered), the changelog.
 
 **Tests.** The warning with no token, no warning with the token in module or service `configuration`, no warning for
 Compose; a rendered `strata-values.yaml` holding the pinned tag after `deploy run`.
@@ -394,7 +409,8 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 - [ADR-0019](../decisions/0019-version-pinning.md) - `kind: version` pins
 - [value-token-resolution.md](../design/value-token-resolution.md) - the `${kind:KEY}` tokens and where they
   resolve
-- A new ADR for design 1 (a 7th token kind, deploy time only, `store: artifact` kept for Terraform) when it is built
+- [ADR-0058](../decisions/0058-artifact-token-for-pinned-image-fields.md) - the `${artifact:NAME.FIELD}` token
+  (designs 1 and 3): deploy time only, `store: artifact` kept for Terraform, `${value:}` off the image fields
 
 ## Remaining Work / Open Questions
 
@@ -410,6 +426,10 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 - **Design 10, built 2026-11-10** (not released), as planned: 21 citations in 14 source and test files, plus the
   one unlinked mention in `version-pin-overlay.md`. Nothing in `src/` or `tests/` cites `docs/work/` or
   `docs/design/artifact-references.md` any more.
+- **Design 2, built 2026-11-10** (not released), as planned. `artifact_not_delivered` looks in the module's and the
+  service's `configuration` only. A `deploy run` test shows the pinned tag in the chart's `strata-values.yaml`.
+  Also corrected `module.md`, which said a Helm service's `configuration` lands under `values.<service>`; it lands
+  under `<module>-<service>` (or `<service>` when the names are equal).
 
 ### Implementation order
 
@@ -439,4 +459,5 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: a design for each finding; the open questions from the review decided as recommendations.
 - 2026-11-10: designs agreed. Design 1 implemented (`${artifact:NAME.FIELD}`), with its implementation plan.
 - 2026-11-10: design 3 implemented: token uses counted as images, `${value:}` on an artifact's image rejected.
+- 2026-11-10: ADR-0058 written for designs 1 and 3. Design 2 implemented (`artifact_not_delivered`).
 - 2026-11-10: design 10 implemented: the stale `artifact-references.md` citations, by the rule "now" -> reference, "why" -> archive.

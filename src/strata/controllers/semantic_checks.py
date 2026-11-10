@@ -96,6 +96,7 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import manifest_path
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 from strata.utils.report_template import check_report_template
+from strata.utils.value_tokens import referenced_artifact_keys, split_artifact_token_key
 
 log = get_logger(__name__)
 
@@ -154,6 +155,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_version_workspace(index, resolved))
     diagnostics.extend(_check_dns_records(index))
     diagnostics.extend(_check_helm_release_names(index))
+    diagnostics.extend(_check_helm_artifact_delivery(index))
     diagnostics.extend(_check_integration_versions(index))
     diagnostics.extend(_check_integration_required_disabled(index))
     return diagnostics
@@ -1950,6 +1952,48 @@ def _helm_references(
 
 def _token_note(value: str) -> str:
     return " Value tokens are not resolved in this field." if "${" in value else ""
+
+
+def _referenced_artifact_names(node: object) -> set[str]:
+    """The artifact names of every ``${artifact:NAME.FIELD}`` token in `node`, whatever the field."""
+    return {split_artifact_token_key(key)[0] for key in referenced_artifact_keys(node)}
+
+
+def _check_helm_artifact_delivery(index: DocumentIndex) -> Diagnostics:
+    """A Helm module service that names an `artifact` delivers it to the chart (docs/work/artifact-gap-analysis.md,
+    design 2).
+
+    The Helm integration writes no image into a chart's values (`helm.py`'s `_render_values()`): a service's
+    `artifact` resolves into its `image`, which `deploy images`, the SBOM and `image_tag_policy` read, but the chart
+    decides which image runs. The artifact reaches the chart only through an `${artifact:NAME.FIELD}` token in the
+    module's `spec.configuration` or the service's own `configuration`, the two parts of the values written in the
+    chart's own keys. A token in the service's `environment` becomes an environment variable, so it does not count.
+    A warning, once per module document: the artifact is still useful as a declaration, and a module may set the
+    image some other way strata cannot see.
+    """
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.MODULE):
+        module = cast(ModuleModel, entry.model)
+        if module.spec.type != "helm":
+            continue
+        module_delivers = _referenced_artifact_names(module.spec.configuration or {})
+        for position, service in enumerate(module.spec.services or []):
+            if service.artifact is None:
+                continue
+            artifact = str(service.artifact)
+            if artifact in module_delivers or artifact in _referenced_artifact_names(service.configuration or {}):
+                continue
+            diagnostics.warning(
+                f"Module '{module.meta.name}' (type helm): service '{service.name}' names artifact '{artifact}', but "
+                "strata writes no image into a chart's values, so the chart decides which image runs; deploy images, "
+                "the SBOM and image_tag_policy judge the declared one. Deliver it in the chart's own keys, for "
+                f'example configuration: {{image: {{repository: "${{artifact:{artifact}.image_name}}", '
+                f'tag: "${{artifact:{artifact}.image_tag}}"}}}}.',
+                source=str(entry.source),
+                location=f"spec.services[{position}].artifact",
+                code="artifact_not_delivered",
+            )
+    return diagnostics
 
 
 def _check_helm_release_names(index: DocumentIndex) -> Diagnostics:

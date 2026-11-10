@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 from strata.controllers.build_controller import build_run
 from strata.controllers.deploy_controller import deploy_run, tf_var_env
@@ -5374,3 +5375,28 @@ def test_deploy_run_resolves_an_artifact_token_in_a_compose_module(tmp_path: Pat
     compose_text = (build_path / "apps" / "docker-compose.deploy.yml").read_text(encoding="utf-8")
     assert "example/api:1.0.0" in compose_text
     assert "${artifact:" not in compose_text
+
+
+def test_deploy_run_delivers_a_pinned_artifact_to_a_helm_chart_through_its_values(tmp_path: Path, _capture):
+    """Design 2 (docs/work/artifact-gap-analysis.md): the chart's own keys, the deployment's pin."""
+    root = _helm_solution(tmp_path)
+    _write_artifact(root, image_tag="1.0.0", pin="2.0.0")
+    module = root / "module.yaml"
+    module.write_text(
+        module.read_text(encoding="utf-8").replace(
+            "  services:\n    - name: server\n",
+            "  services:\n    - name: server\n      artifact: api\n"
+            "  configuration:\n    image:\n"
+            '      repository: "${artifact:api.image_name}"\n      tag: "${artifact:api.image_tag}"\n',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path, pin="prd")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
+
+    assert diagnostics.ok, diagnostics.messages()
+    values = yaml.safe_load((build_path / "apps" / "auth" / "strata-values.yaml").read_text(encoding="utf-8"))
+    assert values["image"] == {"repository": "example/api", "tag": "2.0.0"}

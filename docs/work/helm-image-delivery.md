@@ -1,7 +1,7 @@
 # Helm module images - Work
 
 - Status: draft
-- Last updated: 2026-11-02
+- Last updated: 2026-11-10
 
 ## Overview
 
@@ -74,7 +74,7 @@ Charts disagree on where the image lives: `image.repository` and `image.tag`, `i
 | What the image is                                                                             | Does strata know what runs?                                                                    | Judged today     |
 | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------- |
 | Compose service `image`                                                                       | Yes                                                                                            | Yes              |
-| Artifact (`store: artifact`, or a service `artifact`)                                         | Yes for Terraform variables and Compose. A Helm service `artifact` is declared only, as below. | Yes              |
+| Artifact (`store: artifact`, or a service `artifact`)                                         | Yes for Terraform variables, Compose and an `${artifact:}` token in Helm values; a Helm service `artifact` alone is declared only. | Yes              |
 | Helm module `services[].image` or `artifact`                                                  | No: declared only                                                                              | Yes, as if known |
 | An image only the chart knows (no `services`, or extra images, or a `configuration` override) | No                                                                                             | No, silently     |
 
@@ -103,6 +103,14 @@ services:
 - Writing the same path from `configuration` is an error, not a silent override.
 - A chart that takes one `repository:tag` string needs a second form (`image_values: {path: ..., form: ref}`).
   Whether to support it is a question for a real consumer.
+
+**Met for artifacts by the `${artifact:NAME.FIELD}` token** (ADR-0058, 2026-11-10). A module writes the pinned image
+in the chart's own keys, `configuration: {image: {repository: "${artifact:x.image_name}", tag:
+"${artifact:x.image_tag}"}}`, with no `image_values` field, and `check_configuration_keys` still checks the path
+against the chart's `values.yaml`. A one-string chart takes `${artifact:x.image_ref}`. `strata validate` warns
+`artifact_not_delivered` for a Helm service that names an `artifact` with no such token
+([artifact-gap-analysis.md](artifact-gap-analysis.md), design 2). A literal `services[].image` on a Helm module still
+has no way in except writing it by hand into `configuration`.
 
 ### Sketch of option B output
 
@@ -161,8 +169,10 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
   module declare its images or a pin, which is strict.
 - **Chart-only modules.** Is there a real consumer with a chart-only module whose image tag matters? Without one,
   B is enough.
-- **A Helm service `artifact`.** It resolves into the service `image`, so it is declared only for Helm too. Should
-  it be an error without `image_values` once C exists?
+- ~~**A Helm service `artifact`.** It resolves into the service `image`, so it is declared only for Helm too. Should
+  it be an error without `image_values` once C exists?~~ Answered 2026-11-10: delivered with an `${artifact:}` token
+  in `configuration`; without one, a warning (`artifact_not_delivered`), not an error, since the artifact is still a
+  useful declaration.
 
 ### Stale statements to correct
 
@@ -182,6 +192,8 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
 
 ## Changelog
 
+- 2026-11-10: option C is met for artifacts by the `${artifact:NAME.FIELD}` token, with the `artifact_not_delivered`
+  warning; the open question on a Helm service `artifact` answered. A literal Helm service `image` is unchanged.
 - 2026-11-07: The SBOM's Helm gap ([sbom-generation.md](sbom-generation.md)) is deferred to be done together with
   this doc's work; added as plan item 6.
 - 2026-11-02: created from a review of [image-tag-policy.md](../design/image-tag-policy.md). Verified in the v2 and

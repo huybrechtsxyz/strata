@@ -252,7 +252,8 @@ record and its decisions are in [deployment-tokens.md](deployment-tokens.md).
 ## The 7th kind: `${artifact:NAME.FIELD}` (2026-11-10)
 
 An artifact's `image_name`, `image_tag` or `image_ref`, with the deployment's version pin applied. It replaces a
-`store: artifact` variable declared only to forward one field. The design is design 1 in
+`store: artifact` variable declared only to forward one field. The decision is
+[ADR-0058](../decisions/0058-artifact-token-for-pinned-image-fields.md), the design is design 1 in
 [artifact-gap-analysis.md](../work/artifact-gap-analysis.md); it copies `${deployment:}` point for point.
 
 - **Syntax.** `artifact` is in `VALUE_TOKEN_KINDS` and both regexes. The key is `NAME.FIELD`, split at its first `.`

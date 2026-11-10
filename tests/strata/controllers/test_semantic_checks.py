@@ -4929,3 +4929,92 @@ def test_an_artifact_token_in_an_environment_store_value_is_caught(tmp_path):
     context = _resolve(root)
     assert not context.ok
     assert any(d.code == "store_value_token_unsupported" for d in context.diagnostics.errors)
+
+
+# ---------------------------------------------------------------------------
+# A Helm service's artifact reaches the chart only through an ${artifact:} token in
+# its values (docs/work/artifact-gap-analysis.md, design 2)
+# ---------------------------------------------------------------------------
+
+
+def _helm_artifact_solution(
+    tmp_path: Path, *, module_type: str = "helm", module_configuration: str = "", service_extra: str = ""
+) -> Path:
+    """The base solution with artifact `immich` and a module `photos` whose service `server` names it."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "artifacts/immich.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: immich\n"
+        "spec:\n  image_name: ghcr.io/immich-app/immich-server\n  image_tag: v1.120.0\n",
+    )
+    _write(
+        root,
+        "modules/photos.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: photos\nspec:\n"
+        f"  type: {module_type}\n  source:\n    source_path: charts/photos\n"
+        f"  services:\n    - name: server\n      artifact: immich\n{service_extra}{module_configuration}",
+    )
+    return root
+
+
+def _delivery_findings(context) -> list:
+    return [d for d in context.diagnostics.items if d.code == "artifact_not_delivered"]
+
+
+def test_a_helm_service_artifact_without_a_token_is_not_delivered(tmp_path):
+    context = _resolve(_helm_artifact_solution(tmp_path))
+
+    findings = _delivery_findings(context)
+    assert [(d.severity.value, d.location) for d in findings] == [("warning", "spec.services[0].artifact")]
+    message = findings[0].message
+    assert "photos" in message
+    assert "server" in message
+    assert "${artifact:immich.image_tag}" in message
+    assert context.ok, "a warning, not an error"
+
+
+def test_a_token_in_the_module_configuration_delivers_the_artifact(tmp_path):
+    configuration = (
+        "  configuration:\n    image:\n"
+        '      repository: "${artifact:immich.image_name}"\n      tag: "${artifact:immich.image_tag}"\n'
+    )
+    context = _resolve(_helm_artifact_solution(tmp_path, module_configuration=configuration))
+
+    assert _delivery_findings(context) == []
+
+
+def test_a_token_in_the_service_configuration_delivers_the_artifact(tmp_path):
+    service_extra = '      configuration:\n        image: "${artifact:immich.image_ref}"\n'
+    context = _resolve(_helm_artifact_solution(tmp_path, service_extra=service_extra))
+
+    assert _delivery_findings(context) == []
+
+
+def test_a_token_in_the_service_environment_does_not_deliver_the_artifact(tmp_path):
+    """It becomes an environment variable of the chart's pods, not the image the chart runs."""
+    service_extra = "      environment:\n        - key: IMAGE\n          value: ${artifact:immich.image_ref}\n"
+    context = _resolve(_helm_artifact_solution(tmp_path, service_extra=service_extra))
+
+    assert len(_delivery_findings(context)) == 1
+
+
+def test_a_token_for_another_artifact_does_not_deliver_this_one(tmp_path):
+    root = _helm_artifact_solution(
+        tmp_path, module_configuration='  configuration:\n    sidecar: "${artifact:redis.image_ref}"\n'
+    )
+    _write(
+        root,
+        "artifacts/redis.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: redis\nspec:\n  image_name: redis\n",
+    )
+    context = _resolve(root)
+
+    assert len(_delivery_findings(context)) == 1
+
+
+def test_a_compose_service_artifact_is_delivered_by_strata(tmp_path):
+    """Compose writes the service's image into the compose file, so there is nothing to warn about."""
+    context = _resolve(_helm_artifact_solution(tmp_path, module_type="compose"))
+
+    assert _delivery_findings(context) == []

@@ -230,7 +230,9 @@ class ModuleServiceModel(PlatformBaseModel):
         None,
         description="Name of an Artifact document that supplies this service's image (its "
         "`image_name` and `image_tag`; a Version document can pin it). Mutually "
-        "exclusive with `image`: use `image` for a literal, unpinned string.\n\n"
+        "exclusive with `image`: use `image` for a literal, unpinned string. For a Helm "
+        "module it is a declaration only: write it into the chart's values with an "
+        "`${artifact:NAME.FIELD}` token in `configuration`.\n\n"
         "Design notes: Name of an Artifact document supplying this service's image "
         "(image_name[:image_tag], kind: version's pins.artifacts-pinnable). Mutually "
         "exclusive with `image` — use `image` for a literal, unpinned string; use "

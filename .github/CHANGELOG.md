@@ -19,6 +19,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   Terraform the value as a variable. An artifact used through the token is an image the deployment runs:
   `strata deploy images` lists it with `via: token:KIND/NAME`, and the SBOM, the image gates and `image_tag_policy`
   judge it.
+- `strata validate` warns `artifact_not_delivered` for a Helm module service that names an `artifact` while no
+  `${artifact:NAME.FIELD}` token for it appears in the module's or the service's `configuration`. Strata writes no
+  image into a chart's values, so such an artifact (and its version pin) changes `deploy images` and the SBOM but not
+  what runs. Deliver it in the chart's own keys, for example
+  `configuration: {image: {repository: "${artifact:NAME.image_name}", tag: "${artifact:NAME.image_tag}"}}`.
 
 ### Changed
 
