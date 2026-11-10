@@ -112,7 +112,8 @@ class EffectiveImage:
     `origin` is `artifact` (a `kind: artifact`, reached through a `store: artifact` variable or a module
     service's `artifact`) or `module-service` (a module service's literal `image`). `name` is the artifact
     or service name; `artifact`/`module` say which document it came from, and `via` lists every use
-    (`variable:KEY`, `service:MODULE/SERVICE`).
+    (`variable:KEY`, `service:MODULE/SERVICE`, `token:KIND/NAME` for a document holding an
+    `${artifact:}` token).
 
     `image_tag` is `None` when neither a pin nor the declaration supplies one, and `image_ref` is then the
     bare name. `tag_source` is `pin`, `declared` or `none`; `pin_version` names the version document of a

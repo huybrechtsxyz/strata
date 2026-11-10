@@ -955,15 +955,20 @@ def test_resolve_document_value_references_rejects_a_field_a_version_pin_overrid
     assert f"pins.{category}" in diagnostics.items[0].message
 
 
-def test_resolve_document_value_references_points_an_artifact_tag_reference_at_store_artifact(tmp_path):
+@pytest.mark.parametrize("field", ["image_name", "image_tag"])
+def test_resolve_document_value_references_points_an_artifact_image_at_the_artifact_token(tmp_path, field):
+    """Design 3 (docs/work/artifact-gap-analysis.md): an image read through `${value:}` is never pinned and
+    never listed, so both image fields are rejected and the message names the token."""
     root = _solution(tmp_path)
     _artifact(root, "api", image_name="int/api", image_tag="1.0.0")
-    _probe(root, "${value:artifact.api.spec.image_tag}")
+    _probe(root, f"${{value:artifact.api.spec.{field}}}")
     context = _context(root)
 
-    _values, diagnostics = resolve_document_value_references(context.controller.index)
+    values, diagnostics = resolve_document_value_references(context.controller.index)
 
-    assert "store: artifact" in diagnostics.items[0].message
+    assert values == {}
+    assert [d.code for d in diagnostics.items] == ["value_reference_pinnable_field"]
+    assert f"${{artifact:api.{field}}}" in diagnostics.items[0].message
 
 
 def test_pin_category_covers_the_chart_version_path_and_ignores_other_module_fields():
@@ -975,19 +980,26 @@ def test_pin_category_covers_the_chart_version_path_and_ignores_other_module_fie
     assert _pin_category(PlatformKind.TENANT, ["spec", "image_tag"]) is None
 
 
-def test_resolve_document_value_references_still_resolves_unpinned_artifact_and_module_fields(tmp_path):
+def test_resolve_document_value_references_still_resolves_free_form_artifact_and_module_fields(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "api", image_name="int/api", image_tag="1.0.0")
+    _write(
+        root,
+        "api.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: api\n"
+        "spec:\n  image_name: int/api\n  registry: registry.example.com\n  configuration:\n    team: core\n",
+    )
     _write(root, "module.yaml", _PINNABLE_MODULE)
-    _probe(root, "${value:artifact.api.spec.image_name}")
-    _probe(root, "${value:module.web-module.spec.services.web.name}", name="probe2")
+    _probe(root, "${value:artifact.api.spec.registry}")
+    _probe(root, "${value:artifact.api.spec.configuration.team}", name="probe2")
+    _probe(root, "${value:module.web-module.spec.services.web.name}", name="probe3")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
 
     assert diagnostics.ok, diagnostics.messages()
     assert values == {
-        "artifact.api.spec.image_name": "int/api",
+        "artifact.api.spec.registry": "registry.example.com",
+        "artifact.api.spec.configuration.team": "core",
         "module.web-module.spec.services.web.name": "web",
     }
 

@@ -16,7 +16,17 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   `store: artifact` variable declared only to pass one field along. `${artifact:NAME.image_tag}` on an artifact with
   no tag and no pin is an error (`unavailable_artifact_token`), never an empty tag; an unknown artifact or field is
   `unknown_artifact_token`. `strata validate` judges both per deployment. A `store: artifact` variable still gives
-  Terraform the value as a variable.
+  Terraform the value as a variable. An artifact used through the token is an image the deployment runs:
+  `strata deploy images` lists it with `via: token:KIND/NAME`, and the SBOM, the image gates and `image_tag_policy`
+  judge it.
+
+### Changed
+
+- `strata validate` rejects `${value:artifact.NAME.spec.image_name}`, as it already rejected `spec.image_tag`
+  (`value_reference_pinnable_field`). Such an image was never pinned and never listed by `deploy images`, the SBOM
+  or `image_tag_policy`. Replace it with `${artifact:NAME.image_name}`, which the message names. The artifact's
+  free-form fields (`spec.configuration.*`, `spec.properties.*`, `spec.registry`, ...) stay readable through
+  `${value:}`.
 
 ## [2.6.0] - 2026-11-09
 

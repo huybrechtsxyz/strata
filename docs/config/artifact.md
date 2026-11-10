@@ -20,7 +20,8 @@ field (see [`module`](module.md)).
   whatever pulls or copies the image (your pipeline, the runtime)
 - `spec.properties` / `spec.configuration` / `spec.custom` — free-form/passthrough data, never
   merged and never read by strata. Reach a literal field from another document's string with
-  `${value:artifact.<name>.spec.configuration.<key>}`
+  `${value:artifact.<name>.spec.configuration.<key>}`. `spec.image_name` and `spec.image_tag` cannot be
+  read that way (`value_reference_pinnable_field`): use the `${artifact:NAME.FIELD}` token below
 
 ## Example
 
@@ -76,8 +77,11 @@ variables:
     field: image_tag
 ```
 
-The pinned tag is also what a build writes to `strata.variables`. `${value:artifact.<name>.spec.image_tag}` is
-rejected, as it would read the unpinned tag; use the token.
+The pinned tag is also what a build writes to `strata.variables`.
+
+Every way of reaching an artifact counts as using it: `strata deploy images` lists the artifact with each use in
+`via` (`variable:KEY`, `service:MODULE/SERVICE`, or `token:KIND/NAME` for the document holding an
+`${artifact:}` token), and so the SBOM, the image gates and `image_tag_policy` judge it.
 
 To see which images a deployment runs, with the tag after the pin and where it came from, run
 `strata deploy images DEPLOYMENT [--pin NAME] -o json`. It reads the solution only (no build, no

@@ -1,6 +1,6 @@
 # Artifact gap analysis - Work
 
-- Status: in-progress (all designs agreed; design 1 built, the rest not started)
+- Status: in-progress (all designs agreed; designs 1 and 3 built, the rest not started)
 - Last updated: 2026-11-10
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
@@ -212,6 +212,26 @@ hole.
 - `controllers/value_references.py`: `_pin_category()` becomes `_artifact_field_rule()` / `_pin_category()`, so
   `spec.image_name` is rejected with the token hint even though no pin overrides it.
 
+**Implementation plan** (refines the changes above after reading the code):
+
+1. A new `controllers/reachable_documents.py` with `ReachedDocument` (model, kind, name, source, claimed),
+   `documents_reachable_from_workspace()` and `reachable_environment_names()` moved from `semantic_checks.py`, and
+   `documents_reached_by_deployment()`: the workspace's documents plus the deployment, its tenant and its
+   environments, which `_check_deployment_value_tokens()` added inline. `enabled_only=True` leaves out a module
+   reached only through a disabled namespace reference, matching the services `effective_images()` already counts.
+2. `semantic_checks.py` uses it, with every document as before (`enabled_only=False`: a disabled module is still
+   validated).
+3. `effective_images()` scans each reached document (`meta` left out, as the token checks do) with
+   `referenced_artifact_keys()` and adds a use `token:<kind>/<name>` per artifact, once per document. An unknown
+   artifact is skipped, as for a variable; `strata validate` reports it.
+4. `value_references.py`: an artifact's `spec.image_name` and `spec.image_tag` are rejected with
+   `value_reference_pinnable_field` and a hint naming the token. The module and asset cases are unchanged.
+5. Docs: `artifact.md`, `cross-document-value-references.md`, the `via` descriptions (`EffectiveImage`, the SBOM
+   collector, `sbom-generation.md`), the changelog (a `Changed` entry for the rejection).
+
+A module reference's own `configuration` lives in the namespace document, which the walk does not include; it is
+"accepted, not applied yet", so a token there reaches nothing and is rightly not counted.
+
 **Tests.** A token in a Helm value, a Terraform payload and a script argument each listed by `deploy images` with its
 `via`; `image_tag_policy` failing on a token-delivered image; the `${value:}` rejection and its hint; a free-form
 field still readable.
@@ -367,8 +387,11 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 
 - **Design 1, built 2026-11-10** (not released). As planned, with one difference: the `${artifact:}` entries hold
   every artifact in the solution, so a script without `script.values` sees them all in `STRATA_VALUES` (they are not
-  secrets). Until design 3 lands, an image delivered only through the token is not in `deploy images`, the SBOM or
-  `image_tag_policy`; release 1 must not ship without design 3.
+  secrets).
+- **Design 3, built 2026-11-10** (not released), as planned. `effective_images()` scans the same documents
+  `strata validate` checks (`controllers/reachable_documents.py`), leaving out modules reached only through a
+  disabled namespace reference; each use is `token:<kind>/<name>`. `${value:artifact.N.spec.image_name}` is now
+  rejected, with the token in the message.
 
 ### Implementation order
 
@@ -397,3 +420,4 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: created from a review of artifact use in configuration.
 - 2026-11-10: a design for each finding; the open questions from the review decided as recommendations.
 - 2026-11-10: designs agreed. Design 1 implemented (`${artifact:NAME.FIELD}`), with its implementation plan.
+- 2026-11-10: design 3 implemented: token uses counted as images, `${value:}` on an artifact's image rejected.

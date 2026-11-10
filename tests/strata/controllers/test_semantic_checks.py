@@ -1658,13 +1658,12 @@ def test_topology_is_reachable_as_part_of_the_workspace_document(tmp_path):
     """Topology is inline on `WorkspaceModel.spec.topology` now (ADR-0028) —
     there is no separate Topology document to add to the reachable set;
     its fields (and any tokens in them) are already covered by the
-    `(workspace, False, source)` entry `_documents_reachable_from_workspace()`
-    always includes first."""
-    from strata.controllers.semantic_checks import _documents_reachable_from_workspace
+    workspace entry `documents_reachable_from_workspace()` always includes first."""
+    from strata.controllers.reachable_documents import documents_reachable_from_workspace
 
     context = _resolve(_base_solution(tmp_path))
-    documents = _documents_reachable_from_workspace(context.controller.index, "main")
-    kinds = {type(document).__name__ for document, _claimed, _source in documents}
+    documents = documents_reachable_from_workspace(context.controller.index, "main")
+    kinds = {type(document.model).__name__ for document in documents}
     assert "WorkspaceModel" in kinds
     assert "ProviderModel" in kinds
     assert "ResourceModel" in kinds

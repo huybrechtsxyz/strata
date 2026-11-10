@@ -107,6 +107,21 @@ def _walk_value_reference_path(node: Any, segments: list[str]) -> Any:
     return node
 
 
+#: An artifact's image fields: `${value:}` may not read them (docs/work/artifact-gap-analysis.md, design 3).
+_ARTIFACT_IMAGE_FIELDS = ("image_name", "image_tag")
+
+
+def _artifact_image_field(kind: PlatformKind, path: list[str]) -> str | None:
+    """The artifact image field `path` names (`image_name` or `image_tag`), if any.
+
+    `${value:}` resolves once per solution: it cannot see a deployment's pin, and an image reached through it is
+    invisible to `deploy images`, the SBOM and `image_tag_policy`. `${artifact:NAME.FIELD}` does both.
+    """
+    if kind is PlatformKind.ARTIFACT and len(path) == 2 and path[0] == "spec" and path[1] in _ARTIFACT_IMAGE_FIELDS:
+        return path[1]
+    return None
+
+
 def _pin_category(kind: PlatformKind, path: list[str]) -> str | None:
     """The `kind: version` pin category that overrides the field `path` names on a `kind` document, if any.
 
@@ -175,7 +190,8 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
        instead, exactly matching "referencing a whole sub-object is out
        of scope."
     4a. The path is not a field a `kind: version` pin overrides
-       (`_pin_category()`, `value_reference_pinnable_field`).
+       (`_pin_category()`), nor an artifact's `image_name`
+       (`_artifact_image_field()`); both `value_reference_pinnable_field`.
     5. That leaf is a scalar — `str`/`int`/`float`/`bool`, never a
        `dict`/`list`/`None` (`value_reference_not_scalar`).
     6. If the leaf is a string, it contains no `${...}` token of any kind
@@ -263,17 +279,22 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
                         code="value_reference_invalid_path",
                     )
                     continue
+                artifact_field = _artifact_image_field(target_kind, path_segments)
+                if artifact_field is not None:
+                    diagnostics.error(
+                        f"'${{value:{full_key}}}' reads an artifact's image, which '${{value:}}' resolves without "
+                        "the deployment's version pin ('pins.artifacts') and hides from 'deploy images', the SBOM "
+                        f"and image_tag_policy. Use '${{artifact:{name}.{artifact_field}}}' instead.",
+                        source=str(entry.source),
+                        location=location,
+                        code="value_reference_pinnable_field",
+                    )
+                    continue
                 pin_category = _pin_category(target_kind, path_segments)
                 if pin_category is not None:
-                    hint = (
-                        " Use a 'store: artifact' variable with field 'image_tag' instead."
-                        if pin_category == "artifacts"
-                        else ""
-                    )
                     diagnostics.error(
                         f"'${{value:{full_key}}}' reads a field that a kind: version pin "
-                        f"('pins.{pin_category}') overrides per deployment, and '${{value:}}' cannot see the pin."
-                        f"{hint}",
+                        f"('pins.{pin_category}') overrides per deployment, and '${{value:}}' cannot see the pin.",
                         source=str(entry.source),
                         location=location,
                         code="value_reference_pinnable_field",

@@ -35,7 +35,7 @@ class ImageCollector(SbomCollector):
     services that name an `artifact`, which have no `image` of their own.
 
     Deduplicates by PURL, and lists every use of an image in a `strata:used-by`
-    property (`service:MODULE/SERVICE`, `variable:KEY`, as `strata deploy images`
+    property (`service:MODULE/SERVICE`, `variable:KEY`, `token:KIND/NAME`, as `strata deploy images`
     names them). A floating tag (`latest`, `main`, `dev`, ...) gets a
     `strata:tag-stability=floating` property plus a `Severity.WARNING`
     diagnostic - informational, never fails the build. An artifact whose tag a

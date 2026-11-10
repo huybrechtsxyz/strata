@@ -111,7 +111,7 @@ semver-shaped) gets the property `strata:tag-stability: floating`. An artifact i
 `kind: version` pin chose is floating only when the tag is a mutable alias.
 
 An image and a declared chart list where they are used in `strata:used-by`, comma-separated in
-first-use order: `service:MODULE/SERVICE` and `variable:KEY` for images (the names `strata deploy
+first-use order: `service:MODULE/SERVICE`, `variable:KEY` and `token:KIND/NAME` for images (the names `strata deploy
 images` and the image tag policy use; an artifact's come from `graph.images`), `module:NAME` for a
 chart. One property rather than a namespace, a module and a service property, because a component
 used in several places needs each module kept with its service. A chart found only in a

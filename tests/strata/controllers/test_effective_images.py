@@ -160,3 +160,77 @@ def test_artifact_rows_come_before_module_service_rows(tmp_path):
     context = open_solution(root).require_valid()
     rows = effective_images(context, resolve_deployment(context, "app"))
     assert [row.origin for row in rows] == ["artifact", "module-service"]
+
+
+# `${artifact:NAME.FIELD}` uses (docs/work/artifact-gap-analysis.md, design 3): an image delivered only
+# through the token is still an image the deployment runs.
+
+_TOKEN_SERVICE = (
+    "    - name: redis\n      image: redis:7\n"
+    "      environment:\n        - key: CATALOG_IMAGE\n          value: ${artifact:catalog.image_ref}\n"
+)
+
+
+def _append(root: Path, relative: str, text: str) -> None:
+    path = root / relative
+    path.write_text(path.read_text(encoding="utf-8") + text, encoding="utf-8")
+
+
+def test_a_token_in_a_module_lists_the_artifact_with_the_module_as_its_use(tmp_path):
+    row = _images(_solution(tmp_path, variable_artifacts=(), services=_TOKEN_SERVICE))["catalog"]
+    assert (row.origin, row.artifact, row.image_ref) == ("artifact", "catalog", "example/catalog-api:1.0.0")
+    assert row.via == ("token:module/stack",)
+
+
+def test_a_token_in_the_workspace_or_an_environment_is_a_use(tmp_path):
+    root = _solution(tmp_path, variable_artifacts=())
+    _append(root, "workspace.yaml", "  custom:\n    api_image: ${artifact:catalog.image_name}\n")
+    environment = root / "environment.yaml"
+    environment.write_text(
+        _HEADER.format(kind="environment", name="prd") + "  properties:\n    tag: ${artifact:catalog.image_tag}\n",
+        encoding="utf-8",
+    )
+    assert _images(root)["catalog"].via == ("token:workspace/main", "token:environment/prd")
+
+
+def test_a_token_in_a_disabled_module_is_not_a_use(tmp_path):
+    images = _images(_solution(tmp_path, variable_artifacts=(), services=_TOKEN_SERVICE, module_enabled=False))
+    assert "catalog" not in images
+
+
+def test_a_token_only_artifact_gets_the_deployments_pin(tmp_path):
+    root = _solution(
+        tmp_path, variable_artifacts=(), services=_TOKEN_SERVICE, pins="    artifacts:\n      catalog: '2.0.0'\n"
+    )
+    row = _images(root)["catalog"]
+    assert (row.image_tag, row.tag_source, row.pin_version) == ("2.0.0", "pin", "prd")
+
+
+def test_every_use_is_listed_once_variables_first(tmp_path):
+    services = _TOKEN_SERVICE + "      command: [run, '${artifact:catalog.image_tag}']\n"
+    row = _images(_solution(tmp_path, services=services))["catalog"]
+    assert row.via == ("variable:CATALOG_TAG", "token:module/stack")
+
+
+def test_an_escaped_token_is_not_a_use(tmp_path):
+    services = "    - name: redis\n      image: redis:7\n      command: [echo, '$" + "${artifact:catalog.image_tag}']\n"
+    assert "catalog" not in _images(_solution(tmp_path, variable_artifacts=(), services=services))
+
+
+def test_image_tag_policy_judges_an_image_delivered_only_through_the_token(tmp_path):
+    from strata.controllers.image_tag_policy import check_image_tag_policy
+    from strata.controllers.value_controller import resolve_deployment_workspace
+
+    root = _solution(
+        tmp_path,
+        artifact_spec="  image_name: example/catalog-api\n",
+        variable_artifacts=(),
+        services="    - name: redis\n      image: redis:7\n      command: [run, '${artifact:catalog.image_ref}']\n",
+    )
+    _append(root, "workspace.yaml", "  image_tag_policy: {}\n")
+    context = open_solution(root).require_valid()
+    deployment, workspace = resolve_deployment_workspace(context, "app")
+
+    diagnostics = check_image_tag_policy(context, deployment, workspace)
+
+    assert any("catalog" in message for message in diagnostics.messages())
