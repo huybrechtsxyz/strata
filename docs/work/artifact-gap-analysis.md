@@ -1,6 +1,6 @@
 # Artifact gap analysis - Work
 
-- Status: in-progress (all designs agreed; designs 1, 2, 3 and 10 built; ADR-0058 written; the rest not started)
+- Status: in-progress (all designs agreed; designs 1, 2, 3, 9 and 10 built; ADR-0058 written; the rest not started)
 - Last updated: 2026-11-10
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
@@ -371,6 +371,22 @@ Compose module `portainer` through `services[].artifact` instead of its literal 
 prd-deployment` then shows both `via` kinds. The Helm module `authentik` stays as it is: it shows the chart-only
 case, documented by design 2.
 
+**Implementation plan** (refines the decision above after reading `config/` and the tests over it):
+
+1. `config/artifacts/portainer.yaml`: `image_name: portainer/portainer-ce`, `image_tag: "2.39.3-alpine"`. The tag is
+   declared because `prd-acme-deployment` has no version document and the workspace's `image_tag_policy` requires
+   a tag; `prd-deployment` and `prd-contoso-deployment` take the pin.
+2. `config/modules/portainer.yaml`: the service names `artifact: portainer` instead of its literal `image`.
+3. `config/versions/prd.yaml`: `pins.images.portainer` moves to `pins.artifacts.portainer` (the same tag, the
+   shorthand form), with the comments saying which document each pin reaches.
+4. The token: the workspace gains `custom: {api_image: "${artifact:example-api.image_ref}"}`, which reaches Terraform
+   as `strata.custom.api_image`, the full pinned reference with no second variable. `API_IMAGE_TAG` stays, as the
+   `store: artifact` way of giving Terraform a variable.
+5. The shipped-example tests in `test_solution_controller.py` assert the three `via` kinds, the pins and the policy
+   for both deployments, and the token in the deploy-time tfvars. `test_shipped_example_validates_with_no_warnings`
+   already guards against a stale pin.
+6. The docs examples in `module.md` and `version.md` show the literal-image form on purpose and stay.
+
 ### 10. Fix the stale references
 
 **Decision.** Every reference to `docs/work/artifact-references.md` or `docs/design/artifact-references.md` points
@@ -430,6 +446,9 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
   service's `configuration` only. A `deploy run` test shows the pinned tag in the chart's `strata-values.yaml`.
   Also corrected `module.md`, which said a Helm service's `configuration` lands under `values.<service>`; it lands
   under `<module>-<service>` (or `<service>` when the names are equal).
+- **Design 9, built 2026-11-10** (not released), as planned. `strata deploy images prd-deployment --path config` now
+  lists `example-api` (`variable:API_IMAGE_TAG`, `token:workspace/main`) and `portainer`
+  (`service:portainer/portainer`), both `pin prd`; `prd-acme-deployment` shows both as `declared`.
 
 ### Implementation order
 
@@ -459,5 +478,6 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: a design for each finding; the open questions from the review decided as recommendations.
 - 2026-11-10: designs agreed. Design 1 implemented (`${artifact:NAME.FIELD}`), with its implementation plan.
 - 2026-11-10: design 3 implemented: token uses counted as images, `${value:}` on an artifact's image rejected.
+- 2026-11-10: design 9 implemented: the example solution uses an artifact all three ways.
 - 2026-11-10: ADR-0058 written for designs 1 and 3. Design 2 implemented (`artifact_not_delivered`).
 - 2026-11-10: design 10 implemented: the stale `artifact-references.md` citations, by the rule "now" -> reference, "why" -> archive.

@@ -75,6 +75,11 @@ spec:
         - resource: edge-waf
   default_tags:
     managed-by: strata
+  custom:
+    # Reaches Terraform as `strata.custom.api_image`: the full image reference with the deployment's pin applied,
+    # resolved at deploy. No variable to declare; `API_IMAGE_TAG` (environments/prd.yaml) is the `store: artifact`
+    # way, for a Terraform root that wants the tag as a variable of its own.
+    api_image: ${artifact:example-api.image_ref}
   # Guard rail on the tag of every image a deployment runs: each needs a tag, and `latest`, `main` and the
   # other mutable aliases are rejected. `build run`, `deploy run` and `deploy images` judge it, offline.
   image_tag_policy: {}

@@ -1,0 +1,11 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: artifact
+meta:
+  name: portainer
+  annotations:
+    description: "The image the portainer Compose module runs (modules/portainer.yaml); strata writes it into the compose file"
+spec:
+  image_name: portainer/portainer-ce
+  # Declared, because a deployment without a version document (deployments/prd-acme.yaml) still needs a tag for
+  # `image_tag_policy` (workspaces/main.yaml). versions/prd.yaml pins it for the deployments that use that version.
+  image_tag: "2.39.3-alpine"
