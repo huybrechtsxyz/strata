@@ -2,12 +2,22 @@
 """Tests for `effective_images()` (docs/work/effective-images.md)."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
-from strata.controllers.effective_images import effective_images
+import pytest
+import yaml
+
+from strata.controllers.effective_images import _received_variable_keys, effective_images
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import resolve_deployment
+from strata.models.workspace_model import WorkspaceModel
 
 _HEADER = "apiVersion: strata.huybrechts.xyz/v2\nkind: {kind}\nmeta:\n  name: {name}\nspec:\n"
+
+_TERRAFORM_STEP = (
+    "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n"
+    "  execution:\n    - name: infra\n      provisioner: tf\n      namespaces:\n        - apps\n"
+)
 
 
 def _write(root: Path, relative: str, kind: str, name: str, spec: str) -> None:
@@ -25,8 +35,11 @@ def _solution(
     pins: str = "",
     module_enabled: bool = True,
     deployment_version: bool = True,
+    steps: str = _TERRAFORM_STEP,
 ) -> Path:
-    """One workspace reaching one compose module, one artifact `catalog`, one unreferenced artifact `orphan`."""
+    """One workspace reaching one compose module, one artifact `catalog`, one unreferenced artifact `orphan`.
+    `steps` are the workspace's provisioners and execution steps: by default one Terraform step, which receives
+    every variable."""
     root = tmp_path / "sln"
     root.mkdir()
     (root / "strata.yaml").write_text(_HEADER.format(kind="solution", name="s") + "  {}\n", encoding="utf-8")
@@ -36,8 +49,7 @@ def _solution(
         "workspace.yaml",
         "workspace",
         "main",
-        "  providers:\n    - p1\n  namespaces:\n    - apps\n"
-        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n",
+        "  providers:\n    - p1\n  namespaces:\n    - apps\n" + steps,
     )
     _write(
         root,
@@ -234,3 +246,80 @@ def test_image_tag_policy_judges_an_image_delivered_only_through_the_token(tmp_p
     diagnostics = check_image_tag_policy(context, deployment, workspace)
 
     assert any("catalog" in message for message in diagnostics.messages())
+
+
+# A `store: artifact` variable counts only where the deployment can receive it
+# (docs/work/artifact-gap-analysis.md, design 7).
+
+_HELM_STEP = (
+    "  provisioners:\n    - name: charts\n      tool: helm\n      source:\n        source_path: infra\n"
+    "  execution:\n    - name: apps\n      provisioner: charts\n      namespaces:\n        - apps\n"
+)
+
+
+def test_a_variable_no_step_receives_does_not_list_its_artifact(tmp_path):
+    """A Helm step takes no variables except through a token, and nothing reads `${var:CATALOG_TAG}`."""
+    assert "catalog" not in _images(_solution(tmp_path, steps=_HELM_STEP))
+
+
+def test_a_workspace_without_execution_steps_delivers_no_variable(tmp_path):
+    steps = "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n"
+    assert "catalog" not in _images(_solution(tmp_path, steps=steps))
+
+
+def test_a_var_token_in_a_reached_document_is_what_delivers_the_variable(tmp_path):
+    services = (
+        "    - name: redis\n      image: redis:7\n"
+        "      environment:\n        - key: TAG\n          value: ${var:CATALOG_TAG}\n"
+    )
+    row = _images(_solution(tmp_path, steps=_HELM_STEP, services=services))["catalog"]
+    assert row.via == ("variable:CATALOG_TAG",)
+
+
+def _workspace(provisioner: str) -> WorkspaceModel:
+    return WorkspaceModel.model_validate(
+        yaml.safe_load(
+            "meta:\n  name: main\nspec:\n  providers: [p1]\n  namespaces: [apps]\n"
+            f"  provisioners:\n    - name: step\n{provisioner}"
+            "  execution:\n    - name: run\n      provisioner: step\n      namespaces: [apps]\n"
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("provisioner", "expected"),
+    [
+        ("      tool: terraform\n      source: {source_path: infra}\n", {"A", "B"}),
+        ("      tool: opentofu\n      source: {source_path: infra}\n", {"A", "B"}),
+        ("      tool: script\n      source: {source_path: s}\n      script: {file: run.py}\n", {"A", "B"}),
+        ("      tool: script\n      source: {source_path: s}\n      script: {file: run.py, values: [A]}\n", {"A"}),
+        ("      tool: helm\n      source: {source_path: c}\n", set()),
+    ],
+    ids=["terraform", "unknown-tool", "script-all-values", "script-listed-values", "helm"],
+)
+def test_which_steps_receive_variables_without_a_token(tmp_path, provisioner, expected):
+    context = SimpleNamespace(root=tmp_path)
+    assert _received_variable_keys(context, _workspace(provisioner), {"A", "B"}) == expected
+
+
+@pytest.mark.parametrize(
+    ("template", "expected"),
+    [
+        ("{{ variables.A }}", {"A"}),
+        ("{{ variables['B'] }}", {"B"}),
+        ("{{ secrets.A }}", set()),
+        ("{% for k, v in variables.items() %}{{ v }}{% endfor %}", {"A", "B"}),
+        ("{{ variables[name] }}", {"A", "B"}),
+    ],
+)
+def test_an_output_template_receives_the_variables_it_reads(tmp_path, template, expected):
+    (tmp_path / "out.j2").write_text(template, encoding="utf-8")
+    provisioner = "      tool: helm\n      source: {source_path: c}\n      output: {template: out.j2}\n"
+    context = SimpleNamespace(root=tmp_path)
+    assert _received_variable_keys(context, _workspace(provisioner), {"A", "B"}) == expected
+
+
+def test_an_output_template_that_cannot_be_read_receives_every_variable(tmp_path):
+    provisioner = "      tool: helm\n      source: {source_path: c}\n      output: {template: missing.j2}\n"
+    context = SimpleNamespace(root=tmp_path)
+    assert _received_variable_keys(context, _workspace(provisioner), {"A", "B"}) == {"A", "B"}

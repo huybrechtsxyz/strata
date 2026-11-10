@@ -29,7 +29,8 @@ def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "", integr
         "workspace",
         "main",
         "  providers:\n    - p1\n  namespaces:\n    - apps\n"
-        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n" + policy,
+        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: infra\n      provisioner: tf\n      namespaces:\n        - apps\n" + policy,
     )
     _write(
         root,

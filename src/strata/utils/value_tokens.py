@@ -102,6 +102,24 @@ def split_artifact_token_key(key: str) -> tuple[str, str | None]:
     return name, (field if dot and field else None)
 
 
+def referenced_variable_keys(node: object) -> set[str]:
+    """Every ``${var:KEY}`` token's ``KEY`` found anywhere in `node`, with the same walk as
+    `referenced_output_keys()`."""
+    if isinstance(node, str):
+        return {key for kind, key in extract_value_tokens(node) if kind == "var"}
+    if isinstance(node, dict):
+        keys: set[str] = set()
+        for value in node.values():
+            keys |= referenced_variable_keys(value)
+        return keys
+    if isinstance(node, list):
+        keys = set()
+        for item in node:
+            keys |= referenced_variable_keys(item)
+        return keys
+    return set()
+
+
 def referenced_artifact_keys(node: object) -> set[str]:
     """Every ``${artifact:NAME.FIELD}`` token's ``"NAME.FIELD"`` found anywhere in `node`, with the same walk as
     `referenced_output_keys()`."""

@@ -102,6 +102,19 @@ def template_secret_keys(source: str) -> set[str] | None:
     A template that does not parse also returns `None`: build already rejects it, so this only matters for a
     deploy that runs without a build check, and "every secret" is the safe answer.
     """
+    return template_context_keys(source, "secrets")
+
+
+def template_variable_keys(source: str) -> set[str] | None:
+    """The `variables` keys `source` (an `output.template`) reads, with the same rules as `template_secret_keys()`
+    (docs/work/artifact-gap-analysis.md, design 7)."""
+    return template_context_keys(source, "variables")
+
+
+def template_context_keys(source: str, name: str) -> set[str] | None:
+    """The keys of the context mapping `name` that `source` (an `output.template`) reads, or `None` when it reads
+    `name` in a way that cannot be checked statically (`name[key]` with a computed key, `name.items()`, `name`
+    passed on whole) or does not parse: the caller then counts every key as read."""
     try:
         ast = _ENV.parse(source)
     except TemplateSyntaxError:
@@ -111,7 +124,7 @@ def template_secret_keys(source: str) -> set[str] | None:
     for node in ast.find_all((nodes.Getattr, nodes.Getitem)):
         if not isinstance(node, (nodes.Getattr, nodes.Getitem)):
             continue
-        if not isinstance(node.node, nodes.Name) or node.node.name != "secrets":
+        if not isinstance(node.node, nodes.Name) or node.node.name != name:
             continue
         if isinstance(node, nodes.Getattr):
             if node.attr in {"items", "keys", "values", "get"}:
@@ -122,8 +135,8 @@ def template_secret_keys(source: str) -> set[str] | None:
         else:
             return None
         covered.add(id(node.node))
-    for name in ast.find_all(nodes.Name):
-        if name.name == "secrets" and id(name) not in covered:
+    for reference in ast.find_all(nodes.Name):
+        if reference.name == name and id(reference) not in covered:
             return None
     return keys
 

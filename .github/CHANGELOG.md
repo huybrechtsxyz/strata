@@ -33,6 +33,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Changed
 
+- An artifact reached only through a `store: artifact` variable is listed by `deploy images`, and judged by the
+  SBOM, the image gates and `image_tag_policy`, only when the deployment can receive that variable: a `${var:KEY}`
+  token in a document it reaches, or an execution step that gets every variable (Terraform, a script without
+  `script.values`, an `output.template` that reads it, or a tool strata does not know). A variable declared for
+  a Helm- or Compose-only workspace that nothing reads no longer makes the policy fail on an image that never runs.
 - `strata validate` rejects `${value:artifact.NAME.spec.image_name}`, as it already rejected `spec.image_tag`
   (`value_reference_pinnable_field`). Such an image was never pinned and never listed by `deploy images`, the SBOM
   or `image_tag_policy`. Replace it with `${artifact:NAME.image_name}`, which the message names. The artifact's

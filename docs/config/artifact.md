@@ -88,6 +88,11 @@ variables:
 
 The pinned tag is also what a build writes to `strata.variables`.
 
+A declared variable only counts as using the artifact when the deployment can receive it: a `${var:KEY}`
+token in a document it reaches, or an execution step that gets every variable (Terraform, which reads
+`strata.variables` and `TF_VAR_<key>`; a script without `script.values`; an `output.template` that reads it).
+A variable nothing receives does not make `deploy images` or `image_tag_policy` list the artifact.
+
 Every way of reaching an artifact counts as using it: `strata deploy images` lists the artifact with each use in
 `via` (`variable:KEY`, `service:MODULE/SERVICE`, or `token:KIND/NAME` for the document holding an
 `${artifact:}` token), and so the SBOM, the image gates and `image_tag_policy` judge it.

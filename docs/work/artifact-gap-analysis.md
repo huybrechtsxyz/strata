@@ -1,6 +1,6 @@
 # Artifact gap analysis - Work
 
-- Status: in-progress (all designs agreed; designs 1, 2, 3, 5, 6 step 1, 9 and 10 built; ADR-0058 written; the rest not started)
+- Status: in-progress (all designs agreed; designs 1, 2, 3, 5, 6 step 1, 7, 9 and 10 built; ADR-0058 written; the rest not started)
 - Last updated: 2026-11-10
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
@@ -376,7 +376,25 @@ Otherwise the artifact is not listed. Over-counting stays the rule wherever stra
 works offline from the solution and does not read `.tf` files.
 
 **Changes.** `effective_images()`, with the token scan from design 3 and the step rule borrowed from
-`step_secrets.py`'s `all_secrets` cases. **Tests:** a Helm-only workspace with an unused artifact variable lists
+`step_secrets.py`'s `all_secrets` cases.
+
+**Implementation plan** (refines the decision above after reading the code):
+
+1. "A step" is an `execution` step, through its provisioner: `deploy run` runs only those, and `build run` writes
+   `strata.variables` only for them. A workspace with no `execution` delivers no variable to anything.
+2. Per step, as `step_secret_keys()` does for secrets: a tool whose integration class has `ENV_VAR_PREFIX`
+   (Terraform, OpenTofu) receives every variable; a script without `script.values` receives every variable, one
+   with it the keys it lists; an `output.template` receives the `variables` keys it reads, or every variable when it
+   reads them dynamically or cannot be read. A tool strata does not know also counts as receiving every variable.
+3. `templater.py`: `template_secret_keys()` becomes one case of `template_context_keys(source, name)`;
+   `template_variable_keys()` is the other.
+4. Plus every `${var:KEY}` in a document the deployment reaches (`documents_reached_by_deployment()`,
+   `enabled_only=True`).
+5. The variable's use stays `variable:KEY` in `via`; only whether it is listed changes.
+6. Test fixtures that list an artifact through a variable gain an `execution` step with their Terraform
+   provisioner, which is what makes the variable reach something.
+7. Docs: `artifact.md`, `effective-images.md`, the changelog (`Changed`: `deploy images` and the image checks may
+   list fewer artifacts). **Tests:** a Helm-only workspace with an unused artifact variable lists
 nothing; the same with a Terraform step lists it; a `${var:KEY}` use lists it.
 
 ### 8. Warn about an artifact nothing uses
@@ -486,6 +504,9 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 - **Design 6 step 1, built 2026-11-10** (not released), as planned. `deploy images` shows `INTEGRATION`
   only when some image names one; `deploy report`'s `images[]` carries the field too. Step 2 (a Compose
   `docker login`) waits for a real private-registry consumer.
+- **Design 7, built 2026-11-10** (not released), as planned. `template_secret_keys()` is now one case of
+  `template_context_keys()`. The effective-images and `deploy images` test fixtures had a Terraform
+  provisioner but no `execution` step, so their variables reached nothing; they gained the step.
 
 ### Implementation order
 
@@ -515,6 +536,7 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: a design for each finding; the open questions from the review decided as recommendations.
 - 2026-11-10: designs agreed. Design 1 implemented (`${artifact:NAME.FIELD}`), with its implementation plan.
 - 2026-11-10: design 3 implemented: token uses counted as images, `${value:}` on an artifact's image rejected.
+- 2026-11-10: design 7 implemented: a `store: artifact` variable counts only where it is received.
 - 2026-11-10: design 6 step 1 implemented: `deploy images` names an artifact's `integration`.
 - 2026-11-10: design 5 implemented (`artifact_registry_mismatch`).
 - 2026-11-10: design 9 implemented: the example solution uses an artifact all three ways.

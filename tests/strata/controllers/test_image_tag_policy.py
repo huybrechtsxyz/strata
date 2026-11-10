@@ -270,7 +270,17 @@ def _solution(
         "workspace",
         "main",
         "  providers:\n    - p1\n"
-        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n" + policy,
+        "  resources:\n    - name: r1\n      resource: r1\n"
+        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: infra\n      provisioner: tf\n      resources:\n        - r1\n" + policy,
+    )
+    # The Terraform step is what receives `CATALOG_TAG` (docs/work/artifact-gap-analysis.md, design 7).
+    _write(
+        root,
+        "resource.yaml",
+        "resource",
+        "r1",
+        "  provider_type: local\n  resource_type: server\n  category: compute\n  default_tags:\n    managed-by: strata\n",
     )
     _write(root, "artifact.yaml", "artifact", "catalog", f"  image_name: registry/catalog\n{artifact_tag}")
     _write(

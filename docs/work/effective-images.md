@@ -70,6 +70,10 @@ Row fields:
 - `tag_source`: `pin`, `declared` or `none`
 - `pin_version`: the version document that supplied the tag
 - `pin_flag`: true when the tag came from `--pin`
+- (2026-11-10, design 7 of [artifact-gap-analysis.md](artifact-gap-analysis.md)) a `store: artifact` variable
+  is a use only when the deployment can receive it: a `${var:KEY}` token in a reached document, or an execution
+  step that receives every variable (Terraform, a script without `script.values`, an `output.template` that
+  reads it, a tool strata does not know)
 - `integration`: an artifact's `spec.integration`, by name, for the credentials a copy needs (added 2026-11-10,
   [artifact-gap-analysis.md](artifact-gap-analysis.md) design 6)
 
