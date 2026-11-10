@@ -47,6 +47,13 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   free-form fields (`spec.configuration.*`, `spec.properties.*`, `spec.registry`, ...) stay readable through
   `${value:}`.
 
+### Fixed
+
+- A registry chart pull on Windows no longer fails with a bare `PermissionError` when another process (a virus
+  scanner reading the new archive) briefly holds a file in its staging directory. Removing that directory is best
+  effort, so the pull's own result stands, such as `helm_chart_digest_changed`. A failure to store the entry is
+  reported as `helm_chart_pull_failed`.
+
 ## [2.6.0] - 2026-11-09
 
 Deployment documentation: `strata deploy output`, `strata deploy report` and `spec.documentation`, built on a
