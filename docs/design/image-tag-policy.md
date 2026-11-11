@@ -151,5 +151,8 @@ is nothing honest to seed it with.
   checks in `strata validate`.
 - Out of scope: the images a Helm chart deploys by itself. strata does not write a Helm module's service `image`
   into the chart values (v1 did not either), so for a Helm module the policy judges the declared image and cannot
-  see an image only the chart knows. How to treat that is tracked in
-  `helm-image-delivery.md` (work doc).
+  see an image only the chart knows. Since 2026-11-11 the policy says so instead of staying silent:
+  - a declared Helm image's finding says "declared only";
+  - a Helm module that declares no image is reported as `image_unknown_to_strata`, as `on_unknown_image` decides.
+
+  The rest is tracked in `helm-image-delivery.md` (work doc).

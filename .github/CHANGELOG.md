@@ -10,6 +10,23 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **`strata deploy images` says which images strata delivers.** Strata delivers an image when it writes it into
+  what runs:
+  - a Compose service;
+  - an artifact a step receives through a variable, or one an `${artifact:}` token delivers.
+
+  A Helm module's service image is only declared, because the chart decides which image runs.
+  - The console gets a `DELIVERED` column whenever an image is not delivered, for example
+    `no (helm module: the chart decides)`.
+  - JSON gets `data.images[].delivered` and `.delivery`.
+  - A Helm module that declares no service `image` or `artifact` is listed under "Known only to Helm"
+    (`data.unknown_image_modules[]`), with its chart and version.
+- **`image_tag_policy.on_unknown_image`** (`skip` | `warn` | `block`, default `warn`), for a Helm module whose
+  images strata does not know (`image_unknown_to_strata`). It is independent of `enforcement`. `allow` does not
+  exempt a module; declare its images to have them judged.
+  - A workspace with an `image_tag_policy` and such a module now gets a warning on `build run` and `deploy run`.
+  - A declared Helm image is still judged, and its finding says "declared only, the chart decides which image
+    runs".
 - `${artifact:NAME.FIELD}`, a token for an artifact's `image_name`, `image_tag` or `image_ref`, with the
   deployment's version pin applied. It works in every field a `${var:}` token resolves in at deploy (a Terraform
   payload or backend, Helm values, a Compose file, a script's arguments), so an artifact no longer needs a

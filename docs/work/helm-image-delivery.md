@@ -1,7 +1,7 @@
 # Helm module images - Work
 
-- Status: draft
-- Last updated: 2026-11-10
+- Status: option B built (2026-11-11), not released
+- Last updated: 2026-11-11
 
 ## Overview
 
@@ -132,6 +132,188 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
    does (haven pins Helm apps by chart version). Until then, a Helm image is set through `configuration`.
 3. Leave D until a consumer needs chart-only modules judged.
 
+## Design: option B (2026-11-11)
+
+Every place that lists or judges images says which ones strata delivers. It also names the Helm modules whose
+images strata does not know at all. Nothing changes in what is rendered or deployed. The chart version is still
+the only thing that fixes a Helm module's images; strata now says so instead of judging a declaration as if it
+ran.
+
+### 1. Delivered: one rule, in the resolver
+
+Strata delivers an image when it writes the image into something that runs:
+
+- the Compose integration writes a service `image` (`compose.py`, `entry["image"] = service.image`);
+- a `store: artifact` variable reaches an execution step;
+- an `${artifact:}` token is resolved into a document the deployment uses.
+
+No other module integration writes an image: not `helm.py`, the GitOps integrations (`argocd`, `flux`), `script`
+or a custom plugin.
+
+`EffectiveImage` (`integrations/resolved_context.py`) gets two fields with defaults, so existing constructors do
+not change:
+
+- `delivered: bool = True`
+- `delivery: str | None = None`, the reason when `delivered` is false
+
+`effective_images()` sets them:
+
+| Row | `delivered` | `delivery` |
+| --- | --- | --- |
+| `module-service` on a `compose` module | true | - |
+| `module-service` on a `helm` module | false | `helm module: the chart decides` |
+| `module-service` on any other module type | false | `<type> module: strata writes no image` |
+| `artifact` with at least one delivering use: `variable:KEY`, `token:KIND/NAME`, or `service:` on a `compose` module | true | - |
+| `artifact` whose only uses are `service:` on non-Compose modules | false | `helm module: no ${artifact:} token` (or the type, as above) |
+
+The resolver already resolves each module (`resolve_module()`), so `spec.type` is at hand; no extra lookup.
+
+**Known limit.** A `token:` use names the document, not the field. So an `${artifact:}` token in a Helm
+service's `environment` counts as delivered here, although it only sets an environment variable.
+`artifact_not_delivered` still warns about that at `strata validate`, so the case is not silent.
+
+### 2. Modules whose images strata does not know
+
+There is a new frozen dataclass next to `EffectiveImage`:
+
+```python
+@dataclass(frozen=True)
+class UnknownImageModule:
+    module: str          # module document name
+    namespace: str       # the namespace whose modules[] enables it
+    chart: str | None    # source.chart_name
+    chart_version: str | None  # after a `charts` pin, so it is the version that deploys
+```
+
+There is also a new function, `unknown_image_modules(context, deployment) -> list[UnknownImageModule]`, in
+`controllers/effective_images.py`. It uses the same walk as `effective_images()`: the deployment's workspace,
+its namespaces, enabled references and version pins applied. The walk becomes one private generator that both
+functions use, so they cannot disagree on which modules count.
+
+- **What counts:** an enabled `helm` module whose `services` declare neither an `image` nor an `artifact`. That
+  covers no `services`, or services that carry only `env`, `persistence` or `configuration`.
+- **Kept out of `effective_images()`.** The SBOM, the audit manifest, the gates and the report all expect every
+  row to have an image. A row with no image would break each of them.
+- **Helm only.** An `argocd`, `script` or custom module may run no containers at all, such as a script that sets
+  DNS. Reporting them would be noise. (See the open questions.)
+- **Not reported:** a Helm module that declares some images but whose chart runs more. Strata cannot tell
+  without rendering the chart, which is option D.
+
+### 3. `strata deploy images`
+
+The console gets a DELIVERED column, shown only when some row is not delivered, as DIGEST is. Below the table is a
+list of the unknown modules:
+
+```
+  NAME     ORIGIN          IMAGE                        TAG        SOURCE    DELIVERED                                USED BY
+  api      artifact        acr.example.io/acme/api      1.4.0      pin prd   yes                                      token:module/api
+  server   module-service  docker.io/vaultwarden/server 1.32.0     declared  yes                                      service:vaultwarden/server
+  db       module-service  docker.io/library/postgres   16-alpine  pin prd   no (helm module: the chart decides)      service:authentik/db
+  server   module-service  ghcr.io/goauthentik/server   2026.5.2   declared  no (helm module: the chart decides)      service:authentik/server
+
+  Known only to Helm (declare no images, so none of theirs is listed):
+    immich  namespace forge  chart immich 0.13.1
+```
+
+JSON gets the new fields and a new list, so a pipeline can tell the two kinds of image apart:
+
+```json
+{"images": [{"name": "db", "module": "authentik", "image_ref": "docker.io/library/postgres:16-alpine",
+             "delivered": false, "delivery": "helm module: the chart decides", "...": "..."}],
+ "unknown_image_modules": [{"module": "immich", "namespace": "forge", "chart": "immich",
+                            "chart_version": "0.13.1"}]}
+```
+
+- **Without an `image_tag_policy`:** one info finding per unknown module, `image_unknown_to_strata`. The run
+  gets no warning, because nothing asked for one, as a missing tag is only a warning there.
+- **With an `image_tag_policy`:** the policy decides (section 4).
+
+### 4. `image_tag_policy.on_unknown_image`
+
+```yaml
+spec:
+  image_tag_policy:
+    enforcement: deny
+    on_unknown_image: warn     # skip | warn | block (default warn)
+```
+
+- `on_unknown_image` decides only about the unknown modules, separately from `enforcement`. `image_gate_policy`
+  has the same field and works the same way.
+  - `block` is an error: `build run` and `deploy run` stop, and `deploy images` and `policy check` exit 3.
+  - `warn` is a warning.
+  - `skip` is an info finding, which is how `image_gate_policy` handles `skip` too: it stays out of the summary
+    but remains in `-v` and JSON output.
+- The finding:
+
+  ```
+  image_tag_policy: module 'immich' (helm chart immich 0.13.1) declares no images, so the images the chart
+  deploys are known only to Helm and are not judged. Declare them under spec.services[].image to have them
+  judged, or set on_unknown_image: skip.  [image_unknown_to_strata]
+  ```
+
+- The policy's existing filters apply to unknown modules too:
+  - **`rings`:** a deployment outside the policy's rings gets nothing, as today.
+  - **`origins`:** unknown modules are reported only when `origins` covers `module-service`, because they are
+    module images.
+- **`allow` does not exempt an unknown module.** Its names are image names (an artifact or a service), not module
+  names. To clear the finding, declare the chart's images. They are then judged as declared, which is what the
+  author can vouch for.
+- **A declared-only image is still judged**, with the same codes and rules, so what an author wrote on purpose
+  is not dropped. The message says the image is declared only:
+
+  ```
+  image_tag_policy: module-service 'server' (ghcr.io/goauthentik/server; used by service:authentik/server;
+  declared only, the chart decides which image runs) has the floating tag 'latest'.  [image_floating_tag]
+  ```
+
+- Code: `evaluate_image_tag_policy(images, policy, ring, *, unknown=(), today=None)` stays pure.
+  `check_image_tag_policy()` gets `unknown_image_modules()` and passes them on, so its four callers do not
+  change: `deploy images`, `build_controller`, `deploy_controller` and `policy_controller`. `deploy images`
+  passes the list it already printed, as it does `images`.
+
+### 5. What does not change
+
+- **Rendering:** nothing new is written into a chart. That is option C.
+- **`images` pins on a Helm service** still move only the declaration. The DELIVERED column now shows that.
+- **SBOM, CVE and image gates:** unchanged. Plan item 6 (the `strata:image-delivered=false` SBOM property) can
+  then read `EffectiveImage.delivered` instead of working it out again.
+- **Audit manifest:** its image entries keep their schema. Adding `delivered` there is part of plan item 6, so
+  the audit and the SBOM gain the marker together.
+- **`deploy report`:** dumps `EffectiveImage` with `asdict()`, so `delivered` and `delivery` show up there with no
+  code change.
+
+### 6. Compatibility
+
+- The new JSON fields and the `unknown_image_modules` list are additive.
+- A workspace with an `image_tag_policy` and a Helm module that declares no images gets a **new warning** on
+  `build run` and `deploy run`. It does not fail unless `on_unknown_image: block` is set. In `config/`, the
+  `authentik` Helm module declares its images, so it gets no new finding.
+- `.github/CHANGELOG.md`, Added: the DELIVERED fact, the unknown-module list and `on_unknown_image`.
+
+### 7. Tests
+
+- **`effective_images()`:**
+  - `delivered` for Compose, Helm and `script` service rows;
+  - an artifact reached by a variable;
+  - an artifact reached by a token in a Helm module;
+  - an artifact used only by a Helm service with no token, which is false.
+- **`unknown_image_modules()`:**
+  - a chart-only Helm module is listed, with its pinned chart version;
+  - one that declares an image is not, nor is one that declares an artifact;
+  - a disabled reference and a Compose module are not listed;
+  - a module in two namespaces is listed once per namespace.
+- **`evaluate_image_tag_policy()`:**
+  - `skip`, `warn` and `block` map to info, warning and error;
+  - `rings` and `origins` exclude unknown modules;
+  - the declared-only wording;
+  - `enforcement: warn` with `on_unknown_image: block` still errors.
+- **`deploy images`:**
+  - the DELIVERED column appears only when needed;
+  - the unknown-module section;
+  - the JSON fields;
+  - exit 3 on `block`.
+- **The model:** `on_unknown_image` defaults to `warn` and rejects another value.
+
 ## Related Decisions
 
 - [ADR-0026](../decisions/0026-pinnable-artifact-references.md) - `ModuleServiceModel.artifact` and its Compose
@@ -145,28 +327,35 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
 
 ### Implementation plan
 
-- [ ] 1. Add `delivered` (and the reason) to `EffectiveImage`; true for Compose services and for artifacts that
-  reach a Terraform variable, false for a Helm module's service images
-- [ ] 2. `deploy images`: a DELIVERED column and `data.images[].delivered`; list enabled chart modules that
-  declare no image
-- [ ] 3. `image_tag_policy`: `on_unknown_image`, the `image_unknown_to_strata` finding, and a decision on judging
-  declared-only Helm images (see below)
-- [ ] 4. Docs: the policy section of the workspace reference, `module.md` (what a Helm service `image` means), and
-  the stale rows listed below
-- [ ] 5. Optional, on demand: option C, then option D
-- [ ] 6. The SBOM side, done in the same piece of work: the declared-only marker and rendering local charts, as
+- [x] 1. `EffectiveImage.delivered` and `.delivery`, set by `effective_images()` (design section 1); the module
+  walk shared with step 2
+- [x] 2. `UnknownImageModule` and `unknown_image_modules()` (section 2)
+- [x] 3. `ImageTagPolicyModel.on_unknown_image`; `evaluate_image_tag_policy(..., unknown=...)` with the
+  `image_unknown_to_strata` finding and the declared-only wording; `check_image_tag_policy()` fetches the modules
+  (section 4)
+- [x] 4. `deploy images`: the DELIVERED column, the "Known only to Helm" list, the JSON fields, the info finding
+  without a policy (section 3)
+- [x] 5. Docs: the policy section of the workspace reference, `module.md` (what a Helm service `image` means),
+  `deploy images` help, `image-tag-policy.md`'s out-of-scope note, `.github/CHANGELOG.md`. The schema is
+  generated from the model, so `on_unknown_image` needs no file. The `version-lifecycle.md` row below was already
+  correct; the ADR rows stay as they are (ADRs are immutable)
+- [x] 6. Checks: ruff, mypy, lint-imports, `strata validate config`, the full suite
+- [ ] 7. Optional, on demand: option C, then option D
+- [ ] 8. The SBOM side, done in the same piece of work: the declared-only marker and rendering local charts, as
   designed in [sbom-generation.md](sbom-generation.md). Its step 1 is this doc's open question on a shared
   marker, and its step 2 is option D for local charts only (offline).
 
 ### Open questions
 
-- **Judge declared-only Helm images?** Judging them can give false assurance; skipping them drops what the author
-  wrote on purpose. Suggested: judge them and word the finding "declared as X; the chart may run another".
+- ~~**Judge declared-only Helm images?**~~ Answered 2026-11-11: judged, and the finding says "declared only, the
+  chart decides which image runs" (design section 4).
+- **GitOps and script modules.** Their service images are marked not delivered. But a module of that type that
+  declares no images is not reported as unknown, because it may run no containers. Should `argocd` and `flux`
+  count, since they deploy Kubernetes manifests? Wait for a consumer.
 - **Does the SBOM and the CVE and image gates need the same marker?** They scan Helm-declared images as if they
   ran. A `strata:image-delivered=false` property on the SBOM component would let a gate report "scanned a declared
   image". Taken up in [sbom-generation.md](sbom-generation.md) (step 1), together with rendering local charts.
-- **`on_unknown_image` default.** `warn` (as `image_gate_policy`) is the suggestion. `block` makes every chart
-  module declare its images or a pin, which is strict.
+- ~~**`on_unknown_image` default.**~~ Answered 2026-11-11: `warn`, as `image_gate_policy`. `block` is opt-in.
 - **Chart-only modules.** Is there a real consumer with a chart-only module whose image tag matters? Without one,
   B is enough.
 - ~~**A Helm service `artifact`.** It resolves into the service `image`, so it is declared only for Helm too. Should
@@ -192,6 +381,9 @@ db      module-service  docker.io/library/postgres  16-alpine  pin prd   no (hel
 
 ## Changelog
 
+- 2026-11-11: option B designed: `EffectiveImage.delivered`, `unknown_image_modules()`, the `deploy images` column
+  and list, `image_tag_policy.on_unknown_image`. Two open questions answered; the plan rewritten; the old plan
+  items 5 and 6 are now 7 and 8. Built the same day (plan steps 1-6).
 - 2026-11-10: option C is met for artifacts by the `${artifact:NAME.FIELD}` token, with the `artifact_not_delivered`
   warning; the open question on a Helm service `artifact` answered. A literal Helm service `image` is unchanged.
 - 2026-11-07: The SBOM's Helm gap ([sbom-generation.md](sbom-generation.md)) is deferred to be done together with

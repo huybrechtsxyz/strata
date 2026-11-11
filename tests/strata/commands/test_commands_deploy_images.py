@@ -292,3 +292,77 @@ def test_the_integration_never_carries_a_credential(tmp_path):
     """Only the name: nothing is resolved, so not even the key the integration reads its token from appears."""
     result = _invoke(_solution(tmp_path, integration=True), "app", "-o", "json")
     assert "FEED_API_KEY" not in result.output
+
+
+# Images strata does not deliver or does not know (docs/work/helm-image-delivery.md, option B).
+
+
+def _with_helm(root: Path, *, services: str = "") -> None:
+    """Add Helm module `chart` (chart immich 0.13.1) to namespace `apps`."""
+    _write(
+        root,
+        "chart.yaml",
+        "module",
+        "chart",
+        "  source:\n    chart_repository: https://charts.example.com\n    chart_name: immich\n"
+        "    chart_version: 0.13.1\n  type: helm\n" + (f"  services:\n{services}" if services else ""),
+    )
+    namespace = root / "namespace.yaml"
+    namespace.write_text(
+        namespace.read_text(encoding="utf-8") + "    - name: chart\n      module: chart\n", encoding="utf-8"
+    )
+
+
+def test_json_says_which_images_strata_delivers(tmp_path):
+    root = _solution(tmp_path)
+    _with_helm(root, services="    - name: server\n      image: ghcr.io/immich/server:v1.2.0\n")
+    rows = {row["name"]: row for row in _data(_invoke(root, "app", "-o", "json"))["images"]}
+    assert (rows["redis"]["delivered"], rows["redis"]["delivery"]) == (True, None)
+    assert (rows["server"]["delivered"], rows["server"]["delivery"]) == (False, "helm module: the chart decides")
+
+
+def test_the_table_shows_a_delivered_column_only_when_an_image_is_not_delivered(tmp_path):
+    root = _solution(tmp_path)
+    assert "DELIVERED" not in _invoke(root, "app").output
+    _with_helm(root, services="    - name: server\n      image: ghcr.io/immich/server:v1.2.0\n")
+    result = _invoke(root, "app")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "DELIVERED" in result.output
+    server = next(line for line in result.output.splitlines() if line.strip().startswith("server"))
+    assert "no (helm module: the chart decides)" in server
+
+
+def test_a_helm_module_that_declares_no_image_is_listed_and_noted_without_a_policy(tmp_path):
+    root = _solution(tmp_path)
+    _with_helm(root)
+    result = _invoke(root, "app", "-o", "json")
+    envelope = json.loads(result.output)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert envelope["data"]["unknown_image_modules"] == [
+        {"module": "chart", "namespace": "apps", "chart": "immich", "chart_version": "0.13.1"}
+    ]
+    assert [(d["severity"], d["code"]) for d in envelope["diagnostics"]] == [("info", "image_unknown_to_strata")]
+
+    console = _invoke(root, "app").output
+    assert "Known only to Helm" in console
+    assert "chart  namespace apps  chart immich 0.13.1" in console
+
+
+def test_a_policy_with_on_unknown_image_block_fails_on_an_unknown_helm_module(tmp_path):
+    root = _solution(tmp_path, policy="  image_tag_policy:\n    on_unknown_image: block\n")
+    _with_helm(root)
+    result = _invoke(root, "app", "-o", "json")
+    assert result.exit_code == EXIT_VALIDATION, result.output
+    assert [(d["severity"], d["code"]) for d in json.loads(result.output)["diagnostics"]] == [
+        ("error", "image_unknown_to_strata")
+    ]
+
+
+def test_a_policy_warns_on_an_unknown_helm_module_by_default(tmp_path):
+    root = _solution(tmp_path, policy=_DENY)
+    _with_helm(root)
+    result = _invoke(root, "app", "-o", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert [(d["severity"], d["code"]) for d in json.loads(result.output)["diagnostics"]] == [
+        ("warning", "image_unknown_to_strata")
+    ]

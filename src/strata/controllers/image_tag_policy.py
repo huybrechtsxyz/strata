@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Evaluate `spec.image_tag_policy` over a deployment's effective images (docs/design/image-tag-policy.md).
 
-Pure: it reads only the rows `effective_images()` returns, the policy and the deployment's ring, so it
-needs no solution, network or credential. Callers (`build run`, `deploy run`, `strata policy check`,
+Pure: it reads only the rows `effective_images()` returns, the Helm modules `unknown_image_modules()` names,
+the policy and the deployment's ring, so it needs no solution, network or credential. Callers (`build run`, `deploy run`, `strata policy check`,
 `deploy images`) fetch the rows and the ring and decide when to run it.
 """
 
@@ -10,10 +10,10 @@ import re
 from collections.abc import Sequence
 from datetime import date
 
-from strata.controllers.effective_images import effective_images
+from strata.controllers.effective_images import effective_images, unknown_image_modules
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import resolve_version
-from strata.integrations.resolved_context import EffectiveImage
+from strata.integrations.resolved_context import EffectiveImage, UnknownImageModule
 from strata.models.deployment_model import DeploymentModel
 from strata.models.image_tag_policy_model import ImageTagAllowEntryModel, ImageTagPolicyModel
 from strata.models.workspace_model import WorkspaceModel
@@ -28,19 +28,23 @@ def check_image_tag_policy(
     *,
     pinned_by_flag: bool = False,
     images: Sequence[EffectiveImage] | None = None,
+    unknown: Sequence[UnknownImageModule] | None = None,
 ) -> Diagnostics:
     """Evaluate the workspace's `image_tag_policy` for `deployment`; nothing to report when it is unset.
 
     `deployment` is the resolved model, already carrying a `--pin` in `spec.version`, and `pinned_by_flag`
     says whether it did (as `effective_images()` takes them). Pass `images` when the caller already has the
-    deployment's `effective_images()` rows, so they are not resolved twice.
+    deployment's `effective_images()` rows, so they are not resolved twice, and `unknown` when it already has
+    its `unknown_image_modules()`.
     """
     policy = workspace.spec.image_tag_policy
     if policy is None:
         return Diagnostics()
     if images is None:
         images = effective_images(context, deployment, pinned_by_flag=pinned_by_flag)
-    return evaluate_image_tag_policy(images, policy, deployment_ring(context, deployment))
+    if unknown is None:
+        unknown = unknown_image_modules(context, deployment)
+    return evaluate_image_tag_policy(images, policy, deployment_ring(context, deployment), unknown=unknown)
 
 
 def deployment_ring(context: SolutionContext, deployment: DeploymentModel) -> str | None:
@@ -55,9 +59,11 @@ def evaluate_image_tag_policy(
     policy: ImageTagPolicyModel,
     ring: str | None,
     *,
+    unknown: Sequence[UnknownImageModule] = (),
     today: date | None = None,
 ) -> Diagnostics:
-    """One finding per breached rule per image: an error for `deny`, a warning for `warn`.
+    """One finding per breached rule per image: an error for `deny`, a warning for `warn`. Plus one finding per
+    Helm module in `unknown`, as `on_unknown_image` says, when `origins` covers `module-service`.
 
     Args:
         images: The deployment's `effective_images()` rows.
@@ -65,6 +71,7 @@ def evaluate_image_tag_policy(
         ring: The deployment's `spec.promotion.ring` from its version document, or `None` when it has none.
             A deployment with no ring is always evaluated; one whose ring is not in `policy.rings` is not,
             and gets a single info finding saying so.
+        unknown: The deployment's `unknown_image_modules()`: Helm modules whose images strata does not know.
         today: The day an `allow` entry's `expires` is compared with; defaults to the current date.
     """
     diagnostics = Diagnostics()
@@ -93,7 +100,36 @@ def evaluate_image_tag_policy(
 
         for code, problem in _problems(image, policy, rejected, pattern):
             report(f"image_tag_policy: {_describe(image)} {problem}{note}", code=code)
+
+    if policy.origins is None or "module-service" in policy.origins:
+        for module in unknown:
+            _report_unknown_module(diagnostics, policy, module)
     return diagnostics
+
+
+def unknown_module_message(module: UnknownImageModule) -> str:
+    """What to say about a Helm module whose images strata does not know (`image_unknown_to_strata`)."""
+    chart = " ".join(part for part in (module.chart, module.chart_version) if part)
+    shown = f" (helm chart {chart})" if chart else " (helm)"
+    return (
+        f"module '{module.module}'{shown} in namespace '{module.namespace}' declares no images, so the images the "
+        "chart deploys are known only to Helm and are not judged."
+    )
+
+
+def _report_unknown_module(diagnostics: Diagnostics, policy: ImageTagPolicyModel, module: UnknownImageModule) -> None:
+    """`on_unknown_image` decides, apart from `enforcement`; `skip` is an info finding, as `image_gate_policy` has
+    it, so the module still shows in verbose and JSON output."""
+    message = (
+        f"image_tag_policy: {unknown_module_message(module)} Declare them under spec.services[].image to have "
+        "them judged, or set on_unknown_image: skip."
+    )
+    if policy.on_unknown_image == "block":
+        diagnostics.error(message, code="image_unknown_to_strata")
+    elif policy.on_unknown_image == "warn":
+        diagnostics.warning(message, code="image_unknown_to_strata")
+    else:
+        diagnostics.info(message, code="image_unknown_to_strata")
 
 
 def _is_active(entry: ImageTagAllowEntryModel, today: date) -> bool:
@@ -140,7 +176,15 @@ def _fix_digest(image: EffectiveImage) -> str:
 
 def _describe(image: EffectiveImage) -> str:
     used_by = f"; used by {', '.join(image.via)}" if image.via else ""
-    return f"{image.origin} '{image.name}' ({image.image_name}{used_by})"
+    declared_only = "" if image.delivered else f"; declared only, {_declared_only_reason(image)}"
+    return f"{image.origin} '{image.name}' ({image.image_name}{used_by}{declared_only})"
+
+
+def _declared_only_reason(image: EffectiveImage) -> str:
+    """Why a judged image may not be what runs: the chart decides, or no integration writes it."""
+    if image.delivery is not None and image.delivery.startswith("helm module"):
+        return "the chart decides which image runs"
+    return image.delivery or "strata does not deliver it"
 
 
 def _source(image: EffectiveImage) -> str:

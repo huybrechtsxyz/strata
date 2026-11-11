@@ -108,6 +108,15 @@ class ImageTagPolicyModel(PlatformBaseModel):
     allow: list[ImageTagAllowEntryModel] | None = Field(
         None, description="Images exempt from the policy, each with a reason and an optional expiry"
     )
+    on_unknown_image: Literal["skip", "warn", "block"] = Field(
+        default="warn",
+        description="What to do about a Helm module that declares no service `image` or `artifact`: strata does "
+        "not know the images its chart deploys, so it cannot judge them. 'block' stops the run, 'warn' reports "
+        "and continues, 'skip' only notes it in verbose and JSON output. Independent of `enforcement`; `allow` "
+        "does not exempt a module. Declare the chart's images under the module's `services` to have them "
+        "judged.\n\n"
+        "Design notes: docs/work/helm-image-delivery.md, option B. Mirrors `image_gate_policy.on_unknown_image`.",
+    )
 
     @field_validator("reject_tags")
     @classmethod

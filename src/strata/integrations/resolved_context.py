@@ -122,6 +122,11 @@ class EffectiveImage:
 
     `integration` is an artifact's `spec.integration`, by name only (docs/work/artifact-gap-analysis.md,
     design 6): it tells a pipeline that copies the image which credentials to use. Nothing is resolved from it.
+
+    `delivered` says whether strata writes the image into what runs (docs/work/helm-image-delivery.md, option B):
+    true for a Compose service, an artifact a step receives through a variable and one an `${artifact:}` token
+    delivers; false for a Helm module's service image, which the chart may override. `delivery` gives the reason
+    when it is false (`helm module: the chart decides`).
     """
 
     origin: str
@@ -139,6 +144,23 @@ class EffectiveImage:
     pin_flag: bool = False
     integration: str | None = None
     image_digest: str | None = None
+    delivered: bool = True
+    delivery: str | None = None
+
+
+@dataclass(frozen=True)
+class UnknownImageModule:
+    """An enabled Helm module that declares no service `image` and no `artifact`, so the images its chart deploys
+    are known only to Helm (`effective_images.unknown_image_modules()`, docs/work/helm-image-delivery.md, option B).
+
+    `namespace` is the namespace whose `modules` enables it; `chart_version` is the one that deploys, after a
+    `charts` pin.
+    """
+
+    module: str
+    namespace: str
+    chart: str | None = None
+    chart_version: str | None = None
 
 
 @dataclass(frozen=True)

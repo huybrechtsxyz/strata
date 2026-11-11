@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for `evaluate_image_tag_policy()` (docs/design/image-tag-policy.md, phase 2)."""
 
+import dataclasses
 from datetime import date
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from strata.controllers.policy_controller import check_policies, list_policies
 from strata.controllers.policy_results import image_tag_policy_result, read_policy_results
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import resolve_deployment_workspace
-from strata.integrations.resolved_context import EffectiveImage
+from strata.integrations.resolved_context import EffectiveImage, UnknownImageModule
 from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Severity
@@ -404,3 +405,76 @@ def test_policy_list_shows_the_policy_as_checkable(tmp_path):
         True,
         False,
     )
+
+
+# Images strata does not deliver or does not know (docs/work/helm-image-delivery.md, option B).
+
+_IMMICH = UnknownImageModule(module="immich", namespace="forge", chart="immich", chart_version="0.13.1")
+
+
+@pytest.mark.parametrize(
+    ("setting", "severity"),
+    [("block", Severity.ERROR), ("warn", Severity.WARNING), ("skip", Severity.INFO)],
+)
+def test_on_unknown_image_decides_the_severity_of_an_unknown_helm_module(setting, severity):
+    diagnostics = evaluate_image_tag_policy([], _policy(on_unknown_image=setting), None, unknown=[_IMMICH])
+    [item] = diagnostics.items
+    assert (item.code, item.severity) == ("image_unknown_to_strata", severity)
+    assert item.message.startswith(
+        "image_tag_policy: module 'immich' (helm chart immich 0.13.1) in namespace 'forge' declares no images"
+    )
+
+
+def test_on_unknown_image_defaults_to_warn():
+    assert _policy().on_unknown_image == "warn"
+    diagnostics = evaluate_image_tag_policy([], _policy(), None, unknown=[_IMMICH])
+    assert [item.severity for item in diagnostics.items] == [Severity.WARNING]
+
+
+def test_on_unknown_image_rejects_another_value():
+    with pytest.raises(ValueError, match="on_unknown_image"):
+        _policy(on_unknown_image="fail")
+
+
+def test_on_unknown_image_does_not_follow_enforcement():
+    diagnostics = evaluate_image_tag_policy(
+        [], _policy(enforcement="warn", on_unknown_image="block"), None, unknown=[_IMMICH]
+    )
+    assert [item.severity for item in diagnostics.items] == [Severity.ERROR]
+
+
+def test_an_unknown_module_is_not_reported_outside_the_policys_rings_or_origins():
+    outside_ring = evaluate_image_tag_policy([], _policy(rings=["prd"]), "dev", unknown=[_IMMICH])
+    assert _codes(outside_ring) == ["image_tag_policy_not_applied"]
+    artifacts_only = evaluate_image_tag_policy([], _policy(origins=["artifact"]), None, unknown=[_IMMICH])
+    assert artifacts_only.items == []
+
+
+def test_allow_does_not_exempt_an_unknown_module():
+    policy = _policy(allow=[{"name": "immich", "reason": "the chart pins its own tags"}])
+    assert _codes(evaluate_image_tag_policy([], policy, None, unknown=[_IMMICH])) == ["image_unknown_to_strata"]
+
+
+def test_an_unknown_module_without_a_chart_still_reads_well():
+    module = UnknownImageModule(module="local", namespace="apps")
+    [item] = evaluate_image_tag_policy([], _policy(), None, unknown=[module]).items
+    assert "module 'local' (helm) in namespace 'apps' declares no images" in item.message
+
+
+def test_a_declared_only_image_is_judged_and_says_so():
+    image = dataclasses.replace(
+        _image("server", "latest", origin="module-service", via=("service:authentik/server",)),
+        delivered=False,
+        delivery="helm module: the chart decides",
+    )
+    [item] = evaluate_image_tag_policy([image], _policy(), None).items
+    assert item.code == "image_floating_tag"
+    assert item.message.startswith(
+        "image_tag_policy: module-service 'server' (registry/server; used by service:authentik/server; "
+        "declared only, the chart decides which image runs) has the floating tag 'latest'."
+    )
+
+
+def test_a_delivered_image_is_described_as_before():
+    [item] = evaluate_image_tag_policy([_image(tag="latest")], _policy(), None).items
+    assert "declared only" not in item.message

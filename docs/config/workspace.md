@@ -286,6 +286,7 @@ spec:
     require_pin: false             # the tag must come from a kind: version pin (or --pin)
     require_digest: false          # the image must carry a digest (name@sha256:... or name:tag@sha256:...)
     rings: [acc, prd]              # only deployments whose version document is in these rings; default all
+    on_unknown_image: warn         # a Helm module that declares no image: skip | warn (default) | block
     allow:
       - name: redis                # the image's name as `strata deploy images` lists it
         reason: third-party image, covered by cve_policy
@@ -330,10 +331,20 @@ The result is recorded in `policy_results.json` as `image_tag_policy` and ends u
 `deploy run` entry replaces the one `build run` wrote.
 
 The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
-module, strata does not write a service's `image` into the chart's values, so the chart decides what runs: the
-policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
-the module's `configuration`, in the chart's own key shape. See
+module, strata does not write a service's `image` into the chart's values, so the chart decides what runs. Set a
+Helm image through the module's `configuration`, in the chart's own key shape. See
 `helm-image-delivery.md` (work doc).
+
+- **A declared Helm image** is still judged, by the same rules. Its finding says "declared only, the chart decides
+  which image runs". `strata deploy images` shows it as `DELIVERED no (helm module: the chart decides)`.
+- **A Helm module that declares no service `image` or `artifact`** has images that only the chart knows.
+  - `on_unknown_image` decides what happens, apart from `enforcement`. The finding is `image_unknown_to_strata`.
+    - `warn` (the default) reports it.
+    - `block` stops the run.
+    - `skip` keeps it as an info finding, shown only in verbose and JSON output.
+  - The policy's `rings` and `origins` apply: the module counts as a `module-service` image.
+  - `allow` does not exempt a module. To have its images judged, declare them under the module's `services`.
+  - Without a policy, `strata deploy images` still lists such a module under "Known only to Helm".
 
 ## Provisioner lock policy
 

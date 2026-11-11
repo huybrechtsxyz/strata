@@ -19,10 +19,18 @@ document reads it, or an execution step receives it without a token
 (`_received_variable_keys()`, docs/work/artifact-gap-analysis.md, design 7).
 Where strata cannot tell, it counts: over-reporting an image is the safe side.
 
+Each row says whether strata delivers the image, that is writes it into what
+runs (docs/work/helm-image-delivery.md, option B): only the Compose integration
+writes a service `image`, a `store: artifact` variable reaches a step, and an
+`${artifact:}` token is resolved into a document the deployment uses. A Helm
+module's service image is a declaration; the chart decides what runs.
+`unknown_image_modules()` names the Helm modules that declare no image at all.
+
 Never resolves a store: a `store: artifact` value is an in-solution document
 lookup, so this needs no network and reveals no secret.
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
@@ -38,11 +46,13 @@ from strata.controllers.value_controller import (
 from strata.controllers.workload_controller import apply_version_pins, resolve_module
 from strata.integrations.registry import IntegrationNotFoundError
 from strata.integrations.registry import get_class as get_integration_class
-from strata.integrations.resolved_context import EffectiveImage
+from strata.integrations.resolved_context import EffectiveImage, UnknownImageModule
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
+from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.store_model import VariableStoreType
+from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
@@ -74,6 +84,9 @@ def effective_images(
         reached.append((f"token:{document.kind.value}/{document.name}", dumped))
 
     artifact_uses: dict[str, list[str]] = {}
+    # An artifact is delivered when any use delivers it; otherwise the first non-delivering service use says why.
+    artifact_delivered: set[str] = set()
+    artifact_undelivered: dict[str, str] = {}
     variables, _, _ = merge_environment_models(reachable_environments(context, deployment))
     artifact_keys = {key for key, store in variables.items() if store.store == VariableStoreType.ARTIFACT}
     used_keys = {key for _, dumped in reached for key in referenced_variable_keys(dumped)}
@@ -81,41 +94,40 @@ def effective_images(
     for key, store in variables.items():
         if key in delivered:
             artifact_uses.setdefault(str(store.value), []).append(f"variable:{key}")
+            artifact_delivered.add(str(store.value))
 
     service_rows: list[EffectiveImage] = []
-    for namespace_name in (workspace.spec.namespaces if workspace is not None else None) or []:
-        namespace_entry = index.get(PlatformKind.NAMESPACE, namespace_name)
-        if namespace_entry is None:
-            continue
-        namespace = cast(NamespaceModel, namespace_entry.model)
-        for reference in namespace.spec.modules or []:
-            if not reference.enabled:
-                continue
-            declared = resolve_module(index, reference)
-            effective = apply_version_pins(declared, version)
-            module_name = declared.meta.name
-            for service in effective.spec.services or []:
-                use = f"service:{module_name}/{service.name}"
-                if service.artifact is not None:
-                    artifact_uses.setdefault(str(service.artifact), []).append(use)
-                elif service.image:
-                    pinned = version_service is not None and version_service.resolve("images", service.name) is not None
-                    name, tag, digest = parse_image_ref(service.image)
-                    service_rows.append(
-                        EffectiveImage(
-                            origin="module-service",
-                            name=str(service.name),
-                            image_name=name,
-                            image_tag=tag,
-                            image_digest=digest,
-                            image_ref=service.image,
-                            tag_source="pin" if pinned else ("declared" if tag or digest else "none"),
-                            module=module_name,
-                            via=(use,),
-                            pin_version=version.meta.name if pinned and version is not None else None,
-                            pin_flag=pinned and pinned_by_flag,
-                        )
+    for _, declared, effective in _enabled_modules(context, workspace, version):
+        module_name = declared.meta.name
+        delivery = _not_delivered(effective)
+        for service in effective.spec.services or []:
+            use = f"service:{module_name}/{service.name}"
+            if service.artifact is not None:
+                artifact_uses.setdefault(str(service.artifact), []).append(use)
+                if delivery is None:
+                    artifact_delivered.add(str(service.artifact))
+                else:
+                    artifact_undelivered.setdefault(str(service.artifact), _artifact_not_delivered(effective))
+            elif service.image:
+                pinned = version_service is not None and version_service.resolve("images", service.name) is not None
+                name, tag, digest = parse_image_ref(service.image)
+                service_rows.append(
+                    EffectiveImage(
+                        origin="module-service",
+                        name=str(service.name),
+                        image_name=name,
+                        image_tag=tag,
+                        image_digest=digest,
+                        image_ref=service.image,
+                        tag_source="pin" if pinned else ("declared" if tag or digest else "none"),
+                        module=module_name,
+                        via=(use,),
+                        pin_version=version.meta.name if pinned and version is not None else None,
+                        pin_flag=pinned and pinned_by_flag,
+                        delivered=delivery is None,
+                        delivery=delivery,
                     )
+                )
 
     # `${artifact:NAME.FIELD}` anywhere `deploy run` resolves tokens (docs/work/artifact-gap-analysis.md, design 3):
     # without this, an image delivered only through the token would escape the policy, the SBOM and the gates.
@@ -124,6 +136,7 @@ def effective_images(
             uses = artifact_uses.setdefault(artifact_name, [])
             if use not in uses:
                 uses.append(use)
+            artifact_delivered.add(artifact_name)
 
     artifact_rows: list[EffectiveImage] = []
     for artifact_name, via in artifact_uses.items():
@@ -148,9 +161,73 @@ def effective_images(
                 pin_version=artifact_tag.version,
                 pin_flag=artifact_tag.source == "pin" and pinned_by_flag,
                 integration=artifact.spec.integration,
+                delivered=artifact_name not in artifact_undelivered or artifact_name in artifact_delivered,
+                delivery=None if artifact_name in artifact_delivered else artifact_undelivered.get(artifact_name),
             )
         )
     return [*artifact_rows, *service_rows]
+
+
+def unknown_image_modules(context: SolutionContext, deployment: DeploymentModel) -> list[UnknownImageModule]:
+    """The enabled Helm modules of `deployment` whose services declare no `image` and no `artifact`, so every
+    image their chart deploys is known only to Helm (docs/work/helm-image-delivery.md, option B).
+
+    Helm only: a GitOps, script or custom module may run no container at all. A Helm module that declares some
+    images but whose chart runs more is not listed: telling that needs the chart rendered (option D).
+    `chart_version` is the one that deploys, after a `charts` pin.
+    """
+    workspace = deployment_workspace(context.controller.index, deployment)
+    version = resolve_version(context, deployment)
+    found: list[UnknownImageModule] = []
+    for namespace_name, declared, effective in _enabled_modules(context, workspace, version):
+        if effective.spec.type != "helm":
+            continue
+        if any(service.image or service.artifact is not None for service in effective.spec.services or []):
+            continue
+        found.append(
+            UnknownImageModule(
+                module=declared.meta.name,
+                namespace=namespace_name,
+                chart=effective.spec.source.chart_name,
+                chart_version=effective.spec.source.chart_version,
+            )
+        )
+    return found
+
+
+def _enabled_modules(
+    context: SolutionContext, workspace: WorkspaceModel | None, version: VersionModel | None
+) -> Iterator[tuple[str, ModuleModel, ModuleModel]]:
+    """`(namespace, declared module, module after version pins)` for each enabled module reference of the
+    workspace's namespaces: the one walk `effective_images()` and `unknown_image_modules()` share."""
+    index = context.controller.index
+    for namespace_name in (workspace.spec.namespaces if workspace is not None else None) or []:
+        namespace_entry = index.get(PlatformKind.NAMESPACE, namespace_name)
+        if namespace_entry is None:
+            continue
+        namespace = cast(NamespaceModel, namespace_entry.model)
+        for reference in namespace.spec.modules or []:
+            if not reference.enabled:
+                continue
+            declared = resolve_module(index, reference)
+            yield str(namespace_name), declared, apply_version_pins(declared, version)
+
+
+def _not_delivered(module: ModuleModel) -> str | None:
+    """Why strata does not deliver a service `image` of `module`, or `None` when it does: only the Compose
+    integration writes a service's image into what runs (`compose.py`)."""
+    if module.spec.type == "compose":
+        return None
+    if module.spec.type == "helm":
+        return "helm module: the chart decides"
+    return f"{module.spec.type or 'untyped'} module: strata writes no image"
+
+
+def _artifact_not_delivered(module: ModuleModel) -> str:
+    """Why an artifact that `module`'s services name, and nothing else delivers, does not reach what runs."""
+    if module.spec.type == "helm":
+        return "helm module: no ${artifact:} token"
+    return f"{module.spec.type or 'untyped'} module: strata writes no image"
 
 
 def _received_variable_keys(context: SolutionContext, workspace: WorkspaceModel | None, keys: set[str]) -> set[str]:
