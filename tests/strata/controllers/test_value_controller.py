@@ -1237,7 +1237,7 @@ def test_resolve_document_value_references_ignores_documents_with_no_value_token
 
 
 def test_resolve_document_value_references_does_not_scan_meta_as_a_source(tmp_path):
-    """docs/design/gap_fit_v1.md gap #24 — `meta` (name/annotations/labels/
+    """docs/work/gap_fit_v1.md gap #24 — `meta` (name/annotations/labels/
     tags) is documentation only; a literal '${value:...}'-shaped string
     there (e.g. an annotation quoting the real reference syntax as
     documentation) must not be treated as a reference to resolve, even

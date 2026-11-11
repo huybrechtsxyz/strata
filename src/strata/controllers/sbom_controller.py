@@ -331,7 +331,7 @@ def cve_findings(build_path: Path, index: DocumentIndex, threshold: str) -> CveF
 
 def evaluate_cve_policy(build_path: Path, workspace: WorkspaceModel, index: DocumentIndex) -> Diagnostics:
     """Gate `build run` on CVE findings in the SBOM `write_sbom()` just
-    wrote, when `workspace.spec.cve_policy` is set (docs/work/
+    wrote, when `workspace.spec.cve_policy` is set (docs/archive/
     cve-scanner-integration.md).
 
     No-op (empty `Diagnostics`) with no policy configured — the common

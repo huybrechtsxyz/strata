@@ -281,7 +281,7 @@ def test_tenant_geography_not_declared_by_any_provider_is_caught(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Deployment -> Tenant/Workspace/Provider: static geography cross-check
-# (docs/design/tenant-zone-policy.md's "static tier")
+# (docs/work/tenant-zone-policy.md's "static tier")
 # ---------------------------------------------------------------------------
 
 
@@ -1392,7 +1392,7 @@ def test_deployment_with_no_resolvable_environment_skips_token_checking(tmp_path
 
 
 # ---------------------------------------------------------------------------
-# docs/design/gap_fit_v1.md gap #12, generalized (docs/design/deploy-command.md's
+# docs/work/gap_fit_v1.md gap #12, generalized (docs/design/deploy-command.md's
 # "Cross-invocation output access" section, "Expanded finding"): `strata
 # validate` previously rejected EVERY `${output:...}` token unconditionally,
 # even one a real execution step's `targets` claims — confirmed to affect
@@ -1670,7 +1670,7 @@ def test_topology_is_reachable_as_part_of_the_workspace_document(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Environment -> Configuration.spec.security (docs/design/gap_fit_v1.md gap #7 —
+# Environment -> Configuration.spec.security (docs/work/gap_fit_v1.md gap #7 —
 # real usage: config-repo's config/stores.yaml)
 # ---------------------------------------------------------------------------
 
@@ -1754,7 +1754,7 @@ def test_security_with_no_fields_set_restricts_nothing(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Workspace -> Configuration.spec.security.allowed_key_value_stores
-# (docs/work/cross-run-step-output-delivery.md's Implementation Plan step 1,
+# (docs/archive/cross-run-step-output-delivery.md's Implementation Plan step 1,
 # 'Governance') — same mechanism as allowed_variable_stores above, but
 # checking WorkspaceModel.spec.output_store/.output_store_integration
 # instead of an Environment's per-key store declarations.
@@ -1871,7 +1871,7 @@ def test_workspace_without_output_store_is_unaffected_by_restrictive_security(tm
 
 # ---------------------------------------------------------------------------
 # Workspace -> output-store backend must support compare-and-swap
-# (docs/work/cross-run-step-output-delivery.md — DeploymentOutputStore's
+# (docs/archive/cross-run-step-output-delivery.md — DeploymentOutputStore's
 # read-modify-write cannot work with a backend lacking real CAS, e.g.
 # azure-keyvault; caught here at validate time, independent of any
 # Configuration document/allow-list).
@@ -2174,7 +2174,7 @@ def test_security_gate_integration_of_an_unregistered_type_is_not_this_checks_fi
 
 
 # ---------------------------------------------------------------------------
-# Configuration.spec.paths (docs/design/path-conventions.md, docs/design/gap_fit_v1.md
+# Configuration.spec.paths (docs/design/path-conventions.md, docs/work/gap_fit_v1.md
 # gap #7 — real usage: config-repo's config/paths.yaml)
 # ---------------------------------------------------------------------------
 
@@ -2552,7 +2552,7 @@ def test_artifact_reference_to_an_unknown_artifact_is_caught(tmp_path):
 # ---------------------------------------------------------------------------
 # SolutionRemoteModel -> Module/Provisioner SourceModel usages: an OCI
 # remote's `reference` is required only when a real non-chart consumer needs
-# it (docs/design/gap_fit_v1.md gap #3).
+# it (docs/work/gap_fit_v1.md gap #3).
 # ---------------------------------------------------------------------------
 
 

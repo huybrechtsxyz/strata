@@ -297,7 +297,7 @@ class ResourceSpecModel(PlatformBaseModel):
         "provisioned infrastructure). Deliberately distinct from meta.tags (a "
         "free-form list used for strata-internal categorization/documentation, not "
         "cloud tags). Optional (v1-derived documents commonly carry no cloud tags at "
-        "all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum "
+        "all — gap #4, docs/work/gap_fit_v1.md). Strata does not enforce a maximum "
         "tag count — cloud provider/resource-type tag limits vary too much to bake "
         "into the schema; keeping default_tags + custom_tags within your target "
         "provider's limit is the resource author's responsibility.",

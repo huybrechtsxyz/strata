@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for rendering the audit CloudEvents+ECS envelope (docs/design/audit-trail.md's
+"""Tests for rendering the audit CloudEvents+ECS envelope (docs/work/audit-trail.md's
 "The audit files — ... the Event is rendered, not written").
 
 Phase 2 of that doc's Layer 2 Implementation Plan.

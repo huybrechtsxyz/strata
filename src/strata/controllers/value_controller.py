@@ -196,7 +196,7 @@ def resolve_deployment_workspace(
 
 def resolve_tenant(context: SolutionContext, deployment: DeploymentModel) -> TenantModel | None:
     """The `TenantModel` `deployment.spec.tenant` names, or `None` if unset
-    or unresolvable (docs/design/build-command.md's `tenant` Terraform
+    or unresolvable (docs/work/build-command.md's `tenant` Terraform
     category).
 
     `deployment.spec.tenant` survives `resolve_deployment()`'s `extends`/

@@ -52,7 +52,7 @@ def status_command(deployment: str | None, path: Path | None, output: str, quiet
 
     Reads from the solution's configured 'git' audit sink
     (spec.audit.sinks[].git) — never local files, since most real
-    deployments run in ephemeral CI (docs/design/audit-trail.md's "Layer 3
+    deployments run in ephemeral CI (docs/work/audit-trail.md's "Layer 3
     deferred"). Fails fast, before any network access, if no readable sink
     is configured, or if more than one is (only one is supported so far).
 
@@ -184,7 +184,7 @@ def changes_command(
 
     Reads from the solution's configured 'git' audit sink, same as
     'audit status' — never local files, since most real deployments run in
-    ephemeral CI (docs/design/audit-trail.md's "Layer 3 deferred"). Fails
+    ephemeral CI (docs/work/audit-trail.md's "Layer 3 deferred"). Fails
     fast, before any network access, if --since/--until is malformed, or if
     no/multiple readable audit sinks are configured.
 

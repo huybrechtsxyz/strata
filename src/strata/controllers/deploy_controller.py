@@ -159,7 +159,7 @@ def _contains_output_token(node: object) -> bool:
     piece of one) contains a well-formed `${output:...}` token anywhere.
 
     Used to flag a DNS/network/firewall document that needs an owning step
-    (docs/design/gap_fit_v1.md gap #12) but has none — `${var:}`/`${secret:}` tokens
+    (docs/work/gap_fit_v1.md gap #12) but has none — `${var:}`/`${secret:}` tokens
     don't need this check, they resolve identically for every step
     regardless of ownership.
     """
@@ -394,7 +394,7 @@ def _merge_durable_outputs(
 ) -> bool:
     """Fill in `visible_outputs` for any `upstream` step not already
     produced by this same invocation (`step_outputs`), reading from the
-    durable `output_store` as a fallback (docs/work/
+    durable `output_store` as a fallback (docs/archive/
     cross-run-step-output-delivery.md's Implementation Plan step 4) —
     the actual cross-*run* half of `${output:...}` resolution; the
     in-memory half above is unchanged, same-run only.
@@ -444,7 +444,7 @@ def _step_payload(
     payload: Mapping[str, Any], step_claimed: set[str], claimed_by_category: Mapping[str, set[str]]
 ) -> dict[str, Any]:
     """This step's own view of the workspace payload: dns/networks/firewalls documents filtered to what it
-    claims plus whatever nobody claims (docs/design/gap_fit_v1.md gap #12); every other category broadcasts as is."""
+    claims plus whatever nobody claims (docs/work/gap_fit_v1.md gap #12); every other category broadcasts as is."""
     return {
         category: (
             {
@@ -1108,7 +1108,7 @@ def deploy_run(
     # (mirrors `backend.configuration`'s existing per-step pattern). A
     # `${output:...}` token needs an owning step to scope which step's
     # outputs apply — see the ownership/claiming logic right below
-    # (docs/design/gap_fit_v1.md gap #12) — `${var:}`/`${secret:}` tokens
+    # (docs/work/gap_fit_v1.md gap #12) — `${var:}`/`${secret:}` tokens
     # need no such owner and resolve identically for every step.
     #
     # One payload now, not two (`dns_networks_firewalls`/
@@ -1118,7 +1118,7 @@ def deploy_run(
     # identical for every step, exactly as before.
     payload = build_strata_payload(graph)
 
-    # Same lookup `build_workload_modules()` uses at build time (docs/design/gap_fit_v1.md
+    # Same lookup `build_workload_modules()` uses at build time (docs/work/gap_fit_v1.md
     # gap #13) — `HelmIntegration.deploy_namespace()` needs it to resolve a
     # chart-based module's `chartRemote` name into a real registry URL.
     solution = context.controller.solution
@@ -1128,7 +1128,7 @@ def deploy_run(
 
     all_steps = workspace.spec.execution or []
 
-    # Ownership (docs/design/gap_fit_v1.md gap #12): a document is "claimed" once any
+    # Ownership (docs/work/gap_fit_v1.md gap #12): a document is "claimed" once any
     # step's effective dns/firewall/network set (`claimed_names()`,
     # docs/design/workspace-execution-model.md — direct fields plus
     # resource-derived claiming, topology-expanded) names it
@@ -1155,7 +1155,7 @@ def deploy_run(
                 diagnostics.error(
                     f"'{name}' uses '${{output:...}}' but no execution step claims this document "
                     f"(directly or via its resources/topologies) — add it to the step that should apply "
-                    f"it (docs/design/gap_fit_v1.md gap #12).",
+                    f"it (docs/work/gap_fit_v1.md gap #12).",
                     location=name,
                 )
 
@@ -1170,7 +1170,7 @@ def deploy_run(
         if _contains_output_token(category_payload):
             diagnostics.error(
                 f"'{category}' uses '${{output:...}}', which is not supported outside dns/networks/firewalls "
-                "(docs/design/gap_fit_v1.md gap #8) — remove it or move the value into a dns/network/firewall document instead.",
+                "(docs/work/gap_fit_v1.md gap #8) — remove it or move the value into a dns/network/firewall document instead.",
                 location=category,
             )
     if not diagnostics.ok:
@@ -1417,7 +1417,7 @@ def deploy_run(
             **artifact_tokens,
         }
 
-        # Helm/Compose dispatch (docs/design/gap_fit_v1.md gap #13): a
+        # Helm/Compose dispatch (docs/work/gap_fit_v1.md gap #13): a
         # container-capable step never goes through Terraform's
         # init/validate/plan/deploy sequence at all — it deploys every
         # namespace its effective namespace set names instead (direct
@@ -1780,7 +1780,7 @@ def deploy_run(
                 # No real plan preview available for this integration. Under
                 # `--dry-run` that's a graceful skip — a warning was already
                 # recorded by `plan_or_warn()`; move on to the next step
-                # rather than aborting the whole run (docs/work/
+                # rather than aborting the whole run (docs/design/
                 # deploy-plan-preview.md §3: "if the IaC/provisioner supports
                 # it, otherwise not"). On a real apply, `plan()` is a required
                 # prerequisite, not an optional preview — silently skipping
@@ -1840,7 +1840,7 @@ def deploy_run(
         collected_at = datetime.now(timezone.utc)
         if output_store is not None:
             # Per step, immediately after collection — not batched to the
-            # end of the run (docs/work/cross-run-step-output-delivery.md)
+            # end of the run (docs/archive/cross-run-step-output-delivery.md)
             # — so a mid-run crash still leaves every already-completed
             # step's output durably recorded. A write failure here never
             # fails the run: the step already deployed successfully,

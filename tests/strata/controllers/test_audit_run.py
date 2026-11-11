@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `audit_run.finalize_and_distribute_deploy_audit()` (docs/design/
+"""Tests for `audit_run.finalize_and_distribute_deploy_audit()` (docs/work/
 audit-trail.md's "Write once locally, then distribute").
 
 Phase 5 of that doc's Layer 2 Implementation Plan — the final phase. Real
@@ -535,7 +535,7 @@ def test_manifest_artifacts_bom_absent_when_workspace_reaches_nothing(tmp_path: 
 
 
 # ---------------------------------------------------------------------------
-# change_reference (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
+# change_reference (docs/work/audit-trail.md's ChangeReferenceModel CLI wiring)
 # ---------------------------------------------------------------------------
 
 

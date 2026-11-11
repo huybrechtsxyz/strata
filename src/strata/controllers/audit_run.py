@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Finalize and distribute a deploy run's audit trail — the end-of-run
-sequencing (docs/design/audit-trail.md's "Write once locally, then
+sequencing (docs/work/audit-trail.md's "Write once locally, then
 distribute").
 
 Phase 5 of that doc's Layer 2 Implementation Plan — the final phase,
@@ -542,7 +542,7 @@ def _dispatch_integration_sink(
 def _record_sink_failure(sink: AuditSinkModel, message: str, code: str, diagnostics: Diagnostics) -> None:
     """One place deciding warn-vs-fail, so both sink arms can never drift apart.
 
-    `required` is the whole decision (docs/design/audit-trail.md's "Dispatch
+    `required` is the whole decision (docs/work/audit-trail.md's "Dispatch
     failure — a `required` flag, not a binary silent-vs-fail choice").
     """
     if sink.required:

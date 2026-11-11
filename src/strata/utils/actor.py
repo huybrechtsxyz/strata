@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Resolve a weak, best-effort actor identity for the audit manifest's
-`deployed_by` field (docs/design/audit-trail.md's "Actor/identity").
+`deployed_by` field (docs/work/audit-trail.md's "Actor/identity").
 
 Phase 3 of that doc's Layer 2 Implementation Plan. Pure function, no
 dependency on other layers — lives in `utils/` (not `controllers/`), same

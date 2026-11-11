@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `audit_push.push_audit_files` (docs/design/audit-trail.md's
+"""Tests for `audit_push.push_audit_files` (docs/work/audit-trail.md's
 "Durable push destination"/"The endpoints").
 
 Phase 4 of that doc's Layer 2 Implementation Plan. Most tests mock

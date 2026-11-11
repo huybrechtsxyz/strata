@@ -162,7 +162,7 @@ class DnsZoneModel(PlatformBaseModel):
         "environment, owner). Deliberately distinct from meta.tags (a free-form list "
         "used for strata-internal categorization/documentation, not cloud tags). "
         "Optional (v1-derived documents commonly carry no cloud tags at all — gap #4, "
-        "docs/design/gap_fit_v1.md). Strata does not enforce a maximum tag count.",
+        "docs/work/gap_fit_v1.md). Strata does not enforce a maximum tag count.",
     )
     custom_tags: dict[str, str] | None = Field(
         None,

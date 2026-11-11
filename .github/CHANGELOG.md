@@ -68,6 +68,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Fixed
 
+- Schema descriptions (`strata schema`) and docstrings cite each doc where it is now. 139 citations of 13 docs
+  pointed to a path the doc had moved from; a test now fails on any such citation.
 - `strata promote status` marks an `images` pin `← behind` by its tag. An image pin is a whole reference
   (`acme/api:1.2.0`), which never parsed as a version, so no image pin was ever marked behind. Siblings that pin
   different images are not compared, and an `artifacts` pin of `tag@digest` compares its tag.

@@ -649,7 +649,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "Provisioner's bare 'tool' (ADR-0022 D2). Omit to disable cross-run output "
         "persistence entirely (today's in-memory-only behavior). Checked against "
         "Configuration.spec.security.allowed_key_value_stores when set "
-        "(docs/work/cross-run-step-output-delivery.md).",
+        "(docs/archive/cross-run-step-output-delivery.md).",
     )
     output_store_integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         None,

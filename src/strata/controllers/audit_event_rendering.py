@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render the audit CloudEvents+ECS envelope on demand — never written to disk
-(docs/design/audit-trail.md's "The audit files — ... the Event is rendered,
+(docs/work/audit-trail.md's "The audit files — ... the Event is rendered,
 not written").
 
 Phase 2 of that doc's Layer 2 Implementation Plan. Lives in `controllers/`

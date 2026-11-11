@@ -358,7 +358,7 @@ def test_pin_names_an_unknown_version_exits_two(runner, solution, _stub_terrafor
 
 
 # ---------------------------------------------------------------------------
-# --output-max-age (docs/work/cross-run-step-output-delivery.md)
+# --output-max-age (docs/archive/cross-run-step-output-delivery.md)
 # ---------------------------------------------------------------------------
 
 
@@ -386,7 +386,7 @@ def test_output_max_age_rejects_a_non_positive_value(runner, solution, _stub_ter
 
 
 # ---------------------------------------------------------------------------
-# --change-* (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
+# --change-* (docs/work/audit-trail.md's ChangeReferenceModel CLI wiring)
 # ---------------------------------------------------------------------------
 
 

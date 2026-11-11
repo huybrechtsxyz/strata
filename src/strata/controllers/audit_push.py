@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Push audit files to a durable git destination — the `git` sink arm's
-transport (docs/design/audit-trail.md's "Durable push destination"/"The
+transport (docs/work/audit-trail.md's "Durable push destination"/"The
 endpoints").
 
 Phase 4 of that doc's Layer 2 Implementation Plan. A new, push-specific

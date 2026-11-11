@@ -24,7 +24,7 @@ class ReachedDocument:
     """One document a deployment reaches.
 
     `claimed` is whether some workspace execution step's `targets` claims it
-    (`WorkspaceService.claimed_document_names()`, docs/design/gap_fit_v1.md gap #12): `unresolved_value_tokens()`
+    (`WorkspaceService.claimed_document_names()`, docs/work/gap_fit_v1.md gap #12): `unresolved_value_tokens()`
     accepts an `${output:...}` token only then. A module reached through a targeted namespace inherits that
     namespace's claim; every other document is never claimable today.
     """
@@ -45,7 +45,7 @@ def documents_reachable_from_workspace(
 ) -> list[ReachedDocument]:
     """Every document a workspace renders or configures: DNS/Network/Firewall/Module plus the workspace document
     itself and every Resource/Provider/Topology it references (config passthrough fields,
-    docs/design/gap_fit_v1.md gap #10's Phase 7 finding).
+    docs/work/gap_fit_v1.md gap #10's Phase 7 finding).
 
     A bounded, one-then-two-hop walk, not a generic graph traversal: a workspace names Topology/Namespace documents
     directly, and those attach Modules. The workspace document is included whole, so

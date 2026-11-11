@@ -54,7 +54,7 @@ class SbomReferenceModel(PlatformBaseModel):
 
     Written by `sbom_controller.write_sbom()` after successfully producing
     `sbom.json`. Not yet embedded anywhere (no v2 deployment manifest exists
-    — docs/design/gap_fit_v1.md gap #7); kept so that feature can read the
+    — docs/work/gap_fit_v1.md gap #7); kept so that feature can read the
     hash straight off the already-written file once it is designed.
     """
 
@@ -105,7 +105,7 @@ class CveAllowedEntryModel(PlatformBaseModel):
 
     Design notes:
     A single entry in the CVE allowlist
-    (`ConfigurationSpecModel.cve_allowed`, docs/work/
+    (`ConfigurationSpecModel.cve_allowed`, docs/archive/
     cve-scanner-integration.md Phase 3).
 
     Ported field-for-field from v1's real `.strata/cve-allowed.yaml` shape

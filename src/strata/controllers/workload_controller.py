@@ -742,7 +742,7 @@ def _check_dependency_list(
 def resolve_namespace_modules(
     index: DocumentIndex, namespace: NamespaceModel, build_path: Path
 ) -> dict[str, list[ResolvedModule]]:
-    """`deploy_run()`'s counterpart to `build_workload_modules()` (docs/design/gap_fit_v1.md
+    """`deploy_run()`'s counterpart to `build_workload_modules()` (docs/work/gap_fit_v1.md
     gap #13) — resolves `namespace`'s modules, grouped by `module.spec.type`,
     without re-materialising any source.
 

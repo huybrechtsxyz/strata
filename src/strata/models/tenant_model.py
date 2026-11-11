@@ -82,7 +82,7 @@ class TenantSpecModel(PlatformBaseModel):
         "`TenantService.validate_geographies_against_provider_configs()`. A tenant's "
         "allowed set is what a zone-isolation policy tests a planned resource's region "
         "against. None/omitted means this tenant has no data-residency constraint at "
-        "all — the real, common case (docs/design/tenant-zone-policy.md: no real "
+        "all — the real, common case (docs/work/tenant-zone-policy.md: no real "
         "tenant in the one production consumer checked has this populated yet).",
     )
     onboarded: date | None = Field(

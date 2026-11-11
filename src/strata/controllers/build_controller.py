@@ -19,7 +19,7 @@ Four small, independent helpers plus the loop itself:
 - `find_provisioner()` (lives in `integration_resolution.py`) — `WorkspaceSpecModel.validate_execution()` already
   guarantees `step.provisioner` names a real entry in `spec.provisioners`;
   this is a lookup, not a check.
-- `materialise_provisioner_sources()` (ADR-0029 — docs/work/
+- `materialise_provisioner_sources()` (ADR-0029 — docs/design/
   provisioner-source-dependencies.md Phase 4) — recursively syncs a
   provisioner's own `depends_on` chain before the step loop materialises
   the step's own provisioner, so a provisioner named only in another

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """`DeploymentOutputStore` — the backend-agnostic business logic layer on
-top of `KeyValueStoreIntegration` (docs/work/cross-run-step-output-delivery.md's
+top of `KeyValueStoreIntegration` (docs/archive/cross-run-step-output-delivery.md's
 Implementation Plan steps 2-3, and ADR-0057).
 
 Not itself an `Integration` — plain code wrapping one already-resolved
@@ -67,7 +67,7 @@ class OutputRecordNotFoundError(UsageError):
     Distinguishing "never ran in any invocation" from "ran in this
     invocation" is the caller's job — `DeploymentOutputStore.read()` is
     only ever consulted as the fallback once an in-memory lookup already
-    missed (docs/work/cross-run-step-output-delivery.md)."""
+    missed (docs/archive/cross-run-step-output-delivery.md)."""
 
 
 class OutputRecordDestroyedError(OutputRecordNotFoundError):
@@ -219,7 +219,7 @@ class DeploymentOutputStore:
         """Write `step`'s non-sensitive output values to its own key.
 
         A sensitive output is never serialised here, full stop — matches
-        the non-negotiable security constraint in docs/work/
+        the non-negotiable security constraint in docs/archive/
         cross-run-step-output-delivery.md.
 
         A plain `put()`: the key has one writer, the step that just deployed, and there is nothing to merge.

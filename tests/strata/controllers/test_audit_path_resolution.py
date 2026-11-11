@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for resolve_audit_relative_path() — docs/design/audit-trail.md's
+"""Tests for resolve_audit_relative_path() — docs/work/audit-trail.md's
 "Path resolution — shared by the local write and every push destination".
 
 Phase 3 of that doc's Layer 2 Implementation Plan.

@@ -1443,7 +1443,7 @@ def test_tf_var_env_empty_when_no_values_resolved():
 
 
 def test_tf_var_env_empty_when_prefix_is_none():
-    """docs/design/gap_fit_v1.md: a container-capable integration (or any future
+    """docs/work/gap_fit_v1.md: a container-capable integration (or any future
     infra tool with no env-var-prefix mechanism) declares `ENV_VAR_PREFIX
     = None` - this whole mechanism has nothing to deliver for it."""
     resolved = ValueResolution(deployment="app", values={"db_password": "hunter2"})
@@ -1601,7 +1601,7 @@ def test_deploy_run_pin_resolves_the_artifacts_category(tmp_path: Path, monkeypa
     assert diagnostics.ok, diagnostics.messages()
     # A `tf_var_env()`-delivered environment variable is a raw string,
     # same as a secret's own TF_VAR_ value — HashiCorp's own documented
-    # TF_VAR convention for a plain scalar (docs/work/
+    # TF_VAR convention for a plain scalar (docs/design/
     # terraform-variable-precedence.md Open Question 7 — json.dumps()-ing a
     # plain string embedded spurious literal quote characters that Terraform
     # never unwraps).
@@ -2645,7 +2645,7 @@ def test_deploy_run_projects_the_deployments_provider_binding(tmp_path: Path, _c
 
 
 def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #17 / value-token-resolution.md's "Decision
+    """docs/work/gap_fit_v1.md gap #17 / value-token-resolution.md's "Decision
     (2026-09-29)": a '${var:}'/'${secret:}' token inside a Provider's
     'configuration'/'custom' used to pass 'strata validate' cleanly but
     was never projected into any Terraform artifact at all — silently
@@ -2721,7 +2721,7 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
 
 
 def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #8: '${output:...}' has no ownership mechanism
+    """docs/work/gap_fit_v1.md gap #8: '${output:...}' has no ownership mechanism
     for resx_<type>/topologies/properties/custom/tenant (broadcast-only,
     unlike dns/networks/firewalls) — rejected outright, not silently
     ignored or left unresolved."""
@@ -2771,7 +2771,7 @@ def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Pat
 
 
 def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #12: a DNS document claimed by a step's `targets`
+    """docs/work/gap_fit_v1.md gap #12: a DNS document claimed by a step's `targets`
     resolves '${output:...}' using THAT step's own dependency-scoped
     outputs — the worked example from the design discussion (a VM's public
     IP, produced by 'provision-hearth', consumed by 'apply-dns')."""
@@ -2954,7 +2954,7 @@ def test_deploy_run_sentinels_an_output_token_when_the_real_output_is_sensitive(
 
 
 def test_deploy_run_rejects_unclaimed_output_token_in_dns(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #12: a DNS document using '${output:...}' with no
+    """docs/work/gap_fit_v1.md gap #12: a DNS document using '${output:...}' with no
     step naming it in `targets` is a clear, single diagnostic error — not a
     per-step crash or silently inconsistent resolution."""
     root = _solution(tmp_path)
@@ -3607,7 +3607,7 @@ def test_upstream_step_names_is_transitive():
 
 
 # ---------------------------------------------------------------------------
-# _merge_durable_outputs() — docs/work/cross-run-step-output-delivery.md's
+# _merge_durable_outputs() — docs/archive/cross-run-step-output-delivery.md's
 # Implementation Plan step 4. Direct unit tests against a stub
 # DeploymentOutputStore (same "test the private helper directly" convention
 # as _upstream_step_names above) — asymmetric by design: not-found is
@@ -3723,7 +3723,7 @@ def test_merge_durable_outputs_fails_loudly_when_the_backend_is_unreachable():
 
 
 # ---------------------------------------------------------------------------
-# deploy_run() wired end to end to a configured output_store (docs/work/
+# deploy_run() wired end to end to a configured output_store (docs/archive/
 # cross-run-step-output-delivery.md's Implementation Plan step 4) — a fake
 # KeyValueStoreIntegration registered as a real entry-point plugin (same
 # pattern test_integrations_registry.py's own tests use), so no real SDK is
@@ -4084,7 +4084,7 @@ def test_deploy_run_reports_a_template_render_failure(tmp_path: Path, _capture):
 
 
 # ---------------------------------------------------------------------------
-# Helm/Compose namespace dispatch (docs/design/gap_fit_v1.md gap #13,
+# Helm/Compose namespace dispatch (docs/work/gap_fit_v1.md gap #13,
 # docs/design/deploy-command.md) - a "container"-capable step deploys the
 # namespace(s) its own `targets` names directly, bypassing Terraform's
 # init/validate/plan/apply sequence entirely.
@@ -4435,7 +4435,7 @@ def test_deploy_run_container_step_with_no_matching_namespace_target_errors(tmp_
 def _compose_solution(tmp_path: Path) -> Path:
     """Same shape as `_helm_solution()`, but `tool: compose` - proves the
     orchestrator's container-capability branch is genuinely tool-agnostic
-    (docs/design/gap_fit_v1.md gap #13), not accidentally Helm-specific."""
+    (docs/work/gap_fit_v1.md gap #13), not accidentally Helm-specific."""
     root = _terraform_solution(tmp_path)
     _write(root, "services/portainer/.keep", "")
     _write(
@@ -4500,7 +4500,7 @@ def test_deploy_run_dispatches_compose_step_to_deploy_namespace(tmp_path: Path, 
 
 
 def test_deploy_run_does_not_leak_tf_var_env_into_container_capable_steps(tmp_path: Path):
-    """docs/design/gap_fit_v1.md: Helm/Compose declare no `ENV_VAR_PREFIX` (base
+    """docs/work/gap_fit_v1.md: Helm/Compose declare no `ENV_VAR_PREFIX` (base
     default `None`) - `tf_var_env()` now returns `{}` for them, so a
     container-capable step's own subprocess never receives TF_VAR_-
     prefixed secrets meant for Terraform."""

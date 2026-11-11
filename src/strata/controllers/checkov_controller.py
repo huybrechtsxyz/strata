@@ -5,7 +5,7 @@ run` on static-IaC-security findings in the provisioners/Helm modules
 set.
 
 Not folded into `sbom_controller.py` — no SBOM relationship exists here,
-same reasoning as `checkov_model.py`'s own placement (docs/work/
+same reasoning as `checkov_model.py`'s own placement (docs/archive/
 checkov-integration.md Phase 1).
 
 **`scope` is build-time-native, not v1's deployment-stage concept** — a
@@ -107,7 +107,7 @@ def evaluate_checkov_policy(
         workspace: The deployment's resolved workspace — the sole owner of
             `spec.checkov_policy`.
         provisioner_source_paths: The real `materialised` dict
-            `build_run()`'s own step loop builds (docs/work/
+            `build_run()`'s own step loop builds (docs/archive/
             checkov-integration.md Phase 1) — provisioner name -> the
             directory its source was synced to, for every provisioner
             reached this build, however it was reached. `None` for a

@@ -415,7 +415,7 @@ class ModuleSpecModel(PlatformBaseModel):
         "Kubernetes metadata.labels on generated Pods/Deployments, or Docker Compose "
         "service labels) — e.g. app.kubernetes.io/name, environment. Optional "
         "(v1-derived documents commonly carry no labels at all — gap #4, "
-        "docs/design/gap_fit_v1.md). Strata does not enforce a maximum label count.",
+        "docs/work/gap_fit_v1.md). Strata does not enforce a maximum label count.",
     )
     custom_labels: dict[str, str] | None = Field(
         None,

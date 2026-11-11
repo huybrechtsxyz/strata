@@ -501,7 +501,8 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 - `artifact_model.py`'s module docstring also lists the ways an artifact is referenced; it gains the token.
 - Out of scope: the same drift for other moved docs (`gap_fit_v1.md`, `audit-trail.md`,
   `cross-run-step-output-delivery.md` and five more, 135 citations in all). Listed as a follow-up, with a guard
-  test that would have caught all of it.
+  test that would have caught all of it. Done 2026-11-10 in [doc-citations.md](doc-citations.md): 139 citations
+  of 13 docs, counted with the ones wrapped across lines, and `tests/strata/test_doc_citations.py`.
 
 ### Smaller notes
 

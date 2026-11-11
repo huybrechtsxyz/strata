@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the deployment manifest model — `_manifest.json` (docs/design/audit-trail.md).
+"""Tests for the deployment manifest model — `_manifest.json` (docs/work/audit-trail.md).
 
 Phase 2 of that doc's Layer 2 Implementation Plan.
 """

@@ -108,7 +108,7 @@ def schemas_dir(root: Path) -> Path:
 
 
 def audit_dir(root: Path) -> Path:
-    """Return the audit trail directory for `root` (docs/design/audit-trail.md).
+    """Return the audit trail directory for `root` (docs/work/audit-trail.md).
 
     Fixed, never configurable — `spec.audit` has no `path` field, the same
     way remotes have no configurable location either (see this module's own

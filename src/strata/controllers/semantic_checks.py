@@ -367,7 +367,7 @@ def _check_deployment_layers(
 
 def _check_deployment_tenant_geography(index: DocumentIndex, deployment: DeploymentModel) -> Diagnostics:
     """Cross-check a deployment's provider region(s) against its tenant's allowed
-    geographies (docs/design/tenant-zone-policy.md's "static tier" — the
+    geographies (docs/work/tenant-zone-policy.md's "static tier" — the
     cheap, config-time equivalent of v1's real, plan-time `tenant_zone` policy).
 
     Fully automatic — no config field anywhere turns this on or off; it
@@ -1125,7 +1125,7 @@ def _check_workspace_key_value_store_allowed(
 ) -> Diagnostics:
     """Check the resolved output-store backend type against
     `security.allowed_key_value_stores` — the controller's job
-    (cross-document resolution), not the service's (docs/work/
+    (cross-document resolution), not the service's (docs/archive/
     cross-run-step-output-delivery.md's Implementation Plan step 1,
     'Governance').
     """
@@ -1387,7 +1387,7 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
     conditionally-meaningful field.
 
     Also enforces `Configuration.spec.security`'s store allow-lists
-    (docs/design/gap_fit_v1.md gap #7), when exactly one `Configuration` document
+    (docs/work/gap_fit_v1.md gap #7), when exactly one `Configuration` document
     exists and declares it — same "skip rather than guess a policy that was
     never declared" rule `_check_workspace_topology_components()` already
     uses for `spec.topologies`.
@@ -1437,7 +1437,7 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     only version that can't be wrong in either direction.
 
     **Also checks the deployment/tenant/environment/workspace/resource/
-    provider/topology documents themselves** — docs/design/gap_fit_v1.md gap #10's
+    provider/topology documents themselves** — docs/work/gap_fit_v1.md gap #10's
     Phase 7 finding: this function used to only check DNS/network/
     firewall/module (`documents_reachable_from_workspace()`'s original,
     narrower scope), so a `${var:}`/`${secret:}` token in, say,
@@ -1449,7 +1449,7 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     that ever ran.
 
     Each document's own real source path is attributed to its findings
-    (docs/design/gap_fit_v1.md gap #20) — every finding used to report
+    (docs/work/gap_fit_v1.md gap #20) — every finding used to report
     `entry.source` (this deployment's own path) regardless of which
     document actually held the token.
 
@@ -1551,7 +1551,7 @@ def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> 
 # ---------------------------------------------------------------------------
 # SolutionRemoteModel -> Module/Provisioner SourceModel usages: an OCI
 # remote's `reference` is required only when a real (non-chart) consumer
-# needs it (docs/design/gap_fit_v1.md gap #3).
+# needs it (docs/work/gap_fit_v1.md gap #3).
 # ---------------------------------------------------------------------------
 
 
@@ -1572,7 +1572,7 @@ def _check_remotes(index: DocumentIndex, solution: SolutionModel | None) -> Diag
 
     An OCI remote with `reference` already set, or with zero consumers at
     all, produces no finding either way — an unused remote is a separate,
-    still-unbuilt gap (see docs/design/gap_fit_v1.md), not this check's concern.
+    still-unbuilt gap (see docs/work/gap_fit_v1.md), not this check's concern.
     """
     diagnostics = Diagnostics()
     if solution is None:
@@ -1799,7 +1799,7 @@ def _check_value_references(index: DocumentIndex) -> Diagnostics:
 
 # ---------------------------------------------------------------------------
 # Configuration.spec.paths -> every document's real file location
-# (docs/design/path-conventions.md, docs/design/gap_fit_v1.md gap #7)
+# (docs/design/path-conventions.md, docs/work/gap_fit_v1.md gap #7)
 # ---------------------------------------------------------------------------
 
 
