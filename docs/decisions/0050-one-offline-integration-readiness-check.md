@@ -3,7 +3,7 @@
 - Status: accepted
 - Date: 2026-10-27
 - Related: [ADR-0051](0051-local-tools-as-declarable-integration-types.md),
-  [docs/work/integration-readiness.md](../work/integration-readiness.md) D1-D24, D29-D31,
+  `integration-readiness.md` (work doc) D1-D24, D29-D31,
   [ADR-0021](0021-integration-layer.md) (integration layer)
 
 ## Context and Problem Statement

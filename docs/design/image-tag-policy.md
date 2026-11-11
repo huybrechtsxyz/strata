@@ -10,7 +10,7 @@ a deployment runs. It fails (or warns) when an image has no tag, a floating tag 
 not match a required pattern, or, optionally, a tag that does not come from a `kind: version` pin.
 
 Without it strata resolves the tag of each image (`strata deploy images`, see
-[effective-images.md](../work/effective-images.md)) but never judges it: a tag-less artifact resolves to an empty
+`effective-images.md` (work doc)) but never judges it: a tag-less artifact resolves to an empty
 tag, and whatever consumes the value, for example a Terraform root that rejects it, fails late at `terraform plan`
 without saying which image or pin is missing. The policy moves that failure to the first command, names the image
 and says where to put the tag.
@@ -107,8 +107,8 @@ is nothing honest to seed it with.
   the `deny | warn` convention
 - [ADR-0019](../decisions/0019-version-pinning.md), [ADR-0026](../decisions/0026-pinnable-artifact-references.md) -
   pins and artifacts
-- [policy-engine-architecture.md](../work/policy-engine-architecture.md) - bespoke policies, no generic engine
-- [effective-images.md](../work/effective-images.md) - the resolver this policy reads
+- `policy-engine-architecture.md` (work doc) - bespoke policies, no generic engine
+- `effective-images.md` (work doc) - the resolver this policy reads
 
 ## History
 
@@ -123,7 +123,7 @@ is nothing honest to seed it with.
 - A workspace is shared by every ring, so it cannot be strict on prd and lenient on dev by itself. A `rings`
   selector on the policy, using the ring of the deployment's version document, was chosen over a per-deployment
   override, which would be a new mechanism for every policy and cuts across the "rebind only, no field patches"
-  rule in [workspace-overrides.md](../work/workspace-overrides.md). A deployment with no ring is judged (fail
+  rule in `workspace-overrides.md` (work doc). A deployment with no ring is judged (fail
   closed).
 - "Floating" is the explicit alias list, not "anything that is not a semantic version" as the SBOM treats a
   declared tag: a strict default trains people to switch the policy to `warn`. `tag_pattern` is the opt-in for more.
@@ -132,7 +132,7 @@ is nothing honest to seed it with.
 - `build run` judges before it cleans or writes so a breach fails fast with nothing changed. The cost is that a
   denied build records no result in `policy_results.json`, since `build run` writes that file once at the end.
   Whether a denied build should reach the audit trail at all is tracked in
-  [denied-build-audit.md](../work/denied-build-audit.md).
+  `denied-build-audit.md` (work doc).
 - `deploy images` used to only warn on a missing tag and said nothing about `latest`. With the policy set it now
   fails on `deny`; without the policy it behaves as before.
 - Both origins are covered by default, so an untagged third-party module image such as `redis` is flagged, which is
@@ -152,4 +152,4 @@ is nothing honest to seed it with.
 - Out of scope: the images a Helm chart deploys by itself. strata does not write a Helm module's service `image`
   into the chart values (v1 did not either), so for a Helm module the policy judges the declared image and cannot
   see an image only the chart knows. How to treat that is tracked in
-  [helm-image-delivery.md](../work/helm-image-delivery.md).
+  `helm-image-delivery.md` (work doc).

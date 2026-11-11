@@ -14,7 +14,7 @@ registered for type 'script'" `UsageError`. This doc covers the
 for `.ps1`/`.sh`/`.bash`/`.py`/`.bat` scripts, run as an ordinary
 provisioning step (ordinary `execution:`/`depends_on` ordering already
 gives "run this before/after that" for free, so this needed no separate
-phase-hook subsystem — see [lifecycle.md](../work/lifecycle.md), the doc
+phase-hook subsystem — see `lifecycle.md` (work doc), the doc
 this one was split out of, for that investigation's own
 zero-real-demand finding).
 
@@ -614,7 +614,7 @@ Two small, additive controller changes:
   `InfraIntegration` contract this class implements; D11's interpreter
   map (`.py`-only for `Integration.lifecycle`) is a narrower, unrelated
   case (that's a *hook*, not a provisioner).
-- [lifecycle.md](../work/lifecycle.md) — the doc this one was split out
+- `lifecycle.md` (work doc) — the doc this one was split out
   of; its gate-question finding (zero real lifecycle-hook demand) is why
   this doc doesn't port v1's phase-hook executor, only the plain "run a
   script" primitive.

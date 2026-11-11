@@ -10,8 +10,8 @@
   `output_store`/`output_store_integration` fields)
 - See also: [docs/archive/cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md)
   (full evidence record, brainstorming, and build progress — this ADR
-  records only the decisions themselves), [docs/work/key-value-store-integration.md](../work/key-value-store-integration.md)
-  (the capability's own backend-by-backend design), [docs/work/output-store-lock-audit.md](../work/output-store-lock-audit.md)
+  records only the decisions themselves), `key-value-store-integration.md` (work doc)
+  (the capability's own backend-by-backend design), `output-store-lock-audit.md` (work doc)
   (deferred follow-on: audit-trail visibility for D2's optimistic writes)
 
 ## Context and Problem Statement
@@ -57,7 +57,7 @@ ADR-0021 D9's existing closed-capability-vocabulary rule exactly — no
 new dispatch mechanism invented. Named for the **capability**
 (`key_value`), not this feature's own field name (`output_store`),
 since it already has more than one planned consumer (a future lock
-primitive, [docs/work/key-value-store-integration.md](../work/key-value-store-integration.md)'s
+primitive, the work doc `key-value-store-integration.md`'s
 "Validated reuse" section) — a future feature reusing the same
 capability stays governed by the same allow-list (D4) rather than
 needing its own.
@@ -177,10 +177,10 @@ they believed they'd enforced would not actually hold.
 - Bad: only two backends are built today (Azure App Configuration, Azure
   Blob Storage) despite six being designed — real backend choice is
   narrower than the design anticipates until the rest are built (lower
-  priority, tracked in [docs/work/key-value-store-integration.md](../work/key-value-store-integration.md)).
+  priority, tracked in `key-value-store-integration.md` (work doc)).
 - Accepted gap: write-contention audit visibility (who held the
   optimistic lock, when) is not yet built — deferred to
-  [docs/work/output-store-lock-audit.md](../work/output-store-lock-audit.md),
+  `output-store-lock-audit.md` (work doc),
   low priority since Terraform's own backend locking already covers the
   actual IaC state-consistency concern; this gap is purely about
   observability for the separate, already-write-safe output-store path.

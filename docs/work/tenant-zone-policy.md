@@ -7,7 +7,7 @@
   extraction) remains deliberately deferred — sized, not built.
 - Date: 2026-09-30
 - Related: [docs/work/gap_fit_v1.md](gap_fit_v1.md) gap #7 (`policies`/`promotions`
-  still fully open), [docs/design/path-conventions.md](path-conventions.md)
+  still fully open), [docs/design/path-conventions.md](../design/path-conventions.md)
   (the sibling policy type, `path_convention`, already resolved — same
   "don't port the generic engine, model the one real check directly"
   precedent this doc follows), `tenant_model.py` (`TenantSpecModel.

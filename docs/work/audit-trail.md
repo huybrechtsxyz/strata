@@ -6,11 +6,11 @@
   writes a real, local audit manifest + metrics record on every
   invocation, and distributes them to configured `git` sinks. Layer 2 is
   live. `strata audit status` (Layer 3 reads) is also now implemented
-  (2026-10-05) — see [audit-commands.md](audit-commands.md). The manifest's
+  (2026-10-05) — see [audit-commands.md](../design/audit-commands.md). The manifest's
   `sbom` reference is now also wired to the real build-time SBOM
   (2026-10-03). Layer 4's actual dispatch is designed and implemented
   separately in
-  [audit-sink-dispatch.md](audit-sink-dispatch.md) (2026-10-03) — the
+  [audit-sink-dispatch.md](../design/audit-sink-dispatch.md) (2026-10-03) — the
   `integration` sink arm this doc left as a stub now really sends, via a
   generic `webhook` integration. A NIS2/ISO 27001/ISAE 3402 compliance
   gap analysis + MoSCoW (2026-10-03) found Q2 ("why")/Q3 ("who approved")
@@ -36,7 +36,7 @@
   flags, closing Q2 ("why") for any deploy that supplies them — see the
   Should-have list. **`strata audit status` AND `strata audit changes`
   are now both implemented (2026-10-05)** — see
-  [audit-commands.md](audit-commands.md)'s Phases 1-7, all complete:
+  [audit-commands.md](../design/audit-commands.md)'s Phases 1-7, all complete:
   `status` reads the configured `git` sink's latest record per
   deployment, `changes` lists every record in a range — the full ISAE
   3402 "enumerable sample over a period" ask this Must-have exists for.
@@ -152,7 +152,7 @@ Two parts, no code beyond a Jinja2-templated scaffold:
   checklists). Idempotent — never overwrites an existing file.
 
   > **This half is no longer just a v1 capability — it's real in v2 too
-  > (2026-09-30).** [`strata sln init`/`strata sln update`](solution-scaffolding.md)
+  > (2026-09-30).** [`strata sln init`/`strata sln update`](../design/solution-scaffolding.md)
   > are built and tested: they scaffold both files (matching this
   > description, with v2-specific CLI wording), idempotently, never
   > overwriting a `.github/` file a repo has since customized. The
@@ -1188,7 +1188,7 @@ by digest, not the content — same discipline already applied to
 
 Everything below is settled design (this whole "v2 Design Notes" section,
 its open questions resolved, the full end-to-end loop walked once with a
-worked example). Phased the same way [solution-scaffolding.md](solution-scaffolding.md)
+worked example). Phased the same way [solution-scaffolding.md](../design/solution-scaffolding.md)
 was — one phase, one focused change, full check suite, then the next.
 
 **Explicitly out of scope for every phase below** (already decided
@@ -1436,9 +1436,9 @@ there too).
 
 Within this repo: [`docs/work/gap_fit_v1.md`](gap_fit_v1.md) gap #7 tracks
 `audit` as still fully open/unstarted, alongside `policies`/`promotions`.
-[`docs/design/v2-schema-overview.md`](v2-schema-overview.md) has no audit
+[`docs/design/v2-schema-overview.md`](../design/v2-schema-overview.md) has no audit
 entry yet — add one once a v2 ADR exists.
-[`docs/design/audit-sink-dispatch.md`](audit-sink-dispatch.md) (2026-10-03)
+[`docs/design/audit-sink-dispatch.md`](../design/audit-sink-dispatch.md) (2026-10-03)
 is the child design for Layer 4's actual dispatch — the `integration` sink
 arm this doc deliberately left as a stub, starting with a generic webhook.
 
@@ -1483,7 +1483,7 @@ a v2 ADR/implementation:
   durability) first — it is the one piece that is both real and already
   load-bearing for this specific consumer.** Layer 1 (PR template
   scaffolding) is cheap and real, a reasonable close second — **and is
-  now done** (2026-09-30, see [solution-scaffolding.md](solution-scaffolding.md)):
+  now done** (2026-09-30, see [solution-scaffolding.md](../design/solution-scaffolding.md)):
   `strata sln init`/`update` scaffold both files, matching real
   `config-repo` usage exactly; only the `gh`-based PR-extraction
   half remains unbuilt (needs Layer 2's deploy-log/manifest to exist
@@ -1934,14 +1934,14 @@ auditor actually tests them:
    enumerate every change in a period — that's Layer 3, not built.
 3. **Non-repudiation / tamper resistance** — already the explicit reason
    Layer 4 exists (git is mutable by a repo admin). Solved
-   ([audit-sink-dispatch.md](audit-sink-dispatch.md)).
+   ([audit-sink-dispatch.md](../design/audit-sink-dispatch.md)).
 
 ### MoSCoW
 
 **Must have**
 
 - **Implemented in full (2026-10-05)** — see
-  [audit-commands.md](audit-commands.md)'s Phases 1-7, all complete:
+  [audit-commands.md](../design/audit-commands.md)'s Phases 1-7, all complete:
   `strata audit status` reads the configured `git` sink's latest record
   per deployment; `strata audit changes` lists every record in a
   `--since`/`--until`/`--status`-filtered range, oldest to newest — the
@@ -1988,7 +1988,7 @@ auditor actually tests them:
   actively in progress, and an ADO approval step will be created once
   this stack reaches production — a confirmed, concrete, planned need,
   not a speculative one (same evidence bar the OTel/Sentinel sinks were
-  held to in [audit-sink-dispatch.md](audit-sink-dispatch.md)). See
+  held to in [audit-sink-dispatch.md](../design/audit-sink-dispatch.md)). See
   "Addendum — formalizing approval via an ADO gate" below for the
   right-sized shape (populate the existing `ChangeReferenceModel`, don't
   build a new document kind or re-implement enforcement).
@@ -2024,7 +2024,7 @@ auditor actually tests them:
   Must-have entry above), so this is no longer "not validly designed
   yet," the reasoning that put it here. `audit changes` remains
   unbuilt, tracked as a scope cut in
-  [audit-commands.md](audit-commands.md), not as a design gap.
+  [audit-commands.md](../design/audit-commands.md), not as a design gap.
 
 **Won't have (now)**
 
@@ -2050,7 +2050,7 @@ reasons that didn't exist when M1 was first proposed:
    authorship/"who caused this" claim — a more modest result than first
    framed.
 2. **No concrete demand, unlike everything else promoted this session.**
-   OTel/Sentinel ([audit-sink-dispatch.md](audit-sink-dispatch.md)) and
+   OTel/Sentinel ([audit-sink-dispatch.md](../design/audit-sink-dispatch.md)) and
    the ADO gate below were promoted specifically because of a named real
    signal ("our ELK stack," "pipeline development is in progress"). M1
    was chosen because it was *cheap* (reuses an existing `git rev-parse`
@@ -2104,7 +2104,7 @@ SIEM sinks are pure fire-and-forget, not queryable by strata itself).
 **Decision (2026-10-05):** deferred, not demoted to Could-have — this was
 not "lower priority," it was "not validly designed yet." **Update,
 same day:** a remote-read design was produced, then **implemented in
-full** — see [audit-commands.md](audit-commands.md) for the full design
+full** — see [audit-commands.md](../design/audit-commands.md) for the full design
 and its Phases 1-7, all complete (a dedicated `audit-read/` checkout
 namespace, glob-and-parse manifest discovery rather than reconstructing
 the write path, both the `status` and `changes` commands, failure
@@ -2199,7 +2199,7 @@ pipeline development for this stack is actively in progress, and an ADO
 approval step **will** be created once it reaches production — a
 confirmed, concrete, near-term consumer, the same evidence bar that
 promoted OTel/Sentinel in
-[audit-sink-dispatch.md](audit-sink-dispatch.md) from hypothetical to
+[audit-sink-dispatch.md](../design/audit-sink-dispatch.md) from hypothetical to
 built. Promoted from Could-have to Should-have in the MoSCoW above. The
 discoverability lesson matters for the right-sized version too: whatever
 ships here should be small and obvious (populate one existing field from
@@ -2358,7 +2358,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
 - 2026-09-30: Layer 1 (PR template + issue template scaffolding) design
   started, per request ("lets then first look at strata sln(solution)
   init command... lets start there") — see
-  [solution-scaffolding.md](solution-scaffolding.md), which ports v1's
+  [solution-scaffolding.md](../design/solution-scaffolding.md), which ports v1's
   `strata sln init`/`sln update` scaffolding mechanism as the delivery
   vehicle for this layer specifically (v2 has no scaffolding command
   surface at all today).
@@ -2423,7 +2423,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   should itself be CloudEvent-shaped on disk for `deployment.measured`
   forwarding/resend symmetry.
 - 2026-09-30: **Layer 1's scaffolding half is now built**, per
-  [solution-scaffolding.md](solution-scaffolding.md)'s Phase 3
+  [solution-scaffolding.md](../design/solution-scaffolding.md)'s Phase 3
   (documentation pass, closing that design out). `strata sln init`/
   `update` are real, tested CLI commands — added a callout under "Layer
   1" itself (not just the Remaining Work summary) so a reader hits the
@@ -2591,7 +2591,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   failure — a `required` flag, not a binary silent-vs-fail choice"
   section.
 - 2026-09-30: Added a 5-phase Layer 2 Implementation Plan ("create the
-  implementation plan"), phased like [solution-scaffolding.md](solution-scaffolding.md)'s
+  implementation plan"), phased like [solution-scaffolding.md](../design/solution-scaffolding.md)'s
   own Phase 1/2/3 structure: (1) config models (`audit_model.py`,
   `ConfigurationSpecModel.audit`, `layout.audit_dir()`); (2) manifest +
   metrics models (`audit_manifest_model.py`/`audit_metrics_model.py`,
@@ -2758,7 +2758,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   production — a confirmed, concrete, near-term consumer, not a
   speculative one (same evidence bar that promoted the OTel/Sentinel
   sinks from hypothetical to built in
-  [audit-sink-dispatch.md](audit-sink-dispatch.md)). Also recorded a
+  [audit-sink-dispatch.md](../design/audit-sink-dispatch.md)). Also recorded a
   plausible diagnosis for *why* v1's gate system went unused: likely not
   obvious how to use (a 7-type, 2-mode, condition-expression
   configuration surface), not evidence nobody needed approval gating —
@@ -2872,7 +2872,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   strata-side flags to accept them already shipped (2026-10-05). No code
   changed — doc correction only.
 - 2026-10-05: **Designed the Layer 3 read path, in a new dedicated doc**
-  ([audit-commands.md](audit-commands.md)), per a direct request to design
+  ([audit-commands.md](../design/audit-commands.md)), per a direct request to design
   `strata audit` commands "for this purpose" (git as the read basis) and
   keep the design in a separate file rather than growing this one further
   — same split already done for audit-sink-dispatch.md. Grounded directly

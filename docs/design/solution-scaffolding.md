@@ -4,21 +4,21 @@
   `strata sln init`/`strata sln update` are real, working CLI commands
   (`ScaffoldController`, `scaffold_templates.py`, the two ported
   templates + `.strata/README.md`, wired into `cli.py`), cross-linked
-  from [audit-trail.md](../work/audit-trail.md) and
+  from `audit-trail.md` (work doc) and
   [v2-schema-overview.md](v2-schema-overview.md).
 - Date: 2026-09-30
-- Related: [docs/work/audit-trail.md](../work/audit-trail.md) (Layer 1 — PR
+- Related: `audit-trail.md` (work doc) (Layer 1 — PR
   template + extraction — is this design's motivating, first real
   consumer), [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md)
   (`strata.yaml` — v2's own, different bootstrap document from v1's
-  `.strata/solution.json`), [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) (ADR-0020's
+  `.strata/solution.json`), `gap_fit_v1.md` (work doc) (ADR-0020's
   Tier 2 classification of `init`/etc. as "local interactive bootstrap
   only... does not block either consumer's redeploy path" — still true
   here, this is deliberately not a CI-critical-path feature)
 
 ## Problem
 
-[audit-trail.md](../work/audit-trail.md)'s real-usage scoping (2026-09-30) found
+the work doc `audit-trail.md`'s real-usage scoping (2026-09-30) found
 Layer 1 (PR template + issue template scaffolding) is real and active in
 `config-repo` today — `.github/pull_request_template.md` and
 `.github/ISSUE_TEMPLATE/deployment-change-request.yml` both exist,

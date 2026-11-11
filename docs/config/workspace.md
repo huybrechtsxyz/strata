@@ -333,7 +333,7 @@ The policy judges the images strata knows. For a Compose module and for an artif
 module, strata does not write a service's `image` into the chart's values, so the chart decides what runs: the
 policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
 the module's `configuration`, in the chart's own key shape. See
-[helm-image-delivery.md](../work/helm-image-delivery.md).
+`helm-image-delivery.md` (work doc).
 
 ## Provisioner lock policy
 

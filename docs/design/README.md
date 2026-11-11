@@ -4,7 +4,7 @@ This directory holds **finished** design docs for strata-v2 components and
 features — how something works, fully built, with nothing pending — as
 distinct from [`docs/decisions/`](../decisions/README.md), which records
 point-in-time architectural decisions that don't change once written, and
-[`docs/work/`](../work/README.md), which holds everything still in progress
+`docs/work/`, which holds everything still in progress
 (phase checklists, open questions, drafts).
 
 **Start here:** [v2-schema-overview.md](v2-schema-overview.md) — a one-page
@@ -22,7 +22,7 @@ catalog of every v2 kind and its current status, linking out to the ADR and
 
 A design doc never has unfinished phases, open design questions, or a
 "Remaining Work" list in its main body. If a doc has any of those, it
-belongs in [`docs/work/`](../work/README.md) instead — once the remaining
+belongs in `docs/work/` instead — once the remaining
 items are actually done, move the whole doc here.
 
 A design doc *may* note a deliberately-**out-of-scope** item in a short line

@@ -10,7 +10,7 @@
   evidence record (the real, empirical v1-vs-v2 output comparison) the
   new design was built from.
 - Date: 2026-09-30 (catalog), 2026-09-30 (fix)
-- Related: [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #15 (Terraform
+- Related: `gap_fit_v1.md` (work doc) gap #15 (Terraform
   `variables.tf` input validation — a related but distinct gap: that one
   is about *checking* declared inputs against a module's real
   `variables.tf`; this one is about whether v2 even *produces* the

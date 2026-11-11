@@ -4,7 +4,7 @@
 - Last updated: 2026-10-28
 - Target: strata 2.x (2.0.0rc2, `v2-beta`)
 - Vendor reference: [aikido-api-reference.md](../archive/aikido-api-reference.md) - Appendix A (offline Aikido API), B (fixtures), C (code anchors), D (sources)
-- Related: ADR-0003 (layering), ADR-0004 (exit codes), ADR-0021 (integration layer), ADR-0022 D4 (build renders, deploy resolves), [cve-scanner-integration.md](../archive/cve-scanner-integration.md), [checkov-integration.md](../archive/checkov-integration.md), [integration-readiness.md](../work/integration-readiness.md)
+- Related: ADR-0003 (layering), ADR-0004 (exit codes), ADR-0021 (integration layer), ADR-0022 D4 (build renders, deploy resolves), [cve-scanner-integration.md](../archive/cve-scanner-integration.md), [checkov-integration.md](../archive/checkov-integration.md), `integration-readiness.md` (work doc)
 
 > Facts about Aikido in the vendor reference are labelled **[V]** (verified against a primary source)
 > or **[U]** (not yet confirmed against a live workspace, see section 12). This design replaces that
@@ -325,7 +325,7 @@ through, and only "via policy commit" in the step line hints at it.
 **Why `policy`, not `security`.** "Policy" is already the shared concept in strata: the
 workspace fields (`cve_policy`, `checkov_policy`, `release_gate_policy`, `image_gate_policy`), the
 audit file (`policy_results.json`, `ManifestPolicyResultModel` with `phase: validate | build | plan
-| deploy`) and [policy-engine-architecture.md](../work/policy-engine-architecture.md). The policies differ
+| deploy`) and `policy-engine-architecture.md` (work doc). The policies differ
 in what checks them (a local tool or an integration) and when (build or deploy), but share one
 lifecycle: configured on the workspace, evaluated, enforced `deny`/`warn`, recorded. `security`
 would exclude a future OPA policy, which typically checks tags, naming, regions or cost. `gate`

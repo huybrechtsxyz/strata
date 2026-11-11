@@ -3,7 +3,7 @@
 - Status: accepted — this is an audit/findings report, not itself a decision;
   it required no implementation of its own. Every finding below has since
   been resolved, deliberately deferred, or left open by a follow-up ADR — see
-  [docs/work/v1-schema-parity-tracking.md](../work/v1-schema-parity-tracking.md)
+  `v1-schema-parity-tracking.md` (work doc)
   for the live status of each item, rather than re-reading every ADR below.
 - Date: 2026-09-20
 - Related: [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
@@ -262,5 +262,5 @@ This ADR captures findings only — no decision was made here. Each of the 6
 discrepancies and 8 architectural issues above was later reviewed and
 resolved (or deliberately deferred) by its own follow-up ADR, rather than by
 editing this one. See
-[docs/work/v1-schema-parity-tracking.md](../work/v1-schema-parity-tracking.md)
+`v1-schema-parity-tracking.md` (work doc)
 for the current status and resolving ADR for every item.

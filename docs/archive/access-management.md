@@ -7,7 +7,7 @@
   *already solved there* as an ordinary strata `properties` blob, and that
   what the blob actually lacks is **validation**, not kinds — see
   "2026-10-12 Evidence Review" below. The live follow-on is
-  [dynamic-configuration-validation.md](../work/dynamic-configuration-validation.md).
+  [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md).
   Kept here as the full investigation record (conceptual layering, the
   provisioner mapping analysis, and the evidence review that killed it)
   rather than deleted.
@@ -327,7 +327,7 @@ The question was never "four security kinds, yes or no". It is: **should a
 known-shaped `properties`/`configuration`/`custom` blob be declaratively
 schema-checkable by strata?** Access management is one instance of that
 general problem, not a domain deserving its own kinds. Carried forward to
-[dynamic-configuration-validation.md](../work/dynamic-configuration-validation.md).
+[dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md).
 
 ## Remaining Work / Open Questions
 
@@ -352,5 +352,5 @@ discharged by the evidence review above:
   map onto Terraform/Helm/Compose provisioners.
 - 2026-10-12: Evidence review against the real consumers killed the
   four-kind direction (see section above); doc archived and superseded by
-  [dynamic-configuration-validation.md](../work/dynamic-configuration-validation.md).
+  [dynamic-configuration-validation.md](../design/dynamic-configuration-validation.md).
 

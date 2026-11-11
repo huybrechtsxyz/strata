@@ -10,7 +10,7 @@
   condensed into the settled summary below (available via git history if
   ever needed).
 - Last updated: 2026-10-08
-- Related: [policy-engine-architecture.md](../work/policy-engine-architecture.md)
+- Related: `policy-engine-architecture.md` (work doc)
   (umbrella catalog — `checkov` is bucket C: needs a real external
   scanner, not derivable from strata's own document graph or a Terraform
   plan), [cve-scanner-integration.md](cve-scanner-integration.md) (sibling
@@ -44,7 +44,7 @@ never re-derived independently.
 ## Design decisions (settled)
 
 - **Native Python evaluator, not OPA/a generic engine** — matches every
-  other bucket-C policy shipped so far ([policy-engine-architecture.md](../work/policy-engine-architecture.md)'s
+  other bucket-C policy shipped so far (the work doc `policy-engine-architecture.md`'s
   own Open Question 1: bespoke, indefinitely, no generic `PolicyModel`/
   scheduler planned).
 - **A dedicated `checkov_model.py` module**, not folded into
@@ -176,7 +176,7 @@ never re-derived independently.
   YAML. Zero evidence of current need — doesn't block the build, confirms
   no urgency either.
 - **The generic-vs-bespoke policy engine question** is shared with, and
-  resolved by, [policy-engine-architecture.md](../work/policy-engine-architecture.md)'s
+  resolved by, the work doc `policy-engine-architecture.md`'s
   own Open Question 1 (bespoke, indefinitely) — not re-litigated here.
 - **`tool` is an open string in v2**, not v1's closed 4-value `framework`
   — `framework: terraform` matches both `tool: terraform` and `tool:

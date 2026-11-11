@@ -208,7 +208,7 @@ once at least one real policy type exists to compare against).
    engine would still have to accommodate Checkov's own genuinely
    different shape (real per-provisioner degradation, a configuration
    surface an order of magnitude bigger than any other bucket-C type —
-   see [checkov-integration.md](checkov-integration.md)) just as easily
+   see [checkov-integration.md](../archive/checkov-integration.md)) just as easily
    as the current bespoke approach already does.
 
    **Decision: no generic `PolicyModel`/engine is planned.** Continue the

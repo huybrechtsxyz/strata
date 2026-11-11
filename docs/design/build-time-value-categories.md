@@ -7,7 +7,7 @@ Status: implemented
 `TerraformIntegration.default_output()` is missing four of v1's real output
 categories: `features`/`variables`/`properties`/`custom`. Found while
 investigating the `OutputProfileModel`/`emits` revisit (see
-[build-command.md](../work/build-command.md)'s `default_output()` table), which is
+the work doc `build-command.md`'s `default_output()` table), which is
 blocked on this: `emits` can't gate categories that don't exist yet.
 
 **Important correction:** the gap is *not* "`resolved.values` is silently
@@ -333,7 +333,7 @@ worked out, not settled, so it's tracked separately:
   Terraform,
 - be confused with lifecycle scripts' own translation of the same source
   data into `STRATA_*` env vars — that's a sibling concern, tracked
-  separately in [lifecycle.md](../work/lifecycle.md)'s open Context-contract
+  separately in the work doc `lifecycle.md`'s open Context-contract
   question. Same underlying data, different consumer-owned rendering; do not
   design them together.
 
@@ -423,9 +423,9 @@ reads `graph.version.spec.promotion` directly from it, no separate lookup.
 - [ADR-0022](../decisions/0022-strata-build-run.md) D1a — `ValueResolution` contract (flat, stringified, secrets-excluded).
 - [ADR-0023](../decisions/0023-build-output-rendering.md) D3/D5 — `default_output()` dispatch, `output.template` escape hatch (later phase).
 - [ADR-0024](../decisions/) — tenant-defaults merge (`merge_deployment_specs()`), the only `properties`/`custom` merge that exists today.
-- [build-command.md](../work/build-command.md) — tracks the original gap and the `OutputProfileModel` dependency.
+- `build-command.md` (work doc) — tracks the original gap and the `OutputProfileModel` dependency.
 - [provisioning-injection-model.md](../archive/provisioning-injection-model.md) — Context lifetime, build-time vs. deploy-time split.
-- [lifecycle.md](../work/lifecycle.md) — sibling, NOT the same design: same source data, translated to script env vars instead of tfvars JSON.
+- `lifecycle.md` (work doc) — sibling, NOT the same design: same source data, translated to script env vars instead of tfvars JSON.
 - [deployment-tier-resource-sizing.md](deployment-tier-resource-sizing.md) —
   **decided (ADR-0034)**: per-deployment SKU/deploy-tier selection stays a
   plain, opaque `properties` value (e.g. `deploy_tier`) flowing through

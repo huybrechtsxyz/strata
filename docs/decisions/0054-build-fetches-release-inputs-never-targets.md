@@ -6,8 +6,8 @@
   [ADR-0042](0042-private-chart-registries-authenticate-through-the-remote-integration.md) (registry credentials),
   [ADR-0043](0043-helm-lint-as-the-container-check-phase.md) (the check phase),
   [ADR-0019](0019-version-pinning.md) (version pins),
-  [docs/work/helm-gap-analysis.md](../work/helm-gap-analysis.md) (gap 8, the case that raised this),
-  [docs/work/sbom-generation.md](../work/sbom-generation.md) (step 3, remote charts),
+  `helm-gap-analysis.md` (work doc) (gap 8, the case that raised this),
+  `sbom-generation.md` (work doc) (step 3, remote charts),
   [docs/design/sbom-generation.md](../design/sbom-generation.md) (out of scope: registry lookups)
 
 ## Context and Problem Statement
@@ -93,5 +93,5 @@ is its own change, designed against these conditions.
   follow-up, not part of this decision.
 - Neutral: this supersedes the "network access at build time" reasons given in
   [docs/design/sbom-generation.md](../design/sbom-generation.md) for not looking up image digests, and the opt-in
-  proposed for remote charts in [docs/work/sbom-generation.md](../work/sbom-generation.md) step 3. Its reason for
+  proposed for remote charts in `sbom-generation.md` (work doc) step 3. Its reason for
   not running `terraform init` stands, under condition 4.

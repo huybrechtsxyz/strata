@@ -394,7 +394,7 @@ deploy-time-only" (ADR-0022 D4).
   `InfraIntegration` capability split this design's classes implement.
 - [ADR-0023](../decisions/0023-build-output-rendering.md) D3 — `output.
   template`/`default_output()`, reused here unchanged.
-- [docs/work/remotes.md](../work/remotes.md) — `resolve_remote()`'s
+- `remotes.md` (work doc) — `resolve_remote()`'s
   current pull-only scope; this design's `push_file()` is the first
   push-direction primitive.
 - [docs/design/deploy-command.md](deploy-command.md) — cross-step

@@ -1048,7 +1048,7 @@ doc's own Phase 1 can start.
   this doc delivers; this revision reintroduces `ring` deliberately
   differently — as one tag among three (`ring`/`order`/`wave`), not a
   resurrected duplicate of identity.
-- [path-conventions.md](path-conventions.md) / `semantic_checks.py`'s
+- [path-conventions.md](../design/path-conventions.md) / `semantic_checks.py`'s
   `_check_deployment_layers()` — the "declare it, then validate it matches
   reality" pattern `Version.spec.workspace` reuses.
 - [v2-schema-overview.md](../design/v2-schema-overview.md) — `deployment`

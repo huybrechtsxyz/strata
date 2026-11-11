@@ -101,7 +101,7 @@ is contacted at deploy only when the cache is missing (a deploy job that does no
   nothing pulls from is never looked at, so a mistake in it cannot fail a run. An exact
   `chart_version` already in the cache is not pulled at all.
 - A local chart's `dependencies` are pulled the same way, into the built chart's `charts/`
-  ([helm-chart-dependencies.md](../work/helm-chart-dependencies.md)). To give a private dependency
+  (`helm-chart-dependencies.md` (work doc)). To give a private dependency
   repository credentials, declare a `helm` or `oci` remote with the same URL as the dependency's
   `repository` and an `integration`; any other dependency repository is pulled anonymously.
 - For an HTTP repository: `helm repo add <alias> <url> --force-update --username <user> --password-stdin`.

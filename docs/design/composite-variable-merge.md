@@ -15,7 +15,7 @@
   deferred a version of this exact problem — "revisit when a v2
   workspace/environment overlay concept is designed"), [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md)
   (constrains any fix: strata stays opaque to a value's internal shape),
-  [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #19
+  `gap_fit_v1.md` (work doc) gap #19
 
 ## Overview
 
@@ -339,7 +339,7 @@ blocker for the decision above.
   strata supplies input, never rewrites IaC source; any fix here must keep
   a fragment's internal shape (AGW/WAF or otherwise) fully opaque to
   strata.
-- [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #19 — the tracked-gap
+- `gap_fit_v1.md` (work doc) gap #19 — the tracked-gap
   entry for this problem.
 - [docs/how-to/composite-variable-fragments.md](../how-to/composite-variable-fragments.md) —
   the worked how-to for the `spec.properties` pattern above.

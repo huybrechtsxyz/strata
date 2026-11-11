@@ -6,7 +6,7 @@
   (the finished design — full schema, derivation helpers, migrated call
   sites), ADR-0011 (topology and provisioning decoupling — the "topology
   is a derived fact, not declared" rule this decision extends rather than
-  reopens), [gap_fit_v1.md](../work/gap_fit_v1.md) gap #12 (the original
+  reopens), `gap_fit_v1.md` (work doc) gap #12 (the original
   dns/network/firewall claiming mechanism this decision generalizes)
 
 ## Context and Problem Statement

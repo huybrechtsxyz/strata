@@ -3,7 +3,7 @@
 - Status: accepted
 - Date: 2026-11-10
 - Related: [ADR-0026](0026-pinnable-artifact-references.md) (the artifact kind, `store: artifact` and a module
-  service's `artifact`, which all stay), [docs/work/artifact-gap-analysis.md](../work/artifact-gap-analysis.md)
+  service's `artifact`, which all stay), `artifact-gap-analysis.md` (work doc)
   (designs 1 and 3), [docs/design/deployment-tokens.md](../design/deployment-tokens.md) (the built-in token this one
   copies)
 

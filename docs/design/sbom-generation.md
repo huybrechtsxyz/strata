@@ -89,7 +89,7 @@ build path itself is routinely named `build`.
 The `helm` collector dedupes by chart name and version, first one kept, so a declared chart (which
 knows its repository) is not repeated by the `Chart.yaml` it was materialised to (which does not).
 
-A registry chart `build run` pinned ([helm-registry-chart-checks.md](../work/helm-registry-chart-checks.md))
+A registry chart `build run` pinned (`helm-registry-chart-checks.md` (work doc))
 is recorded from its module's `meta.yaml`, which the build writes before the SBOM: the exact
 `chartVersion` (the purl version, even when the module declared a range), `hashes` `SHA-256` from
 `chartDigest` (strata's SHA-256 of the archive), `strata:version-constraint` when the declared
@@ -99,7 +99,7 @@ not pin keeps its declared version and gets `strata:pinned: false`. The collecto
 path only, never the `.strata/helm/` cache.
 
 A local chart's dependencies are recorded the same way from its `meta.yaml`'s `chartDependencies`
-([helm-chart-dependencies.md](../work/helm-chart-dependencies.md)): the exact version the build placed
+(`helm-chart-dependencies.md` (work doc)): the exact version the build placed
 in `charts/`, `hashes` `SHA-256` for a pulled archive, `strata:version-constraint` when `Chart.yaml`
 declared something else, and `strata:subchart-of: <chart>@<version>`. They replace the declared
 `dependencies[]` entries of that `Chart.yaml`. A `file://` dependency gets no repository in its purl.

@@ -18,7 +18,7 @@
   line is what this doc found and fixed), [ADR-0033](../decisions/0033-ndjson-streaming-follow-trigger.md)
   (the NDJSON trigger decision this doc's Option 5 led to),
   [ndjson-output.md](ndjson-output.md) (sibling archived doc, split out
-  of this one's Option 5), [diagnostic-guidance.md](../work/diagnostic-guidance.md)
+  of this one's Option 5), `diagnostic-guidance.md` (work doc)
   (an unrelated gap surfaced while reviewing the sibling doc, still open)
 
 ## Overview

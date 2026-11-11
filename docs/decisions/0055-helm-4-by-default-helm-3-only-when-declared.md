@@ -3,9 +3,9 @@
 - Status: accepted
 - Date: 2026-11-08
 - Related: [ADR-0043](0043-helm-lint-as-the-container-check-phase.md) (the check phase; unaffected),
-  [docs/work/helm-4-support.md](../work/helm-4-support.md) (the design),
-  [docs/work/helm-gap-analysis.md](../work/helm-gap-analysis.md) (gap 10),
-  [docs/work/integration-readiness.md](../work/integration-readiness.md) (where the version is read)
+  `helm-4-support.md` (work doc) (the design),
+  `helm-gap-analysis.md` (work doc) (gap 10),
+  `integration-readiness.md` (work doc) (where the version is read)
 
 ## Context and Problem Statement
 

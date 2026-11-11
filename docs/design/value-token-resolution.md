@@ -255,7 +255,7 @@ An artifact's `image_name`, `image_tag`, `image_ref`, or one part of a `tag@dige
 `image_digest`, added by design 4), with the deployment's version pin applied. It replaces a
 `store: artifact` variable declared only to forward one field. The decision is
 [ADR-0058](../decisions/0058-artifact-token-for-pinned-image-fields.md), the design is design 1 in
-[artifact-gap-analysis.md](../work/artifact-gap-analysis.md); it copies `${deployment:}` point for point.
+`artifact-gap-analysis.md` (work doc); it copies `${deployment:}` point for point.
 
 - **Syntax.** `artifact` is in `VALUE_TOKEN_KINDS` and both regexes. The key is `NAME.FIELD`, split at its first `.`
   (an artifact name has none); `FIELD` is one of `ARTIFACT_TOKEN_FIELDS`.
@@ -1000,7 +1000,7 @@ real, working, live example in the repo's own coverage-check fixture.
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md) — token syntax decision, resolver design, rationale for rejecting `ValueSourceModel`/Jinja
 - [ADR-0005](../decisions/0005-dns-model-design-decisions.md), [ADR-0007](../decisions/0007-network-model-design-decisions.md), [ADR-0008](../decisions/0008-firewall-model-design-decisions.md), [ADR-0009](../decisions/0009-module-model-design-decisions.md) — per-kind adoption
 - [ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md) — Context, the `${step:}` token this doc doesn't cover yet
-- [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gaps #8, #9, #10 — the real-world evidence (`.v2-haven`) that triggered this section
+- `gap_fit_v1.md` (work doc) gaps #8, #9, #10 — the real-world evidence (`.v2-haven`) that triggered this section
 
 ## Deferred
 
