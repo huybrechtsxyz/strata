@@ -173,7 +173,7 @@ def finalize_and_distribute_deploy_audit(
             timestamp of the approval itself (in the tracker), never
             auto-derived from this run's own clock.
         providers: One entry per provisioner the run used, with the tool version and path its preflight found
-            (`deploy_run(on_tool=...)`, docs/work/helm-4-support.md); `artifacts.providers` is omitted when empty.
+            (`deploy_run(on_tool=...)`, docs/design/helm-chart-deployment.md); `artifacts.providers` is omitted when empty.
 
     Returns:
         Findings from finalizing/writing/distributing only — never
@@ -622,7 +622,7 @@ def _collect_artifacts_bom(
 
     images: list[ManifestImageModel] = []
     rows = effective_images(context, deployment)
-    # Delivered when any use delivers it (docs/work/helm-image-delivery.md, the SBOM side); only `false` is written.
+    # Delivered when any use delivers it (docs/design/helm-image-delivery.md, "The SBOM: the declared-only marker"); only `false` is written.
     delivered = {row.image_ref for row in rows if row.delivered}
     seen_images: set[str] = set()
     for row in rows:

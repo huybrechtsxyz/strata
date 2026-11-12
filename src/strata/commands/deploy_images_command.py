@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """`strata deploy images DEPLOYMENT` - the container images a deployment will run, after version pins.
 
-docs/work/effective-images.md. Reads the solution only: no build, no store, no network, no secret.
+docs/design/effective-images.md. Reads the solution only: no build, no store, no network, no secret.
 It calls `require_valid()` like the other `deploy` subcommands, because a dangling environment or
 module reference would silently drop rows from the list.
 """

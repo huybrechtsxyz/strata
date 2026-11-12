@@ -84,7 +84,7 @@ Nothing is built. Proposed decisions:
   today.
 - **G7 - Deployment attributes and effective values are not graph facts.** `deploy list` (tenant,
   version, ring, filters) and `deploy images` (the tag after a pin, where it came from) report
-  attributes and derived values. See [effective-images.md](effective-images.md). The graph answers
+  attributes and derived values. See [effective-images.md](../design/effective-images.md). The graph answers
   relationships.
 - **G8 - Subcommands (`graph nodes`, `graph edges`, `graph reach`) only with a deliberate break.** The
   positional `PATH` would become a subcommand name. If wanted, do it before `2.0.0`, together with the
@@ -138,4 +138,4 @@ Steps 1 and 3 are small and additive and could go first.
 ## Changelog
 
 - 2026-10-30: created. Findings from reading `graph_controller.py` and `graph_command.py`, and from the
-  `deploy list` / `deploy images` discussion in [effective-images.md](effective-images.md).
+  `deploy list` / `deploy images` discussion in [effective-images.md](../design/effective-images.md).

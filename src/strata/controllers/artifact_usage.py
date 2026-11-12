@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Which artifacts some deployment uses, and a warning for the ones none does
-(docs/work/artifact-gap-analysis.md, design 8).
+(docs/archive/artifact-gap-analysis.md, design 8).
 
 "Uses" is exactly what `effective_images()` lists: a `store: artifact` variable a step receives, an enabled module
 service's `artifact`, or an `${artifact:}` token in a document the deployment reaches. An artifact that no

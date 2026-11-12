@@ -275,7 +275,7 @@ Real consumer sites per category, confirmed by reading each directly:
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
 | `artifacts` | `value_controller.resolve_artifact_field()` (`image_tag` field only)                                                                               | `ArtifactSpecModel.image_tag`   |
 | `remotes`   | `build_controller.py`'s remote-overlay step (runs before `source_sync.py` fetches anything)                                                        | `SolutionRemoteModel.reference` |
-| `images`    | `compose.py` service-rendering (build time); a Helm service's image is not written to the chart ([helm-image-delivery.md](helm-image-delivery.md)) | `ModuleServiceModel.image`      |
+| `images`    | `compose.py` service-rendering (build time); a Helm service's image is not written to the chart ([helm-image-delivery.md](../design/helm-image-delivery.md)) | `ModuleServiceModel.image`      |
 | `charts`    | `helm.py`'s `_render_meta()` (build time, writes `meta.yaml`'s `chartVersion`)                                                                     | `SourceModel.chart_version`     |
 
 Every application is logged via `log_pin_applied()` (ADR-0019 decision 7)

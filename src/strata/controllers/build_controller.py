@@ -934,7 +934,7 @@ def build_run(
         diagnostics.extend(sbom_diagnostics)
         _step(f"wrote {build_path / SBOM_FILENAME}")
 
-        # Image tag policy (docs/design/image-tag-policy.md, docs/work/helm-image-delivery.md plan item 9e): after
+        # Image tag policy (docs/design/image-tag-policy.md, docs/design/helm-image-delivery.md, "Where the policy is judged"): after
         # the SBOM, so it also judges the images the rendered charts run (`sbom.render_charts`). A `deny` fails the
         # build here, with the output on disk, as the gates below do. A no-op when the field is unset.
         image_tag_diagnostics = check_image_tag_policy(

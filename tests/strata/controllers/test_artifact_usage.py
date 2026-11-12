@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `artifact_usage` (docs/work/artifact-gap-analysis.md, design 8): which artifacts some deployment
+"""Tests for `artifact_usage` (docs/archive/artifact-gap-analysis.md, design 8): which artifacts some deployment
 uses, the `artifact_unused` warning, and `version update` leaving unused artifacts out."""
 
 import json

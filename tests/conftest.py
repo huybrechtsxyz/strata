@@ -14,7 +14,7 @@ def pytest_configure(config):
 def _no_registry_chart_pulls(request, monkeypatch):
     """`build run` leaves registry charts unpinned unless a test is marked `chart_pulls`.
 
-    A build pulls registry charts with `helm` when it is installed (docs/work/helm-registry-chart-checks.md), so
+    A build pulls registry charts with `helm` when it is installed (docs/design/helm-chart-deployment.md), so
     without this a test's result would depend on whether the machine running it has `helm` and network access.
     """
     if request.node.get_closest_marker("chart_pulls") is None:

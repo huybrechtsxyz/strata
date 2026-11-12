@@ -330,7 +330,7 @@ def test_env_file_supplies_an_environment_store_variable(runner, solution, monke
 
 
 # ---------------------------------------------------------------------------
-# --offline (docs/work/helm-registry-chart-checks.md)
+# --offline (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 

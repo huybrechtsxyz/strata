@@ -212,7 +212,7 @@ class WorkspaceSbomModel(PlatformBaseModel):
     """What `build run` puts in `sbom.json` beyond what it always records.
 
     Design notes:
-    `WorkspaceSpecModel.sbom` (docs/work/helm-image-delivery.md, the SBOM side). Rendered images reach
+    `WorkspaceSpecModel.sbom` (docs/design/helm-image-delivery.md, "The SBOM: the declared-only marker"). Rendered images reach
     `cve_policy`, `image_gate_policy` and `image_tag_policy`, so the gates check what runs, sidecars and init
     containers included. On by default (plan item 10b); `render_charts: false` keeps the declared images only.
     """

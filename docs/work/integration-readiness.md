@@ -395,7 +395,7 @@ exits 0 with only the warning. `config/` still validates.
 
 ## Changelog
 
-- 2026-11-08: Per-class version rules ([helm-4-support.md](helm-4-support.md), ADR-0055): an integration class can set
+- 2026-11-08: Per-class version rules ([helm-4-support.md](../design/helm-chart-deployment.md#helm-versions), ADR-0055): an integration class can set
   `READ_VERSION` (the version is read without `spec.version`) and return `version_problems()` (readiness problems)
   and `version_notices()` (the new `IntegrationReadiness.warnings`, always warnings, never counted against `ok`).
   `ReadinessProblem` moved to `integrations/base.py` (re-exported here) and gained `flags_only`: a problem about the

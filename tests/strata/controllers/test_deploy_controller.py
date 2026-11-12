@@ -4688,7 +4688,7 @@ def test_deploy_run_resolves_a_deployment_token_in_the_terraform_variables_file(
 
 
 # ---------------------------------------------------------------------------
-# The kube context a deployment names (docs/work/helm-kube-context.md)
+# The kube context a deployment names (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 KUBECONFIG = """apiVersion: v1
@@ -4845,7 +4845,7 @@ def test_without_a_kube_context_helm_uses_the_active_context(tmp_path: Path, mon
 
 
 # ---------------------------------------------------------------------------
-# The docker context a deployment names (docs/work/compose-docker-context.md)
+# The docker context a deployment names (docs/design/deploy-command.md)
 # ---------------------------------------------------------------------------
 
 
@@ -5281,7 +5281,7 @@ def test_a_compose_deploy_after_a_dry_run_still_delivers_its_secrets(tmp_path: P
 
 
 # ---------------------------------------------------------------------------
-# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1): the artifacts' pinned
+# ${artifact:NAME.FIELD} (docs/archive/artifact-gap-analysis.md, design 1): the artifacts' pinned
 # images are in the deploy-time token map
 # ---------------------------------------------------------------------------
 
@@ -5386,7 +5386,7 @@ def test_deploy_run_resolves_an_artifact_token_in_a_compose_module(tmp_path: Pat
 
 
 def test_deploy_run_delivers_a_pinned_artifact_to_a_helm_chart_through_its_values(tmp_path: Path, _capture):
-    """Design 2 (docs/work/artifact-gap-analysis.md): the chart's own keys, the deployment's pin."""
+    """Design 2 (docs/archive/artifact-gap-analysis.md): the chart's own keys, the deployment's pin."""
     root = _helm_solution(tmp_path)
     _write_artifact(root, image_tag="1.0.0", pin="2.0.0")
     module = root / "module.yaml"

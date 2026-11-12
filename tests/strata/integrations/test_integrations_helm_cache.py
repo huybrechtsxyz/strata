@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the registry chart cache (docs/work/helm-registry-chart-checks.md, Phase 1)."""
+"""Tests for the registry chart cache (docs/design/helm-chart-deployment.md, "Registry charts")."""
 
 import functools
 import gzip

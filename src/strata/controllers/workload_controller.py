@@ -556,7 +556,7 @@ def _place_chart_dependencies(
     on_step: Callable[[str], None],
     depth: int = 0,
 ) -> tuple[list[DependencyRecord], list[str]]:
-    """Fill the build copy `chart_dir`'s `charts/` with its dependencies (docs/work/helm-chart-dependencies.md).
+    """Fill the build copy `chart_dir`'s `charts/` with its dependencies (docs/design/helm-chart-deployment.md).
 
     `origin` is where the chart was copied from and `repo_root` the repository it lives in, so a `file://`
     dependency resolves as Helm would resolve it next to the source, and may not leave that repository. A

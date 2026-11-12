@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for the ``${artifact:NAME.FIELD}`` token's syntax and resolution in `utils/value_tokens.py`
-(docs/work/artifact-gap-analysis.md, design 1). The entries themselves are built in
+(docs/archive/artifact-gap-analysis.md, design 1). The entries themselves are built in
 `controllers/artifact_tokens.py` and tested there."""
 
 import pytest

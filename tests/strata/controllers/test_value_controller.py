@@ -559,7 +559,7 @@ def test_resolve_artifact_tag_is_none_for_an_unknown_artifact(tmp_path):
     assert resolve_artifact_tag(context, deployment, "ghost") is None
 
 
-# `${artifact:NAME.FIELD}` entries (docs/work/artifact-gap-analysis.md, design 1)
+# `${artifact:NAME.FIELD}` entries (docs/archive/artifact-gap-analysis.md, design 1)
 
 
 def test_artifact_token_values_apply_the_deployments_pin(tmp_path):
@@ -1037,7 +1037,7 @@ def test_resolve_document_value_references_rejects_a_field_a_version_pin_overrid
 
 @pytest.mark.parametrize("field", ["image_name", "image_tag"])
 def test_resolve_document_value_references_points_an_artifact_image_at_the_artifact_token(tmp_path, field):
-    """Design 3 (docs/work/artifact-gap-analysis.md): an image read through `${value:}` is never pinned and
+    """Design 3 (docs/archive/artifact-gap-analysis.md): an image read through `${value:}` is never pinned and
     never listed, so both image fields are rejected and the message names the token."""
     root = _solution(tmp_path)
     _artifact(root, "api", image_name="int/api", image_tag="1.0.0")

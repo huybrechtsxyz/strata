@@ -598,7 +598,7 @@ def test_every_deployment_token_in_one_document_is_checked():
 
 
 # ---------------------------------------------------------------------------
-# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1): skipped by the
+# ${artifact:NAME.FIELD} (docs/archive/artifact-gap-analysis.md, design 1): skipped by the
 # declared-keys check, judged by `unresolved_artifact_tokens()` against the deployment's entries
 # ---------------------------------------------------------------------------
 

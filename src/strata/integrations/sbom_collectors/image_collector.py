@@ -143,8 +143,8 @@ class ImageCollector(SbomCollector):
 
 
 def _not_delivered(graph: ResolvedWorkspaceGraph) -> dict[str, str]:
-    """Why each image strata does not deliver is not delivered, by purl (docs/work/helm-image-delivery.md, the
-    SBOM side). An image is delivered when any of its uses delivers it, so one a Helm module declares and a
+    """Why each image strata does not deliver is not delivered, by purl (docs/design/helm-image-delivery.md, "The SBOM: the
+    declared-only marker"). An image is delivered when any of its uses delivers it, so one a Helm module declares and a
     Compose module runs is not listed. An image with no `graph.images` row is taken as delivered."""
     delivered = {image_to_purl(image.image_ref) for image in graph.images if image.delivered}
     reasons: dict[str, str] = {}

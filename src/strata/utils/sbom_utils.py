@@ -22,11 +22,11 @@ MUTABLE_ALIAS_TAGS: frozenset[str] = frozenset(
 #: `chart:NS/REFERENCE/CONTAINER`.
 USED_BY_PROPERTY = "strata:used-by"
 #: The image reference as a rendered chart writes it (`traefik/whoami:v1.10.2@sha256:...`). The purl keeps only the
-#: digest of a digest-pinned image, so this is the only place its tag survives (docs/work/helm-image-delivery.md,
+#: digest of a digest-pinned image, so this is the only place its tag survives (docs/design/helm-image-delivery.md,
 #: plan item 9a).
 IMAGE_REF_PROPERTY = "strata:image"
 #: "false" (with `IMAGE_DELIVERY_PROPERTY` saying why) on an image strata does not write into what runs, such as a
-#: Helm module's declared service image (docs/work/helm-image-delivery.md, the SBOM side). Absent means delivered,
+#: Helm module's declared service image (docs/design/helm-image-delivery.md, "The SBOM: the declared-only marker"). Absent means delivered,
 #: so an SBOM written before the marker existed reads the same.
 IMAGE_DELIVERED_PROPERTY = "strata:image-delivered"
 IMAGE_DELIVERY_PROPERTY = "strata:image-delivery"

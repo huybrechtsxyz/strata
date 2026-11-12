@@ -314,7 +314,7 @@ def test_resolve_artifact_services_overrides_image_and_clears_artifact(tmp_path:
 )
 def test_resolve_artifact_services_writes_a_digest_as_a_runtime_pulls_it(tmp_path: Path, image_tag, image):
     """`1.2.3@sha256:...` gives `name:1.2.3@sha256:...`, never `name@1.2.3@sha256:...`
-    (docs/work/artifact-gap-analysis.md, design 4)."""
+    (docs/archive/artifact-gap-analysis.md, design 4)."""
     module = _module_with_artifact("scheduler", "api_container")
     index = DocumentIndex()
     index.add(
@@ -533,7 +533,7 @@ def test_build_workload_modules_cannot_key_check_an_unpinned_registry_chart(tmp_
 
 
 # ---------------------------------------------------------------------------
-# Registry charts pinned at build (docs/work/helm-registry-chart-checks.md, Phase 3)
+# Registry charts pinned at build (docs/design/helm-chart-deployment.md, "Registry charts")
 # ---------------------------------------------------------------------------
 
 _REPOSITORY = "https://charts.example.com"
@@ -805,7 +805,7 @@ def test_registry_credentials_that_need_resolve_unpin_and_broken_ones_fail(tmp_p
 
 
 # ---------------------------------------------------------------------------
-# Local chart dependencies placed at build (docs/work/helm-chart-dependencies.md, Phase 2)
+# Local chart dependencies placed at build (docs/design/helm-chart-deployment.md, "Chart dependencies")
 # ---------------------------------------------------------------------------
 
 

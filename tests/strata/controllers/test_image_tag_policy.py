@@ -316,7 +316,7 @@ def _solution(
         "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n"
         "  execution:\n    - name: infra\n      provisioner: tf\n      resources:\n        - r1\n" + policy,
     )
-    # The Terraform step is what receives `CATALOG_TAG` (docs/work/artifact-gap-analysis.md, design 7).
+    # The Terraform step is what receives `CATALOG_TAG` (docs/archive/artifact-gap-analysis.md, design 7).
     _write(
         root,
         "resource.yaml",
@@ -408,7 +408,7 @@ def test_policy_list_shows_the_policy_as_checkable(tmp_path):
     )
 
 
-# Images strata does not deliver or does not know (docs/work/helm-image-delivery.md, option B).
+# Images strata does not deliver or does not know (docs/design/helm-image-delivery.md, "Modules whose images strata does not know").
 
 _IMMICH = UnknownImageModule(module="immich", namespace="forge", chart="immich", chart_version="0.13.1")
 
@@ -488,7 +488,7 @@ def test_a_delivered_image_is_described_as_before():
     assert "declared only" not in item.message
 
 
-# Images rendered charts run (docs/work/helm-image-delivery.md, plan item 9d).
+# Images rendered charts run (docs/design/helm-image-delivery.md, "Rendered chart images as a build fact").
 
 
 def _chart_row(name="whoami/shipper", tag="latest", *, via=("chart:apps/whoami/shipper",)) -> EffectiveImage:

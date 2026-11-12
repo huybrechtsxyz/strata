@@ -107,7 +107,7 @@ class ValueReference:
 @dataclass(frozen=True)
 class EffectiveImage:
     """One container image a deployment will run, after `kind: version` pins
-    (`effective_images.effective_images()`, docs/work/effective-images.md).
+    (`effective_images.effective_images()`, docs/design/effective-images.md).
 
     `origin` is `artifact` (a `kind: artifact`, reached through a `store: artifact` variable or a module
     service's `artifact`) or `module-service` (a module service's literal `image`). `name` is the artifact
@@ -120,10 +120,10 @@ class EffectiveImage:
     `image_ref` is the bare name when both are. `tag_source` is `pin`, `declared` or `none`; `pin_version`
     names the version document of a pin, and `pin_flag` is true when that came from `--pin` rather than the deployment's `spec.version`.
 
-    `integration` is an artifact's `spec.integration`, by name only (docs/work/artifact-gap-analysis.md,
+    `integration` is an artifact's `spec.integration`, by name only (docs/archive/artifact-gap-analysis.md,
     design 6): it tells a pipeline that copies the image which credentials to use. Nothing is resolved from it.
 
-    `delivered` says whether strata writes the image into what runs (docs/work/helm-image-delivery.md, option B):
+    `delivered` says whether strata writes the image into what runs (docs/design/helm-image-delivery.md, "Delivered: one rule, in the resolver"):
     true for a Compose service, an artifact a step receives through a variable and one an `${artifact:}` token
     delivers; false for a Helm module's service image, which the chart may override. `delivery` gives the reason
     when it is false (`helm module: the chart decides`).
@@ -151,7 +151,7 @@ class EffectiveImage:
 @dataclass(frozen=True)
 class UnknownImageModule:
     """An enabled Helm module that declares no service `image` and no `artifact`, so the images its chart deploys
-    are known only to Helm (`effective_images.unknown_image_modules()`, docs/work/helm-image-delivery.md, option B).
+    are known only to Helm (`effective_images.unknown_image_modules()`, docs/design/helm-image-delivery.md, "Modules whose images strata does not know").
 
     `namespace` is the namespace whose `modules` enables it; `chart_version` is the one that deploys, after a
     `charts` pin.
@@ -276,11 +276,11 @@ class ResolvedModule:
     module: ModuleModel
     source_path: Path
     chart_pin: ChartPin | None = None
-    """A registry chart `build run` pinned into `.strata/helm/` (docs/work/helm-registry-chart-checks.md);
+    """A registry chart `build run` pinned into `.strata/helm/` (docs/design/helm-chart-deployment.md);
     `None` for a local chart, an unpinned one, and at deploy."""
     chart_dependencies: tuple[DependencyRecord, ...] = ()
     """A local chart's dependencies `build run` placed in (or found in) its `charts/`
-    (docs/work/helm-chart-dependencies.md); empty at deploy."""
+    (docs/design/helm-chart-deployment.md); empty at deploy."""
     unpinned_dependencies: tuple[str, ...] = ()
     """Names of the local chart's dependencies the build could not fetch; the deploy refuses the chart."""
 

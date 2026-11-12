@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Links between docs (docs/work/doc-citations.md).
+"""Links between docs (docs/work/README.md).
 
 Two rules over every relative Markdown link in a Markdown file of the repository (`docs/`, the root `README.md`,
 `.github/`, ...):

@@ -381,7 +381,7 @@ def test_prepare_namespace_never_merges_across_modules(tmp_path: Path):
 
 def test_prepare_namespace_writes_an_empty_values_file_when_nothing_to_render(tmp_path: Path):
     """A deploy always passes the file with `-f`, so it must exist: a registry chart has nothing else to give
-    (gap 4 of docs/work/helm-gap-analysis.md)."""
+    (gap 4 of docs/archive/helm-gap-analysis.md)."""
     module = _module(services=None, configuration=None)
     module_dir = tmp_path / "apps" / "authentik"
     module_dir.mkdir(parents=True)
@@ -2225,7 +2225,7 @@ def test_destroy_namespace_dry_run_warns_when_the_preview_cannot_be_read(tmp_pat
 
 
 # ---------------------------------------------------------------------------
-# The kube context a deployment names (docs/work/helm-kube-context.md)
+# The kube context a deployment names (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 

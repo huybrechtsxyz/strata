@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The container images a deployment will run, after `kind: version` pins
-(docs/work/effective-images.md).
+(docs/design/effective-images.md).
 
 Three places used to answer "which images does this deployment use", each
 incompletely: the SBOM (no pins, no artifacts), the audit manifest's bill of
@@ -16,11 +16,11 @@ artifact nothing references is not deployed, so it is not listed.
 
 A `store: artifact` variable counts when a `${var:KEY}` token in a reached
 document reads it, or an execution step receives it without a token
-(`_received_variable_keys()`, docs/work/artifact-gap-analysis.md, design 7).
+(`_received_variable_keys()`, docs/archive/artifact-gap-analysis.md, design 7).
 Where strata cannot tell, it counts: over-reporting an image is the safe side.
 
 Each row says whether strata delivers the image, that is writes it into what
-runs (docs/work/helm-image-delivery.md, option B): only the Compose integration
+runs (docs/design/helm-image-delivery.md, "Delivered: one rule, in the resolver"): only the Compose integration
 writes a service `image`, a `store: artifact` variable reaches a step, and an
 `${artifact:}` token is resolved into a document the deployment uses. A Helm
 module's service image is a declaration; the chart decides what runs.
@@ -35,6 +35,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
+from strata.controllers.artifact_tokens import helm_delivered_artifacts
 from strata.controllers.deployment_resolution import deployment_workspace
 from strata.controllers.reachable_documents import documents_reached_by_deployment
 from strata.controllers.solution_context import SolutionContext
@@ -88,11 +89,17 @@ def effective_images(
     workspace = deployment_workspace(index, deployment)
     deployment_entry = index.get(PlatformKind.DEPLOYMENT, deployment.meta.name)
     source = deployment_entry.source if deployment_entry is not None else Path()
-    reached: list[tuple[str, dict[str, Any]]] = []
+    # `(use, dumped document, what it delivers)`: `None` delivers every artifact it has a token for; a Helm module
+    # delivers only those its chart's own keys name (`helm_delivered_artifacts()`, design 11).
+    reached: list[tuple[str, dict[str, Any], set[str] | None]] = []
     for document in documents_reached_by_deployment(index, deployment, source, enabled_only=True):
         dumped = document.model.model_dump(by_alias=True, mode="json")
         dumped.pop("meta", None)
-        reached.append((f"token:{document.kind.value}/{document.name}", dumped))
+        model = document.model
+        delivers = (
+            helm_delivered_artifacts(model) if isinstance(model, ModuleModel) and model.spec.type == "helm" else None
+        )
+        reached.append((f"token:{document.kind.value}/{document.name}", dumped, delivers))
 
     artifact_uses: dict[str, list[str]] = {}
     # An artifact is delivered when any use delivers it; otherwise the first non-delivering service use says why.
@@ -100,7 +107,7 @@ def effective_images(
     artifact_undelivered: dict[str, str] = {}
     variables, _, _ = merge_environment_models(reachable_environments(context, deployment))
     artifact_keys = {key for key, store in variables.items() if store.store == VariableStoreType.ARTIFACT}
-    used_keys = {key for _, dumped in reached for key in referenced_variable_keys(dumped)}
+    used_keys = {key for _, dumped, _ in reached for key in referenced_variable_keys(dumped)}
     delivered = (used_keys & artifact_keys) | _received_variable_keys(context, workspace, artifact_keys)
     for key, store in variables.items():
         if key in delivered:
@@ -140,14 +147,19 @@ def effective_images(
                     )
                 )
 
-    # `${artifact:NAME.FIELD}` anywhere `deploy run` resolves tokens (docs/work/artifact-gap-analysis.md, design 3):
+    # `${artifact:NAME.FIELD}` anywhere `deploy run` resolves tokens (docs/archive/artifact-gap-analysis.md, design 3):
     # without this, an image delivered only through the token would escape the policy, the SBOM and the gates.
-    for use, dumped in reached:
+    # In a Helm module only a token in the chart's own keys delivers; one elsewhere (a service's `environment`) is a
+    # use, not delivery, as `artifact_not_delivered` judges it (design 11).
+    for use, dumped, delivers in reached:
         for artifact_name in sorted({split_artifact_token_key(key)[0] for key in referenced_artifact_keys(dumped)}):
             uses = artifact_uses.setdefault(artifact_name, [])
             if use not in uses:
                 uses.append(use)
-            artifact_delivered.add(artifact_name)
+            if delivers is None or artifact_name in delivers:
+                artifact_delivered.add(artifact_name)
+            else:
+                artifact_undelivered.setdefault(artifact_name, _HELM_NOT_DELIVERED)
 
     artifact_rows: list[EffectiveImage] = []
     for artifact_name, via in artifact_uses.items():
@@ -181,7 +193,7 @@ def effective_images(
 
 def unknown_image_modules(context: SolutionContext, deployment: DeploymentModel) -> list[UnknownImageModule]:
     """The enabled Helm modules of `deployment` whose services declare no `image` and no `artifact`, so every
-    image their chart deploys is known only to Helm (docs/work/helm-image-delivery.md, option B).
+    image their chart deploys is known only to Helm (docs/design/helm-image-delivery.md, "Modules whose images strata does not know").
 
     Helm only: a GitOps, script or custom module may run no container at all. A Helm module that declares some
     images but whose chart runs more is not listed: telling that needs the chart rendered (option D).
@@ -237,12 +249,16 @@ def _not_delivered(module: ModuleModel) -> str | None:
 def _artifact_not_delivered(module: ModuleModel) -> str:
     """Why an artifact that `module`'s services name, and nothing else delivers, does not reach what runs."""
     if module.spec.type == "helm":
-        return "helm module: no ${artifact:} token"
+        return _HELM_NOT_DELIVERED
     return f"{module.spec.type or 'untyped'} module: strata writes no image"
 
 
+#: Why a Helm module does not deliver an artifact: no token for it in the chart's own keys (design 11).
+_HELM_NOT_DELIVERED = "helm module: no ${artifact:} token in the chart's values"
+
+
 def _received_variable_keys(context: SolutionContext, workspace: WorkspaceModel | None, keys: set[str]) -> set[str]:
-    """Which of `keys` an execution step receives without a `${var:KEY}` token (docs/work/artifact-gap-analysis.md,
+    """Which of `keys` an execution step receives without a `${var:KEY}` token (docs/archive/artifact-gap-analysis.md,
     design 7), with `step_secret_keys()`'s rules for secrets:
 
     - a tool that takes the strata payload (`ENV_VAR_PREFIX`: Terraform, and OpenTofu once ported): every variable,
@@ -286,7 +302,7 @@ def _received_variable_keys(context: SolutionContext, workspace: WorkspaceModel 
 
 def rendered_chart_images(context: SolutionContext, sbom: dict[str, Any]) -> list[EffectiveImage]:
     """The images a build's rendered charts run, from its SBOM as `read_sbom()` gives it
-    (docs/work/helm-image-delivery.md, plan item 9d).
+    (docs/design/helm-image-delivery.md, "Rendered chart images as a build fact").
 
     One row per `chart:NAMESPACE/REFERENCE/CONTAINER` use of a component the `chart-image` collector wrote, so an
     image two containers run is two rows. `origin` is `chart`, `name` is `REFERENCE/CONTAINER` (what `allow`

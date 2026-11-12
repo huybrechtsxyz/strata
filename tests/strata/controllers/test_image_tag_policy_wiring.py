@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """`image_tag_policy` in `build_run()`, `deploy_run()` and `check_policies()` (docs/design/image-tag-policy.md,
-phase 3; the images rendered charts run: docs/work/helm-image-delivery.md, plan items 9e and 9f)."""
+phase 3; the images rendered charts run: docs/design/helm-image-delivery.md, "Where the policy is judged")."""
 
 import json
 from pathlib import Path
@@ -100,7 +100,7 @@ def _codes(diagnostics) -> list[str | None]:
 
 
 def test_build_run_fails_at_the_end_with_the_output_on_disk_when_an_image_has_no_tag(tmp_path):
-    # docs/work/helm-image-delivery.md plan item 9e: judged after the SBOM, as the other build policies.
+    # docs/design/helm-image-delivery.md, "Where the policy is judged": judged after the SBOM, as the other build policies.
     build_path = tmp_path / "build"
     diagnostics = build_run(_context(_solution(tmp_path)), "app", build_path)
     assert [d.code for d in diagnostics.errors] == ["image_without_tag"]
@@ -254,7 +254,7 @@ def test_deploy_run_denies_an_image_whose_tag_was_removed_after_the_build_and_ru
 
 
 def test_deploy_run_denies_an_image_the_builds_rendered_chart_runs_and_runs_no_step(tmp_path, terraform):
-    # docs/work/helm-image-delivery.md plan item 9f: the deploy judges what the build rendered, from its SBOM.
+    # docs/design/helm-image-delivery.md, "Where the policy is judged": the deploy judges what the build rendered, from its SBOM.
     root, build_path = _built(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
     _add_rendered_image(build_path)
 

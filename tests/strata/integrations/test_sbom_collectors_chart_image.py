@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the `chart-image` SBOM collector and `rendered_images()` (docs/work/helm-image-delivery.md, the SBOM
+"""Tests for the `chart-image` SBOM collector and `rendered_images()` (docs/design/helm-image-delivery.md, the SBOM
 side, part 2)."""
 
 import shutil
@@ -156,7 +156,7 @@ def _graph_with_sbom(sbom: WorkspaceSbomModel | None) -> ResolvedWorkspaceGraph:
 
 @pytest.mark.parametrize("sbom", [None, WorkspaceSbomModel()], ids=["no-sbom-section", "sbom-section-without-it"])
 def test_it_renders_by_default(tmp_path, fake_helm, sbom):
-    """`render_charts` defaults to `true` (docs/work/helm-image-delivery.md, plan item 10b)."""
+    """`render_charts` defaults to `true` (docs/design/helm-image-delivery.md, "The SBOM: rendering charts")."""
     _chart(tmp_path, "apps/whoami")
     ChartImageCollector().collect(_graph_with_sbom(sbom), [], tmp_path)
     assert len(fake_helm.calls) == 1

@@ -34,7 +34,7 @@ builds them.
 
 A 7th kind, ``${artifact:NAME.FIELD}`` (``FIELD`` is ``image_name``,
 ``image_tag`` or ``image_ref``), is a built-in for an artifact's image as the
-deployment being run pins it (docs/work/artifact-gap-analysis.md, design 1).
+deployment being run pins it (docs/archive/artifact-gap-analysis.md, design 1).
 It is stored the same way, under ``artifact:NAME.FIELD``; this module only
 knows the key shape (`artifact_key()`), the controllers build the entries
 (`controllers/artifact_tokens.py`), since a pin needs the document index.

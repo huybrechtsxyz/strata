@@ -4476,7 +4476,7 @@ def test_an_absolute_path_remote_outside_the_solution_has_no_finding(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Helm release names and Kubernetes namespaces (docs/work/helm-release-names.md)
+# Helm release names and Kubernetes namespaces (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 _HELM_NAME_CODES = {"helm_release_name_invalid", "helm_kubernetes_namespace_invalid", "helm_release_conflict"}
@@ -4692,7 +4692,7 @@ def test_an_invalid_name_is_not_also_reported_as_a_conflict(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# The kube context of a deployment with a Helm step (docs/work/helm-kube-context.md)
+# The kube context of a deployment with a Helm step (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 _HELM_STEP = """    - name: helm
@@ -4853,7 +4853,7 @@ def test_a_value_token_in_a_context_field_is_a_schema_error(tmp_path, field):
 
 
 # ---------------------------------------------------------------------------
-# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1) - end to end through
+# ${artifact:NAME.FIELD} (docs/archive/artifact-gap-analysis.md, design 1) - end to end through
 # `strata validate`: judged per deployment, its version's pins applied
 # ---------------------------------------------------------------------------
 
@@ -4933,7 +4933,7 @@ def test_an_artifact_token_in_an_environment_store_value_is_caught(tmp_path):
 
 # ---------------------------------------------------------------------------
 # A Helm service's artifact reaches the chart only through an ${artifact:} token in
-# its values (docs/work/artifact-gap-analysis.md, design 2)
+# its values (docs/archive/artifact-gap-analysis.md, design 2)
 # ---------------------------------------------------------------------------
 
 
@@ -4991,6 +4991,15 @@ def test_a_token_in_the_service_configuration_delivers_the_artifact(tmp_path):
     assert _delivery_findings(context) == []
 
 
+def test_a_token_in_another_services_configuration_delivers_the_artifact(tmp_path):
+    """Design 11: every service's `configuration` is written into the chart's values, so the image can run through
+    it; `effective_images()` uses the same rule (`helm_delivered_artifacts()`)."""
+    service_extra = '    - name: worker\n      configuration:\n        image: "${artifact:immich.image_ref}"\n'
+    context = _resolve(_helm_artifact_solution(tmp_path, service_extra=service_extra))
+
+    assert _delivery_findings(context) == []
+
+
 def test_a_token_in_the_service_environment_does_not_deliver_the_artifact(tmp_path):
     """It becomes an environment variable of the chart's pods, not the image the chart runs."""
     service_extra = "      environment:\n        - key: IMAGE\n          value: ${artifact:immich.image_ref}\n"
@@ -5021,7 +5030,7 @@ def test_a_compose_service_artifact_is_delivered_by_strata(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# An artifact's registry agrees with its image_name (docs/work/artifact-gap-analysis.md, design 5)
+# An artifact's registry agrees with its image_name (docs/archive/artifact-gap-analysis.md, design 5)
 # ---------------------------------------------------------------------------
 
 

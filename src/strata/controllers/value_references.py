@@ -107,7 +107,7 @@ def _walk_value_reference_path(node: Any, segments: list[str]) -> Any:
     return node
 
 
-#: An artifact's image fields: `${value:}` may not read them (docs/work/artifact-gap-analysis.md, design 3).
+#: An artifact's image fields: `${value:}` may not read them (docs/archive/artifact-gap-analysis.md, design 3).
 _ARTIFACT_IMAGE_FIELDS = ("image_name", "image_tag")
 
 

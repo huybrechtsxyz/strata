@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for planning a local chart's dependencies (docs/work/helm-chart-dependencies.md, Phase 1)."""
+"""Tests for planning a local chart's dependencies (docs/design/helm-chart-deployment.md, "Chart dependencies")."""
 
 from pathlib import Path
 

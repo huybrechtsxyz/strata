@@ -21,7 +21,7 @@ class ArtifactService(BaseService[ArtifactModel]):
 
     def validate_registry(self) -> Diagnostics:
         """`spec.registry` agrees with the registry `spec.image_name` is pulled from
-        (docs/work/artifact-gap-analysis.md, design 5).
+        (docs/archive/artifact-gap-analysis.md, design 5).
 
         `registry` is documentation: strata never puts it in the image reference, so the runtime pulls
         `image_name` as written, from its own host part or Docker Hub. A `registry` that names another host is a

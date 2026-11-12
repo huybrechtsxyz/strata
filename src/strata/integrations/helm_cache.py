@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Registry Helm charts pinned by `build run` and verified by the deploy (docs/work/helm-registry-chart-checks.md).
+"""Registry Helm charts pinned by `build run` and verified by the deploy (docs/design/helm-chart-deployment.md).
 
 A pinned chart lives at `<cache>/<source>/<chart>/<version>/` as the archive Helm pulled plus that archive unpacked.
 The digest is strata's own SHA-256 of the archive, so a cache hit needs no `helm` (ADR-0054). A pull lands in a

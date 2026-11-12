@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `effective_images()` (docs/work/effective-images.md)."""
+"""Tests for `effective_images()` (docs/design/effective-images.md)."""
 
 import json
 from pathlib import Path
@@ -217,7 +217,7 @@ def test_artifact_rows_come_before_module_service_rows(tmp_path):
     assert [row.origin for row in rows] == ["artifact", "module-service"]
 
 
-# `${artifact:NAME.FIELD}` uses (docs/work/artifact-gap-analysis.md, design 3): an image delivered only
+# `${artifact:NAME.FIELD}` uses (docs/archive/artifact-gap-analysis.md, design 3): an image delivered only
 # through the token is still an image the deployment runs.
 
 _TOKEN_SERVICE = (
@@ -292,7 +292,7 @@ def test_image_tag_policy_judges_an_image_delivered_only_through_the_token(tmp_p
 
 
 # A `store: artifact` variable counts only where the deployment can receive it
-# (docs/work/artifact-gap-analysis.md, design 7).
+# (docs/archive/artifact-gap-analysis.md, design 7).
 
 _HELM_STEP = (
     "  provisioners:\n    - name: charts\n      tool: helm\n      source:\n        source_path: infra\n"
@@ -368,7 +368,7 @@ def test_an_output_template_that_cannot_be_read_receives_every_variable(tmp_path
     assert _received_variable_keys(context, _workspace(provisioner), {"A", "B"}) == {"A", "B"}
 
 
-# Delivered (docs/work/helm-image-delivery.md, option B): strata delivers an image only when it writes it into
+# Delivered (docs/design/helm-image-delivery.md, "Delivered: one rule, in the resolver"): strata delivers an image only when it writes it into
 # what runs. A Helm module's service image is a declaration; the chart decides.
 
 _CHART_SOURCE = (
@@ -414,7 +414,48 @@ def test_an_artifact_only_a_helm_service_names_is_not_delivered(tmp_path):
     root = _solution(tmp_path, variable_artifacts=())
     _with_module(root, services="    - name: server\n      artifact: catalog\n")
     row = _images(root)["catalog"]
-    assert (row.delivered, row.delivery) == (False, "helm module: no ${artifact:} token")
+    assert (row.delivered, row.delivery) == (False, _HELM_NOT_DELIVERED)
+
+
+_HELM_NOT_DELIVERED = "helm module: no ${artifact:} token in the chart's values"
+_ENV_TOKEN = "      environment:\n        - key: IMAGE\n          value: ${artifact:catalog.image_ref}\n"
+
+
+@pytest.mark.parametrize("names_it", [True, False], ids=["service-names-it", "token-only"])
+def test_a_token_in_a_helm_service_environment_is_a_use_not_delivery(tmp_path, names_it):
+    """Design 11: the token becomes an environment variable, not the chart's image, so the chart still decides which
+    image runs. It is still a use (USED BY, not `artifact_unused`), as `artifact_not_delivered` judges it."""
+    root = _solution(tmp_path, variable_artifacts=())
+    artifact = "      artifact: catalog\n" if names_it else ""
+    _with_module(root, services=f"    - name: server\n{artifact}{_ENV_TOKEN}")
+    row = _images(root)["catalog"]
+    assert row.via == (("service:chart/server",) if names_it else ()) + ("token:module/chart",)
+    assert (row.delivered, row.delivery) == (False, _HELM_NOT_DELIVERED)
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        "  configuration:\n    image:\n      repository: ${artifact:catalog.image_name}\n",
+        "    - name: worker\n      configuration:\n        image: ${artifact:catalog.image_ref}\n",
+    ],
+    ids=["module-configuration", "another-services-configuration"],
+)
+def test_a_token_in_the_charts_own_keys_delivers_even_beside_an_environment_token(tmp_path, where):
+    root = _solution(tmp_path, variable_artifacts=())
+    services = f"    - name: server\n      artifact: catalog\n{_ENV_TOKEN}"
+    if where.startswith("    - name"):
+        _with_module(root, services=services + where)
+    else:
+        _with_module(root, services=services, extra=where)
+    assert (_images(root)["catalog"].delivered, _images(root)["catalog"].delivery) == (True, None)
+
+
+def test_a_token_in_a_compose_service_environment_still_delivers(tmp_path):
+    """Only a Helm module's tokens are judged by where they sit: elsewhere a token reaches a provisioner that uses it."""
+    root = _solution(tmp_path, variable_artifacts=())
+    _with_module(root, kind="compose", services=f"    - name: server\n      image: redis:7\n{_ENV_TOKEN}")
+    assert _images(root)["catalog"].delivered
 
 
 def test_an_artifact_a_helm_module_writes_with_a_token_is_delivered(tmp_path):
@@ -475,7 +516,7 @@ def test_a_helm_service_without_an_image_does_not_make_the_module_known(tmp_path
     assert [module.module for module in _unknown(root)] == ["chart"]
 
 
-# Rendered chart images read back from a build (docs/work/helm-image-delivery.md, plan item 9d).
+# Rendered chart images read back from a build (docs/design/helm-image-delivery.md, "Rendered chart images as a build fact").
 
 
 def _sbom_file(build_path: Path, *components: dict) -> Path:

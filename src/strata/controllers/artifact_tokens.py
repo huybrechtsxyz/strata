@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """An artifact's image as a deployment pins it, and the ``${artifact:NAME.FIELD}`` entries of the token map
-(docs/work/artifact-gap-analysis.md, design 1).
+(docs/archive/artifact-gap-analysis.md, design 1).
 
 Index-based on purpose: `semantic_checks.py` judges the tokens with only a `DocumentIndex`, and cannot import
 `value_controller.py` (which imports `solution_context.py`, which imports `semantic_checks.py`). The one pin lookup
@@ -18,6 +18,7 @@ from strata.controllers.version_pins import log_pin_applied
 from strata.models.artifact_model import ArtifactModel
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
+from strata.models.module_model import ModuleModel
 from strata.models.version_model import VersionModel
 from strata.services.version_service import VersionService
 from strata.utils.sbom_utils import compose_image_ref, split_image_tag
@@ -71,6 +72,19 @@ def effective_artifact_tag(
     if entry is None:
         return None
     return _tag(artifact_name, cast(ArtifactModel, entry.model), _deployment_version(index, deployment), log=log)
+
+
+def helm_delivered_artifacts(module: ModuleModel) -> set[str]:
+    """The artifacts a Helm module delivers to its chart: those an ``${artifact:NAME.FIELD}`` token names in the
+    module's `spec.configuration` or in a service's `configuration`, the parts `helm.py`'s `_render_values()`
+    writes into the chart's own keys (docs/archive/artifact-gap-analysis.md, design 11).
+
+    A token in a service's `environment` is not delivery: it becomes an environment variable, and the chart still
+    decides which image runs. The one rule `artifact_not_delivered` and `effective_images()` share.
+    """
+    nodes: list[object] = [module.spec.configuration or {}]
+    nodes.extend(service.configuration or {} for service in module.spec.services or [])
+    return {split_artifact_token_key(key)[0] for node in nodes for key in referenced_artifact_keys(node)}
 
 
 def token_artifact_names(index: DocumentIndex, deployment: DeploymentModel) -> set[str]:

@@ -666,7 +666,7 @@ def test_no_policy_constructs_nothing(tmp_path, script):
     assert script.constructed == []
 
 
-# The declared-only marker (docs/work/helm-image-delivery.md, the SBOM side, part 1).
+# The declared-only marker (docs/design/helm-image-delivery.md, "The SBOM: the declared-only marker", part 1).
 
 
 def test_an_image_the_sbom_marks_not_delivered_reads_as_declared_only(tmp_path):

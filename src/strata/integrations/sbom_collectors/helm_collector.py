@@ -41,11 +41,11 @@ class HelmCollector(SbomCollector):
     materialised to does not. A declared chart lists the modules that use it
     in a `strata:used-by` property (`module:NAME`).
 
-    A registry chart `build run` pinned (docs/work/helm-registry-chart-checks.md) is recorded from its module's
+    A registry chart `build run` pinned (docs/design/helm-chart-deployment.md) is recorded from its module's
     `meta.yaml`: the exact version, the archive's SHA-256, its `appVersion`, and every chart packaged in its
     `charts/`. One the build could not pin keeps its declared form and gets `strata:pinned: false`.
 
-    A local chart's dependencies the build placed in its `charts/` (docs/work/helm-chart-dependencies.md) come from
+    A local chart's dependencies the build placed in its `charts/` (docs/design/helm-chart-deployment.md) come from
     its `meta.yaml`'s `chartDependencies` at their exact versions, instead of its `Chart.yaml`'s declared ones; those
     in `chartDependenciesUnpinned` keep the declared form with `strata:pinned: false`.
     """
@@ -188,7 +188,7 @@ class HelmCollector(SbomCollector):
         seen: set[tuple[str, str | None]],
     ) -> None:
         """The dependencies `build run` placed in a local chart's `charts/`, at their exact versions
-        (docs/work/helm-chart-dependencies.md)."""
+        (docs/design/helm-chart-deployment.md)."""
         try:
             chart = yaml.safe_load((module_dir / "Chart.yaml").read_text(encoding="utf-8"))
         except (OSError, yaml.YAMLError):

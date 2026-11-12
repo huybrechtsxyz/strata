@@ -816,7 +816,7 @@ def test_destroy_namespace_dry_run_warns_when_the_stack_cannot_be_listed(tmp_pat
 
 
 # ---------------------------------------------------------------------------
-# The docker context a deployment names (docs/work/compose-docker-context.md)
+# The docker context a deployment names (docs/design/deploy-command.md)
 # ---------------------------------------------------------------------------
 
 

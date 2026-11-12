@@ -35,7 +35,7 @@ from typing import Any, cast
 from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
-from strata.controllers.artifact_tokens import artifact_token_values
+from strata.controllers.artifact_tokens import artifact_token_values, helm_delivered_artifacts
 from strata.controllers.deployment_resolution import deployment_workspace
 from strata.controllers.reachable_documents import documents_reached_by_deployment, reachable_environment_names
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
@@ -98,7 +98,6 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import manifest_path
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 from strata.utils.report_template import check_report_template
-from strata.utils.value_tokens import referenced_artifact_keys, split_artifact_token_key
 
 log = get_logger(__name__)
 
@@ -275,7 +274,7 @@ def _pinnable_steps(index: DocumentIndex, workspace: WorkspaceModel) -> dict[str
 
 
 def _check_deployment_target_contexts(index: DocumentIndex, deployment: DeploymentModel) -> Diagnostics:
-    """A deployment that runs Helm or Compose names the context each deploys to (docs/work/compose-docker-context.md).
+    """A deployment that runs Helm or Compose names the context each deploys to (docs/design/deploy-command.md).
 
     Without it the step deploys to whatever the environment points at: a warning, since it worked that way before
     the fields existed. A partial base is not deployed, so only the deployments built from it are warned.
@@ -1368,7 +1367,7 @@ def _check_workspace_subnets(index: DocumentIndex, workspace: WorkspaceModel) ->
 
 def _check_artifacts(index: DocumentIndex) -> Diagnostics:
     """Each artifact's `spec.registry` agrees with its `spec.image_name` (`ArtifactService.validate_registry()`,
-    docs/work/artifact-gap-analysis.md, design 5). A warning cannot come from a model validator, so it runs here,
+    docs/archive/artifact-gap-analysis.md, design 5). A warning cannot come from a model validator, so it runs here,
     once per artifact document."""
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.ARTIFACT):
@@ -1944,7 +1943,7 @@ def _check_dns_records(index: DocumentIndex) -> Diagnostics:
 
 # ---------------------------------------------------------------------------
 # Helm module references -> the release name and Kubernetes namespace Helm
-# receives (docs/work/helm-release-names.md)
+# receives (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 
@@ -1968,20 +1967,16 @@ def _token_note(value: str) -> str:
     return " Value tokens are not resolved in this field." if "${" in value else ""
 
 
-def _referenced_artifact_names(node: object) -> set[str]:
-    """The artifact names of every ``${artifact:NAME.FIELD}`` token in `node`, whatever the field."""
-    return {split_artifact_token_key(key)[0] for key in referenced_artifact_keys(node)}
-
-
 def _check_helm_artifact_delivery(index: DocumentIndex) -> Diagnostics:
-    """A Helm module service that names an `artifact` delivers it to the chart (docs/work/artifact-gap-analysis.md,
+    """A Helm module service that names an `artifact` delivers it to the chart (docs/archive/artifact-gap-analysis.md,
     design 2).
 
     The Helm integration writes no image into a chart's values (`helm.py`'s `_render_values()`): a service's
     `artifact` resolves into its `image`, which `deploy images`, the SBOM and `image_tag_policy` read, but the chart
     decides which image runs. The artifact reaches the chart only through an `${artifact:NAME.FIELD}` token in the
-    module's `spec.configuration` or the service's own `configuration`, the two parts of the values written in the
-    chart's own keys. A token in the service's `environment` becomes an environment variable, so it does not count.
+    module's `spec.configuration` or a service's `configuration`, the parts of the values written in the chart's
+    own keys (`artifact_tokens.helm_delivered_artifacts()`, the rule `effective_images()` shares, design 11). A
+    token in a service's `environment` becomes an environment variable, so it does not count.
     A warning, once per module document: the artifact is still useful as a declaration, and a module may set the
     image some other way strata cannot see.
     """
@@ -1990,13 +1985,11 @@ def _check_helm_artifact_delivery(index: DocumentIndex) -> Diagnostics:
         module = cast(ModuleModel, entry.model)
         if module.spec.type != "helm":
             continue
-        module_delivers = _referenced_artifact_names(module.spec.configuration or {})
+        delivered = helm_delivered_artifacts(module)
         for position, service in enumerate(module.spec.services or []):
-            if service.artifact is None:
+            if service.artifact is None or str(service.artifact) in delivered:
                 continue
             artifact = str(service.artifact)
-            if artifact in module_delivers or artifact in _referenced_artifact_names(service.configuration or {}):
-                continue
             diagnostics.warning(
                 f"Module '{module.meta.name}' (type helm): service '{service.name}' names artifact '{artifact}', but "
                 "strata writes no image into a chart's values, so the chart decides which image runs; deploy images, "

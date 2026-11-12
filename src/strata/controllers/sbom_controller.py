@@ -107,7 +107,7 @@ def write_sbom(
             `strata:commit` property; omitted when unknown.
         helm_cache: The `.strata/helm/` cache, handed to the `chart-image`
             collector only, so it can render a pinned registry chart's
-            archive (docs/work/helm-image-delivery.md, plan item 9b).
+            archive (docs/design/helm-image-delivery.md, "The SBOM: rendering charts").
             `None`: registry charts are not rendered.
 
     Returns:
@@ -205,7 +205,7 @@ def _merge_by_purl(components: list[SbomComponentModel]) -> list[SbomComponentMo
     Two collectors can find the same image (the module declares it, the rendered compose file
     names it); listed twice it would be two components with one `bom-ref`, an invalid BOM.
 
-    Two properties do not simply keep the first value (docs/work/helm-image-delivery.md, the SBOM side):
+    Two properties do not simply keep the first value (docs/design/helm-image-delivery.md, "The SBOM: the declared-only marker"):
     `strata:used-by` joins every use, so a rendered chart's use is not lost behind a declared one, and the
     declared-only marker is dropped once a rendered chart deploys the image, which makes it what runs.
     """
@@ -259,7 +259,7 @@ def _declared_not_rendered(
     components: list[SbomComponentModel], graph: ResolvedWorkspaceGraph, diagnostics: Diagnostics
 ) -> list[SbomComponentModel]:
     """An `info` finding for each declared Helm service image whose module's chart was rendered without it
-    (docs/work/helm-image-delivery.md, plan item 9c).
+    (docs/design/helm-image-delivery.md, "The SBOM: declared but not rendered").
 
     Runs after the merge, so a declared image the chart also runs has already lost its marker. A chart counts as
     rendered when it yielded at least one image. The declaration may be deliberate documentation, so the image is

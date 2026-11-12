@@ -149,7 +149,7 @@ def assess_integration(integration: Integration, *, read_version: bool = True) -
     """Check `integration` without credentials or network.
 
     The version is read when `spec.version` is declared or the class sets `READ_VERSION`; a version read is also
-    given to the class's `version_problems()` and `version_notices()` (docs/work/helm-4-support.md).
+    given to the class's `version_problems()` and `version_notices()` (docs/design/helm-chart-deployment.md).
 
     Args:
         integration: A constructed integration (already `bind()`-ed for a provisioner, if any).

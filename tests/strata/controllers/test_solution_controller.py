@@ -569,7 +569,7 @@ def test_shipped_example_takes_the_artifact_tag_from_the_version_pin_or_its_own_
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
 def test_shipped_example_shows_every_way_to_use_an_artifact():
-    """docs/work/artifact-gap-analysis.md, design 9: a `store: artifact` variable and an `${artifact:}` token for
+    """docs/archive/artifact-gap-analysis.md, design 9: a `store: artifact` variable and an `${artifact:}` token for
     `example-api`, a Compose service's `artifact` for `portainer`; each pinned by `prd` and judged by the policy."""
     from strata.controllers.effective_images import effective_images
     from strata.controllers.value_controller import resolve_deployment_workspace

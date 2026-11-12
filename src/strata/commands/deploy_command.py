@@ -133,7 +133,7 @@ def _shared_deploy_options(follow_default: str | None = None) -> Callable[[_F], 
 
 def _provider_recorder() -> tuple[dict[str, ManifestProviderModel], Callable[[str, IntegrationReadiness], None]]:
     """`deploy_run(on_tool=...)` and what it collects: one manifest entry per provisioner, with the tool version
-    and path its preflight found (docs/work/helm-4-support.md)."""
+    and path its preflight found (docs/design/helm-chart-deployment.md)."""
     providers: dict[str, ManifestProviderModel] = {}
 
     def _record(provisioner: str, readiness: IntegrationReadiness) -> None:

@@ -39,7 +39,7 @@ REMOTES_DIRNAME = "remotes"
 ASSETS_DIRNAME = "assets"
 
 #: Subdirectory of `STRATA_DIR` holding registry Helm charts pulled by `build run`, one entry per exact version
-#: (docs/work/helm-registry-chart-checks.md).
+#: (docs/design/helm-chart-deployment.md).
 HELM_DIRNAME = "helm"
 
 #: Subdirectory of `STRATA_DIR` holding generated JSON Schemas (one per

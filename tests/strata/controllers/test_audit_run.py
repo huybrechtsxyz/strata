@@ -1221,7 +1221,7 @@ def test_a_path_remote_that_is_not_a_git_checkout_records_no_commit(tmp_path: Pa
 
 def test_manifest_marks_an_image_strata_does_not_deliver(tmp_path: Path, _terraform_stub):
     """A Helm module's declared service image is recorded with `delivered: false`; a Compose image carries no
-    such key, so a manifest without Helm images is unchanged (docs/work/helm-image-delivery.md, the SBOM side)."""
+    such key, so a manifest without Helm images is unchanged (docs/design/helm-image-delivery.md, "The SBOM: the declared-only marker")."""
     root = _solution_with_workload(tmp_path)
     module = root / "module-authentik.yaml"
     module.write_text(

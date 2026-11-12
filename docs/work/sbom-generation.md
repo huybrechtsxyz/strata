@@ -1,7 +1,7 @@
 # SBOM generation: images inside Helm charts - Work
 
 - Status: deferred - to be done together with the other Helm image gaps in
-  [helm-image-delivery.md](helm-image-delivery.md)
+  [helm-image-delivery.md](../design/helm-image-delivery.md)
 - Last updated: 2026-11-07
 
 ## Overview
@@ -16,12 +16,12 @@ images the chart actually deploys (the app, sidecars, init containers, subcharts
 - `strata:used-by` and `strata:pinned-by` cannot describe what is not listed.
 
 And the images that are listed for a Helm module are not necessarily what runs: strata never writes a service's
-`image` into a chart's values ([helm-image-delivery.md](helm-image-delivery.md)), so a declared Helm service image
+`image` into a chart's values ([helm-image-delivery.md](../design/helm-image-delivery.md)), so a declared Helm service image
 is a statement about the module, not what the chart deploys.
 
 This doc covers what the SBOM records for Helm modules. What strata should deliver into a chart, and what
 `image_tag_policy` and `deploy images` say about undelivered images, stay in
-[helm-image-delivery.md](helm-image-delivery.md); the two share one marker (below). When this work is finished it
+[helm-image-delivery.md](../design/helm-image-delivery.md); the two share one marker (below). When this work is finished it
 graduates into sbom-generation.md, which keeps describing the current state until then.
 
 ## Current state
@@ -56,7 +56,7 @@ has; step 3 (remote charts) is opt-in and separate.
 ### Step 1 - mark declared-only images
 
 An image that only a Helm module's `services` declare gets `strata:image-delivered: false`: strata did not write it
-into what runs. This is the marker [helm-image-delivery.md](helm-image-delivery.md) proposes for the SBOM ("Does the
+into what runs. This is the marker [helm-image-delivery.md](../design/helm-image-delivery.md) proposes for the SBOM ("Does the
 SBOM and the CVE and image gates need the same marker?"), so a gate or a reader can tell "scanned a declared image"
 from "scanned what runs".
 
@@ -91,13 +91,13 @@ A new collector, `chart-image` (`integrations/sbom_collectors/chart_image_collec
 
 Why rendering and not reading `values.yaml`: charts disagree on where an image lives (`image.repository` +
 `image.tag`, one `image:` string, `controllers.main.containers.main.image`, per-component keys, a tag defaulting to
-`appVersion`); [helm-image-delivery.md](helm-image-delivery.md) already rejected interpreting `configuration` for
+`appVersion`); [helm-image-delivery.md](../design/helm-image-delivery.md) already rejected interpreting `configuration` for
 that reason, and the same holds for `values.yaml`. Rendering is exact for the chart strata has.
 
 ### Step 3 - remote charts (opt-in, later)
 
 Superseded on 2026-11-07 by [ADR-0054](../decisions/0054-build-fetches-release-inputs-never-targets.md) and
-[helm-registry-chart-checks.md](helm-registry-chart-checks.md): `build run` now pulls every registry chart into
+[helm-registry-chart-checks.md](../design/helm-chart-deployment.md#registry-charts): `build run` now pulls every registry chart into
 `.strata/helm/<source>/<chart>/<version>/` and pins it, with no opt-in. The SBOM already records the pinned chart's
 exact version, digest, `appVersion` and subcharts. What remains of this step is the images: step 2's renderer can
 run on the unpacked chart in the cache. A chart the build could not pin (no `helm`, credentials that need `--resolve`,
@@ -120,7 +120,7 @@ Proposed: B. Step 1 is safe on by default: it only adds a property.
 ## Related Decisions
 
 - [sbom-generation.md](../design/sbom-generation.md) - the collectors and purl rules this extends
-- [helm-image-delivery.md](helm-image-delivery.md) - what strata delivers into a chart; the shared
+- [helm-image-delivery.md](../design/helm-image-delivery.md) - what strata delivers into a chart; the shared
   `strata:image-delivered` marker
 - [security-gates.md](../design/security-gates.md) - the image gate, which reads its images from `sbom.json`
 - [ADR-0022](../decisions/0022-strata-build-run.md) - `build run` stays offline apart from fetching sources
@@ -139,7 +139,7 @@ Proposed: B. Step 1 is safe on by default: it only adds a property.
   components; the `info` findings; drop the Phase 1 marker on merge when the chart renders the image. Tests with a
   stubbed `run_command`; one end-to-end test behind `shutil.which("helm")` (skipped without Helm).
 - [ ] **Phase 4 - rollout switch** (per the open question), docs (sbom-generation.md, the how-to,
-  helm-image-delivery.md's SBOM question), CHANGELOG, and dogfood on `config/` with a local chart.
+  [helm-image-delivery.md](../design/helm-image-delivery.md)'s SBOM question), CHANGELOG, and dogfood on `config/` with a local chart.
 
 ### Open questions
 
@@ -157,9 +157,9 @@ Proposed: B. Step 1 is safe on by default: it only adds a property.
 ## Changelog
 
 - 2026-11-07: Deferred. The SBOM's Helm gap shares its cause (strata does not know what a chart runs) and its
-  marker with [helm-image-delivery.md](helm-image-delivery.md), so both are tackled in one piece of Helm work
+  marker with [helm-image-delivery.md](../design/helm-image-delivery.md), so both are tackled in one piece of Helm work
   rather than the SBOM part on its own.
 - 2026-11-07: Created. Verified that a remote chart is not in the build path, that a local chart is installed from
   the build path folder, and that strata's `values.yaml` replaces a local chart's own. Proposes a declared-only
-  marker shared with helm-image-delivery.md, rendering local charts with `helm template`, and remote charts as a
+  marker shared with [helm-image-delivery.md](../design/helm-image-delivery.md), rendering local charts with `helm template`, and remote charts as a
   later opt-in.

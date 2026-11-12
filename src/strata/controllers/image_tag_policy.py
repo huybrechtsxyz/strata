@@ -5,7 +5,8 @@
 `unknown_image_modules()` names, the policy and the deployment's ring, so it needs no solution, network or
 credential. Callers (`build run`, `deploy run`, `strata policy check`, `deploy images`) fetch the rows and the ring
 and decide when to run it. `check_image_tag_policy(..., build_path=)` adds the images the build's rendered charts
-run (docs/work/helm-image-delivery.md, plan item 9d); `build run`, `deploy run` and `policy check` pass it (9e, 9f).
+run (docs/design/helm-image-delivery.md, "Rendered chart images as a build fact"); `build run`, `deploy run` and
+`policy check` pass it ("Where the policy is judged").
 """
 
 import re

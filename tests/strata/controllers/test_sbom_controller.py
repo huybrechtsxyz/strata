@@ -823,7 +823,7 @@ def test_a_declared_only_image_no_chart_renders_keeps_its_marker():
     assert merged.properties["strata:image-delivered"] == "false"
 
 
-# A declared Helm image its module's rendered chart does not run (docs/work/helm-image-delivery.md, plan item 9c).
+# A declared Helm image its module's rendered chart does not run (docs/design/helm-image-delivery.md, "The SBOM: declared but not rendered").
 
 
 def _declared(purl: str, *uses: str):

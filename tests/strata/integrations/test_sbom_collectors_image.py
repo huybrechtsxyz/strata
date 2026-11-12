@@ -226,7 +226,7 @@ def test_an_image_a_version_document_pinned_names_that_document():
     assert pinned == {"redis": "prd", "db": None, "api": "prd"}
 
 
-# The declared-only marker (docs/work/helm-image-delivery.md, the SBOM side, part 1).
+# The declared-only marker (docs/design/helm-image-delivery.md, "The SBOM: the declared-only marker", part 1).
 
 
 def _helm_row(image_ref: str, *, delivered: bool, module: str = "authentik"):

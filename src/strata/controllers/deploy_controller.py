@@ -691,10 +691,10 @@ def _verify_registry_charts(
 ) -> dict[Path, ChartPin]:
     """The archive of every registry chart in `targets`, verified against the pin `build run` recorded.
 
-    docs/work/helm-registry-chart-checks.md (ADR-0054, condition 5): a chart the build did not pin is refused; a
+    docs/design/helm-chart-deployment.md (ADR-0054, condition 5): a chart the build did not pin is refused; a
     pinned one comes from the `.strata/helm/` cache, else is pulled again at exactly its version, and either way
     its digest must match. A local chart is refused when the build left any of its dependencies unpinned
-    (docs/work/helm-chart-dependencies.md); its pinned dependencies are already in the build's `charts/`. Every problem is an error on `diagnostics`; the caller stops before any step runs.
+    (docs/design/helm-chart-deployment.md); its pinned dependencies are already in the build's `charts/`. Every problem is an error on `diagnostics`; the caller stops before any step runs.
     `targets` pairs each module with its namespace name. Keyed by module build directory.
     """
     verified: dict[Path, ChartPin] = {}
@@ -951,7 +951,7 @@ def deploy_run(
             cannot be combined with `stop_after` or `use_saved_plan`. A readiness problem marked `flags_only` is a
             warning here, and its step still runs.
         on_tool: Called as `(provisioner name, readiness)` for every step the preflight lets run, so the caller
-            can record which tool, version and path deployed it (docs/work/helm-4-support.md). Called before any
+            can record which tool, version and path deployed it (docs/design/helm-chart-deployment.md). Called before any
             step runs, also when a later step then fails.
 
     Returns:
@@ -1012,7 +1012,7 @@ def deploy_run(
     # tag in effect here can differ from the build's (`--pin` given only to `deploy run`), so the deploy result
     # replaces the build's entry for the same policy. It runs under `smoke_test` too (nothing is contacted), but
     # a smoke test records nothing. The images the build's rendered charts run are judged from its `sbom.json`
-    # (docs/work/helm-image-delivery.md, plan item 9f): what this deploy installs.
+    # (docs/design/helm-image-delivery.md, "Where the policy is judged"): what this deploy installs.
     if workspace.spec.image_tag_policy is not None and not destroy:
         tag_diagnostics = check_image_tag_policy(
             context, deployment, workspace, pinned_by_flag=pin is not None, build_path=build_path
@@ -1216,7 +1216,7 @@ def deploy_run(
             label = f"Provisioner '{provisioner.name}' (step '{step.name}')"
             for problem in readiness.problems:
                 # `uninstall`/`destroy` pass none of the flags a `flags_only` problem is about
-                # (docs/work/helm-4-support.md), so a teardown is not blocked by it.
+                # (docs/design/helm-chart-deployment.md), so a teardown is not blocked by it.
                 report = diagnostics.warning if destroy and problem.flags_only else diagnostics.error
                 report(f"{label}: {problem.message}", location=step.name, code=problem.code)
             for notice in readiness.warnings:
@@ -1257,7 +1257,7 @@ def deploy_run(
             return diagnostics
 
     # A tool with a target context (Helm's `kube_context`, Compose's `docker_context`) runs against the one the
-    # deployment names (docs/work/compose-docker-context.md). Checked once per tool, before any step, so a wrong
+    # deployment names (docs/design/deploy-command.md). Checked once per tool, before any step, so a wrong
     # environment stops the run before anything has changed.
     checked_tools: set[tuple[str, str | None]] = set()
     for _, _, integration in resolved_steps:
@@ -1280,7 +1280,7 @@ def deploy_run(
             )
             return diagnostics
 
-    # Registry charts are installed from the archive the build pinned (docs/work/helm-registry-chart-checks.md).
+    # Registry charts are installed from the archive the build pinned (docs/design/helm-chart-deployment.md).
     # Each is verified once, before any step, so an unpinned or changed chart stops the run before anything changes.
     chart_archives: dict[Path, ChartPin] = {}
     if not destroy and stop_after != "setup":
@@ -1333,7 +1333,7 @@ def deploy_run(
         if not diagnostics.ok:
             return diagnostics
 
-    # `${artifact:NAME.FIELD}` (docs/work/artifact-gap-analysis.md, design 1): once per run, so each pin that wins
+    # `${artifact:NAME.FIELD}` (docs/archive/artifact-gap-analysis.md, design 1): once per run, so each pin that wins
     # is logged once, not once per step.
     artifact_tokens = artifact_token_values(index, deployment, log=True)
 

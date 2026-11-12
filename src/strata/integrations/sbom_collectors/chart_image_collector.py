@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect the container images Helm charts deploy, by rendering them (docs/work/helm-image-delivery.md, the SBOM
+"""Collect the container images Helm charts deploy, by rendering them (docs/design/helm-image-delivery.md, the SBOM
 side, part 2, and plan item 9b for registry charts).
 
 Strata writes no image into a chart's values, so a Helm module's declared service images are only a statement
@@ -86,13 +86,13 @@ def helm() -> HelmIntegration:
 
 class ChartImageCollector(SbomCollector):
     """Renders each chart the build placed and lists the images it deploys. On unless the workspace sets
-    `sbom.render_charts: false` (the default since docs/work/helm-image-delivery.md, plan item 10b).
+    `sbom.render_charts: false` (docs/design/helm-image-delivery.md, "The SBOM: rendering charts").
 
     - A local chart is a module folder with `Chart.yaml` and a `meta.yaml` without `chartName`, the folder
       `deploy run` installs from.
     - A registry chart is a module folder whose `meta.yaml` has `chartName`. Its archive is rendered from the
       `.strata/helm/` cache at `helm_cache`, only when its digest is the `chartDigest` the build pinned, the archive
-      `deploy run` installs (docs/work/helm-image-delivery.md, plan item 9b). Without `helm_cache`, registry charts
+      `deploy run` installs (docs/design/helm-image-delivery.md, "The SBOM: rendering charts"). Without `helm_cache`, registry charts
       are not rendered.
     """
 

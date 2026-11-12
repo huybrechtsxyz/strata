@@ -498,7 +498,7 @@ def sync_module_source(
 
     Returns:
         `(repository root, copied origin)` for a copied source, so a local chart's `file://` dependencies can be
-        resolved against where it came from (docs/work/helm-chart-dependencies.md); `None` for a chart-based one.
+        resolved against where it came from (docs/design/helm-chart-deployment.md); `None` for a chart-based one.
 
     Raises:
         SourceSyncError: `source` names a remote that is not declared, its

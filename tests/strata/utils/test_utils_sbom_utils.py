@@ -26,7 +26,7 @@ from strata.utils.sbom_utils import (
 )
 
 # ---------------------------------------------------------------------------
-# An artifact's image_tag: a tag, a digest or tag@digest (docs/work/artifact-gap-analysis.md, design 4)
+# An artifact's image_tag: a tag, a digest or tag@digest (docs/archive/artifact-gap-analysis.md, design 4)
 # ---------------------------------------------------------------------------
 
 _HEX = "9f86d081" * 8
