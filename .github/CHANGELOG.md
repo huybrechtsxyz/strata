@@ -29,8 +29,19 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     (`sbom_declared_image_not_rendered`) and the reason `helm module: not in the rendered chart`.
   - A chart that cannot be rendered gets an `info` line (`sbom_chart_not_rendered`): no `helm`, a dependency
     not vendored under `charts/`, or a registry chart that is not pinned or whose cached archive changed.
-  - Turning it on adds those images to `cve_policy` and `image_gate_policy`, so a `deny` gate can fail on an
-    image it never saw before.
+  - Turning it on adds those images to `cve_policy`, `image_gate_policy` and `image_tag_policy`, so a `deny` gate
+    can fail on an image it never saw before.
+- **`image_tag_policy` judges the images rendered charts run**, with `sbom.render_charts`, read from the build's
+  `sbom.json` by `build run`, `deploy run` and `policy check`. `strata deploy images` reads no build and is
+  unchanged.
+  - A new origin, `chart`. A workspace that lists `origins` gets these images only once it adds `chart`.
+  - Each is named `REFERENCE/CONTAINER` (`whoami/shipper`), the name an `allow` entry uses.
+  - `require_pin` does not apply to them, and the fix points at the chart's values.
+  - A declared Helm image the chart also runs is judged once, as delivered. A Helm module whose chart rendered an
+    image is no longer reported as `image_unknown_to_strata`.
+  - An info line (`image_tag_policy_rendered_images`) names the `sbom.json` and when it was written, so
+    `policy check` and `deploy run` say which build they judged. An `sbom.json` that cannot be read is a warning
+    (`image_tag_policy_sbom_unreadable`), and the declared images are still judged.
 - **`strata deploy images` says which images strata delivers.** Strata delivers an image when it writes it into
   what runs:
   - a Compose service;
@@ -78,6 +89,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Changed
 
+- **`build run` judges `image_tag_policy` at the end**, after `sbom.json` is written, next to the other build
+  policies, so it can judge the images rendered charts run. A `deny` (and `on_unknown_image: block`) now fails the
+  build after the sources are cloned and the charts rendered, with the output on disk. With `--clean`, the previous
+  build is gone by then. A denied build now records its result in `policy_results.json`. To fail fast, run
+  `strata deploy images` or `strata policy check` before `build run`. `--dry-run` still judges the declared images.
 - An artifact's `image_tag` must be a tag, a digest or `tag@digest`; another shape fails when the document loads.
   An `artifacts` pin of another shape is an error in `strata validate` (`artifact_tag_invalid`), and
   `strata version set` refuses to write one. Before this, `1.4.2@sha256:...` gave `name@1.4.2@sha256:...`, which

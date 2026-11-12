@@ -1,6 +1,6 @@
 # Helm module images - Work
 
-- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed, 9a to 9f built (2026-11-12)
+- Status: option B and plan item 8 built (2026-11-11), plan item 9 built (2026-11-12); not released
 - Last updated: 2026-11-12
 
 ## Overview
@@ -705,7 +705,7 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   - [x] 8c. `WorkspaceSpecModel.sbom.render_charts`; the `chart-image` collector and its findings
   - [x] 8d. Docs (the SBOM design and how-to, `workspace.md`; `security-gates.md` names no label), CHANGELOG;
     checks; the full suite; a real render of a local chart (a test against real `helm`)
-- [ ] 9. Rendered chart images as a build fact (design "Rendered chart images as a build fact" above). Each step
+- [x] 9. Rendered chart images as a build fact (design "Rendered chart images as a build fact" above). Each step
   ends green on ruff, mypy, lint-imports and its own tests.
   - [x] 9a. The SBOM keeps the reference and the container: `strata:image` on a rendered component, and the
     use `chart:<namespace>/<reference>/<container>` (`chart_image_collector.py`, `IMAGE_REF_PROPERTY` in
@@ -728,11 +728,14 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
     came from. Tests for both (section 3). Built 2026-11-12, with the "Where it runs" tables in
     `image-tag-policy.md` and `workspace.md` (and the History bullet), and `denied-build-audit.md`'s current state:
     its option C now holds.
-  - [ ] 9g. Docs: the `chart` origin and
+  - [x] 9g. Docs: the `chart` origin and
     the `allow` name in `workspace.md`, the SBOM design and how-to (registry charts, the new finding), the CI
     how-to's "fail fast with `deploy images`" line, `.github/CHANGELOG.md` (Changed: the build check moves; Added:
     the rest). Then `strata validate config`, the full suite, and the dogfood build again: `whoami` loses its
-    unknown warning and a `latest` sidecar fails a `deny` policy.
+    unknown warning and a `latest` sidecar fails a `deny` policy. Built 2026-11-12. The registry charts and the
+    new finding were already in the SBOM docs from 9b and 9c; 9g added the policy's reading of them, the chart
+    row in `image-tag-policy.md`, and the SBOM design's collector row, which still said local charts only. No
+    CHANGELOG "Fixed" for the relative `--build-path`: `render_charts` is not released yet.
 - [ ] 10. Later, after a release with item 9: `render_charts` on by default (open question below).
 
 ### Open questions
@@ -789,7 +792,8 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   `sbom_declared_image_not_rendered` finding. 9d built the same day: the `chart` origin and the rendered rows;
   no caller passes a build yet. 9e built the same day: `build run` judges the policy after the SBOM; the
   dogfood build found that `helm template` got relative paths while running in the chart's folder, so a
-  relative `--build-path` rendered no chart (fixed in `HelmIntegration.template()`). 9f built the same day.
+  relative `--build-path` rendered no chart (fixed in `HelmIntegration.template()`). 9f built the same day. 9g
+  the same day: the user docs and the CHANGELOG; item 9 is done.
 
 - 2026-11-11: plan item 8 designed from the removed work doc `sbom-generation.md` (2026-11-07). The values-file
   finding there is resolved (`strata-values.yaml`). Rendering local charts is opt-in (`spec.sbom.render_charts`);

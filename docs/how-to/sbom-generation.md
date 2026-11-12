@@ -70,8 +70,8 @@ Strata writes no image into a Helm chart's values, so the chart decides which im
     happens when `helm` is not installed, when a dependency is not vendored under `charts/`, or when a registry
     chart was not pinned (`--offline` with an empty cache) or its cached archive no longer has the pinned digest.
   - An image whose reference holds a token resolved only at deploy is left out (`sbom_chart_image_unresolved`).
-- **Turning it on can fail a build.** `cve_policy` and `image_gate_policy` start checking the rendered images.
-  Check with `strata policy findings` first.
+- **Turning it on can fail a build.** `cve_policy`, `image_gate_policy` and `image_tag_policy` start checking the
+  rendered images. Check with `strata policy findings` and `strata policy check` first.
 
 ## Example
 

@@ -77,7 +77,7 @@ they choose a commit to judge, not the one checked out. Outside git the property
 | `image`     | `spec.services[].image` of every resolved module, plus artifact images (`graph.images`)                                                   | `container`, `pkg:docker/...`                    |
 | `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                                    | `container`, `pkg:docker/...`                    |
 | `helm`      | Chart modules' `source.{chart_name,chart_version,chart_repository}` and their built `meta.yaml`, every rendered `Chart.yaml` and its `dependencies[]` | `library`, `pkg:helm/...`                        |
-| `chart-image` | Opt-in (`spec.sbom.render_charts`): `helm template` of every local chart folder (a `Chart.yaml` and a `meta.yaml` without `chartName`), offline, with `strata-values.yaml`; every `containers`/`initContainers`/`ephemeralContainers` image | `container`, `pkg:docker/...` |
+| `chart-image` | Opt-in (`spec.sbom.render_charts`): `helm template` of every chart folder whose `meta.yaml` has a release name and namespace (a local chart's `Chart.yaml`, or a registry chart's pinned archive in `.strata/helm/`), offline, with `strata-values.yaml`; every `containers`/`initContainers`/`ephemeralContainers` image | `container`, `pkg:docker/...` |
 | `terraform` | `required_providers {}` and `module "x" {}` blocks in every `*.tf` (one `python-hcl2` pass), and each root module's `.terraform.lock.hcl` | `library`, `pkg:terraform/...`, `pkg:github/...` |
 
 The file-based collectors scan the whole build path with `rglob()`; no wiring inside the
@@ -167,6 +167,11 @@ service image may not be what runs.
     this collector only. It renders only an archive whose digest is the `chartDigest` the build pinned, the
     archive `deploy run` installs. An unpinned chart, a missing archive or another digest is an
     `sbom_chart_not_rendered` finding.
+  - `HelmIntegration.template()` gets absolute paths, because Helm runs in the chart's folder: a relative
+    `--build-path` would otherwise render no chart.
+  - `image_tag_policy` reads these components back (`rendered_chart_images()`, origin `chart`), at the end of
+    `build run`, in `deploy run` and in `policy check`, so the SBOM is where the policy learns what a chart runs
+    ([image-tag-policy.md](image-tag-policy.md)).
 - **Merging.** `_merge_by_purl()` joins every component's `strata:used-by` rather than keeping the first one's,
   and drops the declared-only marker when a component with the same purl comes from a rendered chart.
 - **Declared but not rendered.** After the merge, a declared Helm service image whose module's chart was rendered

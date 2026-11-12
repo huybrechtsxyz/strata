@@ -28,7 +28,7 @@ kind: workspace
 spec:
   image_tag_policy:
     enforcement: deny                # deny (default) | warn
-    origins: [artifact]              # artifact | module-service; default: both
+    origins: [artifact]              # artifact | module-service | chart; default: all three
     require_tag: true                # default true
     reject_tags: [latest, main]      # default: the mutable alias set; [] rejects none
     tag_pattern: '^\d+\.\d+\.\d+$'   # a tag must match it (searched, so anchor it)
@@ -36,7 +36,7 @@ spec:
     require_digest: false            # the image must carry a digest
     rings: [acc, prd]                # only deployments in these rings; default all
     allow:
-      - name: redis                  # a row name (artifact or service)
+      - name: redis                  # a row name (artifact, service, or REFERENCE/CONTAINER for a chart)
         reason: third-party image, covered by cve_policy
         expires: 2026-12-31          # optional ISO date, honoured through that day
 ```
@@ -63,7 +63,14 @@ selected and whose name is not allowed:
 - A row carries the tag part in `image_tag` and the digest part in `image_digest`
   (docs/work/artifact-gap-analysis.md, design 4). A digest (`sha256:...`) is immutable: a digest alone satisfies
   `require_tag`, and `reject_tags` and `tag_pattern` judge only a tag part. Every row still has to satisfy
-  `require_pin`.
+  `require_pin`, except a `chart` row.
+- **Chart rows.** Given a build, `check_image_tag_policy()` adds a row per container a rendered chart runs, read
+  from `sbom.json` (`rendered_chart_images()`, `with_rendered_images()` in `controllers/effective_images.py`):
+  origin `chart`, name `REFERENCE/CONTAINER`, `tag_source: chart`. `require_pin` does not apply to them, since
+  strata cannot pin an image inside a chart, and the fix names the chart's values. A declared row with the same
+  purl is judged once, as delivered, and a Helm module with a rendered row is no longer unknown. An SBOM that
+  cannot be read is a warning (`image_tag_policy_sbom_unreadable`), and the solution is still judged. Design and
+  history: `helm-image-delivery.md` (work doc), plan item 9.
 - A tag that merely is not a semantic version, such as a build number (`env_sbx_20260907.11`), is not floating.
   `reject_tags` is an explicit list and `tag_pattern` is how to be stricter. This matches how the SBOM treats a
   pinned tag.
@@ -153,10 +160,12 @@ is nothing honest to seed it with.
   artifacts alone are now reported as `needs_value`.
 - Not built: itemised `policy findings` for this policy (the diagnostics already name every image), and tag
   checks in `strata validate`.
-- Out of scope: the images a Helm chart deploys by itself. strata does not write a Helm module's service `image`
-  into the chart values (v1 did not either), so for a Helm module the policy judges the declared image and cannot
-  see an image only the chart knows. Since 2026-11-11 the policy says so instead of staying silent:
+- The images a Helm chart deploys by itself were out of scope at first. strata does not write a Helm module's
+  service `image` into the chart values (v1 did not either), so for a Helm module the policy judged the declared
+  image and could not see an image only the chart knows. Since 2026-11-11 the policy says so instead of staying
+  silent:
   - a declared Helm image's finding says "declared only";
   - a Helm module that declares no image is reported as `image_unknown_to_strata`, as `on_unknown_image` decides.
 
-  The rest is tracked in `helm-image-delivery.md` (work doc).
+  Since 2026-11-12, with `sbom.render_charts`, it judges the images the rendered charts run (the `chart` origin),
+  which moved the build check to the end of `build run`. See `helm-image-delivery.md` (work doc), plan item 9.

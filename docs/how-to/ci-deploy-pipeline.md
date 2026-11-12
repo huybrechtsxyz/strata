@@ -46,8 +46,10 @@ Five things worth knowing:
 - **`build run` and `deploy run` also judge image tags** when the workspace sets `image_tag_policy`: an image
   with no tag, a floating tag such as `latest`, or a tag that does not match the shape you require fails the
   step (`enforcement: deny`) or warns (`warn`). It is offline and needs no credentials. `build run` judges it
-  before it writes anything, and `deploy run` again before any value is resolved, so pass the same `--pin` to
-  both. See "Image tag policy" in [the workspace reference](../config/workspace.md).
+  at the end, after the SBOM, so with `sbom.render_charts` it also judges the images the charts run. `deploy run`
+  judges it again before any value is resolved, so pass the same `--pin` to both. To fail fast, before the build
+  clones and renders, run `strata deploy images "$DEPLOYMENT"` first: it judges the declared images in seconds.
+  See "Image tag policy" in [the workspace reference](../config/workspace.md).
 
 `strata deploy run --force` is accepted for compatibility with v1 pipelines and currently does
 nothing. `--dry-run` runs init, validate and plan and stops before any change; the security gates
