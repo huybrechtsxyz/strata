@@ -168,14 +168,21 @@ Deployment 'bootstrap-acme' must be named 'bootstrap-acme-001' by the name_rule 
 - A filled-in value the field does not accept (a tenant name with a space) is reported on the
   template, for the deployment: `base spec.tenant: invalid after ${param:} substitution: ...
   (for initech)`, with the model's own code (`string_pattern_mismatch`, ...)
-- A reference that names no document once filled in is an `unknown_reference` on the deployment:
-  `unknown environment 'hub-hub02-env' ... (in deployment 'initech' after ${param:} substitution)`.
-  A name a template writes literally (`workspace: main`) is checked the same way, once per
-  deployment that uses the template
+- A reference that names no document once filled in is an `unknown_reference` on the template's
+  own field, saying which values made it, for the deployment:
+  `base spec.environments[1]: unknown environment 'hub-hub02-env'. Available: [...], from
+  'hub-${param:spoke.hub}-env': spoke.hub = 'hub02' (spoke-initech) (for initech)`. A rejected value
+  says the same. A name a template writes literally (`workspace: mian`) is reported once, on the
+  template, not once per deployment
 - A malformed token in a template (`${param:}`) is a load error
 - A deployable deployment whose name differs from a `name_rule` of its chain is
   `name_rule_mismatch`; a rule that reads a missing key is `param_missing` on the rule's document;
   any token other than `${param:}` in a rule is a load error
+- A value no document reads is reported as **information** (`param_unused`), never as an error
+  or warning, so `strata validate --strict` still passes: a set may hold more than any one
+  deployment needs, like a Helm values file. A top-level key counts as read when some deployment
+  whose chain names the set under a role reads `${param:<role>.<key>...}`; `${param:<role>}`
+  alone reads every key. A set no `meta.params` names is reported once
 - `${param:}` in `meta`, `spec.extends` or `spec.partial` is a load error
 - A `${param:}` in a document of another kind (an environment, a workspace, a module, ...) is not
   substituted, and the token check reports it as a `malformed_value_token`

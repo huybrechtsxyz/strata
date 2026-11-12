@@ -178,6 +178,20 @@ Chart resolution for a pull (`_resolve_chart()`, at build and when the deploy pu
   registries one alias.
 - **Version**: the declared `chart_version` (exact or a range) at build; the pinned `chartVersion` at deploy.
 
+### Version pins at deploy
+
+A Helm module's `kind: version` pins are applied by `build run`: the chart version goes into `meta.yaml`, and
+`${artifact:}` values into `strata-values.yaml`. The deploy installs what the build wrote. So `deploy run` (and
+`deploy plan`, `deploy apply`) refuses, before any step, a version that differs from the build's when the build
+holds a Helm module: `build_version_mismatch`, naming both versions, the Helm modules and the rebuild command.
+
+- The deploy's version is `--pin`, or the deployment's `spec.version` without it; the build's is the `version`
+  key `build run` writes into `resolved.yaml` (`null` without one).
+- Not checked: a destroy (uninstalling does not depend on the versions), a build without a Helm module (Terraform
+  and Compose steps take a deploy `--pin`), and a build made before `resolved.yaml` recorded its version.
+- A pipeline builds and deploys with the same `--pin`, so it never meets the error. Without it, the chart installed
+  the build's versions while the run and its audit record named the deploy's.
+
 ### Kube context pin
 
 Helm uses the kubeconfig the caller provides ([ADR-0020](../decisions/0020-v1-consumer-feature-priority.md)): strata
@@ -334,6 +348,7 @@ Semantic errors stop `build run` and every `deploy` command (`require_valid()`),
 | `helm_unknown_configuration_key`    | warning  | `build run`, a configuration key the chart does not declare     |
 | `helm_chart_not_pinned`             | warning  | `build run`, a registry chart the machine could not pull        |
 | `helm_chart_not_pinned`             | error    | deploy, before any step, a registry chart or a local chart's dependency the build did not pin |
+| `build_version_mismatch`            | error    | deploy, before any step, a version that differs from the build's, when the build holds a Helm module |
 | `helm_chart_dependency_not_pinned`  | warning  | `build run`, a local chart's dependency the machine could not pull |
 | `helm_chart_dependency_lock_out_of_sync` | error | `build run`, a committed `Chart.lock` lacks a declared dependency |
 | `helm_chart_dependency_missing`     | error    | `build run`, a dependency with no repository that is not committed, or `missing` in `helm dependency list` |

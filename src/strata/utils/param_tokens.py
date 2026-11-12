@@ -44,11 +44,49 @@ def holds_param_tokens(node: Any) -> bool:
 
 @dataclass(frozen=True)
 class ParamProblem:
-    """A `${param:}` token that could not be substituted, at `location` (`spec.properties.name`)."""
+    """A problem with a document's `${param:}` substitution, at `location` (`spec.properties.name`).
+
+    `per_leaf` is False for a finding the values played no part in (a name a template writes literally): it is the
+    same for every deployment that uses the template, so it is reported once.
+    """
 
     location: str
     message: str
     code: str
+    per_leaf: bool = True
+
+
+@dataclass(frozen=True)
+class ParamRead:
+    """One `${param:role.key}` token that was filled in, and the value it got."""
+
+    role: str
+    key: str
+    value: Any
+
+
+@dataclass(frozen=True)
+class ParamOrigin:
+    """Where a substituted string came from: the text as written and the tokens filled into it."""
+
+    text: str
+    reads: tuple[ParamRead, ...]
+
+
+def param_reads_in(node: Any) -> set[tuple[str, tuple[str, ...]]]:
+    """`(role, path)` for every well-formed `${param:}` token in the string values under `node` (escapes ignored)."""
+    found: set[tuple[str, tuple[str, ...]]] = set()
+    if isinstance(node, dict):
+        for child in node.values():
+            found |= param_reads_in(child)
+    elif isinstance(node, list):
+        for child in node:
+            found |= param_reads_in(child)
+    elif isinstance(node, str):
+        for match in PARAM_TOKEN_PATTERN.finditer(strip_escaped_value_tokens(node)):
+            role, *path = match.group("key").split(".")
+            found.add((role, tuple(path)))
+    return found
 
 
 @dataclass(frozen=True)
@@ -109,6 +147,7 @@ def substitute_params(
     values: Mapping[str, Mapping[str, Any]],
     sets: Mapping[str, Sequence[str]],
     path: str,
+    origins: dict[str, ParamOrigin] | None = None,
 ) -> tuple[Any, list[ParamProblem]]:
     """`node` with every `${param:}` in its strings substituted, and the tokens that could not be.
 
@@ -120,8 +159,15 @@ def substitute_params(
         values: Role -> merged values (`merge_param_values()`).
         sets: Role -> the parameter sets consulted, named in a missing-key message.
         path: Where `node` sits (`spec`), the prefix of each problem's location.
+        origins: When given, filled with the origin of every string a token was filled into, by its location
+            (`spec.environments[1]`), so a finding on the result can say where its value came from.
     """
     problems: list[ParamProblem] = []
+
+    def record(text: str, where: str, read: ParamRead) -> None:
+        if origins is not None:
+            known = origins.get(where)
+            origins[where] = ParamOrigin(text, (*known.reads, read) if known else (read,))
 
     def walk(item: Any, where: str) -> Any:
         if isinstance(item, dict):
@@ -139,6 +185,8 @@ def substitute_params(
             if isinstance(found, _Missing):
                 problems.append(ParamProblem(where, found.message, "param_missing"))
                 return text
+            role, _, key = whole.group("key").partition(".")
+            record(text, where, ParamRead(role, key, found))
             return copy.deepcopy(found)
 
         def replace(match: re.Match[str]) -> str:
@@ -161,6 +209,8 @@ def substitute_params(
                     )
                 )
                 return match.group(0)
+            role, _, path_key = key.partition(".")
+            record(text, where, ParamRead(role, path_key, found))
             return rendered
 
         return _SUBSTITUTE_PATTERN.sub(replace, text)

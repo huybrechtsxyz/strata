@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from strata.utils.param_tokens import merge_param_values, substitute_params
+from strata.utils.param_tokens import ParamOrigin, ParamRead, merge_param_values, param_reads_in, substitute_params
 
 SETS = {"spoke": ("spoke-acme-001",), "hub": ("hub-defaults", "hub-hub02")}
 VALUES = {
@@ -177,3 +177,32 @@ def test_an_escaped_whole_value_is_left_alone():
     result, problems = _sub({"x": "$${param:spoke.name}"})
     assert problems == []
     assert result == {"x": "$${param:spoke.name}"}
+
+
+# ---------------------------------------------------------------------------
+# Origins and reads (step 1e)
+# ---------------------------------------------------------------------------
+
+
+def test_origins_record_the_text_and_every_token_filled_into_each_string():
+    origins: dict[str, ParamOrigin] = {}
+    node = {"envs": ["fixed", "hub-${param:hub.provider}-${param:spoke.seq}"], "all": "${param:spoke.customers}"}
+    substitute_params(node, VALUES, SETS, "spec", origins)
+    assert origins == {
+        "spec.envs[1]": ParamOrigin(
+            "hub-${param:hub.provider}-${param:spoke.seq}",
+            (ParamRead("hub", "provider", "azure-westus2"), ParamRead("spoke", "seq", "001")),
+        ),
+        "spec.all": ParamOrigin("${param:spoke.customers}", (ParamRead("spoke", "customers", ["acmep01", "acmep02"]),)),
+    }
+
+
+def test_a_token_that_could_not_be_filled_has_no_origin():
+    origins: dict[str, ParamOrigin] = {}
+    substitute_params({"x": "${param:spoke.missing}"}, VALUES, SETS, "spec", origins)
+    assert origins == {}
+
+
+def test_param_reads_in_finds_every_role_and_path_and_skips_escapes():
+    node = {"a": ["${param:spoke.network.cidr}-${param:hub}"], "b": {"c": "$${param:x.y}", "${param:k.k}": 1}}
+    assert param_reads_in(node) == {("spoke", ("network", "cidr")), ("hub", ())}

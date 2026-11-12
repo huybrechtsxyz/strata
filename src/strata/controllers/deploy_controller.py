@@ -826,6 +826,47 @@ def _chart_registry_credentials(
     return credentials
 
 
+def check_build_version(build_path: Path, version: str | None, *, pinned_by_flag: bool) -> Diagnostics:
+    """An error when the deploy's version differs from the build's and the build holds Helm modules
+    (`build_version_mismatch`, docs/design/helm-chart-deployment.md, "Version pins at deploy").
+
+    A Helm module's chart version and its `${artifact:}` values are written into the build (`meta.yaml`,
+    `strata-values.yaml`), and the deploy installs what is there: a different `--pin` would reach the other steps
+    but not the charts, while the run and its audit record name the deploy's version. Nothing to judge when the build
+    records no version (made before `resolved.yaml` carried one) or has no Helm module.
+
+    Args:
+        build_path: The build being deployed.
+        version: The deploy's version: `--pin` when given, else the deployment's `spec.version`.
+        pinned_by_flag: Whether `version` came from `--pin`, for the message.
+    """
+    diagnostics = Diagnostics()
+    try:
+        resolved = yaml.safe_load((build_path / "resolved.yaml").read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return diagnostics
+    if not isinstance(resolved, dict) or "version" not in resolved:
+        return diagnostics
+    built = resolved["version"]
+    if built == version:
+        return diagnostics
+    helm_modules = sorted(path.parent.relative_to(build_path).as_posix() for path in build_path.glob("*/*/meta.yaml"))
+    if not helm_modules:
+        return diagnostics
+
+    shown = ", ".join(helm_modules[:5]) + (f" and {len(helm_modules) - 5} more" if len(helm_modules) > 5 else "")
+    deploy_side = f"--pin {version}" if pinned_by_flag else (f"version '{version}'" if version else "no version")
+    build_side = f"version '{built}'" if built else "no version"
+    rebuild = f"strata build run --pin {version}" if version else "strata build run without --pin"
+    diagnostics.error(
+        f"This deploy uses {deploy_side}, but the build was made with {build_side}. A Helm module's pins are applied "
+        f"by the build, so its chart would still install the build's versions ({shown}). Rebuild with the same "
+        f"version ({rebuild}), or deploy with the build's.",
+        code="build_version_mismatch",
+    )
+    return diagnostics
+
+
 def deploy_run(
     context: SolutionContext,
     deployment_name: str,
@@ -1011,6 +1052,12 @@ def deploy_run(
     report_store = DeploymentReportStore(output_store_backend, deployment_name) if output_store_backend else None
 
     diagnostics = Diagnostics()
+
+    # A Helm module's pins were applied by the build; a deploy cannot change them. Offline, so it runs first.
+    if not destroy:
+        diagnostics.extend(check_build_version(build_path, deployment.spec.version, pinned_by_flag=pin is not None))
+        if not diagnostics.ok:
+            return diagnostics
 
     # Image tag policy (docs/design/image-tag-policy.md): offline, so it runs first, ahead of any store access. The
     # tag in effect here can differ from the build's (`--pin` given only to `deploy run`), so the deploy result

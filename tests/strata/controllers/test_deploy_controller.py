@@ -16,7 +16,7 @@ import pytest
 import yaml
 
 from strata.controllers.build_controller import build_run
-from strata.controllers.deploy_controller import deploy_run, tf_var_env
+from strata.controllers.deploy_controller import check_build_version, deploy_run, tf_var_env
 from strata.controllers.solution_context import open_solution
 from strata.integrations.base import ReadinessProblem
 from strata.integrations.helm import HelmIntegration, _repo_alias
@@ -5450,3 +5450,92 @@ def test_deploy_run_delivers_a_pinned_artifact_to_a_helm_chart_through_its_value
     assert diagnostics.ok, diagnostics.messages()
     values = yaml.safe_load((build_path / "apps" / "auth" / "strata-values.yaml").read_text(encoding="utf-8"))
     assert values["image"] == {"repository": "example/api", "tag": "2.0.0"}
+
+
+# ---------------------------------------------------------------------------
+# A Helm module's pins come from the build (docs/design/helm-chart-deployment.md, "Version pins at deploy")
+# ---------------------------------------------------------------------------
+
+
+def _helm_solution_with_version(tmp_path: Path) -> Path:
+    root = _helm_solution(tmp_path)
+    _write(
+        root,
+        "version.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n  pins: {}\n",
+    )
+    return root
+
+
+def test_deploy_run_refuses_a_pin_the_helm_build_was_not_made_with(tmp_path: Path, _capture):
+    """The chart would install the build's versions while the run and its audit record name `--pin prd`."""
+    root = _helm_solution_with_version(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
+
+    [error] = diagnostics.errors
+    assert error.code == "build_version_mismatch"
+    assert error.message.startswith("This deploy uses --pin prd, but the build was made with no version.")
+    assert "apps/auth" in error.message and "strata build run --pin prd" in error.message
+    assert _capture == [], "nothing runs before the check"
+
+
+def test_deploy_run_takes_the_pin_the_helm_build_was_made_with(tmp_path: Path, _capture):
+    root = _helm_solution_with_version(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path, pin="prd")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd", stop_after="setup")
+
+    assert "build_version_mismatch" not in [d.code for d in diagnostics.items]
+    assert diagnostics.ok, diagnostics.messages()
+
+
+def test_a_destroy_is_not_held_to_the_builds_version(tmp_path: Path, _capture):
+    """Uninstalling a release does not depend on the versions it was installed with."""
+    root = _helm_solution_with_version(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, destroy=True, smoke_test=True, pin="prd")
+
+    assert "build_version_mismatch" not in [d.code for d in diagnostics.items]
+
+
+def _build(tmp_path: Path, resolved: str | None, *, helm: bool = True) -> Path:
+    build_path = tmp_path / "build"
+    build_path.mkdir()
+    if resolved is not None:
+        (build_path / "resolved.yaml").write_text(resolved, encoding="utf-8")
+    if helm:
+        (build_path / "apps" / "auth").mkdir(parents=True)
+        (build_path / "apps" / "auth" / "meta.yaml").write_text("releaseName: auth\n", encoding="utf-8")
+    return build_path
+
+
+@pytest.mark.parametrize(
+    ("resolved", "helm", "version"),
+    [
+        ("version: prd\n", True, "prd"),
+        ("version: null\n", True, None),
+        ("version: prd\n", False, "acc"),
+        ("variables: []\n", True, "acc"),
+        (None, True, "acc"),
+        ("[not, a, mapping]\n", True, "acc"),
+    ],
+    ids=["same", "both-none", "no-helm-module", "build-before-the-key", "no-resolved-yaml", "not-a-mapping"],
+)
+def test_check_build_version_has_nothing_to_report(tmp_path: Path, resolved, helm, version):
+    assert check_build_version(_build(tmp_path, resolved, helm=helm), version, pinned_by_flag=True).items == []
+
+
+def test_check_build_version_names_a_changed_spec_version(tmp_path: Path):
+    """Without `--pin`, the deployment's own `spec.version` changed since the build."""
+    build_path = _build(tmp_path, "version: prd-1\n")
+
+    [error] = check_build_version(build_path, "prd-2", pinned_by_flag=False).errors
+
+    assert error.message.startswith("This deploy uses version 'prd-2', but the build was made with version 'prd-1'.")
+    assert "strata build run --pin prd-2" in error.message

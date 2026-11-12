@@ -81,20 +81,13 @@ def _unresolved(name: str, known: AbstractSet[str], target: str) -> str:
     return f"unknown {target} '{name}'. Available: {sorted(known)}"
 
 
-def model_references(model: BaseModel) -> Iterator[tuple[str, str]]:
-    """Yield `(location, name)` for every document reference `model` declares (remotes excluded)."""
-    for rule in extract_references(type(model)):
-        if rule.kind is not None:
-            yield from references_in(model, rule.path)
-
-
 def unresolved_references(
     index: DocumentIndex, model: BaseModel, *, ignore: AbstractSet[str] = frozenset()
 ) -> Iterator[tuple[str, str]]:
     """Yield `(location, message)` for every document reference of `model` that names no document.
 
-    For a document the index does not hold as such: a deployment resolved from a template, whose references exist
-    only once its values are substituted. Names in `ignore` are skipped; remotes are not checked.
+    For a document the index does not hold as such: a template's spec once its values are substituted, whose
+    references exist only then. Names in `ignore` are skipped; remotes are not checked.
     """
     for rule in extract_references(type(model)):
         if rule.kind is None:

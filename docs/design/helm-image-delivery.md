@@ -290,8 +290,9 @@ The rendered images are read back from the build's `sbom.json` and judged by `im
 - To fail fast, run `strata deploy images` or `strata policy check` before `build run`: both judge the declared
   images offline in seconds.
 - `deploy run` judges before any step, with its own `--pin`, and is what actually stops a deploy, so a pipeline
-  that ignores the build's exit code is still caught. For a Helm module the `--pin` is not re-applied to the
-  chart: the pin was baked into `strata-values.yaml` at build, so the deploy judges the build's rendered images.
+  that ignores the build's exit code is still caught. A Helm module's pins are applied at build, so a deploy whose
+  version differs from the build's is refused before this (`build_version_mismatch`, helm-chart-deployment.md,
+  "Version pins at deploy"): the rendered images judged are the ones the deploy installs.
 
 ### Out of scope
 

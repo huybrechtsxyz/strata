@@ -98,7 +98,8 @@ def _shared_deploy_options(follow_default: str | None = None) -> Callable[[_F], 
             help="Override spec.version with this kind: version document for this invocation only "
             "(ADR-0019) — zero persisted mutation, the deployment document on disk is never touched. "
             "Covers the artifacts pin category (the one that resolves live, at deploy time); pass the "
-            "same value to 'build run --pin' too so a deploy matches the build it is executing.",
+            "same value to 'build run --pin' too so a deploy matches the build it is executing. A build "
+            "with Helm modules must have been made with the same version: their pins are applied at build.",
         )(f)
         f = click.option(
             "--scope",
@@ -371,7 +372,8 @@ def _validate_change_reference_flags(
     help="Override spec.version with this kind: version document for this invocation only "
     "(ADR-0019) — zero persisted mutation, the deployment document on disk is never touched. "
     "Covers the artifacts pin category (the one that resolves live, at deploy time); pass the "
-    "same value to 'build run --pin' too so a deploy matches the build it is executing.",
+    "same value to 'build run --pin' too so a deploy matches the build it is executing. A build "
+    "with Helm modules must have been made with the same version: their pins are applied at build.",
 )
 @click.option(
     "--output-max-age",

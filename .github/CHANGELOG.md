@@ -163,6 +163,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Fixed
 
+- **`deploy run` refuses a version the Helm build was not made with** (`build_version_mismatch`). A Helm module's
+  pins are applied by `build run`, so `deploy run --pin prd-1.5` on a build made with `prd-1.4` installed the
+  charts at 1.4 while the run and its audit record named 1.5. The deploy now stops before any step, naming both
+  versions and the rebuild command. Build and deploy with the same `--pin`. A destroy, a build without Helm modules
+  and a build made before this release are not checked. `resolved.yaml` gains a `version` key.
 - **The container image** (`ghcr.io/huybrechtsxyz/strata`) now has `git` and `ssh`, which strata calls itself:
   a `build run` with a remote no longer fails in it, and `ssh_key` auth works. git trusts a checkout mounted with
   `docker run -v`, so the audit record and the image gate get the commit SHA instead of silently none. The user has a

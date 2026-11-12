@@ -782,11 +782,12 @@ Phases. Each step is shippable on its own; tests are listed with the step that n
         `meta.name`, `meta.params` or `spec.extends` is an error (rule 5). Done 2026-11-12, see the changelog.
   - [x] 1d. **`meta.name_rule`** (rule 10), `name_rule_mismatch` with both names. Tests: match, mismatch, a rule on a
         middle base applies to every leaf below it. Done 2026-11-12, see the changelog.
-  - [ ] 1e. **Diagnostics with origins, and unused values.** The origin of each substituted string, so a finding on a
+  - [x] 1e. **Diagnostics with origins, and unused values.** The origin of each substituted string, so a finding on a
         resolved document names the leaf, the base and the base's field, and the role, parameter set and key. The
         `param_unused` info finding (rule 12): a key of a set that no document reads under any role the set is named
         under. Tests: the message of a bad reference in a base, and of a missing key; an unused key reported once per
-        set, a key read by one of seven leaves not reported, `validate --strict` still passing.
+        set, a key read by one of seven leaves not reported, `validate --strict` still passing. Done 2026-11-13, see
+        the changelog.
   - [ ] 1f. **Docs and decision.** An ADR: a new kind, and a token class substituted at load time next to the run-time
         tokens. The config reference (`kind: parameterset`, deployment `meta.params`, `meta.name_rule`). A how-to with
         a full dummy solution: a hub and two spokes, a customer project, the parameter sets, the bases and the leaves,
@@ -927,3 +928,25 @@ Open questions:
   - A partial base is not held to a rule. `meta` still never makes a document a template: only `spec` does.
   - Not built: a rule check when the spec itself failed to resolve. That leaf already has an error, and a second
     finding about its name would repeat the cause.
+- 2026-11-13: Step 1e built.
+  - **Origins.** `substitute_params()` takes an optional `origins` map and records, per location
+    (`spec.environments[1]`), the text as written and every token filled into it (`ParamOrigin`, `ParamRead`). The
+    resolver names the set a value came from as the last set of the role that holds the key.
+  - **References are checked per template document, not on the merged leaf.** 1c checked the resolved leaf, so a
+    finding sat on the leaf with no way back to the field (merging moves list positions). Now each template's
+    substituted spec is reference-checked right after its per-instance validation, where the location is the
+    template's own field and the origin map applies directly:
+    `base spec.environments[1]: unknown environment 'hub-hub02-env'. Available: [...], from
+    'hub-${param:spoke.hub}-env': spoke.hub = 'hub02' (spoke-initech) (for initech)`. A rejected value gets the same
+    suffix. The merged-document check (`_resolved_reference_problems()`) and `references.model_references()` are
+    gone. Unknown references stay findings, not blocking, as for a loaded document.
+  - **Literal names once.** A reference a template writes without a token is reported once, on the template, without
+    "(for leaf)": the 1c per-leaf duplicate is fixed. Non-template documents of the chain are covered by the ordinary
+    reference walk, and tenant defaults by the tenant's own.
+  - **`param_unused`** (rule 12), `info`: per top-level key of a set no document reads, at `spec.values.<key>`. A
+    key is read when some chain (any deployment's, partial bases included) holds `${param:<role>.<key>...}` in a
+    document's spec or `name_rule` and names the set under that role; `${param:<role>}` alone reads every key. A set
+    no `meta.params` names gets one finding at `meta.name`. Top-level keys only: a nested key that is never read
+    (`network.dns` beside a read `network.cidr`) is not reported. Revisit if that turns out to matter.
+  - Still for phase 4: the origin of every merged field (which document wrote it), for findings on a merged leaf
+    and the rendered view.

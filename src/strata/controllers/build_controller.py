@@ -343,8 +343,13 @@ def write_resolved_manifest(build_path: Path, graph: ResolvedWorkspaceGraph) -> 
     `_dump_promotion()`) when `graph.version` resolved to a document tagged
     with a ring — omitted entirely, not written as `null`/`{}`, for the
     common untagged case (Worked Example A).
+
+    `version` is the version document the build applied (`--pin`, else the deployment's `spec.version`), or `null`
+    without one. `deploy run` compares it with its own, because a Helm module's pins are applied here and not again
+    at deploy (`build_version_mismatch`, docs/design/helm-chart-deployment.md).
     """
     manifest = {
+        "version": graph.version.meta.name if graph.version is not None else None,
         "variables": _dump_refs(graph.variable_refs),
         "features": _dump_refs(graph.feature_refs),
         "secrets": _dump_refs(graph.secret_refs),

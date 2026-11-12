@@ -64,7 +64,7 @@ from typing import Any, cast
 
 from pydantic import ValidationError
 
-from strata.controllers.references import model_references, unresolved_references
+from strata.controllers.references import unresolved_references
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.logging.config import get_logger
 from strata.models.common_models import PlatformKind
@@ -82,7 +82,14 @@ from strata.services.base_service import diagnostics_from_validation_error
 from strata.services.deployment_service import merge_deployment_specs
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
-from strata.utils.param_tokens import ParamProblem, merge_param_values, substitute_params
+from strata.utils.param_tokens import (
+    ParamOrigin,
+    ParamProblem,
+    merge_param_values,
+    param_reads_in,
+    substitute_params,
+)
+from strata.utils.value_paths import VALUE_PATH_MISSING, walk_value_path
 
 log = get_logger(__name__)
 
@@ -115,15 +122,21 @@ class ResolvedDeployment:
     chain: tuple[str, ...]
 
 
+#: `(document, its file, problem)`: a problem found in one document of a chain.
+_Located = tuple[str, str, ParamProblem]
+
+
 @dataclass(frozen=True)
 class _MergedSpec:
-    """A chain's merged spec under one choice of parameter sets, with the tokens that could not be substituted.
+    """A chain's merged spec under one choice of parameter sets.
 
-    Each problem carries the document that holds the token and its file.
+    `problems` stop the deployment resolving (a token that could not be filled, a value the model rejects).
+    `findings` do not (a reference that names no document), as for a document loaded as written.
     """
 
     spec: dict[str, Any]
-    problems: tuple[tuple[str, str, ParamProblem], ...]
+    problems: tuple[_Located, ...]
+    findings: tuple[_Located, ...]
 
 
 @dataclass(frozen=True)
@@ -279,6 +292,7 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
     poisoned: set[str] = set()
     specs: dict[tuple[str, tuple[tuple[str, tuple[str, ...]], ...]], _MergedSpec] = {}
     resolved: dict[str, ResolvedDeployment] = {}
+    reported_once: set[tuple[str, str, str]] = set()
 
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         name = entry.ref.name
@@ -315,14 +329,18 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
             continue  # names a parameter set that does not exist: validate_references reports it on meta.params
         params = merge_param_values(param_sets, _set_values(param_sets, index))
         merged = _merged_spec(chain, param_sets, params, index, specs)
+        for holder, source, problem in merged.findings + merged.problems:
+            if not problem.per_leaf:
+                if (holder, problem.location, problem.message) in reported_once:
+                    continue
+                reported_once.add((holder, problem.location, problem.message))
+            diagnostics.error(
+                f"{holder} {problem.location}: {problem.message}" + (f" (for {name})" if problem.per_leaf else ""),
+                source=source,
+                location=problem.location,
+                code=problem.code,
+            )
         if merged.problems:
-            for holder, source, problem in merged.problems:
-                diagnostics.error(
-                    f"{holder} {problem.location}: {problem.message} (for {name})",
-                    source=source,
-                    location=problem.location,
-                    code=problem.code,
-                )
             continue
 
         merged_dict = _merge_tenant_defaults(merged.spec, index)
@@ -333,17 +351,11 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
             diagnostics.extend(diagnostics_from_validation_error(exc), source=str(entry.source))
             continue
 
-        for location, message in _resolved_reference_problems(index, merged_model, chain):
-            diagnostics.error(
-                f"{message} (in deployment '{name}' after ${{param:}} substitution)",
-                source=str(entry.source),
-                location=location,
-                code="unknown_reference",
-            )
         diagnostics.extend(_check_name_rules(index, entry, chain, params, param_sets))
 
         resolved[name] = ResolvedDeployment(model=merged_model, params=params, param_sets=param_sets, chain=chain)
 
+    diagnostics.extend(_unused_values(index, chains))
     return resolved, diagnostics
 
 
@@ -428,65 +440,176 @@ def _merged_spec(
 
     entry = _require(index, PlatformKind.DEPLOYMENT, name)
     document = cast(AnyDeploymentModel, entry.model)
-    own, own_problems = substitute_params(document.spec.model_dump(exclude_none=True), params, param_sets, "spec")
+    origins: dict[str, ParamOrigin] = {}
+    own, own_problems = substitute_params(
+        document.spec.model_dump(exclude_none=True), params, param_sets, "spec", origins
+    )
+    own_findings: list[ParamProblem] = []
     if isinstance(document, DeploymentTemplateModel) and not own_problems:
-        own, own_problems = _validate_substituted(own)
-    problems = tuple((name, str(entry.source), problem) for problem in own_problems)
+        describe = _OriginText(origins, param_sets, _set_values(param_sets, index))
+        own, own_problems, own_findings = _validate_substituted(own, index, describe)
+    source = str(entry.source)
+    problems = tuple((name, source, problem) for problem in own_problems)
+    findings = tuple((name, source, finding) for finding in own_findings)
 
     if len(chain) == 1:
-        result = _MergedSpec(spec=own, problems=problems)
+        result = _MergedSpec(spec=own, problems=problems, findings=findings)
     else:
         base = _merged_spec(chain[1:], param_sets, params, index, cache)
-        result = _MergedSpec(spec=merge_deployment_specs(base.spec, own), problems=base.problems + problems)
+        result = _MergedSpec(
+            spec=merge_deployment_specs(base.spec, own),
+            problems=base.problems + problems,
+            findings=base.findings + findings,
+        )
     cache[key] = result
     return result
 
 
-def _validate_substituted(spec: dict[str, Any]) -> tuple[dict[str, Any], list[ParamProblem]]:
-    """A template's spec, substituted, validated as the spec it now is and dumped as a loaded document's would be.
+def _bracketed(location: str) -> str:
+    """A model's dotted location (`environments.1`) as substitution writes one (`spec.environments[1]`)."""
+    path = "spec"
+    for part in location.split(".") if location else ():
+        path += f"[{part}]" if part.isdigit() else f".{part}"
+    return path
 
-    What the loader does for every other deployment, done per instance (`base-parameters-v2.md` (work doc),
-    "Templates are validated per instance"): the dump normalises the spec, so it merges like any other.
+
+class _OriginText:
+    """Says where a substituted value of one template document came from, for a finding at that location."""
+
+    def __init__(
+        self, origins: dict[str, ParamOrigin], param_sets: ParamSets, set_values: dict[str, dict[str, Any]]
+    ) -> None:
+        self.origins = origins
+        self.param_sets = param_sets
+        self.set_values = set_values
+
+    def supplier(self, role: str, key: str) -> str:
+        """The parameter set the value of `role.key` comes from: the last one of the role that holds it."""
+        names = self.param_sets.get(role, ())
+        if not key:
+            return ", ".join(names)
+        path = key.split(".")
+        found = [name for name in names if walk_value_path(self.set_values[name], path) is not VALUE_PATH_MISSING]
+        return found[-1] if found else ", ".join(names)
+
+    def of(self, location: str) -> str | None:
+        """`from 'hub-${param:spoke.hub}-env': spoke.hub = 'hub9' (spoke-acme-001)`, or `None` if nothing was
+        substituted at `location` (`spec.environments[1]`)."""
+        origin = self.origins.get(location)
+        if origin is None:
+            return None
+        reads = ", ".join(
+            f"{read.role}{'.' + read.key if read.key else ''} = {read.value!r} ({self.supplier(read.role, read.key)})"
+            for read in origin.reads
+        )
+        return f"from {origin.text!r}: {reads}"
+
+
+def _validate_substituted(
+    spec: dict[str, Any], index: DocumentIndex, describe: _OriginText
+) -> tuple[dict[str, Any], list[ParamProblem], list[ParamProblem]]:
+    """A template's spec, substituted: validated as the spec it now is, dumped as a loaded document's would be, and
+    its references checked.
+
+    What the loader and the reference walk do for every other deployment, done per instance
+    (`base-parameters-v2.md` (work doc), "Templates are validated per instance"): the dump normalises the spec, so it
+    merges like any other. Each finding is located in the template and says which values made the field what it
+    is. A reference the template writes without a token is not per leaf: it is the same for every deployment.
+
+    Returns:
+        `(spec, problems, findings)`: problems stop the deployment resolving, findings do not.
     """
     try:
         model = DeploymentSpecModel.model_validate(spec)
     except ValidationError as exc:
-        problems = [
-            ParamProblem(
-                location=f"spec.{finding.location}" if finding.location else "spec",
-                message=f"invalid after ${{param:}} substitution: {finding.message}",
-                code=finding.code or "invalid_value",
+        problems = []
+        for finding in diagnostics_from_validation_error(exc).errors:
+            location = _bracketed(finding.location or "")
+            origin = describe.of(location)
+            problems.append(
+                ParamProblem(
+                    location=location,
+                    message=f"invalid after ${{param:}} substitution: {finding.message}"
+                    + (f", {origin}" if origin else ""),
+                    code=finding.code or "invalid_value",
+                )
             )
-            for finding in diagnostics_from_validation_error(exc).errors
-        ]
-        return spec, problems
-    return model.model_dump(exclude_none=True), []
+        return spec, problems, []
+
+    findings = []
+    for location, message in unresolved_references(index, model):
+        bracketed = _bracketed(location)
+        origin = describe.of(bracketed)
+        findings.append(
+            ParamProblem(
+                location=bracketed,
+                message=f"{message}, {origin}" if origin else message,
+                code="unknown_reference",
+                per_leaf=origin is not None,
+            )
+        )
+    return model.model_dump(exclude_none=True), [], findings
 
 
-def _resolved_reference_problems(
-    index: DocumentIndex, model: DeploymentModel, chain: tuple[str, ...]
-) -> list[tuple[str, str]]:
-    """`(location, message)` for each reference of a resolved deployment that names no document, when a template
-    in its chain may have produced it.
+def _unused_values(index: DocumentIndex, chains: Mapping[str, tuple[str, ...] | None]) -> Diagnostics:
+    """Rule 12: an `info` finding (`param_unused`) per top-level key of a parameter set that no document reads.
 
-    The reference walk checks each document as written, which cannot see a name a template builds
-    (`hub-${param:spoke.hub}-env`). A name some non-template document of the chain writes itself is left out: the
-    walk already reported it on that document.
+    A key is read when a document of some chain holds `${param:<role>.<key>...}` (in its spec or `meta.name_rule`)
+    and that chain names the set under `<role>`; `${param:<role>}` alone reads every key. A set no `meta.params`
+    names gets one finding of its own. Info, not a warning: `validate --strict` fails on warnings, and a values file
+    holding more than one deployment reads is normal (a spoke's set serves seven deployments).
     """
-    documents = [_require(index, PlatformKind.DEPLOYMENT, name).model for name in chain]
-    if not any(isinstance(document, DeploymentTemplateModel) for document in documents):
-        return []
-    written = {
-        name
-        for document in documents
-        if isinstance(document, DeploymentModel)
-        for _, name in model_references(document)
-    }
-    return [
-        (location, message)
-        for location, message in unresolved_references(index, model, ignore=written)
-        if not location.startswith("meta.")
-    ]
+    reads_of: dict[str, set[tuple[str, tuple[str, ...]]]] = {}
+
+    def reads(name: str) -> set[tuple[str, tuple[str, ...]]]:
+        if name not in reads_of:
+            document = cast(AnyDeploymentModel, _require(index, PlatformKind.DEPLOYMENT, name).model)
+            reads_of[name] = param_reads_in(document.spec.model_dump(exclude_none=True)) | param_reads_in(
+                document.meta.name_rule or ""
+            )
+        return reads_of[name]
+
+    named: set[str] = set()
+    read_whole: set[str] = set()
+    read_keys: dict[str, set[str]] = {}
+    for chain in chains.values():
+        if chain is None:
+            continue
+        sets = _param_sets(chain, index)
+        if sets is None:
+            continue
+        for names in sets.values():
+            named.update(names)
+        for role, path in set().union(*(reads(name) for name in chain)):
+            for set_name in sets.get(role, ()):
+                if path:
+                    read_keys.setdefault(set_name, set()).add(path[0])
+                else:
+                    read_whole.add(set_name)
+
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.PARAMETERSET):
+        name = entry.ref.name
+        if name not in named:
+            diagnostics.info(
+                f"Parameter set '{name}' is named in no deployment's meta.params, so none of its values is read.",
+                source=str(entry.source),
+                location="meta.name",
+                code="param_unused",
+            )
+            continue
+        if name in read_whole:
+            continue
+        for key in cast(ParameterSetModel, entry.model).spec.values:
+            if key not in read_keys.get(name, set()):
+                diagnostics.info(
+                    f"Parameter set '{name}': value '{key}' is read by no document (no ${{param:<role>.{key}}} in "
+                    "a chain that names this set under that role).",
+                    source=str(entry.source),
+                    location=f"spec.values.{key}",
+                    code="param_unused",
+                )
+    return diagnostics
 
 
 def deployment_of(entry: IndexEntry, resolved: Mapping[str, DeploymentModel]) -> DeploymentModel | None:

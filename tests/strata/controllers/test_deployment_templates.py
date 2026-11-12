@@ -123,15 +123,94 @@ def test_reference_fields_are_filled_from_the_values_and_the_solution_validates(
     assert acme.spec.properties == {"owner": "acme", "subscription": "sub-acme-001"}
 
 
-def test_an_unknown_environment_after_substitution_is_reported_on_the_leaf(tmp_path):
+def test_an_unknown_environment_after_substitution_names_the_template_field_and_where_the_value_came_from(tmp_path):
+    """Step 1e: the finding is on the field the author wrote, with the role, key, value and parameter set."""
     root = _solution(tmp_path)
     (root / "environment-hub-hub02-env.yaml").unlink()
     found = open_solution(root).resolve()
     (finding,) = [f for f in found.errors if f.code == "unknown_reference"]
-    assert finding.source is not None and finding.source.endswith("deployment-initech.yaml")
-    assert finding.location == "spec.environments.1"
-    assert "unknown environment 'hub-hub02-env'" in finding.message
-    assert "in deployment 'initech' after ${param:} substitution" in finding.message
+    assert finding.source is not None and finding.source.endswith("deployment-base.yaml")
+    assert finding.location == "spec.environments[1]"
+    assert finding.message.startswith("base spec.environments[1]: unknown environment 'hub-hub02-env'")
+    assert finding.message.endswith(
+        "from 'hub-${param:spoke.hub}-env': spoke.hub = 'hub02' (spoke-initech) (for initech)"
+    )
+
+
+def test_a_name_a_template_writes_literally_is_reported_once_not_per_leaf(tmp_path):
+    root = _solution(tmp_path, base=BASE.replace("    - solution-env\n", "    - solution-envv\n"))
+    found = open_solution(root).resolve()
+    (finding,) = [f for f in found.errors if f.code == "unknown_reference"]
+    assert finding.source is not None and finding.source.endswith("deployment-base.yaml")
+    assert finding.message.startswith("base spec.environments[0]: unknown environment 'solution-envv'")
+    assert "(for " not in finding.message and "from " not in finding.message
+
+
+def test_a_missing_key_names_the_template_field_role_and_sets(tmp_path):
+    root = _solution(tmp_path, base=BASE.replace("sub-${param:spoke.name}\n", "sub-${param:spoke.nmae}\n"))
+    findings = sorted(f.message for f in open_solution(root).resolve().errors)
+    assert findings == [
+        f"base spec.properties.subscription: ${{param:spoke.nmae}} not found in spoke: [spoke-{spoke}] (for {spoke})"
+        for spoke in ("acme", "initech")
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Unused values (rule 12, step 1e)
+# ---------------------------------------------------------------------------
+
+
+def _unused(found) -> list[tuple[str, str]]:
+    return sorted(
+        (Path(f.source).name, f.location) for f in found.infos if f.code == "param_unused" and f.source is not None
+    )
+
+
+def test_a_key_no_document_reads_is_reported_once_per_set_as_info(tmp_path):
+    root = _solution(tmp_path)
+    (root / "parameterset-spoke-acme.yaml").write_text(
+        _HEADER.format(kind="parameterset", name="spoke-acme", meta="")
+        + "  values: { name: acme-001, hub: hub01, tenant: acme, seq: '001', unused: { a: 1 } }\n",
+        "utf-8",
+    )
+    context = open_solution(root)
+    found = context.resolve()
+    assert _unused(found) == [
+        ("parameterset-spoke-acme.yaml", "spec.values.seq"),
+        ("parameterset-spoke-acme.yaml", "spec.values.unused"),
+    ]
+    assert context.ok and not context.diagnostics.warnings  # info: `validate --strict` still passes
+
+
+def test_a_key_read_by_one_of_seven_deployments_is_not_unused(tmp_path):
+    root = _solution(tmp_path, leaves=False)
+    (root / "parameterset-spoke-acme.yaml").write_text(
+        _HEADER.format(kind="parameterset", name="spoke-acme", meta="")
+        + "  values: { name: acme-001, hub: hub01, tenant: acme, region: westeurope }\n",
+        "utf-8",
+    )
+    params = "  params: { hub: hub-hub01, spoke: spoke-acme }\n"
+    for number in range(6):
+        _write(root, f"acme-{number}", "deployment", "  extends: base\n", params)
+    _write(root, "acme-6", "deployment", "  extends: base\n  kube_context: ${param:spoke.region}\n", params)
+    assert _unused(open_solution(root).resolve()) == [  # `region` is read by acme-6 only, so it is used
+        ("parameterset-hub-hub02.yaml", "meta.name"),  # named by no deployment in this solution
+        ("parameterset-spoke-initech.yaml", "meta.name"),
+    ]
+
+
+def test_a_whole_role_read_uses_every_key_and_keys_are_counted_per_role(tmp_path):
+    base = BASE + "  custom:\n    hub: ${param:hub}\n"  # every key of the hub sets
+    root = _solution(tmp_path, base=base)
+    _write(root, "shared", "parameterset", "  values: { a: 1, b: 2 }\n")
+    _write(
+        root,
+        "extra",
+        "deployment",
+        "  extends: base\n  custom:\n    x: ${param:other.a}\n",
+        "  params: { hub: hub-hub01, spoke: spoke-acme, other: shared }\n",
+    )
+    assert _unused(open_solution(root).resolve()) == [("parameterset-shared.yaml", "spec.values.b")]
 
 
 def test_an_unknown_tenant_after_substitution_is_reported_not_silently_skipped(tmp_path):
