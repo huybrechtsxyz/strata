@@ -1,6 +1,6 @@
 # Helm module images - Work
 
-- Status: option B and plan item 8 built (2026-11-11), plan item 9 built (2026-11-12); not released
+- Status: option B and plan item 8 built (2026-11-11), plan item 9 built (2026-11-12); not released. Plan item 10 designed (2026-11-12)
 - Last updated: 2026-11-12
 
 ## Overview
@@ -670,6 +670,86 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   and on another digest. One test against real `helm` with a packaged chart.
 - **Declared but not rendered:** the `info` finding and the reason; no finding when the chart was not rendered.
 
+## Design: `render_charts` by default (plan item 10, 2026-11-12)
+
+Item 8 made `spec.sbom.render_charts` opt-in, and item 9 made the policies read what it renders. Item 10 makes it
+the default, so a workspace that never set it gets the images its charts run in the SBOM and the policies, and
+`render_charts: false` opts out. The code is one default; what needs deciding is how it reaches users.
+
+### What changes for a workspace that never set it
+
+- **New findings that can fail a build.** `cve_policy`, `image_gate_policy` and `image_tag_policy` start seeing
+  sidecars and init containers nobody scanned. A `deny` policy can fail a build that passed the day before, with
+  no change on the user's side.
+- **Fewer findings.** A rendered Helm module loses `image_unknown_to_strata`, and a declared image the chart runs
+  is delivered.
+- **A bigger SBOM.** `sbom.json` gains the rendered components. A consumer such as Dependency-Track sees more
+  components; nothing fails on that.
+- **More work at build.** One `helm template` per chart, offline. `build run` already needs `helm` to pin registry
+  charts. A chart that cannot be rendered (no `helm`, a dependency not vendored, an unpinned registry chart
+  offline) is an `info` line and is skipped, so the render itself never fails a build.
+
+Only the first is a reason for care. It is the 2.3.2 lesson: a change that makes an unchanged pipeline fail on
+upgrade, there through a new warning under `validate --strict`, here through a gate.
+
+### Two releases
+
+- **Release 1, a notice** (plan item 10a). It can ship with item 9 itself, in the same release. When the workspace
+  does not set `render_charts` and the default would change something, `build run` adds one warning,
+  `sbom_render_charts_default_changing`:
+
+  ```
+  workspace 'main': sbom.render_charts will default to true in the next minor release, so cve_policy and
+  image_tag_policy will also check the images your Helm charts run (3 Helm modules). Set sbom.render_charts: true
+  to adopt it now, or false to keep today's SBOM.
+  ```
+
+  - **When:** `sbom.render_charts` is not set (the field absent, or `sbom` absent), the build has at least one
+    Helm module, and at least one of the policies that would read rendered images is configured: `cve_policy`,
+    `image_gate_policy`, or `image_tag_policy` whose `origins` include `chart` (or are omitted). The message names
+    only the policies configured. Without a policy, the default changes only the SBOM and gets no notice.
+  - **Where:** `write_sbom()`, where `render_charts` is read, once per build. Not in `strata validate`: only
+    `validate` has `--strict`, and a new warning there is exactly what 2.3.2 had to remove. `build run` warnings
+    never fail the build.
+  - **Not under `--dry-run`**, which writes no SBOM.
+  - **Unset versus `false`:** the field stays `bool` with default `false`; "not set" is read from pydantic's
+    `model_fields_set`, so the schema does not change.
+  - **Trying it first:** set `render_charts: true` on a branch, then run `strata build run` and
+    `strata policy check`. The how-to says so.
+- **Release 2, the flip** (plan item 10b), the next minor release after release 1:
+  - `render_charts` defaults to `true`; the notice goes away.
+  - CHANGELOG "Changed", first in the list, with the opt-out line `sbom: {render_charts: false}`.
+  - A minor release, not a major: an explicit setting is never changed, and the opt-out is one line. Release 1
+    is what makes that fair.
+
+### Rejected
+
+- **Flip in one release.** Users would learn of it from a failed build.
+- **A `build run --render-charts` flag.** The gates the images feed are workspace settings, so the switch is too
+  (item 8's reasoning).
+- **Rendering by default but feeding the policies only on opt-in.** Two switches for one fact; the SBOM would list
+  images the gates silently skip.
+
+### Docs and model
+
+- Item 9 left three descriptions behind; 10a fixes them with the notice:
+  - `WorkspaceSbomModel.render_charts` says "every local Helm chart" and "Registry charts are not rendered yet";
+  - `WorkspaceSbomModel`'s docstring names only `cve_policy` and `image_gate_policy`;
+  - `WorkspaceSpecModel.sbom` says "local Helm charts".
+- 10a: the SBOM how-to and `workspace.md` say the default will change and how to try it; CHANGELOG "Added" names
+  the notice.
+- 10b: the description, `workspace.md`, the SBOM design ("Opt-in ... It can become the default in a later minor
+  release") and how-to, the CI how-to (`helm` on the build agent), the CHANGELOG.
+
+### Tests
+
+- **10a:** the notice with a Helm module and `cve_policy`; none when `render_charts` is set, `true` or `false`;
+  none without a Helm module; none without a policy; none for `image_tag_policy` whose `origins` leave `chart`
+  out; none under `--dry-run`; the message names only the configured policies.
+- **10b:** the collector runs when `sbom` is absent; `render_charts: false` still turns it off. Fixtures and
+  example workspaces that assumed it off are updated or set `false` explicitly; the `config/` example is
+  checked for new findings.
+
 ## Related Decisions
 
 - [ADR-0026](../decisions/0026-pinnable-artifact-references.md) - `ModuleServiceModel.artifact` and its Compose
@@ -736,7 +816,12 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
     new finding were already in the SBOM docs from 9b and 9c; 9g added the policy's reading of them, the chart
     row in `image-tag-policy.md`, and the SBOM design's collector row, which still said local charts only. No
     CHANGELOG "Fixed" for the relative `--build-path`: `render_charts` is not released yet.
-- [ ] 10. Later, after a release with item 9: `render_charts` on by default (open question below).
+- [ ] 10. `render_charts` on by default, in two releases (design "`render_charts` by default" above).
+  - [ ] 10a. The notice: `sbom_render_charts_default_changing` from `write_sbom()` when `render_charts` is unset,
+    the build has a Helm module and a policy that would read rendered images; the three stale descriptions; the
+    SBOM how-to and `workspace.md`; CHANGELOG "Added". Can ship with item 9.
+  - [ ] 10b. The next minor release after 10a: default `true`, the notice removed, fixtures and examples, the
+    docs that say opt-in, CHANGELOG "Changed".
 
 ### Open questions
 
@@ -751,8 +836,9 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   matches `chartDigest` (plan item 9, section 4).
 - ~~**Declared but not rendered.**~~ Answered 2026-11-12: an `info` finding, `sbom_declared_image_not_rendered`
   (plan item 9, section 5).
-- **`render_charts` by default** in a later minor release? Not before a release with item 9, so that the policy,
-  the SBOM and the gates all see rendered images when it changes.
+- ~~**`render_charts` by default** in a later minor release?~~ Answered 2026-11-12: yes, in two releases, a
+  notice first (it can ship with item 9) and the flip in the next minor release (design "`render_charts` by
+  default").
 - **A deploy `--pin` that differs from the build's.** For a Helm module the pin is baked into
   `strata-values.yaml` at build, so the deploy judges the build's rendered images, not what its own pin says.
   Should the deploy warn when a Helm module's declared tag differs between its pin and the build? Or should a
@@ -793,7 +879,8 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   no caller passes a build yet. 9e built the same day: `build run` judges the policy after the SBOM; the
   dogfood build found that `helm template` got relative paths while running in the chart's folder, so a
   relative `--build-path` rendered no chart (fixed in `HelmIntegration.template()`). 9f built the same day. 9g
-  the same day: the user docs and the CHANGELOG; item 9 is done.
+  the same day: the user docs and the CHANGELOG; item 9 is done. Item 10 designed the same day: a notice in one
+  release, the flip in the next; the 2.3.2 lesson put the notice in `build run`, not `validate`.
 
 - 2026-11-11: plan item 8 designed from the removed work doc `sbom-generation.md` (2026-11-07). The values-file
   finding there is resolved (`strata-values.yaml`). Rendering local charts is opt-in (`spec.sbom.render_charts`);
