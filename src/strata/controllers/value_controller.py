@@ -250,11 +250,13 @@ def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactMo
 
 
 def resolve_artifact_tag(
-    context: SolutionContext, deployment: DeploymentModel, artifact_name: str
+    context: SolutionContext, deployment: DeploymentModel, artifact_name: str, *, log: bool = True
 ) -> ArtifactTag | None:
     """The effective tag of `artifact_name` for `deployment`, or `None` when the artifact does not exist; a pin
-    that wins is logged. See `artifact_tokens.effective_artifact_tag()`, the one pin lookup for artifacts."""
-    return effective_artifact_tag(context.controller.index, deployment, artifact_name)
+    that wins is logged when `log` is set (a `store: artifact` variable resolved for a run). A caller that only
+    reports the tag (`effective_images()`) passes `log=False`. See `artifact_tokens.effective_artifact_tag()`, the
+    one pin lookup for artifacts."""
+    return effective_artifact_tag(context.controller.index, deployment, artifact_name, log=log)
 
 
 def resolve_artifact_field(

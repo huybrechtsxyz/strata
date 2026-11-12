@@ -5318,7 +5318,7 @@ def test_deploy_run_resolves_an_artifact_tag_in_a_backend(tmp_path: Path, _captu
 
 def test_deploy_run_applies_the_pin_to_an_artifact_token(tmp_path: Path, _capture, monkeypatch):
     """`--pin` picks the version. The token map is built once for the run, logging its pins, not once per step;
-    the audit manifest's `effective_images()` logs the pin again, as it does for a `store: artifact` variable."""
+    the audit manifest's `effective_images()` re-derives the tag without logging it again."""
     import strata.controllers.deploy_controller as deploy_controller
 
     builds: list[bool] = []
@@ -5334,11 +5334,16 @@ def test_deploy_run_applies_the_pin_to_an_artifact_token(tmp_path: Path, _captur
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path, pin="prd")
 
+    import strata.controllers.artifact_tokens as artifact_tokens
+
+    logged: list[str] = []
+    monkeypatch.setattr(artifact_tokens, "log_pin_applied", lambda _category, name, *_args: logged.append(name))
     diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
 
     assert diagnostics.ok, diagnostics.messages()
     assert "key=2.0.0.tfstate" in _init_call(_capture)
     assert builds == [True]
+    assert logged == ["api"], "the pin is logged once for the run: not per step, not again by the audit manifest"
 
 
 def test_deploy_run_reports_an_untagged_artifact_before_running_anything(tmp_path: Path, _capture):

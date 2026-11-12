@@ -221,6 +221,32 @@ def test_apply_version_pins_logs_each_application():
     assert categories == {"charts", "images"}
 
 
+def test_apply_version_pins_without_logging_still_applies_every_pin(monkeypatch):
+    """`log=False` is for callers that only re-derive what the build applied (`effective_images()`, the SBOM, the
+    audit manifest): the overlay is the same, nothing is logged."""
+    import strata.controllers.workload_controller as workload_controller
+
+    logged: list[str] = []
+    monkeypatch.setattr(workload_controller, "log_pin_applied", lambda category, *_args: logged.append(category))
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="redis"),
+        spec=ModuleSpecModel(
+            source=SourceModel(remote="goauthentik", chart_name="authentik", chart_version="2024.1.0"),
+            type="helm",
+            services=[ModuleServiceModel(name="redis", image="redis:7")],
+            default_labels={},
+        ),
+    )
+    version = _version(chart_pins={"redis": "2024.2.0"}, image_pins={"redis": "redis:7.2"})
+
+    overlaid = apply_version_pins(module, version, log=False)
+
+    assert (overlaid.spec.source.chart_version, overlaid.spec.services[0].image) == ("2024.2.0", "redis:7.2")
+    assert logged == []
+    apply_version_pins(module, version)
+    assert logged == ["charts", "images"]
+
+
 # ---------------------------------------------------------------------------
 # resolve_artifact_services() (docs/archive/artifact-references.md Path 1)
 # ---------------------------------------------------------------------------

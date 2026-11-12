@@ -617,7 +617,8 @@ def _collect_artifacts_bom(
         for reference in namespace.spec.modules or []:
             if not reference.enabled:
                 continue
-            modules.append(apply_version_pins(resolve_module(index, reference), version))
+            # Re-derived for the record: the build logged each pin when it applied it.
+            modules.append(apply_version_pins(resolve_module(index, reference), version, log=False))
 
     images: list[ManifestImageModel] = []
     rows = effective_images(context, deployment)

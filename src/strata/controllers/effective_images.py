@@ -152,7 +152,7 @@ def effective_images(
     artifact_rows: list[EffectiveImage] = []
     for artifact_name, via in artifact_uses.items():
         artifact = resolve_artifact(context, artifact_name)
-        artifact_tag = resolve_artifact_tag(context, deployment, artifact_name)
+        artifact_tag = resolve_artifact_tag(context, deployment, artifact_name, log=False)
         if artifact is None or artifact_tag is None:
             continue
         tag, digest = split_image_tag(artifact_tag.value)
@@ -221,7 +221,7 @@ def _enabled_modules(
             if not reference.enabled:
                 continue
             declared = resolve_module(index, reference)
-            yield str(namespace_name), declared, apply_version_pins(declared, version)
+            yield str(namespace_name), declared, apply_version_pins(declared, version, log=False)
 
 
 def _not_delivered(module: ModuleModel) -> str | None:

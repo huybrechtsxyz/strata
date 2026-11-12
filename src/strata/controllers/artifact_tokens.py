@@ -9,8 +9,10 @@ about an artifact's tag.
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, cast
 
+from strata.controllers.reachable_documents import documents_reached_by_deployment
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.version_pins import log_pin_applied
 from strata.models.artifact_model import ArtifactModel
@@ -19,7 +21,7 @@ from strata.models.deployment_model import DeploymentModel
 from strata.models.version_model import VersionModel
 from strata.services.version_service import VersionService
 from strata.utils.sbom_utils import compose_image_ref, split_image_tag
-from strata.utils.value_tokens import artifact_key
+from strata.utils.value_tokens import artifact_key, referenced_artifact_keys, split_artifact_token_key
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,19 @@ def effective_artifact_tag(
     return _tag(artifact_name, cast(ArtifactModel, entry.model), _deployment_version(index, deployment), log=log)
 
 
+def token_artifact_names(index: DocumentIndex, deployment: DeploymentModel) -> set[str]:
+    """The artifacts an ``${artifact:NAME.FIELD}`` token names in some document `deployment` reaches (enabled ones
+    only): the documents whose strings `deploy run` resolves tokens in, as `effective_images()` walks them."""
+    entry = index.get(PlatformKind.DEPLOYMENT, deployment.meta.name)
+    source = entry.source if entry is not None else Path()
+    names: set[str] = set()
+    for document in documents_reached_by_deployment(index, deployment, source, enabled_only=True):
+        dumped = document.model.model_dump(by_alias=True, mode="json")
+        dumped.pop("meta", None)
+        names |= {split_artifact_token_key(key)[0] for key in referenced_artifact_keys(dumped)}
+    return names
+
+
 def artifact_token_values(index: DocumentIndex, deployment: DeploymentModel, *, log: bool = False) -> dict[str, str]:
     """The ``artifact:NAME.FIELD`` entries of the flat token map for `deployment`, up to five per artifact.
 
@@ -85,14 +100,17 @@ def artifact_token_values(index: DocumentIndex, deployment: DeploymentModel, *, 
     Args:
         index: The loaded solution's documents.
         deployment: The resolved deployment, its `spec.version` already overridden by `--pin` when given.
-        log: Log each pin that wins. `deploy run` sets it once per run; `strata validate` leaves it off.
+        log: Log each pin that wins for an artifact a document the deployment reaches has an ``${artifact:}`` token
+            for (`token_artifact_names()`). The map has every artifact, but only those tokens are substituted, so
+            only their pins take effect. `deploy run` sets it once per run; `strata validate` leaves it off.
     """
     version = _deployment_version(index, deployment)
+    logged = token_artifact_names(index, deployment) if log and version is not None else set()
     values: dict[str, str] = {}
     for entry in index.all_of(PlatformKind.ARTIFACT):
         artifact = cast(ArtifactModel, entry.model)
         name = entry.ref.name
-        tag = _tag(name, artifact, version, log=log).value
+        tag = _tag(name, artifact, version, log=name in logged).value
         tag_name, digest = split_image_tag(tag)
         values[artifact_key(name, "image_name")] = artifact.spec.image_name
         if tag:

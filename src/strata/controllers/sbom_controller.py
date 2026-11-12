@@ -188,7 +188,8 @@ def _resolve_all_modules(
         for reference in namespace.spec.modules or []:
             if not reference.enabled:
                 continue
-            module = apply_version_pins(resolve_module(index, reference), graph.version)
+            # The build render already logged each pin; this only lists what it rendered.
+            module = apply_version_pins(resolve_module(index, reference), graph.version, log=False)
             source = module.spec.source
             remote = remotes.get(source.remote) if source.remote and source.chart_name else None
             if remote is not None and source.chart_repository is None:

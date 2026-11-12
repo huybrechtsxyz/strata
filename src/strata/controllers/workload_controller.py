@@ -89,7 +89,7 @@ def resolve_module(index: DocumentIndex, reference: ModuleReferenceModel) -> Mod
     return cast(ModuleModel, entry.model)
 
 
-def apply_version_pins(module: ModuleModel, version: VersionModel | None) -> ModuleModel:
+def apply_version_pins(module: ModuleModel, version: VersionModel | None, *, log: bool = True) -> ModuleModel:
     """Overlay `version.spec.pins.charts`/`.images` onto `module` (docs/design/
     version-pin-overlay.md Phase 4).
 
@@ -111,7 +111,10 @@ def apply_version_pins(module: ModuleModel, version: VersionModel | None) -> Mod
       itself pinned via the `artifacts` category through a different
       path), and a pin changes a version, never which field is in use.
 
-    Logs every application (ADR-0019 decision 7).
+    Logs every application (ADR-0019 decision 7) when `log` is set: where the pinned module is rendered (build).
+    A caller that only re-derives what the build applied (`effective_images()`, the SBOM, the audit manifest)
+    passes `log=False`, so one build or deploy does not log the same pin several times, and `strata validate`
+    logs none.
     """
     if version is None:
         return module
@@ -122,9 +125,10 @@ def apply_version_pins(module: ModuleModel, version: VersionModel | None) -> Mod
     if module.spec.source.chart_name is not None:
         chart_pin = version_service.resolve("charts", module.meta.name)
         if chart_pin is not None:
-            log_pin_applied(
-                "charts", module.meta.name, module.spec.source.chart_version, chart_pin.version, version.meta.name
-            )
+            if log:
+                log_pin_applied(
+                    "charts", module.meta.name, module.spec.source.chart_version, chart_pin.version, version.meta.name
+                )
             spec_updates["source"] = module.spec.source.model_copy(update={"chart_version": chart_pin.version})
 
     services = module.spec.services or []
@@ -134,7 +138,8 @@ def apply_version_pins(module: ModuleModel, version: VersionModel | None) -> Mod
             continue
         image_pin = version_service.resolve("images", service.name)
         if image_pin is not None:
-            log_pin_applied("images", service.name, service.image, image_pin.version, version.meta.name)
+            if log:
+                log_pin_applied("images", service.name, service.image, image_pin.version, version.meta.name)
             service_overrides[service.name] = service.model_copy(update={"image": image_pin.version})
 
     if service_overrides:
