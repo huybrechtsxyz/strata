@@ -4,7 +4,7 @@ side, part 2, and plan item 9b for registry charts).
 
 Strata writes no image into a chart's values, so a Helm module's declared service images are only a statement
 about it, and the images its chart deploys by itself (the app, sidecars, init containers, subcharts) are in no
-SBOM. With the workspace's `sbom.render_charts`, this collector renders every local chart in the build path, and
+SBOM. Unless the workspace sets `sbom.render_charts: false`, this collector renders every local chart in the build path, and
 every pinned registry chart from the `.strata/helm/` cache, with `helm template`, offline, and lists the images in
 the manifests. They are what runs, so they carry no
 declared-only marker, and `sbom_controller._merge_by_purl()` drops the marker from a declared image the chart also
@@ -86,8 +86,8 @@ def helm() -> HelmIntegration:
 
 
 class ChartImageCollector(SbomCollector):
-    """Renders each chart the build placed and lists the images it deploys. Off unless the workspace sets
-    `sbom.render_charts: true`.
+    """Renders each chart the build placed and lists the images it deploys. On unless the workspace sets
+    `sbom.render_charts: false` (the default since docs/work/helm-image-delivery.md, plan item 10b).
 
     - A local chart is a module folder with `Chart.yaml` and a `meta.yaml` without `chartName`, the folder
       `deploy run` installs from.
@@ -102,7 +102,7 @@ class ChartImageCollector(SbomCollector):
 
     def collect(self, graph: ResolvedWorkspaceGraph, modules: list[ModuleModel], build_path: Path) -> CollectorResult:
         settings = graph.workspace.spec.sbom
-        if settings is None or not settings.render_charts:
+        if settings is not None and not settings.render_charts:
             return CollectorResult()
         result = CollectorResult()
         charts: list[tuple[Path, dict[str, Any], Path]] = []

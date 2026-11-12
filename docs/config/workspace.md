@@ -58,12 +58,11 @@ parameters.
 - `spec.image_tag_policy` — fail `build run` and `deploy run` when an image the deployment runs has no
   tag, a floating tag such as `latest`, or a tag that does not match the shape you require (see "Image
   tag policy" below)
-- `spec.sbom` — what `build run` adds to `sbom.json`: `render_charts: true` renders every Helm chart, local
-  or pinned from a registry, with `helm template` and lists the images it deploys, so the CVE and image gates and
-  `image_tag_policy` check them (see
-  [how-to/sbom-generation.md](../how-to/sbom-generation.md#helm-images)). Off by default today; it becomes the
-  default in the next minor release, and until then `build run` warns when it is not set and the change would
-  matter (`sbom_render_charts_default_changing`). Set it to `true` or `false` to choose.
+- `spec.sbom` — what `build run` adds to `sbom.json`. `render_charts` (default `true`) renders every Helm
+  chart, local or pinned from a registry, with `helm template` and lists the images it deploys, so the CVE and
+  image gates and `image_tag_policy` check them (see
+  [how-to/sbom-generation.md](../how-to/sbom-generation.md#helm-images)). `render_charts: false` lists only the
+  images modules declare.
 - `spec.provisioner_lock_policy` — fail `build run` when a Terraform or OpenTofu provisioner has no
   `.terraform.lock.hcl`, or one that does not lock every provider it declares (see "Provisioner lock policy"
   below)
@@ -342,7 +341,7 @@ module, strata does not write a service's `image` into the chart's values, so th
 Helm image through the module's `configuration`, in the chart's own key shape. See
 `helm-image-delivery.md` (work doc).
 
-- **With [`sbom.render_charts`](../how-to/sbom-generation.md#helm-images)** the policy also judges every image the
+- **With [`sbom.render_charts`](../how-to/sbom-generation.md#helm-images)**, on by default, the policy also judges every image the
   rendered charts run, sidecars and init containers included, read from the build's `sbom.json`. That is origin
   `chart`; a workspace that lists `origins` must add `chart` to get them.
   - Each is named `REFERENCE/CONTAINER`, the module reference in the namespace and the container, for example
@@ -355,7 +354,7 @@ Helm image through the module's `configuration`, in the chart's own key shape. S
   - One info line, `image_tag_policy_rendered_images`, says how many images came from which `sbom.json`, and when
     it was written. At deploy and in `policy check` that tells you which build was judged.
   - `strata deploy images` reads no build, so it still judges the declared images only.
-- **A declared Helm image** is still judged, by the same rules. Without `render_charts`, or when the chart was not
+- **A declared Helm image** is still judged, by the same rules. With `render_charts: false`, or when the chart was not
   rendered, its finding says "declared only, the chart decides which image runs". `strata deploy images` shows it
   as `DELIVERED no (helm module: the chart decides)`.
 - **A Helm module that declares no service `image` or `artifact`** has images that only the chart knows.

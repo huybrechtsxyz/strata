@@ -18,7 +18,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - The deploy audit manifest records it with `delivered: false`.
   - `strata:used-by` now lists every use of an image found by more than one collector, not only the first
     collector's.
-- **`spec.sbom.render_charts`** (workspace, default `false`). `build run` renders every Helm chart with
+- **`spec.sbom.render_charts`** (workspace, default `true`, see "Changed"). `build run` renders every Helm chart with
   `helm template`, offline and with strata's values, and lists every image it deploys in `sbom.json`, sidecars and
   init containers included (`strata:found-in: rendered-chart`). Each records the container in its use
   (`strata:used-by: chart:<namespace>/<reference>/<container>`) and the reference as the chart writes it
@@ -29,14 +29,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     (`sbom_declared_image_not_rendered`) and the reason `helm module: not in the rendered chart`.
   - A chart that cannot be rendered gets an `info` line (`sbom_chart_not_rendered`): no `helm`, a dependency
     not vendored under `charts/`, or a registry chart that is not pinned or whose cached archive changed.
-  - Turning it on adds those images to `cve_policy`, `image_gate_policy` and `image_tag_policy`, so a `deny` gate
-    can fail on an image it never saw before.
-- **`sbom.render_charts` will default to `true` in the next minor release.** Until then `build run` warns
-  (`sbom_render_charts_default_changing`) when the workspace does not set it, has a Helm module, and has a policy
-  that would check the rendered images: `cve_policy`, `image_gate_policy`, or `image_tag_policy` covering the
-  `chart` origin. Set `render_charts: true` to adopt it now, or `false` to keep today's SBOM; either silences it.
-  `strata validate` does not warn, so `--strict` is unaffected.
-- **`image_tag_policy` judges the images rendered charts run**, with `sbom.render_charts`, read from the build's
+  - Those images reach `cve_policy`, `image_gate_policy` and `image_tag_policy`, so a `deny` gate can fail on an
+    image it never saw before.
+- **`image_tag_policy` judges the images rendered charts run**, read from the build's
   `sbom.json` by `build run`, `deploy run` and `policy check`. `strata deploy images` reads no build and is
   unchanged.
   - A new origin, `chart`. A workspace that lists `origins` gets these images only once it adds `chart`.
@@ -94,6 +89,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Changed
 
+- **`build run` renders Helm charts by default** (`sbom.render_charts` defaults to `true`). `sbom.json` lists
+  the images every Helm chart runs, and `cve_policy`, `image_gate_policy` and `image_tag_policy` check them, so a
+  pipeline with a Helm module and a `deny` gate can fail on a sidecar or init container nobody scanned before.
+  Run `strata build run` and `strata policy check` before upgrading the pipeline, and fix or `allow` what they
+  report. To keep the declared images only, set `sbom: {render_charts: false}` on the workspace. Without `helm`
+  on the build agent each chart is an `info` line and is skipped.
 - **`build run` judges `image_tag_policy` at the end**, after `sbom.json` is written, next to the other build
   policies, so it can judge the images rendered charts run. A `deny` (and `on_unknown_image: block`) now fails the
   build after the sources are cloned and the charts rendered, with the output on disk. With `--clean`, the previous

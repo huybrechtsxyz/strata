@@ -212,18 +212,17 @@ class WorkspaceSbomModel(PlatformBaseModel):
     """What `build run` puts in `sbom.json` beyond what it always records.
 
     Design notes:
-    `WorkspaceSpecModel.sbom` (docs/work/helm-image-delivery.md, the SBOM side). Opt-in because rendered images
-    reach `cve_policy`, `image_gate_policy` and `image_tag_policy`, so a `deny` gate can start failing on images
-    nobody scanned before. Plan item 10 makes it the default in two releases; until then `build run` warns when it
-    is not set (`model_fields_set`, so "not set" and `false` differ without a schema change).
+    `WorkspaceSpecModel.sbom` (docs/work/helm-image-delivery.md, the SBOM side). Rendered images reach
+    `cve_policy`, `image_gate_policy` and `image_tag_policy`, so the gates check what runs, sidecars and init
+    containers included. On by default (plan item 10b); `render_charts: false` keeps the declared images only.
     """
 
     render_charts: bool = Field(
-        default=False,
+        default=True,
         description="Render every Helm chart with `helm template` at build (offline, no secret), a local chart or "
         "a registry chart the build pinned, and list the images it deploys, sidecars and init containers "
         "included, so the CVE and image gates and `image_tag_policy` check what runs instead of only what a "
         "module declares. A chart that cannot be rendered (no `helm`, a dependency not vendored, a registry chart "
-        "not pinned) gets an `info` line and is skipped. Will default to `true` in the next minor release: set it "
-        "to `false` to keep today's SBOM.",
+        "not pinned) gets an `info` line and is skipped. Default `true`; set `false` to list only the images "
+        "modules declare.",
     )

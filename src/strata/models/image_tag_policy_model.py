@@ -70,7 +70,7 @@ class ImageTagPolicyModel(PlatformBaseModel):
         min_length=1,
         description="Which images the policy covers: `artifact` for a `kind: artifact` image, `module-service` for "
         "a service image a module declares, `chart` for an image a Helm chart runs, read from the build's "
-        "`sbom.json` when the workspace sets `sbom.render_charts`. Omit to cover all three.",
+        "`sbom.json` unless the workspace sets `sbom.render_charts: false`. Omit to cover all three.",
     )
     require_tag: bool = Field(
         default=True,

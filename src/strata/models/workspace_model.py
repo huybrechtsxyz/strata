@@ -754,9 +754,8 @@ class WorkspaceSpecModel(PlatformBaseModel):
     )
     sbom: WorkspaceSbomModel | None = Field(
         None,
-        description="What `build run` adds to `sbom.json`: `render_charts: true` lists the images Helm charts "
-        "deploy. Omit it for the SBOM as always; `render_charts` will default to `true` in the next minor "
-        "release.\n\n"
+        description="What `build run` adds to `sbom.json`. Omitted, it lists the images Helm charts deploy "
+        "(`render_charts` defaults to `true`); `render_charts: false` lists only the images modules declare.\n\n"
         "Design notes: docs/work/helm-image-delivery.md, the SBOM side.",
     )
 

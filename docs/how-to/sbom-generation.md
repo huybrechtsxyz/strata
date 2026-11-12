@@ -1,8 +1,8 @@
 # How To: Use the SBOM (CycloneDX)
 
 Every `strata build run` writes a CycloneDX 1.6 Software Bill of Materials, `sbom.json`, at the
-root of the build path (next to `resolved.yaml`). It needs no configuration; one workspace setting,
-`sbom.render_charts`, adds the images Helm charts deploy (below). This guide covers
+root of the build path (next to `resolved.yaml`). It needs no configuration; it also lists the images Helm
+charts deploy, unless the workspace sets `sbom.render_charts: false` (below). This guide covers
 what it contains, how strata and other tools use it, and how to add a collector. The design is in
 [docs/design/sbom-generation.md](../design/sbom-generation.md).
 
@@ -22,7 +22,7 @@ what it contains, how strata and other tools use it, and how to add a collector.
 | `image`     | Every resolved module's `spec.services[].image`, and artifact images                                                                   |
 | `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                                 |
 | `helm`      | Chart modules (`chart_name`/`chart_version`, the repository or the remote's URL), every rendered `Chart.yaml` and its `dependencies[]` |
-| `chart-image` | Only with `sbom.render_charts: true`: the images each chart deploys, from `helm template`                                      |
+| `chart-image` | The images each chart deploys, from `helm template`; off with `sbom.render_charts: false`                                        |
 | `terraform` | `required_providers {}` and `module "x" {}` blocks in every rendered `*.tf`, and each root module's `.terraform.lock.hcl`              |
 
 Versions are the deployed ones: `kind: version` pins and `--pin` are applied first. The SBOM is
@@ -49,16 +49,10 @@ Strata writes no image into a Helm chart's values, so the chart decides which im
 - **Declared only.** A Helm module's declared service image is listed with `strata:image-delivered: false` and
   `strata:image-delivery: helm module: the chart decides`. It is still scanned. The image gate names it
   `... (declared only)`, and the audit manifest records it with `delivered: false`.
-- **Rendered charts.** To list what a chart really deploys, set this on the workspace:
-
-  ```yaml
-  spec:
-    sbom:
-      render_charts: true
-  ```
-
-  `build run` then renders each chart with `helm template`, offline, with strata's values: a local chart from its
-  build folder, a registry chart from the archive the build pinned in `.strata/helm/`.
+- **Rendered charts.** To list what a chart really deploys, `build run` renders each chart with `helm template`,
+  offline, with strata's values: a local chart from its build folder, a registry chart from the archive the build
+  pinned in `.strata/helm/`. It needs `helm` on the build agent, which `build run` already uses to pin registry
+  charts.
   - Every container image, sidecars and init containers included, is listed with
     `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<module reference>/<container>` and
     `strata:image`, the image reference exactly as the chart writes it.
@@ -70,13 +64,16 @@ Strata writes no image into a Helm chart's values, so the chart decides which im
     happens when `helm` is not installed, when a dependency is not vendored under `charts/`, or when a registry
     chart was not pinned (`--offline` with an empty cache) or its cached archive no longer has the pinned digest.
   - An image whose reference holds a token resolved only at deploy is left out (`sbom_chart_image_unresolved`).
-- **Turning it on can fail a build.** `cve_policy`, `image_gate_policy` and `image_tag_policy` start checking the
-  rendered images. Check with `strata policy findings` and `strata policy check` first.
-- **It will be on by default in the next minor release.** Until then, a build whose workspace does not set
-  `render_charts`, has a Helm module and a policy that would check the rendered images gets one warning,
-  `sbom_render_charts_default_changing`. To prepare, set `render_charts: true` on a branch, run
-  `strata build run` and `strata policy check`, and fix or `allow` what they report. Then keep `true`, or set
-  `false` to keep today's SBOM. Either silences the warning.
+- **The policies check them.** `cve_policy`, `image_gate_policy` and `image_tag_policy` check the rendered images
+  too, so a `deny` gate can fail on a sidecar nobody scanned before. Run `strata build run` and
+  `strata policy check`, and fix or `allow` what they report.
+- **Turning it off.** To list only the images modules declare, set this on the workspace:
+
+  ```yaml
+  spec:
+    sbom:
+      render_charts: false
+  ```
 
 ## Example
 

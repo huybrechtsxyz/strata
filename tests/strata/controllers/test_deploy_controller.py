@@ -4117,6 +4117,7 @@ def _helm_solution(tmp_path: Path) -> Path:
         root,
         "workspace.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  sbom:\n    render_charts: false\n"
         "  providers:\n    - p1\n"
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
@@ -4164,6 +4165,7 @@ def _helm_two_namespace_solution(tmp_path: Path) -> Path:
         root,
         "workspace.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  sbom:\n    render_charts: false\n"
         "  providers:\n    - p1\n"
         "  namespaces:\n    - zzz\n    - aaa\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
@@ -4412,6 +4414,7 @@ def test_deploy_run_container_step_with_no_matching_namespace_target_errors(tmp_
         root,
         "workspace.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  sbom:\n    render_charts: false\n"
         "  providers:\n    - p1\n"
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"

@@ -77,7 +77,7 @@ they choose a commit to judge, not the one checked out. Outside git the property
 | `image`     | `spec.services[].image` of every resolved module, plus artifact images (`graph.images`)                                                   | `container`, `pkg:docker/...`                    |
 | `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                                    | `container`, `pkg:docker/...`                    |
 | `helm`      | Chart modules' `source.{chart_name,chart_version,chart_repository}` and their built `meta.yaml`, every rendered `Chart.yaml` and its `dependencies[]` | `library`, `pkg:helm/...`                        |
-| `chart-image` | Opt-in (`spec.sbom.render_charts`): `helm template` of every chart folder whose `meta.yaml` has a release name and namespace (a local chart's `Chart.yaml`, or a registry chart's pinned archive in `.strata/helm/`), offline, with `strata-values.yaml`; every `containers`/`initContainers`/`ephemeralContainers` image | `container`, `pkg:docker/...` |
+| `chart-image` | Unless `spec.sbom.render_charts: false`: `helm template` of every chart folder whose `meta.yaml` has a release name and namespace (a local chart's `Chart.yaml`, or a registry chart's pinned archive in `.strata/helm/`), offline, with `strata-values.yaml`; every `containers`/`initContainers`/`ephemeralContainers` image | `container`, `pkg:docker/...` |
 | `terraform` | `required_providers {}` and `module "x" {}` blocks in every `*.tf` (one `python-hcl2` pass), and each root module's `.terraform.lock.hcl` | `library`, `pkg:terraform/...`, `pkg:github/...` |
 
 The file-based collectors scan the whole build path with `rglob()`; no wiring inside the
@@ -154,8 +154,9 @@ service image may not be what runs.
     `(declared only)`.
   - The audit manifest records `delivered: false` from the same effective images.
   - The CVE gate does not read it: the scanners scan every component.
-- **Rendered charts.** The `chart-image` collector is opt-in through `spec.sbom.render_charts`, because the
-  images it adds reach the gates.
+- **Rendered charts.** The `chart-image` collector runs unless the workspace sets `spec.sbom.render_charts:
+  false`. It was opt-in while it was built, because the images it adds reach the gates; since plan item 10b of
+  docs/work/helm-image-delivery.md it is the default, so the gates check what runs.
   - It runs `HelmIntegration.template()` in an isolated Helm configuration, with no `--dependency-update`. The
     rendered text stays in memory, and strata's values file holds tokens, never a secret value.
   - Each image gets `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<reference>/<container>`

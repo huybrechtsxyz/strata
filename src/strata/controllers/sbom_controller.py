@@ -16,7 +16,7 @@ re-derives its reference from that file (`audit_run._sbom_reference()`).
 """
 
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -129,7 +129,6 @@ def write_sbom(
     """
     diagnostics = Diagnostics()
     modules = _resolve_all_modules(graph, index, remotes or {})
-    _render_charts_default_notice(graph.workspace, modules, diagnostics)
 
     collected: list[SbomComponentModel] = []
     for name in registry.list_collectors():
@@ -169,51 +168,6 @@ def write_sbom(
     )
 
     return diagnostics
-
-
-RENDER_CHARTS_DEFAULT_CHANGING = "sbom_render_charts_default_changing"
-
-
-def _render_charts_default_notice(
-    workspace: WorkspaceModel, modules: Sequence[ModuleModel], diagnostics: Diagnostics
-) -> None:
-    """Warn that `sbom.render_charts` will default to `true` (docs/work/helm-image-delivery.md, plan item 10a).
-
-    Only when the workspace does not set it, the build has a Helm module, and a policy that would read the
-    rendered images is configured: then the next minor release can fail a build that passes today. `build run`
-    only, never `strata validate`, whose `--strict` would turn the warning into a failure (the 2.3.2 lesson).
-    """
-    settings = workspace.spec.sbom
-    if settings is not None and "render_charts" in settings.model_fields_set:
-        return
-    helm_modules = sorted({module.meta.name for module in modules if module.spec.type == "helm"})
-    if not helm_modules:
-        return
-    spec = workspace.spec
-    tag_policy = spec.image_tag_policy
-    policies = [
-        name
-        for name, configured in (
-            ("cve_policy", spec.cve_policy is not None),
-            ("image_gate_policy", spec.image_gate_policy is not None),
-            (
-                "image_tag_policy",
-                tag_policy is not None and (tag_policy.origins is None or "chart" in tag_policy.origins),
-            ),
-        )
-        if configured
-    ]
-    if not policies:
-        return
-    named = policies[0] if len(policies) == 1 else ", ".join(policies[:-1]) + " and " + policies[-1]
-    count = f"{len(helm_modules)} Helm module" + ("" if len(helm_modules) == 1 else "s")
-    diagnostics.warning(
-        f"Workspace '{workspace.meta.name}': sbom.render_charts will default to true in the next minor release, so "
-        f"{named} will also check the images your Helm charts run ({count}). Set sbom.render_charts: true to adopt "
-        "it now, or false to keep today's SBOM.",
-        location=str(workspace.meta.name),
-        code=RENDER_CHARTS_DEFAULT_CHANGING,
-    )
 
 
 def _resolve_all_modules(

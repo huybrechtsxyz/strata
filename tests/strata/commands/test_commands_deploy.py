@@ -590,6 +590,7 @@ def test_deploy_setup_gracefully_skips_container_capable_step(runner, tmp_path, 
         root,
         "workspace.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  sbom:\n    render_charts: false\n"
         "  providers:\n    - p1\n  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n"

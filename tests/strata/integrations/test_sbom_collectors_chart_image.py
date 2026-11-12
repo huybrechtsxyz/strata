@@ -142,11 +142,24 @@ def fake_helm(monkeypatch):
     return fake
 
 
-@pytest.mark.parametrize("setting", [None, False])
-def test_it_renders_nothing_unless_the_workspace_asks(tmp_path, fake_helm, setting):
+def test_it_renders_nothing_when_the_workspace_opts_out(tmp_path, fake_helm):
     _chart(tmp_path, "apps/whoami")
-    result = ChartImageCollector().collect(_graph(setting), [], tmp_path)
+    result = ChartImageCollector().collect(_graph(False), [], tmp_path)
     assert (result.components, result.diagnostics, fake_helm.calls) == ([], [], [])
+
+
+def _graph_with_sbom(sbom: WorkspaceSbomModel | None) -> ResolvedWorkspaceGraph:
+    graph = _graph()
+    spec = graph.workspace.spec.model_copy(update={"sbom": sbom})
+    return ResolvedWorkspaceGraph(workspace=graph.workspace.model_copy(update={"spec": spec}))
+
+
+@pytest.mark.parametrize("sbom", [None, WorkspaceSbomModel()], ids=["no-sbom-section", "sbom-section-without-it"])
+def test_it_renders_by_default(tmp_path, fake_helm, sbom):
+    """`render_charts` defaults to `true` (docs/work/helm-image-delivery.md, plan item 10b)."""
+    _chart(tmp_path, "apps/whoami")
+    ChartImageCollector().collect(_graph_with_sbom(sbom), [], tmp_path)
+    assert len(fake_helm.calls) == 1
 
 
 def test_a_local_chart_is_rendered_with_its_release_namespace_and_values(tmp_path, fake_helm):
