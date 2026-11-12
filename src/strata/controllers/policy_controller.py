@@ -169,12 +169,17 @@ def _image_findings(request: _FindingsRequest) -> PolicyFindingsReport:
 
 
 def _image_tag_check(request: _CheckRequest) -> tuple[Diagnostics, list[ManifestPolicyResultModel]]:
-    """The tag rules over the deployment's effective images; offline, honours `--pin`."""
+    """The tag rules over the deployment's effective images and the images the last build's rendered charts run
+    (its `sbom.json`, when there is one); offline, honours `--pin`."""
     deployment, _ = resolve_deployment_workspace(
         request.context, request.deployment_name, version_pin=request.version_pin
     )
     diagnostics = check_image_tag_policy(
-        request.context, deployment, request.workspace, pinned_by_flag=request.version_pin is not None
+        request.context,
+        deployment,
+        request.workspace,
+        pinned_by_flag=request.version_pin is not None,
+        build_path=request.build_path,
     )
     result = image_tag_policy_result(request.workspace, diagnostics)
     return diagnostics, [result] if result is not None else []

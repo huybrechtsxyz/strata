@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 from strata.controllers.build_controller import build_run
 from strata.controllers.deploy_controller import deploy_run, tf_var_env
@@ -1442,7 +1443,7 @@ def test_tf_var_env_empty_when_no_values_resolved():
 
 
 def test_tf_var_env_empty_when_prefix_is_none():
-    """docs/design/gap_fit_v1.md: a container-capable integration (or any future
+    """docs/work/gap_fit_v1.md: a container-capable integration (or any future
     infra tool with no env-var-prefix mechanism) declares `ENV_VAR_PREFIX
     = None` - this whole mechanism has nothing to deliver for it."""
     resolved = ValueResolution(deployment="app", values={"db_password": "hunter2"})
@@ -1600,7 +1601,7 @@ def test_deploy_run_pin_resolves_the_artifacts_category(tmp_path: Path, monkeypa
     assert diagnostics.ok, diagnostics.messages()
     # A `tf_var_env()`-delivered environment variable is a raw string,
     # same as a secret's own TF_VAR_ value — HashiCorp's own documented
-    # TF_VAR convention for a plain scalar (docs/work/
+    # TF_VAR convention for a plain scalar (docs/design/
     # terraform-variable-precedence.md Open Question 7 — json.dumps()-ing a
     # plain string embedded spurious literal quote characters that Terraform
     # never unwraps).
@@ -2644,7 +2645,7 @@ def test_deploy_run_projects_the_deployments_provider_binding(tmp_path: Path, _c
 
 
 def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #17 / value-token-resolution.md's "Decision
+    """docs/work/gap_fit_v1.md gap #17 / value-token-resolution.md's "Decision
     (2026-09-29)": a '${var:}'/'${secret:}' token inside a Provider's
     'configuration'/'custom' used to pass 'strata validate' cleanly but
     was never projected into any Terraform artifact at all — silently
@@ -2720,7 +2721,7 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
 
 
 def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #8: '${output:...}' has no ownership mechanism
+    """docs/work/gap_fit_v1.md gap #8: '${output:...}' has no ownership mechanism
     for resx_<type>/topologies/properties/custom/tenant (broadcast-only,
     unlike dns/networks/firewalls) — rejected outright, not silently
     ignored or left unresolved."""
@@ -2770,7 +2771,7 @@ def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Pat
 
 
 def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #12: a DNS document claimed by a step's `targets`
+    """docs/work/gap_fit_v1.md gap #12: a DNS document claimed by a step's `targets`
     resolves '${output:...}' using THAT step's own dependency-scoped
     outputs — the worked example from the design discussion (a VM's public
     IP, produced by 'provision-hearth', consumed by 'apply-dns')."""
@@ -2953,7 +2954,7 @@ def test_deploy_run_sentinels_an_output_token_when_the_real_output_is_sensitive(
 
 
 def test_deploy_run_rejects_unclaimed_output_token_in_dns(tmp_path: Path):
-    """docs/design/gap_fit_v1.md gap #12: a DNS document using '${output:...}' with no
+    """docs/work/gap_fit_v1.md gap #12: a DNS document using '${output:...}' with no
     step naming it in `targets` is a clear, single diagnostic error — not a
     per-step crash or silently inconsistent resolution."""
     root = _solution(tmp_path)
@@ -3606,7 +3607,7 @@ def test_upstream_step_names_is_transitive():
 
 
 # ---------------------------------------------------------------------------
-# _merge_durable_outputs() — docs/work/cross-run-step-output-delivery.md's
+# _merge_durable_outputs() — docs/archive/cross-run-step-output-delivery.md's
 # Implementation Plan step 4. Direct unit tests against a stub
 # DeploymentOutputStore (same "test the private helper directly" convention
 # as _upstream_step_names above) — asymmetric by design: not-found is
@@ -3722,7 +3723,7 @@ def test_merge_durable_outputs_fails_loudly_when_the_backend_is_unreachable():
 
 
 # ---------------------------------------------------------------------------
-# deploy_run() wired end to end to a configured output_store (docs/work/
+# deploy_run() wired end to end to a configured output_store (docs/archive/
 # cross-run-step-output-delivery.md's Implementation Plan step 4) — a fake
 # KeyValueStoreIntegration registered as a real entry-point plugin (same
 # pattern test_integrations_registry.py's own tests use), so no real SDK is
@@ -4083,7 +4084,7 @@ def test_deploy_run_reports_a_template_render_failure(tmp_path: Path, _capture):
 
 
 # ---------------------------------------------------------------------------
-# Helm/Compose namespace dispatch (docs/design/gap_fit_v1.md gap #13,
+# Helm/Compose namespace dispatch (docs/work/gap_fit_v1.md gap #13,
 # docs/design/deploy-command.md) - a "container"-capable step deploys the
 # namespace(s) its own `targets` names directly, bypassing Terraform's
 # init/validate/plan/apply sequence entirely.
@@ -4116,6 +4117,7 @@ def _helm_solution(tmp_path: Path) -> Path:
         root,
         "workspace.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  sbom:\n    render_charts: false\n"
         "  providers:\n    - p1\n"
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
@@ -4163,6 +4165,7 @@ def _helm_two_namespace_solution(tmp_path: Path) -> Path:
         root,
         "workspace.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  sbom:\n    render_charts: false\n"
         "  providers:\n    - p1\n"
         "  namespaces:\n    - zzz\n    - aaa\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
@@ -4411,6 +4414,7 @@ def test_deploy_run_container_step_with_no_matching_namespace_target_errors(tmp_
         root,
         "workspace.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  sbom:\n    render_charts: false\n"
         "  providers:\n    - p1\n"
         "  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
@@ -4434,7 +4438,7 @@ def test_deploy_run_container_step_with_no_matching_namespace_target_errors(tmp_
 def _compose_solution(tmp_path: Path) -> Path:
     """Same shape as `_helm_solution()`, but `tool: compose` - proves the
     orchestrator's container-capability branch is genuinely tool-agnostic
-    (docs/design/gap_fit_v1.md gap #13), not accidentally Helm-specific."""
+    (docs/work/gap_fit_v1.md gap #13), not accidentally Helm-specific."""
     root = _terraform_solution(tmp_path)
     _write(root, "services/portainer/.keep", "")
     _write(
@@ -4499,7 +4503,7 @@ def test_deploy_run_dispatches_compose_step_to_deploy_namespace(tmp_path: Path, 
 
 
 def test_deploy_run_does_not_leak_tf_var_env_into_container_capable_steps(tmp_path: Path):
-    """docs/design/gap_fit_v1.md: Helm/Compose declare no `ENV_VAR_PREFIX` (base
+    """docs/work/gap_fit_v1.md: Helm/Compose declare no `ENV_VAR_PREFIX` (base
     default `None`) - `tf_var_env()` now returns `{}` for them, so a
     container-capable step's own subprocess never receives TF_VAR_-
     prefixed secrets meant for Terraform."""
@@ -5274,3 +5278,128 @@ def test_a_compose_deploy_after_a_dry_run_still_delivers_its_secrets(tmp_path: P
     stack_deploys = [env for args, env in calls if args[:3] == ["docker", "stack", "deploy"]]
     assert len(stack_deploys) == 1
     assert (stack_deploys[0] or {}).get("DB_PWD") == "hunter2"
+
+
+# ---------------------------------------------------------------------------
+# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1): the artifacts' pinned
+# images are in the deploy-time token map
+# ---------------------------------------------------------------------------
+
+
+def _write_artifact(root: Path, *, image_tag: str | None, pin: str | None = None) -> None:
+    """Artifact `api` (`example/api`), and with `pin` a version `prd` pinning it (selected with `--pin prd`)."""
+    tag_line = f'  image_tag: "{image_tag}"\n' if image_tag else ""
+    _write(
+        root,
+        "artifact.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: api\n"
+        f"spec:\n  image_name: example/api\n{tag_line}",
+    )
+    if pin is not None:
+        _write(
+            root,
+            "version.yaml",
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\n"
+            f'spec:\n  pins:\n    artifacts:\n      api: "{pin}"\n',
+        )
+
+
+def test_deploy_run_resolves_an_artifact_tag_in_a_backend(tmp_path: Path, _capture):
+    root = _backend_key_solution(tmp_path, "${artifact:api.image_tag}.tfstate")
+    _write_artifact(root, image_tag="1.0.0")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "key=1.0.0.tfstate" in _init_call(_capture)
+
+
+def test_deploy_run_applies_the_pin_to_an_artifact_token(tmp_path: Path, _capture, monkeypatch):
+    """`--pin` picks the version. The token map is built once for the run, logging its pins, not once per step;
+    the audit manifest's `effective_images()` logs the pin again, as it does for a `store: artifact` variable."""
+    import strata.controllers.deploy_controller as deploy_controller
+
+    builds: list[bool] = []
+    real = deploy_controller.artifact_token_values
+
+    def _spy(index, deployment, *, log: bool = False):
+        builds.append(log)
+        return real(index, deployment, log=log)
+
+    monkeypatch.setattr(deploy_controller, "artifact_token_values", _spy)
+    root = _backend_key_solution(tmp_path, "${artifact:api.image_tag}.tfstate")
+    _write_artifact(root, image_tag="1.0.0", pin="2.0.0")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path, pin="prd")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert "key=2.0.0.tfstate" in _init_call(_capture)
+    assert builds == [True]
+
+
+def test_deploy_run_reports_an_untagged_artifact_before_running_anything(tmp_path: Path, _capture):
+    """`deploy run` does not run `validate`, so a tag that is missing for this deployment fails here, cleanly."""
+    root = _backend_key_solution(tmp_path, "${artifact:api.image_tag}.tfstate")
+    _write_artifact(root, image_tag=None)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert "${artifact:api.image_tag}" in diagnostics.messages()[0]
+    assert "has no image_tag" in diagnostics.messages()[0]
+    assert _capture == []
+
+
+def test_deploy_run_resolves_an_artifact_token_in_a_compose_module(tmp_path: Path, _capture):
+    root = _compose_solution(tmp_path)
+    _write_artifact(root, image_tag="1.0.0")
+    module = root / "module.yaml"
+    module.write_text(
+        module.read_text(encoding="utf-8").replace(
+            "image: portainer/portainer-ce\n",
+            "image: portainer/portainer-ce\n"
+            "      environment:\n        - key: API_IMAGE\n          value: ${artifact:api.image_ref}\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    compose_text = (build_path / "apps" / "docker-compose.deploy.yml").read_text(encoding="utf-8")
+    assert "example/api:1.0.0" in compose_text
+    assert "${artifact:" not in compose_text
+
+
+def test_deploy_run_delivers_a_pinned_artifact_to_a_helm_chart_through_its_values(tmp_path: Path, _capture):
+    """Design 2 (docs/work/artifact-gap-analysis.md): the chart's own keys, the deployment's pin."""
+    root = _helm_solution(tmp_path)
+    _write_artifact(root, image_tag="1.0.0", pin="2.0.0")
+    module = root / "module.yaml"
+    module.write_text(
+        module.read_text(encoding="utf-8").replace(
+            "  services:\n    - name: server\n",
+            "  services:\n    - name: server\n      artifact: api\n"
+            "  configuration:\n    image:\n"
+            '      repository: "${artifact:api.image_name}"\n      tag: "${artifact:api.image_tag}"\n',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path, pin="prd")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
+
+    assert diagnostics.ok, diagnostics.messages()
+    values = yaml.safe_load((build_path / "apps" / "auth" / "strata-values.yaml").read_text(encoding="utf-8"))
+    assert values["image"] == {"repository": "example/api", "tag": "2.0.0"}

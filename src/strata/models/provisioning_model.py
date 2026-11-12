@@ -45,8 +45,9 @@ class ProvisionerBackendModel(PlatformBaseModel):
     )
     configuration: dict[str, Any] = Field(
         description="Backend settings, each passed to `terraform init` as one `-backend-config key=value`. Values "
-        "may contain `${var:}`, `${secret:}`, `${feature:}`, `${output:STEP.KEY}` and the deployment's own "
-        "`${deployment:name}` / `${deployment:tenant}` tokens, resolved when `deploy run` starts the step. A "
+        "may contain `${var:}`, `${secret:}`, `${feature:}`, `${output:STEP.KEY}`, `${artifact:NAME.FIELD}` and the "
+        "deployment's own `${deployment:name}` / `${deployment:tenant}` tokens, resolved when `deploy run` starts the "
+        "step. A "
         'non-string value is converted with Python\'s `str()`, so write a boolean as a quoted string (`"true"`).'
     )
 

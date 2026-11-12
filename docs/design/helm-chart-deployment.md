@@ -42,7 +42,7 @@ with a close-match suggestion. The check covers the top level plus one nested le
 to subcharts, so neither it nor its children are checked.
 
 **Registry charts are pinned** ([ADR-0054](../decisions/0054-build-fetches-release-inputs-never-targets.md);
-[helm-registry-chart-checks.md](../work/helm-registry-chart-checks.md)). The build fetches the release's inputs, never
+`helm-registry-chart-checks.md` (work doc)). The build fetches the release's inputs, never
 its targets, so a registry chart is pulled at build and installed from that exact archive at deploy:
 
 - **Cache.** `.strata/helm/<source>/<chart>/<version>/` holds the archive and the archive unpacked (`helm_cache.py`).
@@ -62,7 +62,7 @@ its targets, so a registry chart is pulled at build and installed from that exac
 - `build run --dry-run` reports `would pull …` or `would use cached …` and fetches nothing.
 
 **A local chart's dependencies are placed in its `charts/`**
-([helm-chart-dependencies.md](../work/helm-chart-dependencies.md)). `sync_module_source()` copies the chart alone, and
+(`helm-chart-dependencies.md` (work doc)). `sync_module_source()` copies the chart alone, and
 Helm installs only what is in `charts/`, so `_place_chart_dependencies()` fills the build copy itself. It never runs
 `helm dependency build`, which writes a `Chart.lock` when there is none and cannot follow `file://` once the chart is
 copied. The plan comes from the source (`helm_dependencies.plan_dependencies()`), never the build copy:
@@ -144,8 +144,8 @@ call of its Helm steps to that context by adding `HELM_KUBECONTEXT` to the step'
 (`HelmIntegration.target_context_env()`), and `deploy_run()` checks before the first step, with
 `target_context_problem()` (`kube_context_problem()`), that the kubeconfig defines it and that the caller's environment
 does not point Helm elsewhere (`HELM_KUBECONTEXT`, `HELM_KUBEAPISERVER`). Only the context names are read from the
-kubeconfig; the cluster is not contacted ([helm-kube-context.md](../work/helm-kube-context.md)). Compose is pinned the
-same way through `docker_context` ([compose-docker-context.md](../work/compose-docker-context.md)).
+kubeconfig; the cluster is not contacted (`helm-kube-context.md` (work doc)). Compose is pinned the
+same way through `docker_context` (`compose-docker-context.md` (work doc)).
 
 Chart resolution for a pull (`_resolve_chart()`, at build and when the deploy pulls a chart missing from its cache):
 
@@ -161,7 +161,7 @@ Chart resolution for a pull (`_resolve_chart()`, at build and when the deploy pu
 
 Strata passes Helm 4's flags by default. Helm 3 is deprecated, and gets its own flags only when the solution declares it
 ([ADR-0055](../decisions/0055-helm-4-by-default-helm-3-only-when-declared.md),
-[helm-4-support.md](../work/helm-4-support.md)):
+`helm-4-support.md` (work doc)):
 
 | Purpose                     | Helm 4 (the default)    | Helm 3 (declared)  |
 | --------------------------- | ----------------------- | ------------------ |
@@ -229,7 +229,7 @@ failure: `remote_integration_unknown`, `remote_integration_not_sources`, `remote
 `disabled` and `auth_unsupported` stay warnings, because GitOps and audit pushes also use a git remote's integration.
 
 It also checks the names each enabled Helm module reference deploys as (`release_identity()`, the function `meta.yaml` is written
-with), defaults included, because a default is a strata name and may contain `_` ([helm-release-names.md](../work/helm-release-names.md)):
+with), defaults included, because a default is a strata name and may contain `_` (`helm-release-names.md` (work doc)):
 
 - `_check_helm_release_names()`, over every Namespace document: the release name must match Helm's own rule (verified against
   `helm template`, at most 53 characters) and the Kubernetes namespace must be a DNS-1123 label (at most 63 characters). A
@@ -348,12 +348,12 @@ has been done (no cluster).
   not resolve it, and `cwd=path.parent` doubled the path. It also led to signalling "no check phase" with a dedicated exception
   subclass rather than any `IntegrationError`, which would have hidden a real failure as a skip.
 - 2026-11-07: registry charts moved from a deploy-time `helm upgrade <ref> --version` to a build-time pull
-  ([helm-registry-chart-checks.md](../work/helm-registry-chart-checks.md), gap 8 of the Helm gap analysis). Before, a
+  (`helm-registry-chart-checks.md` (work doc), gap 8 of the Helm gap analysis). Before, a
   registry chart got neither the key check nor lint, the SBOM recorded the declared version (possibly a range), and an
   unreachable registry failed the deploy mid-way. A check-phase pull was designed first and dropped: it came after the SBOM
   was written. Earlier reasons above that mention a deploy-time pull describe that previous design.
 - 2026-11-08: a local chart's dependencies are placed at build
-  ([helm-chart-dependencies.md](../work/helm-chart-dependencies.md), gap 9). Before, a chart that did not commit its
+  (`helm-chart-dependencies.md` (work doc), gap 9). Before, a chart that did not commit its
   dependencies under `charts/` passed lint (Helm only warns) and failed at `helm upgrade`, and a `file://` dependency
   could never work from the build copy. `helm dependency build` was rejected: about 18 OMP charts declare dependencies
   and only 2 commit a `Chart.lock`, so it would mostly have written a lock of its own.

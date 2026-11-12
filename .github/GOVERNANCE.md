@@ -50,9 +50,9 @@ This governance document defines roles, decision-making processes, and contribut
 
 ## References
 
-- Code of Conduct: [CODE_OF_CONDUCT](./code_of_conduct.md)
-- Security policy: [SECURITY](./security.md)
-- Contributing: [CONTRIBUTING](./contributing.md)
-- Support: [SUPPORT](./support.md)
+- Code of Conduct: [CODE_OF_CONDUCT](./CODE_OF_CONDUCT.md)
+- Security policy: [SECURITY](./SECURITY.md)
+- Contributing: [CONTRIBUTING](./CONTRIBUTING.md)
+- Support: [SUPPORT](./SUPPORT.md)
 
 Questions or proposals about governance: open an issue labeled "governance".

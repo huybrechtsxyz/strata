@@ -309,7 +309,7 @@ footgun entirely.
   reasoning above follows.
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md) —
   why `requires` was rejected as this field's name.
-- [build-command.md](build-command.md) — current `build run` status this
+- `build-command.md` (work doc) — current `build run` status this
   feature slots into.
 
 ## History

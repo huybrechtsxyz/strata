@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit trail configuration models — `spec.audit` (docs/design/audit-trail.md).
+"""Audit trail configuration models — `spec.audit` (docs/work/audit-trail.md).
 
 Phase 1 of that doc's Layer 2 Implementation Plan: the config surface only —
 `AuditConfigModel`/`AuditSinkModel`/`AuditGitSinkTargetModel`. The written
@@ -80,7 +80,7 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
         min_length=1,
         description="Folder inside the repository under which each run's audit files are written.\n\n"
         "Design notes: Root prefix under the repository. The shared per-execution "
-        "relative path (see docs/design/audit-trail.md's 'Path resolution') is "
+        "relative path (see docs/work/audit-trail.md's 'Path resolution') is "
         "appended under this.",
     )
 
@@ -91,7 +91,7 @@ class AuditSinkModel(PlatformBaseModel):
 
     Design notes:
     A configured audit event destination — exactly one of two structurally
-    different arms (docs/design/audit-trail.md's "The endpoints").
+    different arms (docs/work/audit-trail.md's "The endpoints").
     """
 
     schema_rules: ClassVar[tuple[str, ...]] = (
@@ -154,7 +154,7 @@ class AuditConfigModel(PlatformBaseModel):
 
     Design notes:
     `spec.audit` — fully optional; every field either derives a default or is dropped
-    (docs/design/audit-trail.md's "Streamlining the configuration surface").
+    (docs/work/audit-trail.md's "Streamlining the configuration surface").
     """
 
     schema_rules: ClassVar[tuple[str, ...]] = (

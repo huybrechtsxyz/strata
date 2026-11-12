@@ -50,6 +50,7 @@ spec:
     source_path: modules/web
   services:
     - name: web
+      image: nginx:1.26
 """,
     )
     _write(
@@ -98,7 +99,112 @@ def test_resolvable_pins_produce_no_findings(tmp_path):
             "    remotes:\n      strata-remote: v2.0.0\n",
         )
     )
+    assert context.diagnostics.messages() == []
+
+
+# ---------------------------------------------------------------------------
+# Image pins: a whole reference that pins something, for the image the service runs
+# ---------------------------------------------------------------------------
+
+_IMAGE_DIGEST = "sha256:" + "9f86d081" * 8
+
+
+def _image_pin(tmp_path: Path, value: str) -> Path:
+    return _solution(tmp_path, f"  pins:\n    images:\n      web: '{value}'\n")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "nginx:1.27",
+        "docker.io/library/nginx:1.27",
+        "index.docker.io/library/nginx:1.27-alpine",
+        f"nginx@{_IMAGE_DIGEST}",
+        f"nginx:1.27@{_IMAGE_DIGEST}",
+    ],
+)
+def test_an_image_pin_naming_the_service_image_with_a_tag_or_digest_is_clean(tmp_path, value):
+    assert _resolve(_image_pin(tmp_path, value)).diagnostics.messages() == []
+
+
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [
+        ("1.27", "has no tag or digest, so it pins nothing"),
+        ("nginx", "has no tag or digest, so it pins nothing"),
+        ("Nginx:1.27", "may hold only lowercase letters"),
+        ("nginx:", "nothing follows ':'"),
+        ("nginx@", "nothing follows '@'"),
+        ("nginx:-1", "the tag '-1'"),
+        ("nginx@sha256:abc", "the digest 'sha256:abc'"),
+        ("bad_host:99/nginx:1.27", "the registry 'bad_host:99' is not a host name"),
+    ],
+)
+def test_an_image_pin_of_another_shape_is_an_error(tmp_path, value, reason):
+    context = _resolve(_image_pin(tmp_path, value))
+    assert not context.ok
+    [error] = context.diagnostics.errors
+    assert error.code == "image_pin_invalid"
+    assert error.location == "spec.pins.images.web.version"
+    assert error.message.startswith(f"image pin 'web': '{value}'")
+    assert reason in error.message
+
+
+def test_a_tag_only_image_pin_suggests_the_service_image_with_that_tag(tmp_path):
+    [error] = _resolve(_image_pin(tmp_path, "1.27")).diagnostics.errors
+    assert "for example 'nginx:1.27'" in error.message
+
+
+def test_a_name_only_image_pin_asks_for_the_tag(tmp_path):
+    [error] = _resolve(_image_pin(tmp_path, "nginx")).diagnostics.errors
+    assert "Add the tag, for example 'nginx:<tag>'" in error.message
+
+
+def test_an_image_pin_naming_another_image_is_a_warning(tmp_path):
+    context = _resolve(_image_pin(tmp_path, "redis:7"))
     assert context.ok
+    [warning] = context.diagnostics.warnings
+    assert warning.code == "image_pin_renamed"
+    assert warning.location == "spec.pins.images.web.version"
+    assert "pulls 'redis', but service 'web' runs 'nginx' (module 'web-module')" in warning.message
+
+
+def test_an_image_pin_is_judged_against_every_service_with_that_name(tmp_path):
+    root = _image_pin(tmp_path, "redis:7")
+    _write(
+        root,
+        "other.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: other-module\nspec:\n"
+        "  type: docker-compose\n  default_labels:\n    environment: test\n  source:\n    source_path: modules/o\n"
+        "  services:\n    - name: web\n      image: docker.io/library/redis:6\n",
+    )
+    assert _resolve(root).diagnostics.messages() == []
+
+
+@pytest.mark.parametrize(
+    ("service", "hint"), [("    - name: web\n", False), ("    - name: web\n      artifact: catalog\n", True)]
+)
+def test_an_image_pin_for_a_service_with_no_image_changes_nothing(tmp_path, service, hint):
+    root = _with_artifact(_image_pin(tmp_path, "nginx:1.27"))
+    module = (root / "module.yaml").read_text(encoding="utf-8")
+    (root / "module.yaml").write_text(
+        module.replace("    - name: web\n      image: nginx:1.26\n", service), encoding="utf-8"
+    )
+    context = _resolve(root)
+    assert context.ok
+    [warning] = context.diagnostics.warnings
+    assert warning.code == "pin_not_applicable"
+    assert "targets a service that declares no image (module 'web-module'), so the pin changes nothing" in (
+        warning.message
+    )
+    assert ("pins.artifacts" in warning.message) is hint
+
+
+def test_a_stale_image_pin_is_still_shape_checked(tmp_path):
+    context = _resolve(_solution(tmp_path, "  pins:\n    images:\n      ghost: '1.27'\n"))
+    assert [d.code for d in context.diagnostics.errors] == ["image_pin_invalid"]
+    assert [d.code for d in context.diagnostics.warnings] == ["stale_pin"]
+    assert "Write the whole reference, NAME:TAG" in context.diagnostics.errors[0].message
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +338,25 @@ def test_artifact_pin_matching_no_artifact_is_a_warning(tmp_path):
     assert "catalog-api" in warning.message
 
 
+_DIGEST = "sha256:" + "9f86d081" * 8
+
+
+@pytest.mark.parametrize("value", ["1.2.3", _DIGEST, f"1.2.3@{_DIGEST}"])
+def test_an_artifact_pin_may_be_a_tag_a_digest_or_both(tmp_path, value):
+    root = _with_artifact(_solution(tmp_path, f"  pins:\n    artifacts:\n      catalog: '{value}'\n"))
+    assert _resolve(root).diagnostics.messages() == []
+
+
+def test_an_artifact_pin_of_another_shape_is_an_error(tmp_path):
+    root = _with_artifact(_solution(tmp_path, "  pins:\n    artifacts:\n      catalog: '1.2.3@sha256:abc'\n"))
+    context = _resolve(root)
+    assert not context.ok
+    [error] = context.diagnostics.errors
+    assert error.code == "artifact_tag_invalid"
+    assert error.location == "spec.pins.artifacts.catalog.version"
+    assert error.message.startswith("artifact pin 'catalog': '1.2.3@sha256:abc' is not a tag (1.4.2)")
+
+
 # ---------------------------------------------------------------------------
 # Every category is checked
 # ---------------------------------------------------------------------------
@@ -240,7 +365,8 @@ def test_artifact_pin_matching_no_artifact_is_a_warning(tmp_path):
 @pytest.mark.parametrize("category", PIN_CATEGORIES)
 def test_every_pin_category_reports_a_pin_naming_nothing_as_stale(tmp_path, category):
     """A new category added to `PIN_CATEGORIES` without a branch in `check_version_pins()` fails here."""
-    context = _resolve(_solution(tmp_path, f"  pins:\n    {category}:\n      ghost: x\n"))
+    value = "nginx:1.27" if category == "images" else "x"
+    context = _resolve(_solution(tmp_path, f"  pins:\n    {category}:\n      ghost: {value}\n"))
     assert context.ok
     warnings = context.diagnostics.warnings
     assert [w.code for w in warnings] == ["stale_pin"]

@@ -35,7 +35,9 @@ from typing import Any, cast
 from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
+from strata.controllers.artifact_tokens import artifact_token_values
 from strata.controllers.deployment_resolution import deployment_workspace
+from strata.controllers.reachable_documents import documents_reached_by_deployment, reachable_environment_names
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
 from strata.integrations.base import Integration
@@ -50,9 +52,10 @@ from strata.integrations.helm import (
 )
 from strata.integrations.registry import get_class as get_integration_class
 from strata.logging.config import get_logger
+from strata.models.artifact_model import ArtifactModel
 from strata.models.asset_model import AssetModel
 from strata.models.attributeconfig_model import AttributeConfigModel
-from strata.models.common_models import ModuleReferenceModel, PlatformBaseModel, PlatformKind, SourceModel
+from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
@@ -69,6 +72,7 @@ from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
+from strata.services.artifact_service import ArtifactService
 from strata.services.attributeconfig_evaluator import (
     ATTRIBUTECONFIG_INVALID_CODE,
     build_validator,
@@ -82,6 +86,7 @@ from strata.services.environment_service import (
     EnvironmentService,
     merge_environment_models,
     merge_workspace_environment_deployment_properties,
+    unresolved_artifact_tokens,
     unresolved_deployment_tokens,
     unresolved_value_tokens,
 )
@@ -93,6 +98,7 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import manifest_path
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 from strata.utils.report_template import check_report_template
+from strata.utils.value_tokens import referenced_artifact_keys, split_artifact_token_key
 
 log = get_logger(__name__)
 
@@ -140,6 +146,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_attributeconfig_conflicts(index))
     diagnostics.extend(_check_workspaces(index))
     diagnostics.extend(_check_environments(index))
+    diagnostics.extend(_check_artifacts(index))
     diagnostics.extend(_check_deployment_value_tokens(index, resolved))
     diagnostics.extend(_check_script_values(index, resolved))
     diagnostics.extend(_check_remotes(index, solution))
@@ -151,6 +158,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_version_workspace(index, resolved))
     diagnostics.extend(_check_dns_records(index))
     diagnostics.extend(_check_helm_release_names(index))
+    diagnostics.extend(_check_helm_artifact_delivery(index))
     diagnostics.extend(_check_integration_versions(index))
     diagnostics.extend(_check_integration_required_disabled(index))
     return diagnostics
@@ -359,7 +367,7 @@ def _check_deployment_layers(
 
 def _check_deployment_tenant_geography(index: DocumentIndex, deployment: DeploymentModel) -> Diagnostics:
     """Cross-check a deployment's provider region(s) against its tenant's allowed
-    geographies (docs/design/tenant-zone-policy.md's "static tier" — the
+    geographies (docs/work/tenant-zone-policy.md's "static tier" — the
     cheap, config-time equivalent of v1's real, plan-time `tenant_zone` policy).
 
     Fully automatic — no config field anywhere turns this on or off; it
@@ -935,7 +943,7 @@ def _merged_effective_value(index: DocumentIndex, deployment: DeploymentModel, b
         return parts
 
     environments: list[EnvironmentModel] = []
-    for name in _reachable_environment_names(index, deployment):
+    for name in reachable_environment_names(index, deployment):
         env_entry = index.get(PlatformKind.ENVIRONMENT, name)
         if env_entry is not None:
             environments.append(cast(EnvironmentModel, env_entry.model))
@@ -1117,7 +1125,7 @@ def _check_workspace_key_value_store_allowed(
 ) -> Diagnostics:
     """Check the resolved output-store backend type against
     `security.allowed_key_value_stores` — the controller's job
-    (cross-document resolution), not the service's (docs/work/
+    (cross-document resolution), not the service's (docs/archive/
     cross-run-step-output-delivery.md's Implementation Plan step 1,
     'Governance').
     """
@@ -1358,9 +1366,20 @@ def _check_workspace_subnets(index: DocumentIndex, workspace: WorkspaceModel) ->
 # ---------------------------------------------------------------------------
 
 
+def _check_artifacts(index: DocumentIndex) -> Diagnostics:
+    """Each artifact's `spec.registry` agrees with its `spec.image_name` (`ArtifactService.validate_registry()`,
+    docs/work/artifact-gap-analysis.md, design 5). A warning cannot come from a model validator, so it runs here,
+    once per artifact document."""
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.ARTIFACT):
+        service = ArtifactService.from_model(cast(ArtifactModel, entry.model))
+        diagnostics.extend(service.validate_registry(), source=str(entry.source))
+    return diagnostics
+
+
 def _check_environments(index: DocumentIndex) -> Diagnostics:
     """Every `store: artifact` variable's `value` names a real `ArtifactModel`
-    (docs/work/artifact-references.md's full-review finding, 2026-09-27):
+    (docs/archive/artifact-references.md's full-review finding, 2026-09-27):
     `VariableStoreModel.value: Any` is only conditionally an artifact
     reference, so `references.py`'s generic `References()` walker never
     checks it — this is that missing check, following the exact
@@ -1368,7 +1387,7 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
     conditionally-meaningful field.
 
     Also enforces `Configuration.spec.security`'s store allow-lists
-    (docs/design/gap_fit_v1.md gap #7), when exactly one `Configuration` document
+    (docs/work/gap_fit_v1.md gap #7), when exactly one `Configuration` document
     exists and declares it — same "skip rather than guess a policy that was
     never declared" rule `_check_workspace_topology_components()` already
     uses for `spec.topologies`.
@@ -1418,9 +1437,9 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     only version that can't be wrong in either direction.
 
     **Also checks the deployment/tenant/environment/workspace/resource/
-    provider/topology documents themselves** — docs/design/gap_fit_v1.md gap #10's
+    provider/topology documents themselves** — docs/work/gap_fit_v1.md gap #10's
     Phase 7 finding: this function used to only check DNS/network/
-    firewall/module (`_documents_reachable_from_workspace()`'s original,
+    firewall/module (`documents_reachable_from_workspace()`'s original,
     narrower scope), so a `${var:}`/`${secret:}` token in, say,
     `ResourceSpecModel.configuration` or `WorkspaceSpecModel.custom` was
     never checked at all — not a "resolves at deploy time or not" question
@@ -1430,13 +1449,15 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     that ever ran.
 
     Each document's own real source path is attributed to its findings
-    (docs/design/gap_fit_v1.md gap #20) — every finding used to report
+    (docs/work/gap_fit_v1.md gap #20) — every finding used to report
     `entry.source` (this deployment's own path) regardless of which
     document actually held the token.
 
     `${deployment:}` tokens are judged here too, by `unresolved_deployment_tokens()`, in the same documents but
     separately: they need no environment, so they are checked even when the deployment resolves none, and a
     `partial: true` base is skipped because its tenant is only known once a deployment extends it.
+    `${artifact:}` tokens follow the same rule (`unresolved_artifact_tokens()`), against the artifact entries
+    `deploy run` builds for the deployment, its version's pins applied.
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
@@ -1450,29 +1471,21 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
             continue  # no resolvable environment — nothing to check tokens against
 
         owner = "+".join(deployment.spec.environments or []) or "(none)"
-        documents: list[tuple[PlatformBaseModel, bool, Path]] = _documents_reachable_from_workspace(
-            index, deployment.spec.workspace, deployment
-        )
-        documents.append((deployment, False, entry.source))
-        if deployment.spec.tenant:
-            tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
-            if tenant_entry is not None:
-                documents.append((tenant_entry.model, False, tenant_entry.source))
-        for name in _reachable_environment_names(index, deployment):
-            env_entry = index.get(PlatformKind.ENVIRONMENT, name)
-            if env_entry is not None:
-                documents.append((env_entry.model, False, env_entry.source))
-
-        for document, claimed, doc_source in documents:
+        artifact_values = artifact_token_values(index, deployment) if check_deployment_tokens else {}
+        for reached in documents_reached_by_deployment(index, deployment, entry.source):
             if declared is not None:
                 diagnostics.extend(
-                    unresolved_value_tokens(document, declared, owner, output_claimed=claimed),
-                    source=str(doc_source),
+                    unresolved_value_tokens(reached.model, declared, owner, output_claimed=reached.claimed),
+                    source=str(reached.source),
                 )
             if check_deployment_tokens:
                 diagnostics.extend(
-                    unresolved_deployment_tokens(document, deployment.meta.name, deployment.spec.tenant),
-                    source=str(doc_source),
+                    unresolved_deployment_tokens(reached.model, deployment.meta.name, deployment.spec.tenant),
+                    source=str(reached.source),
+                )
+                diagnostics.extend(
+                    unresolved_artifact_tokens(reached.model, artifact_values, deployment.meta.name),
+                    source=str(reached.source),
                 )
     return diagnostics
 
@@ -1514,24 +1527,6 @@ def _check_script_values(index: DocumentIndex, resolved: dict[str, DeploymentMod
     return diagnostics
 
 
-def _reachable_environment_names(index: DocumentIndex, deployment: DeploymentModel) -> list[str]:
-    """Every Environment name this deployment resolves — its Tenant's own
-    `spec.environments` first (tenant merges in before deployment), then
-    the deployment's own. Shared by `_merged_declared_keys()` (which only
-    needs the union of *keys*) and `_check_deployment_value_tokens()`
-    (which also needs each environment's own *document*, gap #10's Phase 7
-    finding, to check tokens written directly in an Environment's own
-    `properties`/`custom`).
-    """
-    names = list(deployment.spec.environments or [])
-    if deployment.spec.tenant:
-        tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
-        if tenant_entry is not None:
-            tenant = cast(TenantModel, tenant_entry.model)
-            names = list(tenant.spec.environments or []) + names
-    return names
-
-
 def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> dict[str, set[str]] | None:
     """Union declared keys across every Environment this deployment resolves.
 
@@ -1540,7 +1535,7 @@ def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> 
     """
     merged: dict[str, set[str]] = {"var": set(), "secret": set(), "feature": set()}
     found_any = False
-    for name in _reachable_environment_names(index, deployment):
+    for name in reachable_environment_names(index, deployment):
         env_entry = index.get(PlatformKind.ENVIRONMENT, name)
         if env_entry is None:
             continue
@@ -1553,91 +1548,10 @@ def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> 
     return merged if found_any else None
 
 
-def _documents_reachable_from_workspace(
-    index: DocumentIndex, workspace_name: str | None, deployment: DeploymentModel | None = None
-) -> list[tuple[PlatformBaseModel, bool, Path]]:
-    """Every document a workspace renders or configures — DNS/Network/
-    Firewall/Module (rendered artifacts) plus the workspace document itself
-    and every Resource/Provider/Topology it references (config passthrough
-    fields: docs/design/gap_fit_v1.md gap #10's Phase 7 finding — these were never
-    checked at all before, a validate-time coverage gap entirely separate
-    from gap #9/Phase 6's deploy-time delivery fix).
-
-    Returns `(document, claimed, source)` triples — `claimed` is whether some
-    workspace execution step's `targets` claims this document
-    (`WorkspaceService.claimed_document_names()`, gap #12 generalized to
-    namespaces, docs/design/deploy-command.md's "Cross-invocation output
-    access" section) — `unresolved_value_tokens()` accepts an
-    `${output:...}` token only when `claimed` is True. A module reached
-    through a targeted namespace inherits that namespace's claim; every
-    other document here (workspace/resource/provider/topology, and a
-    topology-attached module) is never claimable today, so `claimed` is
-    unconditionally False for those.
-
-    A bounded, one-then-two-hop walk — not a generic graph traversal —
-    since the schema only has one indirection beyond the workspace's own
-    direct references: a workspace names Topology/Namespace documents
-    directly, and those in turn attach Modules. The workspace document
-    itself is included whole (not just its `configuration`/`custom`/
-    `properties` fields individually) — `unresolved_value_tokens()` already
-    walks a document's entire serialized form generically, so this covers
-    `WorkspaceResourceModel.configuration` (the workspace's own per-resource
-    override) for free, without a separate fetch.
-    """
-    if not workspace_name:
-        return []
-    workspace_entry = index.get(PlatformKind.WORKSPACE, workspace_name)
-    if workspace_entry is None:
-        return []
-    workspace = cast(WorkspaceModel, workspace_entry.model)
-    spec = workspace.spec
-    claimed_names = WorkspaceService.from_model(workspace).claimed_document_names()
-
-    documents: list[tuple[PlatformBaseModel, bool, Path]] = [(workspace, False, workspace_entry.source)]
-
-    for kind, names in (
-        (PlatformKind.DNS, spec.dns_zones),
-        (PlatformKind.NETWORK, spec.networks),
-        (PlatformKind.FIREWALL, spec.firewalls),
-        (PlatformKind.PROVIDER, list(dict.fromkeys(effective_providers(workspace, deployment).values()))),
-    ):
-        for name in names or []:
-            found = index.get(kind, name)
-            if found is not None:
-                documents.append((found.model, name in claimed_names, found.source))
-
-    for workspace_resource in spec.resources or []:
-        if workspace_resource.resource is None:
-            continue
-        resource_entry = index.get(PlatformKind.RESOURCE, workspace_resource.resource)
-        if resource_entry is not None:
-            documents.append((resource_entry.model, False, resource_entry.source))
-
-    for topo in spec.topology or []:
-        for component in topo.components:
-            for module_ref in component.modules or []:
-                module_entry = index.get(PlatformKind.MODULE, module_ref.module)
-                if module_entry is not None:
-                    documents.append((module_entry.model, False, module_entry.source))
-
-    for name in spec.namespaces or []:
-        namespace_entry = index.get(PlatformKind.NAMESPACE, name)
-        if namespace_entry is None:
-            continue
-        namespace = cast(NamespaceModel, namespace_entry.model)
-        namespace_claimed = name in claimed_names
-        for module_ref in namespace.spec.modules or []:
-            module_entry = index.get(PlatformKind.MODULE, module_ref.module)
-            if module_entry is not None:
-                documents.append((module_entry.model, namespace_claimed, module_entry.source))
-
-    return documents
-
-
 # ---------------------------------------------------------------------------
 # SolutionRemoteModel -> Module/Provisioner SourceModel usages: an OCI
 # remote's `reference` is required only when a real (non-chart) consumer
-# needs it (docs/design/gap_fit_v1.md gap #3).
+# needs it (docs/work/gap_fit_v1.md gap #3).
 # ---------------------------------------------------------------------------
 
 
@@ -1658,7 +1572,7 @@ def _check_remotes(index: DocumentIndex, solution: SolutionModel | None) -> Diag
 
     An OCI remote with `reference` already set, or with zero consumers at
     all, produces no finding either way — an unused remote is a separate,
-    still-unbuilt gap (see docs/design/gap_fit_v1.md), not this check's concern.
+    still-unbuilt gap (see docs/work/gap_fit_v1.md), not this check's concern.
     """
     diagnostics = Diagnostics()
     if solution is None:
@@ -1885,7 +1799,7 @@ def _check_value_references(index: DocumentIndex) -> Diagnostics:
 
 # ---------------------------------------------------------------------------
 # Configuration.spec.paths -> every document's real file location
-# (docs/design/path-conventions.md, docs/design/gap_fit_v1.md gap #7)
+# (docs/design/path-conventions.md, docs/work/gap_fit_v1.md gap #7)
 # ---------------------------------------------------------------------------
 
 
@@ -2052,6 +1966,48 @@ def _helm_references(
 
 def _token_note(value: str) -> str:
     return " Value tokens are not resolved in this field." if "${" in value else ""
+
+
+def _referenced_artifact_names(node: object) -> set[str]:
+    """The artifact names of every ``${artifact:NAME.FIELD}`` token in `node`, whatever the field."""
+    return {split_artifact_token_key(key)[0] for key in referenced_artifact_keys(node)}
+
+
+def _check_helm_artifact_delivery(index: DocumentIndex) -> Diagnostics:
+    """A Helm module service that names an `artifact` delivers it to the chart (docs/work/artifact-gap-analysis.md,
+    design 2).
+
+    The Helm integration writes no image into a chart's values (`helm.py`'s `_render_values()`): a service's
+    `artifact` resolves into its `image`, which `deploy images`, the SBOM and `image_tag_policy` read, but the chart
+    decides which image runs. The artifact reaches the chart only through an `${artifact:NAME.FIELD}` token in the
+    module's `spec.configuration` or the service's own `configuration`, the two parts of the values written in the
+    chart's own keys. A token in the service's `environment` becomes an environment variable, so it does not count.
+    A warning, once per module document: the artifact is still useful as a declaration, and a module may set the
+    image some other way strata cannot see.
+    """
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.MODULE):
+        module = cast(ModuleModel, entry.model)
+        if module.spec.type != "helm":
+            continue
+        module_delivers = _referenced_artifact_names(module.spec.configuration or {})
+        for position, service in enumerate(module.spec.services or []):
+            if service.artifact is None:
+                continue
+            artifact = str(service.artifact)
+            if artifact in module_delivers or artifact in _referenced_artifact_names(service.configuration or {}):
+                continue
+            diagnostics.warning(
+                f"Module '{module.meta.name}' (type helm): service '{service.name}' names artifact '{artifact}', but "
+                "strata writes no image into a chart's values, so the chart decides which image runs; deploy images, "
+                "the SBOM and image_tag_policy judge the declared one. Deliver it in the chart's own keys, for "
+                f'example configuration: {{image: {{repository: "${{artifact:{artifact}.image_name}}", '
+                f'tag: "${{artifact:{artifact}.image_tag}}"}}}}.',
+                source=str(entry.source),
+                location=f"spec.services[{position}].artifact",
+                code="artifact_not_delivered",
+            )
+    return diagnostics
 
 
 def _check_helm_release_names(index: DocumentIndex) -> Diagnostics:

@@ -12,7 +12,7 @@ invocations exactly:
 
 Trivy filters severities via its own `--severity` flag; Grype has none —
 filtering happens here in Python instead, including the `NEGLIGIBLE` ->
-`LOW` remap Trivy's own vocabulary never needs (v1 evidence, docs/work/
+`LOW` remap Trivy's own vocabulary never needs (v1 evidence, docs/archive/
 cve-scanner-integration.md).
 
 Doesn't fit `Integration.command`'s normal one-executable-per-class

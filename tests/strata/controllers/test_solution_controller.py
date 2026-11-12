@@ -514,6 +514,36 @@ def test_shipped_example_takes_the_artifact_tag_from_the_version_pin_or_its_own_
     assert tags == {"prd-deployment": ("1.4.2", "pin"), "prd-acme-deployment": ("1.0.0", "declared")}
 
 
+@pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+def test_shipped_example_shows_every_way_to_use_an_artifact():
+    """docs/work/artifact-gap-analysis.md, design 9: a `store: artifact` variable and an `${artifact:}` token for
+    `example-api`, a Compose service's `artifact` for `portainer`; each pinned by `prd` and judged by the policy."""
+    from strata.controllers.effective_images import effective_images
+    from strata.controllers.value_controller import resolve_deployment_workspace
+
+    context = open_solution(_repo_config_dir()).require_valid()
+    rows = {}
+    for name in ("prd-deployment", "prd-acme-deployment"):
+        deployment, _ = resolve_deployment_workspace(context, name)
+        rows[name] = {r.name: r for r in effective_images(context, deployment) if r.origin == "artifact"}
+
+    pinned = rows["prd-deployment"]
+    assert pinned["example-api"].via == ("variable:API_IMAGE_TAG", "token:workspace/main")
+    assert pinned["portainer"].via == ("service:portainer/portainer",)
+    assert {name: (row.image_ref, row.tag_source) for name, row in pinned.items()} == {
+        "example-api": ("registry.example.com/example/api:1.4.2", "pin"),
+        "portainer": ("portainer/portainer-ce:2.39.3-alpine", "pin"),
+    }
+    assert {name: row.tag_source for name, row in rows["prd-acme-deployment"].items()} == {
+        "example-api": "declared",
+        "portainer": "declared",
+    }
+
+    from strata.controllers.artifact_usage import check_unused_artifacts
+
+    assert check_unused_artifacts(context).items == [], "every artifact in the example is used"
+
+
 def _example_backend_configuration(controller: SolutionController) -> dict:
     workspace_entry = controller.index.get(PlatformKind.WORKSPACE, "main")
     assert workspace_entry is not None

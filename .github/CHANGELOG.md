@@ -8,6 +8,137 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **The SBOM, the image gate and the audit manifest say which images strata does not deliver.** A Helm module's
+  declared service image is still listed and scanned, but the chart decides which image runs.
+  - `sbom.json` gives it `strata:image-delivered: false` and `strata:image-delivery: helm module: the chart
+    decides`.
+  - `image_gate_policy` names it `... (declared only)`.
+  - The deploy audit manifest records it with `delivered: false`.
+  - `strata:used-by` now lists every use of an image found by more than one collector, not only the first
+    collector's.
+- **`spec.sbom.render_charts`** (workspace, default `true`, see "Changed"). `build run` renders every Helm chart with
+  `helm template`, offline and with strata's values, and lists every image it deploys in `sbom.json`, sidecars and
+  init containers included (`strata:found-in: rendered-chart`). Each records the container in its use
+  (`strata:used-by: chart:<namespace>/<reference>/<container>`) and the reference as the chart writes it
+  (`strata:image`), which keeps a tag the purl drops for a digest-pinned image.
+  - A registry chart is rendered from the archive the build pinned in `.strata/helm/`, only while its digest
+    still matches.
+  - A declared Helm image the module's rendered chart does not run gets an `info` line
+    (`sbom_declared_image_not_rendered`) and the reason `helm module: not in the rendered chart`.
+  - A chart that cannot be rendered gets an `info` line (`sbom_chart_not_rendered`): no `helm`, a dependency
+    not vendored under `charts/`, or a registry chart that is not pinned or whose cached archive changed.
+  - Those images reach `cve_policy`, `image_gate_policy` and `image_tag_policy`, so a `deny` gate can fail on an
+    image it never saw before.
+- **`image_tag_policy` judges the images rendered charts run**, read from the build's
+  `sbom.json` by `build run`, `deploy run` and `policy check`. `strata deploy images` reads no build and is
+  unchanged.
+  - A new origin, `chart`. A workspace that lists `origins` gets these images only once it adds `chart`.
+  - Each is named `REFERENCE/CONTAINER` (`whoami/shipper`), the name an `allow` entry uses.
+  - `require_pin` does not apply to them, and the fix points at the chart's values.
+  - A declared Helm image the chart also runs is judged once, as delivered. A Helm module whose chart rendered an
+    image is no longer reported as `image_unknown_to_strata`.
+  - An info line (`image_tag_policy_rendered_images`) names the `sbom.json` and when it was written, so
+    `policy check` and `deploy run` say which build they judged. An `sbom.json` that cannot be read is a warning
+    (`image_tag_policy_sbom_unreadable`), and the declared images are still judged.
+- **`strata deploy images` says which images strata delivers.** Strata delivers an image when it writes it into
+  what runs:
+  - a Compose service;
+  - an artifact a step receives through a variable, or one an `${artifact:}` token delivers.
+
+  A Helm module's service image is only declared, because the chart decides which image runs.
+  - The console gets a `DELIVERED` column whenever an image is not delivered, for example
+    `no (helm module: the chart decides)`.
+  - JSON gets `data.images[].delivered` and `.delivery`.
+  - A Helm module that declares no service `image` or `artifact` is listed under "Known only to Helm"
+    (`data.unknown_image_modules[]`), with its chart and version.
+- **`image_tag_policy.on_unknown_image`** (`skip` | `warn` | `block`, default `warn`), for a Helm module whose
+  images strata does not know (`image_unknown_to_strata`). It is independent of `enforcement`. `allow` does not
+  exempt a module; declare its images to have them judged.
+  - A workspace with an `image_tag_policy` and such a module now gets a warning on `build run` and `deploy run`.
+  - A declared Helm image is still judged, and its finding says "declared only, the chart decides which image
+    runs".
+- `${artifact:NAME.FIELD}`, a token for an artifact's `image_name`, `image_tag` or `image_ref`, with the
+  deployment's version pin applied. It works in every field a `${var:}` token resolves in at deploy (a Terraform
+  payload or backend, Helm values, a Compose file, a script's arguments), so an artifact no longer needs a
+  `store: artifact` variable declared only to pass one field along. `${artifact:NAME.image_tag}` on an artifact with
+  no tag and no pin is an error (`unavailable_artifact_token`), never an empty tag; an unknown artifact or field is
+  `unknown_artifact_token`. `strata validate` judges both per deployment. A `store: artifact` variable still gives
+  Terraform the value as a variable. An artifact used through the token is an image the deployment runs:
+  `strata deploy images` lists it with `via: token:KIND/NAME`, and the SBOM, the image gates and `image_tag_policy`
+  judge it.
+- `strata validate` warns `artifact_not_delivered` for a Helm module service that names an `artifact` while no
+  `${artifact:NAME.FIELD}` token for it appears in the module's or the service's `configuration`. Strata writes no
+  image into a chart's values, so such an artifact (and its version pin) changes `deploy images` and the SBOM but not
+  what runs. Deliver it in the chart's own keys, for example
+  `configuration: {image: {repository: "${artifact:NAME.image_name}", tag: "${artifact:NAME.image_tag}"}}`.
+- `strata validate` warns `artifact_registry_mismatch` when an artifact's `registry` names another registry than
+  its `image_name` is pulled from (an `image_name` with no host is Docker Hub). `registry` is documentation: strata
+  never adds it to the image reference, so the runtime pulls `image_name` as written. Put the host in `image_name`.
+- `strata deploy images` reports an artifact's `integration`, by name: an `INTEGRATION` column when any image
+  has one, and `data.images[].integration` in JSON, so a pipeline that copies the images knows which
+  credentials each one needs. Nothing is resolved from it, so no credential appears.
+- `strata validate` warns `artifact_unused` for an artifact no deployment uses: no `store: artifact` variable a
+  step receives, no module service `artifact` and no `${artifact:}` token in a document a deployment reaches.
+  `strata version update` no longer offers a pin for such an artifact, and says which it left out.
+- An artifact's `image_tag` and an `artifacts` pin can be a tag, a digest or both: `1.4.2@sha256:<hex>` gives
+  `name:1.4.2@sha256:<hex>`. Two more fields read the parts, `image_tag_name` and `image_digest`, as a
+  `${artifact:}` token or a `store: artifact` variable's `field`. `strata deploy images` gains a `DIGEST` column and
+  `data.images[].image_digest`. `image_tag_policy` gains `require_digest` (`image_without_digest`).
+
+### Changed
+
+- **`build run` renders Helm charts by default** (`sbom.render_charts` defaults to `true`). `sbom.json` lists
+  the images every Helm chart runs, and `cve_policy`, `image_gate_policy` and `image_tag_policy` check them, so a
+  pipeline with a Helm module and a `deny` gate can fail on a sidecar or init container nobody scanned before.
+  Run `strata build run` and `strata policy check` before upgrading the pipeline, and fix or `allow` what they
+  report. To keep the declared images only, set `sbom: {render_charts: false}` on the workspace. Without `helm`
+  on the build agent each chart is an `info` line and is skipped.
+- **`build run` judges `image_tag_policy` at the end**, after `sbom.json` is written, next to the other build
+  policies, so it can judge the images rendered charts run. A `deny` (and `on_unknown_image: block`) now fails the
+  build after the sources are cloned and the charts rendered, with the output on disk. With `--clean`, the previous
+  build is gone by then. A denied build now records its result in `policy_results.json`. To fail fast, run
+  `strata deploy images` or `strata policy check` before `build run`. `--dry-run` still judges the declared images.
+- An artifact's `image_tag` must be a tag, a digest or `tag@digest`; another shape fails when the document loads.
+  An `artifacts` pin of another shape is an error in `strata validate` (`artifact_tag_invalid`), and
+  `strata version set` refuses to write one. Before this, `1.4.2@sha256:...` gave `name@1.4.2@sha256:...`, which
+  no runtime pulls.
+- An `images` pin must be a whole image reference with a tag, a digest or both (`postgres:16-alpine`); another
+  value is an error in `strata validate` (`image_pin_invalid`), and `strata version set` refuses to write one. A pin
+  replaces the service's whole image, so `db: 16-alpine` ran the image `16-alpine` from Docker Hub, and
+  `db: postgres` floated on `latest`. Two warnings join it: `image_pin_renamed` when the pin names another image
+  than the service runs (`postgres` and `docker.io/library/postgres` are the same image), and `pin_not_applicable`
+  when the service declares no `image`, so the pin changed nothing. `--available` is not checked.
+- In `strata deploy images -o json`, `data.images[].image_tag` is now only the tag part. A digest is in
+  `image_digest`, so a digest-only image has `image_tag: null` where it had the digest. The same split
+  applies to a module service's literal `name:tag@sha256:...`. An image with a digest is never floating in the SBOM,
+  and `image_tag_policy`'s `reject_tags` and `tag_pattern` judge the tag part of `tag@digest`.
+
+- An artifact reached only through a `store: artifact` variable is listed by `deploy images`, and judged by the
+  SBOM, the image gates and `image_tag_policy`, only when the deployment can receive that variable: a `${var:KEY}`
+  token in a document it reaches, or an execution step that gets every variable (Terraform, a script without
+  `script.values`, an `output.template` that reads it, or a tool strata does not know). A variable declared for
+  a Helm- or Compose-only workspace that nothing reads no longer makes the policy fail on an image that never runs.
+- `strata validate` rejects `${value:artifact.NAME.spec.image_name}`, as it already rejected `spec.image_tag`
+  (`value_reference_pinnable_field`). Such an image was never pinned and never listed by `deploy images`, the SBOM
+  or `image_tag_policy`. Replace it with `${artifact:NAME.image_name}`, which the message names. The artifact's
+  free-form fields (`spec.configuration.*`, `spec.properties.*`, `spec.registry`, ...) stay readable through
+  `${value:}`.
+
+### Fixed
+
+- Schema descriptions (`strata schema`) and docstrings cite each doc where it is now. 139 citations of 13 docs
+  pointed to a path the doc had moved from; a test now fails on any such citation.
+- `strata promote status` marks an `images` pin `← behind` by its tag. An image pin is a whole reference
+  (`acme/api:1.2.0`), which never parsed as a version, so no image pin was ever marked behind. Siblings that pin
+  different images are not compared, and an `artifacts` pin of `tag@digest` compares its tag.
+- A registry chart pull on Windows no longer fails with a bare `PermissionError` when another process (a virus
+  scanner reading the new archive) briefly holds a file in its staging directory. Removing that directory is best
+  effort, so the pull's own result stands, such as `helm_chart_digest_changed`. A failure to store the entry is
+  reported as `helm_chart_pull_failed`. A later pull removes a `.pull-*` directory left in `.strata/helm/` once it
+  is more than an hour old.
+
 ## [2.6.0] - 2026-11-09
 
 Deployment documentation: `strata deploy output`, `strata deploy report` and `spec.documentation`, built on a

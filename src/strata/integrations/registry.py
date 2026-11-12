@@ -126,7 +126,7 @@ def get_class(integration_type: str) -> type[Integration]:
     validate-time check inspecting a class-level attribute (e.g.
     `KeyValueStoreIntegration.SUPPORTS_CAS`) to catch a structurally
     incompatible configuration before `deploy run` ever constructs the
-    real thing (docs/work/cross-run-step-output-delivery.md).
+    real thing (docs/archive/cross-run-step-output-delivery.md).
 
     Raises:
         IntegrationNotFoundError: `integration_type` is registered neither

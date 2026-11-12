@@ -6,14 +6,14 @@ real ConfigurationModel also covers logging, manifest/output shaping, cost
 and drift tracking, and change tracking. Those are ported only when the
 corresponding v2 kind/feature that needs them is built (see ADR-0003).
 `spec.security`/`spec.paths`/`spec.audit` (below) are exceptions ported
-ahead of a specific consuming feature — real usage (docs/design/gap_fit_v1.md gap #7)
+ahead of a specific consuming feature — real usage (docs/work/gap_fit_v1.md gap #7)
 had no equivalent to derive them from elsewhere, unlike `zones` (superseded
 by `TenantSpecModel.geographies` + `ProviderConfigRegionModel.geography`)
 or `integrations`/`remotes` (already their own standalone kind/the solution
 manifest, respectively). `spec.paths` is narrower than v1's own version —
 see docs/design/path-conventions.md for what's deliberately not ported
 (the generic `validate:` sub-block, the full policy engine). `spec.audit`
-is narrower still — see docs/design/audit-trail.md's "v2 Design Notes" for
+is narrower still — see docs/work/audit-trail.md's "v2 Design Notes" for
 what's deliberately not ported (the CLI-invocation journal, a durable local
 append series, the full v1 event-type vocabulary).
 
@@ -81,7 +81,7 @@ class ConfigurationSecurityModel(PlatformBaseModel):
     `environment`, ...) still needs to appear in the list to be allowed —
     v1's real `config/stores.yaml` deliberately excludes `environment`
     platform-wide this way, proving builtins are not implicitly exempt.
-    `allowed_key_value_stores` (docs/work/cross-run-step-output-delivery.md)
+    `allowed_key_value_stores` (docs/archive/cross-run-step-output-delivery.md)
     is a v2-only addition, no v1 precedent — same discipline applied to a
     new capability, not retrofitted after real usage existed.
     """
@@ -109,7 +109,7 @@ class ConfigurationSecurityModel(PlatformBaseModel):
         "Design notes: Key/value backend types (e.g. 'azure-keyvault', "
         "'azure-appconfig', 'azure-blob') permitted for a Workspace's "
         "'output_store'/'output_store_integration' "
-        "(docs/work/cross-run-step-output-delivery.md). Named after the capability "
+        "(docs/archive/cross-run-step-output-delivery.md). Named after the capability "
         "(KEY_VALUE), not the feature field, since it already has more than one "
         "planned consumer. None means unrestricted.",
     )
@@ -142,7 +142,7 @@ class PathConventionModel(PlatformBaseModel):
 
     Design notes:
     One directory-family naming convention (docs/design/path-conventions.md,
-    docs/design/gap_fit_v1.md gap #7).
+    docs/work/gap_fit_v1.md gap #7).
 
     Ported from v1's real, active `enforce-path-conventions` policy
     (`config/paths.yaml`, config-repo) — structural shape only

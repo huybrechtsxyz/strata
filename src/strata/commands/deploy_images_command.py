@@ -14,11 +14,11 @@ import click
 from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
-from strata.controllers.effective_images import effective_images
-from strata.controllers.image_tag_policy import check_image_tag_policy
+from strata.controllers.effective_images import effective_images, unknown_image_modules
+from strata.controllers.image_tag_policy import check_image_tag_policy, unknown_module_message
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import resolve_deployment_workspace
-from strata.integrations.resolved_context import EffectiveImage
+from strata.integrations.resolved_context import EffectiveImage, UnknownImageModule
 from strata.utils.diagnostics import Diagnostics
 
 
@@ -55,8 +55,15 @@ def deploy_images_command(
 
     Nothing is built, resolved against a store or sent anywhere, so it is safe to run before
     `build run`: a pipeline can use it to copy the images to a registry first. With -o json,
-    `data.images[]` carries origin, name, artifact, module, via, image_name, image_tag, image_ref,
-    registry, configuration, tag_source, pin_version and pin_flag.
+    `data.images[]` carries origin, name, artifact, module, via, image_name, image_tag (the tag part),
+    image_digest (the digest part of `tag@sha256:...`), image_ref, registry, configuration, tag_source,
+    pin_version, pin_flag and integration (an artifact's `spec.integration`, by name: which credentials
+    a copy needs; never resolved, so never a secret), delivered and delivery.
+
+    DELIVERED says whether strata writes the image into what runs. A Helm module's service image is only
+    declared: the chart decides which image runs, so it shows "no (helm module: the chart decides)". A Helm
+    module that declares no image at all is listed under "Known only to Helm" (`data.unknown_image_modules[]`);
+    `image_tag_policy.on_unknown_image` decides whether that warns or fails.
 
     \b
     Exit codes:
@@ -71,24 +78,29 @@ def deploy_images_command(
         run.describe(solution=solution.meta.name if solution else "(unnamed)", root=context.root, deployment=deployment)
         resolved, workspace = resolve_deployment_workspace(context, deployment, version_pin=pin)
         rows = effective_images(context, resolved, pinned_by_flag=pin is not None)
+        unknown = unknown_image_modules(context, resolved)
         run.step(f"{len(rows)} image(s)")
 
         # With an image_tag_policy the policy judges the rows, and a `deny` breach fails the command so the
         # image copy at the start of a pipeline stops first. Without one a missing tag is only a warning.
         diagnostics = Diagnostics()
         if workspace.spec.image_tag_policy is not None:
-            diagnostics = check_image_tag_policy(context, resolved, workspace, images=rows)
+            diagnostics = check_image_tag_policy(context, resolved, workspace, images=rows, unknown=unknown)
         else:
             for row in rows:
-                if row.image_tag is None:
+                if row.image_tag is None and row.image_digest is None:
                     diagnostics.warning(
                         f"'{row.name}' has no tag: neither a version pin nor the declaration supplies one.",
                         location=row.name,
                         code="image_without_tag",
                     )
+            # Without a policy nothing asked for a judgement, so a module strata cannot see into is only noted.
+            for module in unknown:
+                diagnostics.info(unknown_module_message(module), location=module.module, code="image_unknown_to_strata")
 
         if output == "console":
             _print_rows(rows)
+            _print_unknown(unknown)
         run.report(diagnostics, root=context.root)
         run.ok = diagnostics.ok
         if isinstance(run.reporter, JsonReporter):
@@ -97,6 +109,7 @@ def deploy_images_command(
                 "version": resolved.spec.version,
                 "pin": pin,
                 "images": [asdict(row) for row in rows],
+                "unknown_image_modules": [asdict(module) for module in unknown],
             }
 
 
@@ -106,13 +119,44 @@ def _source(row: EffectiveImage) -> str:
     return row.tag_source
 
 
+def _delivered(row: EffectiveImage) -> str:
+    return "yes" if row.delivered else f"no ({row.delivery})"
+
+
+def _print_unknown(unknown: list[UnknownImageModule]) -> None:
+    if not unknown:
+        return
+    click.echo("")
+    click.echo("  Known only to Helm (declare no images, so none of theirs is listed):")
+    for module in unknown:
+        chart = " ".join(part for part in (module.chart, module.chart_version) if part)
+        click.echo(f"    {module.module}  namespace {module.namespace}" + (f"  chart {chart}" if chart else ""))
+
+
 def _print_rows(rows: list[EffectiveImage]) -> None:
     if not rows:
         click.echo("  (no images)")
         return
-    headers = ("NAME", "ORIGIN", "IMAGE", "TAG", "SOURCE", "USED BY")
+    # DIGEST, DELIVERED and INTEGRATION only when a row needs one, so the usual table does not gain a column of
+    # "-" (or of "yes").
+    with_digest = any(row.image_digest for row in rows)
+    with_delivered = any(not row.delivered for row in rows)
+    with_integration = any(row.integration for row in rows)
+    headers: tuple[str, ...] = ("NAME", "ORIGIN", "IMAGE", "TAG", *(("DIGEST",) if with_digest else ()), "SOURCE")
+    headers += ("DELIVERED",) if with_delivered else ()
+    headers += ("INTEGRATION", "USED BY") if with_integration else ("USED BY",)
     table = [
-        (row.name, row.origin, row.image_name, row.image_tag or "-", _source(row), ", ".join(row.via) or "-")
+        (
+            row.name,
+            row.origin,
+            row.image_name,
+            row.image_tag or "-",
+            *((row.image_digest or "-",) if with_digest else ()),
+            _source(row),
+            *((_delivered(row),) if with_delivered else ()),
+            *((row.integration or "-",) if with_integration else ()),
+            ", ".join(row.via) or "-",
+        )
         for row in rows
     ]
     widths = [max(len(header), *(len(line[i]) for line in table)) for i, header in enumerate(headers[:-1])]

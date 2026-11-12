@@ -14,7 +14,7 @@
   (the trigger-mechanism decision this doc's evidence grounds),
   [cli-output-mode-interactions.md](cli-output-mode-interactions.md)
   (sibling archived doc this was split out of — the concrete `--follow`/
-  `STRATA_OUTPUT` interaction bug), [diagnostic-guidance.md](../work/diagnostic-guidance.md)
+  `STRATA_OUTPUT` interaction bug), `diagnostic-guidance.md` (work doc)
   (an unrelated gap surfaced while reviewing this doc, still open — see
   `docs/work/`)
 

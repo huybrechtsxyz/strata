@@ -11,8 +11,7 @@ spec:
   # reconstruct the decision from git history.
   pins:
     images:
-      # Shorthand — nothing is being held back.
-      portainer: portainer/portainer-ce:2.39.3-alpine
+      # Overrides a module service's literal `image`, keyed by the service name (authentik's `db`).
       # Structured — deliberately behind upstream, and it says so.
       db:
         version: docker.io/library/postgres:16-alpine
@@ -28,9 +27,13 @@ spec:
         reason: "chart version could not be confirmed upstream; re-verify before bumping"
         reviewed: 2026-09-08
     artifacts:
-      # Overrides `image_tag` of the artifact (artifacts/example-api.yaml), wherever it is
-      # resolved: the `API_IMAGE_TAG` variable in environments/prd.yaml. `image_name` is never pinned.
+      # Overrides an artifact's `image_tag`, wherever the artifact is used. `image_name` is never pinned.
+      # artifacts/example-api.yaml: the `API_IMAGE_TAG` variable (environments/prd.yaml) and the
+      # `${artifact:example-api.image_ref}` token (workspaces/main.yaml).
       example-api: 1.4.2
+      # artifacts/portainer.yaml: the portainer Compose service (modules/portainer.yaml).
+      # Shorthand — nothing is being held back.
+      portainer: 2.39.3-alpine
     remotes:
       # Overrides `reference` for the 'infra' remote declared in strata.yaml.
       # Only valid because that remote is `fetch: strata` — a `fetch: external`

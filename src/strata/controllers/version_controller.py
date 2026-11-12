@@ -28,6 +28,7 @@ ordering and quote style must survive a single targeted pin edit
 untouched, which a parse-and-re-dump through plain PyYAML cannot do.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -45,6 +46,7 @@ from strata.models.module_model import ModuleModel
 from strata.models.solution_model import RemoteFetch, SolutionModel
 from strata.models.version_model import PIN_CATEGORIES, VersionModel
 from strata.utils.errors import UsageError
+from strata.utils.sbom_utils import image_pin_problem, image_tag_problem, parse_image_ref
 
 
 def _image_targets(index: DocumentIndex) -> dict[str, str | None]:
@@ -135,7 +137,11 @@ class ReconcileRow:
 
 
 def reconcile_version(
-    index: DocumentIndex, solution: SolutionModel | None, version: VersionModel
+    index: DocumentIndex,
+    solution: SolutionModel | None,
+    version: VersionModel,
+    *,
+    unused_artifacts: Collection[str] = (),
 ) -> list[ReconcileRow]:
     """Compare `version.spec.pins` against the solution's real inventory.
 
@@ -146,6 +152,11 @@ def reconcile_version(
     nothing honest to seed it with, same rule `scaffold_version()`'s own
     `--from` cloning follows. The one exception is an artifact with no
     `image_tag`: it is reported as `needs_value`, with no seed.
+
+    An artifact in `unused_artifacts` (no deployment uses it,
+    `artifact_usage.unused_artifacts()`) is offered neither as `add` nor as
+    `needs_value`: pinning what nothing deploys changes nothing. A pin it
+    already has is not stale, since the artifact exists, and is left alone.
     """
     inventory = _inventory(index, solution)
     declared: dict[str, set[str]] = {category: set() for category in PIN_CATEGORIES}
@@ -158,6 +169,8 @@ def reconcile_version(
         for name in sorted(declared[category] - real_targets.keys()):
             rows.append(ReconcileRow(category=category, name=name, action="remove"))
         for name in sorted(real_targets.keys() - declared[category]):
+            if category == "artifacts" and name in unused_artifacts:
+                continue
             seed_value = real_targets[name]
             if seed_value is not None:
                 rows.append(ReconcileRow(category=category, name=name, action="add", seed_value=seed_value))
@@ -292,7 +305,9 @@ def set_version_pin(
             nor `available` given; `value`/`available` given as an empty
             string; `target` does not exist yet and `value` is `None`; or
             `target` exists, is `held`/`unverified`, `value` is given, and
-            `force` is not set.
+            `force` is not set; an `artifacts` value is not a tag, a digest or
+            `tag@digest`; or an `images` value is not an image reference with a
+            tag, a digest or both (`--available` is not checked for `images`).
     """
     if category not in PIN_CATEGORIES:
         raise UsageError(f"Unknown pin category '{category}'. Expected one of: {', '.join(PIN_CATEGORIES)}.")
@@ -302,6 +317,11 @@ def set_version_pin(
         raise UsageError("<value> must not be empty.")
     if available is not None and not available.strip():
         raise UsageError("--available must not be empty.")
+    if category == "artifacts":
+        for what, given in (("<value>", value), ("--available", available)):
+            problem = image_tag_problem(given) if given is not None else None
+            if problem is not None:
+                raise UsageError(f"{what} {problem}")
 
     rt = _round_trip_yaml()
     data = rt.load(path.read_text(encoding="utf-8"))
@@ -320,6 +340,12 @@ def set_version_pin(
         status = None  # shorthand always means status: current (VersionPinModel's own default)
     else:
         status = existing.get("status")
+
+    if category == "images" and value is not None:
+        current = existing if isinstance(existing, str) else (existing or {}).get("version")
+        problem = image_pin_problem(value, name_hint=parse_image_ref(current)[0] if current else None)
+        if problem is not None:
+            raise UsageError(f"<value> {problem}")
 
     if value is not None and status in _PROTECTED_STATUSES and not force:
         raise UsageError(f"Pin '{target}' is '{status}' — refusing to change its version without --force.")

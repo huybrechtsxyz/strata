@@ -222,7 +222,7 @@ def test_apply_version_pins_logs_each_application():
 
 
 # ---------------------------------------------------------------------------
-# resolve_artifact_services() (docs/work/artifact-references.md Path 1)
+# resolve_artifact_services() (docs/archive/artifact-references.md Path 1)
 # ---------------------------------------------------------------------------
 
 
@@ -277,6 +277,36 @@ def test_resolve_artifact_services_overrides_image_and_clears_artifact(tmp_path:
     service = resolved.spec.services[0]
     assert service.image == "example/scheduler-api:1.2.3"
     assert service.artifact is None
+
+
+@pytest.mark.parametrize(
+    ("image_tag", "image"),
+    [
+        ("sha256:" + "ab" * 32, "example/scheduler-api@sha256:" + "ab" * 32),
+        ("1.2.3@sha256:" + "ab" * 32, "example/scheduler-api:1.2.3@sha256:" + "ab" * 32),
+    ],
+)
+def test_resolve_artifact_services_writes_a_digest_as_a_runtime_pulls_it(tmp_path: Path, image_tag, image):
+    """`1.2.3@sha256:...` gives `name:1.2.3@sha256:...`, never `name@1.2.3@sha256:...`
+    (docs/work/artifact-gap-analysis.md, design 4)."""
+    module = _module_with_artifact("scheduler", "api_container")
+    index = DocumentIndex()
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.MODULE, name="scheduler"), model=module, source=Path("scheduler.yaml")
+        )
+    )
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="api_container"),
+            model=_artifact("api_container", image_name="example/scheduler-api", image_tag=image_tag),
+            source=Path("api_container.yaml"),
+        )
+    )
+
+    resolved = resolve_artifact_services(module, _context(tmp_path, index), _deployment())
+
+    assert resolved.spec.services[0].image == image
 
 
 def test_resolve_artifact_services_leaves_other_services_untouched(tmp_path: Path):
@@ -1192,7 +1222,7 @@ def test_build_workload_modules_applies_image_pin_end_to_end(tmp_path: Path):
 
 def test_build_workload_modules_resolves_artifact_reference_end_to_end(tmp_path: Path):
     """A service's `.artifact` reference reaches the real rendered
-    `docker-compose.yml` as a resolved `.image` string (docs/work/
+    `docker-compose.yml` as a resolved `.image` string (docs/archive/
     artifact-references.md Path 1)."""
     root = tmp_path / "sln"
     _write(root / "services" / "scheduler" / "docker-compose.yml", "# stand-in\n")

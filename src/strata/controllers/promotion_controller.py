@@ -52,6 +52,7 @@ from strata.models.deployment_model import DeploymentModel
 from strata.models.version_model import VersionModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
+from strata.utils.sbom_utils import canonical_image_name, parse_image_ref, split_image_tag
 
 
 class PromotionWaveView(BaseModel):
@@ -303,9 +304,12 @@ def build_status_rows(view: PromotionView) -> list[PromotionStatusRow]:
             if len(values) < 2:
                 continue
             try:
-                max_by_pin[pin_key] = max(SemVer(value) for value in values)
+                parsed = [_pin_order(pin_key[0], value) for value in values]
             except InvalidVersion:
                 continue  # Not every sibling value is comparable — skip, don't guess.
+            if len({image for image, _ in parsed}) > 1:
+                continue  # Siblings pin different images: their tags do not order.
+            max_by_pin[pin_key] = max(version for _, version in parsed)
 
         for wave_view in ring_view.waves:
             pins = list(wave_view.version.spec.pins.iter_pins())
@@ -329,7 +333,7 @@ def build_status_rows(view: PromotionView) -> list[PromotionStatusRow]:
                 best = max_by_pin.get((category, target))
                 if best is not None:
                     try:
-                        behind = SemVer(pin.version) < best
+                        behind = _pin_order(category, pin.version)[1] < best
                     except InvalidVersion:
                         behind = False
                 rows.append(
@@ -345,6 +349,25 @@ def build_status_rows(view: PromotionView) -> list[PromotionStatusRow]:
                     )
                 )
     return rows
+
+
+def _pin_order(category: str, value: str) -> tuple[str, SemVer]:
+    """`(image, version)` to order a pin's value by; `image` is empty except for an `images` pin.
+
+    An `images` pin is a whole reference (`acme/api:1.2.0`), so its tag is the version and the image it names must
+    match its siblings'. An `artifacts` pin of `tag@digest` orders by its tag. Raises `InvalidVersion` for a value with
+    no version-shaped part (`16-alpine`, a digest alone, a git ref).
+    """
+    image = ""
+    version: str | None = value
+    if category == "images":
+        name, version, _ = parse_image_ref(value)
+        image = canonical_image_name(name)
+    elif category == "artifacts":
+        version = split_image_tag(value)[0]
+    if not version:
+        raise InvalidVersion(value)
+    return image, SemVer(version)
 
 
 @dataclass(frozen=True)

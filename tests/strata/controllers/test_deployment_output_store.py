@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `DeploymentOutputStore` (docs/work/cross-run-step-output-delivery.md's
+"""Tests for `DeploymentOutputStore` (docs/archive/cross-run-step-output-delivery.md's
 Implementation Plan steps 2-3, and ADR-0057: one key per step)."""
 
 import json

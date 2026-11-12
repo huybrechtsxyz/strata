@@ -41,7 +41,9 @@ class ReleaseGateOutcome:
 class ImageRef:
     """One container image from the SBOM, split the way `parse_image_ref()` splits a reference.
 
-    A digest-pinned image carries no tag: `image_to_purl()` keeps only the digest.
+    A digest-pinned image carries no tag: `image_to_purl()` keeps only the digest. `delivered` is false for an
+    image the SBOM marks `strata:image-delivered: false`, a declared Helm image the chart may not run
+    (docs/work/helm-image-delivery.md, the SBOM side).
     """
 
     service: str
@@ -49,6 +51,7 @@ class ImageRef:
     repository: str
     tag: str | None = None
     digest: str | None = None
+    delivered: bool = True
 
     @property
     def path(self) -> str:

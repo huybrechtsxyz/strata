@@ -137,7 +137,9 @@ def _helm_solution(tmp_path: Path, **kwargs: Any) -> Path:
             "    - name: deploy_apps\n      provisioner: helm_main\n      namespaces:\n        - apps\n"
             "      scope: apps\n"
         ),
-        workspace_extra="  namespaces:\n    - apps\n" + kwargs.pop("workspace_extra", ""),
+        # These tests count the deploy's own helm calls; the build's `helm template` for the SBOM is off.
+        workspace_extra="  sbom:\n    render_charts: false\n  namespaces:\n    - apps\n"
+        + kwargs.pop("workspace_extra", ""),
         files={"charts/authentik/Chart.yaml": "name: authentik\n"},
         **kwargs,
     )

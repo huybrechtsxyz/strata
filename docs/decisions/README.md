@@ -10,7 +10,7 @@ progress tracker and not a design doc: once written, its Context/Decision/
 Consequences don't change, and it never describes implementation status,
 phase progress, or day-to-day "how this currently works." That content lives
 in [`docs/design/`](../design/README.md) (once finished) or
-[`docs/work/`](../work/README.md) (while in progress) — never in the ADR
+`docs/work/` (while in progress) — never in the ADR
 itself. Don't add a `- Revised:` line patching an old decision's narrative,
 and don't add a `## Remaining Work` tracker — see "Decisions don't get
 revised in place" and "No build-progress tracking" below.
@@ -36,7 +36,7 @@ an earlier decision:
 Don't add `- Revised:` lines that patch an old decision's narrative — that's
 what a new ADR is for. If you're just narrating how a design evolved day to
 day (not a distinct new decision), that narrative belongs in a
-[`docs/work/`](../work/README.md) doc instead, not in the ADR at all.
+`docs/work/` doc instead, not in the ADR at all.
 
 ## No build-progress tracking in an ADR
 
@@ -46,11 +46,13 @@ implementation-status narrative to an ADR. Track that in:
 
 - [`docs/design/`](../design/README.md), once the feature is fully built and
   nothing is pending — a living doc describing how it works today.
-- [`docs/work/`](../work/README.md), while it's still being built, designed,
+- `docs/work/`, while it's still being built, designed,
   or debated — phases, open questions, in-progress narrative.
 
-An ADR with real follow-on work should link out via `Related:` to whichever
-of those two has it, instead of listing it itself.
+An ADR with real follow-on work should point via `Related:` to whichever
+of those two has it, instead of listing it itself: a link to a design doc, or
+the name of a work doc without a link (`` `topic-name.md` (work doc) ``), since
+a work doc moves and a link to it would break.
 
 ## Index
 
@@ -71,8 +73,8 @@ the index:
 3. That's it — no index table to update.
 4. If the decision involves ongoing build-out, phases, or a component whose
    design will keep evolving, create/update a matching doc in
-   [`docs/work/`](../work/README.md) (while it's in progress) and link it
-   from this ADR's `Related:` line. Once that build-out finishes with
+   `docs/work/` (while it's in progress) and name it,
+   without a link, on this ADR's `Related:` line. Once that build-out finishes with
    nothing pending, the doc graduates to [`docs/design/`](../design/README.md)
    instead. Keep the ADR itself focused on the decision, never the build
    progress.

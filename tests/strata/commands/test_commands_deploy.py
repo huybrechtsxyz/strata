@@ -358,7 +358,7 @@ def test_pin_names_an_unknown_version_exits_two(runner, solution, _stub_terrafor
 
 
 # ---------------------------------------------------------------------------
-# --output-max-age (docs/work/cross-run-step-output-delivery.md)
+# --output-max-age (docs/archive/cross-run-step-output-delivery.md)
 # ---------------------------------------------------------------------------
 
 
@@ -386,7 +386,7 @@ def test_output_max_age_rejects_a_non_positive_value(runner, solution, _stub_ter
 
 
 # ---------------------------------------------------------------------------
-# --change-* (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
+# --change-* (docs/work/audit-trail.md's ChangeReferenceModel CLI wiring)
 # ---------------------------------------------------------------------------
 
 
@@ -590,6 +590,7 @@ def test_deploy_setup_gracefully_skips_container_capable_step(runner, tmp_path, 
         root,
         "workspace.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  sbom:\n    render_charts: false\n"
         "  providers:\n    - p1\n  namespaces:\n    - apps\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n"

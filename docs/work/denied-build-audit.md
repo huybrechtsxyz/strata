@@ -1,7 +1,7 @@
 # Policy denials and the audit trail - Work
 
 - Status: draft
-- Last updated: 2026-11-03
+- Last updated: 2026-11-12
 
 ## Overview
 
@@ -22,13 +22,13 @@ Verified against the source on 2026-11-03.
 
 | Step                                           | Records a result in `policy_results.json` when it denies?                                                                                                      |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `build run`, `image_tag_policy`                | No. It runs before anything is cleaned or written and returns on a breach, before the file is written.                                                         |
+| `build run`, `image_tag_policy`                | Yes, since 2026-11-12: it moved to the end, after the SBOM (helm-image-delivery.md, plan item 9e). Not written under `--dry-run`.                               |
 | `build run`, `cve_policy` and `checkov_policy` | Yes. Both are evaluated after the SBOM, their results are written together at the end, even when a breach already failed the build. Skipped under `--dry-run`. |
 | `deploy run`, `image_tag_policy`               | Yes. The result is appended to the sidecar before the run returns on a breach.                                                                                 |
 | `strata policy check`                          | Yes, appended when the build path exists.                                                                                                                      |
 
 `policy_results.json` is a local sidecar under the build path. `strata policy list` reads it back, so a denied
-`cve_policy` build shows its last result locally; a denied `image_tag_policy` one shows none.
+build shows its last result locally, for every build-phase policy.
 
 ### How it reaches the audit trail
 
@@ -38,8 +38,7 @@ Verified against the source on 2026-11-03.
   manifest, with a failed status.
 - `DeploymentManifestModel.action` allows `build`, `deploy` and `destroy`; `deploy run`/`deploy apply` set `deploy` and
   `deploy destroy` sets `destroy`. Nothing writes a `build` manifest.
-- So a denied `build run` never reaches any sink, for any policy: the sidecar holds the result locally for
-  `cve_policy` and `checkov_policy`, and nothing at all for `image_tag_policy`. A pipeline that stops at the denied
+- So a denied `build run` never reaches any sink, for any policy: the sidecar holds the result locally. A pipeline that stops at the denied
   build produces no manifest, since no `deploy run` follows.
 
 ## Options
@@ -51,8 +50,10 @@ Verified against the source on 2026-11-03.
   manifest when a build is denied, with the same sinks and `policy_results`. It answers "show me every time the
   gate stopped something", which a compliance reviewer might ask. It is a new producer, new status semantics and
   noise in the sink for every failed CI build.
-- **C. Local consistency only.** Write the `image_tag_policy` result to the sidecar even when it denies, as the CVE
-  and Checkov policies do. The cost is that `build run` would have to create the build path (or a result file
+- **C. Local consistency only.** Done on 2026-11-12 as a side effect: `image_tag_policy` moved to the end of the
+  build to judge rendered chart images (helm-image-delivery.md, plan item 9e), so its result is written even when it
+  denies, and the "nothing changed on a breach" promise is gone. What follows is the original analysis. Write the
+  `image_tag_policy` result to the sidecar even when it denies, as the CVE and Checkov policies do. The cost is that `build run` would have to create the build path (or a result file
   somewhere else) before the "nothing changed on a breach" promise holds, since the design chose to fail before
   cleaning or writing. The value is only local (`policy list`, a following `policy check`), because nothing sends the
   sidecar anywhere without a deploy.
@@ -74,7 +75,7 @@ convenience.
 
 ## Remaining Work / Open Questions
 
-- [ ] Decide A, B or C. The deciding fact is whether anyone needs denied attempts recorded; nothing found so far
+- [ ] Decide A or B (C is in place, see Options). The deciding fact is whether anyone needs denied attempts recorded; nothing found so far
       says so.
 - [ ] Confirm the exit state of a `deploy run` denied by `image_tag_policy`: the manifest status and that the
       appended result is read (the code path is straightforward but no test pins it for this policy).
@@ -84,6 +85,9 @@ convenience.
       write one) before any code.
 
 ## Changelog
+
+- 2026-11-12: `build run` now judges `image_tag_policy` at the end, so a denied build records its result for every
+  policy and option C no longer needs deciding. A and B stay open.
 
 - 2026-11-03: Created from the open item left after the image tag policy work. Verified the three build-phase
   policies and the deploy path against `build_controller.py`, `policy_results.py`, `audit_run.py` and

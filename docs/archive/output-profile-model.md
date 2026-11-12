@@ -62,7 +62,7 @@ the third.
 **Why this wasn't built already, until now:** `emits` has nothing to gate
 until the categories it gates exist. `features`/`variables`/`properties`/
 `custom` didn't exist in v2's `default_output()` until
-[build-time-value-categories.md](build-time-value-categories.md) (status:
+[build-time-value-categories.md](../design/build-time-value-categories.md) (status:
 implemented) built them. That prerequisite is now done — this doc is the
 next, previously-blocked step, not a re-litigation of D2.
 
@@ -763,10 +763,10 @@ mechanism, built or planned, that closes this gap for `emits` specifically.
   decided not to port `OutputProfileModel` ("zero usage"), later corrected
   once `config-repo` was checked; D3's `OutputModel`/`template` is the
   field this design extends rather than duplicates.
-- [build-time-value-categories.md](build-time-value-categories.md) — built
+- [build-time-value-categories.md](../design/build-time-value-categories.md) — built
   the `flags`/`variables`/`properties`/`custom` categories this design's
   `emits` now has something real to gate.
-- [build-command.md](build-command.md) — tracks the original gap and the
+- `build-command.md` (work doc) — tracks the original gap and the
   2026-09-25 investigation that found/cleared the prerequisite.
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)
   — defines the parallel Interface/Injection concept (Environmental channel,

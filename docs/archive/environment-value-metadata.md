@@ -12,8 +12,8 @@
   [ADR-0040](../decisions/0040-attributeconfig-standalone-kind.md),
   [cross-document-value-references.md](../design/cross-document-value-references.md) (`${value:}`),
   [composite-variable-merge.md](../design/composite-variable-merge.md),
-  [policy-engine-architecture.md](../work/policy-engine-architecture.md) (generic engine ruled out, 2026-10-07),
-  [promotion.md](../work/promotion.md) (same consumer),
+  `policy-engine-architecture.md` (work doc) (generic engine ruled out, 2026-10-07),
+  `promotion.md` (work doc) (same consumer),
   [output-declarations.md](../design/output-declarations.md) and [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md)
   (`${output:}`), [cross-run-step-output-delivery.md](../archive/cross-run-step-output-delivery.md) (archived)
 
@@ -213,7 +213,7 @@ Open questions:
 
 - Per-key field on the variable, or a separate sidecar so the 700-line file does not grow further?
 - Is it emitted anywhere? It should not reach Terraform or the tfvars projection.
-- Relationship to the audit trail ([audit-trail.md](../work/audit-trail.md)): that records what a *deploy* did. This records
+- Relationship to the audit trail (`audit-trail.md` (work doc)): that records what a *deploy* did. This records
   where a *config value* came from. Related, but the two should not be merged.
 - If a pinned value has a recorded origin, a drift check against the upstream output becomes possible. That is a
   separate feature layered on this one, and config-repo rules out resolving such values at deploy time, so it would have
@@ -251,7 +251,7 @@ over-length composed name earlier, at `strata validate` on the pull request, ins
 - If no, strata's contribution shrinks to the single-value shape checks in topic 1 (the closed `environment_name` set,
   the tenant-code pattern and its 5-character limit), which are already in reach.
 
-Related, already tracked: [subnet-cidr-derivation.md](../work/subnet-cidr-derivation.md) reached the same "strata carries the
+Related, already tracked: `subnet-cidr-derivation.md` (work doc) reached the same "strata carries the
 request, Terraform computes" split for CIDRs.
 
 **Decision: no.** Terraform composes the names, so Terraform is where the length rule belongs; a strata copy of the
@@ -279,7 +279,7 @@ estates need the ring's resource group, key vault and subnet facts. `.v2-cfg` co
 **Why it was never opened up** (recorded decisions, not new analysis):
 
 - Output visibility is per step and dependency-scoped, so a token needs an owning step to scope against. dns, network
-  and firewall documents had none until a step could claim them ([gap_fit_v1.md](../work/gap_fit_v1.md) gap #12).
+  and firewall documents had none until a step could claim them (`gap_fit_v1.md` (work doc) gap #12).
 - `properties`, `custom` and `tenant` are workspace-wide singletons with no name to put in `targets`, so no owner is
   possible. Per-name ownership for topologies and resources was deferred for "zero evidenced need", "not forgotten,
   should real evidence ever surface" ([value-token-resolution.md](../design/value-token-resolution.md), gap #8/#9).

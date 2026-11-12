@@ -16,8 +16,11 @@ def _write(root: Path, relative: str, kind: str, name: str, spec: str) -> None:
     (root / relative).write_text(_HEADER.format(kind=kind, name=name) + spec, encoding="utf-8")
 
 
-def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "") -> Path:
-    """Deployment `app` (version `prd`, pinning `catalog` to 2.0.0) and `other` (no version)."""
+def _solution(
+    tmp_path: Path, *, with_tag: bool = True, policy: str = "", integration: bool = False, pin: str = "2.0.0"
+) -> Path:
+    """Deployment `app` (version `prd`, pinning `catalog` to `pin`) and `other` (no version). With `integration`,
+    `catalog` names the integration `feed` that holds its registry's credentials."""
     root = tmp_path / "sln"
     root.mkdir()
     (root / "strata.yaml").write_text(_HEADER.format(kind="solution", name="s") + "  {}\n", encoding="utf-8")
@@ -28,7 +31,8 @@ def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "") -> Pat
         "workspace",
         "main",
         "  providers:\n    - p1\n  namespaces:\n    - apps\n"
-        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n" + policy,
+        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: infra\n      provisioner: tf\n      namespaces:\n        - apps\n" + policy,
     )
     _write(
         root,
@@ -46,8 +50,22 @@ def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "") -> Pat
         "  default_labels:\n    app: apps\n  modules:\n    - name: stack\n      module: stack\n",
     )
     tag = "  image_tag: '1.0.0'\n" if with_tag else ""
+    if integration:
+        tag += "  integration: feed\n"
+        _write(
+            root,
+            "integration.yaml",
+            "integration",
+            "feed",
+            "  type: proget\n  capabilities: [sources]\n"
+            "  authentication:\n    method: token\n    token:\n      token: FEED_API_KEY\n      username: api\n",
+        )
     _write(
-        root, "artifact.yaml", "artifact", "catalog", f"  image_name: int/catalog\n  registry: cdn.example.com\n{tag}"
+        root,
+        "artifact.yaml",
+        "artifact",
+        "catalog",
+        f"  image_name: int/catalog\n  registry: cdn.example.com\n{tag}",
     )
     _write(
         root,
@@ -56,7 +74,7 @@ def _solution(tmp_path: Path, *, with_tag: bool = True, policy: str = "") -> Pat
         "prd",
         "  variables:\n    - key: CATALOG_TAG\n      store: artifact\n      value: catalog\n      field: image_tag\n",
     )
-    _write(root, "version.yaml", "version", "prd", "  pins:\n    artifacts:\n      catalog: '2.0.0'\n")
+    _write(root, "version.yaml", "version", "prd", f"  pins:\n    artifacts:\n      catalog: '{pin}'\n")
     _write(root, "app.yaml", "deployment", "app", "  workspace: main\n  version: prd\n  environments:\n    - prd\n")
     _write(root, "other.yaml", "deployment", "other", "  workspace: main\n  environments:\n    - prd\n")
     return root
@@ -128,6 +146,45 @@ def test_console_prints_a_table_with_the_tag_source(tmp_path):
     )
 
 
+# A tag and a digest (docs/work/artifact-gap-analysis.md, design 4).
+
+_DIGEST = "sha256:" + "9f86d081" * 8
+
+
+def test_a_pinned_tag_at_digest_is_listed_as_its_two_parts(tmp_path):
+    rows = {
+        row["name"]: row
+        for row in _data(_invoke(_solution(tmp_path, pin=f"2.0.0@{_DIGEST}"), "app", "-o", "json"))["images"]
+    }
+    catalog = rows["catalog"]
+    assert (catalog["image_tag"], catalog["image_digest"]) == ("2.0.0", _DIGEST)
+    assert catalog["image_ref"] == f"int/catalog:2.0.0@{_DIGEST}"
+    assert rows["redis"]["image_digest"] is None
+
+
+def test_console_adds_a_digest_column_only_when_a_row_has_one(tmp_path):
+    result = _invoke(_solution(tmp_path, pin=f"2.0.0@{_DIGEST}"), "app")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    header = next(line for line in result.output.splitlines() if line.strip().startswith("NAME"))
+    assert header.split()[:6] == ["NAME", "ORIGIN", "IMAGE", "TAG", "DIGEST", "SOURCE"]
+    assert any(
+        line.split()[:6] == ["catalog", "artifact", "int/catalog", "2.0.0", _DIGEST, "pin"]
+        for line in result.output.splitlines()
+    )
+    assert any(
+        line.split()[:5] == ["redis", "module-service", "redis", "7", "-"] for line in result.output.splitlines()
+    )
+
+
+def test_a_digest_without_a_tag_is_not_a_row_with_no_tag(tmp_path):
+    result = _invoke(_solution(tmp_path, pin=_DIGEST), "app", "-o", "json")
+    envelope = json.loads(result.output)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    catalog = next(row for row in envelope["data"]["images"] if row["name"] == "catalog")
+    assert (catalog["image_tag"], catalog["image_digest"]) == (None, _DIGEST)
+    assert envelope["diagnostics"] == []
+
+
 def test_it_requires_a_valid_solution(tmp_path):
     root = _solution(tmp_path)
     _write(root, "broken.yaml", "deployment", "broken", "  workspace: ghost\n  environments:\n    - prd\n")
@@ -192,3 +249,120 @@ def test_the_policy_judges_the_deployment_under_pin(tmp_path):
     root = _solution(tmp_path, with_tag=False, policy=_DENY)
     assert _invoke(root, "other").exit_code == EXIT_VALIDATION
     assert _invoke(root, "other", "--pin", "prd").exit_code == EXIT_SUCCESS
+
+
+# `integration` (docs/work/artifact-gap-analysis.md, design 6 step 1): which credentials a copy needs, by name.
+
+
+def _rows(result) -> dict:
+    return {row["name"]: row for row in _data(result)["images"]}
+
+
+def test_json_names_an_artifacts_integration(tmp_path):
+    rows = _rows(_invoke(_solution(tmp_path, integration=True), "app", "-o", "json"))
+    assert rows["catalog"]["integration"] == "feed"
+    assert rows["redis"]["integration"] is None
+
+
+def test_json_reports_no_integration_when_the_artifact_names_none(tmp_path):
+    assert _rows(_invoke(_solution(tmp_path), "app", "-o", "json"))["catalog"]["integration"] is None
+
+
+def test_the_table_shows_an_integration_column_only_when_an_image_has_one(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    with_integration = _invoke(_solution(tmp_path / "a", integration=True), "app")
+    without = _invoke(_solution(tmp_path / "b"), "app")
+
+    assert with_integration.exit_code == EXIT_SUCCESS, with_integration.output
+    lines = with_integration.output.splitlines()
+    header = next(line for line in lines if "NAME" in line and "ORIGIN" in line)
+    assert header.split() == ["NAME", "ORIGIN", "IMAGE", "TAG", "SOURCE", "INTEGRATION", "USED", "BY"]
+    column = header.index("INTEGRATION")
+
+    def _cell(name: str) -> str:
+        return next(line for line in lines if line.strip().startswith(name))[column:].split()[0]
+
+    assert (_cell("catalog"), _cell("redis")) == ("feed", "-")
+    assert without.exit_code == EXIT_SUCCESS, without.output
+    assert "INTEGRATION" not in without.output
+
+
+def test_the_integration_never_carries_a_credential(tmp_path):
+    """Only the name: nothing is resolved, so not even the key the integration reads its token from appears."""
+    result = _invoke(_solution(tmp_path, integration=True), "app", "-o", "json")
+    assert "FEED_API_KEY" not in result.output
+
+
+# Images strata does not deliver or does not know (docs/work/helm-image-delivery.md, option B).
+
+
+def _with_helm(root: Path, *, services: str = "") -> None:
+    """Add Helm module `chart` (chart immich 0.13.1) to namespace `apps`."""
+    _write(
+        root,
+        "chart.yaml",
+        "module",
+        "chart",
+        "  source:\n    chart_repository: https://charts.example.com\n    chart_name: immich\n"
+        "    chart_version: 0.13.1\n  type: helm\n" + (f"  services:\n{services}" if services else ""),
+    )
+    namespace = root / "namespace.yaml"
+    namespace.write_text(
+        namespace.read_text(encoding="utf-8") + "    - name: chart\n      module: chart\n", encoding="utf-8"
+    )
+
+
+def test_json_says_which_images_strata_delivers(tmp_path):
+    root = _solution(tmp_path)
+    _with_helm(root, services="    - name: server\n      image: ghcr.io/immich/server:v1.2.0\n")
+    rows = {row["name"]: row for row in _data(_invoke(root, "app", "-o", "json"))["images"]}
+    assert (rows["redis"]["delivered"], rows["redis"]["delivery"]) == (True, None)
+    assert (rows["server"]["delivered"], rows["server"]["delivery"]) == (False, "helm module: the chart decides")
+
+
+def test_the_table_shows_a_delivered_column_only_when_an_image_is_not_delivered(tmp_path):
+    root = _solution(tmp_path)
+    assert "DELIVERED" not in _invoke(root, "app").output
+    _with_helm(root, services="    - name: server\n      image: ghcr.io/immich/server:v1.2.0\n")
+    result = _invoke(root, "app")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "DELIVERED" in result.output
+    server = next(line for line in result.output.splitlines() if line.strip().startswith("server"))
+    assert "no (helm module: the chart decides)" in server
+
+
+def test_a_helm_module_that_declares_no_image_is_listed_and_noted_without_a_policy(tmp_path):
+    root = _solution(tmp_path)
+    _with_helm(root)
+    result = _invoke(root, "app", "-o", "json")
+    envelope = json.loads(result.output)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert envelope["data"]["unknown_image_modules"] == [
+        {"module": "chart", "namespace": "apps", "chart": "immich", "chart_version": "0.13.1"}
+    ]
+    assert [(d["severity"], d["code"]) for d in envelope["diagnostics"]] == [("info", "image_unknown_to_strata")]
+
+    console = _invoke(root, "app").output
+    assert "Known only to Helm" in console
+    assert "chart  namespace apps  chart immich 0.13.1" in console
+
+
+def test_a_policy_with_on_unknown_image_block_fails_on_an_unknown_helm_module(tmp_path):
+    root = _solution(tmp_path, policy="  image_tag_policy:\n    on_unknown_image: block\n")
+    _with_helm(root)
+    result = _invoke(root, "app", "-o", "json")
+    assert result.exit_code == EXIT_VALIDATION, result.output
+    assert [(d["severity"], d["code"]) for d in json.loads(result.output)["diagnostics"]] == [
+        ("error", "image_unknown_to_strata")
+    ]
+
+
+def test_a_policy_warns_on_an_unknown_helm_module_by_default(tmp_path):
+    root = _solution(tmp_path, policy=_DENY)
+    _with_helm(root)
+    result = _invoke(root, "app", "-o", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert [(d["severity"], d["code"]) for d in json.loads(result.output)["diagnostics"]] == [
+        ("warning", "image_unknown_to_strata")
+    ]

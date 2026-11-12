@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `audit_run.finalize_and_distribute_deploy_audit()` (docs/design/
+"""Tests for `audit_run.finalize_and_distribute_deploy_audit()` (docs/work/
 audit-trail.md's "Write once locally, then distribute").
 
 Phase 5 of that doc's Layer 2 Implementation Plan — the final phase. Real
@@ -535,7 +535,7 @@ def test_manifest_artifacts_bom_absent_when_workspace_reaches_nothing(tmp_path: 
 
 
 # ---------------------------------------------------------------------------
-# change_reference (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
+# change_reference (docs/work/audit-trail.md's ChangeReferenceModel CLI wiring)
 # ---------------------------------------------------------------------------
 
 
@@ -1182,3 +1182,25 @@ def test_a_path_remote_that_is_not_a_git_checkout_records_no_commit(tmp_path: Pa
     [warning] = _commit_warnings(diagnostics)
     assert "infra-remote" in warning.message
     assert "not a git checkout" in warning.message
+
+
+def test_manifest_marks_an_image_strata_does_not_deliver(tmp_path: Path, _terraform_stub):
+    """A Helm module's declared service image is recorded with `delivered: false`; a Compose image carries no
+    such key, so a manifest without Helm images is unchanged (docs/work/helm-image-delivery.md, the SBOM side)."""
+    root = _solution_with_workload(tmp_path)
+    module = root / "module-authentik.yaml"
+    module.write_text(
+        module.read_text().replace(
+            "    - name: server\n", "    - name: server\n      image: goauthentik/server:2024.1\n"
+        )
+    )
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    import json as _json
+
+    manifest = _json.loads(next(layout.audit_dir(root).rglob("_manifest.json")).read_text())
+    images = manifest["artifacts"]["images"]
+    assert {"name": "server", "image": "goauthentik/server:2024.1", "delivered": False} in images
+    assert {"name": "redis", "image": "redis:7"} in images

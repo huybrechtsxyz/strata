@@ -45,7 +45,7 @@ def test_get_constructs_a_new_instance_every_call():
 
 
 def test_list_collectors_returns_every_built_in():
-    assert set(registry.list_collectors()) == {"image", "compose", "helm", "terraform"}
+    assert set(registry.list_collectors()) == {"image", "compose", "helm", "chart-image", "terraform"}
 
 
 def test_unknown_name_raises():

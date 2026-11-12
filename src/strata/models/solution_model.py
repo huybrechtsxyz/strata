@@ -209,7 +209,7 @@ class SolutionRemoteModel(PlatformBaseModel):
         "versions and the real pin is SourceModel.chart_version instead. Whether an "
         "OCI remote is chart-serving needs the loaded solution's SourceModel usages, "
         "so that half of the rule is a Phase 2 check "
-        "(docs/design/solution-loading-and-phase2-validation.md, gap #3) — this field "
+        "(docs/work/solution-loading-and-phase2-validation.md, gap #3) — this field "
         "is merely optional here, and schema-valid to omit even for a non-chart OCI "
         "remote until Phase 2 sees a real consumer.",
     )

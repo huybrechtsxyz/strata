@@ -6,7 +6,11 @@ import pytest
 from strata.models.configuration_model import ConfigurationSecurityModel
 from strata.models.dns_model import DnsModel
 from strata.models.network_model import NetworkModel
-from strata.services.environment_service import EnvironmentService, unresolved_deployment_tokens
+from strata.services.environment_service import (
+    EnvironmentService,
+    unresolved_artifact_tokens,
+    unresolved_deployment_tokens,
+)
 
 
 def _environment() -> EnvironmentService:
@@ -83,7 +87,7 @@ def test_token_kind_is_checked_against_the_right_store():
 
 
 def test_output_token_is_rejected_cleanly_not_a_crash():
-    """A '${output:}' token has no declared-keys set (gap #11, docs/design/gap_fit_v1.md) —
+    """A '${output:}' token has no declared-keys set (gap #11, docs/work/gap_fit_v1.md) —
     must produce a clean diagnostic, not an unhandled KeyError."""
     result = _environment().validate_document_tokens(_dns("${output:provision-hearth.public_ip}"))
     assert not result.ok
@@ -218,7 +222,7 @@ def test_meta_annotations_labels_tags_are_not_scanned_for_value_tokens():
 # ---------------------------------------------------------------------------
 # Generalized Phase 1 (malformed-syntax) check in configuration/custom
 # passthrough fields — docs/design/value-token-resolution.md's "Full
-# Solution" section, docs/design/gap_fit_v1.md gap #8. `DnsZoneModel.configuration`
+# Solution" section, docs/work/gap_fit_v1.md gap #8. `DnsZoneModel.configuration`
 # has no field_validator of its own (dict[str, Any], real .v2-haven shape),
 # unlike DnsRecordModel.value.
 # ---------------------------------------------------------------------------
@@ -386,7 +390,7 @@ def test_merge_properties_multiple_environments_merge_in_order():
 
 
 # ---------------------------------------------------------------------------
-# validate_artifact_references() (docs/design/artifact-references.md's
+# validate_artifact_references() (docs/archive/artifact-references.md's
 # full-review finding — store: artifact's value had no cross-reference check)
 # ---------------------------------------------------------------------------
 
@@ -461,6 +465,7 @@ def _environment_with_variable_value(value: object, *, section: str = "variables
         ("features", "${feature:ENABLE_X}", "${feature:ENABLE_X}"),
         ("variables", "${output:step.key}", "${output:step.key}"),
         ("variables", "${deployment:name}", "${deployment:name}"),
+        ("variables", "${artifact:api.image_tag}", "${artifact:api.image_tag}"),
         ("variables", "prefix-${var:REGION}-suffix", "${var:REGION}"),
     ],
 )
@@ -492,7 +497,7 @@ def test_a_literal_store_value_is_allowed(value):
 
 
 # ---------------------------------------------------------------------------
-# validate_allowed_stores() (docs/design/gap_fit_v1.md gap #7 — Configuration's
+# validate_allowed_stores() (docs/work/gap_fit_v1.md gap #7 — Configuration's
 # spec.security allow-lists, real usage: config-repo's
 # config/stores.yaml)
 # ---------------------------------------------------------------------------
@@ -590,6 +595,58 @@ def test_other_token_kinds_are_not_this_functions_business():
 def test_every_deployment_token_in_one_document_is_checked():
     result = unresolved_deployment_tokens(_dns("${deployment:tenant}/${deployment:bogus}"), "prd-shared", None)
     assert sorted(d.code for d in result.errors) == ["unavailable_deployment_token", "unknown_deployment_token"]
+
+
+# ---------------------------------------------------------------------------
+# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1): skipped by the
+# declared-keys check, judged by `unresolved_artifact_tokens()` against the deployment's entries
+# ---------------------------------------------------------------------------
+
+_ARTIFACTS = {
+    "artifact:api.image_name": "example/api",
+    "artifact:api.image_tag": "1.4.2",
+    "artifact:api.image_ref": "example/api:1.4.2",
+    "artifact:untagged.image_name": "example/untagged",
+    "artifact:untagged.image_ref": "example/untagged",
+}
+
+
+def test_artifact_token_is_not_judged_by_the_declared_keys_check():
+    result = _environment().validate_document_tokens(_dns("${artifact:api.image_tag}"))
+    assert result.ok, result.messages()
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "${artifact:api.image_tag}",
+        "${artifact:api.image_name}:${artifact:api.image_tag}",
+        "${artifact:untagged.image_ref}",
+    ],
+)
+def test_an_artifact_token_the_deployment_can_supply_passes(token):
+    assert unresolved_artifact_tokens(_dns(token), _ARTIFACTS, "prd-contoso").ok
+
+
+def test_the_tag_of_an_untagged_artifact_is_unavailable_and_names_the_deployment():
+    result = unresolved_artifact_tokens(_dns("${artifact:untagged.image_tag}"), _ARTIFACTS, "prd-contoso")
+    assert [d.code for d in result.errors] == ["unavailable_artifact_token"]
+    message = result.messages()[0]
+    assert "untagged" in message
+    assert "prd-contoso" in message
+    assert "pins.artifacts.untagged" in message
+    assert "records" in (result.errors[0].location or "")
+
+
+@pytest.mark.parametrize("token", ["${artifact:ghost.image_tag}", "${artifact:api.digest}", "${artifact:api}"])
+def test_an_unknown_artifact_or_field_is_rejected(token):
+    result = unresolved_artifact_tokens(_dns(token), _ARTIFACTS, "prd-contoso")
+    assert [d.code for d in result.errors] == ["unknown_artifact_token"]
+
+
+def test_other_kinds_and_escapes_are_not_the_artifact_checks_business():
+    assert unresolved_artifact_tokens(_dns("${var:GHOST_IP}"), _ARTIFACTS, "prd-contoso").ok
+    assert unresolved_artifact_tokens(_dns("$" + "${artifact:ghost.image_tag}"), _ARTIFACTS, "prd-contoso").ok
 
 
 # ---------------------------------------------------------------------------

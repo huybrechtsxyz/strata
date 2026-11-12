@@ -86,7 +86,7 @@ class CheckovPolicyModel(PlatformBaseModel):
     selects which provisioners or namespaces are scanned.
 
     Design notes:
-    Per-provisioner Checkov policy configuration (docs/work/
+    Per-provisioner Checkov policy configuration (docs/archive/
     checkov-integration.md's "v2 design decision" section).
 
     Field names/defaults/casing (`framework`, `severity_gate`, `scope`,

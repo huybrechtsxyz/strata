@@ -1,7 +1,8 @@
 # How To: Use the SBOM (CycloneDX)
 
 Every `strata build run` writes a CycloneDX 1.6 Software Bill of Materials, `sbom.json`, at the
-root of the build path (next to `resolved.yaml`). There is nothing to configure. This guide covers
+root of the build path (next to `resolved.yaml`). It needs no configuration; it also lists the images Helm
+charts deploy, unless the workspace sets `sbom.render_charts: false` (below). This guide covers
 what it contains, how strata and other tools use it, and how to add a collector. The design is in
 [docs/design/sbom-generation.md](../design/sbom-generation.md).
 
@@ -21,6 +22,7 @@ what it contains, how strata and other tools use it, and how to add a collector.
 | `image`     | Every resolved module's `spec.services[].image`, and artifact images                                                                   |
 | `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                                 |
 | `helm`      | Chart modules (`chart_name`/`chart_version`, the repository or the remote's URL), every rendered `Chart.yaml` and its `dependencies[]` |
+| `chart-image` | The images each chart deploys, from `helm template`; off with `sbom.render_charts: false`                                        |
 | `terraform` | `required_providers {}` and `module "x" {}` blocks in every rendered `*.tf`, and each root module's `.terraform.lock.hcl`              |
 
 Versions are the deployed ones: `kind: version` pins and `--pin` are applied first. The SBOM is
@@ -39,6 +41,39 @@ version that a [`kind: version`](../config/version.md) pin chose also has
 An image you reference by digest (`image: ghcr.io/acme/api:1.4.2@sha256:...`) also lists that
 digest under `hashes` (`{"alg": "SHA-256", "content": "..."}`). An image referenced by tag has
 none: strata does not ask the registry.
+
+### Helm images
+
+Strata writes no image into a Helm chart's values, so the chart decides which images run.
+
+- **Declared only.** A Helm module's declared service image is listed with `strata:image-delivered: false` and
+  `strata:image-delivery: helm module: the chart decides`. It is still scanned. The image gate names it
+  `... (declared only)`, and the audit manifest records it with `delivered: false`.
+- **Rendered charts.** To list what a chart really deploys, `build run` renders each chart with `helm template`,
+  offline, with strata's values: a local chart from its build folder, a registry chart from the archive the build
+  pinned in `.strata/helm/`. It needs `helm` on the build agent, which `build run` already uses to pin registry
+  charts.
+  - Every container image, sidecars and init containers included, is listed with
+    `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<module reference>/<container>` and
+    `strata:image`, the image reference exactly as the chart writes it.
+  - A declared image the chart also renders loses its declared-only marker. One the rendered chart does not
+    run keeps it, with the reason `helm module: not in the rendered chart`, and gets an `info` line
+    (`sbom_declared_image_not_rendered`). Either the declaration is out of date, or the chart picks the image
+    by a value strata does not set.
+  - A chart that cannot be rendered gets one `info` line (`sbom_chart_not_rendered`) and is skipped. That
+    happens when `helm` is not installed, when a dependency is not vendored under `charts/`, or when a registry
+    chart was not pinned (`--offline` with an empty cache) or its cached archive no longer has the pinned digest.
+  - An image whose reference holds a token resolved only at deploy is left out (`sbom_chart_image_unresolved`).
+- **The policies check them.** `cve_policy`, `image_gate_policy` and `image_tag_policy` check the rendered images
+  too, so a `deny` gate can fail on a sidecar nobody scanned before. Run `strata build run` and
+  `strata policy check`, and fix or `allow` what they report.
+- **Turning it off.** To list only the images modules declare, set this on the workspace:
+
+  ```yaml
+  spec:
+    sbom:
+      render_charts: false
+  ```
 
 ## Example
 

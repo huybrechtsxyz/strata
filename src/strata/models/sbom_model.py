@@ -54,7 +54,7 @@ class SbomReferenceModel(PlatformBaseModel):
 
     Written by `sbom_controller.write_sbom()` after successfully producing
     `sbom.json`. Not yet embedded anywhere (no v2 deployment manifest exists
-    — docs/design/gap_fit_v1.md gap #7); kept so that feature can read the
+    — docs/work/gap_fit_v1.md gap #7); kept so that feature can read the
     hash straight off the already-written file once it is designed.
     """
 
@@ -105,7 +105,7 @@ class CveAllowedEntryModel(PlatformBaseModel):
 
     Design notes:
     A single entry in the CVE allowlist
-    (`ConfigurationSpecModel.cve_allowed`, docs/work/
+    (`ConfigurationSpecModel.cve_allowed`, docs/archive/
     cve-scanner-integration.md Phase 3).
 
     Ported field-for-field from v1's real `.strata/cve-allowed.yaml` shape
@@ -206,3 +206,23 @@ class CveMaxSeverityPolicyModel(PlatformBaseModel):
                 "severity_threshold must be max_severity or lower (more inclusive)."
             )
         return self
+
+
+class WorkspaceSbomModel(PlatformBaseModel):
+    """What `build run` puts in `sbom.json` beyond what it always records.
+
+    Design notes:
+    `WorkspaceSpecModel.sbom` (docs/work/helm-image-delivery.md, the SBOM side). Rendered images reach
+    `cve_policy`, `image_gate_policy` and `image_tag_policy`, so the gates check what runs, sidecars and init
+    containers included. On by default (plan item 10b); `render_charts: false` keeps the declared images only.
+    """
+
+    render_charts: bool = Field(
+        default=True,
+        description="Render every Helm chart with `helm template` at build (offline, no secret), a local chart or "
+        "a registry chart the build pinned, and list the images it deploys, sidecars and init containers "
+        "included, so the CVE and image gates and `image_tag_policy` check what runs instead of only what a "
+        "module declares. A chart that cannot be rendered (no `helm`, a dependency not vendored, a registry chart "
+        "not pinned) gets an `info` line and is skipped. Default `true`; set `false` to list only the images "
+        "modules declare.",
+    )

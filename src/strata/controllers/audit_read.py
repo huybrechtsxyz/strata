@@ -114,7 +114,7 @@ def resolve_readable_sink(audit_config: AuditConfigModel | None) -> AuditGitSink
         raise UsageError(
             "No audit git sink is configured for this solution. Reading audit records ('strata audit "
             "status'/'strata audit changes') requires a configured 'git' audit sink, and none exists — "
-            "add one under spec.audit.sinks in your Configuration document. See docs/design/audit-trail.md "
+            "add one under spec.audit.sinks in your Configuration document. See docs/work/audit-trail.md "
             "and docs/design/audit-commands.md."
         )
     if len(git_sinks) > 1:

@@ -4,10 +4,10 @@
   1-4 are built, every Open Question below is resolved, and the current,
   living reference for this feature now lives in
   [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md) (the
-  settled decisions) and [key-value-store-integration.md](../work/key-value-store-integration.md)
+  settled decisions) and `key-value-store-integration.md` (work doc)
   (the backend designs). Step 5 (lock audit, not started) and the
   remaining backends (file/Consul/etcd/S3, not built) are tracked
-  separately in [output-store-lock-audit.md](../work/output-store-lock-audit.md)
+  separately in `output-store-lock-audit.md` (work doc)
   and that same backend doc, so nothing pending is lost by archiving
   this one. Kept here as the full investigation record (motivating
   example, rejected alternatives, every "Built" confirmation) rather
@@ -20,7 +20,7 @@
   declared both fields with disagreeing types; fixed to match the
   resolver's precedence exactly. (2) `output_store`/`output_store_
   integration` resolving to a backend lacking real compare-and-swap
-  (e.g. `azure-keyvault` — see [key-value-store-integration.md](../work/key-value-store-integration.md)'s
+  (e.g. `azure-keyvault` — see the work doc `key-value-store-integration.md`'s
   new `SUPPORTS_CAS` note) is now rejected at validate time instead of
   silently never persisting anything, downgraded to an easy-to-miss
   warning on every single deploy.
@@ -191,7 +191,7 @@ revised once the actual first-three consumers were known, not because
 the earlier reasoning (reuse infra a workspace already has configured)
 was wrong; Key Vault/App Config/Blob simply satisfy it more directly
 than file+Consul did. File, Consul, etcd, and S3 are fully designed in
-[key-value-store-integration.md](../work/key-value-store-integration.md) too,
+`key-value-store-integration.md` (work doc) too,
 but are not next in line to build. CI-native artifact/cache
 mechanisms (GitHub Actions `actions/cache`/`upload-artifact`+
 `download-artifact`, Azure Pipelines `PublishPipelineArtifact`/
@@ -208,7 +208,7 @@ needs CI-native support specifically.
 The `KeyValueStoreIntegration` capability (raw get/put-with-CAS) plus its
 first two backends (file, Azure App Configuration) are designed in full,
 ready to implement, in
-[key-value-store-integration.md](../work/key-value-store-integration.md) — kept
+`key-value-store-integration.md` (work doc) — kept
 out of this doc's own body since it's a genuinely standalone, reusable
 piece. `DeploymentOutputStore` (the business-logic layer built on top:
 serialisation, the sensitive-key filter, staleness, merge-on-write) stays
@@ -233,7 +233,7 @@ designed key/value capability)
 Identified by walking through "configure the backend, find the steps
 that need it, gather+store on run" and checking what's actually
 load-bearing between those three — steps 1-4 are built (below); step 5
-(lock audit) split out to [output-store-lock-audit.md](../work/output-store-lock-audit.md),
+(lock audit) split out to `output-store-lock-audit.md` (work doc),
 not started:
 
 1. **Configuration — settled, mirrors `ProvisionerModel.tool`/`.integration`
@@ -394,7 +394,7 @@ not started:
    runtime state, `layout.py`'s `STRATA_DIR`) — neither of which was
    designed for a key written into an arbitrary pluggable external
    backend: `/` is the one separator all six backends (Backends 1-6,
-   [key-value-store-integration.md](../work/key-value-store-integration.md))
+   `key-value-store-integration.md` (work doc))
    treat as an ordinary, unremarkable character in a key, never special
    to any of their write APIs, and it matches the on-disk precedent's
    own shape most closely. `<deployment-name>` is embedded as a bare
@@ -482,7 +482,7 @@ not started:
    "ran in an earlier invocation" for real). Full suite green, mypy/
    ruff/lint-imports clean.
 5. **Lock audit — split out to its own doc:**
-   [output-store-lock-audit.md](../work/output-store-lock-audit.md). Not started,
+   `output-store-lock-audit.md` (work doc). Not started,
    low priority — for the primary IaC use case, Terraform's own backend
    locking already does the real locking; this is purely an audit-trail
    nice-to-have for `DeploymentOutputStore.record()`'s own (already
@@ -509,7 +509,7 @@ not started:
   backend at all" (silent degradation). Now instead rejected outright at
   validate time for this feature specifically — `SUPPORTS_CAS` (code
   review, 2026-10-12) will be `False` on the file backend once built (see
-  [key-value-store-integration.md](../work/key-value-store-integration.md)'s own
+  the work doc `key-value-store-integration.md`'s own
   Backend 1 section), so `output_store: file` fails loud and early
   instead of silently never protecting an update the way Key Vault
   originally did. The file backend itself remains otherwise useful
@@ -539,7 +539,7 @@ not started:
 
 ## Related
 
-- [key-value-store-integration.md](../work/key-value-store-integration.md) —
+- `key-value-store-integration.md` (work doc) —
   the `KeyValueStoreIntegration` capability + file/Azure App Configuration
   backends this doc's `DeploymentOutputStore` layer is built on, designed
   in full and ready to implement as its own first step.
@@ -554,7 +554,7 @@ not started:
   rejected for this (inert HCL-bound data, not a live Python instance).
 - `src/strata/models/audit_manifest_model.py`'s `ManifestLockReferenceModel`
   — the existing, currently-unpopulated lock-audit shape
-  [output-store-lock-audit.md](../work/output-store-lock-audit.md) (step 5,
+  `output-store-lock-audit.md` (work doc) (step 5,
   split out) plans to reuse for the output store's own CAS-retry write
   attempts.
 - [deploy-time-output-sensitivity-gaps.md](deploy-time-output-sensitivity-gaps.md) —

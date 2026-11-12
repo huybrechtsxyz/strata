@@ -19,7 +19,7 @@ Four small, independent helpers plus the loop itself:
 - `find_provisioner()` (lives in `integration_resolution.py`) — `WorkspaceSpecModel.validate_execution()` already
   guarantees `step.provisioner` names a real entry in `spec.provisioners`;
   this is a lookup, not a check.
-- `materialise_provisioner_sources()` (ADR-0029 — docs/work/
+- `materialise_provisioner_sources()` (ADR-0029 — docs/design/
   provisioner-source-dependencies.md Phase 4) — recursively syncs a
   provisioner's own `depends_on` chain before the step loop materialises
   the step's own provisioner, so a provisioner named only in another
@@ -117,6 +117,7 @@ from strata.utils.dependency_order import topological_order
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import StrataError, SystemError, UsageError
+from strata.utils.layout import helm_cache_dir
 from strata.utils.terraform_outputs import read_declared_outputs
 
 
@@ -644,14 +645,8 @@ def build_run(
     if not preflight.ok:
         return diagnostics
 
-    # Image tag policy (docs/design/image-tag-policy.md): offline, so it also runs under `dry_run`, and before
-    # anything is cleaned or rendered so a `deny` breach leaves nothing behind. A no-op when the field is unset.
+    # The images `image_tag_policy` judges at the end of the build; the graph below carries them too.
     images = effective_images(context, deployment, pinned_by_flag=pin is not None)
-    image_tag_diagnostics = check_image_tag_policy(context, deployment, workspace, images=images)
-    diagnostics.extend(image_tag_diagnostics)
-    if not image_tag_diagnostics.ok:
-        return diagnostics
-    image_tag_result = build_image_tag_policy_result(workspace, image_tag_diagnostics)
     resolved = ValueResolution(deployment=deployment_name)
     if resolve:
         variables, secrets, features = merge_environment_models(environments)
@@ -927,9 +922,25 @@ def build_run(
     # rendered, matching v1's own unconditional "sbom runs last" ordering.
     # Skipped in a dry run: nothing has actually been rendered to scan yet.
     if not dry_run:
-        sbom_diagnostics = write_sbom(build_path, graph, index, remotes, commit=built_commit_sha(context.root))
+        sbom_diagnostics = write_sbom(
+            build_path,
+            graph,
+            index,
+            remotes,
+            commit=built_commit_sha(context.root),
+            helm_cache=helm_cache_dir(context.root),
+        )
         diagnostics.extend(sbom_diagnostics)
         _step(f"wrote {build_path / 'sbom.json'}")
+
+        # Image tag policy (docs/design/image-tag-policy.md, docs/work/helm-image-delivery.md plan item 9e): after
+        # the SBOM, so it also judges the images the rendered charts run (`sbom.render_charts`). A `deny` fails the
+        # build here, with the output on disk, as the gates below do. A no-op when the field is unset.
+        image_tag_diagnostics = check_image_tag_policy(
+            context, deployment, workspace, images=images, build_path=build_path
+        )
+        diagnostics.extend(image_tag_diagnostics)
+        image_tag_result = build_image_tag_policy_result(workspace, image_tag_diagnostics)
 
         # CVE policy gate (docs/archive/cve-scanner-integration.md) — runs
         # immediately after SBOM generation, the only point `build_run()`
@@ -988,5 +999,7 @@ def build_run(
             write_policy_results(build_path, policy_results)
     else:
         _step(f"would write {build_path / 'sbom.json'}")
+        # Offline, so a dry run still judges the declared images; nothing is rendered, so there are no others.
+        diagnostics.extend(check_image_tag_policy(context, deployment, workspace, images=images))
 
     return diagnostics

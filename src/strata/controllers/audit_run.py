@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Finalize and distribute a deploy run's audit trail — the end-of-run
-sequencing (docs/design/audit-trail.md's "Write once locally, then
+sequencing (docs/work/audit-trail.md's "Write once locally, then
 distribute").
 
 Phase 5 of that doc's Layer 2 Implementation Plan — the final phase,
@@ -542,7 +542,7 @@ def _dispatch_integration_sink(
 def _record_sink_failure(sink: AuditSinkModel, message: str, code: str, diagnostics: Diagnostics) -> None:
     """One place deciding warn-vs-fail, so both sink arms can never drift apart.
 
-    `required` is the whole decision (docs/design/audit-trail.md's "Dispatch
+    `required` is the whole decision (docs/work/audit-trail.md's "Dispatch
     failure — a `required` flag, not a binary silent-vs-fail choice").
     """
     if sink.required:
@@ -620,11 +620,18 @@ def _collect_artifacts_bom(
             modules.append(apply_version_pins(resolve_module(index, reference), version))
 
     images: list[ManifestImageModel] = []
+    rows = effective_images(context, deployment)
+    # Delivered when any use delivers it (docs/work/helm-image-delivery.md, the SBOM side); only `false` is written.
+    delivered = {row.image_ref for row in rows if row.delivered}
     seen_images: set[str] = set()
-    for row in effective_images(context, deployment):
+    for row in rows:
         if row.image_ref not in seen_images:
             seen_images.add(row.image_ref)
-            images.append(ManifestImageModel(name=row.name, image=row.image_ref))
+            images.append(
+                ManifestImageModel(
+                    name=row.name, image=row.image_ref, delivered=None if row.image_ref in delivered else False
+                )
+            )
     charts: list[ManifestChartModel] = []
     for module in modules:
         if module.spec.source.chart_name is not None:

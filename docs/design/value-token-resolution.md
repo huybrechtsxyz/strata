@@ -249,6 +249,27 @@ record and its decisions are in [deployment-tokens.md](deployment-tokens.md).
 - **A missing tenant is an error**, not an empty string, in line with the rule that an unknown reference never
   becomes an empty substitution.
 
+## The 7th kind: `${artifact:NAME.FIELD}` (2026-11-10)
+
+An artifact's `image_name`, `image_tag`, `image_ref`, or one part of a `tag@digest` value (`image_tag_name`,
+`image_digest`, added by design 4), with the deployment's version pin applied. It replaces a
+`store: artifact` variable declared only to forward one field. The decision is
+[ADR-0058](../decisions/0058-artifact-token-for-pinned-image-fields.md), the design is design 1 in
+`artifact-gap-analysis.md` (work doc); it copies `${deployment:}` point for point.
+
+- **Syntax.** `artifact` is in `VALUE_TOKEN_KINDS` and both regexes. The key is `NAME.FIELD`, split at its first `.`
+  (an artifact name has none); `FIELD` is one of `ARTIFACT_TOKEN_FIELDS`.
+- **Resolution.** The entries are stored as `artifact:NAME.FIELD` (`artifact_key()`), up to five per artifact, built by
+  `controllers/artifact_tokens.artifact_token_values()` with the same pin lookup `store: artifact` uses
+  (`effective_artifact_tag()`). `deploy_run()` builds them once per run, so each applied pin is logged once, and adds
+  them to the same `tokens` map as the deployment entries, never to `ValueResolution.values`. `image_tag` is left out
+  when the artifact has no tag and no pin, and `image_tag_name` or `image_digest` when the value has no such part, so
+  the token fails instead of substituting `""`.
+- **Validation.** `unresolved_value_tokens()` skips the kind. `unresolved_artifact_tokens()` judges it in the same
+  documents and for the same deployments as the deployment tokens: `unknown_artifact_token` for an unknown artifact
+  or field, `unavailable_artifact_token` for a tag that is missing for that deployment. The kind is rejected in an
+  environment store's own `value`.
+
 ## Decision: unify `docs/work/gap_fit_v1.md` gaps #8/#9/#10 into one deploy-time resolver, general-scope, per-integration delivery (2026-09-28)
 
 Triggered by reviewing the `.v2-haven` coverage-check migration (`docs/work/gap_fit_v1.md`
@@ -979,7 +1000,7 @@ real, working, live example in the repo's own coverage-check fixture.
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md) — token syntax decision, resolver design, rationale for rejecting `ValueSourceModel`/Jinja
 - [ADR-0005](../decisions/0005-dns-model-design-decisions.md), [ADR-0007](../decisions/0007-network-model-design-decisions.md), [ADR-0008](../decisions/0008-firewall-model-design-decisions.md), [ADR-0009](../decisions/0009-module-model-design-decisions.md) — per-kind adoption
 - [ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md) — Context, the `${step:}` token this doc doesn't cover yet
-- [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gaps #8, #9, #10 — the real-world evidence (`.v2-haven`) that triggered this section
+- `gap_fit_v1.md` (work doc) gaps #8, #9, #10 — the real-world evidence (`.v2-haven`) that triggered this section
 
 ## Deferred
 

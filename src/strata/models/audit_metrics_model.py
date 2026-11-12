@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The deployment metrics record — `_metrics.json` (docs/design/audit-trail.md's
+"""The deployment metrics record — `_metrics.json` (docs/work/audit-trail.md's
 "A third file — `_metrics.json`, adapting v1's never-built ADR-0064").
 
 Phase 2 of that doc's Layer 2 Implementation Plan. Same non-discoverable,

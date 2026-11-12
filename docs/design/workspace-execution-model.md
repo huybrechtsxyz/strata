@@ -165,7 +165,7 @@ step's own directly-declared fields.
   — the decision to split `targets` by kind and derive dns/firewall/
   network claiming from topology/resource references (this doc is its
   "how it works" counterpart).
-- [gap_fit_v1.md](../work/gap_fit_v1.md) gap #12 — the original
+- `gap_fit_v1.md` (work doc) gap #12 — the original
   dns/network/firewall claiming mechanism this doc's `claimed_names()`
   generalizes.
 - [asset-management.md](asset-management.md) — `step.assets` independently

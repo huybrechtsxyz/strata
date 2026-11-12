@@ -107,7 +107,7 @@ def apply_version_pins(module: ModuleModel, version: VersionModel | None) -> Mod
       exact case.
     - `images` only overrides a service's `.image` when that service
       already declares one — a service may instead use `.artifact`
-      (mutually exclusive with `.image`, docs/work/artifact-references.md,
+      (mutually exclusive with `.image`, docs/config/artifact.md,
       itself pinned via the `artifacts` category through a different
       path), and a pin changes a version, never which field is in use.
 
@@ -150,7 +150,7 @@ def resolve_artifact_services(
     module: ModuleModel, context: SolutionContext | None, deployment: DeploymentModel | None
 ) -> ModuleModel:
     """Resolve every `service.artifact` reference into `service.image`
-    (docs/work/artifact-references.md Path 1).
+    (docs/archive/artifact-references.md Path 1).
 
     Mirrors `apply_version_pins()`'s own overlay shape — resolve something
     external, overlay it onto a service via `model_copy()`, return a new
@@ -255,7 +255,7 @@ def build_workload_modules(
             `pins.charts`/`pins.images` reachable from each module before
             it's rendered. `None` is the default and the common case
             (a deployment with no `spec.version`).
-        context: The loaded `SolutionContext`, or `None` (docs/work/
+        context: The loaded `SolutionContext`, or `None` (docs/archive/
             artifact-references.md Path 1) — resolves any `service.artifact`
             reference reachable from each module before it's rendered.
             `None` is a graceful no-op, same as `deployment` below.
@@ -742,7 +742,7 @@ def _check_dependency_list(
 def resolve_namespace_modules(
     index: DocumentIndex, namespace: NamespaceModel, build_path: Path
 ) -> dict[str, list[ResolvedModule]]:
-    """`deploy_run()`'s counterpart to `build_workload_modules()` (docs/design/gap_fit_v1.md
+    """`deploy_run()`'s counterpart to `build_workload_modules()` (docs/work/gap_fit_v1.md
     gap #13) — resolves `namespace`'s modules, grouped by `module.spec.type`,
     without re-materialising any source.
 

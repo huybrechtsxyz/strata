@@ -4,18 +4,87 @@
 import pytest
 
 from strata.utils.sbom_utils import (
+    canonical_image_name,
+    compose_image_ref,
     exact_version,
     helm_chart_to_purl,
     image_digest_hash,
+    image_pin_problem,
+    image_ref_problem,
+    image_tag_problem,
     image_to_purl,
     is_floating_tag,
     is_local_module_source,
     parse_image_ref,
+    pull_registry,
+    registry_host,
+    split_image_tag,
     split_registry,
     terraform_module_to_purl,
     terraform_provider_address,
     terraform_provider_to_purl,
 )
+
+# ---------------------------------------------------------------------------
+# An artifact's image_tag: a tag, a digest or tag@digest (docs/work/artifact-gap-analysis.md, design 4)
+# ---------------------------------------------------------------------------
+
+_HEX = "9f86d081" * 8
+_DIGEST = f"sha256:{_HEX}"
+
+
+@pytest.mark.parametrize(
+    ("value", "parts", "ref"),
+    [
+        ("1.4.2", ("1.4.2", None), "example/api:1.4.2"),
+        (_DIGEST, (None, _DIGEST), f"example/api@{_DIGEST}"),
+        (f"1.4.2@{_DIGEST}", ("1.4.2", _DIGEST), f"example/api:1.4.2@{_DIGEST}"),
+        (None, (None, None), "example/api"),
+        ("", (None, None), "example/api"),
+    ],
+)
+def test_an_image_tag_splits_and_composes_in_three_shapes(value, parts, ref):
+    assert split_image_tag(value) == parts
+    assert compose_image_ref("example/api", value) == ref
+    if value:
+        name, tag, digest = parse_image_ref(ref)
+        assert (name, tag, digest) == ("example/api", *parts), "compose is the reverse of parse"
+
+
+def test_compose_image_ref_keeps_a_registry_port():
+    assert compose_image_ref("registry:5000/img", f"1.0@{_DIGEST}") == f"registry:5000/img:1.0@{_DIGEST}"
+
+
+@pytest.mark.parametrize(
+    "value", ["1.4.2", "v1.4.2-rc.1", "env_sbx_20260907.11", _DIGEST, f"1.4.2@{_DIGEST}", "sha512:" + "a" * 128]
+)
+def test_a_valid_image_tag_has_no_problem(value):
+    assert image_tag_problem(value) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "says"),
+    [
+        ("-1.0", "the tag '-1.0'"),
+        ("1.0+build", "the tag '1.0+build'"),
+        ("a" * 129, "at most 128 characters"),
+        ("sha256:abc123", "the digest 'sha256:abc123'"),
+        (f"sha256:{_HEX.upper()}", "lowercase hex"),
+        (f"1.4.2@{_HEX}", f"the digest '{_HEX}'"),
+        ("1.4.2@", "both sides of '@'"),
+        (f"@{_DIGEST}", "both sides of '@'"),
+    ],
+)
+def test_an_invalid_image_tag_says_what_is_wrong(value, says):
+    problem = image_tag_problem(value)
+    assert problem is not None and says in problem
+    assert "a tag (1.4.2), a digest (sha256:<hex>) or both (1.4.2@sha256:<hex>)" in problem
+
+
+def test_a_tag_with_a_digest_is_never_floating():
+    assert is_floating_tag(f"latest@{_DIGEST}") is False
+    assert is_floating_tag(_DIGEST) is False
+
 
 # ---------------------------------------------------------------------------
 # split_registry() (docs/design/security-gates.md D1)
@@ -32,6 +101,38 @@ def test_split_registry_recognises_registry_hosts():
 def test_split_registry_leaves_docker_hub_names_alone():
     assert split_registry("org/app") == (None, "org/app")
     assert split_registry("traefik") == (None, "traefik")
+
+
+@pytest.mark.parametrize(
+    ("image_name", "expected"),
+    [
+        ("ghcr.io/org/app", "ghcr.io"),
+        ("GHCR.io/org/app", "ghcr.io"),
+        ("registry:5000/img", "registry:5000"),
+        ("localhost/img", "localhost"),
+        ("org/app", "docker.io"),
+        ("traefik", "docker.io"),
+        ("index.docker.io/library/redis", "docker.io"),
+    ],
+)
+def test_pull_registry_names_where_the_runtime_pulls_from(image_name, expected):
+    assert pull_registry(image_name) == expected
+
+
+@pytest.mark.parametrize(
+    ("registry", "expected"),
+    [
+        ("registry.example.com", "registry.example.com"),
+        ("https://Registry.Example.com/", "registry.example.com"),
+        ("http://acr.example.io/team", "acr.example.io"),
+        ("registry:5000", "registry:5000"),
+        ("index.docker.io", "docker.io"),
+        ("", None),
+        ("https://", None),
+    ],
+)
+def test_registry_host_normalises_the_free_text_setting(registry, expected):
+    assert registry_host(registry) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -258,3 +359,87 @@ def test_terraform_provider_purl_leaves_out_the_default_registry_and_qualifies_a
         "pkg:terraform/hashicorp/null@3.2.1?repository_url=registry.opentofu.org"
     )
     assert terraform_provider_to_purl("hashicorp/azurerm") == "pkg:terraform/hashicorp/azurerm"
+
+
+# ---------------------------------------------------------------------------
+# Image references and image pins
+# ---------------------------------------------------------------------------
+
+_REF_DIGEST = "sha256:" + "ab" * 32
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "nginx",
+        "nginx:1.27",
+        "library/nginx:1.27-alpine",
+        "ghcr.io/org/my-app:v1.2.3",
+        "registry:5000/team/app__x:1",
+        "localhost/app:1",
+        f"nginx@{_REF_DIGEST}",
+        f"nginx:1.27@{_REF_DIGEST}",
+    ],
+)
+def test_image_ref_problem_accepts_a_docker_reference(value):
+    assert image_ref_problem(value) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [
+        ("", "it has no image name"),
+        (":1.27", "it has no image name"),
+        ("Nginx:1.27", "the name 'Nginx'"),
+        ("org//app:1", "the name 'org//app'"),
+        ("app-:1", "the name 'app-'"),
+        ("nginx:", "nothing follows ':'"),
+        ("nginx@", "nothing follows '@'"),
+        ("nginx:.1", "the tag '.1'"),
+        ("nginx@sha256:XYZ", "the digest 'sha256:XYZ'"),
+        ("-bad.io:x/app:1", "the registry '-bad.io:x'"),
+    ],
+)
+def test_image_ref_problem_names_what_is_wrong(value, reason):
+    problem = image_ref_problem(value)
+    assert problem is not None
+    assert problem.startswith(
+        f"'{value}' is not an image reference (NAME:TAG, NAME@sha256:<hex> or NAME:TAG@sha256:<hex>)"
+    )
+    assert reason in problem
+
+
+def test_image_pin_problem_needs_a_tag_or_a_digest():
+    assert image_pin_problem("nginx:1.27") is None
+    assert image_pin_problem(f"nginx@{_REF_DIGEST}") is None
+    assert "no tag or digest" in (image_pin_problem("nginx") or "")
+    assert "may hold only lowercase" in (image_pin_problem("Nginx") or "")
+
+
+@pytest.mark.parametrize(
+    ("value", "hint", "fix"),
+    [
+        ("16-alpine", "docker.io/library/postgres", "for example 'docker.io/library/postgres:16-alpine'"),
+        ("postgres", "docker.io/library/postgres", "Add the tag, for example 'docker.io/library/postgres:<tag>'"),
+        ("16-alpine", None, "NAME:TAG, for example 'postgres:16-alpine'"),
+    ],
+)
+def test_image_pin_problem_suggests_a_fix_from_the_service_image(value, hint, fix):
+    assert fix in (image_pin_problem(value, name_hint=hint) or "")
+
+
+@pytest.mark.parametrize(
+    ("name", "canonical"),
+    [
+        ("postgres", "docker.io/library/postgres"),
+        ("library/postgres", "docker.io/library/postgres"),
+        ("docker.io/library/postgres", "docker.io/library/postgres"),
+        ("index.docker.io/bitnami/redis", "docker.io/bitnami/redis"),
+        ("bitnami/redis", "docker.io/bitnami/redis"),
+        ("ghcr.io/org/app", "ghcr.io/org/app"),
+        ("GHCR.io/org/app", "ghcr.io/org/app"),
+        ("registry:5000/app", "registry:5000/app"),
+    ],
+)
+def test_canonical_image_name_is_the_name_a_runtime_pulls(name, canonical):
+    assert canonical_image_name(name) == canonical

@@ -21,7 +21,8 @@ is the directory to check.
 
 1. **Created** when a feature/decision needs ongoing design thought, a phased
    build-out, or has open questions not yet resolved — often right after the
-   ADR that motivated it (`Related:` link both ways).
+   ADR that motivated it (the work doc links the ADR; the ADR names the work
+   doc without a link, see below).
 2. **Updated in place** as phases complete, questions resolve, or the design
    changes — a `## Changelog` section is expected and encouraged here (unlike
    in `docs/design/`, where it isn't).
@@ -41,7 +42,11 @@ is the directory to check.
 1. Create `docs/work/topic-name.md` (no numbering — matches `docs/design/`'s
    naming convention, since the file may move there later without a rename).
 2. Use the template below.
-3. Link it from any ADR(s) it tracks follow-on work for (`Related:` line).
+3. Name it, without a link, in any ADR(s) it tracks follow-on work for
+   (`Related:` line): `` `topic-name.md` (work doc) ``. Only a work doc links to a
+   work doc. A work doc moves to `docs/design/` or `docs/archive/` and may be
+   deleted, so a link to it from a finished doc would break;
+   `tests/strata/test_doc_links.py` fails on one.
 
 ### Template
 

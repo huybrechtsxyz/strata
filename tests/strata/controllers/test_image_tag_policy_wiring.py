@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""`image_tag_policy` in `build_run()` and `deploy_run()` (docs/design/image-tag-policy.md, phase 3)."""
+"""`image_tag_policy` in `build_run()`, `deploy_run()` and `check_policies()` (docs/design/image-tag-policy.md,
+phase 3; the images rendered charts run: docs/work/helm-image-delivery.md, plan items 9e and 9f)."""
 
+import json
 from pathlib import Path
 
 import pytest
 
 from strata.controllers.build_controller import build_run
 from strata.controllers.deploy_controller import deploy_run
+from strata.controllers.policy_controller import check_policies
 from strata.controllers.policy_results import read_policy_results
 from strata.controllers.solution_context import open_solution
+from strata.utils.sbom_utils import image_to_purl
 from strata.utils.transport import CommandResult
 
 _HEADER = "apiVersion: strata.huybrechts.xyz/v2\nkind: {kind}\nmeta:\n  name: {name}\nspec:\n"
@@ -95,25 +99,74 @@ def _codes(diagnostics) -> list[str | None]:
 # ---------------------------------------------------------------------------
 
 
-def test_build_run_fails_before_writing_anything_when_an_image_has_no_tag(tmp_path):
+def test_build_run_fails_at_the_end_with_the_output_on_disk_when_an_image_has_no_tag(tmp_path):
+    # docs/work/helm-image-delivery.md plan item 9e: judged after the SBOM, as the other build policies.
     build_path = tmp_path / "build"
     diagnostics = build_run(_context(_solution(tmp_path)), "app", build_path)
-    assert _codes(diagnostics) == ["image_without_tag"]
-    assert not build_path.exists()
+    assert [d.code for d in diagnostics.errors] == ["image_without_tag"]
+    assert (build_path / "sbom.json").is_file()
+    [recorded] = read_policy_results(build_path)
+    assert (recorded.policy_name, recorded.passed, len(recorded.violations)) == ("image_tag_policy", False, 1)
 
 
-def test_build_run_does_not_clean_an_existing_build_path_when_the_policy_denies(tmp_path):
+def test_build_run_cleans_the_previous_build_before_the_policy_denies(tmp_path):
     build_path = tmp_path / "build"
     build_path.mkdir()
     (build_path / "keep.txt").write_text("previous build", encoding="utf-8")
     diagnostics = build_run(_context(_solution(tmp_path)), "app", build_path, clean=True)
     assert not diagnostics.ok
-    assert (build_path / "keep.txt").is_file()
+    assert not (build_path / "keep.txt").exists()
 
 
-def test_build_run_dry_run_also_fails(tmp_path):
-    diagnostics = build_run(_context(_solution(tmp_path)), "app", tmp_path / "build", dry_run=True)
+def test_build_run_dry_run_judges_the_declared_images_and_writes_nothing(tmp_path):
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(_solution(tmp_path)), "app", build_path, dry_run=True)
     assert _codes(diagnostics) == ["image_without_tag"]
+    assert not build_path.exists()
+
+
+def _add_rendered_image(build_path: Path, image: str = "acme/shipper:latest") -> None:
+    """Add a component as the `chart-image` collector writes it to the build's `sbom.json`."""
+    sbom_file = build_path / "sbom.json"
+    sbom = json.loads(sbom_file.read_text(encoding="utf-8"))
+    sbom.setdefault("components", []).append(
+        {
+            "type": "container",
+            "name": "acme/shipper",
+            "purl": image_to_purl(image),
+            "properties": [
+                {"name": "strata:found-in", "value": "rendered-chart"},
+                {"name": "strata:used-by", "value": "chart:apps/whoami/shipper"},
+                {"name": "strata:image", "value": image},
+            ],
+        }
+    )
+    sbom_file.write_text(json.dumps(sbom), encoding="utf-8")
+
+
+def test_build_run_judges_an_image_a_rendered_chart_runs(tmp_path, monkeypatch):
+    """The SBOM the build wrote is what the policy reads: a rendered `latest` fails a `deny` policy."""
+    import strata.controllers.build_controller as build_module
+
+    real_write_sbom = build_module.write_sbom
+
+    def _write_sbom(build_path, *args, **kwargs):
+        diagnostics = real_write_sbom(build_path, *args, **kwargs)
+        _add_rendered_image(build_path)
+        return diagnostics
+
+    monkeypatch.setattr(build_module, "write_sbom", _write_sbom)
+    build_path = tmp_path / "build"
+    root = _solution(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    [error] = diagnostics.errors
+    assert error.code == "image_floating_tag"
+    assert "chart 'whoami/shipper'" in error.message
+    assert "image_tag_policy_rendered_images" in [d.code for d in diagnostics.infos]
+    [recorded] = read_policy_results(build_path)
+    assert (recorded.policy_name, recorded.passed, len(recorded.violations)) == ("image_tag_policy", False, 1)
 
 
 def test_build_run_passes_and_records_the_result_when_every_image_is_tagged(tmp_path):
@@ -198,6 +251,40 @@ def test_deploy_run_denies_an_image_whose_tag_was_removed_after_the_build_and_ru
     assert terraform == []
     results = {r.policy_name: r for r in read_policy_results(build_path)}
     assert (results["image_tag_policy"].phase, results["image_tag_policy"].passed) == ("deploy", False)
+
+
+def test_deploy_run_denies_an_image_the_builds_rendered_chart_runs_and_runs_no_step(tmp_path, terraform):
+    # docs/work/helm-image-delivery.md plan item 9f: the deploy judges what the build rendered, from its SBOM.
+    root, build_path = _built(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
+    _add_rendered_image(build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert [d.code for d in diagnostics.errors] == ["image_floating_tag"]
+    assert terraform == []
+    results = {r.policy_name: r for r in read_policy_results(build_path)}
+    assert (results["image_tag_policy"].phase, results["image_tag_policy"].passed) == ("deploy", False)
+
+
+def test_policy_check_judges_the_last_builds_rendered_images_and_says_where_they_came_from(tmp_path):
+    root, build_path = _built(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
+    _add_rendered_image(build_path)
+
+    diagnostics, checked = check_policies(_context(root), "app", build_path)
+
+    assert checked == ["image_tag_policy"]
+    assert [d.code for d in diagnostics.errors] == ["image_floating_tag"]
+    [source] = [d for d in diagnostics.infos if d.code == "image_tag_policy_rendered_images"]
+    assert str(build_path / "sbom.json") in source.message
+    assert " written 20" in source.message
+    assert read_policy_results(build_path)[0].passed is False
+
+
+def test_policy_check_without_a_build_judges_the_declared_images_only(tmp_path):
+    root = _solution(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
+    diagnostics, _ = check_policies(_context(root), "app", tmp_path / "no-build")
+    assert diagnostics.ok, diagnostics.messages()
+    assert "image_tag_policy_rendered_images" not in [d.code for d in diagnostics.infos]
 
 
 def test_deploy_run_replaces_the_build_result_with_its_own(tmp_path, terraform):

@@ -58,6 +58,11 @@ parameters.
 - `spec.image_tag_policy` — fail `build run` and `deploy run` when an image the deployment runs has no
   tag, a floating tag such as `latest`, or a tag that does not match the shape you require (see "Image
   tag policy" below)
+- `spec.sbom` — what `build run` adds to `sbom.json`. `render_charts` (default `true`) renders every Helm
+  chart, local or pinned from a registry, with `helm template` and lists the images it deploys, so the CVE and
+  image gates and `image_tag_policy` check them (see
+  [how-to/sbom-generation.md](../how-to/sbom-generation.md#helm-images)). `render_charts: false` lists only the
+  images modules declare.
 - `spec.provisioner_lock_policy` — fail `build run` when a Terraform or OpenTofu provisioner has no
   `.terraform.lock.hcl`, or one that does not lock every provider it declares (see "Provisioner lock policy"
   below)
@@ -123,7 +128,8 @@ one `-backend-config key=value` each. The `backend "azurerm" {}` block itself st
 `type` is not sent to Terraform.
 
 The values are resolved when `deploy run` starts the step, so they may contain `${var:}`, `${secret:}`,
-`${feature:}` and `${output:STEP.KEY}` tokens, and two tokens for the deployment being run. A workspace is shared
+`${feature:}`, `${output:STEP.KEY}` and [`${artifact:NAME.FIELD}`](artifact.md) tokens, and two tokens for the
+deployment being run. A workspace is shared
 by every deployment, so these are the way to give each deployment its own state without typing a key into every
 deployment's environment:
 
@@ -278,27 +284,32 @@ is already a useful policy: every image needs a tag, and the mutable aliases are
 spec:
   image_tag_policy:
     enforcement: deny              # deny (default) | warn
-    origins: [artifact]            # artifact | module-service; default: both
+    origins: [artifact]            # artifact | module-service | chart; default: all three
     require_tag: true              # default true
     reject_tags: [latest, main]    # default: latest, main, master, dev, develop, staging, edge, nightly, canary
     tag_pattern: '^\d+\.\d+\.\d+$'  # a tag must match it (searched, so anchor it); a digest is not checked
     require_pin: false             # the tag must come from a kind: version pin (or --pin)
+    require_digest: false          # the image must carry a digest (name@sha256:... or name:tag@sha256:...)
     rings: [acc, prd]              # only deployments whose version document is in these rings; default all
+    on_unknown_image: warn         # a Helm module that declares no image: skip | warn (default) | block
     allow:
-      - name: redis                # the image's name as `strata deploy images` lists it
+      - name: redis                # as `strata deploy images` lists it, or REFERENCE/CONTAINER for a chart's image
         reason: third-party image, covered by cve_policy
         expires: 2026-12-31        # optional ISO date, honoured through that day
 ```
 
-| Rule          | An image fails when                           | Finding code         |
-| ------------- | --------------------------------------------- | -------------------- |
-| `require_tag` | it has no tag and no pin supplies one         | `image_without_tag`  |
-| `reject_tags` | its tag is in the list, ignoring case         | `image_floating_tag` |
-| `tag_pattern` | its tag does not match the regular expression | `image_tag_pattern`  |
-| `require_pin` | its tag does not come from a version pin      | `image_not_pinned`   |
+| Rule             | An image fails when                              | Finding code           |
+| ---------------- | ------------------------------------------------ | ---------------------- |
+| `require_tag`    | it has no tag or digest and no pin supplies one  | `image_without_tag`    |
+| `reject_tags`    | its tag is in the list, ignoring case            | `image_floating_tag`   |
+| `tag_pattern`    | its tag does not match the regular expression    | `image_tag_pattern`    |
+| `require_pin`    | its tag does not come from a version pin         | `image_not_pinned`     |
+| `require_digest` | it has no digest                                 | `image_without_digest` |
 
-- A digest (`sha256:...`) is immutable, so it passes `reject_tags` and `tag_pattern`. It still has to satisfy
-  `require_tag` and `require_pin`.
+- A digest (`sha256:...`) is immutable, so a digest alone satisfies `require_tag` and is never judged by
+  `reject_tags` or `tag_pattern`. With `tag@digest` ([artifact](artifact.md#tag-and-digest)), those two judge
+  the tag part, so `latest@sha256:...` is still a floating tag name. Every image still has to satisfy
+  `require_pin`, except an image a chart runs (below).
 - A tag that merely is not a semantic version, such as a build number (`env_sbx_20260907.11`), is not floating.
   `reject_tags` is an explicit list; use `tag_pattern` to be stricter. Set `reject_tags: []` to reject none.
 - An image with no tag gets one finding, not also `image_not_pinned`, unless `require_tag` is `false`.
@@ -313,22 +324,47 @@ spec:
 
 Where it runs:
 
-| Command                | Behavior                                                                                                                                                    |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `strata build run`     | Judged first, before anything is cleaned or written, so a `deny` breach leaves the build path as it was. Also under `--dry-run`.                            |
-| `strata deploy run`    | Judged again before any value is resolved, because `--pin` given only to `deploy run` can change the tag. Also under `--smoke-test`, which records nothing. |
-| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first.                        |
-| `strata policy check`  | Evaluates it offline and records the result. `strata policy list` shows it.                                                                                 |
-| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                  |
+| Command                | Behavior                                                                                                                                                                                                                                            |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata build run`     | Judged at the end, after `sbom.json` is written, so it also judges the images rendered charts run (`sbom.render_charts`). A `deny` fails the build with its output on disk. Under `--dry-run`, only the declared images, since nothing is rendered. |
+| `strata deploy run`    | Judged again before any value is resolved, because `--pin` given only to `deploy run` can change the tag. The images the build's rendered charts run are judged too, from its `sbom.json`. Also under `--smoke-test`, which records nothing.        |
+| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first. It reads no build, so it judges the declared images only.                                                      |
+| `strata policy check`  | Evaluates it offline and records the result. With a build at `--build-path`, it also judges that build's rendered chart images and says which `sbom.json` they came from. `strata policy list` shows it.                                            |
+| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                                                                                                          |
 
 The result is recorded in `policy_results.json` as `image_tag_policy` and ends up in the audit manifest. The
-`deploy run` entry replaces the one `build run` wrote.
+`deploy run` entry replaces the one `build run` wrote. Because `build run` judges at the end, a pipeline that
+wants the answer before it clones and renders runs `strata deploy images` or `strata policy check` first.
 
 The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
-module, strata does not write a service's `image` into the chart's values, so the chart decides what runs: the
-policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
-the module's `configuration`, in the chart's own key shape. See
-[helm-image-delivery.md](../work/helm-image-delivery.md).
+module, strata does not write a service's `image` into the chart's values, so the chart decides what runs. Set a
+Helm image through the module's `configuration`, in the chart's own key shape. See
+`helm-image-delivery.md` (work doc).
+
+- **With [`sbom.render_charts`](../how-to/sbom-generation.md#helm-images)**, on by default, the policy also judges every image the
+  rendered charts run, sidecars and init containers included, read from the build's `sbom.json`. That is origin
+  `chart`; a workspace that lists `origins` must add `chart` to get them.
+  - Each is named `REFERENCE/CONTAINER`, the module reference in the namespace and the container, for example
+    `whoami/shipper`. That is the name an `allow` entry uses.
+  - `require_pin` does not apply: strata cannot pin an image inside a chart. The chart's version pin fixes it.
+  - The fix the finding gives is to set the tag in the chart's values through the module's `configuration`, or
+    to pin a chart version that ships the tag you want.
+  - A declared image the chart also runs is judged once, as delivered. A Helm module whose chart rendered at
+    least one image is no longer reported by `on_unknown_image`.
+  - One info line, `image_tag_policy_rendered_images`, says how many images came from which `sbom.json`, and when
+    it was written. At deploy and in `policy check` that tells you which build was judged.
+  - `strata deploy images` reads no build, so it still judges the declared images only.
+- **A declared Helm image** is still judged, by the same rules. With `render_charts: false`, or when the chart was not
+  rendered, its finding says "declared only, the chart decides which image runs". `strata deploy images` shows it
+  as `DELIVERED no (helm module: the chart decides)`.
+- **A Helm module that declares no service `image` or `artifact`** has images that only the chart knows.
+  - `on_unknown_image` decides what happens, apart from `enforcement`. The finding is `image_unknown_to_strata`.
+    - `warn` (the default) reports it.
+    - `block` stops the run.
+    - `skip` keeps it as an info finding, shown only in verbose and JSON output.
+  - The policy's `rings` and `origins` apply: the module counts as a `module-service` image.
+  - `allow` does not exempt a module. To have its images judged, declare them under the module's `services`.
+  - Without a policy, `strata deploy images` still lists such a module under "Known only to Helm".
 
 ## Provisioner lock policy
 

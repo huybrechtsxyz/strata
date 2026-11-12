@@ -104,7 +104,7 @@ only.
   `spec.layers.segments.*`, `spec.properties.*` and `spec.custom.*`, and the path walk and scalar rule already exist
   for `${value:}`. It would also turn the whole deployment schema, inert fields included, into a token surface, so a
   field rename would break workspaces that read it. It can be added later without changing the two keys; the sketch
-  and the conditions for building it are in [deployment-token-paths.md](../work/deployment-token-paths.md).
+  and the conditions for building it are in `deployment-token-paths.md` (work doc).
 - **A missing tenant is an error.** The first draft made it empty. An empty value in a state key silently produces
   colliding keys such as `-.tfstate`, and `resolve_value_tokens()` already holds that an unknown reference is never
   an empty substitution.

@@ -102,7 +102,7 @@ integration layer.
    artifact_name)` instead of `value_controller.py`'s own
    `(version.spec.pins.artifacts or {}).get(...)` line. Same outcome,
    removes the one duplicate lookup implementation. Low risk: one call
-   site, already has test coverage (`artifact-references.md`'s existing
+   site, already has test coverage ([artifact-references.md](../archive/artifact-references.md)'s existing
    tests) to catch a regression.
 
 4. **Logging every application (ADR-0019 decision 7 — explicitly "not

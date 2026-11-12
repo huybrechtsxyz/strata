@@ -166,7 +166,7 @@ class VariableStoreType(str, Enum):
     `CONSTANT`/`ENVIRONMENT`/`ARTIFACT` are built-in resolvers (no
     integration needed) — `ARTIFACT` resolves against an in-solution
     `kind: artifact` document, not an external system
-    (docs/work/artifact-references.md). `AZURE_APPCONFIG`/`INFISICAL`
+    (docs/config/artifact.md). `AZURE_APPCONFIG`/`INFISICAL`
     resolve against a real `Integration` document today (see module
     docstring); `HASHICORP_CONSUL`/`HASHICORP_VAULT`/`ETCD` are still
     recognized values with no runtime resolver behind them yet.
@@ -230,11 +230,12 @@ class VariableStoreModel(PlatformBaseModel):
     default: str | None = Field(
         None, description="Seed the store with this value when the key is missing (integration-backed stores only)"
     )
-    field: Literal["image_name", "image_tag", "image_ref"] | None = Field(
+    field: Literal["image_name", "image_tag", "image_ref", "image_tag_name", "image_digest"] | None = Field(
         None,
         description="Which field of the `store: artifact` target to read: image_name, image_tag (kind: "
-        "version's pins.artifacts-overlaid), or the synthesised image_ref ('{image_name}:{image_tag}'). "
-        "Only valid on 'store: artifact'.",
+        "version's pins.artifacts-overlaid; a tag, a digest or `tag@digest`), the synthesised image_ref "
+        "('{image_name}:{tag}@{digest}'), or one part of image_tag: image_tag_name (the tag) or image_digest. A "
+        "part the value lacks is empty. Only valid on 'store: artifact'.",
     )
 
     @model_validator(mode="after")

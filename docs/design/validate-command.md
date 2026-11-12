@@ -90,7 +90,7 @@ schema.
    real `Environment`). Each was already a tested method on its owning
    service, built alongside that kind, and finally wired here — this is
    what closes the "parked Phase 2 validator" gap tracked in
-   [solution-loading-and-phase2-validation.md](../work/solution-loading-and-phase2-validation.md).
+   `solution-loading-and-phase2-validation.md` (work doc).
 4. **Version pin checks** (`version_pins.py`) — per Version document (not
    per deployment referencing it, to avoid double-reporting): does a pin's
    target exist, and is pinning it even meaningful (e.g. a `remotes` pin
@@ -113,7 +113,7 @@ directly since it needs to render findings regardless of outcome.
 - [ADR-0019](../decisions/0019-version-pinning.md) — version pin check severities
 - [ADR-0020](../decisions/0020-v1-consumer-feature-priority.md) — real-usage evidence that `--deep` should be the default
 - [ADR-0024](../decisions/0024-tenant-defaults-merge.md) — tenant defaults folded into pass 2
-- [solution-loading-and-phase2-validation.md](../work/solution-loading-and-phase2-validation.md) — tracks the validators this command wires (now stale — see its own note)
+- `solution-loading-and-phase2-validation.md` (work doc) — tracks the validators this command wires (now stale — see its own note)
 
 
 ## History

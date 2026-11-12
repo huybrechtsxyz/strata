@@ -391,7 +391,7 @@ def test_prepare_namespace_does_nothing_for_an_empty_group():
 
 
 # ---------------------------------------------------------------------------
-# resolve_compose_values() — docs/design/gap_fit_v1.md gap #9, Full Solution Phase 5.
+# resolve_compose_values() — docs/work/gap_fit_v1.md gap #9, Full Solution Phase 5.
 # Deliberately pure (no disk I/O) — mirrors resolve_module_values()'s own
 # testable-without-touching-disk convention.
 # ---------------------------------------------------------------------------
@@ -419,7 +419,7 @@ def test_resolve_compose_values_does_not_touch_disk():
 
 
 # ---------------------------------------------------------------------------
-# deploy_namespace() — docs/design/gap_fit_v1.md gap #13
+# deploy_namespace() — docs/work/gap_fit_v1.md gap #13
 # ---------------------------------------------------------------------------
 
 

@@ -3,18 +3,19 @@
 
 An `Artifact` is a pinnable, named reference to something external strata
 does not fetch or deploy itself — a container image today, possibly a chart
-or other identifier later (docs/work/artifact-references.md). Referenced
-by identity (ADR-0015) from anywhere in the solution: a `store: artifact`
-variable (an opaque external provisioner's own input, e.g. scheduler_api's
-`api_container_image_tag`) or a `ModuleServiceModel.artifact` (a
-strata-owned Compose/Helm service).
+or other identifier later (docs/config/artifact.md). Referenced by identity (ADR-0015)
+from anywhere in the solution: an `${artifact:NAME.FIELD}` token in any
+field resolved at deploy, a `store: artifact` variable (an opaque external
+provisioner's own input, e.g. scheduler_api's `api_container_image_tag`)
+or a `ModuleServiceModel.artifact` (a strata-owned Compose/Helm service).
 
 Deliberately NOT built on `SourceModel`, despite the surface similarity to
 its chart mode (`chart_name`/`chart_version`) — `SourceModel.remote` is
 fetch-oriented (`SolutionRemoteModel.fetch: strata|external` = "who
 materialises bytes on disk"), and strata never fetches a container image at
 all; the registry pulls it at deploy time, not strata at build time. See
-the design doc's "Shape correction" changelog entry for the full reasoning.
+the "Shape correction" changelog entry in docs/archive/artifact-references.md
+for the full reasoning.
 
 No chart mode: real chart pins exist (`haven/versions/prd.yaml`'s
 `pins.charts`), but every one targets a real `kind: module` document's own
@@ -40,6 +41,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.reference_fields import References
+from strata.utils.sbom_utils import image_tag_problem
 
 
 class ArtifactSpecModel(PlatformBaseModel):
@@ -47,18 +49,21 @@ class ArtifactSpecModel(PlatformBaseModel):
 
     image_name: str = Field(
         min_length=1,
-        description="Container image path (e.g. 'example/scheduler-api'). Identity — "
-        "never overridden by a kind: version pin, only image_tag is.",
+        description="The full image path the container runtime pulls, registry host included (e.g. "
+        "'ghcr.io/example/scheduler-api'; no host means Docker Hub). Identity — never overridden by a "
+        "kind: version pin, only image_tag is.",
     )
     image_tag: str | None = Field(
         None,
-        description="Image tag/digest to deploy. Optional: omit it when a kind: version pin always supplies "
-        "it; with neither, the tag is blank. Overridden by kind: version's pins.artifacts[name] when set.",
+        description="What to deploy: a tag (`1.4.2`), a digest (`sha256:<hex>`) or both (`1.4.2@sha256:<hex>`). "
+        "Optional: omit it when a kind: version pin always supplies it; with neither, the tag is blank. "
+        "Overridden by kind: version's pins.artifacts[name] when set.",
     )
     registry: str | None = Field(
         None,
         description="Registry host, for documentation only (for example `registry.example.com`). "
-        "Strata never pulls the image: the container runtime does that at deploy time.\n\n"
+        "Strata never pulls the image and never adds this to the reference: the container runtime pulls "
+        "`image_name` as written, so put the host there too. `strata validate` warns when the two differ.\n\n"
         "Design notes: Registry host, free text for documentation only (e.g. "
         "'cdn-feeds.acme.com') — NOT a SolutionRemoteModel reference, since strata "
         "never fetches an image (it stays in the registry and is pulled by the runtime "
@@ -66,8 +71,9 @@ class ArtifactSpecModel(PlatformBaseModel):
     )
     integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         None,
-        description="Reserved. Must name an existing Integration, but nothing reads it: no registry "
-        "credentials are resolved from it. Supply them to whatever pulls or copies the image.",
+        description="The Integration that holds this image's registry credentials. `strata deploy images` "
+        "reports its name, so a pipeline that copies the image knows which credentials to use; strata "
+        "resolves nothing from it and never logs in.",
     )
     description: str | None = Field(None, description="Optional description for documentation purposes")
     properties: dict[str, Any] | None = Field(
@@ -77,6 +83,16 @@ class ArtifactSpecModel(PlatformBaseModel):
         None, description="Raw passthrough data for whatever consumes this artifact"
     )
     custom: dict[str, Any] | None = Field(None, description="Custom user-defined data for scripts or extensions")
+
+    @field_validator("image_tag")
+    @classmethod
+    def validate_image_tag_shape(cls, value: str | None) -> str | None:
+        """A tag, a digest or `tag@digest`: anything else would give a reference no runtime pulls."""
+        if value:
+            problem = image_tag_problem(value)
+            if problem is not None:
+                raise ValueError(problem)
+        return value
 
 
 class ArtifactMetaModel(PlatformBaseModel):

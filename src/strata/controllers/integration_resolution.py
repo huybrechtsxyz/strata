@@ -201,7 +201,7 @@ def resolve_output_store_integration(
 ) -> KeyValueStoreIntegration | None:
     """Return the `KeyValueStoreIntegration` instance `workspace`'s cross-run
     step-output store should read/write against, or `None` when the
-    feature is disabled for this workspace (docs/work/
+    feature is disabled for this workspace (docs/archive/
     cross-run-step-output-delivery.md's Implementation Plan step 1).
 
     Same named-binding-wins-else-auto-bind duality as `resolve_integration()`

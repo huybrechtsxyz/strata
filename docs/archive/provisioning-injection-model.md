@@ -71,7 +71,7 @@ has a `references` field):
   variables/secrets/features plus `stage_outputs` from prior stages.
   `${step:step_name.output_key}` is the token that reads from it (not yet
   added to `VALUE_TOKEN_KINDS` — see
-  [value-token-resolution.md](../work/value-token-resolution.md)).
+  [value-token-resolution.md](../design/value-token-resolution.md)).
 
 **Rejected**: Requirement (`spec.references` as a schema field) — both of
 its v1 jobs (provisioner scoping, typo-catching) are better solved without
@@ -288,7 +288,7 @@ even have noticed.
   ready-to-implement gap while grounding this: `TerraformIntegration
   .default_output()` silently discards `resolved.values` (`del resolved`)
   instead of writing it — not a missing Context, a one-method fix, tracked
-  in [build-command.md](../work/build-command.md) instead of here. No code changed
+  in `build-command.md` (work doc) instead of here. No code changed
   in this update.
 - 2026-09-30: **Designed the Interface parse-failure policy**, per direct
   request, prompted by a real question about gap #15's

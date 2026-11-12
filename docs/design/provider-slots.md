@@ -138,7 +138,7 @@ and `prd-north-deployment` extending it. `strata build run` renders `strata.prov
 - Patching fields of a bound provider, and environment-level overrides (`environment.spec.overrides`).
   Per-deployment values belong in environments.
 - Rebinding other workspace content (resources, modules) — tracked in
-  [workspace-overrides.md](../work/workspace-overrides.md), which reuses this pattern. Assets
+  `workspace-overrides.md` (work doc), which reuses this pattern. Assets
   already do: see [asset-management.md](asset-management.md).
 
 ## Related Decisions
@@ -149,7 +149,7 @@ and `prd-north-deployment` extending it. `strata build run` renders `strata.prov
   `(kind, meta.name)`, never a file.
 - [ADR-0024](../decisions/0024-tenant-defaults-merge.md) — the deployment merge axes (`extends`,
   tenant defaults) this builds on.
-- [tenant-zone-policy.md](../work/tenant-zone-policy.md) — the geography check that now evaluates
+- `tenant-zone-policy.md` (work doc) — the geography check that now evaluates
   the bound provider.
 - [asset-management.md](asset-management.md) — the same slot-and-rebind rule for assets; its
   `_check_slot_bindings()` now holds the validation rules both share, with the provider type check

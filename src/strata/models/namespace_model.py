@@ -103,7 +103,7 @@ class NamespaceSpecModel(PlatformBaseModel):
         "Design notes: Baseline labels applied to this namespace itself (Kubernetes "
         "metadata.labels on the generated Namespace object) — e.g. environment, team, "
         "istio-injection. Optional (v1-derived documents commonly carry no labels at "
-        "all — gap #4, docs/design/gap_fit_v1.md). Strata does not enforce a maximum "
+        "all — gap #4, docs/work/gap_fit_v1.md). Strata does not enforce a maximum "
         "label count.",
     )
     custom_labels: dict[str, str] | None = Field(

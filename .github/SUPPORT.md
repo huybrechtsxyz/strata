@@ -33,12 +33,12 @@ When opening an Issue, please include:
 
 ## Contributing and paid support
 
-- Contributions via PRs are welcome — see [contributing](./contributing.md)
+- Contributions via PRs are welcome — see [contributing](./CONTRIBUTING.md)
 - This repository may offer paid support or consulting separately; details (if any) are linked from the README or FUNDING.yml.
 
 ## Community & Conduct
 
-- Please follow the [Code of Conduct](./code_of_conduct.md) in all interactions.
+- Please follow the [Code of Conduct](./CODE_OF_CONDUCT.md) in all interactions.
 - Be respectful and include necessary details to help maintainers assist you quickly.
 
 ## Privacy & Data

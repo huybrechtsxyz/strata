@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `remote_resolution.resolve_remote` (docs/design/remotes.md)."""
+"""Tests for `remote_resolution.resolve_remote` (docs/work/remotes.md)."""
 
 from pathlib import Path
 

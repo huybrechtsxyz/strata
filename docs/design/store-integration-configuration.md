@@ -8,7 +8,7 @@
   falling back to their original env vars unchanged whenever no document
   is bound or a specific field is unset.
 - Last updated: 2026-10-06 (graduated from `docs/work/`)
-- Related: [integration-layer.md](../work/integration-layer.md) (the
+- Related: `integration-layer.md` (work doc) (the
   subsystem this extends — `Integration`/`StoreIntegration` base classes,
   the registry, the three resolver classes), [ADR-0021](../decisions/0021-integration-layer.md)
   D3 (the type-vs-name-keying decision this design must not contradict),
@@ -232,7 +232,7 @@ Same ambient-auth story as Key Vault above.
 - [ADR-0021](../decisions/0021-integration-layer.md) D3 — type-based,
   not name-based, store→integration binding; this design's core
   constraint.
-- [integration-layer.md](../work/integration-layer.md) — the base
+- `integration-layer.md` (work doc) — the base
   `Integration`/`StoreIntegration` classes, registry, and the three
   resolver classes this design binds real config into.
 - [docs/config/integration.md](../config/integration.md) — corrected here

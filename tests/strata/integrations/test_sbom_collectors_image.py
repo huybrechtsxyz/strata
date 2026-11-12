@@ -92,7 +92,13 @@ def test_an_image_without_a_digest_has_no_hash():
     assert component.hashes == {}
 
 
-def test_an_artifact_pinned_to_a_digest_records_it_as_a_hash():
+@pytest.mark.parametrize(
+    ("tag", "source", "version"),
+    [(None, "pin", None), ("latest", "pin", "latest"), ("latest", "declared", "latest")],
+)
+def test_an_artifact_with_a_digest_records_it_as_a_hash_and_is_not_floating(tag, source, version):
+    """`image_tag` is the tag part and `image_digest` the digest, as `effective_images()` splits `TAG@sha256:...`.
+    A digest never moves, so not even `latest@sha256:...` is floating."""
     from strata.integrations.resolved_context import EffectiveImage
 
     graph = _graph()
@@ -101,18 +107,30 @@ def test_an_artifact_pinned_to_a_digest_records_it_as_a_hash():
             origin="artifact",
             name="api",
             image_name="ghcr.io/acme/api",
-            image_tag=f"sha256:{_HEX}",
-            image_ref=f"ghcr.io/acme/api@sha256:{_HEX}",
-            tag_source="pin",
+            image_tag=tag,
+            image_digest=f"sha256:{_HEX}",
+            image_ref=f"ghcr.io/acme/api{f':{tag}' if tag else ''}@sha256:{_HEX}",
+            tag_source=source,
             artifact="api",
             via=("variable:API_IMAGE",),
-            pin_version="prd",
+            pin_version="prd" if source == "pin" else None,
         )
     )
 
-    [component] = ImageCollector().collect(graph, [], Path("/does/not/matter")).components
+    result = ImageCollector().collect(graph, [], Path("/does/not/matter"))
 
-    assert component.hashes == {"SHA-256": _HEX}
+    [component] = result.components
+    assert (component.version, component.hashes) == (version, {"SHA-256": _HEX})
+    assert component.purl == f"pkg:docker/acme/api@sha256:{_HEX}?repository_url=ghcr.io", "the digest, not the tag"
+    assert "strata:tag-stability" not in component.properties
+    assert result.diagnostics == []
+
+
+def test_a_service_image_with_a_floating_tag_and_a_digest_is_not_floating():
+    module = _module("app", ModuleServiceModel(name="app", image=f"acme/app:latest@sha256:{_HEX}"))
+    result = ImageCollector().collect(_graph(), [module], Path("/does/not/matter"))
+    assert "strata:tag-stability" not in result.components[0].properties
+    assert result.diagnostics == []
 
 
 def test_collect_skips_a_service_using_artifact_instead_of_image():
@@ -206,3 +224,59 @@ def test_an_image_a_version_document_pinned_names_that_document():
 
     pinned = {c.name: c.properties.get("strata:pinned-by") for c in result.components}
     assert pinned == {"redis": "prd", "db": None, "api": "prd"}
+
+
+# The declared-only marker (docs/work/helm-image-delivery.md, the SBOM side, part 1).
+
+
+def _helm_row(image_ref: str, *, delivered: bool, module: str = "authentik"):
+    from strata.integrations.resolved_context import EffectiveImage
+
+    image_name, _, tag = image_ref.rpartition(":")
+    return EffectiveImage(
+        origin="module-service",
+        name="server",
+        image_name=image_name,
+        image_tag=tag,
+        image_ref=image_ref,
+        tag_source="declared",
+        module=module,
+        via=(f"service:{module}/server",),
+        delivered=delivered,
+        delivery=None if delivered else "helm module: the chart decides",
+    )
+
+
+def test_an_image_only_a_helm_module_declares_is_marked_not_delivered():
+    graph = _graph()
+    graph.images.append(_helm_row("ghcr.io/goauthentik/server:2026.5.2", delivered=False))
+    module = _module("authentik", ModuleServiceModel(name="server", image="ghcr.io/goauthentik/server:2026.5.2"))
+
+    [component] = ImageCollector().collect(graph, [module], Path("/does/not/matter")).components
+
+    assert component.properties["strata:image-delivered"] == "false"
+    assert component.properties["strata:image-delivery"] == "helm module: the chart decides"
+
+
+def test_an_image_a_compose_module_also_runs_is_not_marked():
+    graph = _graph()
+    graph.images.append(_helm_row("redis:7.2", delivered=False))
+    graph.images.append(_helm_row("redis:7.2", delivered=True, module="cache"))
+    module = _module("cache", ModuleServiceModel(name="server", image="redis:7.2"))
+
+    [component] = ImageCollector().collect(graph, [module], Path("/does/not/matter")).components
+
+    assert "strata:image-delivered" not in component.properties
+
+
+def test_a_delivered_image_or_one_without_a_row_is_not_marked():
+    graph = _graph()
+    graph.images.append(_helm_row("redis:7.2", delivered=True))
+    modules = [
+        _module("cache", ModuleServiceModel(name="redis", image="redis:7.2")),
+        _module("web", ModuleServiceModel(name="nginx", image="nginx:1.27")),
+    ]
+
+    components = ImageCollector().collect(graph, modules, Path("/does/not/matter")).components
+
+    assert all("strata:image-delivered" not in c.properties for c in components)

@@ -3,7 +3,7 @@
 - Status: accepted
 - Date: 2026-10-24
 - Related: [docs/design/solution-scaffolding.md](../design/solution-scaffolding.md) (how `sln init`/`update` work),
-  [docs/work/gap_fit_v1_vscode.md](../work/gap_fit_v1_vscode.md) gap #13 (why skills instead of a chat participant)
+  `gap_fit_v1_vscode.md` (work doc) gap #13 (why skills instead of a chat participant)
 
 ## Context and Problem Statement
 

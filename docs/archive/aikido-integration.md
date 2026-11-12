@@ -181,7 +181,7 @@ Candidates for the scaffolded `project-gotchas` agent skill once confirmed in a 
 
 - [ADR-0046](../decisions/0046-strata-agent-skills-with-generated-marker.md) - scaffolded agent
   skills; the `project-gotchas` skill is where confirmed Aikido/Safe Chain lessons would go.
-- [policy-engine-architecture.md](../work/policy-engine-architecture.md) - Checkov and CVE scanning are
+- `policy-engine-architecture.md` (work doc) - Checkov and CVE scanning are
   its "bucket C" (real external scanner) concerns; any change here belongs in that framing.
 
 ## Remaining Work / Open Questions
@@ -212,7 +212,7 @@ Still open, outside the design:
 
 - **Integration readiness** (local tool/version checks next to `integration check`'s connection
   check, and the unenforced `spec.version`): tracked separately in
-  [integration-readiness.md](../work/integration-readiness.md).
+  `integration-readiness.md` (work doc).
 - **Evidence check:** compare, for one real deployment (haven `prd`), Aikido's repo scan with
   strata's Checkov on the rendered `build/` output. Not needed to build the gates, but it decides
   whether the deferred upload/local-scanner work (D12) is worth doing.

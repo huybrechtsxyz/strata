@@ -14,6 +14,9 @@ from strata.models.module_model import ModuleModel
 from strata.models.sbom_model import SbomComponentModel
 from strata.utils.diagnostics import Diagnostic, Severity
 from strata.utils.sbom_utils import (
+    IMAGE_DELIVERED_PROPERTY,
+    IMAGE_DELIVERY_PROPERTY,
+    USED_BY_PROPERTY,
     image_digest_hash,
     image_to_purl,
     is_floating_tag,
@@ -23,7 +26,7 @@ from strata.utils.sbom_utils import (
 
 _FLOATING_PROPERTY = "strata:tag-stability"
 _FLOATING_VALUE = "floating"
-_USED_BY_PROPERTY = "strata:used-by"
+_USED_BY_PROPERTY = USED_BY_PROPERTY
 #: The `kind: version` document whose pin chose the tag, from the deployment's effective images.
 _PINNED_BY_PROPERTY = "strata:pinned-by"
 
@@ -35,7 +38,7 @@ class ImageCollector(SbomCollector):
     services that name an `artifact`, which have no `image` of their own.
 
     Deduplicates by PURL, and lists every use of an image in a `strata:used-by`
-    property (`service:MODULE/SERVICE`, `variable:KEY`, as `strata deploy images`
+    property (`service:MODULE/SERVICE`, `variable:KEY`, `token:KIND/NAME`, as `strata deploy images`
     names them). A floating tag (`latest`, `main`, `dev`, ...) gets a
     `strata:tag-stability=floating` property plus a `Severity.WARNING`
     diagnostic - informational, never fails the build. An artifact whose tag a
@@ -91,14 +94,15 @@ class ImageCollector(SbomCollector):
                 _add(
                     str(service.name),
                     service.image,
-                    is_floating_tag(tag or digest),
+                    digest is None and is_floating_tag(tag),
                     (f"service:{module.meta.name}/{service.name}",),
                 )
 
         for image in graph.images:
             if image.origin != "artifact":
                 continue
-            floating = (
+            # A digest never moves, whatever tag travels with it.
+            floating = image.image_digest is None and (
                 is_mutable_alias_tag(image.image_tag) if image.tag_source == "pin" else is_floating_tag(image.image_tag)
             )
             _add(image.name, image.image_ref, floating, image.via)
@@ -120,4 +124,32 @@ class ImageCollector(SbomCollector):
             else c
             for c in components
         ]
+        not_delivered = _not_delivered(graph)
+        components = [
+            c.model_copy(
+                update={
+                    "properties": {
+                        **c.properties,
+                        IMAGE_DELIVERED_PROPERTY: "false",
+                        IMAGE_DELIVERY_PROPERTY: not_delivered[c.purl],
+                    }
+                }
+            )
+            if c.purl in not_delivered
+            else c
+            for c in components
+        ]
         return CollectorResult(components=components, diagnostics=diagnostics)
+
+
+def _not_delivered(graph: ResolvedWorkspaceGraph) -> dict[str, str]:
+    """Why each image strata does not deliver is not delivered, by purl (docs/work/helm-image-delivery.md, the
+    SBOM side). An image is delivered when any of its uses delivers it, so one a Helm module declares and a
+    Compose module runs is not listed. An image with no `graph.images` row is taken as delivered."""
+    delivered = {image_to_purl(image.image_ref) for image in graph.images if image.delivered}
+    reasons: dict[str, str] = {}
+    for image in graph.images:
+        purl = image_to_purl(image.image_ref)
+        if not image.delivered and purl not in delivered:
+            reasons.setdefault(purl, image.delivery or "strata does not deliver it")
+    return reasons

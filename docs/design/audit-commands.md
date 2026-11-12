@@ -6,7 +6,7 @@
 
 ## Overview
 
-This is Layer 3 of [audit-trail.md](../work/audit-trail.md)'s four-layer model — the
+This is Layer 3 of the work doc `audit-trail.md`'s four-layer model — the
 one piece that doc's own MoSCoW records as genuinely missing: a way to read
 back what Layer 2 already writes and Layer 4 already pushes out, so a human
 or an auditor can ask "what deployed, and when" without knowing the on-disk
@@ -658,7 +658,7 @@ accurate.
 ## Related Decisions
 
 No new ADR — this extends the existing Layer 2/4 design in
-[audit-trail.md](../work/audit-trail.md) (itself grounded in ADR-0003's layering and
+`audit-trail.md` (work doc) (itself grounded in ADR-0003's layering and
 ADR-0015's identity-not-paths/`.strata/` discovery exclusion) rather than
 introducing a new architectural decision. Reuses
 [audit-sink-dispatch.md](audit-sink-dispatch.md)'s existing sink model

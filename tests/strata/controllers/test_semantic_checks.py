@@ -281,7 +281,7 @@ def test_tenant_geography_not_declared_by_any_provider_is_caught(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Deployment -> Tenant/Workspace/Provider: static geography cross-check
-# (docs/design/tenant-zone-policy.md's "static tier")
+# (docs/work/tenant-zone-policy.md's "static tier")
 # ---------------------------------------------------------------------------
 
 
@@ -1392,7 +1392,7 @@ def test_deployment_with_no_resolvable_environment_skips_token_checking(tmp_path
 
 
 # ---------------------------------------------------------------------------
-# docs/design/gap_fit_v1.md gap #12, generalized (docs/design/deploy-command.md's
+# docs/work/gap_fit_v1.md gap #12, generalized (docs/design/deploy-command.md's
 # "Cross-invocation output access" section, "Expanded finding"): `strata
 # validate` previously rejected EVERY `${output:...}` token unconditionally,
 # even one a real execution step's `targets` claims — confirmed to affect
@@ -1658,20 +1658,19 @@ def test_topology_is_reachable_as_part_of_the_workspace_document(tmp_path):
     """Topology is inline on `WorkspaceModel.spec.topology` now (ADR-0028) —
     there is no separate Topology document to add to the reachable set;
     its fields (and any tokens in them) are already covered by the
-    `(workspace, False, source)` entry `_documents_reachable_from_workspace()`
-    always includes first."""
-    from strata.controllers.semantic_checks import _documents_reachable_from_workspace
+    workspace entry `documents_reachable_from_workspace()` always includes first."""
+    from strata.controllers.reachable_documents import documents_reachable_from_workspace
 
     context = _resolve(_base_solution(tmp_path))
-    documents = _documents_reachable_from_workspace(context.controller.index, "main")
-    kinds = {type(document).__name__ for document, _claimed, _source in documents}
+    documents = documents_reachable_from_workspace(context.controller.index, "main")
+    kinds = {type(document.model).__name__ for document in documents}
     assert "WorkspaceModel" in kinds
     assert "ProviderModel" in kinds
     assert "ResourceModel" in kinds
 
 
 # ---------------------------------------------------------------------------
-# Environment -> Configuration.spec.security (docs/design/gap_fit_v1.md gap #7 —
+# Environment -> Configuration.spec.security (docs/work/gap_fit_v1.md gap #7 —
 # real usage: config-repo's config/stores.yaml)
 # ---------------------------------------------------------------------------
 
@@ -1755,7 +1754,7 @@ def test_security_with_no_fields_set_restricts_nothing(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Workspace -> Configuration.spec.security.allowed_key_value_stores
-# (docs/work/cross-run-step-output-delivery.md's Implementation Plan step 1,
+# (docs/archive/cross-run-step-output-delivery.md's Implementation Plan step 1,
 # 'Governance') — same mechanism as allowed_variable_stores above, but
 # checking WorkspaceModel.spec.output_store/.output_store_integration
 # instead of an Environment's per-key store declarations.
@@ -1872,7 +1871,7 @@ def test_workspace_without_output_store_is_unaffected_by_restrictive_security(tm
 
 # ---------------------------------------------------------------------------
 # Workspace -> output-store backend must support compare-and-swap
-# (docs/work/cross-run-step-output-delivery.md — DeploymentOutputStore's
+# (docs/archive/cross-run-step-output-delivery.md — DeploymentOutputStore's
 # read-modify-write cannot work with a backend lacking real CAS, e.g.
 # azure-keyvault; caught here at validate time, independent of any
 # Configuration document/allow-list).
@@ -2175,7 +2174,7 @@ def test_security_gate_integration_of_an_unregistered_type_is_not_this_checks_fi
 
 
 # ---------------------------------------------------------------------------
-# Configuration.spec.paths (docs/design/path-conventions.md, docs/design/gap_fit_v1.md
+# Configuration.spec.paths (docs/design/path-conventions.md, docs/work/gap_fit_v1.md
 # gap #7 — real usage: config-repo's config/paths.yaml)
 # ---------------------------------------------------------------------------
 
@@ -2509,7 +2508,7 @@ spec:
 
 
 # ---------------------------------------------------------------------------
-# Environment -> Artifact: store: artifact references (docs/design/
+# Environment -> Artifact: store: artifact references (docs/archive/
 # artifact-references.md's full-review finding)
 # ---------------------------------------------------------------------------
 
@@ -2553,7 +2552,7 @@ def test_artifact_reference_to_an_unknown_artifact_is_caught(tmp_path):
 # ---------------------------------------------------------------------------
 # SolutionRemoteModel -> Module/Provisioner SourceModel usages: an OCI
 # remote's `reference` is required only when a real non-chart consumer needs
-# it (docs/design/gap_fit_v1.md gap #3).
+# it (docs/work/gap_fit_v1.md gap #3).
 # ---------------------------------------------------------------------------
 
 
@@ -4851,3 +4850,197 @@ def test_a_value_token_in_a_context_field_is_a_schema_error(tmp_path, field):
     [finding] = context.diagnostics.errors
     assert finding.location == f"spec.{field}"
     assert "'${var:cluster}' contains a value token, which is not resolved here" in finding.message
+
+
+# ---------------------------------------------------------------------------
+# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1) - end to end through
+# `strata validate`: judged per deployment, its version's pins applied
+# ---------------------------------------------------------------------------
+
+_ARTIFACT_TOKEN_CODES = {"unknown_artifact_token", "unavailable_artifact_token"}
+
+
+def _artifact_token_solution(tmp_path: Path, key: str, *, image_tag: str | None, pin: str | None = None) -> Path:
+    """The base solution with one artifact, `api`, and a backend `key` that uses `key`; `pin` adds a version that
+    pins the artifact and points the deployment at it."""
+    root = _backend_key_solution(tmp_path, key)
+    tag_line = f'  image_tag: "{image_tag}"\n' if image_tag else ""
+    _write(
+        root,
+        "artifact.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: api\n"
+        f"spec:\n  image_name: example/api\n{tag_line}",
+    )
+    if pin is not None:
+        _write(
+            root,
+            "version.yaml",
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\n"
+            f'spec:\n  pins:\n    artifacts:\n      api: "{pin}"\n',
+        )
+        path = root / "deployment.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("spec:\n", "spec:\n  version: prd\n", 1), encoding="utf-8"
+        )
+    return root
+
+
+def _artifact_token_codes(context) -> list[str]:
+    return [d.code for d in context.diagnostics.errors if d.code in _ARTIFACT_TOKEN_CODES]
+
+
+def test_an_artifact_token_with_a_declared_tag_passes_validate(tmp_path):
+    context = _resolve(_artifact_token_solution(tmp_path, "${artifact:api.image_tag}.tfstate", image_tag="1.0.0"))
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_the_tag_of_an_untagged_artifact_is_caught_for_the_deployment(tmp_path):
+    context = _resolve(_artifact_token_solution(tmp_path, "${artifact:api.image_tag}.tfstate", image_tag=None))
+    assert not context.ok
+    assert _artifact_token_codes(context) == ["unavailable_artifact_token"]
+    assert any("prd-deployment" in m for m in context.diagnostics.messages())
+
+
+def test_a_pin_supplies_the_tag_an_artifact_lacks(tmp_path):
+    root = _artifact_token_solution(tmp_path, "${artifact:api.image_tag}.tfstate", image_tag=None, pin="2.0.0")
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_the_image_ref_of_an_untagged_artifact_passes(tmp_path):
+    context = _resolve(_artifact_token_solution(tmp_path, "${artifact:api.image_ref}", image_tag=None))
+    assert context.ok, context.diagnostics.messages()
+
+
+@pytest.mark.parametrize("token", ["${artifact:ghost.image_tag}", "${artifact:api.digest}"])
+def test_an_unknown_artifact_or_field_is_caught(tmp_path, token):
+    context = _resolve(_artifact_token_solution(tmp_path, token, image_tag="1.0.0"))
+    assert not context.ok
+    assert _artifact_token_codes(context) == ["unknown_artifact_token"]
+
+
+def test_an_artifact_token_in_an_environment_store_value_is_caught(tmp_path):
+    root = _artifact_token_solution(tmp_path, "state.tfstate", image_tag="1.0.0")
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace('value: "1.2.3.4"', 'value: "${artifact:api.image_tag}"'),
+        encoding="utf-8",
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "store_value_token_unsupported" for d in context.diagnostics.errors)
+
+
+# ---------------------------------------------------------------------------
+# A Helm service's artifact reaches the chart only through an ${artifact:} token in
+# its values (docs/work/artifact-gap-analysis.md, design 2)
+# ---------------------------------------------------------------------------
+
+
+def _helm_artifact_solution(
+    tmp_path: Path, *, module_type: str = "helm", module_configuration: str = "", service_extra: str = ""
+) -> Path:
+    """The base solution with artifact `immich` and a module `photos` whose service `server` names it."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "artifacts/immich.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: immich\n"
+        "spec:\n  image_name: ghcr.io/immich-app/immich-server\n  image_tag: v1.120.0\n",
+    )
+    _write(
+        root,
+        "modules/photos.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: photos\nspec:\n"
+        f"  type: {module_type}\n  source:\n    source_path: charts/photos\n"
+        f"  services:\n    - name: server\n      artifact: immich\n{service_extra}{module_configuration}",
+    )
+    return root
+
+
+def _delivery_findings(context) -> list:
+    return [d for d in context.diagnostics.items if d.code == "artifact_not_delivered"]
+
+
+def test_a_helm_service_artifact_without_a_token_is_not_delivered(tmp_path):
+    context = _resolve(_helm_artifact_solution(tmp_path))
+
+    findings = _delivery_findings(context)
+    assert [(d.severity.value, d.location) for d in findings] == [("warning", "spec.services[0].artifact")]
+    message = findings[0].message
+    assert "photos" in message
+    assert "server" in message
+    assert "${artifact:immich.image_tag}" in message
+    assert context.ok, "a warning, not an error"
+
+
+def test_a_token_in_the_module_configuration_delivers_the_artifact(tmp_path):
+    configuration = (
+        "  configuration:\n    image:\n"
+        '      repository: "${artifact:immich.image_name}"\n      tag: "${artifact:immich.image_tag}"\n'
+    )
+    context = _resolve(_helm_artifact_solution(tmp_path, module_configuration=configuration))
+
+    assert _delivery_findings(context) == []
+
+
+def test_a_token_in_the_service_configuration_delivers_the_artifact(tmp_path):
+    service_extra = '      configuration:\n        image: "${artifact:immich.image_ref}"\n'
+    context = _resolve(_helm_artifact_solution(tmp_path, service_extra=service_extra))
+
+    assert _delivery_findings(context) == []
+
+
+def test_a_token_in_the_service_environment_does_not_deliver_the_artifact(tmp_path):
+    """It becomes an environment variable of the chart's pods, not the image the chart runs."""
+    service_extra = "      environment:\n        - key: IMAGE\n          value: ${artifact:immich.image_ref}\n"
+    context = _resolve(_helm_artifact_solution(tmp_path, service_extra=service_extra))
+
+    assert len(_delivery_findings(context)) == 1
+
+
+def test_a_token_for_another_artifact_does_not_deliver_this_one(tmp_path):
+    root = _helm_artifact_solution(
+        tmp_path, module_configuration='  configuration:\n    sidecar: "${artifact:redis.image_ref}"\n'
+    )
+    _write(
+        root,
+        "artifacts/redis.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: redis\nspec:\n  image_name: redis\n",
+    )
+    context = _resolve(root)
+
+    assert len(_delivery_findings(context)) == 1
+
+
+def test_a_compose_service_artifact_is_delivered_by_strata(tmp_path):
+    """Compose writes the service's image into the compose file, so there is nothing to warn about."""
+    context = _resolve(_helm_artifact_solution(tmp_path, module_type="compose"))
+
+    assert _delivery_findings(context) == []
+
+
+# ---------------------------------------------------------------------------
+# An artifact's registry agrees with its image_name (docs/work/artifact-gap-analysis.md, design 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("image_name", "expected"),
+    [("example/api", ["artifact_registry_mismatch"]), ("registry.example.com/example/api", [])],
+)
+def test_validate_checks_an_artifacts_registry_against_its_image_name(tmp_path, image_name, expected):
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "artifacts/api.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: api\n"
+        f"spec:\n  image_name: {image_name}\n  registry: registry.example.com\n",
+    )
+
+    context = _resolve(root)
+
+    findings = [d for d in context.diagnostics.items if d.code == "artifact_registry_mismatch"]
+    assert [d.code for d in findings] == expected
+    assert all(d.source.endswith("api.yaml") for d in findings)
+    assert context.ok

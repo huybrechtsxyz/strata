@@ -178,7 +178,8 @@ class VersionPinsModel(PlatformBaseModel):
     """Pins grouped by what they target. The key is always the target's own name. A pin may only target
     something strata itself materialises.
 
-    - `images`: a module service's `image`; the key is the service name.
+    - `images`: a module service's whole `image`; the key is the service name. The value is a whole
+      image reference with a tag, a digest or both, never a tag alone.
     - `charts`: a Helm module's `chart_version`; the key is the module name.
     - `remotes`: a remote's `reference`; the key is the remote name. Only for remotes with `fetch:
       strata`; a pin on an `external` remote is rejected.
@@ -201,8 +202,8 @@ class VersionPinsModel(PlatformBaseModel):
       remote is `fetch: strata`. A `fetch: external` remote is placed by CI
       before strata runs, so pinning it cannot take effect — resolution
       rejects such a pin rather than ignoring it silently.
-    - ``artifacts`` -> `ArtifactSpecModel.image_tag` (docs/design/
-      artifact-references.md). A separate category from `images`, not an
+    - ``artifacts`` -> `ArtifactSpecModel.image_tag` (docs/config/
+      artifact.md). A separate category from `images`, not an
       overload of it — `images` stays unambiguously `ModuleServiceModel.
       name`, no disambiguation logic needed. `image_name` is identity and
       is never overlaid by a pin here, same as `charts` never overlays
@@ -217,7 +218,10 @@ class VersionPinsModel(PlatformBaseModel):
 
     images: dict[PlatformName, VersionPinModel] | None = Field(
         default=None,
-        description="Container image pins. The key is the module service name.\n\n"
+        description="Container image pins. The key is the module service name. Each value replaces the "
+        "service's whole `image`, so it is a whole reference with a tag, a digest or both "
+        "(`docker.io/library/postgres:16-alpine`), never a tag alone; `strata validate` reports another value "
+        "as `image_pin_invalid`.\n\n"
         "Design notes: Container image pins. Key = ModuleServiceModel.name.",
     )
     charts: dict[PlatformName, VersionPinModel] | None = Field(

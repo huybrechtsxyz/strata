@@ -400,7 +400,7 @@ def test_validate_allowed_key_value_store_skips_when_no_backend_configured():
 
 # ---------------------------------------------------------------------------
 # claimed_document_names() — the ownership half of `${output:...}` resolution
-# (docs/design/gap_fit_v1.md gap #12, generalized to namespaces so a Module reached
+# (docs/work/gap_fit_v1.md gap #12, generalized to namespaces so a Module reached
 # through a targeted namespace counts as claimed too, not just directly-
 # targeted DNS/network/firewall documents — docs/design/deploy-command.md's
 # "Cross-invocation output access" section).

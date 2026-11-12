@@ -24,14 +24,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from sys import stdin
-from typing import Any, Literal, cast
+from typing import Any, cast
 
+from strata.controllers.artifact_tokens import ArtifactTag, effective_artifact_tag
 from strata.controllers.deployment_resolution import deployment_workspace, resolve_deployment_chains
 from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.value_references import resolve_document_value_references
-from strata.controllers.version_pins import log_pin_applied
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.integrations.registry import IntegrationNotFoundError
@@ -53,9 +53,9 @@ from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
-from strata.services.version_service import VersionService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
+from strata.utils.sbom_utils import compose_image_ref, split_image_tag
 from strata.utils.secret_generator import generate_secret, mask_secret
 from strata.utils.value_tokens import has_value_tokens, resolve_value_tokens
 
@@ -196,7 +196,7 @@ def resolve_deployment_workspace(
 
 def resolve_tenant(context: SolutionContext, deployment: DeploymentModel) -> TenantModel | None:
     """The `TenantModel` `deployment.spec.tenant` names, or `None` if unset
-    or unresolvable (docs/design/build-command.md's `tenant` Terraform
+    or unresolvable (docs/work/build-command.md's `tenant` Terraform
     category).
 
     `deployment.spec.tenant` survives `resolve_deployment()`'s `extends`/
@@ -237,7 +237,7 @@ def resolve_version(context: SolutionContext, deployment: DeploymentModel) -> Ve
 
 def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactModel | None:
     """The `ArtifactModel` named `artifact_name`, or `None` if unresolvable
-    (docs/work/artifact-references.md).
+    (docs/config/artifact.md).
 
     A missing artifact reference silently returns `None` — `validate_references`
     is the layer that reports a bad reference, not this function, matching
@@ -249,63 +249,22 @@ def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactMo
     return cast(ArtifactModel, entry.model)
 
 
-@dataclass(frozen=True)
-class ArtifactTag:
-    """An artifact's effective tag and where it came from.
-
-    `source` is `pin` (a `kind: version` pin won), `declared` (the artifact's own `image_tag`) or `none`
-    (neither supplied one; `value` is `None`). `version` names the version document for a `pin`.
-    """
-
-    value: str | None
-    source: Literal["pin", "declared", "none"]
-    version: str | None = None
-
-
 def resolve_artifact_tag(
     context: SolutionContext, deployment: DeploymentModel, artifact_name: str
 ) -> ArtifactTag | None:
-    """The effective tag of `artifact_name` for `deployment`, or `None` when the artifact does not exist.
-
-    Consults `deployment.spec.version` -> `VersionModel.spec.pins.artifacts[artifact_name]` first (via
-    `VersionService.resolve()`, the single shared pin lookup every overlay category uses,
-    docs/design/version-pin-overlay.md), then the artifact's own `image_tag`. Every pin application is
-    logged (ADR-0019 decision 7). `None` means "no such artifact", never "no tag": that is an
-    `ArtifactTag` with `source="none"`.
-    """
-    artifact = resolve_artifact(context, artifact_name)
-    if artifact is None:
-        return None
-    declared = artifact.spec.image_tag or None
-    if deployment.spec.version:
-        version_entry = context.controller.index.get(PlatformKind.VERSION, deployment.spec.version)
-        if version_entry is not None:
-            version = cast(VersionModel, version_entry.model)
-            pin = VersionService.from_model(version).resolve("artifacts", artifact_name)
-            if pin is not None:
-                log_pin_applied("artifacts", artifact_name, declared, pin.version, version.meta.name)
-                return ArtifactTag(pin.version, "pin", version.meta.name)
-    return ArtifactTag(declared, "declared" if declared else "none")
-
-
-def compose_image_ref(image_name: str, image_tag: str | None) -> str:
-    """`name:tag`, `name@algo:digest` for a digest, or the bare name when there is no tag.
-
-    A tag never contains `:`, so a value that does is a digest (`sha256:...`).
-    """
-    if not image_tag:
-        return image_name
-    separator = "@" if ":" in image_tag else ":"
-    return f"{image_name}{separator}{image_tag}"
+    """The effective tag of `artifact_name` for `deployment`, or `None` when the artifact does not exist; a pin
+    that wins is logged. See `artifact_tokens.effective_artifact_tag()`, the one pin lookup for artifacts."""
+    return effective_artifact_tag(context.controller.index, deployment, artifact_name)
 
 
 def resolve_artifact_field(
     context: SolutionContext, deployment: DeploymentModel, artifact_name: str, field: str
 ) -> str | None:
     """Resolve one `(artifact_name, field)` pair to a plain string
-    (docs/work/artifact-references.md's `store: artifact` mechanism).
+    (docs/config/artifact.md's `store: artifact` variable).
 
-    `field` is one of `image_name`/`image_tag`/`image_ref`:
+    `field` is one of `image_name`/`image_tag`/`image_ref`/`image_tag_name`/`image_digest`
+    (the last two are the parts of `TAG@sha256:...`, `""` when the value lacks one):
 
     - `image_name` is identity — read straight off the artifact document,
       never pin-overlaid (matches `chart_name`'s treatment — a pin never
@@ -314,7 +273,7 @@ def resolve_artifact_field(
       neither a pin nor the artifact supplies one.
     - `image_ref` is `compose_image_ref()` of the name and effective tag —
       adminapp's real combined Terraform variable shape
-      (docs/work/artifact-references.md).
+      (docs/archive/artifact-references.md).
 
     Returns `None` only when `artifact_name` doesn't resolve — same
     silently-return-None treatment as `resolve_artifact()`/`resolve_tenant()`.
@@ -330,6 +289,11 @@ def resolve_artifact_field(
     image_tag = tag.value if tag is not None else None
     if field == "image_tag":
         return image_tag or ""
+    tag_name, digest = split_image_tag(image_tag)
+    if field == "image_tag_name":
+        return tag_name or ""
+    if field == "image_digest":
+        return digest or ""
     # field == "image_ref": synthesised, never a stored field.
     return compose_image_ref(artifact.spec.image_name, image_tag)
 
@@ -384,7 +348,7 @@ def build_value_references(
     casting, `VariableStoreModel.value`/`FeatureStoreModel.value` are not
     cross-validated against `type` in v2 either), `environment` (a local
     `os.environ` read - not network I/O), and `artifact` (an in-solution
-    document lookup, docs/work/artifact-references.md - variables only,
+    document lookup, docs/config/artifact.md - variables only,
     never features/secrets) stores. Every other store type, and every
     secret regardless of store type, gets `value=None` - structurally,
     never resolved here (Q5: integration-backed resolution is deploy's

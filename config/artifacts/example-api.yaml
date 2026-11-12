@@ -5,7 +5,8 @@ meta:
   annotations:
     description: "Example application image that the Terraform root deploys; strata only resolves its tag"
 spec:
-  image_name: example/api
+  # The full path the runtime pulls, registry included: `registry` below only documents it.
+  image_name: registry.example.com/example/api
   # The tag every deployment gets unless a version document pins another: versions/prd.yaml
   # moves the production rollout without touching this document. Leave it out to make a pin
   # mandatory; `image_tag_policy` (workspaces/main.yaml) then fails a deployment with no pin.

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Tests for `evaluate_image_tag_policy()` (docs/design/image-tag-policy.md, phase 2)."""
 
+import dataclasses
+import json
 from datetime import date
 from pathlib import Path
 
@@ -11,21 +13,25 @@ from strata.controllers.policy_controller import check_policies, list_policies
 from strata.controllers.policy_results import image_tag_policy_result, read_policy_results
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import resolve_deployment_workspace
-from strata.integrations.resolved_context import EffectiveImage
+from strata.integrations.resolved_context import EffectiveImage, UnknownImageModule
 from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Severity
+from strata.utils.sbom_utils import compose_image_ref, image_to_purl, split_image_tag
 
 _DIGEST = "sha256:" + "a" * 64
 
 
 def _image(name="api", tag="1.2.3", *, origin="artifact", source=None, via=("variable:IMAGE",)) -> EffectiveImage:
+    """A row as `effective_images()` gives it: `tag` is the whole value (`1.2.3`, `sha256:...`, `1.2.3@sha256:...`)."""
+    tag_name, digest = split_image_tag(tag)
     return EffectiveImage(
         origin=origin,
         name=name,
         image_name=f"registry/{name}",
-        image_tag=tag,
-        image_ref=f"registry/{name}:{tag}" if tag else f"registry/{name}",
+        image_tag=tag_name,
+        image_digest=digest,
+        image_ref=compose_image_ref(f"registry/{name}", tag),
         tag_source=source or ("declared" if tag else "none"),
         via=via,
     )
@@ -87,6 +93,42 @@ def test_an_empty_reject_tags_rejects_nothing():
 def test_a_digest_passes_the_tag_rules_but_still_needs_a_tag_source():
     policy = _policy(tag_pattern=r"^\d+\.\d+\.\d+$", reject_tags=[_DIGEST])
     assert evaluate_image_tag_policy([_image(tag=_DIGEST)], policy, None).items == []
+
+
+def test_the_tag_rules_judge_the_tag_of_a_tag_at_digest():
+    policy = _policy(tag_pattern=r"^\d+\.\d+\.\d+$")
+    assert evaluate_image_tag_policy([_image(tag=f"1.2.3@{_DIGEST}")], policy, None).items == []
+    assert _codes(evaluate_image_tag_policy([_image(tag=f"1.2@{_DIGEST}")], policy, None)) == ["image_tag_pattern"]
+    diagnostics = evaluate_image_tag_policy([_image(tag=f"latest@{_DIGEST}")], _policy(), None)
+    assert _codes(diagnostics) == ["image_floating_tag"]
+
+
+@pytest.mark.parametrize(
+    ("tag", "codes"),
+    [
+        (_DIGEST, []),
+        (f"1.2.3@{_DIGEST}", []),
+        ("1.2.3", ["image_without_digest"]),
+        (None, ["image_without_tag", "image_without_digest"]),
+    ],
+)
+def test_require_digest_fails_an_image_with_no_digest(tag, codes):
+    diagnostics = evaluate_image_tag_policy([_image(tag=tag)], _policy(require_digest=True), None)
+    assert _codes(diagnostics) == codes
+    if "image_without_digest" in codes:
+        assert "TAG@sha256:<hex> under spec.pins.artifacts.api" in diagnostics.errors[-1].message
+
+
+def test_require_digest_names_the_service_image_form_for_a_module_service():
+    diagnostics = evaluate_image_tag_policy(
+        [_image(tag="7", origin="module-service")], _policy(require_digest=True), None
+    )
+    assert "Write the service's image as NAME:TAG@sha256:<hex>" in diagnostics.errors[0].message
+
+
+def test_require_pin_shows_the_whole_value_it_found(tmp_path):
+    diagnostics = evaluate_image_tag_policy([_image(tag=f"1.2.3@{_DIGEST}")], _policy(require_pin=True), None)
+    assert f"its tag '1.2.3@{_DIGEST}' is declared on the document" in diagnostics.errors[0].message
 
 
 def test_tag_pattern_is_searched_in_the_tag():
@@ -270,7 +312,17 @@ def _solution(
         "workspace",
         "main",
         "  providers:\n    - p1\n"
-        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n" + policy,
+        "  resources:\n    - name: r1\n      resource: r1\n"
+        "  provisioners:\n    - name: tf\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: infra\n      provisioner: tf\n      resources:\n        - r1\n" + policy,
+    )
+    # The Terraform step is what receives `CATALOG_TAG` (docs/work/artifact-gap-analysis.md, design 7).
+    _write(
+        root,
+        "resource.yaml",
+        "resource",
+        "r1",
+        "  provider_type: local\n  resource_type: server\n  category: compute\n  default_tags:\n    managed-by: strata\n",
     )
     _write(root, "artifact.yaml", "artifact", "catalog", f"  image_name: registry/catalog\n{artifact_tag}")
     _write(
@@ -354,3 +406,171 @@ def test_policy_list_shows_the_policy_as_checkable(tmp_path):
         True,
         False,
     )
+
+
+# Images strata does not deliver or does not know (docs/work/helm-image-delivery.md, option B).
+
+_IMMICH = UnknownImageModule(module="immich", namespace="forge", chart="immich", chart_version="0.13.1")
+
+
+@pytest.mark.parametrize(
+    ("setting", "severity"),
+    [("block", Severity.ERROR), ("warn", Severity.WARNING), ("skip", Severity.INFO)],
+)
+def test_on_unknown_image_decides_the_severity_of_an_unknown_helm_module(setting, severity):
+    diagnostics = evaluate_image_tag_policy([], _policy(on_unknown_image=setting), None, unknown=[_IMMICH])
+    [item] = diagnostics.items
+    assert (item.code, item.severity) == ("image_unknown_to_strata", severity)
+    assert item.message.startswith(
+        "image_tag_policy: module 'immich' (helm chart immich 0.13.1) in namespace 'forge' declares no images"
+    )
+
+
+def test_on_unknown_image_defaults_to_warn():
+    assert _policy().on_unknown_image == "warn"
+    diagnostics = evaluate_image_tag_policy([], _policy(), None, unknown=[_IMMICH])
+    assert [item.severity for item in diagnostics.items] == [Severity.WARNING]
+
+
+def test_on_unknown_image_rejects_another_value():
+    with pytest.raises(ValueError, match="on_unknown_image"):
+        _policy(on_unknown_image="fail")
+
+
+def test_on_unknown_image_does_not_follow_enforcement():
+    diagnostics = evaluate_image_tag_policy(
+        [], _policy(enforcement="warn", on_unknown_image="block"), None, unknown=[_IMMICH]
+    )
+    assert [item.severity for item in diagnostics.items] == [Severity.ERROR]
+
+
+def test_an_unknown_module_is_not_reported_outside_the_policys_rings_or_origins():
+    outside_ring = evaluate_image_tag_policy([], _policy(rings=["prd"]), "dev", unknown=[_IMMICH])
+    assert _codes(outside_ring) == ["image_tag_policy_not_applied"]
+    artifacts_only = evaluate_image_tag_policy([], _policy(origins=["artifact"]), None, unknown=[_IMMICH])
+    assert artifacts_only.items == []
+
+
+def test_allow_does_not_exempt_an_unknown_module():
+    policy = _policy(allow=[{"name": "immich", "reason": "the chart pins its own tags"}])
+    assert _codes(evaluate_image_tag_policy([], policy, None, unknown=[_IMMICH])) == ["image_unknown_to_strata"]
+
+
+def test_an_unknown_module_without_a_chart_still_reads_well():
+    module = UnknownImageModule(module="local", namespace="apps")
+    [item] = evaluate_image_tag_policy([], _policy(), None, unknown=[module]).items
+    assert "module 'local' (helm) in namespace 'apps' declares no images" in item.message
+
+
+def test_a_declared_only_image_is_judged_and_says_so():
+    image = dataclasses.replace(
+        _image("server", "latest", origin="module-service", via=("service:authentik/server",)),
+        delivered=False,
+        delivery="helm module: the chart decides",
+    )
+    [item] = evaluate_image_tag_policy([image], _policy(), None).items
+    assert item.code == "image_floating_tag"
+    assert item.message.startswith(
+        "image_tag_policy: module-service 'server' (registry/server; used by service:authentik/server; "
+        "declared only, the chart decides which image runs) has the floating tag 'latest'."
+    )
+
+
+def test_a_delivered_image_is_described_as_before():
+    [item] = evaluate_image_tag_policy([_image(tag="latest")], _policy(), None).items
+    assert "declared only" not in item.message
+
+
+# Images rendered charts run (docs/work/helm-image-delivery.md, plan item 9d).
+
+
+def _chart_row(name="whoami/shipper", tag="latest", *, via=("chart:apps/whoami/shipper",)) -> EffectiveImage:
+    return dataclasses.replace(_image(name, tag, origin="chart", source="chart", via=via), module="whoami")
+
+
+def test_a_chart_image_is_judged_and_the_fix_points_at_the_charts_values():
+    [item] = evaluate_image_tag_policy([_chart_row()], _policy(), None).items
+    assert item.code == "image_floating_tag"
+    assert item.message == (
+        "image_tag_policy: chart 'whoami/shipper' (registry/whoami/shipper; used by chart:apps/whoami/shipper) has "
+        "the floating tag 'latest'. Set the tag in the chart's values through the module's configuration, or pin a "
+        "chart version that ships the tag you want."
+    )
+
+
+@pytest.mark.parametrize("tag", ["1.2.3", None])
+def test_require_pin_does_not_apply_to_a_chart_image(tag):
+    policy = _policy(require_pin=True, require_tag=False)
+    assert evaluate_image_tag_policy([_chart_row(tag=tag)], policy, None).items == []
+
+
+def test_require_digest_names_the_charts_values_for_a_chart_image():
+    [item] = evaluate_image_tag_policy([_chart_row(tag="1.2.3")], _policy(require_digest=True), None).items
+    assert item.code == "image_without_digest"
+    assert item.message.endswith(
+        "Set the image as TAG@sha256:<hex> in the chart's values through the module's configuration."
+    )
+
+
+def test_allow_names_a_chart_image_by_reference_and_container():
+    policy = _policy(allow=[{"name": "whoami/shipper", "reason": "vendor sidecar"}])
+    assert evaluate_image_tag_policy([_chart_row()], policy, None).items == []
+
+
+def test_origins_without_chart_leaves_chart_images_out():
+    declared_only = _policy(origins=["artifact", "module-service"])
+    assert evaluate_image_tag_policy([_chart_row()], declared_only, None).items == []
+    assert _codes(evaluate_image_tag_policy([_chart_row()], _policy(origins=["chart"]), None)) == ["image_floating_tag"]
+
+
+def _sbom(build_path: Path, *components: dict) -> Path:
+    build_path.mkdir(parents=True, exist_ok=True)
+    (build_path / "sbom.json").write_text(json.dumps({"components": list(components)}), encoding="utf-8")
+    return build_path
+
+
+def _rendered_component(image: str, use: str) -> dict:
+    return {
+        "type": "container",
+        "name": use.rsplit("/", 1)[-1],
+        "purl": image_to_purl(image),
+        "properties": [
+            {"name": "strata:found-in", "value": "rendered-chart"},
+            {"name": "strata:used-by", "value": use},
+            {"name": "strata:image", "value": image},
+        ],
+    }
+
+
+def _check_with_build(root: Path, build_path: Path):
+    context = open_solution(root)
+    deployment, workspace = resolve_deployment_workspace(context, "app")
+    return check_image_tag_policy(context, deployment, workspace, build_path=build_path)
+
+
+def test_with_a_build_the_images_its_rendered_charts_run_are_judged(tmp_path):
+    root = _solution(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
+    shipper = _rendered_component("ghcr.io/acme/log-shipper:latest", "chart:apps/whoami/shipper")
+    diagnostics = _check_with_build(root, _sbom(tmp_path / "build", shipper))
+    [item] = diagnostics.errors
+    assert item.code == "image_floating_tag"
+    assert item.message.startswith("image_tag_policy: chart 'whoami/shipper' (ghcr.io/acme/log-shipper;")
+    # Where the rendered images came from (plan item 9f); this SBOM has no metadata timestamp.
+    [source] = diagnostics.infos
+    assert (source.code, source.message) == (
+        "image_tag_policy_rendered_images",
+        f"image_tag_policy: 1 image(s) rendered charts run judged too, from {tmp_path / 'build' / 'sbom.json'}.",
+    )
+
+
+def test_a_build_without_an_sbom_is_judged_on_the_solution_alone(tmp_path):
+    root = _solution(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
+    assert _check_with_build(root, tmp_path / "none").items == []
+
+
+def test_an_unreadable_sbom_is_a_warning_and_the_solution_is_still_judged(tmp_path):
+    build_path = tmp_path / "build"
+    build_path.mkdir()
+    (build_path / "sbom.json").write_text("{not json", encoding="utf-8")
+    diagnostics = _check_with_build(_solution(tmp_path), build_path)
+    assert _codes(diagnostics) == ["image_tag_policy_sbom_unreadable", "image_without_tag"]

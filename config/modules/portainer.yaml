@@ -14,7 +14,9 @@ spec:
     app: portainer
   services:
     - name: portainer
-      image: portainer/portainer-ce:2.39.3-alpine
+      # The image comes from an artifact (artifacts/portainer.yaml), so versions/prd.yaml pins it under
+      # `pins.artifacts` and every deployment runs that pinned tag. A literal `image:` works too, unpinnable.
+      artifact: portainer
       restart: unless-stopped
       command: ["--http-disabled"]
       # Edge tunnel port for Docker/Kubernetes Edge Agents — not proxied by

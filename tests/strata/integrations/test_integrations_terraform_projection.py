@@ -496,7 +496,7 @@ def test_build_strata_locals_always_defines_strata_assets():
 
 
 # ---------------------------------------------------------------------------
-# find_secret_paths() / rewrite_strata_payload() (ADR-0035, docs/work/
+# find_secret_paths() / rewrite_strata_payload() (ADR-0035, docs/design/
 # unified-terraform-projection.md Phase 3) — the single-object replacement
 # for resolve_deploy_time_files(), tested standalone against synthetic
 # payloads rather than a real build_strata_payload() output, since neither

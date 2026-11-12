@@ -43,7 +43,7 @@ from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.provisioner_lock_policy_model import ProvisionerLockPolicyModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
 from strata.models.reference_fields import References
-from strata.models.sbom_model import CveMaxSeverityPolicyModel
+from strata.models.sbom_model import CveMaxSeverityPolicyModel, WorkspaceSbomModel
 from strata.models.security_gate_model import ImageGatePolicyModel, ReleaseGatePolicyModel
 from strata.utils.dependency_order import topological_order
 from strata.utils.names import check_unique_names
@@ -649,7 +649,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "Provisioner's bare 'tool' (ADR-0022 D2). Omit to disable cross-run output "
         "persistence entirely (today's in-memory-only behavior). Checked against "
         "Configuration.spec.security.allowed_key_value_stores when set "
-        "(docs/work/cross-run-step-output-delivery.md).",
+        "(docs/archive/cross-run-step-output-delivery.md).",
     )
     output_store_integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         None,
@@ -751,6 +751,12 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "one that does not lock every provider it declares. Omit it to only get an `info` line in `build run`.\n\n"
         "Design notes: Opt-in guard rail over the build path (docs/design/provisioner-lock-policy.md). Build only: "
         "deploy uses the built sources.",
+    )
+    sbom: WorkspaceSbomModel | None = Field(
+        None,
+        description="What `build run` adds to `sbom.json`. Omitted, it lists the images Helm charts deploy "
+        "(`render_charts` defaults to `true`); `render_charts: false` lists only the images modules declare.\n\n"
+        "Design notes: docs/work/helm-image-delivery.md, the SBOM side.",
     )
 
     @model_validator(mode="after")

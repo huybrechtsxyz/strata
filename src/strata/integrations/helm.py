@@ -209,7 +209,7 @@ class HelmIntegration(InfraIntegration):
         timeout: int | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
-        """Deploy every Helm module in `modules` (docs/design/gap_fit_v1.md gap #13).
+        """Deploy every Helm module in `modules` (docs/work/gap_fit_v1.md gap #13).
 
         One `helm upgrade` per module — `prepare_namespace()`'s own
         already-written `VALUES_FILE`/`meta.yaml` are this method's real
@@ -709,6 +709,25 @@ class HelmIntegration(InfraIntegration):
                 expected_digest=expected_digest,
             )
 
+    def template(
+        self, chart_dir: Path, *, release: str, namespace: str, values: Path | None = None, timeout: int = 120
+    ) -> CommandResult:
+        """`helm template release chart --namespace ns [-f values]`: render a chart on disk, offline.
+
+        `chart_dir` is a chart folder or a packaged chart (`.tgz`, a registry chart from `.strata/helm/`). No
+        `--dependency-update` and no repository: a dependency that is not vendored under `charts/` fails the
+        render instead of fetching it. Run in an isolated Helm configuration, so the user's repositories and
+        plugins play no part. Used by the SBOM's `chart-image` collector (docs/work/helm-image-delivery.md).
+        """
+        # Absolute, because Helm runs in the chart's folder: a relative `--build-path` would otherwise not resolve.
+        chart_dir = chart_dir.resolve()
+        args = ["template", release, str(chart_dir), "--namespace", namespace]
+        if values is not None:
+            args.extend(["-f", str(values.resolve())])
+        cwd = chart_dir if chart_dir.is_dir() else chart_dir.parent
+        with ExitStack() as isolated:
+            return self.run(*args, cwd=cwd, env=_isolated_helm_env(isolated), timeout=timeout)
+
     def dependency_list(self, chart_dir: Path, *, timeout: int = 60) -> CommandResult:
         """`helm dependency list chart_dir`: each dependency's status in `charts/`, read offline."""
         return self.run("dependency", "list", str(chart_dir), timeout=timeout)
@@ -889,7 +908,7 @@ def _render_values(module: ModuleModel) -> dict[str, Any]:
 
 def resolve_module_values(module: ModuleModel, values: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
     """Resolve Value tokens in one module's rendered `VALUES_FILE` payload
-    for deploy-time delivery (docs/design/gap_fit_v1.md gap #9, docs/design/
+    for deploy-time delivery (docs/work/gap_fit_v1.md gap #9, docs/design/
     value-token-resolution.md's Full Solution Phase 4).
 
     Reuses `_render_values()`'s own build-time payload (still containing
@@ -1086,7 +1105,7 @@ def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, A
     v1's real "self-contained build artifact" reasoning). Omitted for a
     git-based (local chart) `source`, where `item.source_path` itself is
     the chart to deploy. `chartRemote`/`chartRepository` are mutually
-    exclusive on `SourceModel` (docs/design/gap_fit_v1.md gap #2's Option 1) — at
+    exclusive on `SourceModel` (docs/work/gap_fit_v1.md gap #2's Option 1) — at
     most one is ever written.
     """
     module = item.module
@@ -1137,7 +1156,7 @@ def chart_cache_source(meta: Mapping[str, Any]) -> str:
 # ----------------------------------------------------------------------
 # deploy_namespace() helpers — chart reference resolution, registry
 # credentials, and the stdin values document for secrets
-# (docs/design/gap_fit_v1.md gap #13).
+# (docs/work/gap_fit_v1.md gap #13).
 # ----------------------------------------------------------------------
 
 
@@ -1264,7 +1283,7 @@ def _chart_ref_from_url(
 ) -> str:
     """Build the real `helm upgrade` chart argument from a resolved registry
     URL — shared by both `chartRemote` (a `SolutionRemoteModel` lookup) and
-    `chartRepository` (an inline URL, docs/design/gap_fit_v1.md gap #2's Option 1)
+    `chartRepository` (an inline URL, docs/work/gap_fit_v1.md gap #2's Option 1)
     resolution paths, which differ only in *where* the URL and OCI-ness
     come from, never in what happens once both are known.
 
@@ -1351,7 +1370,7 @@ def _resolve_chart(
 
     Two mutually exclusive ways a chart-based source names its registry
     (`SourceModel`'s own validator enforces exactly one — see its
-    docstring, docs/design/gap_fit_v1.md gap #2):
+    docstring, docs/work/gap_fit_v1.md gap #2):
 
     - `chartRemote`: a name that must resolve to a real, declared
       `SolutionRemoteModel` (looked up by name, never guessed). Its `type`

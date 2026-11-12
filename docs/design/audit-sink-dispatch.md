@@ -8,7 +8,7 @@
 
 ## Overview
 
-[audit-trail.md](../work/audit-trail.md)'s Layer 4 is "send the audit evidence
+the work doc `audit-trail.md`'s Layer 4 is "send the audit evidence
 somewhere durable and tamper-resistant." v2 ships Layer 2 (local
 manifest/metrics + `git` sink push) and the full CloudEvents+ECS *rendering*
 for Layer 4 — but nothing ever calls that renderer. A configured
@@ -25,7 +25,7 @@ v1 shipped **five** SIEM backends (`sentinel`, `elk`, `otel`, `splunk` HEC,
 `syslog`+CEF). Real usage, confirmed directly in `config-repo`'s own
 `config/audit.yaml`: **one** declared sink (`elk`), `enabled: false` — zero
 actually active. That is the exact "declared-but-unread machinery" failure
-[audit-trail.md](../work/audit-trail.md)'s own "Lessons from v1's own defects" #1
+the work doc `audit-trail.md`'s own "Lessons from v1's own defects" #1
 describes, reproduced at the integration layer.
 
 The opposing risk is just as real, and was raised directly: *"if not
@@ -304,7 +304,7 @@ Datadog, an OTel Collector that itself fans out further.
   layer, capability ABCs, lazy registry, `x-` extension tier, and
   `http_request()`; this design adds one capability and one class within
   that existing structure rather than inventing a parallel one.
-- [audit-trail.md](../work/audit-trail.md) — the parent design: the four-layer
+- `audit-trail.md` (work doc) — the parent design: the four-layer
   evidence model, the CloudEvents+ECS envelope, and the sink config surface
   this dispatch consumes.
 - [path-conventions.md](path-conventions.md) — precedent for D2's rejection

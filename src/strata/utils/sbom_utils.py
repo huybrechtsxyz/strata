@@ -18,6 +18,22 @@ MUTABLE_ALIAS_TAGS: frozenset[str] = frozenset(
     {"latest", "main", "master", "dev", "develop", "staging", "edge", "nightly", "canary"}
 )
 
+#: Where a component is used: `service:MODULE/SERVICE`, `variable:KEY`, `token:KIND/NAME`,
+#: `chart:NS/REFERENCE/CONTAINER`.
+USED_BY_PROPERTY = "strata:used-by"
+#: The image reference as a rendered chart writes it (`traefik/whoami:v1.10.2@sha256:...`). The purl keeps only the
+#: digest of a digest-pinned image, so this is the only place its tag survives (docs/work/helm-image-delivery.md,
+#: plan item 9a).
+IMAGE_REF_PROPERTY = "strata:image"
+#: "false" (with `IMAGE_DELIVERY_PROPERTY` saying why) on an image strata does not write into what runs, such as a
+#: Helm module's declared service image (docs/work/helm-image-delivery.md, the SBOM side). Absent means delivered,
+#: so an SBOM written before the marker existed reads the same.
+IMAGE_DELIVERED_PROPERTY = "strata:image-delivered"
+IMAGE_DELIVERY_PROPERTY = "strata:image-delivery"
+#: `FOUND_IN_RENDERED_CHART` on an image a rendered chart deploys (the `chart-image` collector): it is what runs.
+FOUND_IN_PROPERTY = "strata:found-in"
+FOUND_IN_RENDERED_CHART = "rendered-chart"
+
 #: Semver-ish pattern: optional leading "v", dot-separated integers,
 #: optional pre-release / build metadata suffix.
 _SEMVER_RE = re.compile(r"^v?\d+(\.\d+)*(-[a-zA-Z0-9.+]+)?(\+[a-zA-Z0-9.+]+)?$")
@@ -36,17 +52,154 @@ def exact_version(constraint: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+#: A Docker tag: what may follow `name:` in an image reference.
+_TAG_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
+
+#: A content digest, `<algorithm>:<lowercase hex>`, at least 32 hex characters.
+_DIGEST_RE = re.compile(r"[a-z0-9]+(?:[+._-][a-z0-9]+)*:[0-9a-f]{32,}")
+
+
+def split_image_tag(value: str | None) -> tuple[str | None, str | None]:
+    """An artifact's `image_tag` (or `artifacts` pin) as `(tag, digest)`; either may be `None`.
+
+    The value is `tag`, `algorithm:hex` or `tag@algorithm:hex`. A tag never contains `:`, so a value with `:` and no
+    `@` is a digest only.
+
+    Examples:
+        "1.4.2" -> ("1.4.2", None)
+        "sha256:9f86..." -> (None, "sha256:9f86...")
+        "1.4.2@sha256:9f86..." -> ("1.4.2", "sha256:9f86...")
+    """
+    if not value:
+        return None, None
+    if "@" in value:
+        tag, _, digest = value.partition("@")
+        return tag or None, digest or None
+    if ":" in value:
+        return None, value
+    return value, None
+
+
+def image_tag_problem(value: str) -> str | None:
+    """Why `value` is not a valid `image_tag` (`tag`, `algorithm:hex` or `tag@algorithm:hex`), or `None`."""
+    tag, digest = split_image_tag(value)
+    shapes = "a tag (1.4.2), a digest (sha256:<hex>) or both (1.4.2@sha256:<hex>)"
+    if "@" in value and (tag is None or digest is None):
+        return f"'{value}' is not {shapes}: both sides of '@' must be set."
+    if tag is not None and _TAG_RE.fullmatch(tag) is None:
+        return (
+            f"'{value}' is not {shapes}: the tag '{tag}' may hold only letters, digits, '_', '.' and '-', must not "
+            "start with '.' or '-', and has at most 128 characters."
+        )
+    if digest is not None and _DIGEST_RE.fullmatch(digest) is None:
+        return (
+            f"'{value}' is not {shapes}: the digest '{digest}' must be an algorithm, ':' and at least 32 lowercase "
+            "hex characters."
+        )
+    return None
+
+
+#: One path component of an image name: lowercase letters and digits, joined by '.', '_', '__' or dashes.
+_NAME_COMPONENT_RE = re.compile(r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*")
+
+#: A registry host with an optional port, as it may lead an image name.
+_REGISTRY_HOST_RE = re.compile(
+    r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*(?::[0-9]+)?"
+)
+
+_IMAGE_REF_SHAPES = "an image reference (NAME:TAG, NAME@sha256:<hex> or NAME:TAG@sha256:<hex>)"
+
+
+def image_ref_problem(value: str) -> str | None:
+    """Why `value` is not a valid image reference (`name`, `name:tag`, `name@digest`, `name:tag@digest`), or `None`.
+
+    The name follows Docker's rules: an optional registry host (with a port), then `/`-separated lowercase components.
+    The tag and digest follow `image_tag_problem()`'s rules. A bare name is valid here; `image_pin_problem()` refuses it.
+    """
+    name, tag, digest = parse_image_ref(value)
+    if "@" in value and not digest:
+        return f"'{value}' is not {_IMAGE_REF_SHAPES}: nothing follows '@'."
+    if not name:
+        return f"'{value}' is not {_IMAGE_REF_SHAPES}: it has no image name."
+    host, repository = split_registry(name)
+    if host is not None and _REGISTRY_HOST_RE.fullmatch(host) is None:
+        return f"'{value}' is not {_IMAGE_REF_SHAPES}: the registry '{host}' is not a host name with an optional port."
+    if any(_NAME_COMPONENT_RE.fullmatch(part) is None for part in repository.split("/")):
+        return (
+            f"'{value}' is not {_IMAGE_REF_SHAPES}: the name '{repository}' may hold only lowercase letters, digits "
+            "and '/', '.', '_' or '-' between them."
+        )
+    if tag is not None and not tag:
+        return f"'{value}' is not {_IMAGE_REF_SHAPES}: nothing follows ':'."
+    if tag is not None and _TAG_RE.fullmatch(tag) is None:
+        return (
+            f"'{value}' is not {_IMAGE_REF_SHAPES}: the tag '{tag}' may hold only letters, digits, '_', '.' and '-', "
+            "must not start with '.' or '-', and has at most 128 characters."
+        )
+    if digest is not None and _DIGEST_RE.fullmatch(digest) is None:
+        return (
+            f"'{value}' is not {_IMAGE_REF_SHAPES}: the digest '{digest}' must be an algorithm, ':' and at least 32 "
+            "lowercase hex characters."
+        )
+    return None
+
+
+def image_pin_problem(value: str, name_hint: str | None = None) -> str | None:
+    """Why `value` cannot be a `pins.images` pin, or `None`: it must be an image reference with a tag, a digest or both.
+
+    A pin replaces the service's whole `image`, so a value with no tag or digest (`16-alpine`, `postgres`) pins nothing.
+    `name_hint` is the service's own image name, used for the suggested fix.
+    """
+    problem = image_ref_problem(value)
+    if problem is not None:
+        return problem
+    _, tag, digest = parse_image_ref(value)
+    if tag or digest:
+        return None
+    if name_hint and canonical_image_name(name_hint) != canonical_image_name(value):
+        fix = f"Write the whole reference, for example '{name_hint}:{value}'."
+    elif name_hint:
+        fix = f"Add the tag, for example '{name_hint}:<tag>'."
+    else:
+        fix = "Write the whole reference, NAME:TAG, for example 'postgres:16-alpine'."
+    return f"'{value}' has no tag or digest, so it pins nothing: an image pin replaces the service's whole image. {fix}"
+
+
+def canonical_image_name(name: str) -> str:
+    """An image name (no tag or digest) as a runtime pulls it: registry first, Docker Hub's `library/` filled in.
+
+    Examples:
+        "postgres" -> "docker.io/library/postgres"
+        "docker.io/library/postgres" -> "docker.io/library/postgres"
+        "index.docker.io/bitnami/redis" -> "docker.io/bitnami/redis"
+        "ghcr.io/org/app" -> "ghcr.io/org/app"
+    """
+    registry = pull_registry(name)
+    _, repository = split_registry(name)
+    if registry == DOCKER_HUB and "/" not in repository:
+        repository = f"library/{repository}"
+    return f"{registry}/{repository}"
+
+
+def compose_image_ref(image_name: str, image_tag: str | None) -> str:
+    """`name:tag`, `name@algo:hex`, `name:tag@algo:hex`, or the bare name when there is neither; the reverse of
+    `parse_image_ref()`. `image_tag` is split with `split_image_tag()`.
+    """
+    tag, digest = split_image_tag(image_tag)
+    return image_name + (f":{tag}" if tag else "") + (f"@{digest}" if digest else "")
+
+
 def is_floating_tag(tag: str | None) -> bool:
     """Return True when the image tag is mutable / not pinned.
 
     A tag is considered floating when it is None/empty, an exact match for a
     known mutable alias (latest, main, dev, …), or doesn't look like a
-    semantic version string. A digest reference (`sha256:...`) is never
-    floating.
+    semantic version string. A value with a digest (`sha256:...`,
+    `latest@sha256:...`) is never floating: a digest never moves.
     """
     if not tag:
         return True
-    if tag.startswith("sha256:"):
+    if split_image_tag(tag)[1] is not None:
         return False
     if tag.lower() in MUTABLE_ALIAS_TAGS:
         return True
@@ -115,6 +268,45 @@ def split_registry(name: str) -> tuple[str | None, str]:
 
 #: The names Docker Hub answers to; an image on any of them is written without a registry.
 _DOCKER_HUB_REGISTRIES: frozenset[str] = frozenset({"docker.io", "index.docker.io", "registry-1.docker.io"})
+
+#: How `pull_registry()` and `registry_host()` name Docker Hub.
+DOCKER_HUB = "docker.io"
+
+
+def _canonical_registry(host: str) -> str:
+    host = host.lower()
+    return DOCKER_HUB if host in _DOCKER_HUB_REGISTRIES else host
+
+
+def pull_registry(image_name: str) -> str:
+    """The registry a container runtime pulls `image_name` (no tag or digest) from: its host part, lower-cased, or
+    `docker.io` when it has none (Docker's rule, `split_registry()`) or names a Docker Hub alias.
+
+    Examples:
+        "ghcr.io/org/app" -> "ghcr.io"
+        "registry:5000/img" -> "registry:5000"
+        "org/app" -> "docker.io"
+        "index.docker.io/library/redis" -> "docker.io"
+    """
+    host, _ = split_registry(image_name)
+    return _canonical_registry(host) if host is not None else DOCKER_HUB
+
+
+def registry_host(registry: str) -> str | None:
+    """A free-text registry setting (an artifact's `spec.registry`) as `pull_registry()` would name it: scheme,
+    trailing `/` and any path dropped, lower-cased, Docker Hub aliases as `docker.io`. `None` when nothing is left.
+
+    Examples:
+        "https://Registry.Example.com/" -> "registry.example.com"
+        "acr.example.io/team" -> "acr.example.io"
+        "index.docker.io" -> "docker.io"
+    """
+    text = registry.strip()
+    for scheme in ("https://", "http://"):
+        if text.lower().startswith(scheme):
+            text = text[len(scheme) :]
+    host = text.strip("/").partition("/")[0]
+    return _canonical_registry(host) if host else None
 
 
 def image_to_purl(image: str) -> str:

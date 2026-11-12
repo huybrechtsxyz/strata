@@ -95,7 +95,7 @@ def test_ordered_by_depends_on_handles_a_diamond():
 
 
 def test_ordered_by_depends_on_raises_on_a_cycle():
-    """Regression test for the Phase 1 refactor (docs/work/
+    """Regression test for the Phase 1 refactor (docs/design/
     provisioner-source-dependencies.md): this used to silently drop cyclic
     steps from the result instead of raising — confirm the new
     `topological_order()`-backed implementation actually raises instead.

@@ -1,7 +1,7 @@
 # SBOM Generation (CycloneDX) - Design
 
 - Status: current
-- Last updated: 2026-11-07
+- Last updated: 2026-11-11
 
 ## Overview
 
@@ -77,6 +77,7 @@ they choose a commit to judge, not the one checked out. Outside git the property
 | `image`     | `spec.services[].image` of every resolved module, plus artifact images (`graph.images`)                                                   | `container`, `pkg:docker/...`                    |
 | `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                                    | `container`, `pkg:docker/...`                    |
 | `helm`      | Chart modules' `source.{chart_name,chart_version,chart_repository}` and their built `meta.yaml`, every rendered `Chart.yaml` and its `dependencies[]` | `library`, `pkg:helm/...`                        |
+| `chart-image` | Unless `spec.sbom.render_charts: false`: `helm template` of every chart folder whose `meta.yaml` has a release name and namespace (a local chart's `Chart.yaml`, or a registry chart's pinned archive in `.strata/helm/`), offline, with `strata-values.yaml`; every `containers`/`initContainers`/`ephemeralContainers` image | `container`, `pkg:docker/...` |
 | `terraform` | `required_providers {}` and `module "x" {}` blocks in every `*.tf` (one `python-hcl2` pass), and each root module's `.terraform.lock.hcl` | `library`, `pkg:terraform/...`, `pkg:github/...` |
 
 The file-based collectors scan the whole build path with `rglob()`; no wiring inside the
@@ -89,7 +90,7 @@ build path itself is routinely named `build`.
 The `helm` collector dedupes by chart name and version, first one kept, so a declared chart (which
 knows its repository) is not repeated by the `Chart.yaml` it was materialised to (which does not).
 
-A registry chart `build run` pinned ([helm-registry-chart-checks.md](../work/helm-registry-chart-checks.md))
+A registry chart `build run` pinned (`helm-registry-chart-checks.md` (work doc))
 is recorded from its module's `meta.yaml`, which the build writes before the SBOM: the exact
 `chartVersion` (the purl version, even when the module declared a range), `hashes` `SHA-256` from
 `chartDigest` (strata's SHA-256 of the archive), `strata:version-constraint` when the declared
@@ -99,7 +100,7 @@ not pin keeps its declared version and gets `strata:pinned: false`. The collecto
 path only, never the `.strata/helm/` cache.
 
 A local chart's dependencies are recorded the same way from its `meta.yaml`'s `chartDependencies`
-([helm-chart-dependencies.md](../work/helm-chart-dependencies.md)): the exact version the build placed
+(`helm-chart-dependencies.md` (work doc)): the exact version the build placed
 in `charts/`, `hashes` `SHA-256` for a pulled archive, `strata:version-constraint` when `Chart.yaml`
 declared something else, and `strata:subchart-of: <chart>@<version>`. They replace the declared
 `dependencies[]` entries of that `Chart.yaml`. A `file://` dependency gets no repository in its purl.
@@ -111,7 +112,7 @@ semver-shaped) gets the property `strata:tag-stability: floating`. An artifact i
 `kind: version` pin chose is floating only when the tag is a mutable alias.
 
 An image and a declared chart list where they are used in `strata:used-by`, comma-separated in
-first-use order: `service:MODULE/SERVICE` and `variable:KEY` for images (the names `strata deploy
+first-use order: `service:MODULE/SERVICE`, `variable:KEY` and `token:KIND/NAME` for images (the names `strata deploy
 images` and the image tag policy use; an artifact's come from `graph.images`), `module:NAME` for a
 chart. One property rather than a namespace, a module and a service property, because a component
 used in several places needs each module kept with its service. A chart found only in a
@@ -138,6 +139,46 @@ declaring them (those are not in the SBOM at all), so the gap is visible in the 
 never fails a command, not even under `--strict`.
 Providers are matched on their full address with Terraform's defaults applied, so `azurerm`,
 `hashicorp/azurerm` and `registry.terraform.io/hashicorp/azurerm` are one provider.
+
+### Helm images: declared or rendered
+
+Strata writes no image into a chart's values (`helm-image-delivery.md` (work doc)), so a Helm module's declared
+service image may not be what runs.
+
+- **The marker.** `ImageCollector` adds `strata:image-delivered: false` and `strata:image-delivery: <reason>` to
+  an image when no `graph.images` row with its purl is delivered (`EffectiveImage.delivered`). An image a Compose
+  module or an artifact also delivers is not marked. The property is written only when false, so an older SBOM
+  reads the same.
+- **Who reads it.**
+  - `images_from_sbom()` reads it into `ImageRef.delivered`, and the image gate labels such an image
+    `(declared only)`.
+  - The audit manifest records `delivered: false` from the same effective images.
+  - The CVE gate does not read it: the scanners scan every component.
+- **Rendered charts.** The `chart-image` collector runs unless the workspace sets `spec.sbom.render_charts:
+  false`. It was opt-in while it was built, because the images it adds reach the gates; since plan item 10b of
+  docs/work/helm-image-delivery.md it is the default, so the gates check what runs.
+  - It runs `HelmIntegration.template()` in an isolated Helm configuration, with no `--dependency-update`. The
+    rendered text stays in memory, and strata's values file holds tokens, never a secret value.
+  - Each image gets `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<reference>/<container>`
+    and `strata:image`, the reference as the chart writes it. The purl keeps only the digest of a digest-pinned
+    image, so `strata:image` is where its tag survives.
+  - A chart it cannot render gets an `info` finding (`sbom_chart_not_rendered`); an image holding a `${...}`
+    token gets `sbom_chart_image_unresolved`. Neither fails the build.
+  - A registry chart is rendered from its archive in `.strata/helm/`, which `write_sbom(helm_cache=)` hands to
+    this collector only. It renders only an archive whose digest is the `chartDigest` the build pinned, the
+    archive `deploy run` installs. An unpinned chart, a missing archive or another digest is an
+    `sbom_chart_not_rendered` finding.
+  - `HelmIntegration.template()` gets absolute paths, because Helm runs in the chart's folder: a relative
+    `--build-path` would otherwise render no chart.
+  - `image_tag_policy` reads these components back (`rendered_chart_images()`, origin `chart`), at the end of
+    `build run`, in `deploy run` and in `policy check`, so the SBOM is where the policy learns what a chart runs
+    ([image-tag-policy.md](image-tag-policy.md)).
+- **Merging.** `_merge_by_purl()` joins every component's `strata:used-by` rather than keeping the first one's,
+  and drops the declared-only marker when a component with the same purl comes from a rendered chart.
+- **Declared but not rendered.** After the merge, a declared Helm service image whose module's chart was rendered
+  (it yielded at least one image) but does not run it gets an `info` finding, `sbom_declared_image_not_rendered`.
+  It stays marked not delivered, with the reason `helm module: not in the rendered chart` once every module
+  declaring it was rendered.
 
 ### Package URLs
 
@@ -259,6 +300,10 @@ mechanism as `strata.integrations` (ADR-0021 D10).
   purl, and modules were deduplicated by source, so only the first of two versions was listed.
   Modules have no lock file, so only an exact `version` becomes the purl version and a range is a
   property; deduplication is by purl.
+- A Helm module's declared image was listed and scanned as if it ran, and a chart's own images were in no SBOM.
+  Since 2026-11-11 a declared-only image carries `strata:image-delivered: false`, and `sbom.render_charts` lists
+  what local charts deploy. The 2026-11-07 finding that strata's values replaced a local chart's own `values.yaml`
+  no longer holds: strata writes `strata-values.yaml` next to it.
 - An image's digest was only in its purl version. It is now also a CycloneDX hash, from the digest
   already in the solution, without a registry lookup. Building it showed that both image collectors
   judged tag stability on the tag alone, so a digest-only image was reported as floating; they now

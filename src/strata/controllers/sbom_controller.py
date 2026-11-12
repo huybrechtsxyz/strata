@@ -38,6 +38,7 @@ from strata.integrations.cve_scanner import CveScannerIntegration, GrypeIntegrat
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.sbom_collectors import registry
+from strata.integrations.sbom_collectors.chart_image_collector import ChartImageCollector
 from strata.logging.config import get_logger
 from strata.models.common_models import PlatformKind
 from strata.models.configuration_model import ConfigurationModel
@@ -54,6 +55,13 @@ from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
+from strata.utils.sbom_utils import (
+    FOUND_IN_PROPERTY,
+    FOUND_IN_RENDERED_CHART,
+    IMAGE_DELIVERED_PROPERTY,
+    IMAGE_DELIVERY_PROPERTY,
+    USED_BY_PROPERTY,
+)
 
 log = get_logger(__name__)
 
@@ -77,6 +85,7 @@ def write_sbom(
     index: DocumentIndex,
     remotes: Mapping[str, SolutionRemoteModel] | None = None,
     commit: str | None = None,
+    helm_cache: Path | None = None,
 ) -> Diagnostics:
     """Collect every registered SBOM collector's components, serialise to
     CycloneDX 1.6 JSON, validate, and write `build_path / "sbom.json"`.
@@ -97,6 +106,10 @@ def write_sbom(
             URL as its repository.
         commit: The solution commit being built, recorded as the deployment's
             `strata:commit` property; omitted when unknown.
+        helm_cache: The `.strata/helm/` cache, handed to the `chart-image`
+            collector only, so it can render a pinned registry chart's
+            archive (docs/work/helm-image-delivery.md, plan item 9b).
+            `None`: registry charts are not rendered.
 
     Returns:
         `Diagnostics` carrying every collector's warnings (floating image
@@ -120,10 +133,12 @@ def write_sbom(
     collected: list[SbomComponentModel] = []
     for name in registry.list_collectors():
         collector = registry.get(name)
+        if isinstance(collector, ChartImageCollector):
+            collector.helm_cache = helm_cache
         result = collector.collect(graph, modules, build_path)
         collected.extend(result.components)
         diagnostics.items.extend(result.diagnostics)
-    components = _merge_by_purl(collected)
+    components = _declared_not_rendered(_merge_by_purl(collected), graph, diagnostics)
 
     bom_json = _build_cyclonedx_json(components, graph, commit)
 
@@ -189,6 +204,10 @@ def _merge_by_purl(components: list[SbomComponentModel]) -> list[SbomComponentMo
 
     Two collectors can find the same image (the module declares it, the rendered compose file
     names it); listed twice it would be two components with one `bom-ref`, an invalid BOM.
+
+    Two properties do not simply keep the first value (docs/work/helm-image-delivery.md, the SBOM side):
+    `strata:used-by` joins every use, so a rendered chart's use is not lost behind a declared one, and the
+    declared-only marker is dropped once a rendered chart deploys the image, which makes it what runs.
     """
     merged: dict[str, SbomComponentModel] = {}
     for component in components:
@@ -196,16 +215,109 @@ def _merge_by_purl(components: list[SbomComponentModel]) -> list[SbomComponentMo
         first = merged.get(key)
         if first is None:
             merged[key] = component
-        elif not (
-            component.properties.keys() <= first.properties.keys() and component.hashes.keys() <= first.hashes.keys()
-        ):
-            merged[key] = first.model_copy(
-                update={
-                    "properties": {**component.properties, **first.properties},
-                    "hashes": {**component.hashes, **first.hashes},
-                }
+            continue
+        properties = {**component.properties, **first.properties}
+        uses = _joined_uses(first.properties.get(USED_BY_PROPERTY), component.properties.get(USED_BY_PROPERTY))
+        if uses:
+            properties[USED_BY_PROPERTY] = uses
+        merged[key] = first.model_copy(
+            update={"properties": properties, "hashes": {**component.hashes, **first.hashes}}
+        )
+    return [_rendered_is_delivered(component) for component in merged.values()]
+
+
+def _joined_uses(*values: str | None) -> str | None:
+    """`strata:used-by` values joined in first-use order, each use once."""
+    uses: list[str] = []
+    for value in values:
+        for use in (value or "").split(","):
+            use = use.strip()
+            if use and use not in uses:
+                uses.append(use)
+    return ", ".join(uses) or None
+
+
+def _rendered_is_delivered(component: SbomComponentModel) -> SbomComponentModel:
+    """Drop the declared-only marker from an image a rendered chart deploys."""
+    if component.properties.get(FOUND_IN_PROPERTY) != FOUND_IN_RENDERED_CHART:
+        return component
+    if IMAGE_DELIVERED_PROPERTY not in component.properties:
+        return component
+    properties = {
+        name: value
+        for name, value in component.properties.items()
+        if name not in (IMAGE_DELIVERED_PROPERTY, IMAGE_DELIVERY_PROPERTY)
+    }
+    return component.model_copy(update={"properties": properties})
+
+
+#: `strata:image-delivery` of a declared Helm image its module's rendered chart does not run.
+NOT_RENDERED_DELIVERY = "helm module: not in the rendered chart"
+
+
+def _declared_not_rendered(
+    components: list[SbomComponentModel], graph: ResolvedWorkspaceGraph, diagnostics: Diagnostics
+) -> list[SbomComponentModel]:
+    """An `info` finding for each declared Helm service image whose module's chart was rendered without it
+    (docs/work/helm-image-delivery.md, plan item 9c).
+
+    Runs after the merge, so a declared image the chart also runs has already lost its marker. A chart counts as
+    rendered when it yielded at least one image. The declaration may be deliberate documentation, so the image is
+    kept, still marked not delivered; its reason becomes `NOT_RENDERED_DELIVERY` once every module declaring it
+    was rendered.
+    """
+    rendered = _rendered_modules(components, graph)
+    if not rendered:
+        return components
+    declared = {use: image.image_ref for image in graph.images for use in image.via if use.startswith("service:")}
+    result: list[SbomComponentModel] = []
+    for component in components:
+        if component.properties.get(IMAGE_DELIVERED_PROPERTY) != "false":
+            result.append(component)
+            continue
+        uses = [use for use in _uses(component) if use.startswith("service:")]
+        missing = [use for use in uses if _service_module(use) in rendered]
+        for use in missing:
+            module, _, service = use.removeprefix("service:").partition("/")
+            diagnostics.info(
+                f"service '{service}' of module '{module}' declares {declared.get(use, component.name)}, but the "
+                "rendered chart does not run it. The declaration is kept, marked not delivered.",
+                location=module,
+                code="sbom_declared_image_not_rendered",
             )
-    return list(merged.values())
+        if missing and len(missing) == len(uses):
+            properties = {**component.properties, IMAGE_DELIVERY_PROPERTY: NOT_RENDERED_DELIVERY}
+            component = component.model_copy(update={"properties": properties})
+        result.append(component)
+    return result
+
+
+def _rendered_modules(components: list[SbomComponentModel], graph: ResolvedWorkspaceGraph) -> set[str]:
+    """The module documents a rendered chart image came from: its `chart:NS/REFERENCE/CONTAINER` use, with the
+    namespace's reference resolved to the module it names."""
+    modules: set[str] = set()
+    for component in components:
+        if component.properties.get(FOUND_IN_PROPERTY) != FOUND_IN_RENDERED_CHART:
+            continue
+        for use in _uses(component):
+            namespace_name, _, rest = use.removeprefix("chart:").partition("/")
+            if not use.startswith("chart:") or not rest:
+                continue
+            reference_name = rest.split("/", 1)[0]
+            namespace = graph.namespaces.get(namespace_name)
+            for reference in (namespace.spec.modules or []) if namespace is not None else []:
+                if reference.name == reference_name:
+                    modules.add(reference.module)
+    return modules
+
+
+def _uses(component: SbomComponentModel) -> list[str]:
+    return [use.strip() for use in (component.properties.get(USED_BY_PROPERTY) or "").split(",") if use.strip()]
+
+
+def _service_module(use: str) -> str:
+    """The module of a `service:MODULE/SERVICE` use."""
+    return use.removeprefix("service:").partition("/")[0]
 
 
 def _canonical_purl(purl: str) -> str:
@@ -331,7 +443,7 @@ def cve_findings(build_path: Path, index: DocumentIndex, threshold: str) -> CveF
 
 def evaluate_cve_policy(build_path: Path, workspace: WorkspaceModel, index: DocumentIndex) -> Diagnostics:
     """Gate `build run` on CVE findings in the SBOM `write_sbom()` just
-    wrote, when `workspace.spec.cve_policy` is set (docs/work/
+    wrote, when `workspace.spec.cve_policy` is set (docs/archive/
     cve-scanner-integration.md).
 
     No-op (empty `Diagnostics`) with no policy configured — the common

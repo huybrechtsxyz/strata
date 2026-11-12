@@ -112,11 +112,21 @@ class EffectiveImage:
     `origin` is `artifact` (a `kind: artifact`, reached through a `store: artifact` variable or a module
     service's `artifact`) or `module-service` (a module service's literal `image`). `name` is the artifact
     or service name; `artifact`/`module` say which document it came from, and `via` lists every use
-    (`variable:KEY`, `service:MODULE/SERVICE`).
+    (`variable:KEY`, `service:MODULE/SERVICE`, `token:KIND/NAME` for a document holding an
+    `${artifact:}` token).
 
-    `image_tag` is `None` when neither a pin nor the declaration supplies one, and `image_ref` is then the
-    bare name. `tag_source` is `pin`, `declared` or `none`; `pin_version` names the version document of a
-    pin, and `pin_flag` is true when that came from `--pin` rather than the deployment's `spec.version`.
+    `image_tag` is the tag part only and `image_digest` the digest part (`sha256:...`) of what a pin or the
+    declaration supplies (`1.4.2`, `sha256:...` or `1.4.2@sha256:...`); either is `None` when absent, and
+    `image_ref` is the bare name when both are. `tag_source` is `pin`, `declared` or `none`; `pin_version`
+    names the version document of a pin, and `pin_flag` is true when that came from `--pin` rather than the deployment's `spec.version`.
+
+    `integration` is an artifact's `spec.integration`, by name only (docs/work/artifact-gap-analysis.md,
+    design 6): it tells a pipeline that copies the image which credentials to use. Nothing is resolved from it.
+
+    `delivered` says whether strata writes the image into what runs (docs/work/helm-image-delivery.md, option B):
+    true for a Compose service, an artifact a step receives through a variable and one an `${artifact:}` token
+    delivers; false for a Helm module's service image, which the chart may override. `delivery` gives the reason
+    when it is false (`helm module: the chart decides`).
     """
 
     origin: str
@@ -132,6 +142,25 @@ class EffectiveImage:
     configuration: dict[str, Any] | None = None
     pin_version: str | None = None
     pin_flag: bool = False
+    integration: str | None = None
+    image_digest: str | None = None
+    delivered: bool = True
+    delivery: str | None = None
+
+
+@dataclass(frozen=True)
+class UnknownImageModule:
+    """An enabled Helm module that declares no service `image` and no `artifact`, so the images its chart deploys
+    are known only to Helm (`effective_images.unknown_image_modules()`, docs/work/helm-image-delivery.md, option B).
+
+    `namespace` is the namespace whose `modules` enables it; `chart_version` is the one that deploys, after a
+    `charts` pin.
+    """
+
+    module: str
+    namespace: str
+    chart: str | None = None
+    chart_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -163,7 +192,7 @@ class ResolvedWorkspaceGraph:
     by `build_controller.py`, before the per-provisioner loop — derived,
     minimal data, not raw `DeploymentModel`/`EnvironmentModel` instances.
 
-    `tenant` (docs/design/build-command.md's `tenant` Terraform category) is
+    `tenant` (docs/work/build-command.md's `tenant` Terraform category) is
     the deployment's own `spec.tenant` reference, resolved once by
     `value_controller.resolve_tenant()` — `None` when the deployment
     references no tenant, or the reference doesn't resolve.

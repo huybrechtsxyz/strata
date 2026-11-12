@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Image tag policy (docs/design/image-tag-policy.md).
 
-An opt-in workspace guard rail on the tag of every image a deployment runs. The rules read only the
-solution (the effective images of a deployment), so unlike the security gates there is no
-`on_missing_data`: nothing that is needed can be missing.
+An opt-in workspace guard rail on the tag of every image a deployment runs. The rules read the solution (the
+effective images of a deployment) and, given a build, the images its rendered charts run
+(docs/work/helm-image-delivery.md, plan item 9). Unlike the security gates there is no `on_missing_data`: a build
+without rendered charts is judged on the solution alone, as before.
 """
 
 import re
@@ -27,7 +28,7 @@ class ImageTagAllowEntryModel(PlatformBaseModel):
     name: str = Field(
         min_length=1,
         description="The image to exempt: the name of an artifact, or of a module service, as `strata deploy "
-        "images` lists it",
+        "images` lists it, or `REFERENCE/CONTAINER` for an image a rendered chart runs (`whoami/shipper`)",
     )
     reason: str = Field(min_length=1, description="Why this image may break the policy")
     expires: str | None = Field(None, description="ISO date after which this entry is ignored (e.g. '2026-12-31')")
@@ -64,33 +65,41 @@ class ImageTagPolicyModel(PlatformBaseModel):
     enforcement: Literal["deny", "warn"] = Field(
         default="deny", description="'deny' stops the run on a breach; 'warn' reports and continues"
     )
-    origins: list[Literal["artifact", "module-service"]] | None = Field(
+    origins: list[Literal["artifact", "module-service", "chart"]] | None = Field(
         None,
         min_length=1,
         description="Which images the policy covers: `artifact` for a `kind: artifact` image, `module-service` for "
-        "a service image a module declares. Omit to cover both.",
+        "a service image a module declares, `chart` for an image a Helm chart runs, read from the build's "
+        "`sbom.json` unless the workspace sets `sbom.render_charts: false`. Omit to cover all three.",
     )
     require_tag: bool = Field(
         default=True,
-        description="Fail an image that has no tag and no `kind: version` pin to take one from",
+        description="Fail an image that has no tag and no `kind: version` pin to take one from. A digest "
+        "(`sha256:...`) counts as a tag here: it pins the image even more firmly.",
+    )
+    require_digest: bool = Field(
+        default=False,
+        description="Fail an image whose reference has no digest (`name@sha256:...` or "
+        "`name:tag@sha256:...`), so what runs is fixed byte for byte, not by a tag a registry can move",
     )
     reject_tags: list[Annotated[str, Field(min_length=1)]] | None = Field(
         None,
         description="Tags that are not allowed, compared without regard to case. Omit to reject the mutable "
         "aliases `latest`, `main`, `master`, `dev`, `develop`, `staging`, `edge`, `nightly` and `canary`. Set an "
         "empty list to reject none. A digest is never rejected, and neither is a tag that merely is not a "
-        "semantic version, such as a build number.",
+        "semantic version, such as a build number. With `tag@digest` only the tag is compared.",
     )
     tag_pattern: str | None = Field(
         None,
         min_length=1,
         description="Regular expression a tag must match, searched anywhere in the tag (anchor it with `^` and "
-        "`$`). A digest is not checked against it.",
+        "`$`). A digest is not checked against it; with `tag@digest` the tag is.",
     )
     require_pin: bool = Field(
         default=False,
         description="Require the tag to come from a `kind: version` pin (or `--pin`), so what a ring runs is "
-        "always decided by its version document",
+        "always decided by its version document. Not applied to a `chart` image: strata cannot pin an image "
+        "inside a chart; the chart's own pin fixes it.",
     )
     rings: list[Annotated[str, Field(min_length=1)]] | None = Field(
         None,
@@ -101,6 +110,15 @@ class ImageTagPolicyModel(PlatformBaseModel):
     )
     allow: list[ImageTagAllowEntryModel] | None = Field(
         None, description="Images exempt from the policy, each with a reason and an optional expiry"
+    )
+    on_unknown_image: Literal["skip", "warn", "block"] = Field(
+        default="warn",
+        description="What to do about a Helm module that declares no service `image` or `artifact`: strata does "
+        "not know the images its chart deploys, so it cannot judge them. 'block' stops the run, 'warn' reports "
+        "and continues, 'skip' only notes it in verbose and JSON output. Independent of `enforcement`; `allow` "
+        "does not exempt a module. Declare the chart's images under the module's `services` to have them "
+        "judged.\n\n"
+        "Design notes: docs/work/helm-image-delivery.md, option B. Mirrors `image_gate_policy.on_unknown_image`.",
     )
 
     @field_validator("reject_tags")

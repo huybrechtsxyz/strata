@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tarfile
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from strata.integrations.helm import HelmIntegration
 from strata.integrations.helm_cache import (
     DIGEST_CHANGED,
     PULL_FAILED,
+    STALE_STAGING_SECONDS,
     ChartPullError,
     Subchart,
     archive_digest,
@@ -26,6 +28,7 @@ from strata.integrations.helm_cache import (
     entry_path,
     is_exact_version,
     pull_chart,
+    remove_stale_staging,
 )
 from strata.utils.transport import CommandResult
 
@@ -167,6 +170,81 @@ def test_an_expected_digest_that_differs_is_rejected_and_not_stored(tmp_path: Pa
 
     assert raised.value.code == DIGEST_CHANGED
     assert "but the build pinned sha256:000" in str(raised.value)
+    assert cached_pin(tmp_path, "goauthentik", "authentik", "1.2.3") is None
+
+
+def _lock_staged_archives(monkeypatch) -> None:
+    """Windows refuses to delete a file another process holds open, as a virus scanner does a newly written archive."""
+    real_unlink = os.unlink
+
+    def unlink(path, *args, dir_fd=None, **kwargs):
+        # Windows' `shutil.rmtree` unlinks by full path; Linux's unlinks the bare file name relative to an open
+        # directory (`dir_fd`). These tests remove no archive but a staged one, so either form is the locked file.
+        if str(path).endswith(".tgz") and (".pull-" in str(path) or dir_fd is not None):
+            raise PermissionError(13, "The process cannot access the file because it is being used", str(path))
+        return real_unlink(path, *args, dir_fd=dir_fd, **kwargs)
+
+    monkeypatch.setattr(os, "unlink", unlink)
+
+
+def test_a_staging_directory_that_cannot_be_removed_does_not_hide_a_digest_change(tmp_path: Path, monkeypatch):
+    _lock_staged_archives(monkeypatch)
+
+    with pytest.raises(ChartPullError) as raised:
+        _pull(_FakeHelm(), tmp_path, expected_digest="sha256:" + "0" * 64)
+
+    assert raised.value.code == DIGEST_CHANGED
+    assert [path.name.startswith(".pull-") for path in tmp_path.iterdir()] == [True]
+    monkeypatch.undo()
+    pin = _pull(_FakeHelm(), tmp_path)
+    assert cached_pin(tmp_path, "goauthentik", "authentik", "1.2.3") == pin, "a leftover is never read as an entry"
+
+
+def _staging_dir(cache: Path, name: str, *, age: float) -> Path:
+    path = cache / name
+    (path / "entry").mkdir(parents=True)
+    (path / "entry" / "authentik-1.2.3.tgz").write_bytes(b"x")
+    stamp = time.time() - age
+    os.utime(path, (stamp, stamp))
+    return path
+
+
+def test_a_pull_removes_stale_staging_directories_and_keeps_recent_ones(tmp_path: Path):
+    stale = _staging_dir(tmp_path, ".pull-old", age=STALE_STAGING_SECONDS + 60)
+    recent = _staging_dir(tmp_path, ".pull-running", age=60)
+    other = _staging_dir(tmp_path, "goauthentik", age=STALE_STAGING_SECONDS + 60)
+
+    _pull(_FakeHelm(), tmp_path)
+
+    assert not stale.exists()
+    assert recent.is_dir(), "another process may still be pulling into it"
+    assert other.is_dir(), "only .pull-* directories are staging"
+
+
+def test_a_staging_directory_that_is_still_locked_is_left_for_a_later_pull(tmp_path: Path, monkeypatch):
+    stale = _staging_dir(tmp_path, ".pull-old", age=STALE_STAGING_SECONDS + 60)
+    _lock_staged_archives(monkeypatch)
+
+    assert remove_stale_staging(tmp_path) == []
+    assert stale.is_dir()
+
+    monkeypatch.undo()
+    assert remove_stale_staging(tmp_path) == [stale]
+    assert not stale.exists()
+
+
+def test_an_entry_that_cannot_be_stored_is_a_pull_failure(tmp_path: Path, monkeypatch):
+    def replace(source, destination):
+        raise PermissionError(13, "Access is denied", str(source))
+
+    monkeypatch.setattr(os, "replace", replace)
+
+    with pytest.raises(ChartPullError) as raised:
+        _pull(_FakeHelm(), tmp_path)
+
+    assert raised.value.code == PULL_FAILED
+    assert str(raised.value).startswith("chart 'authentik' (1.2.3) at 1.2.3 could not be stored in ")
+    assert "Access is denied" in str(raised.value)
     assert cached_pin(tmp_path, "goauthentik", "authentik", "1.2.3") is None
 
 

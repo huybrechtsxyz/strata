@@ -10,7 +10,7 @@
   consumer: `InfraIntegration.prepare()`/`prepare_namespace()` call into this
   design to produce whatever they write to disk), [ADR-0021](0021-integration-layer.md)
   (the `InfraIntegration` ABC this document's rendering logic sits behind)
-- See also: [docs/work/build-command.md](../work/build-command.md) for
+- See also: `build-command.md` (work doc) for
   current cross-ADR build-pipeline status (superseding the former
   `build-pipeline-status.md` dashboard, retired 2026-10-06 once stale)
 

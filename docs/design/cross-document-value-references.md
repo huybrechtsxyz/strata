@@ -231,7 +231,10 @@ and `deploy_run()` (both already call `resolve_values()`), though only
   service's `image`, a module's `source.chart_version`, an asset's `location.reference`) —
   rejected as `value_reference_pinnable_field`. `${value:}` resolves once per solution with no
   deployment, so it cannot apply a pin; it would read the unpinned value while build and deploy
-  use the pinned one. `_pin_category()` in `value_references.py` lists the paths.
+  use the pinned one. `_pin_category()` in `value_references.py` lists the paths. An artifact's
+  `image_name` is rejected too, with the same code (`_artifact_image_field()`): an image reached
+  through `${value:}` is invisible to `deploy images`, the SBOM and `image_tag_policy`. The message
+  names the `${artifact:NAME.FIELD}` token to use instead.
 - **Wildcard/array-producing paths** (e.g. "every module in this
   namespace") — one path resolves to exactly one scalar, matching how
   `${var:KEY}`/`${output:step.key}` are both single-value lookups too.
@@ -395,4 +398,6 @@ Organized by how much changes, smallest first.
   `store: artifact` returned the pinned one. A pin cannot be applied here (no deployment in
   scope), so every field a `kind: version` pin overrides is now rejected instead
   (`value_reference_pinnable_field`).
+- 2026-11-10: an artifact's `image_name` is rejected as well, and both artifact fields point to
+  `${artifact:NAME.FIELD}` (docs/work/artifact-gap-analysis.md, design 3).
 

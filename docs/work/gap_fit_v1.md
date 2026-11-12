@@ -30,7 +30,7 @@ durable, reviewable record.
   list (e.g. `authentik.yaml`, `vaultwarden.yaml`, `homarr-secrets.yaml`).
 - **Status:** closed (2026-09-28). The *field choice* was always deliberate
   (ADR-0002) and confirmed by
-  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)'s
   Per-Kind Status table: v1's declared-keys list is replaced by inline
   `${secret:KEY}` value tokens at the point of use
   (`ModuleServiceEnvironmentModel.value` — the only field the four
@@ -331,7 +331,7 @@ durable, reviewable record.
     `kind: integration` document; no new v2 code needed for this specific
     shape translation.
   - `paths` — **RESOLVED 2026-09-30** (structural half only —
-    see [docs/design/path-conventions.md](path-conventions.md)).
+    see [docs/design/path-conventions.md](../design/path-conventions.md)).
     New `PathConventionModel`/`PathSegmentModel`/
     `ConfigurationSpecModel.paths` (`pattern` for directory shape,
     independently optional `filename_pattern` for filename shape — a
@@ -411,7 +411,7 @@ durable, reviewable record.
   (undocumented) or a plain oversight where `${secret:KEY}` was meant.
   Either way, today neither form actually resolves through strata.
 - **Design completed 2026-09-28** (see
-  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)'s
   "unify gaps #8/#9/#10" section): extend `resolve_value_tokens_in_mapping()`
   (already field-agnostic) to `configuration`/`custom` call sites too — not
   a new algorithm, just new call sites, decided in favor of option (a) from
@@ -441,7 +441,7 @@ durable, reviewable record.
   would wrongly reject that already-working document — a real regression,
   not hypothetical. Generalizing Phase 1 therefore needs an escape/skip
   syntax first, designed in
-  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)'s
   new "Escape syntax" section — not implemented yet, design only.
 - **Phase 1 implemented 2026-09-28** (design validated against source
   first, then built — see the design doc's "Full Solution" Phase 0/1):
@@ -497,7 +497,7 @@ durable, reviewable record.
   not a token-resolution one). Full design (decision: broadcast-only,
   `${output:}` rejected outright, one new `build_configuration_payloads()`
   function) lives in
-  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)'s
   Phase 6 — **implemented 2026-09-28**, same day as the design: new
   `build_configuration_payloads()` (`terraform_projection.py`) delivers
   all five as `TF_VAR_resx_<type>`/`TF_VAR_topologies`/`TF_VAR_properties`/
@@ -567,7 +567,7 @@ durable, reviewable record.
   haven-migration mistake; every real solution hits this today for any
   module secret.
 - **Design completed 2026-09-28** (see
-  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)'s
   "unify gaps #8/#9/#10" section): concrete per-integration delivery
   (Terraform `TF_VAR_<name>=<json>` for the whole `dns`/`networks`/
   `firewalls` payload; Helm `values.yaml` rewrite + `--set-string` for
@@ -634,7 +634,7 @@ durable, reviewable record.
   never actually resolve here" — the one signal that would have caught every
   gap #8 module at authoring time, before it ever reached a real deployment.
 - **Design completed 2026-09-28** (see
-  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)'s
   "unify gaps #8/#9/#10" section): once gap #9's resolver covers every
   string in a document instead of a fixed field allowlist, this gap's
   false-green-light failure mode disappears by construction — no code
@@ -1025,7 +1025,7 @@ durable, reviewable record.
   where in `build run`'s flow the check runs and how strict it is (error
   vs. warning, and whether backend-referenced keys are excluded the same
   way v1's real exclusion rule works).
-- **Related:** [docs/design/terraform-tfvars-parity.md](terraform-tfvars-parity.md)
+- **Related:** [docs/design/terraform-tfvars-parity.md](../design/terraform-tfvars-parity.md)
   (2026-09-30, **fixed** the same day) is a distinct but adjacent gap —
   that doc audited (and then fixed) whether v2 even *produced* the right
   tfvars variable names/shapes a real Terraform root expects (found via a
@@ -1134,7 +1134,7 @@ durable, reviewable record.
   consequentially, `workspace`/`namespaces`/`flags`/`variables`, none of
   which realistically carry a token) was simply never on that list.
   Recorded as a formal decision in
-  [value-token-resolution.md](value-token-resolution.md)'s
+  [value-token-resolution.md](../design/value-token-resolution.md)'s
   "Decision (2026-09-29)" section: resolution reach must match validation
   reach — no curated allowlist, ever, for exactly this reason.
 - **Status: closed (2026-09-29).** `_build_providers_payload()` now
@@ -1199,7 +1199,7 @@ durable, reviewable record.
   "all customer paths on agw are in one block... not really a manageable
   solution" (direct quote).
 - **Status:** **Resolved (2026-10-02), no new schema** — see
-  [docs/design/composite-variable-merge.md](composite-variable-merge.md)'s
+  [docs/design/composite-variable-merge.md](../design/composite-variable-merge.md)'s
   Decision. `spec.properties`/`.custom` (existing `EnvironmentSpecModel`
   fields) already run through a real, generic, recursive `deep_merge()`
   (`strata/utils/dict_merge.py`, already proven at two other call sites —
@@ -1291,7 +1291,7 @@ durable, reviewable record.
 ### 22. `hub-path`'s full-path (incl. filename) matching produces 22 real warnings against genuinely hub/spoke/customer/ring-shaped data
 
 - **Found in:** `.v2-cfg`'s `deploy/hubs/**` tree (2026-10-13) — real files exist at every intermediate level of the hierarchy (`deploy/hubs/hub1/spoke1/deploy-spoke.yaml`, `.../fabrikam/deploy-customer.yaml`, `.../fabrikam/dev/deploy-ring.yaml`, etc.), not only at the deepest 5-segment `{hub}/{spoke}/{customer}/{ring}/{instance}` leaf the `hub-path` convention's `pattern` is written for. `strata validate` reports all 22 such files as `path_convention_mismatch` warnings.
-- **Status:** not a new design gap — [docs/design/path-conventions.md](path-conventions.md)'s own `## History` section already names this exact tradeoff: "v1's real `hub-path`/`control-path` conventions match only the containing directory (no filename); this implementation's `pattern` always matches the full relative path including filename — simpler and unambiguous, at the cost of a migrated `layers`-resolving convention needing an explicit trailing filename segment it didn't need in v1." This entry is the first confirmation of that documented tradeoff's real cost against genuine hub/spoke/customer/ring-shaped data, at real scale (22 warnings, not a hypothetical count) — every file above a `{ring}` or `{instance}` leaf triggers it, which in practice is most of a real hub/spoke/customer tree (`deploy-spoke.yaml`/`env-spoke.yaml` at the spoke level, `deploy-customer.yaml`/`env-customer.yaml` at the customer level — only `dev/deploy-ring.yaml`/`dev/env-ring.yaml` sit at the convention's intended depth, and even those are one segment short of the full `{instance}` leaf since no real document yet exists at that depth).
+- **Status:** not a new design gap — [docs/design/path-conventions.md](../design/path-conventions.md)'s own `## History` section already names this exact tradeoff: "v1's real `hub-path`/`control-path` conventions match only the containing directory (no filename); this implementation's `pattern` always matches the full relative path including filename — simpler and unambiguous, at the cost of a migrated `layers`-resolving convention needing an explicit trailing filename segment it didn't need in v1." This entry is the first confirmation of that documented tradeoff's real cost against genuine hub/spoke/customer/ring-shaped data, at real scale (22 warnings, not a hypothetical count) — every file above a `{ring}` or `{instance}` leaf triggers it, which in practice is most of a real hub/spoke/customer tree (`deploy-spoke.yaml`/`env-spoke.yaml` at the spoke level, `deploy-customer.yaml`/`env-customer.yaml` at the customer level — only `dev/deploy-ring.yaml`/`dev/env-ring.yaml` sit at the convention's intended depth, and even those are one segment short of the full `{instance}` leaf since no real document yet exists at that depth).
 - **Not fixed** — warning-severity only (not an error, `strata validate` still exits 0/PASSED), and fixing it (e.g. a prefix-match mode for `pattern` vs. today's full-match) is a real design question path-conventions.md's own History section already flagged as a known cost, not something to patch ad hoc from this fixture.
 - **Migration action:** none — a real multi-level hub/spoke/customer/ring directory tree should expect a `path_convention_mismatch` warning at every level shallower than the convention's full declared segment depth; this is current, intended (if costly) behavior, not a bug to work around per-document.
 
@@ -1749,7 +1749,7 @@ and the provider/providerconfig/topologyconfig registry split.
   remaining steps.
 - 2026-09-29: **Found and resolved gap #17** ("design, plan, and implement
   phase 1" — Phase 1 of
-  [cross-document-value-references.md](cross-document-value-references.md)'s
+  [cross-document-value-references.md](../design/cross-document-value-references.md)'s
   Implementation Plan). Confirmed the real gap directly against source
   before changing anything: `_build_providers_payload()`
   (`terraform_projection.py`) never read `ProviderSpecModel.configuration`/
@@ -1801,7 +1801,7 @@ and the provider/providerconfig/topologyconfig registry split.
 - 2026-09-29: **Resolved gap #7's `paths` sub-item**, per request ("lets
   look at paths, lets create the design first" -> "design, plan, and
   implement"). Full design written first
-  ([docs/design/path-conventions.md](path-conventions.md)), all 3
+  ([docs/design/path-conventions.md](../design/path-conventions.md)), all 3
   open questions resolved before implementing. Grounded in the real,
   current `config-repo/config/paths.yaml` and a real deep leaf
   deployment's actual `layers:` usage. Found v1's generic `validate:`
@@ -1882,4 +1882,4 @@ and the provider/providerconfig/topologyconfig registry split.
   fully accurate) and flagged `.v2-cfg/`'s own fixture as now stale
   (still on-disk in the pre-ADR-0028 standalone shape; `WorkspaceModel` no
   longer parses it; left unfixed deliberately, Phase 5 of the ADR-0028
-  reversal — see [docs/design/topology-standalone-kind-reconsideration.md](topology-standalone-kind-reconsideration.md)).
+  reversal — see [docs/design/topology-standalone-kind-reconsideration.md](../design/topology-standalone-kind-reconsideration.md)).

@@ -91,12 +91,12 @@ consumer need shows up.
   current `FirewallRuleModel` shape (`from`/`to` as Value-bound strings).
 - [cross-document-value-references.md](cross-document-value-references.md) —
   the `${value:kind.name.path}` mechanism this design consumes.
-- [subnet-cidr-derivation.md](../work/subnet-cidr-derivation.md) — the
+- `subnet-cidr-derivation.md` (work doc) — the
   sibling Network doc this one was originally spun out of; its own
   `strata network allocate` direction was separately cancelled, which
   turned out not to matter here (the positional-addressing risk this
   design fixes was already real without it).
-- [solution-loading-and-phase2-validation.md](../work/solution-loading-and-phase2-validation.md) —
+- `solution-loading-and-phase2-validation.md` (work doc) —
   a related but distinct concern: the Workspace subnet cross-check
   resolves `WorkspaceResourceSubnetModel.subnet` by `.name` directly on
   its own model field, not through this `${value:}` path-walking

@@ -549,7 +549,7 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
             "kind": "artifact",
             "meta": {"name": "api"},
             "spec": {
-                "image_name": "example/api",
+                "image_name": "registry.example.com/example/api",
                 "image_tag": "1.4.2",
                 "registry": "registry.example.com",
                 "description": "The public API image",

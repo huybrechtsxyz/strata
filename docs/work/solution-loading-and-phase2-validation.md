@@ -23,7 +23,7 @@ discovery loader is `strata/controllers/solution_controller.py`
 `strata/controllers/solution_context.py` (`open_solution()`,
 `SolutionContext.resolve()`), and four of the seven originally-parked
 validators are wired through `strata/controllers/semantic_checks.py`,
-called by `strata validate` (see [validate-command.md](validate-command.md)).
+called by `strata validate` (see [validate-command.md](../design/validate-command.md)).
 This doc's job now is just to track the one that still isn't built.
 
 ## Current Design
@@ -68,7 +68,7 @@ Built. `SolutionController`/`find_solution_root` (`solution_controller.py`)
 discover and schema-validate every document; `open_solution()`/
 `SolutionContext.resolve()` (`solution_context.py`) run the four Phase 2
 passes (reference existence, `extends`/tenant resolution, semantic checks,
-version pin checks) — see [validate-command.md](validate-command.md) for
+version pin checks) — see [validate-command.md](../design/validate-command.md) for
 the full flow.
 
 ## Related Decisions

@@ -69,7 +69,7 @@ class WorkspaceService(BaseService[WorkspaceModel]):
     def claimed_document_names(self) -> set[str]:
         """Every dns_zones/networks/firewalls/namespaces name claimed by
         some execution step — the ownership half of `${output:...}`
-        resolution (docs/design/gap_fit_v1.md gap #12, generalized to
+        resolution (docs/work/gap_fit_v1.md gap #12, generalized to
         namespaces so a Module reached through a targeted namespace is
         covered too, not just a directly-targeted DNS/network/firewall
         document — see docs/design/deploy-command.md's "Cross-invocation
@@ -261,7 +261,7 @@ class WorkspaceService(BaseService[WorkspaceModel]):
     ) -> Diagnostics:
         """Check this workspace's resolved output-store backend type against
         the platform's key/value store allow-list (same convention as
-        `EnvironmentService.validate_allowed_stores()`, docs/work/
+        `EnvironmentService.validate_allowed_stores()`, docs/archive/
         cross-run-step-output-delivery.md's Implementation Plan step 1,
         'Governance').
 

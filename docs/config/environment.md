@@ -21,13 +21,14 @@ of that machinery is ported.
     but have no runtime resolver wired up yet
   - `value` — the store's own addressing scheme: a literal (`constant`), an environment variable
     name (`environment`/`github`), or a secret path/ID/flag key for an integration-backed store.
-    A `value` cannot contain a `${var:}`/`${secret:}`/`${feature:}`/`${output:}`/`${deployment:}` token — a key
+    A `value` cannot contain a `${var:}`/`${secret:}`/`${feature:}`/`${output:}`/`${deployment:}`/`${artifact:}` token — a key
     cannot be defined through another key, and `strata validate` rejects it
     (`store_value_token_unsupported`). `${value:kind.name.path}` (a field of another document)
     is allowed in a `constant`'s value, except a field a [`version`](version.md) pin overrides
-    (an artifact's `image_tag`, a module service's `image`, a module's `source.chart_version`, an
-    asset's `location.reference`): `strata validate` rejects it (`value_reference_pinnable_field`),
-    since it would read the unpinned value. Use a `store: artifact` variable for an image tag.
+    (an artifact's `image_name` or `image_tag`, a module service's `image`, a module's
+    `source.chart_version`, an asset's `location.reference`): `strata validate` rejects it
+    (`value_reference_pinnable_field`), since it would read the unpinned value. Use
+    [`${artifact:NAME.FIELD}`](artifact.md) or a `store: artifact` variable for an image.
   - Secrets additionally support `generate: {type, length}` (auto-generate when the key is missing)
     and `rotate` (age-based or automatic rotation policy) — integration-backed stores only
 - `spec.properties` — merged as a layer into every deployment using this environment (tenant

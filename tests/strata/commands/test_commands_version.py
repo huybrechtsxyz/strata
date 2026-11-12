@@ -293,7 +293,7 @@ def test_set_shorthand_pin_and_preserves_comments(runner, solution):
 def test_set_refuses_held_pin_without_force(runner, solution):
     _set_solution(solution)
 
-    result = _set(runner, "prd", "images", "db", "17.0-alpine", "--path", solution)
+    result = _set(runner, "prd", "images", "db", "postgres:17.0-alpine", "--path", solution)
     assert result.exit_code == EXIT_USAGE
     assert "--force" in result.output
 
@@ -301,12 +301,12 @@ def test_set_refuses_held_pin_without_force(runner, solution):
 def test_set_held_pin_with_force_succeeds(runner, solution):
     path = _set_solution(solution)
 
-    result = _set(runner, "prd", "images", "db", "17.0-alpine", "--force", "--path", solution)
+    result = _set(runner, "prd", "images", "db", "postgres:17.0-alpine", "--force", "--path", solution)
     assert result.exit_code == EXIT_SUCCESS
 
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     db = data["spec"]["pins"]["images"]["db"]
-    assert db["version"] == "17.0-alpine"
+    assert db["version"] == "postgres:17.0-alpine"
     assert db["status"] == "held"
     assert db["reason"] == "postgres majors need pg_upgrade/dump-restore"
 
@@ -331,6 +331,71 @@ def test_set_creates_a_new_pin(runner, solution):
 
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert data["spec"]["pins"]["images"]["redis"] == "redis:7-alpine"
+
+
+_DIGEST = "sha256:" + "9f86d081" * 8
+
+
+def test_set_writes_an_artifact_pin_with_a_tag_and_a_digest(runner, solution):
+    path = _set_solution(solution)
+
+    result = _set(runner, "prd", "artifacts", "api", f"1.4.2@{_DIGEST}", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert data["spec"]["pins"]["artifacts"]["api"] == f"1.4.2@{_DIGEST}"
+
+
+@pytest.mark.parametrize("args", [("1.4.2@sha256:abc",), ("--available", "sha256:abc")])
+def test_set_refuses_an_artifact_pin_that_is_not_a_tag_or_a_digest(runner, solution, args):
+    path = _set_solution(solution)
+    before = path.read_text(encoding="utf-8")
+
+    result = _set(runner, "prd", "artifacts", "api", *args, "--path", solution)
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert "is not a tag (1.4.2), a digest (sha256:<hex>) or both" in result.output
+    assert path.read_text(encoding="utf-8") == before
+
+
+@pytest.mark.parametrize(
+    ("target", "value", "fix"),
+    [
+        ("caddy", "2.1-alpine", "for example 'caddy:2.1-alpine'"),
+        ("db", "17.0-alpine", "for example 'docker.io/library/postgres:17.0-alpine'"),
+        ("redis", "7-alpine", "for example 'postgres:16-alpine'"),
+    ],
+)
+def test_set_refuses_an_image_pin_with_no_tag_or_digest(runner, solution, target, value, fix):
+    """A tag alone would replace the whole image; the fix names the pin's own image when there is one."""
+    path = _set_solution(solution)
+    before = path.read_text(encoding="utf-8")
+
+    result = _set(runner, "prd", "images", target, value, "--force", "--path", solution)
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert f"'{value}' has no tag or digest, so it pins nothing" in result.output
+    assert fix in " ".join(result.output.split())
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_set_refuses_an_image_pin_that_is_not_an_image_reference(runner, solution):
+    path = _set_solution(solution)
+    before = path.read_text(encoding="utf-8")
+
+    result = _set(runner, "prd", "images", "caddy", "Caddy:2.1", "--path", solution)
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert "is not an image reference" in result.output
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_set_leaves_an_image_pin_available_free(runner, solution):
+    """`--available` is an upstream hint nothing applies; the shipped example holds a bare tag there."""
+    path = _set_solution(solution)
+
+    result = _set(runner, "prd", "images", "db", "--available", "19.0-alpine", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert (
+        yaml.safe_load(path.read_text(encoding="utf-8"))["spec"]["pins"]["images"]["db"]["available"] == "19.0-alpine"
+    )
 
 
 def test_set_rejects_creating_a_pin_with_only_available(runner, solution):
@@ -393,10 +458,19 @@ PINNED_WEB = (
 )
 
 
+#: Uses `untagged` through a token in its own properties, so the artifact is deployed: `version update` offers a pin
+#: only for an artifact some deployment uses (docs/work/artifact-gap-analysis.md, design 8).
+USES_UNTAGGED = (
+    "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+    '  workspace: main\n  properties:\n    image: "${artifact:untagged.image_ref}"\n'
+)
+
+
 def _untagged_solution(solution: Path, version: str = PINNED_WEB) -> None:
     (solution / "versions").mkdir()
     (solution / "versions" / "prd.yaml").write_text(version, encoding="utf-8")
     (solution / "untagged.yaml").write_text(UNTAGGED_ARTIFACT, encoding="utf-8")
+    (solution / "app.yaml").write_text(USES_UNTAGGED, encoding="utf-8")
 
 
 def test_update_warns_about_an_artifact_with_no_tag_and_no_pin_and_exits_zero(runner, solution):

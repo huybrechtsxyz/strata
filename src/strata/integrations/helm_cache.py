@@ -12,6 +12,7 @@ import re
 import shutil
 import tarfile
 import tempfile
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -93,6 +94,29 @@ def cached_pin(cache_root: Path, source: str, chart: str, version: str) -> Chart
     return _pin(chart, archives[0], chart_dirs[0])
 
 
+#: How old a `.pull-*` staging directory must be before a pull removes it. Far longer than any pull takes (the
+#: default `helm pull` timeout is 5 minutes), so a pull still running in another process keeps its directory.
+STALE_STAGING_SECONDS = 3600
+
+
+def remove_stale_staging(cache_root: Path, *, older_than: float = STALE_STAGING_SECONDS) -> list[Path]:
+    """Remove the `.pull-*` staging directories in `cache_root` last changed more than `older_than` seconds ago.
+
+    Best effort: one still locked stays for a later pull. Returns the directories removed.
+    """
+    cutoff = time.time() - older_than
+    removed: list[Path] = []
+    for path in cache_root.glob(".pull-*"):
+        try:
+            if not path.is_dir() or path.stat().st_mtime > cutoff:
+                continue
+            shutil.rmtree(path)
+        except OSError:
+            continue
+        removed.append(path)
+    return removed
+
+
 def pull_chart(
     integration: Integration,
     ref: str,
@@ -113,11 +137,16 @@ def pull_chart(
     the registry then serves new content under a version already pinned.
 
     Raises:
-        ChartPullError: the pull failed, the archive is not a chart, or its digest differs.
+        ChartPullError: the pull failed, the archive is not a chart, its digest differs, or the entry could not be
+            stored.
     """
     wanted = f"chart '{chart}'" + (f" ({version})" if version else "")
     cache_root.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".pull-", dir=cache_root) as tmp:
+    remove_stale_staging(cache_root)
+    # Removing the staging directory is best effort: on Windows another process (a virus scanner reading the new
+    # archive) can hold a file open, and that must not replace the pull's own result. A leftover `.pull-*` directory
+    # is never read as an entry, and a later pull removes it once it is stale.
+    with tempfile.TemporaryDirectory(prefix=".pull-", dir=cache_root, ignore_cleanup_errors=True) as tmp:
         staging = Path(tmp) / "entry"
         staging.mkdir()
         args = ["pull", ref, "--destination", str(staging)]
@@ -147,10 +176,13 @@ def pull_chart(
                     code=DIGEST_CHANGED,
                 )
             return existing
-        if entry.exists():
-            shutil.rmtree(entry)  # an incomplete entry from before entries were renamed into place
-        entry.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(staging, entry)
+        try:
+            if entry.exists():
+                shutil.rmtree(entry)  # an incomplete entry from before entries were renamed into place
+            entry.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(staging, entry)
+        except OSError as exc:
+            raise ChartPullError(f"{wanted} at {pulled.version} could not be stored in {entry} — {exc}") from exc
     stored = cached_pin(cache_root, source, chart, pulled.version)
     assert stored is not None  # just renamed into place
     return stored

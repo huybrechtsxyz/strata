@@ -103,11 +103,11 @@ Every line above is real, built code today — not a sketch.
   substitution's differing kind/timing per output (the table this doc's
   "out of scope" correction above is grounded in)
 - [ADR-0021](../decisions/0021-integration-layer.md) /
-  [integration-layer.md](../work/integration-layer.md) — `InfraIntegration`,
+  `integration-layer.md` (work doc) — `InfraIntegration`,
   `prepare_namespace()`'s home on the ABC
 - [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md)
   — why `sync_module_source()` copies a chart verbatim and never rewrites it
-- [build-command.md](../work/build-command.md) — the provisioner pipeline this one
+- `build-command.md` (work doc) — the provisioner pipeline this one
   runs alongside, inside the same `build_run()` call
 
 

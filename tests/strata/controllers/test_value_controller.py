@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from strata.controllers.artifact_tokens import artifact_token_values
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import (
     build_value_references,
-    compose_image_ref,
     is_direct_store,
     list_values,
     reachable_environments,
@@ -41,6 +41,8 @@ from strata.models.store_model import (
     VariableStoreType,
 )
 from strata.utils.errors import UsageError
+from strata.utils.sbom_utils import compose_image_ref
+from strata.utils.value_tokens import artifact_token_problem
 
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
@@ -370,7 +372,7 @@ def test_resolve_values_version_pin_affects_store_artifact_resolution(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# resolve_artifact() / resolve_artifact_field() (docs/design/artifact-references.md)
+# resolve_artifact() / resolve_artifact_field() (docs/config/artifact.md)
 # ---------------------------------------------------------------------------
 
 
@@ -555,6 +557,107 @@ def test_resolve_artifact_tag_with_no_tag_and_no_pin_is_none_not_a_missing_artif
 def test_resolve_artifact_tag_is_none_for_an_unknown_artifact(tmp_path):
     context, deployment = _tag_context(tmp_path)
     assert resolve_artifact_tag(context, deployment, "ghost") is None
+
+
+# `${artifact:NAME.FIELD}` entries (docs/work/artifact-gap-analysis.md, design 1)
+
+
+def test_artifact_token_values_apply_the_deployments_pin(tmp_path):
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"}, version=True)
+    assert artifact_token_values(context.controller.index, deployment) == {
+        "artifact:api_container.image_name": "int/api",
+        "artifact:api_container.image_tag": "2.0.0",
+        "artifact:api_container.image_tag_name": "2.0.0",
+        "artifact:api_container.image_ref": "int/api:2.0.0",
+    }
+
+
+_DIGEST = "sha256:" + "9f86d081" * 8
+
+
+def test_artifact_token_values_split_a_pinned_tag_at_digest(tmp_path):
+    pins = {"api_container": f"2.0.0@{_DIGEST}"}
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins=pins, version=True)
+    assert artifact_token_values(context.controller.index, deployment) == {
+        "artifact:api_container.image_name": "int/api",
+        "artifact:api_container.image_tag": f"2.0.0@{_DIGEST}",
+        "artifact:api_container.image_tag_name": "2.0.0",
+        "artifact:api_container.image_digest": _DIGEST,
+        "artifact:api_container.image_ref": f"int/api:2.0.0@{_DIGEST}",
+    }
+
+
+def test_artifact_token_values_leave_out_the_part_a_digest_only_value_lacks(tmp_path):
+    context, deployment = _tag_context(tmp_path, image_tag=_DIGEST)
+    values = artifact_token_values(context.controller.index, deployment)
+    assert "artifact:api_container.image_tag_name" not in values
+    assert values["artifact:api_container.image_digest"] == _DIGEST
+    assert values["artifact:api_container.image_ref"] == f"int/api@{_DIGEST}"
+
+
+@pytest.mark.parametrize(
+    ("value", "field", "part"), [(_DIGEST, "image_tag_name", "tag"), ("1.0.0", "image_digest", "digest")]
+)
+def test_a_missing_part_says_which_part_and_how_to_add_it(tmp_path, value, field, part):
+    context, deployment = _tag_context(tmp_path, image_tag=value)
+    values = artifact_token_values(context.controller.index, deployment)
+    problem = artifact_token_problem(f"api_container.{field}", values)
+    assert problem == (
+        f"'${{artifact:api_container.{field}}}': artifact 'api_container' is deployed as '{value}', which has no "
+        f"{part}. Give `spec.image_tag` or the pin under `pins.artifacts.api_container` the form `TAG@sha256:<hex>`."
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [("image_tag", ""), ("image_tag_name", ""), ("image_digest", ""), ("image_ref", "int/api")],
+)
+def test_resolve_artifact_field_gives_empty_parts_for_a_blank_tag(tmp_path, field, expected):
+    context, deployment = _tag_context(tmp_path)
+    assert resolve_artifact_field(context, deployment, "api_container", field) == expected
+
+
+def test_artifact_token_values_use_the_declared_tag_without_a_pin(tmp_path):
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0")
+    values = artifact_token_values(context.controller.index, deployment)
+    assert values["artifact:api_container.image_tag"] == "1.0.0"
+
+
+@pytest.mark.parametrize("declared", [None, ""])
+def test_artifact_token_values_leave_out_a_missing_tag(tmp_path, declared):
+    """So `${artifact:NAME.image_tag}` fails instead of becoming `""`; `image_ref` is the bare name."""
+    context, deployment = _tag_context(tmp_path, image_tag=declared)
+    values = artifact_token_values(context.controller.index, deployment)
+    assert "artifact:api_container.image_tag" not in values
+    assert values["artifact:api_container.image_ref"] == "int/api"
+
+
+def test_artifact_token_values_follow_a_pin_override(tmp_path):
+    """`--pin` reaches the tokens through `resolve_deployment()`, as it reaches every other pin."""
+    context, _ = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"})
+    deployment = resolve_deployment(context, "app", version_pin="prd")
+    assert artifact_token_values(context.controller.index, deployment)["artifact:api_container.image_tag"] == "2.0.0"
+
+
+@pytest.mark.parametrize("field", ["image_name", "image_tag", "image_ref", "image_tag_name", "image_digest"])
+def test_artifact_token_values_agree_with_a_store_artifact_variable(tmp_path, field):
+    pins = {"api_container": f"2.0.0@{_DIGEST}"}
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins=pins, version=True)
+    values = artifact_token_values(context.controller.index, deployment)
+    assert values[f"artifact:api_container.{field}"] == resolve_artifact_field(
+        context, deployment, "api_container", field
+    )
+
+
+@pytest.mark.parametrize(("log", "expected"), [(False, []), (True, ["api_container"])])
+def test_artifact_token_values_log_a_pin_only_when_asked(tmp_path, monkeypatch, log, expected):
+    import strata.controllers.artifact_tokens as artifact_tokens
+
+    logged: list[str] = []
+    monkeypatch.setattr(artifact_tokens, "log_pin_applied", lambda _category, name, *_args: logged.append(name))
+    context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"}, version=True)
+    artifact_token_values(context.controller.index, deployment, log=log)
+    assert logged == expected
 
 
 @pytest.mark.parametrize("declared", [None, ""])
@@ -900,15 +1003,20 @@ def test_resolve_document_value_references_rejects_a_field_a_version_pin_overrid
     assert f"pins.{category}" in diagnostics.items[0].message
 
 
-def test_resolve_document_value_references_points_an_artifact_tag_reference_at_store_artifact(tmp_path):
+@pytest.mark.parametrize("field", ["image_name", "image_tag"])
+def test_resolve_document_value_references_points_an_artifact_image_at_the_artifact_token(tmp_path, field):
+    """Design 3 (docs/work/artifact-gap-analysis.md): an image read through `${value:}` is never pinned and
+    never listed, so both image fields are rejected and the message names the token."""
     root = _solution(tmp_path)
     _artifact(root, "api", image_name="int/api", image_tag="1.0.0")
-    _probe(root, "${value:artifact.api.spec.image_tag}")
+    _probe(root, f"${{value:artifact.api.spec.{field}}}")
     context = _context(root)
 
-    _values, diagnostics = resolve_document_value_references(context.controller.index)
+    values, diagnostics = resolve_document_value_references(context.controller.index)
 
-    assert "store: artifact" in diagnostics.items[0].message
+    assert values == {}
+    assert [d.code for d in diagnostics.items] == ["value_reference_pinnable_field"]
+    assert f"${{artifact:api.{field}}}" in diagnostics.items[0].message
 
 
 def test_pin_category_covers_the_chart_version_path_and_ignores_other_module_fields():
@@ -920,19 +1028,26 @@ def test_pin_category_covers_the_chart_version_path_and_ignores_other_module_fie
     assert _pin_category(PlatformKind.TENANT, ["spec", "image_tag"]) is None
 
 
-def test_resolve_document_value_references_still_resolves_unpinned_artifact_and_module_fields(tmp_path):
+def test_resolve_document_value_references_still_resolves_free_form_artifact_and_module_fields(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "api", image_name="int/api", image_tag="1.0.0")
+    _write(
+        root,
+        "api.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: api\n"
+        "spec:\n  image_name: int/api\n  registry: registry.example.com\n  configuration:\n    team: core\n",
+    )
     _write(root, "module.yaml", _PINNABLE_MODULE)
-    _probe(root, "${value:artifact.api.spec.image_name}")
-    _probe(root, "${value:module.web-module.spec.services.web.name}", name="probe2")
+    _probe(root, "${value:artifact.api.spec.registry}")
+    _probe(root, "${value:artifact.api.spec.configuration.team}", name="probe2")
+    _probe(root, "${value:module.web-module.spec.services.web.name}", name="probe3")
     context = _context(root)
 
     values, diagnostics = resolve_document_value_references(context.controller.index)
 
     assert diagnostics.ok, diagnostics.messages()
     assert values == {
-        "artifact.api.spec.image_name": "int/api",
+        "artifact.api.spec.registry": "registry.example.com",
+        "artifact.api.spec.configuration.team": "core",
         "module.web-module.spec.services.web.name": "web",
     }
 
@@ -1122,7 +1237,7 @@ def test_resolve_document_value_references_ignores_documents_with_no_value_token
 
 
 def test_resolve_document_value_references_does_not_scan_meta_as_a_source(tmp_path):
-    """docs/design/gap_fit_v1.md gap #24 — `meta` (name/annotations/labels/
+    """docs/work/gap_fit_v1.md gap #24 — `meta` (name/annotations/labels/
     tags) is documentation only; a literal '${value:...}'-shaped string
     there (e.g. an annotation quoting the real reference syntax as
     documentation) must not be treated as a reference to resolve, even
