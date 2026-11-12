@@ -158,7 +158,9 @@ service image may not be what runs.
   images it adds reach the gates.
   - It runs `HelmIntegration.template()` in an isolated Helm configuration, with no `--dependency-update`. The
     rendered text stays in memory, and strata's values file holds tokens, never a secret value.
-  - Each image gets `strata:found-in: rendered-chart` and `strata:used-by: chart:<namespace>/<reference>`.
+  - Each image gets `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<reference>/<container>`
+    and `strata:image`, the reference as the chart writes it. The purl keeps only the digest of a digest-pinned
+    image, so `strata:image` is where its tag survives.
   - A chart it cannot render gets an `info` finding (`sbom_chart_not_rendered`); an image holding a `${...}`
     token gets `sbom_chart_image_unresolved`. Neither fails the build.
   - Registry charts, unpacked in `.strata/helm/` outside the build path, are not rendered yet.

@@ -1,7 +1,7 @@
 # Helm module images - Work
 
-- Status: option B and plan item 8 built (2026-11-11), not released
-- Last updated: 2026-11-11
+- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed and 9a built (2026-11-12)
+- Last updated: 2026-11-12
 
 ## Overview
 
@@ -383,7 +383,8 @@ registered in `_KNOWN` after `helm`.
 - **Component:**
   - type `container`, with the purl from `image_to_purl()`, `hashes` from `image_digest_hash()`, and tag
     stability (`strata:tag-stability: floating` with a warning) as for any image;
-  - `strata:used-by: chart:<namespace>/<reference>`;
+  - `strata:used-by: chart:<namespace>/<reference>/<container>` (the container since plan item 9a);
+  - `strata:image`, the reference as the chart writes it (plan item 9a);
   - `strata:found-in: rendered-chart`;
   - its name is the container name.
 - **When it cannot render:** one `info` finding per chart, `sbom_chart_not_rendered`. The chart's images are not
@@ -404,7 +405,8 @@ declares no services:
 ```json
 {"type": "container", "name": "whoami", "version": "v1.10", "purl": "pkg:docker/traefik/whoami@v1.10",
  "properties": [{"name": "strata:found-in", "value": "rendered-chart"},
-                {"name": "strata:used-by", "value": "chart:apps/whoami"}]}
+                {"name": "strata:used-by", "value": "chart:apps/whoami/whoami"},
+                {"name": "strata:image", "value": "traefik/whoami:v1.10"}]}
 ```
 
 authentik's declared `ghcr.io/goauthentik/server:2026.5.2`, without rendering, which is the default and also
@@ -423,9 +425,9 @@ The image gate then logs: `image gate: asking aikido about ghcr.io/goauthentik/s
 
 - `deploy images`, `image_tag_policy` and `unknown_image_modules()` keep reading the solution only. They do not
   read rendered images, which exist only after a build. So a rendered local chart still shows as "known only to
-  Helm" in `deploy images`.
+  Helm" in `deploy images`. Plan item 9 takes this up for the policy.
 - A declared Helm image that the rendered chart does not contain keeps its marker. The declaration may be
-  deliberate documentation. A finding for it is an open question.
+  deliberate documentation. Plan item 9 adds an `info` finding for it.
 
 ### Tests
 
@@ -448,6 +450,178 @@ The image gate then logs: `image gate: asking aikido about ghcr.io/goauthentik/s
   - the helm-missing and template-failure findings;
   - the components and their properties.
 - **End to end:** one test against real `helm`, skipped when Helm is not installed.
+
+## Design: rendered chart images as a build fact (plan item 9, 2026-11-12)
+
+Item 8 made the rendered chart an input to the SBOM only. Four follow-ups are one gap: nothing else in strata knows
+what a chart runs.
+
+1. `image_tag_policy` and `on_unknown_image` do not see rendered images. The dogfood build rendered `whoami`'s
+   three images and still warned that its images are known only to Helm.
+2. Registry charts are not rendered, so 1 would help local charts only.
+3. A declared Helm image that the rendered chart does not run keeps its marker and says nothing.
+4. `render_charts` is off by default.
+
+This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the open questions).
+
+### Current state (2026-11-12)
+
+- `build run` judges `image_tag_policy` first, before it cleans or writes anything
+  (`build_controller.py`, "Image tag policy"). `cve_policy`, `checkov_policy` and `provisioner_lock_policy` run
+  last, after the render and the SBOM. A `deny` there fails the build and leaves the output on disk, and the
+  results go to `policy_results.json`.
+- `deploy run` reads `policy_results.json` only for the audit manifest. It never refuses a build because of it. It
+  runs its own checks: `image_tag_policy` again, with the deploy's `--pin`, and `image_gate_policy` over the build's
+  `sbom.json` (`images_from_sbom()`).
+- `policy check` judges `image_tag_policy` offline, from the solution, and records into `--build-path`.
+  `deploy images` has no build path.
+- The chart-image collector writes rendered components with `strata:found-in: rendered-chart` and `strata:used-by:
+  chart:<namespace>/<reference>`. A digest-pinned image's purl keeps only the digest, so the reference as written
+  in the chart cannot be read back from the purl.
+- `_merge_by_purl()` keeps one component, with one name, per purl, and joins the uses. Two containers that run
+  the same image, in one chart or in two, become one component: the use says which charts, but not which
+  containers.
+- A registry chart's `meta.yaml` holds `chartName`, `chartVersion` and `chartDigest`. Its archive is in
+  `.strata/helm/`, which `cached_pin()` finds. `deploy run` installs that archive once its digest matches
+  `chartDigest`.
+
+### 1. `image_tag_policy` moves to the end of the build
+
+- `build run` judges the policy last, next to the other build policies, in one check over the declared and the
+  rendered images. One `image_tag_policy` entry goes into `policy_results.json`, as today.
+- A `deny` fails the build after the render, as a CVE `deny` does. The output stays on disk. With `--clean`, the
+  previous build is already gone by then. This is a visible change: a bad tag is now reported after the sources are
+  cloned and the charts are rendered, not before.
+- **Failing fast is still possible:** `strata deploy images` and `strata policy check` judge the declared images
+  offline in seconds, with no build. A pipeline that wants the early answer runs one of them before `build run`.
+  The how-to says so.
+- **`--dry-run`:** the end of the build is skipped in a dry run, but the policy is not. A dry run judges the
+  declared images only, as today, because nothing is rendered.
+- Without `render_charts`, the check is the same as today's, only later.
+
+### 2. Rendered images as policy rows
+
+- **The SBOM keeps what the rows need** (plan item 9a):
+  - a rendered component gets `strata:image: <reference as the chart renders it>`, so a tag next to a digest
+    survives (`traefik/whoami:v1.10.2@sha256:...`). When two references share a purl, the first one is kept;
+    they then differ only in a tag next to the same digest;
+  - the use names the container: `chart:<namespace>/<reference>/<container>`. It survives the merge, which keeps
+    a single component name. Item 8 is not released, so the changed value breaks nothing.
+- **Reading them back:** a new `rendered_chart_images(build_path) -> list[EffectiveImage] | None` in
+  `controllers/effective_images.py` reads `sbom.json` and returns one row per `chart:` use of a rendered
+  component. It returns `None` when there is no SBOM.
+  - `origin: chart`, a new origin;
+  - `name: <reference>/<container>`, for example `whoami/shipper`, so that two charts with a container named
+    `server` do not collide in `allow`;
+  - `module` is the module reference, `via` is the use, `chart:<namespace>/<reference>/<container>`;
+  - `tag_source: chart`, and `delivered: true`.
+- **`check_image_tag_policy(..., build_path=None)`.** When it is given and the SBOM exists:
+  - the rendered rows are added;
+  - a rendered row whose image a declared row already has is not added. The declared row is judged once, as
+    delivered, because the chart runs it;
+  - a Helm module with at least one rendered row is no longer unknown, so `on_unknown_image` does not report it. A
+    chart that renders no container stays unknown; that is not a real case.
+- **Policy fields for a chart row:**
+  - `origins` gains `chart`. A workspace that lists `origins` today does not list `chart`, so it does not get the
+    rendered images until it adds it. One with no `origins` judges every origin, chart rows included.
+  - `allow` matches `<reference>/<container>`.
+  - `require_tag`, `reject_tags`, `tag_pattern` and `require_digest` apply as to any image.
+  - `require_pin` does not apply. Strata cannot pin a chart's image; a `charts` pin, or the chart's digest for a
+    registry chart, fixes it. The finding would only be noise.
+- **The fix text** for a chart row: "Set the tag in the chart's values through the module's `configuration`, or
+  pin a chart version that ships the tag you want."
+- **Example:**
+
+  ```
+  image_tag_policy: chart 'whoami/shipper' (ghcr.io/acme/log-shipper; used by chart:apps/whoami/shipper) has the
+  floating tag 'latest'. Set the tag in the chart's values through the module's configuration, or pin a chart version
+  that ships the tag you want.  [image_floating_tag]
+  ```
+
+### 3. Who reads the rendered rows
+
+| Caller | Build path | Rendered rows |
+| --- | --- | --- |
+| `build run` | its own, after `write_sbom()` | yes |
+| `build run --dry-run` | none (nothing written) | no |
+| `deploy run` | the build it deploys | yes, from that build's `sbom.json` |
+| `policy check` | `--build-path` when it exists | yes, from the last build |
+| `deploy images` | none | no: declared only, unchanged |
+
+- `deploy run` is what actually stops a deploy, so a pipeline that ignores the build's exit code is still caught.
+- `policy check` judges the last build's rendered images. Its output says where they came from: "rendered images
+  from the build of <time>", the `sbom.json` timestamp.
+- `deploy images` stays offline and build-free. Giving it `--build-path` is possible later, on demand.
+
+### 4. Registry charts
+
+- The chart-image collector also renders a registry chart: `helm template <release> <archive> --namespace <ns> -f
+  <folder>/strata-values.yaml`, where the archive is the `.tgz` in `.strata/helm/` that `cached_pin()` finds for the
+  `meta.yaml` coordinates.
+- **Digest first:** it renders only an archive whose digest is `chartDigest`, as `deploy run` checks before
+  installing. Any other case is an `info` finding, `sbom_chart_not_rendered`, and the chart is skipped:
+  - the build did not pin it, for example `--offline` with an empty cache;
+  - the archive is missing or has another digest.
+- **The cache path:** `write_sbom()` gains `helm_cache: Path | None`, which `build run` sets to
+  `helm_cache_dir(context.root)`, and passes it to the chart-image collector only. The `collect()` signature the
+  other collectors implement does not change.
+- Offline, as for local charts: the archive already holds its subcharts.
+
+### 5. Declared but not rendered
+
+- When a Helm module's chart was rendered and a declared service image of that module is not among the rendered
+  images, `write_sbom()` adds an `info` finding, `sbom_declared_image_not_rendered`:
+
+  ```
+  service 'server' of module 'authentik' declares ghcr.io/goauthentik/server:2026.5.2, but the rendered chart
+  does not run it. The declaration is kept, marked not delivered.
+  ```
+
+- `info`, not a warning: the declaration may be deliberate documentation, and the chart may pick the image by a
+  value strata does not set. The component keeps its marker, with the reason `helm module: not in the rendered
+  chart`.
+- Matched on the purl, so a declared `server:2026.5.2` and a rendered `server:2026.5.2@sha256:...` differ. That
+  is correct: the declaration does not say which digest runs.
+
+### 6. Compatibility
+
+- **Changed:** a `deny` from `image_tag_policy` now fails `build run` at the end, not at the start. `on_unknown_image:
+  block` moves with it.
+- **New findings, only with `render_charts`:** rendered images are judged by `image_tag_policy`, at build and at
+  deploy, unless `origins` leaves `chart` out. A `deny` policy can then fail a build that passed before.
+- **Fewer findings:** a rendered Helm module loses its `image_unknown_to_strata` warning.
+- **Additive:** the `chart` origin, the `strata:image` property, the two finding codes, registry charts in the SBOM.
+- Docs: the "Where it runs" table in [image-tag-policy.md](../design/image-tag-policy.md) and in
+  [workspace.md](../config/workspace.md), which both promise "before anything is cleaned or written", and the
+  comment in `build_controller.py`.
+
+### Not in this item
+
+- `deploy images --build-path`.
+- A deploy whose `--pin` differs from the build's for a Helm module: the deploy judges the build's rendered
+  images, which carry the build's pin. See the open questions.
+- `render_charts` by default.
+
+### Tests
+
+- **`rendered_chart_images()`:** reads `strata:image`, keeps tag and digest, names rows `<reference>/<container>`;
+  `None` without an SBOM; ignores components that were not rendered.
+- **`check_image_tag_policy()` with a build path:**
+  - rendered rows are judged, and `allow` matches `<reference>/<container>`;
+  - a rendered image a declared row also has is judged once, as delivered;
+  - a rendered module is not unknown;
+  - `origins` without `chart` skips them;
+  - `require_pin` does not apply to a chart row.
+- **`build run`:**
+  - a `deny` on a rendered image fails the build with the SBOM written and the result recorded;
+  - a `deny` on a declared image still fails it;
+  - `--dry-run` judges declared images;
+  - the policy result is written once.
+- **`deploy run`:** a `deny` on a rendered image in the build's SBOM stops the deploy before any step.
+- **`policy check`:** reads rendered images from `--build-path`.
+- **Registry chart:** renders from a cached archive whose digest matches; skips with `info` on a missing archive
+  and on another digest. One test against real `helm` with a packaged chart.
+- **Declared but not rendered:** the `info` finding and the reason; no finding when the chart was not rendered.
 
 ## Related Decisions
 
@@ -484,6 +658,32 @@ The image gate then logs: `image gate: asking aikido about ghcr.io/goauthentik/s
   - [x] 8c. `WorkspaceSpecModel.sbom.render_charts`; the `chart-image` collector and its findings
   - [x] 8d. Docs (the SBOM design and how-to, `workspace.md`; `security-gates.md` names no label), CHANGELOG;
     checks; the full suite; a real render of a local chart (a test against real `helm`)
+- [ ] 9. Rendered chart images as a build fact (design "Rendered chart images as a build fact" above). Each step
+  ends green on ruff, mypy, lint-imports and its own tests.
+  - [x] 9a. The SBOM keeps the reference and the container: `strata:image` on a rendered component, and the
+    use `chart:<namespace>/<reference>/<container>` (`chart_image_collector.py`, `IMAGE_REF_PROPERTY` in
+    `sbom_utils.py`). Nothing reads them yet. Tests: the reference keeps the tag the purl drops; two containers of
+    one image keep both uses after the merge. Built 2026-11-12.
+  - [ ] 9b. Registry charts: `write_sbom(..., helm_cache=)` from `build run`; the chart-image collector finds the
+    archive with `cached_pin()`, checks `chartDigest`, renders the `.tgz`; the two skip cases as `info`. Unit tests
+    with a stubbed `HelmIntegration`, one with real `helm` and a packaged chart (section 4).
+  - [ ] 9c. Declared but not rendered: the `sbom_declared_image_not_rendered` finding in `write_sbom()` after the
+    merge, and the reason `helm module: not in the rendered chart` (section 5).
+  - [ ] 9d. Policy rows: the `chart` origin in `ImageTagPolicyModel.origins`; `rendered_chart_images()`;
+    `check_image_tag_policy(..., build_path=)` adds the rows, judges a shared image once as delivered, drops
+    rendered modules from `unknown`; `_fix()` and `_problems()` for a chart row (no `require_pin`). Pure tests on
+    `evaluate_image_tag_policy()` plus a test over a written `sbom.json` (section 2).
+  - [ ] 9e. Move the build check: `build run` judges the policy after the SBOM, next to the CVE gate, with its build
+    path; a dry run judges declared images at the same point; the comment rewritten. Build tests for both `deny`
+    cases, the dry run and the single result (section 1).
+  - [ ] 9f. `deploy run` and `policy check` pass their build path; `policy check` says where the rendered images
+    came from. Tests for both (section 3).
+  - [ ] 9g. Docs: the "Where it runs" tables in `image-tag-policy.md` and `workspace.md`, the `chart` origin and
+    the `allow` name in `workspace.md`, the SBOM design and how-to (registry charts, the new finding), the CI
+    how-to's "fail fast with `deploy images`" line, `.github/CHANGELOG.md` (Changed: the build check moves; Added:
+    the rest). Then `strata validate config`, the full suite, and the dogfood build again: `whoami` loses its
+    unknown warning and a `latest` sidecar fails a `deny` policy.
+- [ ] 10. Later, after a release with item 9: `render_charts` on by default (open question below).
 
 ### Open questions
 
@@ -494,12 +694,16 @@ The image gate then logs: `image gate: asking aikido about ghcr.io/goauthentik/s
   count, since they deploy Kubernetes manifests? Wait for a consumer.
 - ~~**Does the SBOM and the CVE and image gates need the same marker?**~~ Answered 2026-11-11: yes,
   `strata:image-delivered: false`, read by the image gate and the audit manifest (design "The SBOM side").
-- **Registry charts in the SBOM.** A pinned registry chart is unpacked in `.strata/helm/`, so it could be rendered
-  offline too. That needs the cache path handed to the collector, which today sees the build path only. Wait for
-  a consumer: immich is a registry chart.
-- **Declared but not rendered.** When a rendered chart lacks a declared Helm image, should there be an `info`
-  finding? It is not built; the declaration may be deliberate.
-- **`render_charts` by default** in a later minor release?
+- ~~**Registry charts in the SBOM.**~~ Answered 2026-11-12: rendered from the cached archive once its digest
+  matches `chartDigest` (plan item 9, section 4).
+- ~~**Declared but not rendered.**~~ Answered 2026-11-12: an `info` finding, `sbom_declared_image_not_rendered`
+  (plan item 9, section 5).
+- **`render_charts` by default** in a later minor release? Not before a release with item 9, so that the policy,
+  the SBOM and the gates all see rendered images when it changes.
+- **A deploy `--pin` that differs from the build's.** For a Helm module the pin is baked into
+  `strata-values.yaml` at build, so the deploy judges the build's rendered images, not what its own pin says.
+  Should the deploy warn when a Helm module's declared tag differs between its pin and the build? Or should a
+  Helm module's pin be accepted at build only?
 - ~~**`on_unknown_image` default.**~~ Answered 2026-11-11: `warn`, as `image_gate_policy`. `block` is opt-in.
 - **Chart-only modules.** Is there a real consumer with a chart-only module whose image tag matters? Without one,
   B is enough.
@@ -525,6 +729,12 @@ The image gate then logs: `image gate: asking aikido about ghcr.io/goauthentik/s
   Hence `warn`.
 
 ## Changelog
+
+- 2026-11-12: plan item 9 designed and planned: `image_tag_policy` moves to the end of the build and judges
+  rendered images (the `chart` origin), at build, deploy and `policy check`; registry charts are rendered from the
+  cache; a declared image the chart does not run gets an `info` finding. Two open questions answered, one added.
+  `render_charts` by default is item 10. 9a built the same day: designing it showed the merge loses the container
+  of a second use, so the `chart:` use now names the container too.
 
 - 2026-11-11: plan item 8 designed from the removed work doc `sbom-generation.md` (2026-11-07). The values-file
   finding there is resolved (`strata-values.yaml`). Rendering local charts is opt-in (`spec.sbom.render_charts`);

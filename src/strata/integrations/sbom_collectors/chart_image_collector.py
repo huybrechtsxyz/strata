@@ -29,6 +29,7 @@ from strata.utils.diagnostics import Diagnostic, Severity
 from strata.utils.sbom_utils import (
     FOUND_IN_PROPERTY,
     FOUND_IN_RENDERED_CHART,
+    IMAGE_REF_PROPERTY,
     USED_BY_PROPERTY,
     image_digest_hash,
     image_to_purl,
@@ -125,7 +126,7 @@ class ChartImageCollector(SbomCollector):
                     )
                 )
                 continue
-            use = f"chart:{_where(build_path, folder)}"
+            chart = f"chart:{_where(build_path, folder)}"
             for name, image in rendered_images(rendered.stdout):
                 if "${" in image:
                     result.diagnostics.append(
@@ -138,13 +139,15 @@ class ChartImageCollector(SbomCollector):
                         )
                     )
                     continue
-                result.components.append(_component(name, image, use, result.diagnostics))
+                result.components.append(_component(name, image, f"{chart}/{name}", result.diagnostics))
         return result
 
 
 def _component(name: str, image: str, use: str, diagnostics: list[Diagnostic]) -> SbomComponentModel:
+    """The use names the container as well as the chart, so it survives `_merge_by_purl()` keeping one component
+    (and one name) for an image two containers or two charts run. `strata:image` keeps the reference as written."""
     _, tag, digest = parse_image_ref(image)
-    properties = {FOUND_IN_PROPERTY: FOUND_IN_RENDERED_CHART, USED_BY_PROPERTY: use}
+    properties = {FOUND_IN_PROPERTY: FOUND_IN_RENDERED_CHART, USED_BY_PROPERTY: use, IMAGE_REF_PROPERTY: image}
     if digest is None and is_floating_tag(tag):
         properties[_FLOATING_PROPERTY] = "floating"
         diagnostics.append(

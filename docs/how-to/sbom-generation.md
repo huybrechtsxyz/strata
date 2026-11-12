@@ -59,7 +59,8 @@ Strata writes no image into a Helm chart's values, so the chart decides which im
 
   `build run` then renders each local chart with `helm template`, offline, with strata's values.
   - Every container image, sidecars and init containers included, is listed with
-    `strata:found-in: rendered-chart` and `strata:used-by: chart:<namespace>/<module reference>`.
+    `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<module reference>/<container>` and
+    `strata:image`, the image reference exactly as the chart writes it.
   - A declared image the chart also renders loses its declared-only marker.
   - A chart that cannot be rendered gets one `info` line (`sbom_chart_not_rendered`) and is skipped. That
     happens when `helm` is not installed, or when a dependency is not vendored under `charts/`.

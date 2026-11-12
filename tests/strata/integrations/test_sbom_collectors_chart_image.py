@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from strata.controllers.sbom_controller import _merge_by_purl
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.sbom_collectors import chart_image_collector
 from strata.integrations.sbom_collectors.chart_image_collector import ChartImageCollector, rendered_images
@@ -147,8 +148,34 @@ def test_a_local_chart_is_rendered_with_its_release_namespace_and_values(tmp_pat
     assert set(components) == {"init", "web", "proxy"}
     web = components["web"]
     assert (web.purl, web.version, web.source_collector) == ("pkg:docker/traefik/whoami@v1.10", "v1.10", "chart-image")
-    assert web.properties == {"strata:found-in": "rendered-chart", "strata:used-by": "chart:apps/whoami"}
+    assert web.properties == {
+        "strata:found-in": "rendered-chart",
+        "strata:used-by": "chart:apps/whoami/web",
+        "strata:image": "traefik/whoami:v1.10",
+    }
     assert result.diagnostics == []
+
+
+def test_the_reference_keeps_the_tag_the_purl_drops_for_a_digest_pinned_image(tmp_path, monkeypatch):
+    digest = "sha256:" + "a" * 64
+    stdout = f"kind: Pod\nspec:\n  containers:\n    - {{name: app, image: 'traefik/whoami:v1.10.2@{digest}'}}\n"
+    monkeypatch.setattr(chart_image_collector, "helm", lambda: _FakeHelm(stdout))
+    _chart(tmp_path, "apps/whoami")
+    [component] = ChartImageCollector().collect(_graph(), [], tmp_path).components
+    assert "v1.10.2" not in component.purl
+    assert component.properties["strata:image"] == f"traefik/whoami:v1.10.2@{digest}"
+
+
+def test_two_containers_of_one_image_keep_both_uses_after_the_merge(tmp_path, monkeypatch):
+    stdout = (
+        "kind: Pod\nspec:\n  initContainers:\n    - {name: wait, image: 'busybox:1.36'}\n"
+        "  containers:\n    - {name: tail, image: 'busybox:1.36'}\n"
+    )
+    monkeypatch.setattr(chart_image_collector, "helm", lambda: _FakeHelm(stdout))
+    _chart(tmp_path, "apps/whoami")
+    components = ChartImageCollector().collect(_graph(), [], tmp_path).components
+    [merged] = _merge_by_purl(components)
+    assert merged.properties["strata:used-by"] == "chart:apps/whoami/wait, chart:apps/whoami/tail"
 
 
 def test_a_chart_without_strata_values_is_rendered_with_its_defaults(tmp_path, fake_helm):

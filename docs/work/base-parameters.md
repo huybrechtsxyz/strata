@@ -1,7 +1,7 @@
 # Parameterised bases (`input`, `params`, `${param:}`) - Work
 
 - Status: draft
-- Last updated: 2026-11-11
+- Last updated: 2026-11-12
 
 ## Overview
 
@@ -13,6 +13,14 @@ cannot remove duplicated *identity*: a base cannot say "my environments are `hub
 This doc compares seven ways to template those leaves and proposes one (option G): a base declares typed **inputs** in
 `meta.input`, uses them in its `spec` as `${param:key}`, and a leaf binds them in `meta.params`. It works like a generic
 type with constraints: the base is `Spoke<hub, spoke, tenant>`, and the leaf is `Spoke<hub01, acme-001, acme>`.
+
+The solution comes in two parts, built in that order:
+
+- **Part 1, parameterised bases (option G).** Templates, `input`, `params`, `${param:}`, chains, and `extends` for
+  environments and tenants. This is the base, and it is designed in detail.
+- **Part 2, shared params documents (`params_from`).** A leaf takes its params from one document per spoke instead
+  of repeating them. It sits on top of part 1 and changes only where a leaf's params come from. The concept is
+  agreed; the details may still change once part 1 is in use.
 
 Nothing is built. The doc is here to settle the shape before any code.
 
@@ -131,9 +139,9 @@ of the diff disappears too.
 
 ### G. Inputs on the base, `${param:}` in its spec, bound in `meta.params` (proposed)
 
-The rest of this doc.
+Part 1 below. Part 2 adds shared params documents on top of it.
 
-## Proposal (option G)
+## Part 1: parameterised bases (option G)
 
 ### Shape
 
@@ -145,14 +153,15 @@ apiVersion: strata.omp.com/v2
 kind: deployment
 meta:
   name: bootstrap_deployment_base
+  name_rule: bootstrap-${param:spoke}  # a leaf's name must match, after binding
   input:
     - key: hub
       type: string
-      pattern: "^hub[0-9]{2}$"
+      schema: { pattern: "^hub[0-9]{2}$" }
       description: "Hub of the spoke."
     - key: spoke
       type: string
-      pattern: "^[a-z][a-z0-9]*-[0-9]{3}$"
+      schema: { pattern: "^[a-z][a-z0-9]*-[0-9]{3}$" }
     - key: tenant
       type: string
       references: tenant          # must name an existing tenant
@@ -161,7 +170,7 @@ meta:
       references: provider
       default: azure-westeurope
 spec:
-  partial: true
+  partial: true                        # required on a template (rule 10)
   workspace: bootstrap
   tenant: ${param:tenant}
   providers:
@@ -205,17 +214,19 @@ kind: environment
 meta:
   name: subscription_env_base
   input:
-    - { key: code, type: string, pattern: "^[a-z][a-z0-9]*$" }
-    - { key: seq, type: string, pattern: "^[0-9]{3}$" }
-    - { key: subscription_id, type: string }
-    - { key: spn_object_id, type: string }
+    - { key: code, type: string, schema: { pattern: "^[a-z][a-z0-9]*$" } }
+    - { key: seq, type: string, schema: { pattern: "^[0-9]{3}$" } }
+    - { key: subscription_id, type: string, schema: { format: uuid } }
+    - { key: spn_object_id, type: string, schema: { format: uuid } }
+    - { key: environment_name, type: string, schema: { enum: [dev, tst, prd] }, default: prd }
 spec:
+  partial: true
   properties:
     environment_info:
       subscription_id: ${param:subscription_id}
       sequence_number: ${param:seq}
       deploy_code: ${param:code}
-      environment_name: prd
+      environment_name: ${param:environment_name}
     state_vault:
       name: kv-${param:code}-tfstate-${param:seq}
       resource_group_name: rg-${param:code}-tfstate-prd
@@ -242,8 +253,15 @@ ingress `customers` block).
 
 ### Rules
 
-1. **`input`** is a list of `{key, type, pattern?, references?, default?, description?}`. `key` is unique within
-   the document. `type` is `string`, `number`, `boolean`, `object` or `list`. An input without `default` is required.
+1. **`input`** is a list of `{key, type, schema?, references?, default?, description?}`. `key` is unique within
+   the document. An input without `default` is required.
+   - `type` takes the names variables already use (`VariableValueType`): `string`, `number`, `bool`, `object`,
+     `list`, `map`.
+   - `schema` is a plain JSON Schema fragment (2020-12), checked by the shared evaluator that attributeconfig uses.
+     This follows attributeconfig's rule of no strata-invented vocabulary: `pattern`, `enum`, `format`, `minLength`,
+     `items` and the rest come with it. A `default` must satisfy its own `schema`.
+   - `references` is the one strata keyword: the value must name an existing document of that kind (`tenant`,
+     `provider`, `environment`, ...). JSON Schema cannot express that. A base (`partial`) never satisfies it.
 2. **`params`** binds the inputs of the document named in `spec.extends`, and only those. A key that the parent does
    not declare is an error. A required input of the parent left unbound is an error. Both name the document that
    holds `params` and the input.
@@ -263,11 +281,25 @@ ingress `customers` block).
    (`${var:x}`) are left alone and resolved at run time as today.
 8. **`params` needs a template parent.** `params` on a document whose parent declares no `input` is an error. A
    document that extends a template without `params` is valid only when every input of the parent has a `default`.
+9. **`name_rule`** (optional, on a template) is a string with `${param:}` tokens. After binding, the `meta.name` of
+   every *leaf* below it must equal the result, or it is an error (`name_rule_mismatch`) that gives both names.
+   Names stay plain text in the file, so the index never depends on substitution, but they cannot drift from their
+   params. A middle base does not have to match its parent's rule. Only leaves do, and with several rules in a
+   chain every one of them applies.
+10. **A template is a document with `meta.input`, and it must say `spec.partial: true` itself.** `input` without
+    `partial: true` (left out, or `false`) is an error (`template_not_partial`) on every kind. Partial is never
+    implied: someone reading the `spec` sees that the document is not deployable without scrolling back to `meta`,
+    and every base, template or not, is marked the same way. No separate `template` flag.
+11. **Templates do not template `meta`.** A leaf's `meta` is its own and holds `name` and `params`. `tags`,
+    `labels` and `annotations` are optional, as they are today, and are never filled in from a base. Notes that
+    belong to one leaf (who the customer is, which ticket delivered a value, when it was last checked) go in the
+    folder's `README.md`, or in the leaf's own `annotations` if a tool needs to read them.
 
 ### Chains: `input` and `params` on every level
 
-There is no depth limit. `extends` has none today (`_resolve_dict()` recurses until a document without `extends`
-and stops only on a cycle), and G adds none.
+There is no depth limit and no depth warning. `extends` has none today (`_resolve_dict()` recurses until a document
+without `extends` and stops only on a cycle), and G adds none. Any threshold would be arbitrary and soon become
+noise; the rendered view (phase 3) is what keeps a deep chain readable.
 
 Any document in a chain may hold both fields, and they face in opposite directions:
 
@@ -296,9 +328,9 @@ kind: deployment
 meta:
   name: stack_deployment_base
   input:
-    - { key: stack, type: string, pattern: "^[a-z]+$" }
-    - { key: hub, type: string, pattern: "^hub[0-9]{2}$" }
-    - { key: spoke, type: string, pattern: "^[a-z][a-z0-9]*-[0-9]{3}$" }
+    - { key: stack, type: string, schema: { enum: [bootstrap, spoke, ingress] } }
+    - { key: hub, type: string, schema: { pattern: "^hub[0-9]{2}$" } }
+    - { key: spoke, type: string, schema: { pattern: "^[a-z][a-z0-9]*-[0-9]{3}$" } }
     - { key: tenant, type: string, references: tenant }
     - { key: provider, type: string, references: provider, default: azure-westeurope }
 spec:
@@ -321,6 +353,7 @@ spec:
 kind: deployment
 meta:
   name: bootstrap_deployment_base
+  name_rule: bootstrap-${param:spoke}
   input:                                    # what a bootstrap leaf must give
     - { key: hub, type: string }
     - { key: spoke, type: string }
@@ -349,7 +382,7 @@ spec:
 ```
 
 Constraints are checked at every level the value passes through: `hub` against base2's input (only a type here) and
-again against base1's (`pattern`). A middle base may make a constraint stricter for its own children, but it cannot
+again against base1's (`schema.pattern`). A middle base may make a constraint stricter for its own children, but it cannot
 relax its parent's.
 
 **A middle level may also close the chain.** A document with `params` and no `input` binds its parent completely:
@@ -390,8 +423,9 @@ template cannot be fully checked until it is bound.
 - **The merged result is validated as an ordinary document**, which includes `validate_references()`. A bad
   `hub-${param:hub}-env` shows up as an unknown environment on the leaf. The diagnostic names the leaf, the template
   and the template's field (`bootstrap_deployment_base: spec.environments[1] = "hub-hub09-env"`).
-- A template is never deployable and never listed directly. A template that is not `partial: true` is an error.
-  For environments, a deployment that lists a template environment by name (instead of its leaf) is an error.
+- A template is never deployable and never listed directly: it must declare `partial: true` (rule 10). For
+  environments, a deployment that lists a template environment by name (instead of its leaf) is an error.
+- `name_rule` (rule 9) is checked on the leaf, after binding and before the merged result is validated.
 - Bases without `input` are unchanged: they are still validated standalone.
 
 `DocumentIndex` holds validated models today, so templates need a place for their raw `spec`, next to the model of
@@ -425,8 +459,15 @@ Environments and tenants are read in many more places: per-environment token che
 tenant's hostname label as `${value:tenant.acme.spec.configuration.dns_slug}`.
 
 So for these two kinds, **the resolved model replaces the raw one in the index**, right after resolution and before
-any check that reads them. Every consumer then sees inherited fields with no change of its own. The raw document is
-kept beside it, so diagnostics can still point at the file and line the author wrote.
+any check that reads them. Every consumer then sees inherited fields with no change of its own.
+
+The raw document is **not** kept beside it. Instead, resolution records an **origin map**: for each field path of
+the resolved model, the document and field it came from (`spec.features[enable_apim] <- spoke-initech-001-env`,
+`spec.features[enable_nsp] <- spoke_flags_base`, `spec.properties.state_vault.name <- subscription_env_base, filled
+in from params.code and params.seq`). Diagnostics use it to point at the file the author wrote, and the rendered view
+(phase 3) uses it to show where each value comes from. A second copy of the document would serve neither. Templates
+still keep their raw `spec` (see "Templates are validated per instance"), because that is what instantiation reads.
+The same map is built for deployments.
 
 A base (`partial: true`) or template stays in the index so `extends` can find it, but it is marked, and every other
 lookup rejects it:
@@ -448,9 +489,13 @@ Stores are deliberately *not* merged field by field, unlike a deployment's keyed
 variable moved from `store: constant` with a `value` to a Key Vault store with a `ref` must not keep the stale
 `value`. The unique-key checks run on the merged result.
 
+A child cannot **remove** an inherited entry, only override it (switch a flag off, give a variable another value).
+That matches deployments today. There is no remove marker; add one only when a real case cannot be handled by an
+override.
+
 `partial` is optional for an environment. Every environment is valid on its own (an empty `spec` is valid), so a plain
 base is just an environment that others extend. Mark it `partial: true` only to stop it from being listed directly. A
-template (`meta.input`) is partial whether or not it says so.
+template (`meta.input`) must mark it (rule 10).
 
 Without params, `extends` on an environment gives the same values as listing the base before the child in the
 deployment's `environments`. Its value is that deployments list one name instead of two, and that it gives a template
@@ -492,8 +537,9 @@ spec:
 `geographies` is replaced, not joined: it is a data-residency limit, and a child that writes `[us]` must not
 silently also allow its base's `europe`.
 
-A tenant base needs `partial: true`: `display_name` is required, so a base without one would fail validation on its
-own, which is exactly what `partial` is for on a deployment. A partial tenant is validated after the merge, and only
+A plain tenant base needs `partial: true`: `display_name` is required, so a base without one would fail validation on
+its own, which is exactly what `partial` is for on a deployment. A tenant template needs it too, like every template
+(rule 10). A partial tenant is validated after the merge, and only
 its leaves are checked against the provider configs' geographies.
 
 `meta.name` is the tenant code, so a base's name must not look like one. A naming rule (for example `_base` suffix) is
@@ -507,9 +553,9 @@ kind: tenant
 meta:
   name: customer_tenant_base
   input:
-    - { key: display_name, type: string }
-    - { key: dns_slug, type: string, pattern: "^[a-z][a-z0-9-]*$" }
-    - { key: geographies, type: list, default: [europe] }
+    - { key: display_name, type: string, schema: { minLength: 1 } }
+    - { key: dns_slug, type: string, schema: { pattern: "^[a-z][a-z0-9-]*$" } }
+    - { key: geographies, type: list, schema: { items: { enum: [europe, us] } }, default: [europe] }
 spec:
   partial: true
   display_name: ${param:display_name}
@@ -541,6 +587,146 @@ A spoke goes from about 355 lines in seven files to about 80, and what is left i
 SPN object ID, flags, customers). The ring generator could then write a leaf of a dozen lines, or be retired. These
 numbers are estimates from the diffs above, not a migration that was carried out.
 
+## Part 2: shared params documents (`params_from`)
+
+Status: concept agreed, details open. Built after part 1, and the design below may change once part 1 is in use.
+
+### The problem it solves
+
+With part 1 alone, every leaf states its own params. One spoke folder has seven leaves, and almost all of them repeat
+the same values:
+
+```
+deploy/hubs/hub01/acme-001/
+  deploy-bootstrap.yaml   params: { hub: hub01, spoke: acme-001, tenant: acme }
+  deploy-spoke.yaml       params: { hub: hub01, spoke: acme-001, tenant: acme }
+  deploy-ingress.yaml     params: { hub: hub01, spoke: acme-001, tenant: acme }
+  env-bootstrap.yaml      params: { spoke: acme-001 }
+  env-spoke.yaml          params: { spoke: acme-001 }
+  env-ingress.yaml        params: { spoke: acme-001 }
+  env-subscription.yaml   params: { spoke: acme-001, code: acme, seq: "001", subscription_id: …, spn_object_id: … }
+```
+
+The cost is typing, not correctness: the folder check on `layers.segments`, `name_rule` (rule 9) and references
+already catch a typo. That is why part 1 can ship without part 2.
+
+The obvious alternative, a deployment passing its params to the environments it lists, is rejected. An environment
+shared by several deployments (the subscription's is listed by every deployment of the spoke) would get several,
+possibly conflicting, bindings, and `${value:environment.sub-acme-001-env...}` would no longer name one document.
+
+### Shape
+
+A new, small kind holds plain values. It has no `extends`, no tokens and no constraints; the constraints stay on the
+templates that consume the values.
+
+```yaml
+# deploy/hubs/hub01/acme-001/spoke.yaml
+kind: parameters
+meta:
+  name: spoke-acme-001
+spec:
+  values:
+    hub: hub01
+    spoke: acme-001
+    tenant: acme
+    code: acme
+    seq: "001"
+    subscription_id: 00000000-0000-0000-0000-000000000001
+    spn_object_id: 00000000-0000-0000-0000-000000000002
+```
+
+A leaf points at it with `meta.params_from`, and can still add or override values in `params`:
+
+```yaml
+# deploy-bootstrap.yaml
+kind: deployment
+meta:
+  name: bootstrap-acme-001
+  params_from: spoke-acme-001
+spec:
+  extends: bootstrap_deployment_base
+
+# env-subscription.yaml
+kind: environment
+meta:
+  name: sub-acme-001-env
+  params_from: spoke-acme-001
+spec:
+  extends: subscription_env_base
+
+# deploy-ingress.yaml: one value of its own on top of the shared set
+kind: deployment
+meta:
+  name: ingress-acme-001
+  params_from: spoke-acme-001
+  params: { provider: azure-westus2 }
+spec:
+  extends: ingress_deployment_base
+```
+
+The spoke folder, before and after:
+
+```
+part 1 only (each leaf repeats)            with part 2 (one source)
+-----------------------------------        -----------------------------------
+deploy-bootstrap.yaml  hub, spoke, tenant  spoke.yaml             all 7 values
+deploy-spoke.yaml      hub, spoke, tenant  deploy-bootstrap.yaml  params_from
+deploy-ingress.yaml    hub, spoke, tenant  deploy-spoke.yaml      params_from
+env-bootstrap.yaml     spoke               deploy-ingress.yaml    params_from + provider
+env-spoke.yaml         spoke               env-bootstrap.yaml     params_from
+env-ingress.yaml       spoke               env-spoke.yaml         params_from + flags
+env-subscription.yaml  spoke, code, seq,   env-ingress.yaml       params_from + customers
+                       subscription_id,    env-subscription.yaml  params_from
+                       spn_object_id
+```
+
+Every real fact about the spoke (group 3 in "The case") ends up in `spoke.yaml`: a reviewer reads one file to know
+what the spoke is. The leaves keep only their exceptions.
+
+### Rules (draft)
+
+- P1. **`params_from`** names a `parameters` document, or a list of them (`[hub-hub01, spoke-acme-001]`, later wins),
+    so values shared by a whole hub (`provider`) can live once per hub.
+- P2. **A leaf takes only what its parent declares.** `env-spoke`'s template asks only for `spoke`, so it ignores
+    `subscription_id`. This relaxes rule 2 (an unknown key is an error) for values from `params_from` only. Keys
+    written in `params` stay strict.
+- P3. **`params` wins over `params_from`.** The origin map records which one supplied each value, so the rendered view
+    shows "`provider` from `params`, `hub` from `spoke-acme-001`".
+- P4. **Every value is still checked** by the parent's `input` (`type`, `schema`, `references`), as if it were written
+    in `params`.
+- P5. **Unused values are reported** (`unused_parameter`, a warning): a key of a parameters document that no leaf using
+    it consumes. This makes up for P2: with a typo such as `spokee: acme-001`, `spokee` is unused and `spoke` is
+    reported missing.
+- P6. **Plain values only** (rule 7): no `${...}` in a parameters document. It depends on nothing, so it is loaded
+    first and can be read at load time.
+
+### How it sits on top of part 1
+
+Part 2 changes only where a leaf's params come from. It adds one step before pass 1 of "Chains":
+
+```
+params_from (part 2)  ──┐
+                        ├─► one params map ─► pass 1: bind up the chain ─► pass 2: fill in + merge ─► validate
+params (part 1)  ───────┘                     (input, schema, references)   (extends, merge rules)
+```
+
+Templates, `input`, `${param:}`, `partial: true`, chains and per-document scope, `name_rule`, per-instance
+validation, the origin map, and `extends` for environments and tenants are unchanged. Consequences:
+
+- **No breaking change.** A leaf with plain `params` stays valid, so part 1 ships without part 2.
+- **Gradual adoption.** One spoke can move to `spoke.yaml` while the others keep inline `params`.
+- **No loss if dropped.** If defaults from the folder (open questions) turn out to be enough, part 1 has nothing to
+  undo.
+
+### Trade-offs
+
+- **Covers environments.** Defaults from the folder would only cover deployments (only they have `layers`).
+- **Cost:** a new kind, `params_from` on three kinds, and one indirection: a leaf is not readable without
+  `spoke.yaml`, which makes the rendered view (phase 3) more necessary.
+- **Signal:** with part 2, the leaves of a spoke differ only by name and parent. That is close to option D (one table,
+  N deployments), which is rejected above. The difference is that the files remain, so audit paths, pipelines and the
+  folder check keep working. Part 2 is "D, but keeping the files", and that is the reason it is acceptable.
+
 ## Related Decisions
 
 - [ADR-0024](../decisions/0024-tenant-defaults-merge.md): tenant defaults, the second merge axis next to `extends`,
@@ -553,50 +739,39 @@ numbers are estimates from the diffs above, not a migration that was carried out
 
 ## Remaining Work / Open Questions
 
-Phases, if G is accepted:
+Phases 1 to 5 are part 1. Phase 6 is part 2 and starts only once part 1 is in use.
 
-- [ ] **Phase 1, deployment templates.** `meta.input`, `meta.params`, `${param:}` substitution in
-      `_resolve_dict()`, per-instance validation, diagnostics that name the leaf and the template field, schema
+- [ ] **Phase 1, deployment templates.** `meta.input` (with `schema` checked by the shared JSON Schema evaluator,
+      and `references`), `meta.params`, `meta.name_rule`, `${param:}` substitution in `_resolve_dict()`,
+      per-instance validation, the origin map, diagnostics that name the leaf and the template field, schema
       export, config docs (`config/deployment`).
 - [ ] **Phase 2, one chain resolver for three kinds.** Lift the walk out of `deployment_resolution.py`. Add
       `extends`/`partial` to `environment` and `tenant` with the merge tables above. Resolve in the order
       environments, tenants, deployments. Replace resolved environments and tenants in the index, and reject bases
       wherever a document can be listed, selected or read by `${value:}`. Then templates for both kinds.
 - [ ] **Phase 3, a rendered view.** A way to print the instantiated document of a leaf (likely an option on an
-      existing command), since what runs is no longer in any single file.
+      existing command), since what runs is no longer in any single file. It shows, from the origin map, which
+      document and which param each value comes from.
 - [ ] **Phase 4, consumer migration.** Spoke stacks first (bootstrap, spoke, ingress, subscription), then customer
       projects, then rings. Use C (a generator) until then.
 - [ ] **Phase 5.** Migrate tenants to a shared tenant base and drop empty placeholder tenant environments.
       `provider` is not worth templating.
+- [ ] **Phase 6, part 2: shared params documents.** The `parameters` kind, `meta.params_from` on deployment,
+      environment and tenant, rules P1 to P6, the `unused_parameter` warning, origin map entries for values from
+      `params_from`. Revisit the draft design against real leaves first.
 
 Open questions:
 
-- [ ] **`meta` of the leaf.** About half of each diff is `annotations.description`, `tags` and comments. Either the
-      leaf may leave them out, or a template may also hold `meta.tags`/`annotations` with `${param:}`, merged into
-      the leaf's `meta`. Leaving them out is simpler. The per-spoke notes (customer name, ticket numbers, dates
-      values were checked) then need a home, such as the spoke's `README.md`.
-- [ ] **Repeated params.** `hub` and `spoke` are still typed in every leaf of a spoke (three deployments, four
-      environments). Should a deployment pass its params to the environments it lists? An environment shared by
-      several deployments (the subscription's) would then need the same binding from each, so this is left out of
-      phase 1.
-- [ ] **Name rule.** Should a template be able to require a leaf name pattern (`bootstrap-${param:spoke}`), as a
-      check only, so names stay literal but cannot drift?
-- [ ] **Template detection.** Is "has `meta.input`" enough, or should a template say so (`spec.partial: true` plus
-      `input`, or a `template: true` flag)?
-- [ ] **Constraint vocabulary.** Is `pattern` + `references` + `type` + `default` enough, or is `enum` needed (for
-      example `environment_name`)?
-- [ ] **Removing an inherited entry.** A child can override a base's variable or flag, but not remove it, as for
-      deployments today. Is that enough, or is a tombstone (`{ key: x, remove: true }`) needed?
-- [ ] **Raw beside resolved.** Keeping both models of an environment or tenant in the index doubles what the index
-      holds for those kinds. Is a source-location map on the resolved model enough instead?
+- [ ] **Part 2 details.** The concept is agreed; to settle when phase 6 starts: the kind's name (`parameters`)
+      and where its files live, whether `params_from` takes a list, whether P2's filtering is right or a leaf should
+      name the keys it takes, and whether `unused_parameter` is a warning or an error.
 - [ ] **Forwarding shorthand.** A middle base that forwards most inputs unchanged repeats each one twice (in
       `input` and as `k: ${param:k}`). A shorthand such as `input: [{ from: parent, except: [stack] }]`
       (redeclare the parent's inputs and forward them as they are) would remove that. Leave it out until a real chain
       shows the repetition hurts. Explicit is easier to read in a review.
-- [ ] **Chain depth.** No limit is proposed. Should `validate` warn above some depth (say 4), since every level makes
-      the rendered view (phase 3) more necessary?
-- [ ] **Interaction with B.** Could an input default to a layer segment (`default: ${layer:hub}`) so a leaf can omit
-      what its folder already states? Only worth it once G is in use.
+- [ ] **Defaults from the folder (option B).** Could an input default to a layer segment (`default: ${layer:hub}`),
+      so a deployment leaf can omit what its folder already states? It covers deployments only, so part 2 is the
+      planned answer to repeated params. Is this still worth it after part 2, or does part 2 make it unnecessary?
 
 ## Changelog
 
@@ -613,3 +788,18 @@ Open questions:
   updated.
 - 2026-11-11: Made anonymous: the source solution, its customers, codes, IDs and naming scheme replaced by
   stand-ins. Structure and counts unchanged.
+- 2026-11-12: Seven open questions settled. Constraints are a JSON Schema `schema` fragment plus `references`, with
+  `type` taken from `VariableValueType` (rule 1; this also fixes `boolean` to `bool` and adds `map`). New rules 9
+  (`name_rule`, checked on leaves), 10 (`input` implies `partial`, which removes a contradiction between the template
+  and environment sections) and 11 (templates do not template `meta`). An origin map replaces keeping the raw
+  document beside the resolved one. No remove marker for inherited entries, and no depth limit or warning. Examples
+  updated to the `schema:` form. Still open: repeated params, the forwarding shorthand, and defaults from the
+  folder.
+- 2026-11-12: Rule 10 changed: a template must write `partial: true` itself (`template_not_partial` otherwise),
+  instead of `input` implying it. Explicit in the `spec`, and the same marking for every base. `partial: true` added
+  back to every template example.
+- 2026-11-12: Added part 2, shared params documents (`params_from`), as the planned answer to repeated params:
+  the `parameters` kind, draft rules P1 to P6, how it sits on top of part 1, and trade-offs. The doc is now split
+  into part 1 (the base, built first) and part 2 (built after, design may change). Phase 6 added. The "Repeated
+  params" open question becomes "Part 2 details", and the folder-defaults question asks whether part 2 makes it
+  unnecessary.

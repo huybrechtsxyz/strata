@@ -20,7 +20,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     collector's.
 - **`spec.sbom.render_charts`** (workspace, default `false`). `build run` renders every local Helm chart with
   `helm template`, offline and with strata's values, and lists every image it deploys in `sbom.json`, sidecars and
-  init containers included (`strata:found-in: rendered-chart`).
+  init containers included (`strata:found-in: rendered-chart`). Each records the container in its use
+  (`strata:used-by: chart:<namespace>/<reference>/<container>`) and the reference as the chart writes it
+  (`strata:image`), which keeps a tag the purl drops for a digest-pinned image.
   - A chart that cannot be rendered gets an `info` line (`sbom_chart_not_rendered`): no `helm`, or a dependency
     not vendored under `charts/`.
   - Registry charts are not rendered yet.
