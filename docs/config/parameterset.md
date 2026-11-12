@@ -4,9 +4,11 @@ One named set of plain values: the instance data of a spoke, a hub, a customer o
 values a whole family of documents differs by (a name, a sequence number, a subscription ID) live
 in one place, so the documents that use them can share one base.
 
-> **Status: the kind only.** strata loads and validates parameter sets, but nothing reads them yet.
-> Naming a set in a deployment's `meta.params` and reading it with `${param:<role>.<key>}` come in
-> the next steps of `base-parameters-v2.md` (work doc).
+> **Status: deployments, free-form fields only.** A deployment names sets in `meta.params`, and
+> `${param:<role>.<key>}` works in any field that takes free text (`properties`, `custom`,
+> `kube_context`, ...). Typed and reference fields (`tenant`, `environments`, `providers`,
+> `layers.segments`), environments and tenants come in the next steps of
+> `base-parameters-v2.md` (work doc).
 
 ## Schema
 
@@ -61,10 +63,62 @@ spec:
 Quote values YAML would otherwise read as another type: `seq: "001"` stays the text `001`, while
 `seq: 001` is the number `1`.
 
+## Using a parameter set
+
+A deployment names sets per **role** in `meta.params`, and any document of its `extends` chain
+reads them with `${param:<role>.<key>}`. The role is chosen where the set is used, so a base reads
+`${param:spoke.name}` whichever spoke a leaf names:
+
+```yaml
+# the base: shared by every spoke
+kind: deployment
+meta:
+  name: spoke_deployment_base
+  params: { hub: hub-defaults }          # optional: defaults, like a chart's values.yaml
+spec:
+  partial: true
+  workspace: spoke
+  environments: [prd]
+  properties:
+    subscription_name: sub-${param:spoke.name}
+    provider_region: ${param:hub.region}
+    customers: ${param:spoke.customers}  # the whole value: the list is inserted as a list
+---
+# a leaf: one per spoke
+kind: deployment
+meta:
+  name: spoke-acme-001
+  params: { spoke: spoke-acme-001 }      # or a list per role, merged in order
+spec:
+  extends: spoke_deployment_base
+```
+
+- **Merging.** Every document of the chain may name sets. Per role they merge root first, then
+  down the chain, then the leaf's, later winning: maps merge per key, lists and scalars are
+  replaced. A base's sets are defaults; the leaf's override them.
+- **Whole value or embedded.** A token that is the entire value is replaced by the value with its
+  type (a list, a map, a number). A token inside a longer string needs a single value; `true` and
+  `false` are written as YAML writes them.
+- **`${param:spoke}`** alone is the whole map of the role. Nested keys and named list items use
+  dots, as `${value:}` does: `${param:spoke.network.cidr}`.
+- **Once, at load.** Values are substituted when the chain is resolved, before anything runs.
+  Run-time tokens (`${var:x}`, `${secret:x}`) are left for run time, and `$${param:x}` stays the
+  literal text `${param:x}`.
+- A `partial: true` base may hold tokens no value fills yet; only a deployable deployment must
+  resolve every token of its chain.
+
 ## Validation
 
 - A `${...}` token in a key or value of `spec.values` is a load error (`value_error`)
 - Two parameter sets with the same name are a `duplicate_document` error, as for every kind
+- A name in `meta.params` that is no parameter set is an `unknown_reference`
+- A `${param:}` whose key the chain's sets do not hold, or whose role no document of the chain
+  names, is `param_missing`. It is reported on the document that holds the token, for each
+  deployment it was resolved for:
+  `base spec.properties.envs[1]: ${param:spoke.hub} not found in spoke: [spoke-acme-001] (for spoke-acme-001)`
+- A list or map inside a longer string is `param_not_scalar`
+- A `${param:}` in a document of another kind (an environment, a workspace, a module, ...) is not
+  substituted, and the token check reports it as a `malformed_value_token`
 
 ## Notes
 

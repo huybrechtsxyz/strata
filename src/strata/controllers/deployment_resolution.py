@@ -46,6 +46,16 @@ inventing a second one. Kept in this module rather than given its own
 call site per consumer: every current and planned reader of this
 function's output wants the same fully-resolved deployment, and a second
 call site is one more place to forget to call it.
+
+**Parameter sets (`base-parameters-v2.md` (work doc), step 1b) make it two
+passes.** The values come from the whole chain, leaf included, and apply
+to every base, so a base's merged spec is no longer one per name. Pass one
+walks up and collects the chain (cycles and missing ancestors, keyed by
+name as before). Pass two, for each deployable leaf, merges the chain's
+parameter sets per role, substitutes `${param:}` in each document's spec
+and merges the specs root first. The merged-spec cache is keyed by (name,
+the sets the chain names), so leaves that name the same sets, or none,
+still share their bases' work.
 """
 
 from dataclasses import dataclass
@@ -53,10 +63,11 @@ from typing import Any, cast
 
 from pydantic import ValidationError
 
-from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.logging.config import get_logger
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
+from strata.models.parameterset_model import ParameterSetModel
 from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
@@ -64,6 +75,7 @@ from strata.services.base_service import diagnostics_from_validation_error
 from strata.services.deployment_service import merge_deployment_specs
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
+from strata.utils.param_tokens import ParamProblem, merge_param_values, substitute_params
 
 log = get_logger(__name__)
 
@@ -76,6 +88,35 @@ class _CircularExtendsError(Exception):
     def __init__(self, cycle: list[str]) -> None:
         super().__init__(f"circular extends chain: {' -> '.join(cycle)}")
         self.cycle = cycle
+
+
+#: Role -> the parameter sets a chain names for it, root first: the merge order, and the merged-spec cache key.
+ParamSets = dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class ResolvedDeployment:
+    """One deployable deployment, resolved.
+
+    `model` is the merged document. `params` is the merged values per role its `${param:}` tokens read, from
+    `param_sets` (role -> the sets named, root first). `chain` is the deployment and its bases, leaf first.
+    """
+
+    model: DeploymentModel
+    params: dict[str, dict[str, Any]]
+    param_sets: ParamSets
+    chain: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _MergedSpec:
+    """A chain's merged spec under one choice of parameter sets, with the tokens that could not be substituted.
+
+    Each problem carries the document that holds the token and its file.
+    """
+
+    spec: dict[str, Any]
+    problems: tuple[tuple[str, str, ParamProblem], ...]
 
 
 @dataclass(frozen=True)
@@ -186,6 +227,19 @@ def deployment_workspace(index: DocumentIndex, deployment: DeploymentModel) -> W
 
 
 def resolve_deployment_chains(index: DocumentIndex) -> tuple[dict[str, DeploymentModel], Diagnostics]:
+    """`resolve_deployments()`, the merged models only: what every caller before parameter sets needed.
+
+    Args:
+        index: The loaded `DocumentIndex`.
+
+    Returns:
+        `(resolved, diagnostics)`, `resolved` mapping each deployable deployment's name to its merged model.
+    """
+    resolved, diagnostics = resolve_deployments(index)
+    return {name: deployment.model for name, deployment in resolved.items()}, diagnostics
+
+
+def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeployment], Diagnostics]:
     """Resolve every deployment's `extends` chain into a complete document.
 
     Args:
@@ -200,12 +254,16 @@ def resolve_deployment_chains(index: DocumentIndex) -> tuple[dict[str, Deploymen
         document is deliberately **not** in `resolved`, whether it is a root
         base or an intermediate link: it is not deployable, so the other
         checks have nothing to say about it — logged at debug, not reported
-        as a finding.
+        as a finding. A deployment whose `${param:}` tokens cannot all be
+        substituted is not in `resolved` either; each token is reported
+        (`param_missing`, `param_not_scalar`) against the document that holds
+        it, naming the deployment it was resolved for.
     """
     diagnostics = Diagnostics()
-    dict_cache: dict[str, dict[str, object] | None] = {}
+    chains: dict[str, tuple[str, ...] | None] = {}
     poisoned: set[str] = set()
-    resolved: dict[str, DeploymentModel] = {}
+    specs: dict[tuple[str, tuple[tuple[str, tuple[str, ...]], ...]], _MergedSpec] = {}
+    resolved: dict[str, ResolvedDeployment] = {}
 
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         name = entry.ref.name
@@ -213,12 +271,12 @@ def resolve_deployment_chains(index: DocumentIndex) -> tuple[dict[str, Deploymen
         assert isinstance(deployment, DeploymentModel)
 
         try:
-            merged_dict = _resolve_dict(name, index, dict_cache, poisoned, visiting=[])
+            chain = _resolve_chain(name, index, chains, poisoned, visiting=[])
         except _CircularExtendsError as exc:
             diagnostics.error(str(exc), source=str(entry.source), location="spec.extends", code="circular_extends")
             continue
 
-        if merged_dict is None:
+        if chain is None:
             if name in poisoned:
                 # Part of a cycle first detected while resolving a *different*
                 # deployment's chain; that occurrence already reported the
@@ -238,7 +296,22 @@ def resolve_deployment_chains(index: DocumentIndex) -> tuple[dict[str, Deploymen
             log.debug("deployment base has no consumers", name=name, source=str(entry.source))
             continue
 
-        merged_dict = _merge_tenant_defaults(merged_dict, index)
+        param_sets = _param_sets(chain, index)
+        if param_sets is None:
+            continue  # names a parameter set that does not exist: validate_references reports it on meta.params
+        params = merge_param_values(param_sets, _set_values(param_sets, index))
+        merged = _merged_spec(chain, param_sets, params, index, specs)
+        if merged.problems:
+            for holder, source, problem in merged.problems:
+                diagnostics.error(
+                    f"{holder} {problem.location}: {problem.message} (for {name})",
+                    source=source,
+                    location=problem.location,
+                    code=problem.code,
+                )
+            continue
+
+        merged_dict = _merge_tenant_defaults(merged.spec, index)
 
         try:
             merged_model = DeploymentModel.model_validate({"meta": deployment.meta.model_dump(), "spec": merged_dict})
@@ -246,9 +319,62 @@ def resolve_deployment_chains(index: DocumentIndex) -> tuple[dict[str, Deploymen
             diagnostics.extend(diagnostics_from_validation_error(exc), source=str(entry.source))
             continue
 
-        resolved[name] = merged_model
+        resolved[name] = ResolvedDeployment(model=merged_model, params=params, param_sets=param_sets, chain=chain)
 
     return resolved, diagnostics
+
+
+def _param_sets(chain: tuple[str, ...], index: DocumentIndex) -> ParamSets | None:
+    """Role -> the parameter sets `chain` (leaf first) names, root first; `None` if one does not exist."""
+    sets: dict[str, list[str]] = {}
+    for name in reversed(chain):
+        model = cast(DeploymentModel, _require(index, PlatformKind.DEPLOYMENT, name).model)
+        for role, named in (model.meta.params or {}).items():
+            names = [named] if isinstance(named, str) else list(named)
+            if any(index.get(PlatformKind.PARAMETERSET, set_name) is None for set_name in names):
+                return None
+            sets.setdefault(role, []).extend(names)
+    return {role: tuple(names) for role, names in sets.items()}
+
+
+def _set_values(param_sets: ParamSets, index: DocumentIndex) -> dict[str, dict[str, Any]]:
+    """Parameter set name -> its `spec.values`, for every set `param_sets` names."""
+    return {
+        name: cast(ParameterSetModel, _require(index, PlatformKind.PARAMETERSET, name).model).spec.values
+        for names in param_sets.values()
+        for name in names
+    }
+
+
+def _merged_spec(
+    chain: tuple[str, ...],
+    param_sets: ParamSets,
+    params: dict[str, dict[str, Any]],
+    index: DocumentIndex,
+    cache: dict[tuple[str, tuple[tuple[str, tuple[str, ...]], ...]], _MergedSpec],
+) -> _MergedSpec:
+    """The merged spec of `chain` (leaf first), each document substituted with `params` before it is merged.
+
+    Memoised per (name, sets named): a base shared by several leaves (a diamond) is folded once per choice of
+    parameter sets, not once per descendant. The sets determine the values, so they are the whole key.
+    """
+    name = chain[0]
+    key = (name, tuple(sorted(param_sets.items())))
+    if key in cache:
+        return cache[key]
+
+    entry = _require(index, PlatformKind.DEPLOYMENT, name)
+    own_raw = cast(DeploymentModel, entry.model).spec.model_dump(exclude_none=True)
+    own, own_problems = substitute_params(own_raw, params, param_sets, "spec")
+    problems = tuple((name, str(entry.source), problem) for problem in own_problems)
+
+    if len(chain) == 1:
+        result = _MergedSpec(spec=own, problems=problems)
+    else:
+        base = _merged_spec(chain[1:], param_sets, params, index, cache)
+        result = _MergedSpec(spec=merge_deployment_specs(base.spec, own), problems=base.problems + problems)
+    cache[key] = result
+    return result
 
 
 def _merge_tenant_defaults(spec_dict: dict[str, Any], index: DocumentIndex) -> dict[str, Any]:
@@ -266,7 +392,7 @@ def _merge_tenant_defaults(spec_dict: dict[str, Any], index: DocumentIndex) -> d
     merge into.
 
     A missing/unresolvable `tenant` reference silently no-ops — the same
-    treatment `_resolve_dict()` gives a missing `extends` ancestor;
+    treatment `_resolve_chain()` gives a missing `extends` ancestor;
     `validate_references` is the layer that reports a bad `spec.tenant`.
     """
     tenant_name = spec_dict.get("tenant")
@@ -284,17 +410,24 @@ def _merge_tenant_defaults(spec_dict: dict[str, Any], index: DocumentIndex) -> d
     return merge_deployment_specs(tenant_base, spec_dict)
 
 
-def _resolve_dict(
+def _require(index: DocumentIndex, kind: PlatformKind, name: str) -> IndexEntry:
+    """The entry for a document already known to exist (a resolved chain link or a checked parameter set)."""
+    entry = index.get(kind, name)
+    assert entry is not None, f"{kind.value}/{name} vanished from the index"
+    return entry
+
+
+def _resolve_chain(
     name: str,
     index: DocumentIndex,
-    cache: dict[str, dict[str, object] | None],
+    cache: dict[str, tuple[str, ...] | None],
     poisoned: set[str],
     visiting: list[str],
-) -> dict[str, object] | None:
-    """Return the fully-merged `spec` dict for deployment `name`, recursively.
+) -> tuple[str, ...] | None:
+    """Return deployment `name` and its bases, leaf first, recursively (pass one).
 
-    Memoised per name: a base shared by several leaves (a diamond) is folded
-    once, not once per descendant.
+    Memoised per name: a base shared by several leaves (a diamond) is
+    walked once, not once per descendant.
 
     Returns:
         `None` for two distinct reasons, distinguished via `poisoned`: the
@@ -319,25 +452,23 @@ def _resolve_dict(
 
     deployment = entry.model
     assert isinstance(deployment, DeploymentModel)
-    own_dict = deployment.spec.model_dump(exclude_none=True)
 
     if not deployment.spec.extends:
-        cache[name] = own_dict
-        return own_dict
+        cache[name] = (name,)
+        return cache[name]
 
     try:
-        base_dict = _resolve_dict(deployment.spec.extends, index, cache, poisoned, [*visiting, name])
+        base_chain = _resolve_chain(deployment.spec.extends, index, cache, poisoned, [*visiting, name])
     except _CircularExtendsError:
         poisoned.add(name)
         cache[name] = None
         raise
 
-    if base_dict is None:
+    if base_chain is None:
         if deployment.spec.extends in poisoned:
             poisoned.add(name)
         cache[name] = None
         return None
 
-    merged = merge_deployment_specs(base_dict, own_dict)
-    cache[name] = merged
-    return merged
+    cache[name] = (name, *base_chain)
+    return cache[name]

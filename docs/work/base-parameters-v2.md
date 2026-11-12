@@ -761,7 +761,7 @@ Phases. Each step is shippable on its own; tests are listed with the step that n
         error; `$${var:x}` is not; a duplicate name is `duplicate_document`. Done 2026-11-12:
         `parameterset_model.py`, `parameterset_service.py`, a schema example, `docs/config/parameterset.md`. The
         ban covers keys as well as values and names every offending path in one `value_error`.
-  - [ ] 1b. **`meta.params` and `${param:}` in free-form strings.** `meta.params` on deployments (a map from a role to
+  - [x] 1b. **`meta.params` and `${param:}` in free-form strings.** `meta.params` on deployments (a map from a role to
         one set or a list, each a `parameterset`), the values merge per role along the chain (rule 3), substitution
         (rules 4, 6, 7, 8) in strings
         that already pass validation as written (`properties`, `custom`, `variables[].value`, ...), the two-pass walk
@@ -771,7 +771,7 @@ Phases. Each step is shippable on its own; tests are listed with the step that n
         with the same key stay apart; one set under two roles; a role no document names is a missing key; whole-value and
         embedded tokens; a list inserted whole; a missing key names the document, field and sets; substituted text
         is not rescanned; `${var:}` is left for run time; one base shared by two leaves with different values (the
-        cache).
+        cache). Done 2026-11-12, see the changelog for what differs from this plan.
   - [ ] 1c. **Templates.** A document whose `spec` holds `${param:}` loads as a template (meta validated, spec a
         plain dict), partial or not. The token checks accept `${param:}` in it. Every consumer that falls back to
         `entry.model` (the list in "Templates are validated per instance") skips templates or reads the resolved
@@ -869,3 +869,23 @@ Open questions:
   schema example and the config reference page. No CHANGELOG entry yet: that waits for 1f, when the kind is usable.
   Open for 1b: `${value:parameterset.<name>.spec.values.<key>}` already resolves through the generic `${value:}`
   path; decide whether to forbid it, so `${param:}` stays the one way to read a set.
+- 2026-11-12: Step 1b built. `DeploymentMetaModel.params` (role -> set or list, `References(parameterset)`);
+  `utils/param_tokens.py` (merge per role with `deep_merge`, one-pass substitution); the resolver split into
+  `_resolve_chain()` (pass one, cycles and missing ancestors as before) and `_merged_spec()` (pass two, cached per
+  (name, sets named), since the sets determine the values). Differences from the plan:
+  - **Return type.** `resolve_deployments()` is new and returns `ResolvedDeployment` (model, merged `params`,
+    `param_sets`, `chain`); `resolve_deployment_chains()` stays as its projection to models, so its four callers are
+    unchanged. Phases 3 and 4 move the callers that need values to `resolve_deployments()`.
+  - **Where findings land.** `param_missing` and `param_not_scalar` go on the document that holds the token (often a
+    base), with the leaf in the message: `base spec.properties.envs[1]: ... (for leaf)`, once per leaf. The full
+    origin map is still 1e.
+  - **An unknown set** in `meta.params` is one `unknown_reference` (the reference walk now follows map values,
+    `meta.params{}`); the leaf is left unresolved without `param_missing` findings on top.
+  - **Token syntax.** `${param:}` is `PARAM_TOKEN_PATTERN` in `value_tokens.py`, outside `VALUE_TOKEN_KINDS`. The
+    malformed-token check accepts it only in a deployment (`param_tokens=`), so a partial base keeps its tokens and
+    any other kind still reports one as malformed.
+  - **Rendering.** An embedded `true`/`false` renders as YAML writes it (`${value:}` writes Python's `True`), a date
+    as ISO text, `null` or a list or map is `param_not_scalar`.
+  - **Shared walk.** `${value:}`'s dotted walk moved to `utils/value_paths.py`, so `${param:}` walks named list
+    items (`${param:spoke.subnets.app.cidr}`) the same way.
+  - The `${value:parameterset...}` question above stays open.

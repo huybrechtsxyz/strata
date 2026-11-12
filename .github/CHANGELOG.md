@@ -143,6 +143,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Fixed
 
+- **The container image** (`ghcr.io/huybrechtsxyz/strata`) now has `git` and `ssh`, which strata calls itself:
+  a `build run` with a remote no longer fails in it, and `ssh_key` auth works. git trusts a checkout mounted with
+  `docker run -v`, so the audit record and the image gate get the commit SHA instead of silently none. The user has a
+  home directory. The image installs the dependency versions in `uv.lock`, the ones CI tested, with a pinned `uv`.
+  Terraform and Helm stay out; the CI how-to shows how to extend the image with the versions you pin.
 - Schema descriptions (`strata schema`) and docstrings cite each doc where it is now. 139 citations of 13 docs
   pointed to a path the doc had moved from; a test now fails on any such citation.
 - `strata promote status` marks an `images` pin `← behind` by its tag. An image pin is a whole reference

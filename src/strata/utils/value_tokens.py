@@ -55,6 +55,12 @@ VALUE_TOKEN_PATTERN = re.compile(
     r"\$\{(?P<kind>var|secret|feature|output|value|deployment|artifact):(?P<key>[A-Za-z0-9_.-]+)\}"
 )
 
+#: ``${param:ROLE.PATH}`` (`base-parameters-v2.md` (work doc)): a *load-time* token, substituted from the
+#: parameter sets a deployment's chain names when the chain is resolved (`utils/param_tokens.py`). Deliberately
+#: not one of `VALUE_TOKEN_KINDS`: those resolve at run time, and no `${param:}` may ever reach run time.
+#: Syntax checks accept it only where a caller says it may appear (`find_malformed_value_tokens(param_tokens=)`).
+PARAM_TOKEN_PATTERN = re.compile(r"\$\{param:(?P<key>[A-Za-z0-9_.-]+)\}")
+
 _VALUE_TOKEN_CANDIDATE_PATTERN = re.compile(r"\$\{[^}]*\}")
 
 #: Escapes a literal, non-strata ``${...}`` (docs/design/value-token-resolution.md's
@@ -217,8 +223,11 @@ def strip_escaped_value_tokens(value: str) -> str:
     return _ESCAPED_VALUE_TOKEN_PATTERN.sub("", value)
 
 
-def find_malformed_value_tokens(value: str) -> list[str]:
+def find_malformed_value_tokens(value: str, *, param_tokens: bool = False) -> list[str]:
     """Return every malformed ``${...}``-shaped candidate in `value`, escapes ignored.
+
+    `param_tokens` accepts a well-formed load-time ``${param:ROLE.PATH}`` too: only in a document whose chain
+    resolution substitutes it (a deployment), never elsewhere, where it would reach run time unresolved.
 
     The non-raising counterpart to `validate_value_tokens()` (which wraps
     this and raises on the first hit) — for callers that collect
@@ -228,7 +237,11 @@ def find_malformed_value_tokens(value: str) -> list[str]:
     `custom` passthrough dicts included).
     """
     stripped = strip_escaped_value_tokens(value)
-    return [c for c in _VALUE_TOKEN_CANDIDATE_PATTERN.findall(stripped) if not VALUE_TOKEN_PATTERN.fullmatch(c)]
+    return [
+        c
+        for c in _VALUE_TOKEN_CANDIDATE_PATTERN.findall(stripped)
+        if not VALUE_TOKEN_PATTERN.fullmatch(c) and not (param_tokens and PARAM_TOKEN_PATTERN.fullmatch(c))
+    ]
 
 
 def validate_value_tokens(value: str) -> None:

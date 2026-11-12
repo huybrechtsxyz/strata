@@ -355,7 +355,7 @@ def _readiness(
     label = f"Provisioner '{provisioner}' (step '{step.name}')"
     if diagnostics is not None:
         for problem in assessed.problems:
-            # A teardown passes none of the flags a `flags_only` problem is about (docs/work/helm-4-support.md).
+            # A teardown passes none of the flags a `flags_only` problem is about (docs/design/helm-chart-deployment.md, "Helm versions").
             report = diagnostics.warning if destroy and problem.flags_only else diagnostics.error
             report(f"{label}: {problem.message}", location=step.name, code=problem.code)
         for notice in assessed.warnings:

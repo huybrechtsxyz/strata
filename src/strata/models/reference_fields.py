@@ -128,11 +128,18 @@ def _walk(annotation: object, path: str) -> list[ReferenceRule]:
         for arg in get_args(annotation):
             if arg is not type(None):
                 rules.extend(_walk(arg, path))
-        return rules
+        # `name | list[name]` (`meta.params` values): the walk already yields each item of a list it ends at, so
+        # `path[]` beside `path` would report every name twice.
+        return [rule for rule in rules if not (rule.path == f"{path}[]" and ReferenceRule(path, rule.kind) in rules)]
 
     if origin is list:
         (item,) = get_args(annotation)
         return _walk(item, f"{path}[]")
+
+    if origin is dict:
+        # A map's values (`meta.params`: role -> parameter set); its keys are never references.
+        _, value = get_args(annotation)
+        return _walk(value, f"{path}{{}}")
 
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
         return _extract(annotation, path)

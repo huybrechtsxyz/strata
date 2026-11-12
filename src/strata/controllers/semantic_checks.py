@@ -1474,7 +1474,13 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
         for reached in documents_reached_by_deployment(index, deployment, entry.source):
             if declared is not None:
                 diagnostics.extend(
-                    unresolved_value_tokens(reached.model, declared, owner, output_claimed=reached.claimed),
+                    unresolved_value_tokens(
+                        reached.model,
+                        declared,
+                        owner,
+                        output_claimed=reached.claimed,
+                        param_tokens=reached.kind is PlatformKind.DEPLOYMENT,
+                    ),
                     source=str(reached.source),
                 )
             if check_deployment_tokens:

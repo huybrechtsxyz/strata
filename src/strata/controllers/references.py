@@ -47,13 +47,17 @@ def _walk(value: Any, segments: list[str], prefix: str) -> Iterator[tuple[str, s
 
     head, *rest = segments
     iterate = head.endswith("[]")
-    attribute = head[:-2] if iterate else head
+    mapping = head.endswith("{}")
+    attribute = head[:-2] if iterate or mapping else head
     child = getattr(value, attribute, None)
     if child is None:
         return
 
     location = f"{prefix}.{attribute}" if prefix else attribute
-    if iterate:
+    if mapping:
+        for key, item in child.items():
+            yield from _walk(item, rest, f"{location}.{key}")
+    elif iterate:
         for position, item in enumerate(child):
             yield from _walk(item, rest, f"{location}.{position}")
     else:

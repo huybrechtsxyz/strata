@@ -5,17 +5,18 @@
 # ============================================================
 FROM python:3.13-slim AS builder
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Install uv, pinned: `latest` would make the build depend on the day it ran (docs/design/cli-image.md)
+COPY --from=ghcr.io/astral-sh/uv:0.9.22 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy manifest and version first for layer caching
-COPY pyproject.toml VERSION.txt ./
+# Copy manifest, lockfile and version first for layer caching
+COPY pyproject.toml uv.lock VERSION.txt ./
 COPY src/ src/
 
-# Install production dependencies only into an in-project .venv
-RUN uv sync --no-dev --no-editable
+# Install production dependencies only into an in-project .venv, at the versions in uv.lock (what CI tested).
+# --locked fails the build when the lockfile no longer matches pyproject.toml, instead of resolving afresh.
+RUN uv sync --locked --no-dev --no-editable
 
 # ============================================================
 # Stage 2 – runtime: lean image with only the installed venv
@@ -40,9 +41,21 @@ WORKDIR /app
 # Copy the pre-built virtual environment from the builder stage
 COPY --from=builder /app/.venv /app/.venv
 
-# Run as non-root
-RUN useradd --no-create-home --shell /bin/bash appuser
+# git: strata itself calls it (fetching remotes at build, the commit SHA in the audit record and the image gate,
+# audit push to a git sink, the GitOps integration). openssh-client: `auth.method: ssh_key` runs git over ssh.
+# Provisioner tools (terraform, helm, docker) stay out: a pipeline brings the versions it pins (docs/design/cli-image.md).
+# safe.directory: a checkout mounted with `docker run -v` belongs to another user, and git refuses it as "dubious
+# ownership"; `git rev-parse HEAD` would then fail and the audit record would silently lose its commit SHA.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git openssh-client \
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --system --add safe.directory '*'
+
+# Run as non-root, with a home directory: git, ssh and any tool a pipeline adds on top (Helm's cache,
+# ~/.kube/config) write under $HOME.
+RUN useradd --create-home --shell /bin/bash appuser
 USER appuser
+ENV HOME=/home/appuser
 
 # The CLI is invoked as: docker run <image> <command> [options]
 # e.g.: docker run strata validate my-config.yaml

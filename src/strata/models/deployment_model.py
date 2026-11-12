@@ -548,6 +548,21 @@ class DeploymentMetaModel(PlatformBaseModel):
     """Deployment metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique deployment name")
+    params: (
+        dict[
+            PlatformName,
+            Annotated[PlatformName, References(PlatformKind.PARAMETERSET)]
+            | list[Annotated[PlatformName, References(PlatformKind.PARAMETERSET)]],
+        ]
+        | None
+    ) = Field(
+        None,
+        description="Parameter sets this deployment reads, per role: `{spoke: spoke-acme-001}`, or a list per "
+        "role merged in order (`{hub: [hub-defaults, hub-hub02]}`). Any document of the extends chain may name "
+        "sets: per role they merge root first, leaf last, later winning per leaf key, so a base's sets are "
+        "defaults and the leaf's override them. `${param:<role>.<key>}` in the spec of any document of the chain "
+        "reads the merged values. Not inherited as meta: each document names its own.",
+    )
     annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )

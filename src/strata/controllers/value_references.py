@@ -26,12 +26,8 @@ from typing import Any
 from strata.controllers.solution_controller import DocumentIndex
 from strata.models.common_models import PlatformKind
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.value_paths import VALUE_PATH_MISSING, walk_value_path
 from strata.utils.value_tokens import extract_value_tokens, has_value_tokens
-
-#: Sentinel distinguishing "path resolved to a real `None`/falsy leaf" from
-#: "path could not be walked at all" — `_walk_value_reference_path()`'s
-#: return value is checked with `is _VALUE_PATH_MISSING`, never truthiness.
-_VALUE_PATH_MISSING = object()
 
 
 def _iter_document_strings(value: Any, path: str = "") -> list[tuple[str, str]]:
@@ -57,54 +53,6 @@ def _iter_document_strings(value: Any, path: str = "") -> list[tuple[str, str]]:
         for position, child in enumerate(value):
             found.extend(_iter_document_strings(child, f"{path}[{position}]"))
     return found
-
-
-def _walk_value_reference_path(node: Any, segments: list[str]) -> Any:
-    """Walk `segments` through `node` (a target document's own
-    `model_dump(by_alias=True, mode="json")`), one segment per step.
-
-    A list segment is resolved by integer index (`networks.0.cidr`) or, if
-    it isn't a digit, by matching a `"name"` key on one of the list's own
-    dict items (`networks.main-network.cidr`) — the same `(kind, name)`
-    identity convention ADR-0015 already established for document
-    addressing, applied one level deeper to named items *within* a
-    document (docs/design/firewall-network-cidr-references.md). The two can
-    never be ambiguous: `PlatformName`'s own pattern requires a leading
-    lowercase letter, so a real name is never also `.isdigit()`. A list of
-    plain scalars (no dict items at all) simply never matches a non-digit
-    segment, the same miss as today. Duplicate names within one list are
-    not re-validated here — the first match wins; uniqueness is each
-    model's own `check_unique_names()` validator's job, not this walk's.
-
-    Returns `_VALUE_PATH_MISSING` the instant a segment cannot be resolved
-    — a missing dict key, a list index/name that doesn't exist, or an
-    attempt to descend into an already-scalar value. An empty `segments`
-    list (a bare `${value:kind.name}` with no path at all) returns `node`
-    itself unchanged — the whole document's dumped dict — which
-    deliberately is not special-cased here: `resolve_document_value_references()`'s
-    own scalar check below rejects it as `value_reference_not_scalar`,
-    naturally covering "referencing a whole sub-object is out of scope"
-    (this design's own "Deliberately out of scope" section) with no extra
-    code.
-    """
-    for segment in segments:
-        if isinstance(node, dict):
-            if segment not in node:
-                return _VALUE_PATH_MISSING
-            node = node[segment]
-        elif isinstance(node, list):
-            if segment.isdigit():
-                if int(segment) >= len(node):
-                    return _VALUE_PATH_MISSING
-                node = node[int(segment)]
-            else:
-                match = next((item for item in node if isinstance(item, dict) and item.get("name") == segment), None)
-                if match is None:
-                    return _VALUE_PATH_MISSING
-                node = match
-        else:
-            return _VALUE_PATH_MISSING
-    return node
 
 
 #: An artifact's image fields: `${value:}` may not read them (docs/archive/artifact-gap-analysis.md, design 3).
@@ -223,7 +171,7 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
         # `meta` (name/annotations/labels/tags) is documentation/presentation
         # only, never a real ${value:...} source — excluded here the same way
         # and for the same reason as `unresolved_value_tokens()` (gap_fit_v1.md
-        # gap #23). The TARGET side below (`_walk_value_reference_path()`)
+        # gap #23). The TARGET side below (`walk_value_path()`)
         # deliberately keeps full `meta` access — `${value:tenant.contoso.meta.name}`
         # is a real, working reference shape (this design's own "Problem"
         # example) — only the source-side scan for where a token is *written*
@@ -267,10 +215,8 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
                     )
                     continue
                 path_segments = segments[2:]
-                resolved = _walk_value_reference_path(
-                    target.model.model_dump(by_alias=True, mode="json"), path_segments
-                )
-                if resolved is _VALUE_PATH_MISSING:
+                resolved = walk_value_path(target.model.model_dump(by_alias=True, mode="json"), path_segments)
+                if resolved is VALUE_PATH_MISSING:
                     diagnostics.error(
                         f"'${{value:{full_key}}}' has no field at path '{'.'.join(path_segments)}' on "
                         f"'{target_kind.value}/{name}'.",

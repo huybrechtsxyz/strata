@@ -158,10 +158,12 @@ def _candidates(schema: dict[str, Any], node: dict[str, Any]) -> list[dict[str, 
 
 
 def _leaf_candidates(schema: dict[str, Any], path: str) -> list[dict[str, Any]]:
-    """The schema node(s) a dotted reference path (`spec.providers[]`) ends at, through $ref/anyOf/items."""
+    """The schema node(s) a dotted reference path (`spec.providers[]`, `meta.params{}`) ends at, through
+    $ref/anyOf/items/additionalProperties."""
     nodes = [schema]
     for part in path.split("."):
-        name, is_list = part.removesuffix("[]"), part.endswith("[]")
+        is_list, is_map = part.endswith("[]"), part.endswith("{}")
+        name = part[:-2] if is_list or is_map else part
         stepped = [
             c["properties"][name]
             for node in nodes
@@ -170,6 +172,14 @@ def _leaf_candidates(schema: dict[str, Any], path: str) -> list[dict[str, Any]]:
         ]
         if is_list:
             stepped = [c["items"] for node in stepped for c in _candidates(schema, node) if "items" in c]
+        if is_map:  # a map's values: `additionalProperties`, or `patternProperties` when its keys have a pattern
+            stepped = [
+                value
+                for node in stepped
+                for c in _candidates(schema, node)
+                for value in [c.get("additionalProperties"), *c.get("patternProperties", {}).values()]
+                if isinstance(value, dict)
+            ]
         nodes = stepped
     return [c for node in nodes for c in _candidates(schema, node)]
 
