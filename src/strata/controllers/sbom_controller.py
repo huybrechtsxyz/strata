@@ -54,6 +54,13 @@ from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
+from strata.utils.sbom_utils import (
+    FOUND_IN_PROPERTY,
+    FOUND_IN_RENDERED_CHART,
+    IMAGE_DELIVERED_PROPERTY,
+    IMAGE_DELIVERY_PROPERTY,
+    USED_BY_PROPERTY,
+)
 
 log = get_logger(__name__)
 
@@ -189,6 +196,10 @@ def _merge_by_purl(components: list[SbomComponentModel]) -> list[SbomComponentMo
 
     Two collectors can find the same image (the module declares it, the rendered compose file
     names it); listed twice it would be two components with one `bom-ref`, an invalid BOM.
+
+    Two properties do not simply keep the first value (docs/work/helm-image-delivery.md, the SBOM side):
+    `strata:used-by` joins every use, so a rendered chart's use is not lost behind a declared one, and the
+    declared-only marker is dropped once a rendered chart deploys the image, which makes it what runs.
     """
     merged: dict[str, SbomComponentModel] = {}
     for component in components:
@@ -196,16 +207,40 @@ def _merge_by_purl(components: list[SbomComponentModel]) -> list[SbomComponentMo
         first = merged.get(key)
         if first is None:
             merged[key] = component
-        elif not (
-            component.properties.keys() <= first.properties.keys() and component.hashes.keys() <= first.hashes.keys()
-        ):
-            merged[key] = first.model_copy(
-                update={
-                    "properties": {**component.properties, **first.properties},
-                    "hashes": {**component.hashes, **first.hashes},
-                }
-            )
-    return list(merged.values())
+            continue
+        properties = {**component.properties, **first.properties}
+        uses = _joined_uses(first.properties.get(USED_BY_PROPERTY), component.properties.get(USED_BY_PROPERTY))
+        if uses:
+            properties[USED_BY_PROPERTY] = uses
+        merged[key] = first.model_copy(
+            update={"properties": properties, "hashes": {**component.hashes, **first.hashes}}
+        )
+    return [_rendered_is_delivered(component) for component in merged.values()]
+
+
+def _joined_uses(*values: str | None) -> str | None:
+    """`strata:used-by` values joined in first-use order, each use once."""
+    uses: list[str] = []
+    for value in values:
+        for use in (value or "").split(","):
+            use = use.strip()
+            if use and use not in uses:
+                uses.append(use)
+    return ", ".join(uses) or None
+
+
+def _rendered_is_delivered(component: SbomComponentModel) -> SbomComponentModel:
+    """Drop the declared-only marker from an image a rendered chart deploys."""
+    if component.properties.get(FOUND_IN_PROPERTY) != FOUND_IN_RENDERED_CHART:
+        return component
+    if IMAGE_DELIVERED_PROPERTY not in component.properties:
+        return component
+    properties = {
+        name: value
+        for name, value in component.properties.items()
+        if name not in (IMAGE_DELIVERED_PROPERTY, IMAGE_DELIVERY_PROPERTY)
+    }
+    return component.model_copy(update={"properties": properties})
 
 
 def _canonical_purl(purl: str) -> str:

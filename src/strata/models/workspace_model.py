@@ -43,7 +43,7 @@ from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.provisioner_lock_policy_model import ProvisionerLockPolicyModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
 from strata.models.reference_fields import References
-from strata.models.sbom_model import CveMaxSeverityPolicyModel
+from strata.models.sbom_model import CveMaxSeverityPolicyModel, WorkspaceSbomModel
 from strata.models.security_gate_model import ImageGatePolicyModel, ReleaseGatePolicyModel
 from strata.utils.dependency_order import topological_order
 from strata.utils.names import check_unique_names
@@ -751,6 +751,12 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "one that does not lock every provider it declares. Omit it to only get an `info` line in `build run`.\n\n"
         "Design notes: Opt-in guard rail over the build path (docs/design/provisioner-lock-policy.md). Build only: "
         "deploy uses the built sources.",
+    )
+    sbom: WorkspaceSbomModel | None = Field(
+        None,
+        description="What `build run` adds to `sbom.json`: `render_charts: true` lists the images local Helm "
+        "charts deploy. Omit it for the SBOM as always.\n\n"
+        "Design notes: docs/work/helm-image-delivery.md, the SBOM side.",
     )
 
     @model_validator(mode="after")

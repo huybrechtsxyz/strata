@@ -224,3 +224,59 @@ def test_an_image_a_version_document_pinned_names_that_document():
 
     pinned = {c.name: c.properties.get("strata:pinned-by") for c in result.components}
     assert pinned == {"redis": "prd", "db": None, "api": "prd"}
+
+
+# The declared-only marker (docs/work/helm-image-delivery.md, the SBOM side, part 1).
+
+
+def _helm_row(image_ref: str, *, delivered: bool, module: str = "authentik"):
+    from strata.integrations.resolved_context import EffectiveImage
+
+    image_name, _, tag = image_ref.rpartition(":")
+    return EffectiveImage(
+        origin="module-service",
+        name="server",
+        image_name=image_name,
+        image_tag=tag,
+        image_ref=image_ref,
+        tag_source="declared",
+        module=module,
+        via=(f"service:{module}/server",),
+        delivered=delivered,
+        delivery=None if delivered else "helm module: the chart decides",
+    )
+
+
+def test_an_image_only_a_helm_module_declares_is_marked_not_delivered():
+    graph = _graph()
+    graph.images.append(_helm_row("ghcr.io/goauthentik/server:2026.5.2", delivered=False))
+    module = _module("authentik", ModuleServiceModel(name="server", image="ghcr.io/goauthentik/server:2026.5.2"))
+
+    [component] = ImageCollector().collect(graph, [module], Path("/does/not/matter")).components
+
+    assert component.properties["strata:image-delivered"] == "false"
+    assert component.properties["strata:image-delivery"] == "helm module: the chart decides"
+
+
+def test_an_image_a_compose_module_also_runs_is_not_marked():
+    graph = _graph()
+    graph.images.append(_helm_row("redis:7.2", delivered=False))
+    graph.images.append(_helm_row("redis:7.2", delivered=True, module="cache"))
+    module = _module("cache", ModuleServiceModel(name="server", image="redis:7.2"))
+
+    [component] = ImageCollector().collect(graph, [module], Path("/does/not/matter")).components
+
+    assert "strata:image-delivered" not in component.properties
+
+
+def test_a_delivered_image_or_one_without_a_row_is_not_marked():
+    graph = _graph()
+    graph.images.append(_helm_row("redis:7.2", delivered=True))
+    modules = [
+        _module("cache", ModuleServiceModel(name="redis", image="redis:7.2")),
+        _module("web", ModuleServiceModel(name="nginx", image="nginx:1.27")),
+    ]
+
+    components = ImageCollector().collect(graph, modules, Path("/does/not/matter")).components
+
+    assert all("strata:image-delivered" not in c.properties for c in components)

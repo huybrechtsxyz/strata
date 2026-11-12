@@ -10,6 +10,22 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **The SBOM, the image gate and the audit manifest say which images strata does not deliver.** A Helm module's
+  declared service image is still listed and scanned, but the chart decides which image runs.
+  - `sbom.json` gives it `strata:image-delivered: false` and `strata:image-delivery: helm module: the chart
+    decides`.
+  - `image_gate_policy` names it `... (declared only)`.
+  - The deploy audit manifest records it with `delivered: false`.
+  - `strata:used-by` now lists every use of an image found by more than one collector, not only the first
+    collector's.
+- **`spec.sbom.render_charts`** (workspace, default `false`). `build run` renders every local Helm chart with
+  `helm template`, offline and with strata's values, and lists every image it deploys in `sbom.json`, sidecars and
+  init containers included (`strata:found-in: rendered-chart`).
+  - A chart that cannot be rendered gets an `info` line (`sbom_chart_not_rendered`): no `helm`, or a dependency
+    not vendored under `charts/`.
+  - Registry charts are not rendered yet.
+  - Turning it on adds those images to `cve_policy` and `image_gate_policy`, so a `deny` gate can fail on an
+    image it never saw before.
 - **`strata deploy images` says which images strata delivers.** Strata delivers an image when it writes it into
   what runs:
   - a Compose service;

@@ -129,6 +129,11 @@ class ManifestImageModel(PlatformBaseModel):
     name: str = Field(description="Service or component name")
     image: str = Field(description="Full image reference including tag")
     digest: str | None = Field(default=None, description="Image content digest (sha256:...), when available")
+    delivered: bool | None = Field(
+        default=None,
+        description="`false` when strata does not write this image into what runs (a Helm module's declared "
+        "service image: the chart decides); left out when it does",
+    )
 
 
 class ManifestChartModel(PlatformBaseModel):

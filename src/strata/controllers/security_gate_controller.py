@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from packageurl import PackageURL
 
@@ -46,7 +46,7 @@ from strata.models.security_gate_model import ImageGatePolicyModel, ReleaseGateP
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.errors import SystemError, UsageError, ValidationError
-from strata.utils.sbom_utils import split_registry
+from strata.utils.sbom_utils import IMAGE_DELIVERED_PROPERTY, split_registry
 from strata.utils.transport import run_command
 
 #: Same file `sbom_controller.write_sbom()` writes during `build run`.
@@ -461,9 +461,19 @@ def images_from_sbom(build_path: Path) -> list[ImageRef] | None:
                 repository=repository,
                 tag=tag,
                 digest=digest,
+                delivered=_property(component, IMAGE_DELIVERED_PROPERTY) != "false",
             )
         )
     return images
+
+
+def _property(component: Mapping[str, Any], name: str) -> str | None:
+    """A CycloneDX component property's value, or `None` when it has none."""
+    for item in component.get("properties") or []:
+        if isinstance(item, Mapping) and item.get("name") == name:
+            value = item.get("value")
+            return value if isinstance(value, str) else None
+    return None
 
 
 def _image_gate(
@@ -651,11 +661,15 @@ def list_image_findings(
 
 
 def _image_label(image: ImageRef) -> str:
+    """The image as findings name it; `(declared only)` when strata does not deliver it, so a result about a
+    declared Helm image is not read as one about what runs."""
     if image.tag:
-        return f"{image.path}:{image.tag}"
-    if image.digest:
-        return f"{image.path}@{image.digest}"
-    return image.path
+        label = f"{image.path}:{image.tag}"
+    elif image.digest:
+        label = f"{image.path}@{image.digest}"
+    else:
+        label = image.path
+    return label if image.delivered else f"{label} (declared only)"
 
 
 def _report_unknown_image(

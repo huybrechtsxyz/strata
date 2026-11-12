@@ -58,6 +58,9 @@ parameters.
 - `spec.image_tag_policy` — fail `build run` and `deploy run` when an image the deployment runs has no
   tag, a floating tag such as `latest`, or a tag that does not match the shape you require (see "Image
   tag policy" below)
+- `spec.sbom` — what `build run` adds to `sbom.json`: `render_charts: true` renders every local Helm chart
+  with `helm template` and lists the images it deploys, so the CVE and image gates check them (see
+  [how-to/sbom-generation.md](../how-to/sbom-generation.md#helm-images))
 - `spec.provisioner_lock_policy` — fail `build run` when a Terraform or OpenTofu provisioner has no
   `.terraform.lock.hcl`, or one that does not lock every provider it declares (see "Provisioner lock policy"
   below)

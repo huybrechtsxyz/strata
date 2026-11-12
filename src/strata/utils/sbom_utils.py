@@ -18,6 +18,17 @@ MUTABLE_ALIAS_TAGS: frozenset[str] = frozenset(
     {"latest", "main", "master", "dev", "develop", "staging", "edge", "nightly", "canary"}
 )
 
+#: Where a component is used: `service:MODULE/SERVICE`, `variable:KEY`, `token:KIND/NAME`, `chart:NS/REFERENCE`.
+USED_BY_PROPERTY = "strata:used-by"
+#: "false" (with `IMAGE_DELIVERY_PROPERTY` saying why) on an image strata does not write into what runs, such as a
+#: Helm module's declared service image (docs/work/helm-image-delivery.md, the SBOM side). Absent means delivered,
+#: so an SBOM written before the marker existed reads the same.
+IMAGE_DELIVERED_PROPERTY = "strata:image-delivered"
+IMAGE_DELIVERY_PROPERTY = "strata:image-delivery"
+#: `FOUND_IN_RENDERED_CHART` on an image a rendered chart deploys (the `chart-image` collector): it is what runs.
+FOUND_IN_PROPERTY = "strata:found-in"
+FOUND_IN_RENDERED_CHART = "rendered-chart"
+
 #: Semver-ish pattern: optional leading "v", dot-separated integers,
 #: optional pre-release / build metadata suffix.
 _SEMVER_RE = re.compile(r"^v?\d+(\.\d+)*(-[a-zA-Z0-9.+]+)?(\+[a-zA-Z0-9.+]+)?$")

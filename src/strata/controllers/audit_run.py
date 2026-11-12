@@ -620,11 +620,18 @@ def _collect_artifacts_bom(
             modules.append(apply_version_pins(resolve_module(index, reference), version))
 
     images: list[ManifestImageModel] = []
+    rows = effective_images(context, deployment)
+    # Delivered when any use delivers it (docs/work/helm-image-delivery.md, the SBOM side); only `false` is written.
+    delivered = {row.image_ref for row in rows if row.delivered}
     seen_images: set[str] = set()
-    for row in effective_images(context, deployment):
+    for row in rows:
         if row.image_ref not in seen_images:
             seen_images.add(row.image_ref)
-            images.append(ManifestImageModel(name=row.name, image=row.image_ref))
+            images.append(
+                ManifestImageModel(
+                    name=row.name, image=row.image_ref, delivered=None if row.image_ref in delivered else False
+                )
+            )
     charts: list[ManifestChartModel] = []
     for module in modules:
         if module.spec.source.chart_name is not None:

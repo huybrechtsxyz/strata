@@ -1,7 +1,7 @@
 # SBOM Generation (CycloneDX) - Design
 
 - Status: current
-- Last updated: 2026-11-07
+- Last updated: 2026-11-11
 
 ## Overview
 
@@ -77,6 +77,7 @@ they choose a commit to judge, not the one checked out. Outside git the property
 | `image`     | `spec.services[].image` of every resolved module, plus artifact images (`graph.images`)                                                   | `container`, `pkg:docker/...`                    |
 | `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                                    | `container`, `pkg:docker/...`                    |
 | `helm`      | Chart modules' `source.{chart_name,chart_version,chart_repository}` and their built `meta.yaml`, every rendered `Chart.yaml` and its `dependencies[]` | `library`, `pkg:helm/...`                        |
+| `chart-image` | Opt-in (`spec.sbom.render_charts`): `helm template` of every local chart folder (a `Chart.yaml` and a `meta.yaml` without `chartName`), offline, with `strata-values.yaml`; every `containers`/`initContainers`/`ephemeralContainers` image | `container`, `pkg:docker/...` |
 | `terraform` | `required_providers {}` and `module "x" {}` blocks in every `*.tf` (one `python-hcl2` pass), and each root module's `.terraform.lock.hcl` | `library`, `pkg:terraform/...`, `pkg:github/...` |
 
 The file-based collectors scan the whole build path with `rglob()`; no wiring inside the
@@ -138,6 +139,31 @@ declaring them (those are not in the SBOM at all), so the gap is visible in the 
 never fails a command, not even under `--strict`.
 Providers are matched on their full address with Terraform's defaults applied, so `azurerm`,
 `hashicorp/azurerm` and `registry.terraform.io/hashicorp/azurerm` are one provider.
+
+### Helm images: declared or rendered
+
+Strata writes no image into a chart's values (`helm-image-delivery.md` (work doc)), so a Helm module's declared
+service image may not be what runs.
+
+- **The marker.** `ImageCollector` adds `strata:image-delivered: false` and `strata:image-delivery: <reason>` to
+  an image when no `graph.images` row with its purl is delivered (`EffectiveImage.delivered`). An image a Compose
+  module or an artifact also delivers is not marked. The property is written only when false, so an older SBOM
+  reads the same.
+- **Who reads it.**
+  - `images_from_sbom()` reads it into `ImageRef.delivered`, and the image gate labels such an image
+    `(declared only)`.
+  - The audit manifest records `delivered: false` from the same effective images.
+  - The CVE gate does not read it: the scanners scan every component.
+- **Rendered charts.** The `chart-image` collector is opt-in through `spec.sbom.render_charts`, because the
+  images it adds reach the gates.
+  - It runs `HelmIntegration.template()` in an isolated Helm configuration, with no `--dependency-update`. The
+    rendered text stays in memory, and strata's values file holds tokens, never a secret value.
+  - Each image gets `strata:found-in: rendered-chart` and `strata:used-by: chart:<namespace>/<reference>`.
+  - A chart it cannot render gets an `info` finding (`sbom_chart_not_rendered`); an image holding a `${...}`
+    token gets `sbom_chart_image_unresolved`. Neither fails the build.
+  - Registry charts, unpacked in `.strata/helm/` outside the build path, are not rendered yet.
+- **Merging.** `_merge_by_purl()` joins every component's `strata:used-by` rather than keeping the first one's,
+  and drops the declared-only marker when a component with the same purl comes from a rendered chart.
 
 ### Package URLs
 
@@ -259,6 +285,10 @@ mechanism as `strata.integrations` (ADR-0021 D10).
   purl, and modules were deduplicated by source, so only the first of two versions was listed.
   Modules have no lock file, so only an exact `version` becomes the purl version and a range is a
   property; deduplication is by purl.
+- A Helm module's declared image was listed and scanned as if it ran, and a chart's own images were in no SBOM.
+  Since 2026-11-11 a declared-only image carries `strata:image-delivered: false`, and `sbom.render_charts` lists
+  what local charts deploy. The 2026-11-07 finding that strata's values replaced a local chart's own `values.yaml`
+  no longer holds: strata writes `strata-values.yaml` next to it.
 - An image's digest was only in its purl version. It is now also a CycloneDX hash, from the digest
   already in the solution, without a registry lookup. Building it showed that both image collectors
   judged tag stability on the tag alone, so a digest-only image was reported as floating; they now

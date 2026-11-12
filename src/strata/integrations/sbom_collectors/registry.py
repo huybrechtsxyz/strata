@@ -28,6 +28,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "image": ("strata.integrations.sbom_collectors.image_collector", "ImageCollector"),
     "compose": ("strata.integrations.sbom_collectors.compose_collector", "ComposeCollector"),
     "helm": ("strata.integrations.sbom_collectors.helm_collector", "HelmCollector"),
+    "chart-image": ("strata.integrations.sbom_collectors.chart_image_collector", "ChartImageCollector"),
     "terraform": ("strata.integrations.sbom_collectors.terraform_collector", "TerraformCollector"),
     # ansible/deps(lockfiles) as each gets a real v2 consumer/trigger
     # (docs/design/sbom-generation.md, Out of scope).

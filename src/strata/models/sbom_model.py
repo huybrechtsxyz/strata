@@ -206,3 +206,20 @@ class CveMaxSeverityPolicyModel(PlatformBaseModel):
                 "severity_threshold must be max_severity or lower (more inclusive)."
             )
         return self
+
+
+class WorkspaceSbomModel(PlatformBaseModel):
+    """What `build run` puts in `sbom.json` beyond what it always records.
+
+    Design notes:
+    `WorkspaceSpecModel.sbom` (docs/work/helm-image-delivery.md, the SBOM side). Opt-in because rendered images
+    reach `cve_policy` and `image_gate_policy`, so a `deny` gate can start failing on images nobody scanned before.
+    """
+
+    render_charts: bool = Field(
+        default=False,
+        description="Render every local Helm chart with `helm template` at build (offline, no secret) and list "
+        "the images it deploys, sidecars and init containers included, so the CVE and image gates check what "
+        "runs instead of only what a module declares. A chart that cannot be rendered (no `helm`, a dependency "
+        "not vendored) gets an `info` line and is skipped. Registry charts are not rendered yet.",
+    )

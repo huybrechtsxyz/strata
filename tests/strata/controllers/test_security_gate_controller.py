@@ -6,6 +6,7 @@ which is what proves the controller is vendor-neutral. The index is built direct
 `test_sbom_controller.py` does; `resolve_values` and `run_command` are stubbed where used.
 """
 
+import dataclasses
 import json
 from datetime import date, timedelta
 from pathlib import Path
@@ -646,3 +647,32 @@ def test_no_policy_constructs_nothing(tmp_path, script):
     evaluation = evaluate_security_gates(_context(tmp_path, []), "app", _workspace(), tmp_path, resolved=_resolved())
     assert evaluation.release is None and evaluation.images is None
     assert script.constructed == []
+
+
+# The declared-only marker (docs/work/helm-image-delivery.md, the SBOM side, part 1).
+
+
+def test_an_image_the_sbom_marks_not_delivered_reads_as_declared_only(tmp_path):
+    declared = {
+        "type": "container",
+        "name": "server",
+        "purl": "pkg:docker/goauthentik/server@2026.5.2?repository_url=ghcr.io",
+        "properties": [{"name": "strata:image-delivered", "value": "false"}],
+    }
+    runs = {"type": "container", "name": "redis", "purl": "pkg:docker/redis@7.2"}
+    (tmp_path / "sbom.json").write_text(json.dumps({"bomFormat": "CycloneDX", "components": [declared, runs]}))
+
+    images = images_from_sbom(tmp_path)
+
+    assert [(i.repository, i.delivered) for i in images] == [("goauthentik/server", False), ("redis", True)]
+
+
+def test_the_gate_labels_a_declared_only_image():
+    from strata.controllers.security_gate_controller import _image_label
+    from strata.integrations.security_findings import ImageRef
+
+    declared = ImageRef(service="server", registry="ghcr.io", repository="goauthentik/server", tag="2026.5.2")
+    assert _image_label(declared) == "ghcr.io/goauthentik/server:2026.5.2"
+    assert _image_label(dataclasses.replace(declared, delivered=False)) == (
+        "ghcr.io/goauthentik/server:2026.5.2 (declared only)"
+    )

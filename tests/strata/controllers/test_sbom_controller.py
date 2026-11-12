@@ -774,3 +774,50 @@ def test_evaluate_cve_policy_without_a_configuration_document_has_no_suppression
     diagnostics = evaluate_cve_policy(tmp_path, workspace, _index())  # no Configuration document at all
 
     assert not diagnostics.ok
+
+
+def _container(collector: str, **properties: str):
+    from strata.models.sbom_model import SbomComponentModel
+
+    return SbomComponentModel(
+        component_type="container",
+        name=collector,
+        version="1",
+        purl="pkg:docker/a@1",
+        properties=properties,
+        source_collector=collector,
+    )
+
+
+def test_duplicates_join_their_uses_in_first_use_order():
+    from strata.controllers.sbom_controller import _merge_by_purl
+
+    [merged] = _merge_by_purl(
+        [
+            _container("image", **{"strata:used-by": "service:a/x, variable:K"}),
+            _container("chart-image", **{"strata:used-by": "chart:apps/a, service:a/x"}),
+        ]
+    )
+
+    assert merged.properties["strata:used-by"] == "service:a/x, variable:K, chart:apps/a"
+
+
+def test_a_rendered_chart_image_drops_the_declared_only_marker():
+    from strata.controllers.sbom_controller import _merge_by_purl
+
+    declared = _container(
+        "image", **{"strata:image-delivered": "false", "strata:image-delivery": "helm module: the chart decides"}
+    )
+    [merged] = _merge_by_purl([declared, _container("chart-image", **{"strata:found-in": "rendered-chart"})])
+
+    assert "strata:image-delivered" not in merged.properties
+    assert "strata:image-delivery" not in merged.properties
+    assert merged.properties["strata:found-in"] == "rendered-chart"
+
+
+def test_a_declared_only_image_no_chart_renders_keeps_its_marker():
+    from strata.controllers.sbom_controller import _merge_by_purl
+
+    [merged] = _merge_by_purl([_container("image", **{"strata:image-delivered": "false"})])
+
+    assert merged.properties["strata:image-delivered"] == "false"

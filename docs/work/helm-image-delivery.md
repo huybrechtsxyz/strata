@@ -1,6 +1,6 @@
 # Helm module images - Work
 
-- Status: option B built (2026-11-11), not released
+- Status: option B and plan item 8 built (2026-11-11), not released
 - Last updated: 2026-11-11
 
 ## Overview
@@ -314,6 +314,141 @@ spec:
   - exit 3 on `block`.
 - **The model:** `on_unknown_image` defaults to `warn` and rejects another value.
 
+## Design: the SBOM side (plan item 8, 2026-11-11)
+
+This is the deferred SBOM work, designed on 2026-11-07 in the work doc `sbom-generation.md`, which was later
+removed. It is restated here against today's code. Two parts:
+
+- a **marker**: the SBOM, the image gate and the audit manifest say which images strata does not deliver;
+- **rendered charts**: the SBOM lists the images a local chart actually deploys.
+
+### Current state (2026-11-11)
+
+- `sbom.json` lists a Helm module's declared service images as if they ran. It lists none of the images its chart
+  deploys on its own: the app, sidecars, init containers and subcharts.
+- `cve_policy` scans `sbom.json`, and `image_gate_policy` reads its images from it (`images_from_sbom()`). So they
+  scan declared images and miss rendered ones.
+- `graph.images`, which `write_sbom()` receives, already holds `EffectiveImage.delivered` (option B).
+- The values-file problem the 2026-11-07 doc found is gone. Strata writes `strata-values.yaml` next to a local
+  chart, and the chart's own `values.yaml` is left alone. So rendering a local chart's folder with
+  `-f strata-values.yaml` renders what `deploy run` installs, apart from values whose tokens resolve only at
+  deploy.
+- `build run` already runs `helm`: it pulls registry charts and runs `dependency list`.
+
+### Part 1: the marker
+
+- **SBOM.** `ImageCollector` adds `strata:image-delivered: false` and `strata:image-delivery: <reason>` to a
+  container component when no `graph.images` row with its purl is delivered. Every use is considered, so an image
+  that a Helm module declares but a Compose module also runs is delivered, and has no marker.
+  - The property is written only when the image is not delivered. A missing property means delivered, so an
+    older SBOM still reads correctly. `strata:pinned: false` works the same way.
+- **Merge.** `_merge_by_purl()` drops both properties when another component with the same purl comes from a
+  rendered chart (part 2). The image is then what runs.
+  - It also joins `strata:used-by` values instead of keeping the first. Today the first collector's list wins,
+    and a rendered chart's use would be lost.
+- **Image gate.**
+  - `images_from_sbom()` reads the marker into `ImageRef.delivered`, which defaults to true.
+  - The gate's label for such an image ends with `(declared only)`. It shows on every finding and on the
+    "asking about" step, so "the vendor knows nothing bad about X" is not read as being about what runs.
+- **Audit manifest.** `ManifestImageModel` gets `delivered: bool | None`. It is set to `false` only when the image
+  is not delivered, and left out otherwise (`exclude_none`), so existing manifests and their hashes are unchanged.
+- **CVE gate:** unchanged. Trivy and Grype scan the SBOM, and the marker is there for whoever reads their
+  results, Dependency-Track included.
+
+### Part 2: render local charts
+
+A new SBOM collector, `chart-image`, lives in `integrations/sbom_collectors/chart_image_collector.py` and is
+registered in `_KNOWN` after `helm`.
+
+- **Opt-in:** `spec.sbom.render_charts: true` on the workspace, default `false`.
+  - Rendered images reach `cve_policy` and `image_gate_policy`. A `deny` gate can then fail a build that passed
+    the day before, because of a sidecar nobody had scanned. That is the point, but turning it on by default would
+    break pipelines on upgrade, the 2.3.2 lesson.
+  - It is a workspace setting, not a `build run` flag, because the gates it feeds are workspace settings too.
+  - It can become the default in a later minor release.
+- **Which charts:** every folder in the build path that holds a `Chart.yaml` and a `meta.yaml` without
+  `chartName`, which is a local chart. `deploy run` installs from that same folder. The collector finds them by
+  file, as the other file collectors do.
+  - Registry charts are not rendered yet. Their unpacked copy is in `.strata/helm/`, outside the build path, and
+    the collector reads only the build path. See the open questions.
+- **Render:** `helm template <releaseName> <folder> --namespace <namespace> -f <folder>/strata-values.yaml`.
+  - The release name and namespace come from `meta.yaml`.
+  - It runs offline, with no `--dependency-update` and no repository access, through a new
+    `HelmIntegration.template()`, with a 120 s timeout.
+  - The rendered text stays in memory and is never written. Strata's values file holds `${secret:}` tokens, not
+    secrets, so the render has nothing secret to leak in any case.
+- **Collect:** the pure function `rendered_images(text)` reads each document (`yaml.safe_load_all`) and walks it.
+  Every `image` under a `containers`, `initContainers` or `ephemeralContainers` list counts. Walking covers
+  Deployment, StatefulSet, DaemonSet, Job, CronJob and Pod, and also CRDs that embed a pod spec.
+- **Component:**
+  - type `container`, with the purl from `image_to_purl()`, `hashes` from `image_digest_hash()`, and tag
+    stability (`strata:tag-stability: floating` with a warning) as for any image;
+  - `strata:used-by: chart:<namespace>/<reference>`;
+  - `strata:found-in: rendered-chart`;
+  - its name is the container name.
+- **When it cannot render:** one `info` finding per chart, `sbom_chart_not_rendered`. The chart's images are not
+  listed, and the build never fails because of it. The cases:
+  - `helm` is not installed;
+  - `helm template` fails, for example on a dependency that is not vendored under `charts/`. The finding gives
+    helm's first error line.
+  - The build still passes `--offline` to the chart dependencies; rendering never needs the network.
+- **An image that still holds a token** (`${...}`, a value resolved only at deploy) is left out, with an `info`
+  finding (`sbom_chart_image_unresolved`). An image delivered by an `${artifact:}` token is already in the SBOM
+  through its artifact row.
+
+### Example
+
+A local chart `whoami` deploys `traefik/whoami:v1.10` with a `busybox:1.36` init container, and its module
+declares no services:
+
+```json
+{"type": "container", "name": "whoami", "version": "v1.10", "purl": "pkg:docker/traefik/whoami@v1.10",
+ "properties": [{"name": "strata:found-in", "value": "rendered-chart"},
+                {"name": "strata:used-by", "value": "chart:apps/whoami"}]}
+```
+
+authentik's declared `ghcr.io/goauthentik/server:2026.5.2`, without rendering, which is the default and also
+the case for a registry chart:
+
+```json
+{"type": "container", "name": "server", "purl": "pkg:docker/goauthentik/server@2026.5.2?repository_url=ghcr.io",
+ "properties": [{"name": "strata:image-delivered", "value": "false"},
+                {"name": "strata:image-delivery", "value": "helm module: the chart decides"},
+                {"name": "strata:used-by", "value": "service:authentik/server"}]}
+```
+
+The image gate then logs: `image gate: asking aikido about ghcr.io/goauthentik/server:2026.5.2 (declared only)`.
+
+### Not in this item
+
+- `deploy images`, `image_tag_policy` and `unknown_image_modules()` keep reading the solution only. They do not
+  read rendered images, which exist only after a build. So a rendered local chart still shows as "known only to
+  Helm" in `deploy images`.
+- A declared Helm image that the rendered chart does not contain keeps its marker. The declaration may be
+  deliberate documentation. A finding for it is an open question.
+
+### Tests
+
+- **Marker:**
+  - an image only a Helm module declares is marked;
+  - the same image also on a Compose module is not;
+  - Compose and artifact images are never marked;
+  - the merge drops the marker for a rendered image and joins `used-by`.
+- **Gate:**
+  - `images_from_sbom()` reads `delivered`;
+  - the label ends with `(declared only)`.
+- **Audit:** `delivered: false` is written only for an undelivered image.
+- **`rendered_images()`:**
+  - a Deployment, a CronJob, an init container, a CRD with a pod spec;
+  - multi-document output, an empty document;
+  - an image with a token.
+- **Collector**, with `HelmIntegration` stubbed:
+  - it is off by default;
+  - it finds local charts only;
+  - the helm-missing and template-failure findings;
+  - the components and their properties.
+- **End to end:** one test against real `helm`, skipped when Helm is not installed.
+
 ## Related Decisions
 
 - [ADR-0026](../decisions/0026-pinnable-artifact-references.md) - `ModuleServiceModel.artifact` and its Compose
@@ -341,9 +476,14 @@ spec:
   correct; the ADR rows stay as they are (ADRs are immutable)
 - [x] 6. Checks: ruff, mypy, lint-imports, `strata validate config`, the full suite
 - [ ] 7. Optional, on demand: option C, then option D
-- [ ] 8. The SBOM side, done in the same piece of work: the declared-only marker and rendering local charts, as
-  designed in [sbom-generation.md](sbom-generation.md). Its step 1 is this doc's open question on a shared
-  marker, and its step 2 is option D for local charts only (offline).
+- [x] 8. The SBOM side: the declared-only marker and rendering local charts (design "The SBOM side" above). Its
+  part 1 is this doc's open question on a shared marker; its part 2 is option D for local charts only (offline).
+  - [x] 8a. Marker: `ImageCollector` properties, `_merge_by_purl()` (drop the marker for a rendered image, join
+    `used-by`), `ImageRef.delivered` and the `(declared only)` gate label, `ManifestImageModel.delivered`
+  - [x] 8b. `rendered_images()` (pure) and `HelmIntegration.template()`
+  - [x] 8c. `WorkspaceSpecModel.sbom.render_charts`; the `chart-image` collector and its findings
+  - [x] 8d. Docs (the SBOM design and how-to, `workspace.md`; `security-gates.md` names no label), CHANGELOG;
+    checks; the full suite; a real render of a local chart (a test against real `helm`)
 
 ### Open questions
 
@@ -352,9 +492,14 @@ spec:
 - **GitOps and script modules.** Their service images are marked not delivered. But a module of that type that
   declares no images is not reported as unknown, because it may run no containers. Should `argocd` and `flux`
   count, since they deploy Kubernetes manifests? Wait for a consumer.
-- **Does the SBOM and the CVE and image gates need the same marker?** They scan Helm-declared images as if they
-  ran. A `strata:image-delivered=false` property on the SBOM component would let a gate report "scanned a declared
-  image". Taken up in [sbom-generation.md](sbom-generation.md) (step 1), together with rendering local charts.
+- ~~**Does the SBOM and the CVE and image gates need the same marker?**~~ Answered 2026-11-11: yes,
+  `strata:image-delivered: false`, read by the image gate and the audit manifest (design "The SBOM side").
+- **Registry charts in the SBOM.** A pinned registry chart is unpacked in `.strata/helm/`, so it could be rendered
+  offline too. That needs the cache path handed to the collector, which today sees the build path only. Wait for
+  a consumer: immich is a registry chart.
+- **Declared but not rendered.** When a rendered chart lacks a declared Helm image, should there be an `info`
+  finding? It is not built; the declaration may be deliberate.
+- **`render_charts` by default** in a later minor release?
 - ~~**`on_unknown_image` default.**~~ Answered 2026-11-11: `warn`, as `image_gate_policy`. `block` is opt-in.
 - **Chart-only modules.** Is there a real consumer with a chart-only module whose image tag matters? Without one,
   B is enough.
@@ -381,6 +526,9 @@ spec:
 
 ## Changelog
 
+- 2026-11-11: plan item 8 designed from the removed work doc `sbom-generation.md` (2026-11-07). The values-file
+  finding there is resolved (`strata-values.yaml`). Rendering local charts is opt-in (`spec.sbom.render_charts`);
+  registry charts are left for later. Built the same day (8a-8d).
 - 2026-11-11: option B designed: `EffectiveImage.delivered`, `unknown_image_modules()`, the `deploy images` column
   and list, `image_tag_policy.on_unknown_image`. Two open questions answered; the plan rewritten; the old plan
   items 5 and 6 are now 7 and 8. Built the same day (plan steps 1-6).

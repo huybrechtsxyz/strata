@@ -1,7 +1,8 @@
 # How To: Use the SBOM (CycloneDX)
 
 Every `strata build run` writes a CycloneDX 1.6 Software Bill of Materials, `sbom.json`, at the
-root of the build path (next to `resolved.yaml`). There is nothing to configure. This guide covers
+root of the build path (next to `resolved.yaml`). It needs no configuration; one workspace setting,
+`sbom.render_charts`, adds the images local Helm charts deploy (below). This guide covers
 what it contains, how strata and other tools use it, and how to add a collector. The design is in
 [docs/design/sbom-generation.md](../design/sbom-generation.md).
 
@@ -21,6 +22,7 @@ what it contains, how strata and other tools use it, and how to add a collector.
 | `image`     | Every resolved module's `spec.services[].image`, and artifact images                                                                   |
 | `compose`   | `services.<name>.image` in every rendered `docker-compose.yml`/`.yaml`                                                                 |
 | `helm`      | Chart modules (`chart_name`/`chart_version`, the repository or the remote's URL), every rendered `Chart.yaml` and its `dependencies[]` |
+| `chart-image` | Only with `sbom.render_charts: true`: the images each local chart deploys, from `helm template`                                      |
 | `terraform` | `required_providers {}` and `module "x" {}` blocks in every rendered `*.tf`, and each root module's `.terraform.lock.hcl`              |
 
 Versions are the deployed ones: `kind: version` pins and `--pin` are applied first. The SBOM is
@@ -39,6 +41,32 @@ version that a [`kind: version`](../config/version.md) pin chose also has
 An image you reference by digest (`image: ghcr.io/acme/api:1.4.2@sha256:...`) also lists that
 digest under `hashes` (`{"alg": "SHA-256", "content": "..."}`). An image referenced by tag has
 none: strata does not ask the registry.
+
+### Helm images
+
+Strata writes no image into a Helm chart's values, so the chart decides which images run.
+
+- **Declared only.** A Helm module's declared service image is listed with `strata:image-delivered: false` and
+  `strata:image-delivery: helm module: the chart decides`. It is still scanned. The image gate names it
+  `... (declared only)`, and the audit manifest records it with `delivered: false`.
+- **Rendered charts.** To list what a local chart really deploys, set this on the workspace:
+
+  ```yaml
+  spec:
+    sbom:
+      render_charts: true
+  ```
+
+  `build run` then renders each local chart with `helm template`, offline, with strata's values.
+  - Every container image, sidecars and init containers included, is listed with
+    `strata:found-in: rendered-chart` and `strata:used-by: chart:<namespace>/<module reference>`.
+  - A declared image the chart also renders loses its declared-only marker.
+  - A chart that cannot be rendered gets one `info` line (`sbom_chart_not_rendered`) and is skipped. That
+    happens when `helm` is not installed, or when a dependency is not vendored under `charts/`.
+  - An image whose reference holds a token resolved only at deploy is left out (`sbom_chart_image_unresolved`).
+  - Registry charts are not rendered yet.
+- **Turning it on can fail a build.** `cve_policy` and `image_gate_policy` start checking the rendered images.
+  Check with `strata policy findings` first.
 
 ## Example
 
