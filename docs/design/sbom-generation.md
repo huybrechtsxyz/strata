@@ -169,6 +169,10 @@ service image may not be what runs.
     `sbom_chart_not_rendered` finding.
 - **Merging.** `_merge_by_purl()` joins every component's `strata:used-by` rather than keeping the first one's,
   and drops the declared-only marker when a component with the same purl comes from a rendered chart.
+- **Declared but not rendered.** After the merge, a declared Helm service image whose module's chart was rendered
+  (it yielded at least one image) but does not run it gets an `info` finding, `sbom_declared_image_not_rendered`.
+  It stays marked not delivered, with the reason `helm module: not in the rendered chart` once every module
+  declaring it was rendered.
 
 ### Package URLs
 

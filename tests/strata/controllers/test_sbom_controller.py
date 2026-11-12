@@ -821,3 +821,151 @@ def test_a_declared_only_image_no_chart_renders_keeps_its_marker():
     [merged] = _merge_by_purl([_container("image", **{"strata:image-delivered": "false"})])
 
     assert merged.properties["strata:image-delivered"] == "false"
+
+
+# A declared Helm image its module's rendered chart does not run (docs/work/helm-image-delivery.md, plan item 9c).
+
+
+def _declared(purl: str, *uses: str):
+    from strata.models.sbom_model import SbomComponentModel
+
+    return SbomComponentModel(
+        component_type="container",
+        name="server",
+        version="2026.5.2",
+        purl=purl,
+        properties={
+            "strata:image-delivered": "false",
+            "strata:image-delivery": "helm module: the chart decides",
+            "strata:used-by": ", ".join(uses),
+        },
+        source_collector="image",
+    )
+
+
+def _rendered(purl: str, use: str):
+    from strata.models.sbom_model import SbomComponentModel
+
+    return SbomComponentModel(
+        component_type="container",
+        name="app",
+        version="1",
+        purl=purl,
+        properties={"strata:found-in": "rendered-chart", "strata:used-by": use},
+        source_collector="chart-image",
+    )
+
+
+def _helm_graph(*images):
+    """Namespace `apps` references module `authentik` as `auth` and module `other` as `other`."""
+    graph = _graph(
+        _namespace(
+            ModuleReferenceModel(name="auth", module="authentik"), ModuleReferenceModel(name="other", module="other")
+        )
+    )
+    return graph.__class__(workspace=graph.workspace, namespaces=graph.namespaces, images=list(images))
+
+
+def _image(ref: str, *via: str):
+    from strata.integrations.resolved_context import EffectiveImage
+    from strata.utils.sbom_utils import parse_image_ref
+
+    name, tag, _ = parse_image_ref(ref)
+    return EffectiveImage(
+        origin="module-service",
+        name="server",
+        image_name=name,
+        image_tag=tag,
+        image_ref=ref,
+        tag_source="declared",
+        via=via,
+        delivered=False,
+        delivery="helm module: the chart decides",
+    )
+
+
+def _not_rendered(components, graph):
+    from strata.controllers.sbom_controller import _declared_not_rendered, _merge_by_purl
+    from strata.utils.diagnostics import Diagnostics
+
+    diagnostics = Diagnostics()
+    return _declared_not_rendered(_merge_by_purl(components), graph, diagnostics), diagnostics
+
+
+_SERVER = "pkg:docker/goauthentik/server@2026.5.2?repository_url=ghcr.io"
+
+
+def test_a_declared_image_the_rendered_chart_does_not_run_gets_an_info_line():
+    graph = _helm_graph(_image("ghcr.io/goauthentik/server:2026.5.2", "service:authentik/server"))
+    components, diagnostics = _not_rendered(
+        [_declared(_SERVER, "service:authentik/server"), _rendered("pkg:docker/other@1", "chart:apps/auth/app")],
+        graph,
+    )
+
+    [finding] = diagnostics.infos
+    assert (finding.code, finding.location) == ("sbom_declared_image_not_rendered", "authentik")
+    assert finding.message == (
+        "service 'server' of module 'authentik' declares ghcr.io/goauthentik/server:2026.5.2, but the rendered chart "
+        "does not run it. The declaration is kept, marked not delivered."
+    )
+    server = next(c for c in components if c.purl == _SERVER)
+    assert server.properties["strata:image-delivered"] == "false"
+    assert server.properties["strata:image-delivery"] == "helm module: not in the rendered chart"
+
+
+def test_a_declared_image_the_rendered_chart_runs_gets_nothing():
+    graph = _helm_graph(_image("ghcr.io/goauthentik/server:2026.5.2", "service:authentik/server"))
+    [server], diagnostics = _not_rendered(
+        [_declared(_SERVER, "service:authentik/server"), _rendered(_SERVER, "chart:apps/auth/server")], graph
+    )
+
+    assert diagnostics.infos == []
+    assert "strata:image-delivered" not in server.properties
+
+
+def test_a_declared_image_of_a_module_whose_chart_was_not_rendered_gets_nothing():
+    graph = _helm_graph(_image("ghcr.io/goauthentik/server:2026.5.2", "service:authentik/server"))
+    components, diagnostics = _not_rendered(
+        [_declared(_SERVER, "service:authentik/server"), _rendered("pkg:docker/other@1", "chart:apps/other/app")],
+        graph,
+    )
+
+    assert diagnostics.infos == []
+    server = next(c for c in components if c.purl == _SERVER)
+    assert server.properties["strata:image-delivery"] == "helm module: the chart decides"
+
+
+def test_an_image_two_modules_declare_keeps_its_reason_while_one_chart_is_not_rendered():
+    uses = ("service:authentik/server", "service:legacy/server")
+    graph = _helm_graph(_image("ghcr.io/goauthentik/server:2026.5.2", *uses))
+    components, diagnostics = _not_rendered(
+        [_declared(_SERVER, *uses), _rendered("pkg:docker/other@1", "chart:apps/auth/app")], graph
+    )
+
+    assert [d.location for d in diagnostics.infos] == ["authentik"]
+    server = next(c for c in components if c.purl == _SERVER)
+    assert server.properties["strata:image-delivery"] == "helm module: the chart decides"
+
+
+def test_write_sbom_reports_a_declared_image_the_rendered_chart_does_not_run(tmp_path: Path, monkeypatch):
+    from strata.integrations.sbom_collectors import registry
+    from strata.integrations.sbom_collectors.base import CollectorResult
+
+    class _Both:
+        def collect(self, graph, modules, build_path):
+            components = [
+                _declared(_SERVER, "service:authentik/server"),
+                _rendered("pkg:docker/x@1", "chart:apps/auth/a"),
+            ]
+            return CollectorResult(components=components)
+
+    monkeypatch.setattr(registry, "list_collectors", lambda: ["both"])
+    monkeypatch.setattr(registry, "get", lambda name: _Both())
+    graph = _helm_graph(_image("ghcr.io/goauthentik/server:2026.5.2", "service:authentik/server"))
+
+    diagnostics = write_sbom(tmp_path, graph, _index(_module("authentik"), _module("other")))
+
+    assert [d.code for d in diagnostics.infos] == ["sbom_declared_image_not_rendered"]
+    data = json.loads((tmp_path / "sbom.json").read_text(encoding="utf-8"))
+    server = next(c for c in data["components"] if c["name"] == "server")
+    assert {"name": "strata:image-delivery", "value": "helm module: not in the rendered chart"} in server["properties"]

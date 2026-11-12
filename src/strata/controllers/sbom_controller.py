@@ -138,7 +138,7 @@ def write_sbom(
         result = collector.collect(graph, modules, build_path)
         collected.extend(result.components)
         diagnostics.items.extend(result.diagnostics)
-    components = _merge_by_purl(collected)
+    components = _declared_not_rendered(_merge_by_purl(collected), graph, diagnostics)
 
     bom_json = _build_cyclonedx_json(components, graph, commit)
 
@@ -249,6 +249,75 @@ def _rendered_is_delivered(component: SbomComponentModel) -> SbomComponentModel:
         if name not in (IMAGE_DELIVERED_PROPERTY, IMAGE_DELIVERY_PROPERTY)
     }
     return component.model_copy(update={"properties": properties})
+
+
+#: `strata:image-delivery` of a declared Helm image its module's rendered chart does not run.
+NOT_RENDERED_DELIVERY = "helm module: not in the rendered chart"
+
+
+def _declared_not_rendered(
+    components: list[SbomComponentModel], graph: ResolvedWorkspaceGraph, diagnostics: Diagnostics
+) -> list[SbomComponentModel]:
+    """An `info` finding for each declared Helm service image whose module's chart was rendered without it
+    (docs/work/helm-image-delivery.md, plan item 9c).
+
+    Runs after the merge, so a declared image the chart also runs has already lost its marker. A chart counts as
+    rendered when it yielded at least one image. The declaration may be deliberate documentation, so the image is
+    kept, still marked not delivered; its reason becomes `NOT_RENDERED_DELIVERY` once every module declaring it
+    was rendered.
+    """
+    rendered = _rendered_modules(components, graph)
+    if not rendered:
+        return components
+    declared = {use: image.image_ref for image in graph.images for use in image.via if use.startswith("service:")}
+    result: list[SbomComponentModel] = []
+    for component in components:
+        if component.properties.get(IMAGE_DELIVERED_PROPERTY) != "false":
+            result.append(component)
+            continue
+        uses = [use for use in _uses(component) if use.startswith("service:")]
+        missing = [use for use in uses if _service_module(use) in rendered]
+        for use in missing:
+            module, _, service = use.removeprefix("service:").partition("/")
+            diagnostics.info(
+                f"service '{service}' of module '{module}' declares {declared.get(use, component.name)}, but the "
+                "rendered chart does not run it. The declaration is kept, marked not delivered.",
+                location=module,
+                code="sbom_declared_image_not_rendered",
+            )
+        if missing and len(missing) == len(uses):
+            properties = {**component.properties, IMAGE_DELIVERY_PROPERTY: NOT_RENDERED_DELIVERY}
+            component = component.model_copy(update={"properties": properties})
+        result.append(component)
+    return result
+
+
+def _rendered_modules(components: list[SbomComponentModel], graph: ResolvedWorkspaceGraph) -> set[str]:
+    """The module documents a rendered chart image came from: its `chart:NS/REFERENCE/CONTAINER` use, with the
+    namespace's reference resolved to the module it names."""
+    modules: set[str] = set()
+    for component in components:
+        if component.properties.get(FOUND_IN_PROPERTY) != FOUND_IN_RENDERED_CHART:
+            continue
+        for use in _uses(component):
+            namespace_name, _, rest = use.removeprefix("chart:").partition("/")
+            if not use.startswith("chart:") or not rest:
+                continue
+            reference_name = rest.split("/", 1)[0]
+            namespace = graph.namespaces.get(namespace_name)
+            for reference in (namespace.spec.modules or []) if namespace is not None else []:
+                if reference.name == reference_name:
+                    modules.add(reference.module)
+    return modules
+
+
+def _uses(component: SbomComponentModel) -> list[str]:
+    return [use.strip() for use in (component.properties.get(USED_BY_PROPERTY) or "").split(",") if use.strip()]
+
+
+def _service_module(use: str) -> str:
+    """The module of a `service:MODULE/SERVICE` use."""
+    return use.removeprefix("service:").partition("/")[0]
 
 
 def _canonical_purl(purl: str) -> str:

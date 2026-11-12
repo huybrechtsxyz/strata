@@ -62,7 +62,10 @@ Strata writes no image into a Helm chart's values, so the chart decides which im
   - Every container image, sidecars and init containers included, is listed with
     `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<module reference>/<container>` and
     `strata:image`, the image reference exactly as the chart writes it.
-  - A declared image the chart also renders loses its declared-only marker.
+  - A declared image the chart also renders loses its declared-only marker. One the rendered chart does not
+    run keeps it, with the reason `helm module: not in the rendered chart`, and gets an `info` line
+    (`sbom_declared_image_not_rendered`). Either the declaration is out of date, or the chart picks the image
+    by a value strata does not set.
   - A chart that cannot be rendered gets one `info` line (`sbom_chart_not_rendered`) and is skipped. That
     happens when `helm` is not installed, when a dependency is not vendored under `charts/`, or when a registry
     chart was not pinned (`--offline` with an empty cache) or its cached archive no longer has the pinned digest.

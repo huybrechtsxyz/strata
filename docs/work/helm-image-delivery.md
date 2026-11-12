@@ -1,6 +1,6 @@
 # Helm module images - Work
 
-- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed, 9a and 9b built (2026-11-12)
+- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed, 9a to 9c built (2026-11-12)
 - Last updated: 2026-11-12
 
 ## Overview
@@ -592,6 +592,19 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   chart`.
 - Matched on the purl, so a declared `server:2026.5.2` and a rendered `server:2026.5.2@sha256:...` differ. That
   is correct: the declaration does not say which digest runs.
+- **How it is built** (plan item 9c): `_declared_not_rendered()` in `sbom_controller.py`, right after
+  `_merge_by_purl()`. The merge has already dropped the marker from a declared image the chart runs, so every
+  component still marked is a candidate.
+  - **Which modules were rendered:** a rendered image's use is `chart:NS/REFERENCE/CONTAINER`, and the
+    namespace's reference names the module (`graph.namespaces`). A declared image's use is
+    `service:MODULE/SERVICE`, by module, so the two are compared by module.
+  - **A chart counts as rendered when it yielded at least one image.** A chart that failed to render, or was not
+    rendered, yields none, so its module's declarations get no finding: nothing is known about them.
+  - **The reason changes only when every module declaring the image was rendered.** An image two Helm modules
+    declare, one rendered and one not, gets the finding for the rendered one and keeps "the chart decides".
+  - The finding's `location` is the module. The declared reference comes from `graph.images`.
+  - A module referenced in two namespaces counts as rendered when either is: the declared use does not carry
+    the namespace. Both render the same chart in practice.
 
 ### 6. Compatibility
 
@@ -677,8 +690,8 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   - [x] 9b. Registry charts: `write_sbom(..., helm_cache=)` from `build run`; the chart-image collector finds the
     archive with `cached_pin()`, checks `chartDigest`, renders the `.tgz`; the skip cases as `info`. Unit tests
     with a stubbed `HelmIntegration`, one with real `helm` and a packaged chart (section 4). Built 2026-11-12.
-  - [ ] 9c. Declared but not rendered: the `sbom_declared_image_not_rendered` finding in `write_sbom()` after the
-    merge, and the reason `helm module: not in the rendered chart` (section 5).
+  - [x] 9c. Declared but not rendered: the `sbom_declared_image_not_rendered` finding in `write_sbom()` after the
+    merge, and the reason `helm module: not in the rendered chart` (section 5). Built 2026-11-12.
   - [ ] 9d. Policy rows: the `chart` origin in `ImageTagPolicyModel.origins`; `rendered_chart_images()`;
     `check_image_tag_policy(..., build_path=)` adds the rows, judges a shared image once as delivered, drops
     rendered modules from `unknown`; `_fix()` and `_problems()` for a chart row (no `require_pin`). Pure tests on
@@ -745,7 +758,8 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   cache; a declared image the chart does not run gets an `info` finding. Two open questions answered, one added.
   `render_charts` by default is item 10. 9a built the same day: designing it showed the merge loses the container
   of a second use, so the `chart:` use now names the container too. 9b built the same day: registry charts are
-  rendered from the cached archive once its digest matches.
+  rendered from the cached archive once its digest matches. 9c built the same day: the
+  `sbom_declared_image_not_rendered` finding.
 
 - 2026-11-11: plan item 8 designed from the removed work doc `sbom-generation.md` (2026-11-07). The values-file
   finding there is resolved (`strata-values.yaml`). Rendering local charts is opt-in (`spec.sbom.render_charts`);

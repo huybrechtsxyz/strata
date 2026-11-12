@@ -25,6 +25,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   (`strata:image`), which keeps a tag the purl drops for a digest-pinned image.
   - A registry chart is rendered from the archive the build pinned in `.strata/helm/`, only while its digest
     still matches.
+  - A declared Helm image the module's rendered chart does not run gets an `info` line
+    (`sbom_declared_image_not_rendered`) and the reason `helm module: not in the rendered chart`.
   - A chart that cannot be rendered gets an `info` line (`sbom_chart_not_rendered`): no `helm`, a dependency
     not vendored under `charts/`, or a registry chart that is not pinned or whose cached archive changed.
   - Turning it on adds those images to `cve_policy` and `image_gate_policy`, so a `deny` gate can fail on an
