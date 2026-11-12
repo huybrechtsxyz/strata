@@ -38,6 +38,15 @@ The export is `models/schema_export.py`: `StrataJsonSchema` (a `GenerateJsonSche
 a model, and `export_schema()` for a kind (adds `examples`). `ScaffoldController._export_schemas()` writes the files.
 Nullable `anyOf` is kept: dropping it would make the editor flag a key with no value.
 
+**Templates** ([ADR-0061](../decisions/0061-parameter-sets-and-load-time-param-token.md)). A deployment whose spec holds
+`${param:}` loads as a template and is validated only once its values are filled in, so the editor must not reject
+`tenant: ${param:spoke.tenant}` on the name pattern. For a kind in `_TEMPLATE_SPECS` (deployment today),
+`export_schema()` lets every value position under the spec (a property, an array's items, a map's values, at any
+depth) also take a string holding a `${param:<role>.<key>}` token: an `anyOf` branch `$ref`-ing one
+`$defs/ParamToken`. Exceptions, as in `strata validate`: `meta` (every `*MetaModel` definition) and the spec's
+`extends` and `partial`. A plain string field already accepts any token and is left alone. `render_schema()` is
+unchanged: a model's own schema still describes a document as loaded.
+
 ### Writing for the schema
 
 - **Description:** user-facing, about the document the user writes. No ADR numbers, phases, v1 history, `docs/`
@@ -127,3 +136,6 @@ roots; revisit if a real consumer needs one.
   that touch the registry use `monkeypatch`.
 - The quality bar was introduced as a per-kind ratchet, one kind at a time, so each phase could land with the suite
   green. With all 20 kinds passing the ratchet was deleted and the bar applies to every kind.
+- 2026-11-13: Templates (ADR-0061). The deployment schema accepts `${param:}` in every spec field but `extends` and
+  `partial`, through one shared `$defs/ParamToken` branch. Defined once rather than inlined at every field: inlined, the
+  deployment schema grew 55%; with the `$ref`, 22%.

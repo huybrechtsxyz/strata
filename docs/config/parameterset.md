@@ -7,8 +7,8 @@ in one place, so the documents that use them can share one base.
 > **Status: deployments.** A deployment names sets in `meta.params`, and `${param:<role>.<key>}`
 > works in any field of its `spec` except `extends` and `partial`, reference fields included
 > (`tenant`, `environments`, `providers[].provider`). Environments and tenants come in the next
-> steps of `base-parameters-v2.md` (work doc). The YAML editor's schema does not know templates
-> yet, so it may underline a token in a typed field that `strata validate` accepts.
+> steps of `base-parameters-v2.md` (work doc). The exported deployment schema accepts a
+> `${param:}` token in the same fields, so the YAML editor does not underline one.
 
 For a full, worked solution (two hubs, two spokes, a customer project), see
 [How To: Write one deployment base for many spokes](../how-to/parameterised-deployment-bases.md).
@@ -185,8 +185,9 @@ Deployment 'bootstrap-acme' must be named 'bootstrap-acme-001' by the name_rule 
 - A value no document reads is reported as **information** (`param_unused`), never as an error
   or warning, so `strata validate --strict` still passes: a set may hold more than any one
   deployment needs, like a Helm values file. A top-level key counts as read when some deployment
-  whose chain names the set under a role reads `${param:<role>.<key>...}`; `${param:<role>}`
-  alone reads every key. A set no `meta.params` names is reported once
+  whose chain names the set under a role reads `${param:<role>.<key>...}`, or any document reads
+  `${value:parameterset.<name>.spec.values.<key>...}`; `${param:<role>}` alone reads every key. A
+  set nothing names or reads is reported once
 - `${param:}` in `meta`, `spec.extends` or `spec.partial` is a load error
 - A `${param:}` in a document of another kind (an environment, a workspace, a module, ...) is not
   substituted, and the token check reports it as a `malformed_value_token`
@@ -195,6 +196,11 @@ Deployment 'bootstrap-acme' must be named 'bootstrap-acme-001' by the name_rule 
 
 - Where parameter sets live is up to the solution: strata finds documents by `kind` and
   `meta.name`, never by folder. Keeping a spoke's set next to the documents that use it reads well.
+- `${value:parameterset.<name>.spec.values.<key>}` also reads a set, from any document: raw and
+  by name, with no role, no merge and no defaults, resolved once per solution. Use it for values
+  every deployment shares (a constants set read by an environment or a workspace). In a
+  deployment, use `${param:}`: a base that names one set serves only that instance, and does not
+  see the defaults and overrides of its chain. Either way, a value read counts for `param_unused`.
 - A parameter set is not an [environment](environment.md): an environment declares run-time
   variables, secrets and feature flags that `${var:}`/`${secret:}`/`${feature:}` resolve at build
   and deploy time. A parameter set's values are read when the solution is loaded, before any of

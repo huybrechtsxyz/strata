@@ -46,7 +46,7 @@ is the directory to check.
    (`Related:` line): `` `topic-name.md` (work doc) ``. Only a work doc links to a
    work doc. A work doc moves to `docs/design/` or `docs/archive/` and may be
    deleted, so a link to it from a finished doc would break;
-   `tests/strata/test_doc_links.py` fails on one.
+   `tests/repo/test_doc_links.py` fails on one.
 
 ### Template
 
@@ -86,12 +86,12 @@ citation of one has to follow it. Two guard tests keep that true:
   its repository path, optionally with a section: `(docs/design/deploy-command.md's
   "Docker context pin")`. Cite what something does now from the design or
   config doc; cite why or when it was decided from the archive.
-  `tests/strata/test_doc_citations.py` finds every `docs/....md` path in a
+  `tests/repo/test_doc_citations.py` finds every `docs/....md` path in a
   file under `src/` or `tests/`, including one wrapped across lines after a
   `/`, and fails on a path that does not exist, naming where a doc of that
   name is now. A path followed by more of a file name (`docs/handover.md.j2`)
   is not a citation.
-- **Between docs.** `tests/strata/test_doc_links.py` checks every relative
+- **Between docs.** `tests/repo/test_doc_links.py` checks every relative
   `.md` link in the repository's Markdown (outside code): it must resolve,
   and it must not go from outside `docs/work/` into it. Only a work doc links
   to a work doc; anywhere else, name it without a link: `` `audit-trail.md`

@@ -213,6 +213,32 @@ def test_a_whole_role_read_uses_every_key_and_keys_are_counted_per_role(tmp_path
     assert _unused(open_solution(root).resolve()) == [("parameterset-shared.yaml", "spec.values.b")]
 
 
+def test_a_value_token_read_counts_as_a_read(tmp_path):
+    """`${value:parameterset...}` reads a set raw and by name; what it reads is not reported unused."""
+    root = _solution(tmp_path)
+    (root / "parameterset-spoke-acme.yaml").write_text(
+        _HEADER.format(kind="parameterset", name="spoke-acme", meta="")
+        + "  values: { name: acme-001, hub: hub01, tenant: acme, seq: '001', unused: 1 }\n",
+        "utf-8",
+    )
+    _write(root, "constants", "parameterset", "  values: { org: example, suffix: example.com }\n")
+    _write(
+        root,
+        "hub-hub01-env",
+        "environment",
+        "  properties:\n"
+        "    seq: ${value:parameterset.spoke-acme.spec.values.seq}\n"
+        "    org: ${value:parameterset.constants.spec.values.org}\n",
+    )
+    context = open_solution(root)
+    found = context.resolve()
+    assert context.ok, context.diagnostics
+    assert _unused(found) == [
+        ("parameterset-constants.yaml", "spec.values.suffix"),  # named by no deployment, but read by a token
+        ("parameterset-spoke-acme.yaml", "spec.values.unused"),
+    ]
+
+
 def test_an_unknown_tenant_after_substitution_is_reported_not_silently_skipped(tmp_path):
     root = _solution(tmp_path)
     (root / "parameterset-spoke-initech.yaml").write_text(

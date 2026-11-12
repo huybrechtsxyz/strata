@@ -400,7 +400,8 @@ other.
   are needed.
 - `${param:}` is never allowed in `meta`, `spec.extends` or `spec.partial`: names, parameter sets
   and chains stay fixed.
-- The YAML editor's schema does not know about templates yet, and may underline a token in a
-  typed field such as `tenant`. `strata validate` is the judge.
+- The YAML editor's schema (`.strata/schemas/`, refreshed by `strata sln update`) accepts a
+  `${param:}` token wherever `strata validate` does, and still underlines one in `meta`,
+  `extends` or `partial`. Whether the filled-in value is right, only `strata validate` can tell.
 - The full rules are in [parameterset.md](../config/parameterset.md); the decision is
   [ADR-0061](../decisions/0061-parameter-sets-and-load-time-param-token.md).

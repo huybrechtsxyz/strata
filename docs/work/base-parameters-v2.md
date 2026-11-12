@@ -957,7 +957,7 @@ Open questions:
   - Config reference: `meta.params` and `meta.name_rule` in `docs/config/deployment.md`, with a "Parameter sets"
     section; `docs/config/parameterset.md` links the how-to and the ADR.
   - How-to `docs/how-to/parameterised-deployment-bases.md`: two hubs, two spokes and a customer project, 20 files,
-    each shown with its path. `tests/strata/test_howto_parameter_sets.py` builds the solution from the page's own
+    each shown with its path. `tests/repo/test_howto_parameter_sets.py` builds the solution from the page's own
     code blocks and requires it to validate strictly with nothing unused, and checks the merged values the page
     shows, so the page cannot drift. Providers are not templated in it: a binding equal to the slot's default is a
     `provider_binding_redundant` warning, which `--strict` would fail on.
@@ -965,3 +965,14 @@ Open questions:
   - CHANGELOG "Added" under Unreleased.
   - Open, for the user: (1) the exported JSON schema does not know templates (the editor may underline `${param:}`
     in a typed field); (2) whether `${value:parameterset...}` should be forbidden.
+- 2026-11-13: Both open points answered.
+  - **Editor schema: built.** `export_schema()` lets every value position under a deployment's spec, at any depth,
+    also take a string holding `${param:<role>.<key>}` (an `anyOf` branch to one `$defs/ParamToken`); `meta`,
+    `extends` and `partial` keep their schema, as `strata validate` rejects a token there. `render_schema()` is
+    unchanged. See `docs/design/schema-export.md`. Phase 2 adds environment and tenant to `_TEMPLATE_SPECS`.
+  - **`${value:parameterset...}` stays allowed.** It reads one named set directly, raw (no merge, no role), which is
+    useful where `${param:}` cannot reach yet (an environment, before phase 2) and for solution-wide constants read
+    by shared documents (a workspace, a module). No correctness reason to forbid it: unlike an artifact's image fields
+    (ADR-0058), nothing is silently wrong. The one flaw was `param_unused` counting only `${param:}` reads, so a key
+    read through `${value:}` was reported unused: `_value_token_reads()` now counts those reads too, and a set read
+    only that way is not reported as named by nothing. `docs/config/parameterset.md` says when to use which.

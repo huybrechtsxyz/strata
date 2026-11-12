@@ -150,9 +150,89 @@ def render_schema(model_cls: type[BaseModel]) -> dict[str, Any]:
     return schema
 
 
+#: Kinds whose spec may be a template (`base-parameters-v2.md` (work doc), ADR-0061): the spec model's `$defs` name,
+#: and the spec fields that are never templated (rule 5). Mirrors `TEMPLATE_SERVICE_BY_KIND` in the controller layer,
+#: which this layer cannot import.
+_TEMPLATE_SPECS: dict[PlatformKind, tuple[str, frozenset[str]]] = {
+    PlatformKind.DEPLOYMENT: ("DeploymentSpecModel", frozenset({"partial", "extends"})),
+}
+
+#: What a templated value may also be: a string holding a `${param:}` token (`hub-${param:spoke.hub}-env`), or one
+#: that is only a token, which then stands for a value of any type (a number, a list, a map).
+_PARAM_TOKEN_SCHEMA: dict[str, Any] = {
+    "type": "string",
+    "pattern": r"\$\{param:[A-Za-z0-9_.-]+\}",
+    "description": "Filled from the deployment's parameter sets when the solution loads (`${param:<role>.<key>}`).",
+}
+
+#: Where the token schema sits in an exported schema, and the branch that points at it: defined once, not inlined
+#: at every field.
+_PARAM_TOKEN_DEF = "ParamToken"
+_PARAM_TOKEN_REF: dict[str, Any] = {"$ref": f"#/$defs/{_PARAM_TOKEN_DEF}"}
+
+#: Keys that carry no constraint: a schema node with only these accepts any string already.
+_UNCONSTRAINED_STRING_KEYS = frozenset({"type", "description", "default", "examples", "title"})
+
+
+def _with_param_token(node: dict[str, Any]) -> dict[str, Any]:
+    """`node`, also accepting a `${param:}` token: `node` itself when it already accepts any string."""
+    if node.get("type") == "string" and set(node) <= _UNCONSTRAINED_STRING_KEYS:
+        return node
+    # The description and default stay on the outer node, where the editor shows them on hover.
+    annotations: dict[str, Any] = {key: node[key] for key in ("description", "default") if key in node}
+    rest = {key: value for key, value in node.items() if key not in annotations}
+    branches = list(rest["anyOf"]) if set(rest) == {"anyOf"} else [rest]
+    if _PARAM_TOKEN_REF not in branches:
+        branches.append(dict(_PARAM_TOKEN_REF))
+    return {"anyOf": branches, **annotations}
+
+
+def _accept_param_tokens(node: dict[str, Any], skip: frozenset[str] = frozenset()) -> None:
+    """Let every value position under `node` also take a `${param:}` token, in place (but not the `skip` fields).
+
+    A value position is a property, an array's items or a map's values; the branches of an `anyOf` are walked, not
+    wrapped, so a nullable field gets one token branch, not one per branch. A `$ref` is left alone: the definition it
+    names is rewritten itself.
+    """
+    for container in ("properties", "patternProperties"):
+        for key, child in list(node.get(container, {}).items()):
+            if isinstance(child, dict) and key not in skip:
+                _accept_param_tokens(child)
+                node[container][key] = _with_param_token(child)
+    for key in ("items", "additionalProperties"):
+        child = node.get(key)
+        if isinstance(child, dict):
+            _accept_param_tokens(child)
+            node[key] = _with_param_token(child)
+    for key in ("anyOf", "oneOf", "allOf"):
+        for branch in node.get(key, ()):
+            if isinstance(branch, dict):
+                _accept_param_tokens(branch)
+
+
+def _accept_templates(schema: dict[str, Any], kind: PlatformKind) -> None:
+    """For a kind whose spec may be a template, every field of the spec, at any depth, also takes `${param:}`.
+
+    The YAML editor then accepts what `strata validate` accepts: `tenant: ${param:spoke.tenant}` in a deployment.
+    `meta` and the never-templated spec fields (`extends`, `partial`) keep their schema, so a token there is still
+    underlined, as `strata validate` rejects it.
+    """
+    template = _TEMPLATE_SPECS.get(kind)
+    if template is None:
+        return
+    spec_name, never = template
+    definitions = schema.setdefault("$defs", {})
+    for name, definition in list(definitions.items()):
+        if name.endswith("MetaModel") or not isinstance(definition, dict):
+            continue
+        _accept_param_tokens(definition, never if name == spec_name else frozenset())
+    definitions[_PARAM_TOKEN_DEF] = copy.deepcopy(_PARAM_TOKEN_SCHEMA)
+
+
 def export_schema(model_cls: type[BaseModel], kind: PlatformKind) -> dict[str, Any]:
     """The schema written to `.strata/schemas/<kind>.json`."""
     schema = render_schema(model_cls)
+    _accept_templates(schema, kind)
     examples = EXAMPLES.get(kind)
     if examples:
         schema["examples"] = copy.deepcopy(examples)

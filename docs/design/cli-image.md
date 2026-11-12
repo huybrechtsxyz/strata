@@ -78,7 +78,7 @@ their own. Its `uv` ecosystem updates `pyproject.toml` and `uv.lock` together; `
 alone, and `--locked` would then fail the image build. Trivy is pinned to an exact version on purpose: a poisoned
 release (v0.69.4) was published through several channels in March 2026.
 
-`tests/strata/test_cli_image.py` checks these rules on the Dockerfile text (what each variant holds, OpenTofu in full
+`tests/repo/test_cli_image.py` checks these rules on the Dockerfile text (what each variant holds, OpenTofu in full
 only, no Terraform anywhere, slim as the default target, a non-root user with a home, every `FROM` pinned, the lockfile, Helm's checksum),
 since the image itself is only built in CI.
 

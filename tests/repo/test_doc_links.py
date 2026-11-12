@@ -56,7 +56,8 @@ def _docs() -> list[Path]:
         text=True,
         check=True,
     ).stdout.split()
-    return [REPO_ROOT / name for name in listed if name.endswith(".md")]
+    # `--cached` still lists a file deleted or moved in the working tree until the change is staged.
+    return [REPO_ROOT / name for name in listed if name.endswith(".md") and (REPO_ROOT / name).is_file()]
 
 
 def _exists_as_written(path: Path) -> bool:

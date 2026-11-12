@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the JSON Schema export (docs/design/schema-export.md)."""
 
+import copy
 from typing import Annotated, Any, ClassVar
 
 import jsonschema
@@ -296,3 +297,64 @@ def test_examples_are_exported_as_the_root_examples_keyword(monkeypatch):
     assert export_schema(_model_of(kind), kind)["examples"] == [{"kind": "provider"}]
     monkeypatch.delitem(EXAMPLES, kind)
     assert "examples" not in export_schema(_model_of(kind), kind)
+
+
+# ---------------------------------------------------------------------------
+# Templates: a deployment's spec may hold `${param:}` anywhere but `extends` and `partial` (ADR-0061)
+# ---------------------------------------------------------------------------
+
+_TEMPLATE = {
+    "apiVersion": "strata.huybrechts.xyz/v2",
+    "kind": "deployment",
+    "meta": {"name": "spoke_deployment_base", "params": {"hub": "hub-defaults"}, "name_rule": "spoke-${param:x.y}"},
+    "spec": {
+        "partial": True,
+        "workspace": "${param:spoke.workspace}",
+        "tenant": "${param:spoke.tenant}",
+        "environments": ["solution-env", "hub-${param:hub.name}-env"],
+        "providers": [{"slot": "azure", "provider": "${param:hub.provider}"}],
+        "layers": {"segments": {"hub": "${param:hub.name}"}},
+        "properties": "${param:spoke}",  # a whole-value token: a map
+        "stages": [{"step": "infra", "timeouts": {"apply": "${param:hub.apply_timeout}"}}],  # an integer
+    },
+}
+
+
+def _deployment_schema() -> dict[str, Any]:
+    return export_schema(_model_of(PlatformKind.DEPLOYMENT), PlatformKind.DEPLOYMENT)
+
+
+def test_the_editor_schema_accepts_a_deployment_template():
+    jsonschema.validate(_TEMPLATE, _deployment_schema())
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("meta", "name", "${param:spoke.name}"),
+        ("meta", "params", {"spoke": "${param:x}"}),
+        ("spec", "extends", "base-${param:spoke.hub}"),
+        ("spec", "partial", "${param:spoke.partial}"),
+        ("spec", "tenant", "Not A Name"),  # a plain value is still checked as before
+    ],
+)
+def test_the_editor_schema_still_rejects_what_validate_rejects(section, field, value):
+    document = copy.deepcopy(_TEMPLATE)
+    document[section][field] = value
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(document, _deployment_schema())
+
+
+def test_a_token_needs_the_param_kind_and_a_key():
+    for value in ("${var:tenant}", "${param:}"):
+        document = copy.deepcopy(_TEMPLATE)
+        document["spec"]["tenant"] = value
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(document, _deployment_schema())
+
+
+def test_only_kinds_that_can_be_templates_take_param_tokens():
+    environment = {"kind": "environment", "meta": {"name": "prd"}, "spec": {"variables": [{"key": "${param:x}"}]}}
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(environment, export_schema(_model_of(PlatformKind.ENVIRONMENT), PlatformKind.ENVIRONMENT))
+    assert "${param:" not in str(export_schema(_model_of(PlatformKind.ENVIRONMENT), PlatformKind.ENVIRONMENT))

@@ -37,7 +37,8 @@ def _tracked_files() -> list[Path]:
         text=True,
         check=True,
     ).stdout.split()
-    return [REPO_ROOT / name for name in listed if name.endswith(_SUFFIXES)]
+    # `--cached` still lists a file deleted or moved in the working tree until the change is staged.
+    return [REPO_ROOT / name for name in listed if name.endswith(_SUFFIXES) and (REPO_ROOT / name).is_file()]
 
 
 def test_every_cited_doc_exists():

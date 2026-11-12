@@ -21,8 +21,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - A problem is reported on the field you wrote, with the values that made it and the deployment it was resolved
     for (`param_missing`, `param_not_scalar`, `unknown_reference`). A value nothing reads is information
     (`param_unused`), so `validate --strict` still passes.
-  - Deployments only for now; environments and tenants follow. The YAML editor's schema does not know templates
-    yet and may underline a token in a typed field that `strata validate` accepts.
+  - Deployments only for now; environments and tenants follow.
+  - The exported deployment schema (`.strata/schemas/deployment.json`, from `strata sln init`/`update`) accepts a
+    `${param:}` token in every spec field but `extends` and `partial`, so the YAML editor no longer underlines
+    `tenant: ${param:spoke.tenant}`. Run `strata sln update` to refresh the schemas.
   - `docs/how-to/parameterised-deployment-bases.md` walks through a full example.
 
 - **A full container image, `ghcr.io/huybrechtsxyz/strata:<version>-full`** (and `latest-full`): strata with

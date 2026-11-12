@@ -58,7 +58,7 @@ the sets the chain names), so leaves that name the same sets, or none,
 still share their bases' work.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -90,6 +90,7 @@ from strata.utils.param_tokens import (
     substitute_params,
 )
 from strata.utils.value_paths import VALUE_PATH_MISSING, walk_value_path
+from strata.utils.value_tokens import extract_value_tokens
 
 log = get_logger(__name__)
 
@@ -555,9 +556,11 @@ def _unused_values(index: DocumentIndex, chains: Mapping[str, tuple[str, ...] | 
     """Rule 12: an `info` finding (`param_unused`) per top-level key of a parameter set that no document reads.
 
     A key is read when a document of some chain holds `${param:<role>.<key>...}` (in its spec or `meta.name_rule`)
-    and that chain names the set under `<role>`; `${param:<role>}` alone reads every key. A set no `meta.params`
-    names gets one finding of its own. Info, not a warning: `validate --strict` fails on warnings, and a values file
-    holding more than one deployment reads is normal (a spoke's set serves seven deployments).
+    and that chain names the set under `<role>`; `${param:<role>}` alone reads every key. A
+    `${value:parameterset.<name>.spec.values.<key>...}` token in any document reads `<key>` of that set too
+    (`_value_token_reads()`). A set nothing names or reads gets one finding of its own. Info, not a warning:
+    `validate --strict` fails on warnings, and a values file holding more than one deployment reads is normal (a
+    spoke's set serves seven deployments).
     """
     reads_of: dict[str, set[tuple[str, tuple[str, ...]]]] = {}
 
@@ -586,13 +589,19 @@ def _unused_values(index: DocumentIndex, chains: Mapping[str, tuple[str, ...] | 
                     read_keys.setdefault(set_name, set()).add(path[0])
                 else:
                     read_whole.add(set_name)
+    value_whole, value_keys = _value_token_reads(index)
+    read_whole |= value_whole
+    for set_name, keys in value_keys.items():
+        read_keys.setdefault(set_name, set()).update(keys)
+    named |= value_whole | set(value_keys)
 
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.PARAMETERSET):
         name = entry.ref.name
         if name not in named:
             diagnostics.info(
-                f"Parameter set '{name}' is named in no deployment's meta.params, so none of its values is read.",
+                f"Parameter set '{name}' is named in no deployment's meta.params and read by no "
+                "${value:parameterset...} token, so none of its values is read.",
                 source=str(entry.source),
                 location="meta.name",
                 code="param_unused",
@@ -604,12 +613,48 @@ def _unused_values(index: DocumentIndex, chains: Mapping[str, tuple[str, ...] | 
             if key not in read_keys.get(name, set()):
                 diagnostics.info(
                     f"Parameter set '{name}': value '{key}' is read by no document (no ${{param:<role>.{key}}} in "
-                    "a chain that names this set under that role).",
+                    f"a chain that names this set under that role, and no ${{value:parameterset.{name}.spec.values."
+                    f"{key}}}).",
                     source=str(entry.source),
                     location=f"spec.values.{key}",
                     code="param_unused",
                 )
     return diagnostics
+
+
+def _value_token_reads(index: DocumentIndex) -> tuple[set[str], dict[str, set[str]]]:
+    """The parameter-set values `${value:parameterset.<name>.spec.values.<key>...}` tokens read, in any document.
+
+    Returns `(sets read whole, set -> top-level keys read)`. A token that stops above a key
+    (`${value:parameterset.<name>.spec.values}`) reads the set whole; `${value:}` rejects it as not a single value,
+    but the author clearly uses the set, so it is not reported unused on top.
+    """
+    whole: set[str] = set()
+    keys: dict[str, set[str]] = {}
+
+    def strings(node: Any) -> Iterator[str]:
+        if isinstance(node, str):
+            yield node
+        elif isinstance(node, dict):
+            for child in node.values():
+                yield from strings(child)
+        elif isinstance(node, list):
+            for child in node:
+                yield from strings(child)
+
+    for entry in index.all():
+        dumped = entry.model.model_dump(by_alias=True, mode="json")
+        dumped.pop("meta", None)  # as `${value:}` resolution itself: a token in meta is never resolved
+        for text in strings(dumped):
+            for kind, key in extract_value_tokens(text):
+                segments = key.split(".")
+                if kind != "value" or segments[0] != PlatformKind.PARAMETERSET.value or len(segments) < 2:
+                    continue
+                if len(segments) >= 5 and segments[2:4] == ["spec", "values"]:
+                    keys.setdefault(segments[1], set()).add(segments[4])
+                else:
+                    whole.add(segments[1])
+    return whole, keys
 
 
 def deployment_of(entry: IndexEntry, resolved: Mapping[str, DeploymentModel]) -> DeploymentModel | None:
