@@ -1,6 +1,7 @@
 # Parameterised bases (`input`, `params`, `${param:}`) - Work
 
-- Status: draft
+- Status: abandoned (superseded by [base-parameters-v2.md](base-parameters-v2.md): values files instead of typed
+  inputs on the base)
 - Last updated: 2026-11-12
 
 ## Overview

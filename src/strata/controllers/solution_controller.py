@@ -55,6 +55,7 @@ from strata.services.integration_service import IntegrationService
 from strata.services.module_service import ModuleService
 from strata.services.namespace_service import NamespaceService
 from strata.services.network_service import NetworkService
+from strata.services.parameterset_service import ParameterSetService
 from strata.services.provider_config_service import ProviderConfigService
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
@@ -98,6 +99,7 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.VERSION: VersionService,
     PlatformKind.ARTIFACT: ArtifactService,
     PlatformKind.ASSET: AssetService,
+    PlatformKind.PARAMETERSET: ParameterSetService,
 }
 
 

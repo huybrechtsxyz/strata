@@ -119,6 +119,59 @@ def test_load_indexes_asset_document(tmp_path):
     assert entry.model.spec.source_path == "assets/contoso/{deploy_tier}/openapi"  # type: ignore[attr-defined]
 
 
+PARAMETERSET_DOC = """\
+apiVersion: strata.huybrechts.xyz/v2
+kind: parameterset
+meta:
+  name: spoke-acme-001
+spec:
+  values:
+    name: acme-001
+    network: { cidr: 10.1.0.0/16 }
+    chart_token: $${TOKEN}
+"""
+
+
+def test_load_indexes_parameterset_document(tmp_path):
+    """A `kind: parameterset` document (`base-parameters-v2.md` (work doc), step 1a) loads like any other kind."""
+    root = _solution(tmp_path)
+    (root / "spoke.yaml").write_text(PARAMETERSET_DOC, encoding="utf-8")
+
+    controller = SolutionController(root)
+    result = controller.load()
+    assert result.ok, result.messages()
+    entry = controller.index.get(PlatformKind.PARAMETERSET, "spoke-acme-001")
+    assert entry is not None
+    assert entry.model.spec.values == {  # type: ignore[attr-defined]
+        "name": "acme-001",
+        "network": {"cidr": "10.1.0.0/16"},
+        "chart_token": "$${TOKEN}",
+    }
+
+
+def test_load_reports_a_token_in_a_parameterset_with_its_file(tmp_path):
+    """Values are plain: a `${var:}` in a parameter set fails the load and names the file and the key."""
+    root = _solution(tmp_path)
+    (root / "spoke.yaml").write_text(PARAMETERSET_DOC.replace("name: acme-001", "name: ${var:spoke}"), encoding="utf-8")
+
+    result = SolutionController(root).load()
+    assert not result.ok
+    (finding,) = result.errors
+    assert finding.source is not None and "spoke.yaml" in finding.source
+    assert "values.name" in finding.message
+
+
+def test_load_rejects_a_duplicate_parameterset(tmp_path):
+    """Two parameter sets with one name are `duplicate_document`, never last-write-wins."""
+    root = _solution(tmp_path)
+    (root / "spoke.yaml").write_text(PARAMETERSET_DOC, encoding="utf-8")
+    (root / "copy.yaml").write_text(PARAMETERSET_DOC, encoding="utf-8")
+
+    result = SolutionController(root).load()
+    (finding,) = [d for d in result.errors if d.code == "duplicate_document"]
+    assert "spoke-acme-001" in finding.message
+
+
 def test_load_reports_missing_manifest(tmp_path):
     """A root without strata.yaml is an error, not a crash."""
     result = SolutionController(tmp_path).load()
