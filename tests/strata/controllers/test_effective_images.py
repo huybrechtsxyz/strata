@@ -1,16 +1,27 @@
 #!/usr/bin/env python3
 """Tests for `effective_images()` (docs/work/effective-images.md)."""
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import yaml
 
-from strata.controllers.effective_images import _received_variable_keys, effective_images, unknown_image_modules
+from strata.controllers.effective_images import (
+    _received_variable_keys,
+    effective_images,
+    rendered_chart_images,
+    unknown_image_modules,
+    with_rendered_images,
+)
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import resolve_deployment
+from strata.integrations.resolved_context import EffectiveImage, UnknownImageModule
+from strata.models.common_models import ModuleReferenceModel
+from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.workspace_model import WorkspaceModel
+from strata.utils.sbom_utils import image_to_purl
 
 _HEADER = "apiVersion: strata.huybrechts.xyz/v2\nkind: {kind}\nmeta:\n  name: {name}\nspec:\n"
 
@@ -460,3 +471,110 @@ def test_a_helm_service_without_an_image_does_not_make_the_module_known(tmp_path
     root = _solution(tmp_path)
     _with_module(root, services="    - name: server\n      environment:\n        - key: A\n          value: b\n")
     assert [module.module for module in _unknown(root)] == ["chart"]
+
+
+# Rendered chart images read back from a build (docs/work/helm-image-delivery.md, plan item 9d).
+
+
+def _sbom_file(build_path: Path, *components: dict) -> Path:
+    build_path.mkdir(parents=True, exist_ok=True)
+    (build_path / "sbom.json").write_text(json.dumps({"components": list(components)}), encoding="utf-8")
+    return build_path
+
+
+def _component(image: str, used_by: str, *, rendered: bool = True, reference: bool = True) -> dict:
+    properties = [{"name": "strata:used-by", "value": used_by}]
+    if rendered:
+        properties.append({"name": "strata:found-in", "value": "rendered-chart"})
+    if reference:
+        properties.append({"name": "strata:image", "value": image})
+    return {"type": "container", "name": "x", "purl": image_to_purl(image), "properties": properties}
+
+
+def _context(*namespaces: NamespaceModel) -> SimpleNamespace:
+    """Just enough of a `SolutionContext` for `rendered_chart_images()`: the namespace documents."""
+    by_name = {namespace.meta.name: SimpleNamespace(model=namespace) for namespace in namespaces}
+    return SimpleNamespace(controller=SimpleNamespace(index=SimpleNamespace(get=lambda kind, name: by_name.get(name))))
+
+
+def test_rendered_chart_images_is_none_without_an_sbom(tmp_path):
+    assert rendered_chart_images(_context(), tmp_path) is None
+
+
+def test_rendered_chart_images_rejects_an_sbom_it_cannot_read(tmp_path):
+    (tmp_path / "sbom.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="no components list"):
+        rendered_chart_images(_context(), tmp_path)
+
+
+def test_rendered_chart_images_gives_one_row_per_container_and_keeps_tag_and_digest(tmp_path):
+    digest = "sha256:" + "b" * 64
+    build = _sbom_file(
+        tmp_path,
+        _component(f"traefik/whoami:v1.10.2@{digest}", "chart:apps/whoami/whoami"),
+        _component("busybox:1.36", "chart:apps/whoami/wait, chart:apps/other/init"),
+        _component("redis:7", "service:cache/redis", rendered=False),
+        _component("nginx:1", "chart:apps/web/nginx", reference=False),
+    )
+    rows = rendered_chart_images(_context(), build)
+    assert [(r.origin, r.name, r.module, r.via, r.tag_source, r.delivered) for r in rows] == [
+        ("chart", "whoami/whoami", "whoami", ("chart:apps/whoami/whoami",), "chart", True),
+        ("chart", "whoami/wait", "whoami", ("chart:apps/whoami/wait",), "chart", True),
+        ("chart", "other/init", "other", ("chart:apps/other/init",), "chart", True),
+    ]
+    assert (rows[0].image_name, rows[0].image_tag, rows[0].image_digest) == ("traefik/whoami", "v1.10.2", digest)
+
+
+def test_rendered_chart_images_names_the_module_the_reference_points_at(tmp_path):
+    namespace = NamespaceModel(
+        meta=NamespaceMetaModel(name="apps"),
+        spec=NamespaceSpecModel(
+            type="dedicated", default_labels={}, modules=[ModuleReferenceModel(name="auth", module="authentik")]
+        ),
+    )
+    build = _sbom_file(tmp_path, _component("goauthentik/server:1", "chart:apps/auth/server"))
+    [row] = rendered_chart_images(_context(namespace), build)
+    assert (row.name, row.module) == ("auth/server", "authentik")
+
+
+def _row(origin: str, name: str, ref: str, via: str, **extra) -> EffectiveImage:
+    image_name, tag = ref.rsplit(":", 1)
+    return EffectiveImage(
+        origin=origin,
+        name=name,
+        image_name=image_name,
+        image_tag=tag,
+        image_ref=ref,
+        tag_source="declared",
+        via=(via,),
+        **extra,
+    )
+
+
+def test_with_rendered_images_judges_a_shared_image_once_and_clears_rendered_modules():
+    declared = _row(
+        "module-service",
+        "server",
+        "ghcr.io/goauthentik/server:1",
+        "service:authentik/server",
+        module="authentik",
+        delivered=False,
+        delivery="helm module: the chart decides",
+    )
+    rendered = [
+        _row("chart", "auth/server", "ghcr.io/goauthentik/server:1", "chart:apps/auth/server", module="authentik"),
+        _row("chart", "whoami/shipper", "acme/shipper:2", "chart:apps/whoami/shipper", module="whoami"),
+    ]
+    unknown = [
+        UnknownImageModule(module="whoami", namespace="apps"),
+        UnknownImageModule(module="whoami", namespace="other"),
+        UnknownImageModule(module="immich", namespace="apps"),
+    ]
+
+    images, remaining = with_rendered_images([declared], unknown, rendered)
+
+    assert [(i.name, i.delivered, i.delivery) for i in images] == [
+        ("server", True, None),
+        ("whoami/shipper", True, None),
+    ]
+    assert [(m.module, m.namespace) for m in remaining] == [("whoami", "other"), ("immich", "apps")]

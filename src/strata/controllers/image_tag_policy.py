@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 """Evaluate `spec.image_tag_policy` over a deployment's effective images (docs/design/image-tag-policy.md).
 
-Pure: it reads only the rows `effective_images()` returns, the Helm modules `unknown_image_modules()` names,
-the policy and the deployment's ring, so it needs no solution, network or credential. Callers (`build run`, `deploy run`, `strata policy check`,
-`deploy images`) fetch the rows and the ring and decide when to run it.
+`evaluate_image_tag_policy()` is pure: it reads only the rows `effective_images()` returns, the Helm modules
+`unknown_image_modules()` names, the policy and the deployment's ring, so it needs no solution, network or
+credential. Callers (`build run`, `deploy run`, `strata policy check`, `deploy images`) fetch the rows and the ring
+and decide when to run it. `check_image_tag_policy(..., build_path=)` adds the images the build's rendered charts
+run (docs/work/helm-image-delivery.md, plan item 9d).
 """
 
 import re
 from collections.abc import Sequence
 from datetime import date
+from pathlib import Path
 
-from strata.controllers.effective_images import effective_images, unknown_image_modules
+from strata.controllers.effective_images import (
+    effective_images,
+    rendered_chart_images,
+    unknown_image_modules,
+    with_rendered_images,
+)
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import resolve_version
 from strata.integrations.resolved_context import EffectiveImage, UnknownImageModule
@@ -29,6 +37,7 @@ def check_image_tag_policy(
     pinned_by_flag: bool = False,
     images: Sequence[EffectiveImage] | None = None,
     unknown: Sequence[UnknownImageModule] | None = None,
+    build_path: Path | None = None,
 ) -> Diagnostics:
     """Evaluate the workspace's `image_tag_policy` for `deployment`; nothing to report when it is unset.
 
@@ -36,6 +45,10 @@ def check_image_tag_policy(
     says whether it did (as `effective_images()` takes them). Pass `images` when the caller already has the
     deployment's `effective_images()` rows, so they are not resolved twice, and `unknown` when it already has
     its `unknown_image_modules()`.
+
+    With `build_path`, the images the build's rendered charts run are judged too, read from its `sbom.json`
+    (`rendered_chart_images()`, `with_rendered_images()`). A build without an SBOM, or without rendered charts,
+    is judged on the solution alone. An SBOM that cannot be read is a warning, and the solution is judged.
     """
     policy = workspace.spec.image_tag_policy
     if policy is None:
@@ -44,7 +57,20 @@ def check_image_tag_policy(
         images = effective_images(context, deployment, pinned_by_flag=pinned_by_flag)
     if unknown is None:
         unknown = unknown_image_modules(context, deployment)
-    return evaluate_image_tag_policy(images, policy, deployment_ring(context, deployment), unknown=unknown)
+    diagnostics = Diagnostics()
+    if build_path is not None:
+        try:
+            rendered = rendered_chart_images(context, build_path)
+        except ValueError as exc:
+            diagnostics.warning(
+                f"image_tag_policy: the images rendered charts run are not judged: {exc}",
+                code="image_tag_policy_sbom_unreadable",
+            )
+            rendered = None
+        if rendered:
+            images, unknown = with_rendered_images(images, unknown, rendered)
+    diagnostics.extend(evaluate_image_tag_policy(images, policy, deployment_ring(context, deployment), unknown=unknown))
+    return diagnostics
 
 
 def deployment_ring(context: SolutionContext, deployment: DeploymentModel) -> str | None:
@@ -144,7 +170,7 @@ def _problems(
     tag, digest = image.image_tag, image.image_digest
     if not tag and not digest:
         problems = [("image_without_tag", f"has no tag. {_fix(image)}")] if policy.require_tag else []
-        if not problems and policy.require_pin:
+        if not problems and policy.require_pin and image.origin != "chart":
             problems.append(("image_not_pinned", f"is not pinned. {_fix(image)}"))
         if policy.require_digest:
             problems.append(("image_without_digest", f"has no digest. {_fix_digest(image)}"))
@@ -158,7 +184,8 @@ def _problems(
             problems.append(("image_tag_pattern", f"has the tag '{tag}', which does not match '{pattern.pattern}'."))
     if policy.require_digest and not digest:
         problems.append(("image_without_digest", f"has the tag '{tag}' but no digest. {_fix_digest(image)}"))
-    if policy.require_pin and image.tag_source != "pin":
+    # Strata cannot pin an image inside a chart; the chart's own pin (or a registry chart's digest) fixes it.
+    if policy.require_pin and image.origin != "chart" and image.tag_source != "pin":
         shown = "@".join(part for part in (tag, digest) if part)
         problems.append(("image_not_pinned", f"is not pinned (its tag '{shown}' is {_source(image)}). {_fix(image)}"))
     return problems
@@ -171,6 +198,8 @@ def _fix_digest(image: EffectiveImage) -> str:
             f"Pin it as TAG@sha256:<hex> under spec.pins.artifacts.{image.name} of a kind: version document, or in "
             "the artifact's image_tag."
         )
+    if image.origin == "chart":
+        return "Set the image as TAG@sha256:<hex> in the chart's values through the module's configuration."
     return f"Write the service's image as NAME:TAG@sha256:<hex>, or pin it so under spec.pins.images.{image.name}."
 
 
@@ -195,4 +224,9 @@ def _fix(image: EffectiveImage) -> str:
     """Where to put the tag: the pin that takes precedence, or the declaration itself."""
     if image.origin == "artifact":
         return f"Pin it under spec.pins.artifacts.{image.name} of a kind: version document, or set image_tag on the artifact."
+    if image.origin == "chart":
+        return (
+            "Set the tag in the chart's values through the module's configuration, or pin a chart version that "
+            "ships the tag you want."
+        )
     return f"Pin it under spec.pins.images.{image.name} of a kind: version document, or set the tag in the service's image."

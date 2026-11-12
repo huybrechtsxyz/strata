@@ -30,7 +30,9 @@ Never resolves a store: a `store: artifact` value is an in-solution document
 lookup, so this needs no network and reveals no secret.
 """
 
-from collections.abc import Iterator
+import json
+from collections.abc import Iterator, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -56,9 +58,21 @@ from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
-from strata.utils.sbom_utils import compose_image_ref, parse_image_ref, split_image_tag
+from strata.utils.sbom_utils import (
+    FOUND_IN_PROPERTY,
+    FOUND_IN_RENDERED_CHART,
+    IMAGE_REF_PROPERTY,
+    USED_BY_PROPERTY,
+    compose_image_ref,
+    image_to_purl,
+    parse_image_ref,
+    split_image_tag,
+)
 from strata.utils.templater import template_variable_keys
 from strata.utils.value_tokens import referenced_artifact_keys, referenced_variable_keys, split_artifact_token_key
+
+#: What `build run` writes (`sbom_controller.write_sbom()`); read back by `rendered_chart_images()`.
+_SBOM_FILENAME = "sbom.json"
 
 
 def effective_images(
@@ -271,3 +285,107 @@ def _received_variable_keys(context: SolutionContext, workspace: WorkspaceModel 
                 return set(keys)
             received |= used
     return received & keys
+
+
+def rendered_chart_images(context: SolutionContext, build_path: Path) -> list[EffectiveImage] | None:
+    """The images a build's rendered charts run, read from its `sbom.json`, or `None` when there is no SBOM
+    (docs/work/helm-image-delivery.md, plan item 9d).
+
+    One row per `chart:NAMESPACE/REFERENCE/CONTAINER` use of a component the `chart-image` collector wrote, so an
+    image two containers run is two rows. `origin` is `chart`, `name` is `REFERENCE/CONTAINER` (what `allow`
+    names), `module` is the module the namespace's reference points at, and the reference is `strata:image`, the
+    image as the chart writes it. `tag_source` is `chart`: strata did not choose the tag. A component without
+    `strata:image` is skipped.
+
+    Raises:
+        ValueError: `sbom.json` exists but cannot be read as an SBOM.
+    """
+    path = build_path / _SBOM_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        sbom = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"'{path}' is not valid JSON ({exc})") from None
+    components = sbom.get("components") if isinstance(sbom, dict) else None
+    if not isinstance(components, list):
+        raise ValueError(f"'{path}' has no components list")
+
+    rows: list[EffectiveImage] = []
+    for component in components:
+        properties = _properties(component)
+        reference = properties.get(IMAGE_REF_PROPERTY)
+        if properties.get(FOUND_IN_PROPERTY) != FOUND_IN_RENDERED_CHART or not reference:
+            continue
+        name, tag, digest = parse_image_ref(reference)
+        for use in (part.strip() for part in properties.get(USED_BY_PROPERTY, "").split(",")):
+            namespace, reference_name, container = _chart_use(use)
+            if container is None:
+                continue
+            rows.append(
+                EffectiveImage(
+                    origin="chart",
+                    name=f"{reference_name}/{container}",
+                    image_name=name,
+                    image_tag=tag,
+                    image_digest=digest,
+                    image_ref=reference,
+                    tag_source="chart",
+                    module=_module_of(context, namespace, reference_name),
+                    via=(use,),
+                )
+            )
+    return rows
+
+
+def with_rendered_images(
+    images: Sequence[EffectiveImage], unknown: Sequence[UnknownImageModule], rendered: Sequence[EffectiveImage]
+) -> tuple[list[EffectiveImage], list[UnknownImageModule]]:
+    """`images` and `unknown` once the build's rendered chart images are known (plan item 9d).
+
+    - A rendered image that a declared row already has (the same purl) is not added: the declared row is judged,
+      once, as delivered, because the chart runs it.
+    - Every other rendered row is added after the declared ones.
+    - A Helm module with at least one rendered row is no longer unknown.
+    """
+    rendered_purls = {image_to_purl(row.image_ref) for row in rendered}
+    declared_purls = {image_to_purl(row.image_ref) for row in images}
+    merged = [
+        replace(row, delivered=True, delivery=None) if image_to_purl(row.image_ref) in rendered_purls else row
+        for row in images
+    ]
+    merged.extend(row for row in rendered if image_to_purl(row.image_ref) not in declared_purls)
+    rendered_modules = {(_chart_use(row.via[0])[0], row.module) for row in rendered if row.via}
+    remaining = [module for module in unknown if (module.namespace, module.module) not in rendered_modules]
+    return merged, remaining
+
+
+def _properties(component: Any) -> dict[str, str]:
+    """A CycloneDX component's `properties` as a mapping; empty for anything that is not a component."""
+    if not isinstance(component, dict) or component.get("type") != "container":
+        return {}
+    found: dict[str, str] = {}
+    for item in component.get("properties") or []:
+        if isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("value"), str):
+            found.setdefault(item["name"], item["value"])
+    return found
+
+
+def _chart_use(use: str) -> tuple[str, str, str | None]:
+    """`(namespace, reference, container)` of a `chart:NS/REFERENCE/CONTAINER` use; container `None` otherwise."""
+    if not use.startswith("chart:"):
+        return "", "", None
+    parts = use.removeprefix("chart:").split("/")
+    if len(parts) != 3 or not all(parts):
+        return "", "", None
+    return parts[0], parts[1], parts[2]
+
+
+def _module_of(context: SolutionContext, namespace_name: str, reference_name: str) -> str:
+    """The module a namespace's reference points at; the reference's own name when the solution no longer has it."""
+    entry = context.controller.index.get(PlatformKind.NAMESPACE, namespace_name)
+    if entry is not None:
+        for reference in cast(NamespaceModel, entry.model).spec.modules or []:
+            if reference.name == reference_name:
+                return str(reference.module)
+    return reference_name

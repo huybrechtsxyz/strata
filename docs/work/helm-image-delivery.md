@@ -1,6 +1,6 @@
 # Helm module images - Work
 
-- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed, 9a to 9c built (2026-11-12)
+- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed, 9a to 9d built (2026-11-12)
 - Last updated: 2026-11-12
 
 ## Overview
@@ -529,7 +529,20 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   - `require_pin` does not apply. Strata cannot pin a chart's image; a `charts` pin, or the chart's digest for a
     registry chart, fixes it. The finding would only be noise.
 - **The fix text** for a chart row: "Set the tag in the chart's values through the module's `configuration`, or
-  pin a chart version that ships the tag you want."
+  pin a chart version that ships the tag you want." For `require_digest`: "Set the image as `TAG@sha256:<hex>` in
+  the chart's values through the module's configuration."
+- **How it is built** (plan item 9d):
+  - `rendered_chart_images(context, build_path)` in `effective_images.py` reads `sbom.json` itself, as
+    `images_from_sbom()` does for the image gate. It takes only components with `strata:found-in: rendered-chart`
+    and a `strata:image`, and gives one row per `chart:` use. `module` is resolved through the namespace document
+    in the solution; when the solution no longer has that reference, it falls back to the reference name.
+  - `with_rendered_images(images, unknown, rendered)` is pure. Images are compared by purl, as the SBOM merge
+    does. Unknown modules are dropped by `(namespace, module)`, so a module rendered in one namespace stays unknown
+    in another.
+  - `check_image_tag_policy(..., build_path=)`. An SBOM that cannot be read is a warning,
+    `image_tag_policy_sbom_unreadable`, and the solution is still judged: the build wrote that file, so a broken
+    one is worth hearing about, but it should not hide the declared images' findings.
+  - No caller passes `build_path` yet; 9e and 9f do. Until then nothing changes for a user.
 - **Example:**
 
   ```
@@ -692,10 +705,11 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
     with a stubbed `HelmIntegration`, one with real `helm` and a packaged chart (section 4). Built 2026-11-12.
   - [x] 9c. Declared but not rendered: the `sbom_declared_image_not_rendered` finding in `write_sbom()` after the
     merge, and the reason `helm module: not in the rendered chart` (section 5). Built 2026-11-12.
-  - [ ] 9d. Policy rows: the `chart` origin in `ImageTagPolicyModel.origins`; `rendered_chart_images()`;
+  - [x] 9d. Policy rows: the `chart` origin in `ImageTagPolicyModel.origins`; `rendered_chart_images()`;
     `check_image_tag_policy(..., build_path=)` adds the rows, judges a shared image once as delivered, drops
     rendered modules from `unknown`; `_fix()` and `_problems()` for a chart row (no `require_pin`). Pure tests on
-    `evaluate_image_tag_policy()` plus a test over a written `sbom.json` (section 2).
+    `evaluate_image_tag_policy()` plus a test over a written `sbom.json` (section 2). Built 2026-11-12. The user
+    docs for `origins: chart` and the `allow` name wait for 9g, when a caller passes the build.
   - [ ] 9e. Move the build check: `build run` judges the policy after the SBOM, next to the CVE gate, with its build
     path; a dry run judges declared images at the same point; the comment rewritten. Build tests for both `deny`
     cases, the dry run and the single result (section 1).
@@ -759,7 +773,8 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   `render_charts` by default is item 10. 9a built the same day: designing it showed the merge loses the container
   of a second use, so the `chart:` use now names the container too. 9b built the same day: registry charts are
   rendered from the cached archive once its digest matches. 9c built the same day: the
-  `sbom_declared_image_not_rendered` finding.
+  `sbom_declared_image_not_rendered` finding. 9d built the same day: the `chart` origin and the rendered rows;
+  no caller passes a build yet.
 
 - 2026-11-11: plan item 8 designed from the removed work doc `sbom-generation.md` (2026-11-07). The values-file
   finding there is resolved (`strata-values.yaml`). Rendering local charts is opt-in (`spec.sbom.render_charts`);

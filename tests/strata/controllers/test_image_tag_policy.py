@@ -2,6 +2,7 @@
 """Tests for `evaluate_image_tag_policy()` (docs/design/image-tag-policy.md, phase 2)."""
 
 import dataclasses
+import json
 from datetime import date
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from strata.integrations.resolved_context import EffectiveImage, UnknownImageMod
 from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Severity
-from strata.utils.sbom_utils import compose_image_ref, split_image_tag
+from strata.utils.sbom_utils import compose_image_ref, image_to_purl, split_image_tag
 
 _DIGEST = "sha256:" + "a" * 64
 
@@ -478,3 +479,91 @@ def test_a_declared_only_image_is_judged_and_says_so():
 def test_a_delivered_image_is_described_as_before():
     [item] = evaluate_image_tag_policy([_image(tag="latest")], _policy(), None).items
     assert "declared only" not in item.message
+
+
+# Images rendered charts run (docs/work/helm-image-delivery.md, plan item 9d).
+
+
+def _chart_row(name="whoami/shipper", tag="latest", *, via=("chart:apps/whoami/shipper",)) -> EffectiveImage:
+    return dataclasses.replace(_image(name, tag, origin="chart", source="chart", via=via), module="whoami")
+
+
+def test_a_chart_image_is_judged_and_the_fix_points_at_the_charts_values():
+    [item] = evaluate_image_tag_policy([_chart_row()], _policy(), None).items
+    assert item.code == "image_floating_tag"
+    assert item.message == (
+        "image_tag_policy: chart 'whoami/shipper' (registry/whoami/shipper; used by chart:apps/whoami/shipper) has "
+        "the floating tag 'latest'. Set the tag in the chart's values through the module's configuration, or pin a "
+        "chart version that ships the tag you want."
+    )
+
+
+@pytest.mark.parametrize("tag", ["1.2.3", None])
+def test_require_pin_does_not_apply_to_a_chart_image(tag):
+    policy = _policy(require_pin=True, require_tag=False)
+    assert evaluate_image_tag_policy([_chart_row(tag=tag)], policy, None).items == []
+
+
+def test_require_digest_names_the_charts_values_for_a_chart_image():
+    [item] = evaluate_image_tag_policy([_chart_row(tag="1.2.3")], _policy(require_digest=True), None).items
+    assert item.code == "image_without_digest"
+    assert item.message.endswith(
+        "Set the image as TAG@sha256:<hex> in the chart's values through the module's configuration."
+    )
+
+
+def test_allow_names_a_chart_image_by_reference_and_container():
+    policy = _policy(allow=[{"name": "whoami/shipper", "reason": "vendor sidecar"}])
+    assert evaluate_image_tag_policy([_chart_row()], policy, None).items == []
+
+
+def test_origins_without_chart_leaves_chart_images_out():
+    declared_only = _policy(origins=["artifact", "module-service"])
+    assert evaluate_image_tag_policy([_chart_row()], declared_only, None).items == []
+    assert _codes(evaluate_image_tag_policy([_chart_row()], _policy(origins=["chart"]), None)) == ["image_floating_tag"]
+
+
+def _sbom(build_path: Path, *components: dict) -> Path:
+    build_path.mkdir(parents=True, exist_ok=True)
+    (build_path / "sbom.json").write_text(json.dumps({"components": list(components)}), encoding="utf-8")
+    return build_path
+
+
+def _rendered_component(image: str, use: str) -> dict:
+    return {
+        "type": "container",
+        "name": use.rsplit("/", 1)[-1],
+        "purl": image_to_purl(image),
+        "properties": [
+            {"name": "strata:found-in", "value": "rendered-chart"},
+            {"name": "strata:used-by", "value": use},
+            {"name": "strata:image", "value": image},
+        ],
+    }
+
+
+def _check_with_build(root: Path, build_path: Path):
+    context = open_solution(root)
+    deployment, workspace = resolve_deployment_workspace(context, "app")
+    return check_image_tag_policy(context, deployment, workspace, build_path=build_path)
+
+
+def test_with_a_build_the_images_its_rendered_charts_run_are_judged(tmp_path):
+    root = _solution(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
+    shipper = _rendered_component("ghcr.io/acme/log-shipper:latest", "chart:apps/whoami/shipper")
+    [item] = _check_with_build(root, _sbom(tmp_path / "build", shipper)).items
+    assert item.code == "image_floating_tag"
+    assert item.message.startswith("image_tag_policy: chart 'whoami/shipper' (ghcr.io/acme/log-shipper;")
+
+
+def test_a_build_without_an_sbom_is_judged_on_the_solution_alone(tmp_path):
+    root = _solution(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
+    assert _check_with_build(root, tmp_path / "none").items == []
+
+
+def test_an_unreadable_sbom_is_a_warning_and_the_solution_is_still_judged(tmp_path):
+    build_path = tmp_path / "build"
+    build_path.mkdir()
+    (build_path / "sbom.json").write_text("{not json", encoding="utf-8")
+    diagnostics = _check_with_build(_solution(tmp_path), build_path)
+    assert _codes(diagnostics) == ["image_tag_policy_sbom_unreadable", "image_without_tag"]
