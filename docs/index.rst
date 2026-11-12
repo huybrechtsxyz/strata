@@ -23,6 +23,7 @@ strata-v2
    how-to/deployment-handover
    how-to/generate-per-instance-terraform-blocks
    how-to/migrate-v1-workspace-topology-provisioning
+   how-to/parameterised-deployment-bases
    how-to/sbom-generation
    how-to/script-provisioner
    how-to/security-gates
@@ -52,6 +53,7 @@ strata-v2
    config/version
    config/artifact
    config/asset
+   config/parameterset
    config/integration
 
 .. toctree::

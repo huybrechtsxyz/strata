@@ -754,7 +754,7 @@ What version 2 gives up:
 
 Phases. Each step is shippable on its own; tests are listed with the step that needs them.
 
-- [ ] **Phase 1, parameter sets and deployment bases.**
+- [x] **Phase 1, parameter sets and deployment bases.** Done 2026-11-13.
   - [x] 1a. **The `parameterset` kind.** `PlatformKind`, the model (`spec.values`: any YAML), its service in
         `SERVICE_BY_KIND`, the `${` ban with the `$${` escape allowed, schema export (`strata schema`), the config
         reference page. Harmless alone: nothing reads it yet. Tests: a valid set loads; `${var:x}` in a value is an
@@ -788,11 +788,11 @@ Phases. Each step is shippable on its own; tests are listed with the step that n
         under. Tests: the message of a bad reference in a base, and of a missing key; an unused key reported once per
         set, a key read by one of seven leaves not reported, `validate --strict` still passing. Done 2026-11-13, see
         the changelog.
-  - [ ] 1f. **Docs and decision.** An ADR: a new kind, and a token class substituted at load time next to the run-time
+  - [x] 1f. **Docs and decision.** An ADR: a new kind, and a token class substituted at load time next to the run-time
         tokens. The config reference (`kind: parameterset`, deployment `meta.params`, `meta.name_rule`). A how-to with
         a full dummy solution: a hub and two spokes, a customer project, the parameter sets, the bases and the leaves,
         file by file, and where each file lives. It shows one layout that works; strata does not prescribe one.
-        CHANGELOG "Added".
+        CHANGELOG "Added". Done 2026-11-13, see the changelog.
 - [ ] **Phase 2, one chain resolver for three kinds.** Lift the walk out of `deployment_resolution.py`. Add
       `extends`, `partial` and `meta.params` to `environment` and `tenant` with the merge tables above. Resolve in
       the order parameter sets, environments, tenants, deployments. Decide first between replacing resolved
@@ -950,3 +950,18 @@ Open questions:
     (`network.dns` beside a read `network.cidr`) is not reported. Revisit if that turns out to matter.
   - Still for phase 4: the origin of every merged field (which document wrote it), for findings on a merged leaf
     and the rendered view.
+- 2026-11-13: Step 1f built; phase 1 is done.
+  - [ADR-0061](../decisions/0061-parameter-sets-and-load-time-param-token.md): parameter sets named per role, and
+    `${param:}` as a load-time token class beside the run-time tokens. Status `accepted` (the design questions were
+    answered on 2026-11-12). Its consequences record the two open points below.
+  - Config reference: `meta.params` and `meta.name_rule` in `docs/config/deployment.md`, with a "Parameter sets"
+    section; `docs/config/parameterset.md` links the how-to and the ADR.
+  - How-to `docs/how-to/parameterised-deployment-bases.md`: two hubs, two spokes and a customer project, 20 files,
+    each shown with its path. `tests/strata/test_howto_parameter_sets.py` builds the solution from the page's own
+    code blocks and requires it to validate strictly with nothing unused, and checks the merged values the page
+    shows, so the page cannot drift. Providers are not templated in it: a binding equal to the slot's default is a
+    `provider_binding_redundant` warning, which `--strict` would fail on.
+  - `docs/index.rst`: the how-to, and `config/parameterset` (missing from the toctree since 1a).
+  - CHANGELOG "Added" under Unreleased.
+  - Open, for the user: (1) the exported JSON schema does not know templates (the editor may underline `${param:}`
+    in a typed field); (2) whether `${value:parameterset...}` should be forbidden.

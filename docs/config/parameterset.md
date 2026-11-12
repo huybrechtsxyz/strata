@@ -10,6 +10,10 @@ in one place, so the documents that use them can share one base.
 > steps of `base-parameters-v2.md` (work doc). The YAML editor's schema does not know templates
 > yet, so it may underline a token in a typed field that `strata validate` accepts.
 
+For a full, worked solution (two hubs, two spokes, a customer project), see
+[How To: Write one deployment base for many spokes](../how-to/parameterised-deployment-bases.md).
+The decision is [ADR-0061](../decisions/0061-parameter-sets-and-load-time-param-token.md).
+
 ## Schema
 
 - `spec.values` — required: a map of any YAML (scalars, lists and nested maps). Its shape is the

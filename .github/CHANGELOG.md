@@ -10,6 +10,21 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **Parameter sets: one deployment base for many spokes.** A new kind, `parameterset`, holds one instance's plain
+  values. A deployment names sets per role in `meta.params` (`params: { hub: hub-hub01, spoke: spoke-acme-001 }`),
+  and any document of its `extends` chain reads them with `${param:<role>.<key>}`, in any field of its spec,
+  reference fields included (`tenant`, `environments`). Values are filled in when the solution loads, and each
+  deployment is then validated as if written out in full (ADR-0061).
+  - Sets named along the chain merge per role, base first: a base's sets are defaults, the leaf's override them.
+  - `meta.name_rule` (`spoke-${param:spoke.name}`) checks each deployment's name against its values
+    (`name_rule_mismatch`).
+  - A problem is reported on the field you wrote, with the values that made it and the deployment it was resolved
+    for (`param_missing`, `param_not_scalar`, `unknown_reference`). A value nothing reads is information
+    (`param_unused`), so `validate --strict` still passes.
+  - Deployments only for now; environments and tenants follow. The YAML editor's schema does not know templates
+    yet and may underline a token in a typed field that `strata validate` accepts.
+  - `docs/how-to/parameterised-deployment-bases.md` walks through a full example.
+
 - **A full container image, `ghcr.io/huybrechtsxyz/strata:<version>-full`** (and `latest-full`): strata with
   OpenTofu, Helm 4, the Docker CLI with Compose, Trivy and Checkov, for a pipeline that runs Helm or Compose steps or the CVE and
   Checkov policies. The image you pull today is the slim variant: `strata:<version>` and `latest` are unchanged, and
