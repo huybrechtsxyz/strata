@@ -278,6 +278,11 @@ mechanism as `strata.integrations` (ADR-0021 D10).
 - Writing the SBOM without a manifest to reference it was a deliberate "write now, reference
   later" split. The deploy audit record now re-derives the reference (`audit_run._sbom_reference()`)
   from the file on disk, since build and deploy are separate invocations.
+- Every reader of `sbom.json` (image tag policy, image gate, audit record) shares one loader,
+  `utils/sbom_file.read_sbom()`: no file is `None`, a file that cannot be read or parsed is a
+  `ValueError`, and a missing `components` key (CycloneDX's empty SBOM) is an empty list. Each
+  reader decides what a bad file means: the gates follow their `on_missing_data`, and the audit
+  record warns (`audit_sbom_unreadable`) without failing, because the deploy has already run.
 - Image purls first put the registry in the name (`pkg:docker/ghcr.io/org/app@1.0`, v1's shape).
   2.3.3 moved it to the `repository_url` qualifier the purl spec defines, so scanners and
   Dependency-Track match images, and normalised Docker Hub spellings. `images_from_sbom()` reads
