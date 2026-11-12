@@ -307,6 +307,8 @@ def rendered_chart_images(context: SolutionContext, build_path: Path) -> list[Ef
         sbom = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"'{path}' is not valid JSON ({exc})") from None
+    except OSError as exc:
+        raise ValueError(f"'{path}' cannot be read ({exc})") from None
     components = sbom.get("components") if isinstance(sbom, dict) else None
     if not isinstance(components, list):
         raise ValueError(f"'{path}' has no components list")

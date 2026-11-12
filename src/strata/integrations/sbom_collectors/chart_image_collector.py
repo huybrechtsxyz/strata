@@ -43,7 +43,6 @@ _SOURCE = "sbom:chart-image"
 _FLOATING_PROPERTY = "strata:tag-stability"
 #: The pod spec lists whose entries carry an `image`, wherever a manifest embeds a pod spec.
 _CONTAINER_LISTS = ("containers", "initContainers", "ephemeralContainers")
-_SKIP_DIRS = frozenset({"node_modules", ".venv", "venv", "dist", "build", ".git", "__pycache__", "charts"})
 
 
 def rendered_images(text: str) -> list[tuple[str, str]]:
@@ -207,13 +206,14 @@ def _component(name: str, image: str, use: str, diagnostics: list[Diagnostic]) -
 
 
 def _chart_folders(build_path: Path) -> Iterator[tuple[Path, dict[str, Any]]]:
-    """`(folder, meta)` for each Helm module folder below `build_path` (a `meta.yaml` with a release name and a
-    namespace), sorted, skipping vendored folders (and a chart's own `charts/`) below the root only: the build path
-    itself is routinely named `build`."""
-    for meta_path in sorted(build_path.rglob("meta.yaml")):
+    """`(folder, meta)` for each Helm module folder of the build (a `meta.yaml` with a release name and a
+    namespace), sorted.
+
+    Only `build_path/NAMESPACE/REFERENCE/`, where `build_workload_modules()` places a module: the provisioner sources
+    and a chart's own `charts/` are never walked, and a namespace or reference may have any name.
+    """
+    for meta_path in sorted(build_path.glob("*/*/meta.yaml")):
         folder = meta_path.parent
-        if not _SKIP_DIRS.isdisjoint(folder.relative_to(build_path).parts):
-            continue
         try:
             meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
         except (OSError, yaml.YAMLError):

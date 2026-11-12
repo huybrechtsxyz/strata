@@ -103,40 +103,31 @@ def split_artifact_token_key(key: str) -> tuple[str, str | None]:
     return name, (field if dot and field else None)
 
 
+def _referenced_keys(node: object, token_kind: str) -> set[str]:
+    """Every ``${token_kind:KEY}`` token's ``KEY`` found anywhere in `node`: a recursive dict/list/str walk, the one
+    the `referenced_*_keys()` functions share."""
+    if isinstance(node, str):
+        return {key for kind, key in extract_value_tokens(node) if kind == token_kind}
+    keys: set[str] = set()
+    if isinstance(node, dict):
+        for value in node.values():
+            keys |= _referenced_keys(value, token_kind)
+    elif isinstance(node, list):
+        for item in node:
+            keys |= _referenced_keys(item, token_kind)
+    return keys
+
+
 def referenced_variable_keys(node: object) -> set[str]:
     """Every ``${var:KEY}`` token's ``KEY`` found anywhere in `node`, with the same walk as
     `referenced_output_keys()`."""
-    if isinstance(node, str):
-        return {key for kind, key in extract_value_tokens(node) if kind == "var"}
-    if isinstance(node, dict):
-        keys: set[str] = set()
-        for value in node.values():
-            keys |= referenced_variable_keys(value)
-        return keys
-    if isinstance(node, list):
-        keys = set()
-        for item in node:
-            keys |= referenced_variable_keys(item)
-        return keys
-    return set()
+    return _referenced_keys(node, "var")
 
 
 def referenced_artifact_keys(node: object) -> set[str]:
     """Every ``${artifact:NAME.FIELD}`` token's ``"NAME.FIELD"`` found anywhere in `node`, with the same walk as
     `referenced_output_keys()`."""
-    if isinstance(node, str):
-        return {key for kind, key in extract_value_tokens(node) if kind == _ARTIFACT_PREFIX}
-    if isinstance(node, dict):
-        keys: set[str] = set()
-        for value in node.values():
-            keys |= referenced_artifact_keys(value)
-        return keys
-    if isinstance(node, list):
-        keys = set()
-        for item in node:
-            keys |= referenced_artifact_keys(item)
-        return keys
-    return set()
+    return _referenced_keys(node, _ARTIFACT_PREFIX)
 
 
 def _deployment_key(key: str) -> str:
@@ -313,38 +304,14 @@ def referenced_output_keys(node: object) -> set[str]:
     Phase 1 schema validation, so anything reaching this point is either
     well-formed or belongs to a document that never validated.
     """
-    if isinstance(node, str):
-        return {key for kind, key in extract_value_tokens(node) if kind == "output"}
-    if isinstance(node, dict):
-        keys: set[str] = set()
-        for value in node.values():
-            keys |= referenced_output_keys(value)
-        return keys
-    if isinstance(node, list):
-        keys = set()
-        for item in node:
-            keys |= referenced_output_keys(item)
-        return keys
-    return set()
+    return _referenced_keys(node, "output")
 
 
 def referenced_secret_keys(node: object) -> set[str]:
     """Return every ``${secret:KEY}`` token's ``KEY`` found anywhere in `node`, with the same walk as
     `referenced_output_keys()`. Used to record which secrets a step's real input uses
     (docs/design/deployment-documentation.md, section 1)."""
-    if isinstance(node, str):
-        return {key for kind, key in extract_value_tokens(node) if kind == "secret"}
-    if isinstance(node, dict):
-        keys: set[str] = set()
-        for value in node.values():
-            keys |= referenced_secret_keys(value)
-        return keys
-    if isinstance(node, list):
-        keys = set()
-        for item in node:
-            keys |= referenced_secret_keys(item)
-        return keys
-    return set()
+    return _referenced_keys(node, "secret")
 
 
 def validate_cidr_or_token(value: str) -> None:

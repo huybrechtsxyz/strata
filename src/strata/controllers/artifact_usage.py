@@ -44,10 +44,13 @@ def used_artifacts(context: SolutionContext) -> set[str] | None:
 
 def unused_artifacts(context: SolutionContext) -> list[str]:
     """The artifacts no deployment uses, sorted; empty when that cannot be told (`used_artifacts()` is `None`)."""
+    artifacts = set(context.controller.index.names_of(PlatformKind.ARTIFACT))
+    if not artifacts:
+        return []  # nothing to report, so no deployment needs resolving
     used = used_artifacts(context)
     if used is None:
         return []
-    return sorted(set(context.controller.index.names_of(PlatformKind.ARTIFACT)) - used)
+    return sorted(artifacts - used)
 
 
 def check_unused_artifacts(context: SolutionContext) -> Diagnostics:
