@@ -61,7 +61,9 @@ parameters.
 - `spec.sbom` — what `build run` adds to `sbom.json`: `render_charts: true` renders every Helm chart, local
   or pinned from a registry, with `helm template` and lists the images it deploys, so the CVE and image gates and
   `image_tag_policy` check them (see
-  [how-to/sbom-generation.md](../how-to/sbom-generation.md#helm-images))
+  [how-to/sbom-generation.md](../how-to/sbom-generation.md#helm-images)). Off by default today; it becomes the
+  default in the next minor release, and until then `build run` warns when it is not set and the change would
+  matter (`sbom_render_charts_default_changing`). Set it to `true` or `false` to choose.
 - `spec.provisioner_lock_policy` — fail `build run` when a Terraform or OpenTofu provisioner has no
   `.terraform.lock.hcl`, or one that does not lock every provider it declares (see "Provisioner lock policy"
   below)

@@ -31,6 +31,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     not vendored under `charts/`, or a registry chart that is not pinned or whose cached archive changed.
   - Turning it on adds those images to `cve_policy`, `image_gate_policy` and `image_tag_policy`, so a `deny` gate
     can fail on an image it never saw before.
+- **`sbom.render_charts` will default to `true` in the next minor release.** Until then `build run` warns
+  (`sbom_render_charts_default_changing`) when the workspace does not set it, has a Helm module, and has a policy
+  that would check the rendered images: `cve_policy`, `image_gate_policy`, or `image_tag_policy` covering the
+  `chart` origin. Set `render_charts: true` to adopt it now, or `false` to keep today's SBOM; either silences it.
+  `strata validate` does not warn, so `--strict` is unaffected.
 - **`image_tag_policy` judges the images rendered charts run**, with `sbom.render_charts`, read from the build's
   `sbom.json` by `build run`, `deploy run` and `policy check`. `strata deploy images` reads no build and is
   unchanged.

@@ -1,6 +1,6 @@
 # Helm module images - Work
 
-- Status: option B and plan item 8 built (2026-11-11), plan item 9 built (2026-11-12); not released. Plan item 10 designed (2026-11-12)
+- Status: option B and plan item 8 built (2026-11-11), plan item 9 built (2026-11-12); not released. Plan item 10 designed, 10a built (2026-11-12)
 - Last updated: 2026-11-12
 
 ## Overview
@@ -817,9 +817,12 @@ upgrade, there through a new warning under `validate --strict`, here through a g
     row in `image-tag-policy.md`, and the SBOM design's collector row, which still said local charts only. No
     CHANGELOG "Fixed" for the relative `--build-path`: `render_charts` is not released yet.
 - [ ] 10. `render_charts` on by default, in two releases (design "`render_charts` by default" above).
-  - [ ] 10a. The notice: `sbom_render_charts_default_changing` from `write_sbom()` when `render_charts` is unset,
+  - [x] 10a. The notice: `sbom_render_charts_default_changing` from `write_sbom()` when `render_charts` is unset,
     the build has a Helm module and a policy that would read rendered images; the three stale descriptions; the
-    SBOM how-to and `workspace.md`; CHANGELOG "Added". Can ship with item 9.
+    SBOM how-to and `workspace.md`; CHANGELOG "Added". Can ship with item 9. Built 2026-11-12:
+    `_render_charts_default_notice()` in `sbom_controller.py`, called once at the start of `write_sbom()`, so a dry
+    run, which writes no SBOM, never warns. The Helm modules are counted by name over `_resolve_all_modules()`,
+    enabled references only. The schema description of `render_charts` says the default will change.
   - [ ] 10b. The next minor release after 10a: default `true`, the notice removed, fixtures and examples, the
     docs that say opt-in, CHANGELOG "Changed".
 
@@ -880,7 +883,8 @@ upgrade, there through a new warning under `validate --strict`, here through a g
   dogfood build found that `helm template` got relative paths while running in the chart's folder, so a
   relative `--build-path` rendered no chart (fixed in `HelmIntegration.template()`). 9f built the same day. 9g
   the same day: the user docs and the CHANGELOG; item 9 is done. Item 10 designed the same day: a notice in one
-  release, the flip in the next; the 2.3.2 lesson put the notice in `build run`, not `validate`.
+  release, the flip in the next; the 2.3.2 lesson put the notice in `build run`, not `validate`. 10a built the
+  same day.
 
 - 2026-11-11: plan item 8 designed from the removed work doc `sbom-generation.md` (2026-11-07). The values-file
   finding there is resolved (`strata-values.yaml`). Rendering local charts is opt-in (`spec.sbom.render_charts`);

@@ -25,6 +25,7 @@ from strata.models.sbom_model import (
     CveMaxSeverityPolicyModel,
 )
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
+from strata.utils.diagnostics import Severity
 
 
 def _module(name: str, *, services: list[ModuleServiceModel] | None = None) -> ModuleModel:
@@ -969,3 +970,66 @@ def test_write_sbom_reports_a_declared_image_the_rendered_chart_does_not_run(tmp
     data = json.loads((tmp_path / "sbom.json").read_text(encoding="utf-8"))
     server = next(c for c in data["components"] if c["name"] == "server")
     assert {"name": "strata:image-delivery", "value": "helm module: not in the rendered chart"} in server["properties"]
+
+
+# `sbom.render_charts` will default to true (docs/work/helm-image-delivery.md, plan item 10a).
+
+
+def _notice_graph(spec: dict) -> ResolvedWorkspaceGraph:
+    workspace = WorkspaceModel(
+        meta=WorkspaceMetaModel(name="ws"),
+        spec=WorkspaceSpecModel.model_validate(
+            {
+                "providers": ["p"],
+                "provisioners": [{"name": "prov", "tool": "terraform", "source": {"source_path": "infra"}}],
+            }
+            | spec
+        ),
+    )
+    namespace = _namespace(ModuleReferenceModel(name="web", module="web"), ModuleReferenceModel(name="db", module="db"))
+    return ResolvedWorkspaceGraph(workspace=workspace, namespaces={"apps": namespace})
+
+
+def _helm_module(name: str) -> ModuleModel:
+    module = _module(name)
+    return module.model_copy(update={"spec": module.spec.model_copy(update={"type": "helm"})})
+
+
+def _notices(tmp_path: Path, spec: dict, *, helm: bool = True) -> list:
+    web = _helm_module("web") if helm else _module("web")
+    diagnostics = write_sbom(tmp_path, _notice_graph(spec), _index(web, _module("db")))
+    return [d for d in diagnostics.items if d.code == "sbom_render_charts_default_changing"]
+
+
+def test_the_default_change_is_announced_for_a_helm_module_and_a_policy_that_would_read_it(tmp_path: Path):
+    [notice] = _notices(tmp_path, {"cve_policy": {"max_severity": "HIGH"}})
+    assert notice.severity == Severity.WARNING
+    assert notice.message == (
+        "Workspace 'ws': sbom.render_charts will default to true in the next minor release, so cve_policy will also "
+        "check the images your Helm charts run (1 Helm module). Set sbom.render_charts: true to adopt it now, or "
+        "false to keep today's SBOM."
+    )
+
+
+def test_the_announcement_names_only_the_policies_the_workspace_configures(tmp_path: Path):
+    [notice] = _notices(tmp_path, {"cve_policy": {"max_severity": "HIGH"}, "image_tag_policy": {}})
+    assert "so cve_policy and image_tag_policy will also check" in notice.message
+
+
+@pytest.mark.parametrize("render_charts", [True, False])
+def test_no_announcement_once_render_charts_is_set_either_way(tmp_path: Path, render_charts: bool):
+    spec = {"cve_policy": {"max_severity": "HIGH"}, "sbom": {"render_charts": render_charts}}
+    assert _notices(tmp_path, spec) == []
+
+
+def test_an_sbom_section_without_render_charts_still_counts_as_not_set(tmp_path: Path):
+    assert len(_notices(tmp_path, {"image_tag_policy": {}, "sbom": {}})) == 1
+
+
+def test_no_announcement_without_a_helm_module(tmp_path: Path):
+    assert _notices(tmp_path, {"cve_policy": {"max_severity": "HIGH"}}, helm=False) == []
+
+
+def test_no_announcement_without_a_policy_that_would_read_rendered_images(tmp_path: Path):
+    assert _notices(tmp_path, {}) == []
+    assert _notices(tmp_path, {"image_tag_policy": {"origins": ["artifact", "module-service"]}}) == []
