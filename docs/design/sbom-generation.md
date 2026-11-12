@@ -156,7 +156,7 @@ service image may not be what runs.
   - The CVE gate does not read it: the scanners scan every component.
 - **Rendered charts.** The `chart-image` collector runs unless the workspace sets `spec.sbom.render_charts:
   false`. It was opt-in while it was built, because the images it adds reach the gates; since plan item 10b of
-  docs/work/helm-image-delivery.md it is the default, so the gates check what runs.
+  docs/design/helm-image-delivery.md it is the default, so the gates check what runs.
   - It runs `HelmIntegration.template()` in an isolated Helm configuration, with no `--dependency-update`. The
     rendered text stays in memory, and strata's values file holds tokens, never a secret value.
   - Each image gets `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<reference>/<container>`

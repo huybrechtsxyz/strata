@@ -399,5 +399,5 @@ Organized by how much changes, smallest first.
   scope), so every field a `kind: version` pin overrides is now rejected instead
   (`value_reference_pinnable_field`).
 - 2026-11-10: an artifact's `image_name` is rejected as well, and both artifact fields point to
-  `${artifact:NAME.FIELD}` (docs/work/artifact-gap-analysis.md, design 3).
+  `${artifact:NAME.FIELD}` (docs/archive/artifact-gap-analysis.md, design 3).
 

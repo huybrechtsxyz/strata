@@ -339,7 +339,7 @@ wants the answer before it clones and renders runs `strata deploy images` or `st
 The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
 module, strata does not write a service's `image` into the chart's values, so the chart decides what runs. Set a
 Helm image through the module's `configuration`, in the chart's own key shape. See
-`helm-image-delivery.md` (work doc).
+[helm-image-delivery.md](../design/helm-image-delivery.md).
 
 - **With [`sbom.render_charts`](../how-to/sbom-generation.md#helm-images)**, on by default, the policy also judges every image the
   rendered charts run, sidecars and init containers included, read from the build's `sbom.json`. That is origin

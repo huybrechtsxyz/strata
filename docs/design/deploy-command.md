@@ -136,11 +136,71 @@ Read directly from `.github/workflows/*.yml` in both reference repos
   / `docker_context` pins every Helm / Compose step to that context,
   checked once per tool before the first step, through the
   integration's own `TARGET_CONTEXT_FIELD`, `target_context_env()` and
-  `target_context_problem()` (docs/work/compose-docker-context.md), so
+  `target_context_problem()` (see "Docker context pin" below), so
   the orchestrator still names no tool. `ComposeIntegration.deploy_namespace()` resolves the
   namespace's already-merged compose file and does one `docker stack
   deploy` for the whole namespace. The orchestrator dispatches purely on
   `integration.CAPABILITIES` — never a tool-name string comparison.
+
+### Docker context pin
+
+A Compose step deploys a Swarm stack to whatever Docker engine the
+caller's environment points at: `DOCKER_HOST`, else `DOCKER_CONTEXT`,
+else the context chosen with `docker context use`. Without a pin, a
+production `deploy run` with the wrong context active deploys to a
+development swarm, and a `deploy destroy` removes a stack from the wrong
+one. `docker_context` is the Compose counterpart of Helm's
+`kube_context` ([helm-chart-deployment.md](helm-chart-deployment.md)).
+
+```yaml
+kind: deployment
+meta:
+  name: hearth-prd
+spec:
+  extends: hearth-base
+  environments: [prd]
+  docker_context: hearth-prd
+```
+
+- **The field.** `DeploymentSpecModel.docker_context: str | None` names a
+  Docker context the caller created (`docker context create hearth-prd
+  --docker host=ssh://deploy@hearth`). It merges through `extends`, and
+  is a literal: a `${...}` token is a schema error, as for
+  `kube_context`. The two fields are independent; a deployment with Helm
+  and Compose steps sets both. `docker_context: default` is the local
+  engine.
+- **Pinning.** `ComposeIntegration.target_context_env()` adds
+  `DOCKER_CONTEXT=<docker_context>` to the env of every Compose step, so
+  `docker stack deploy`, `stack config` (dry-run), `stack rm` and
+  `stack services` (destroy and its preview) all use that context.
+- **The pre-flight check.** `deploy_run()` checks each distinct tool
+  with a target context once, before the first step of `deploy run`,
+  `plan`, `apply` and `destroy`, `--dry-run` included. Compose's
+  `target_context_problem()` stops the run with:
+
+  | Code                              | When                                                                                       |
+  | --------------------------------- | ------------------------------------------------------------------------------------------ |
+  | `compose_docker_context_conflict` | the caller sets `DOCKER_HOST`, or sets `DOCKER_CONTEXT` to another context                 |
+  | `compose_docker_context_missing`  | `docker context inspect <docker_context>` fails; the message lists `docker context ls`     |
+
+  `docker context inspect` reads only the local context store (it
+  honours `DOCKER_CONFIG`) and contacts no engine. `--smoke-test` runs
+  no tool and only says it would check the context. Each Compose step
+  prints the context it uses.
+- **When unset.** Nothing changes at deploy. `strata validate` warns
+  `compose_docker_context_unset` on a deployment that is not a partial
+  base and runs a Compose step (a provisioner whose tool, or named
+  integration, is `compose`). It stays a warning, not an error, because
+  deploying without a context worked before the field existed.
+- **One mechanism for both tools.** `InfraIntegration.TARGET_CONTEXT_FIELD`
+  (`kube_context`, `docker_context`, `None` for every other tool),
+  `target_context_env()` and `target_context_problem()` carry the
+  tool-specific parts; `deploy_run()` and the validate warning
+  (`<integration type>_<field>_unset`) read only those.
+- **What strata never does.** Set `DOCKER_HOST`, create or switch a
+  Docker context, or give a Terraform step `DOCKER_CONTEXT` (a Terraform
+  Docker provider has its own `host`). The caller provides the
+  connection ([ADR-0020](../decisions/0020-v1-consumer-feature-priority.md)).
 
 ### Orchestrator shape
 
@@ -434,3 +494,20 @@ subcommand.
   other-subcommands survey remains real, tracked, unimplemented work,
   kept in this doc's own Remaining Work section rather than scattered
   across separate files.
+- Docker context pin: `DOCKER_HOST` silently overrides `DOCKER_CONTEXT`
+  (probed against Docker CLI 28.3.2, as are the rest of these findings),
+  so a pin through the environment holds only without it. Passing
+  `--context` on every command would win over `DOCKER_HOST`, but was
+  rejected: a caller who set `DOCKER_HOST` meant an engine, quietly
+  deploying elsewhere is the confusion the pin guards against, and the
+  env variable keeps the argv shapes and matches Helm's
+  `HELM_KUBECONTEXT`. So a set `DOCKER_HOST` is an error.
+- The Docker context check asks Docker (`docker context inspect`)
+  rather than reading the context store, which is a directory of hashed
+  folders; Docker's own answer covers `DOCKER_CONFIG` for free. It runs
+  on `--dry-run` too because `docker stack config` never resolves the
+  context: without the check a dry-run against a missing context passes
+  and only the real deploy fails.
+- A `${...}` token in `kube_context` or `docker_context` became a schema
+  error rather than a semantic `*_token` code: a literal-only rule needs
+  no cross-document check.

@@ -37,8 +37,10 @@ from either a Helm chart or a Compose-style service list, sourced from a remote.
     writes no image into a chart's values, so the chart decides, while `strata deploy images`, the SBOM
     and `image_tag_policy` judge what is declared (`deploy images` marks it `DELIVERED no`, and a Helm
     module that declares no image is listed as known only to Helm). To make a Helm service's artifact the image that
-    runs, write it in the chart's own keys with an `${artifact:NAME.FIELD}` token in `configuration`;
-    a Helm service that names an `artifact` with no such token gets the warning `artifact_not_delivered`
+    runs, write it in the chart's own keys with an `${artifact:NAME.FIELD}` token in the module's or a
+    service's `configuration`; a Helm service that names an `artifact` with no such token gets the warning
+    `artifact_not_delivered`, and `deploy images` shows it `DELIVERED no`. A token in `environment` does
+    not count: it sets an environment variable, not the image the chart runs
   - `environment[]` — each `{key, value}`; `value` is a literal or a
     `${var:}`/`${secret:}`/`${feature:}` token
   - `mounts[]` — bind mounts, Docker named volumes (`volume_ref`), or Kubernetes PVCs

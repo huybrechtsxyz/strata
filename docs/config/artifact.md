@@ -84,7 +84,9 @@ spec:
 
 - For a Helm module this is how an artifact becomes the image that runs: strata writes no image into a chart's
   values, so a service's `artifact` alone is only declared (`strata validate` warns, `artifact_not_delivered`).
-  Use the chart's own keys, as above; for a Compose module the service's `artifact` is enough.
+  Use the chart's own keys, as above (the module's or a service's `configuration`); a token in a service's
+  `environment` only sets an environment variable, so `strata validate` and `deploy images` both call the artifact
+  not delivered. For a Compose module the service's `artifact` is enough.
 - It resolves at deploy, in every field a `${var:}` token resolves in: a Terraform payload or backend, Helm values,
   a Compose file, a script's arguments. `--pin NAME` on `deploy run` picks the version, as for every other pin.
 - `${artifact:NAME.image_tag}` on an artifact with no `image_tag` and no pin for the deployment is an error
