@@ -10,11 +10,21 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
-- **A full container image, `ghcr.io/huybrechtsxyz/strata:<version>-full`** (and `latest-full`): strata with Helm 4,
-  the Docker CLI with Compose, Trivy and Checkov, for a pipeline that runs Helm or Compose steps or the CVE and
+- **A full container image, `ghcr.io/huybrechtsxyz/strata:<version>-full`** (and `latest-full`): strata with
+  OpenTofu, Helm 4, the Docker CLI with Compose, Trivy and Checkov, for a pipeline that runs Helm or Compose steps or the CVE and
   Checkov policies. The image you pull today is the slim variant: `strata:<version>` and `latest` are unchanged, and
   are also tagged `-slim` and `latest-slim`. Neither variant has Terraform, whose licence is not settled for a public
   image; extend either one with your own (`docs/design/cli-image.md`).
+- **OpenTofu: `tool: opentofu`** runs a root module with `tofu` (OpenTofu 1.6 or later), with everything a
+  `tool: terraform` step has: the `backend`, the `strata` payload and `TF_VAR_` values, saved plans, destroy,
+  outputs, the lock policy, the SBOM and the Checkov policy. Bind a `type: opentofu` integration to pin its version.
+  - The lock policy and the SBOM read a short provider source as `registry.opentofu.org` when `tofu init` locked it
+    so, and the lock policy says `tofu init`.
+  - `strata validate` errors when a Terraform or OpenTofu provisioner binds an integration of the other type
+    (`provisioner_integration_type_mismatch`), or when a `terraform` integration's `spec.command` runs `tofu` or
+    the reverse (`integration_command_other_tool`). Running `tofu` through `type: terraform` worked by accident,
+    with Terraform's version check and registry; switch it to `tool: opentofu` and `type: opentofu`.
+  - `docs/config/workspace.md` has the migration steps from Terraform.
 - **`strata deploy steps DEPLOYMENT`** lists the execution steps `deploy run` would run, in its order, for a
   pipeline to plan its jobs. It runs nothing and needs no build or credentials.
   - Each step has its `scope`, `order`, `level` (steps on one level do not depend on each other), `depends_on`,

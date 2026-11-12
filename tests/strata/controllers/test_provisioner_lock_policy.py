@@ -85,9 +85,37 @@ def test_an_incomplete_lock_file_is_the_same_finding(tmp_path: Path):
 
 
 def test_a_provider_from_another_registry_keeps_its_host(tmp_path: Path):
-    tofu = 'terraform {\n  required_providers {\n    null = {\n      source = "registry.opentofu.org/hashicorp/null"\n    }\n  }\n}\n'
-    paths = {"infra": _root(tmp_path / "infra", tofu)}
-    assert "(provider registry.opentofu.org/hashicorp/null)" in _evaluate(paths).errors[0].message
+    acme = 'terraform {\n  required_providers {\n    thing = {\n      source = "registry.example.com/acme/thing"\n    }\n  }\n}\n'
+    paths = {"infra": _root(tmp_path / "infra", acme)}
+    assert "(provider registry.example.com/acme/thing)" in _evaluate(paths).errors[0].message
+
+
+def _tofu_lock(*addresses: str) -> str:
+    return "\n".join(f'provider "registry.opentofu.org/{a}" {{\n  version = "1.0.0"\n}}\n' for a in addresses)
+
+
+def test_an_opentofu_root_locked_by_tofu_init_passes(tmp_path: Path):
+    """`tofu init` keys a short source by `registry.opentofu.org`; reading it as `registry.terraform.io` would call
+    every provider of a correctly locked OpenTofu root unlocked, and fail `build run` under `deny` (design: opentofu)."""
+    paths = {"infra": _root(tmp_path / "infra", _AZURERM, lock=_tofu_lock("hashicorp/azurerm"))}
+    assert _evaluate(paths, tools={"infra": "opentofu"}).items == []
+
+
+def test_an_opentofu_root_tells_the_user_to_run_tofu_init(tmp_path: Path):
+    paths = {"infra": _root(tmp_path / "infra", _AZURERM, _RANDOM, lock=_tofu_lock("hashicorp/azurerm"))}
+
+    diagnostics = _evaluate(paths, tools={"infra": "opentofu"})
+
+    assert diagnostics.errors[0].message == (
+        "provisioner_lock_policy: provisioner 'infra': .terraform.lock.hcl does not lock hashicorp/random. "
+        "Run tofu init and commit the updated lock file."
+    )
+
+
+def test_a_lock_file_decides_the_host_whatever_the_tool_says(tmp_path: Path):
+    """A root still locked by `terraform init` under `tool: opentofu` (mid-migration) is locked, not missing."""
+    paths = {"infra": _root(tmp_path / "infra", _AZURERM, lock=_lock("hashicorp/azurerm"))}
+    assert _evaluate(paths, tools={"infra": "opentofu"}).items == []
 
 
 def test_a_root_that_needs_no_providers_passes(tmp_path: Path):

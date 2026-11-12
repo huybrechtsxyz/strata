@@ -38,6 +38,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "azure-appconfig": ("strata.integrations.azure_appconfig_resolver", "AzureAppConfigResolver"),
     "azure-blob": ("strata.integrations.azure_blob_keyvalue_store", "AzureBlobKeyValueStore"),
     "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
+    "opentofu": ("strata.integrations.terraform", "OpenTofuIntegration"),
     "compose": ("strata.integrations.compose", "ComposeIntegration"),
     "helm": ("strata.integrations.helm", "HelmIntegration"),
     "script": ("strata.integrations.script", "ScriptIntegration"),
@@ -51,7 +52,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "trivy": ("strata.integrations.cve_scanner", "TrivyIntegration"),
     "grype": ("strata.integrations.cve_scanner", "GrypeIntegration"),
     "checkov": ("strata.integrations.checkov", "CheckovIntegration"),
-    # ansible/git/bicep/opentofu/vault/consul/etcd/bitwarden/flagsmith/cost/
+    # ansible/git/bicep/vault/consul/etcd/bitwarden/flagsmith/cost/
     # cve/splunk/syslog/identity as each gets a real v2 consumer (ADR-0021
     # Phase 7+).
 }
@@ -60,7 +61,6 @@ _KNOWN: dict[str, tuple[str, str]] = {
 #: type) reads differently from "not real" (a typo) in `get()`'s error.
 _KNOWN_V1_TYPES = frozenset(
     {
-        "opentofu",
         "ansible",
         "bicep",
         "vault",

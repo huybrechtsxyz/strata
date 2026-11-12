@@ -126,6 +126,35 @@ it was resolved for.
   `environments: [solution-env, 'hub-${param:spoke.hub}-env']`. In block style no quotes are
   needed.
 
+### Names follow the values: `meta.name_rule`
+
+A deployment's `meta.name` is never filled in from a parameter set: names stay plain text, so
+every tool that finds a deployment by name keeps working. A base can still keep names from
+drifting away from their values with `meta.name_rule`:
+
+```yaml
+kind: deployment
+meta:
+  name: bootstrap_deployment_base
+  name_rule: bootstrap-${param:spoke.name}
+spec:
+  partial: true
+  # ...
+```
+
+Every deployable deployment built on this base, at any depth, must then be named as the rule
+says once its values are filled in: the leaf that names `spoke-acme-001` (`name: acme-001`) must
+be `bootstrap-acme-001`. Any other name is a `name_rule_mismatch` on the leaf, with both names:
+
+```text
+Deployment 'bootstrap-acme' must be named 'bootstrap-acme-001' by the name_rule of
+'bootstrap_deployment_base' ('bootstrap-${param:spoke.name}').
+```
+
+- Any document of the chain may have a rule, the leaf included; each one applies.
+- A rule holds only `${param:}` tokens: run-time tokens have no value when names are checked.
+- A partial base is not held to a rule; only the deployments that can run are.
+
 ## Validation
 
 - A `${...}` token in a key or value of `spec.values` is a load error (`value_error`)
@@ -144,6 +173,9 @@ it was resolved for.
   A name a template writes literally (`workspace: main`) is checked the same way, once per
   deployment that uses the template
 - A malformed token in a template (`${param:}`) is a load error
+- A deployable deployment whose name differs from a `name_rule` of its chain is
+  `name_rule_mismatch`; a rule that reads a missing key is `param_missing` on the rule's document;
+  any token other than `${param:}` in a rule is a load error
 - `${param:}` in `meta`, `spec.extends` or `spec.partial` is a load error
 - A `${param:}` in a document of another kind (an environment, a workspace, a module, ...) is not
   substituted, and the token check reports it as a `malformed_value_token`

@@ -11,8 +11,9 @@ real integration (Infisical, Azure Key Vault, Azure App Configuration).
 
 ## Schema
 
-- `spec.type` — the specific tool/service (`terraform`, `vault`, `azure-keyvault`, `bitwarden`,
-  `git`, or a custom plugin name) — an open string, not a closed enum
+- `spec.type` — the specific tool/service (`terraform`, `opentofu`, `vault`, `azure-keyvault`, `bitwarden`,
+  `git`, or a custom plugin name) — an open string, not a closed enum. `terraform` and `opentofu` are two types:
+  a provisioner binds the one its `tool` names (see [workspace.md](workspace.md#opentofu))
 - `spec.capabilities` — what this integration provides: `variables`, `secrets`, `features`,
   `infrastructure`, `container`, `sources`, or an `x-`-prefixed extension strata doesn't dispatch on.
   `sources` is what a remote in `strata.yaml` or an asset's `spec.location` needs from its

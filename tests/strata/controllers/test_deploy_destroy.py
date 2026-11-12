@@ -1104,11 +1104,24 @@ def test_a_failure_to_clear_the_record_is_a_warning_not_a_failed_destroy(tmp_pat
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(shutil.which("terraform") is None, reason="terraform not on PATH")
-def test_a_real_terraform_destroy_removes_what_deploy_run_created(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("tool", "binary"),
+    [
+        pytest.param(
+            "terraform",
+            "terraform",
+            marks=pytest.mark.skipif(shutil.which("terraform") is None, reason="terraform not on PATH"),
+        ),
+        # OpenTofu runs the same contract (ADR-0060): the same steps, through `tofu`.
+        pytest.param(
+            "opentofu", "tofu", marks=pytest.mark.skipif(shutil.which("tofu") is None, reason="tofu not on PATH")
+        ),
+    ],
+)
+def test_a_real_terraform_destroy_removes_what_deploy_run_created(tmp_path: Path, tool: str, binary: str):
     root = _solution(
         tmp_path,
-        provisioners="    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n",
+        provisioners=f"    - name: tf_main\n      tool: {tool}\n      source:\n        source_path: infra\n",
         execution="    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n",
         files={
             "infra/main.tf": (
@@ -1121,9 +1134,7 @@ def test_a_real_terraform_destroy_removes_what_deploy_run_created(tmp_path: Path
     step_dir = build_path / "infra"
 
     def _state() -> list[str]:
-        result = subprocess.run(
-            ["terraform", "state", "list"], cwd=step_dir, capture_output=True, text=True, check=False
-        )
+        result = subprocess.run([binary, "state", "list"], cwd=step_dir, capture_output=True, text=True, check=False)
         return [line for line in result.stdout.splitlines() if line.strip()]
 
     applied = deploy_run(_context(root), "app", build_path, force=True)

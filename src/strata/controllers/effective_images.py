@@ -261,7 +261,7 @@ def _received_variable_keys(context: SolutionContext, workspace: WorkspaceModel 
     """Which of `keys` an execution step receives without a `${var:KEY}` token (docs/archive/artifact-gap-analysis.md,
     design 7), with `step_secret_keys()`'s rules for secrets:
 
-    - a tool that takes the strata payload (`ENV_VAR_PREFIX`: Terraform, and OpenTofu once ported): every variable,
+    - a tool that takes the strata payload (`ENV_VAR_PREFIX`: Terraform and OpenTofu): every variable,
       through `strata.variables` and `TF_VAR_<key>`. The root module is not read, so a variable it does not declare
       still counts;
     - a script without `script.values`: every variable (`STRATA_VALUES`); with it, the keys it lists;

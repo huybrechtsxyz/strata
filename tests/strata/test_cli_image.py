@@ -68,22 +68,21 @@ def test_every_variant_has_the_tools_strata_itself_calls(variant):
 
 
 def test_the_full_variant_has_the_pipeline_tools():
-    assert {"helm", "docker", "docker-compose", "trivy", "checkov"} <= _copied_tools(_variant("full"))
+    assert {"tofu", "helm", "docker", "docker-compose", "trivy", "checkov"} <= _copied_tools(_variant("full"))
 
 
-@pytest.mark.parametrize("tool", ["helm", "docker", "docker-compose", "trivy", "checkov", "grype", "kubectl"])
+@pytest.mark.parametrize("tool", ["tofu", "helm", "docker", "docker-compose", "trivy", "checkov", "grype", "kubectl"])
 def test_the_slim_variant_leaves_pipeline_tools_out(tool):
     slim = _variant("slim")
     assert tool not in _apt_packages(slim) | _copied_tools(slim)
 
 
 @pytest.mark.parametrize("variant", ["slim", "full"])
-@pytest.mark.parametrize("tool", ["terraform", "tofu"])
-def test_no_variant_ships_terraform_or_opentofu(variant, tool):
-    """Terraform's BSL licence is not settled for a public image; strata does not run OpenTofu yet."""
+def test_no_variant_ships_terraform(variant):
+    """Terraform's BSL licence is not settled for a public image; the full image ships OpenTofu instead (ADR-0060)."""
     text = " ".join(_variant(variant)).lower()
-    assert tool not in _apt_packages(_variant(variant)) | _copied_tools(_variant(variant))
-    assert f"/{tool}" not in text and f"{tool}_" not in text
+    assert "terraform" not in _apt_packages(_variant(variant)) | _copied_tools(_variant(variant))
+    assert "/terraform" not in text and "terraform_" not in text and "hashicorp/terraform" not in text
 
 
 def test_the_default_target_is_slim():

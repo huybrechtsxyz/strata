@@ -340,10 +340,51 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
                 location=location,
                 code="unknown_reference",
             )
+        diagnostics.extend(_check_name_rules(index, entry, chain, params, param_sets))
 
         resolved[name] = ResolvedDeployment(model=merged_model, params=params, param_sets=param_sets, chain=chain)
 
     return resolved, diagnostics
+
+
+def _check_name_rules(
+    index: DocumentIndex,
+    entry: IndexEntry,
+    chain: tuple[str, ...],
+    params: dict[str, dict[str, Any]],
+    param_sets: ParamSets,
+) -> Diagnostics:
+    """Rule 10: the deployable `entry` has exactly the name each `meta.name_rule` of its chain gives once filled in.
+
+    The leaf's own rule counts too. A mismatch is reported on the leaf, which is what gets renamed; a rule whose
+    `${param:}` cannot be filled is `param_missing` on the document that holds the rule.
+    """
+    diagnostics = Diagnostics()
+    name = entry.ref.name
+    for holder in reversed(chain):
+        holder_entry = _require(index, PlatformKind.DEPLOYMENT, holder)
+        rule = cast(AnyDeploymentModel, holder_entry.model).meta.name_rule
+        if rule is None:
+            continue
+        expected, problems = substitute_params(rule, params, param_sets, "meta.name_rule")
+        for problem in problems:
+            diagnostics.error(
+                f"{holder} {problem.location}: {problem.message} (for {name})",
+                source=str(holder_entry.source),
+                location=problem.location,
+                code=problem.code,
+            )
+        if problems or expected == name:
+            continue
+        rule_of = "its own name_rule" if holder == name else f"the name_rule of '{holder}'"
+        diagnostics.error(
+            f"Deployment '{name}' must be named '{expected}' by {rule_of} ('{rule}'). Rename the deployment, or fix "
+            "the values in its parameter sets.",
+            source=str(entry.source),
+            location="meta.name",
+            code="name_rule_mismatch",
+        )
+    return diagnostics
 
 
 def _param_sets(chain: tuple[str, ...], index: DocumentIndex) -> ParamSets | None:

@@ -59,7 +59,7 @@ from strata.models.common_models import (
 )
 from strata.models.reference_fields import References
 from strata.utils.names import check_unique_names
-from strata.utils.value_tokens import find_malformed_value_tokens
+from strata.utils.value_tokens import find_malformed_value_tokens, find_non_param_tokens
 
 
 class DeploymentHealthCheckModel(PlatformBaseModel):
@@ -564,6 +564,14 @@ class DeploymentMetaModel(PlatformBaseModel):
         "defaults and the leaf's override them. `${param:<role>.<key>}` in the spec of any document of the chain "
         "reads the merged values. Not inherited as meta: each document names its own.",
     )
+    name_rule: str | None = Field(
+        None,
+        min_length=1,
+        description="The name every deployable deployment built on this one must have, with `${param:<role>.<key>}` "
+        "tokens filled from that deployment's parameter sets (`bootstrap-${param:spoke.name}`). A deployment whose "
+        "meta.name differs is a `name_rule_mismatch` error that gives both names: names stay plain text, but cannot "
+        "drift from their values. Only `${param:}` tokens are allowed.",
+    )
     annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
@@ -571,6 +579,19 @@ class DeploymentMetaModel(PlatformBaseModel):
         None, description="Optional labels (key-value pairs for classification/filtering)"
     )
     tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
+
+    @field_validator("name_rule")
+    @classmethod
+    def validate_name_rule_tokens(cls, value: str | None) -> str | None:
+        """Only well-formed `${param:}` tokens: a run-time token (`${var:x}`) has no value when names are checked."""
+        if value is None:
+            return value
+        bad = find_non_param_tokens(value)
+        if bad:
+            raise ValueError(
+                f"name_rule may only hold ${{param:ROLE.KEY}} tokens, but has {', '.join(repr(b) for b in bad)}"
+            )
+        return value
 
 
 class DeploymentModel(PlatformBaseModel):

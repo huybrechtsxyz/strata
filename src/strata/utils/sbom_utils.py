@@ -9,6 +9,7 @@ pulling in anything heavier.
 """
 
 import re
+from collections.abc import Collection
 from urllib.parse import quote
 
 from packageurl import PackageURL
@@ -390,24 +391,54 @@ def is_local_module_source(source: str) -> bool:
 
 #: Where Terraform looks for a provider whose source names no host.
 TERRAFORM_DEFAULT_REGISTRY = "registry.terraform.io"
+#: Where OpenTofu resolves a provider source that names no host (docs/design/opentofu.md).
+OPENTOFU_DEFAULT_REGISTRY = "registry.opentofu.org"
+#: The two hosts a short provider source can mean, by tool.
+DEFAULT_PROVIDER_REGISTRIES = (TERRAFORM_DEFAULT_REGISTRY, OPENTOFU_DEFAULT_REGISTRY)
 
 
-def terraform_provider_address(source: str) -> str:
+def terraform_provider_address(source: str, default_registry: str = TERRAFORM_DEFAULT_REGISTRY) -> str:
     """The full `host/namespace/type` address of a provider source, as `.terraform.lock.hcl` keys it.
 
-    Applies Terraform's defaults: no host is `registry.terraform.io`, no namespace is `hashicorp`.
-    Lower-cased, because Terraform compares addresses case-insensitively.
+    Applies the tool's defaults: no host is `default_registry` (`registry.terraform.io` for Terraform,
+    `registry.opentofu.org` for OpenTofu), no namespace is `hashicorp`. Lower-cased, because both tools compare
+    addresses case-insensitively.
 
     Examples:
         "hashicorp/azurerm" -> "registry.terraform.io/hashicorp/azurerm"
         "azurerm" -> "registry.terraform.io/hashicorp/azurerm"
+        "hashicorp/null", default_registry="registry.opentofu.org" -> "registry.opentofu.org/hashicorp/null"
     """
     parts = source.strip().lower().split("/")
     if len(parts) == 1:
-        parts = [TERRAFORM_DEFAULT_REGISTRY, "hashicorp", *parts]
+        parts = [default_registry, "hashicorp", *parts]
     elif len(parts) == 2:
-        parts = [TERRAFORM_DEFAULT_REGISTRY, *parts]
+        parts = [default_registry, *parts]
     return "/".join(parts)
+
+
+def locked_provider_address(
+    source: str, locked: Collection[str], default_registry: str = TERRAFORM_DEFAULT_REGISTRY
+) -> str:
+    """The address a provider source has in a root whose lock file keys `locked`.
+
+    A source that names its host is that host. A short one (`hashicorp/null`) is whichever default host the lock
+    file holds, Terraform's or OpenTofu's, since the tool that wrote the lock file chose it; without a match it is
+    `default_registry`. So the SBOM, which does not know which tool owns a root, still finds an OpenTofu root's
+    locked versions.
+    """
+    if source.strip().count("/") >= 2:
+        return terraform_provider_address(source)
+    for host in (default_registry, *DEFAULT_PROVIDER_REGISTRIES):
+        address = terraform_provider_address(source, host)
+        if address in locked:
+            return address
+    return terraform_provider_address(source, default_registry)
+
+
+def default_provider_registry(tool: str) -> str:
+    """The registry a short provider source resolves to under `tool` (`terraform` or `opentofu`)."""
+    return OPENTOFU_DEFAULT_REGISTRY if tool == "opentofu" else TERRAFORM_DEFAULT_REGISTRY
 
 
 def terraform_provider_to_purl(source: str, version: str | None = None) -> str:

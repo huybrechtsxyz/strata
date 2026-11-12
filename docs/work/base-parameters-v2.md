@@ -780,8 +780,8 @@ Phases. Each step is shippable on its own; tests are listed with the step that n
         `providers[].provider` and `layers.segments` filled from values; an unknown environment after substitution is
         reported on the leaf; a template leaf; each listed consumer with a template in the index; `${param:}` in
         `meta.name`, `meta.params` or `spec.extends` is an error (rule 5). Done 2026-11-12, see the changelog.
-  - [ ] 1d. **`meta.name_rule`** (rule 10), `name_rule_mismatch` with both names. Tests: match, mismatch, a rule on a
-        middle base applies to every leaf below it.
+  - [x] 1d. **`meta.name_rule`** (rule 10), `name_rule_mismatch` with both names. Tests: match, mismatch, a rule on a
+        middle base applies to every leaf below it. Done 2026-11-12, see the changelog.
   - [ ] 1e. **Diagnostics with origins, and unused values.** The origin of each substituted string, so a finding on a
         resolved document names the leaf, the base and the base's field, and the role, parameter set and key. The
         `param_unused` info finding (rule 12): a key of a set that no document reads under any role the set is named
@@ -916,3 +916,14 @@ Open questions:
   - **Open:** the exported JSON schema does not know templates, so the YAML editor underlines `${param:}` in a
     typed field (`tenant`) that `strata validate` accepts. Candidate for 1f: allow a `${param:...}` pattern
     alongside each `PlatformName` pattern in the deployment schema, or document it.
+- 2026-11-12: Step 1d built. `DeploymentMetaModel.name_rule` (a non-empty string; any `${...}` in it must be a
+  well-formed `${param:}`, via `value_tokens.find_non_param_tokens()`). `_check_name_rules()` in the resolver runs for
+  each deployable deployment that resolved, over every document of its chain, the leaf's own rule included: the rule
+  is filled with the leaf's values (`substitute_params()`) and compared with the leaf's `meta.name`.
+  - A mismatch is `name_rule_mismatch` on the leaf's file at `meta.name`, naming the expected name, the rule's
+    document and the rule as written. The leaf stays resolved: the document is sound, only its name is wrong, as
+    with an unknown reference.
+  - A rule that reads a missing key is `param_missing` on the rule's document, for the leaf, as for a spec token.
+  - A partial base is not held to a rule. `meta` still never makes a document a template: only `spec` does.
+  - Not built: a rule check when the spec itself failed to resolve. That leaf already has an error, and a second
+    finding about its name would repeat the cause.

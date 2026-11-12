@@ -173,6 +173,7 @@ class IntegrationSpecModel(PlatformBaseModel):
         description="Type of the tool or service. Built-in types and the capabilities they "
         "provide:\n\n"
         "- `terraform`: infrastructure. Runs Terraform.\n"
+        "- `opentofu`: infrastructure. Runs OpenTofu (`tofu`), for a provisioner with `tool: opentofu`.\n"
         "- `compose`: container. Docker Compose.\n"
         "- `helm`: container. Helm charts.\n"
         "- `script`: infrastructure. Runs a script.\n"

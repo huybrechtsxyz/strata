@@ -94,6 +94,7 @@ from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
 from strata.services.workspace_service import WorkspaceService, effective_assets, effective_providers
+from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import manifest_path
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
@@ -159,6 +160,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_helm_release_names(index))
     diagnostics.extend(_check_helm_artifact_delivery(index))
     diagnostics.extend(_check_integration_versions(index))
+    diagnostics.extend(_check_terraform_family_commands(index))
     diagnostics.extend(_check_integration_required_disabled(index))
     return diagnostics
 
@@ -1086,6 +1088,7 @@ def _check_workspaces(index: DocumentIndex) -> Diagnostics:
         diagnostics.extend(_check_workspace_key_value_store_supports_cas(index, workspace), source=str(entry.source))
         diagnostics.extend(_check_workspace_security_gates(index, workspace), source=str(entry.source))
         diagnostics.extend(_check_provisioner_integrations(index, workspace), source=str(entry.source))
+        diagnostics.extend(_check_provisioner_tool_types(index, workspace), source=str(entry.source))
         diagnostics.extend(_check_workspace_helm_releases(index, workspace), source=str(entry.source))
         if security is not None:
             diagnostics.extend(
@@ -1250,6 +1253,65 @@ def _check_provisioner_integrations(index: DocumentIndex, workspace: WorkspaceMo
             "cannot deploy. Enable the integration or bind another one.",
             location=f"spec.provisioners.{position}.integration",
             code="provisioner_integration_disabled",
+        )
+    return diagnostics
+
+
+#: The Terraform-family tools (ADR-0060): one CLI contract, two types, two binaries. Only these are compared, since
+#: running one through the other's type is the one mismatch that works by accident.
+_TERRAFORM_FAMILY = {ProvisionerType.TERRAFORM.value: "terraform", ProvisionerType.OPENTOFU.value: "tofu"}
+
+
+def _check_provisioner_tool_types(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
+    """A Terraform or OpenTofu provisioner is bound to an integration of its own type (docs/design/opentofu.md).
+
+    The integration's type decides the class that runs, so `tool: opentofu` bound to a `type: terraform`
+    integration would run `TerraformIntegration`: its version check reads the wrong numbering, and the lock policy
+    and init advice would name the wrong tool. An unknown name is the generic reference walk's finding.
+    """
+    diagnostics = Diagnostics()
+    for position, provisioner in enumerate(workspace.spec.provisioners):
+        tool = str(provisioner.tool)
+        if provisioner.integration is None:
+            continue
+        entry = index.get(PlatformKind.INTEGRATION, provisioner.integration)
+        if entry is None:
+            continue
+        integration_type = cast(IntegrationModel, entry.model).spec.type
+        if tool == integration_type or not {tool, integration_type} & set(_TERRAFORM_FAMILY):
+            continue
+        diagnostics.error(
+            f"Workspace '{workspace.meta.name}': provisioner '{provisioner.name}' (tool: {tool}) names integration "
+            f"'{provisioner.integration}' of type '{integration_type}', so the step would run as "
+            f"'{integration_type}'. Bind an integration of type '{tool}', or set the provisioner's tool to "
+            f"'{integration_type}'.",
+            location=f"spec.provisioners.{position}.integration",
+            code="provisioner_integration_type_mismatch",
+        )
+    return diagnostics
+
+
+def _check_terraform_family_commands(index: DocumentIndex) -> Diagnostics:
+    """A `terraform` integration does not run `tofu`, nor an `opentofu` one `terraform` (ADR-0060).
+
+    `spec.command` stays for a renamed or wrapped binary of the same tool. Pointed at the other tool, the type's
+    version check, lock-file host and init advice are all the wrong tool's.
+    """
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.INTEGRATION):
+        spec = cast(IntegrationModel, entry.model).spec
+        if spec.type not in _TERRAFORM_FAMILY or not spec.command:
+            continue
+        binary = Path(spec.command.strip().split()[0]).name.lower().removesuffix(".exe")
+        other = next((t for t, cmd in _TERRAFORM_FAMILY.items() if cmd == binary and t != spec.type), None)
+        if other is None:
+            continue
+        diagnostics.error(
+            f"Integration '{entry.ref.name}' (type: {spec.type}) runs '{spec.command}', which is {other}. "
+            f"Use type '{other}' and set the provisioners that bind it to tool: {other}.",
+            source=str(entry.source),
+            location="spec.command",
+            code="integration_command_other_tool",
         )
     return diagnostics
 

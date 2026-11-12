@@ -38,7 +38,7 @@ from strata.utils.path_safety import validate_relative_path
 
 
 class ProvisionerBackendModel(PlatformBaseModel):
-    """IaC state backend configuration. Only valid when a Provisioner's `tool` is 'terraform'."""
+    """IaC state backend configuration. Only valid when a Provisioner's `tool` is 'terraform' or 'opentofu'."""
 
     type: str = Field(
         ..., min_length=1, description="Backend type (e.g. 'terraform_cloud', 's3', 'azurerm', 'gcs', 'local')"
@@ -268,7 +268,7 @@ class ProvisionerModel(PlatformBaseModel):
         "sync/GitOps type (argocd, flux), which render from the platform artifact instead.",
     )
     backend: ProvisionerBackendModel | None = Field(
-        None, description="State backend configuration. Only valid when tool is 'terraform'."
+        None, description="State backend configuration. Only valid when tool is 'terraform' or 'opentofu'."
     )
     properties: ProvisionerAnsiblePropertiesModel | None = Field(
         None, description="Typed Ansible properties. Only valid when tool is 'ansible'."

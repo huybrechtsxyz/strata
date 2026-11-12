@@ -338,7 +338,7 @@ def _workspace(provisioner: str) -> WorkspaceModel:
         ("      tool: script\n      source: {source_path: s}\n      script: {file: run.py, values: [A]}\n", {"A"}),
         ("      tool: helm\n      source: {source_path: c}\n", set()),
     ],
-    ids=["terraform", "unknown-tool", "script-all-values", "script-listed-values", "helm"],
+    ids=["terraform", "opentofu", "script-all-values", "script-listed-values", "helm"],
 )
 def test_which_steps_receive_variables_without_a_token(tmp_path, provisioner, expected):
     context = SimpleNamespace(root=tmp_path)

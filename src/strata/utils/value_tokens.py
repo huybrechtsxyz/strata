@@ -244,6 +244,15 @@ def find_malformed_value_tokens(value: str, *, param_tokens: bool = False) -> li
     ]
 
 
+def find_non_param_tokens(value: str) -> list[str]:
+    """Every ``${...}``-shaped candidate in `value` that is not a well-formed ``${param:ROLE.PATH}``, escapes ignored.
+
+    For a string read only at load time (a deployment's `meta.name_rule`), where a run-time token has no value.
+    """
+    stripped = strip_escaped_value_tokens(value)
+    return [c for c in _VALUE_TOKEN_CANDIDATE_PATTERN.findall(stripped) if not PARAM_TOKEN_PATTERN.fullmatch(c)]
+
+
 def validate_value_tokens(value: str) -> None:
     """Raise ``ValueError`` if `value` contains a malformed ``${...}`` token.
 

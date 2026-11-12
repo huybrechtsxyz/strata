@@ -1,6 +1,9 @@
-# OpenTofu support — Work
+# OpenTofu support — Gap analysis
 
-- Status: draft
+- Status: implemented (2026-11-12, not yet released). Gaps 1 to 4, 6, 7, 9 and 10 are built; gap 2 and gap 5
+  are documented limits; gap 8's real-binary test runs `tofu` where it is installed, with no CI job yet; gap 11 is
+  out of scope. The design is [opentofu.md](../design/opentofu.md), the decision
+  [ADR-0060](../decisions/0060-opentofu-as-a-first-class-provisioner-tool.md). Kept as the record of the analysis.
 - Last updated: 2026-11-12
 
 ## Overview
@@ -306,14 +309,33 @@ has no way to deliver a key from a secret store into `TF_ENCRYPTION`, and the SB
   `--check-tools` go through.
 - [ADR-0051](../decisions/0051-local-tools-as-declarable-integration-types.md) — each tool its own type, several
   classes in one module (Trivy, Grype); the precedent for gap 1.
-- No ADR covers OpenTofu itself. See open question 5.
+- [ADR-0060](../decisions/0060-opentofu-as-a-first-class-provisioner-tool.md) — OpenTofu as a first-class
+  provisioner tool: written from open question 5.
 
 Related docs: [cli-image.md](../design/cli-image.md), [provisioner-lock-policy.md](../design/provisioner-lock-policy.md),
-[sbom-generation.md](../design/sbom-generation.md), [integration-layer.md](integration-layer.md),
-[integration-readiness.md](integration-readiness.md), and the style model for this doc,
+[sbom-generation.md](../design/sbom-generation.md), `integration-layer.md` and
+`integration-readiness.md` (work docs), and the style model for this doc,
 [helm-gap-analysis.md](../archive/helm-gap-analysis.md).
 
-## Remaining Work / Open Questions
+## Outcome
+
+Every open question below was decided as recommended. What was built, per gap:
+
+| Gap | Outcome |
+| --- | --- |
+| 1 | `OpenTofuIntegration(TerraformIntegration)` registered; `opentofu` no longer a v1 leftover |
+| 2 | `>= 1.6` documented in `workspace.md`; no floor in code |
+| 3 | `locked_provider_address()`: the lock file decides the host; the lock policy passes the tool's default |
+| 4 | the lock policy says `tofu init` for an OpenTofu provisioner |
+| 5 | documented: strata reads `.tf` roots |
+| 6 | `provisioner_integration_type_mismatch` and `integration_command_other_tool` |
+| 7 | schema descriptions, `workspace.md` and `integration.md` corrected |
+| 8 | the real-binary deploy/destroy test runs over both tools; a CI job with `tofu` is not added |
+| 9 | the migration steps in `workspace.md` |
+| 10 | `tofu` 1.13.9 in the `-full` image; the image test expects it there and nowhere else |
+| 11 | out of scope, documented |
+
+## Remaining Work / Open Questions (as analysed)
 
 ### Proposed order
 
@@ -363,5 +385,6 @@ Related docs: [cli-image.md](../design/cli-image.md), [provisioner-lock-policy.m
 
 ## Changelog
 
+- 2026-11-12: Implemented and archived (see Outcome).
 - 2026-11-12: Created. Gap analysis of OpenTofu support against the Terraform integration: eleven gaps with
   evidence and sizes, a proposed order, and seven open questions with recommendations.

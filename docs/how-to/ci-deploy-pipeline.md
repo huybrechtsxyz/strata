@@ -76,11 +76,13 @@ A container image is published to `ghcr.io/huybrechtsxyz/strata` in two variants
 
 - **`strata:<version>`** (also `-slim`, and `latest`): strata and the tools strata itself calls (`git`, and `ssh`
   for `ssh_key` auth). Enough for `validate`, `schema`, `deploy steps` and a build without Helm modules.
-- **`strata:<version>-full`** (and `latest-full`): adds Helm 4, the Docker CLI with Compose, Trivy and Checkov.
+- **`strata:<version>-full`** (and `latest-full`): adds OpenTofu, Helm 4, the Docker CLI with Compose, Trivy and
+  Checkov.
   Use it for a workspace with Helm modules: `build run` itself calls Helm (it pins registry charts and renders
   charts for the SBOM).
 
-Neither has Terraform: its licence is not settled for a public image. Mount the checkout and work in it:
+Neither has Terraform: its licence is not settled for a public image. The full image runs root modules with
+OpenTofu instead (`tool: opentofu`, see [workspace.md](../config/workspace.md#opentofu)). Mount the checkout and work in it:
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work ghcr.io/huybrechtsxyz/strata:<version> validate config

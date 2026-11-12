@@ -2036,6 +2036,80 @@ def test_a_depends_on_only_provisioner_bound_to_a_disabled_integration_is_not_re
     assert _disabled_findings(_resolve(root)) == []
 
 
+# ---------------------------------------------------------------------------
+# Terraform and OpenTofu are bound to their own type (docs/design/opentofu.md, ADR-0060)
+# ---------------------------------------------------------------------------
+
+
+def _typed_integration(root: Path, name: str, integration_type: str, command: str | None = None) -> None:
+    command_line = f"  command: {command}\n" if command else ""
+    _write(
+        root,
+        f"integrations/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: {name}\nspec:\n"
+        f"  type: {integration_type}\n  capabilities: [x-test]\n{command_line}",
+    )
+
+
+def _set_step_tool(root: Path, tool: str) -> None:
+    path = root / "workspace.yaml"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("      tool: terraform\n", f"      tool: {tool}\n", 1), encoding="utf-8")
+
+
+def _codes_of(context, code: str) -> list:
+    return [d for d in context.diagnostics.items if d.code == code]
+
+
+@pytest.mark.parametrize(("tool", "integration_type"), [("opentofu", "terraform"), ("terraform", "opentofu")])
+def test_a_terraform_family_provisioner_bound_to_the_other_type_is_an_error(tmp_path, tool, integration_type):
+    root = _base_solution(tmp_path)
+    _typed_integration(root, "iac", integration_type)
+    _set_step_tool(root, tool)
+    _bind_step_provisioner(root, "iac")
+
+    context = _resolve(root)
+
+    [finding] = _codes_of(context, "provisioner_integration_type_mismatch")
+    assert finding.severity.value == "error" and not context.ok
+    assert finding.location == "spec.provisioners.0.integration"
+    assert f"(tool: {tool}) names integration 'iac' of type '{integration_type}'" in finding.message
+
+
+def test_an_opentofu_provisioner_bound_to_an_opentofu_integration_passes(tmp_path):
+    root = _base_solution(tmp_path)
+    _typed_integration(root, "tofu", "opentofu")
+    _set_step_tool(root, "opentofu")
+    _bind_step_provisioner(root, "tofu")
+
+    context = _resolve(root)
+
+    assert _codes_of(context, "provisioner_integration_type_mismatch") == []
+    assert context.ok, context.diagnostics.messages()
+
+
+@pytest.mark.parametrize(
+    ("integration_type", "command", "flagged"),
+    [
+        ("terraform", "tofu", True),
+        ("terraform", "/usr/local/bin/tofu", True),
+        ("opentofu", "terraform.exe", True),
+        ("terraform", "/opt/terraform-1.9/terraform", False),
+        ("terraform", "terraform-wrapper", False),
+        ("opentofu", "/usr/bin/tofu", False),
+    ],
+)
+def test_a_terraform_family_integration_does_not_run_the_other_tool(tmp_path, integration_type, command, flagged):
+    root = _base_solution(tmp_path)
+    _typed_integration(root, "iac", integration_type, command)
+
+    findings = _codes_of(_resolve(root), "integration_command_other_tool")
+
+    assert len(findings) == (1 if flagged else 0)
+    if flagged:
+        assert findings[0].location == "spec.command"
+
+
 def test_a_provisioner_naming_an_unknown_integration_is_only_a_reference_error(tmp_path):
     root = _base_solution(tmp_path)
     _bind_step_provisioner(root, "nowhere")

@@ -36,7 +36,7 @@ def _write(root: Path, name: str, kind: str, spec: str, meta: str = "") -> None:
     (root / f"{kind}-{name}.yaml").write_text(_HEADER.format(kind=kind, name=name, meta=meta) + spec, "utf-8")
 
 
-def _solution(tmp_path: Path, *, base: str = BASE, leaves: bool = True) -> Path:
+def _solution(tmp_path: Path, *, base: str = BASE, base_meta: str = "", leaves: bool = True) -> Path:
     """Two hubs and two spokes; one template base; one leaf per spoke naming the spoke's and its hub's sets."""
     root = tmp_path / "sln"
     root.mkdir()
@@ -58,7 +58,7 @@ def _solution(tmp_path: Path, *, base: str = BASE, leaves: bool = True) -> Path:
     _write(root, "hub-hub02", "parameterset", "  values: { provider: p3 }\n")
     _write(root, "spoke-acme", "parameterset", "  values: { name: acme-001, hub: hub01, tenant: acme }\n")
     _write(root, "spoke-initech", "parameterset", "  values: { name: initech-001, hub: hub02, tenant: initech }\n")
-    _write(root, "base", "deployment", base)
+    _write(root, "base", "deployment", base, base_meta)
     if leaves:
         for spoke, hub in (("acme", "hub01"), ("initech", "hub02")):
             meta = f"  params: {{ hub: hub-{hub}, spoke: spoke-{spoke} }}\n"
@@ -208,3 +208,82 @@ def test_unused_artifacts_still_works_with_a_template_base(tmp_path):
     _write(root, "orphan", "artifact", "  image_name: example/orphan\n")
     context = open_solution(root).require_valid()
     assert unused_artifacts(context) == ["orphan"]
+
+
+# ---------------------------------------------------------------------------
+# meta.name_rule (rule 10, step 1d)
+# ---------------------------------------------------------------------------
+
+
+def _name_findings(root: Path) -> list:
+    return [f for f in open_solution(root).resolve().errors if f.code in {"name_rule_mismatch", "param_missing"}]
+
+
+def test_a_leaf_named_as_the_rule_says_is_valid(tmp_path):
+    root = _solution(tmp_path, base_meta="  name_rule: ${param:spoke.tenant}\n")
+    open_solution(root).require_valid()
+
+
+def test_a_leaf_named_otherwise_is_name_rule_mismatch_with_both_names(tmp_path):
+    root = _solution(tmp_path, base_meta="  name_rule: spoke-${param:spoke.name}\n")
+    findings = sorted(_name_findings(root), key=lambda f: f.message)
+    assert [(f.code, f.location) for f in findings] == [("name_rule_mismatch", "meta.name")] * 2
+    assert findings[0].source is not None and findings[0].source.endswith("deployment-acme.yaml")
+    assert findings[0].message.startswith(
+        "Deployment 'acme' must be named 'spoke-acme-001' by the name_rule of 'base' ('spoke-${param:spoke.name}')."
+    )
+
+
+def test_a_rule_on_a_middle_base_applies_to_every_leaf_below_it_and_no_other(tmp_path):
+    root = _solution(tmp_path, leaves=False)
+    _write(
+        root, "middle", "deployment", "  partial: true\n  extends: base\n", "  name_rule: mid-${param:spoke.tenant}\n"
+    )
+    for leaf, parent, spoke, hub in (
+        ("mid-acme", "middle", "acme", "hub01"),
+        ("initech", "middle", "initech", "hub02"),  # wrong: the middle base says mid-initech
+        ("acme", "base", "acme", "hub01"),  # extends the root base, which has no rule
+    ):
+        _write(
+            root,
+            leaf,
+            "deployment",
+            f"  extends: {parent}\n",
+            f"  params: {{ hub: hub-{hub}, spoke: spoke-{spoke} }}\n",
+        )
+    (finding,) = _name_findings(root)
+    assert finding.code == "name_rule_mismatch"
+    assert "Deployment 'initech' must be named 'mid-initech' by the name_rule of 'middle'" in finding.message
+
+
+def test_the_rules_of_every_level_and_the_leafs_own_apply(tmp_path):
+    root = _solution(tmp_path, base_meta="  name_rule: ${param:spoke.tenant}\n", leaves=False)
+    meta = "  name_rule: x-${param:spoke.tenant}\n  params: { hub: hub-hub01, spoke: spoke-acme }\n"
+    _write(root, "acme", "deployment", "  extends: base\n", meta)
+    (finding,) = _name_findings(root)
+    assert "Deployment 'acme' must be named 'x-acme' by its own name_rule" in finding.message
+
+
+def test_a_rule_reading_a_missing_key_is_param_missing_on_the_rules_document(tmp_path):
+    root = _solution(tmp_path, base_meta="  name_rule: ${param:spoke.code}\n")
+    findings = _name_findings(root)
+    assert {f.code for f in findings} == {"param_missing"}
+    assert all(f.source is not None and f.source.endswith("deployment-base.yaml") for f in findings)
+    assert sorted(f.message for f in findings) == [
+        f"base meta.name_rule: ${{param:spoke.code}} not found in spoke: [spoke-{leaf}] (for {leaf})"
+        for leaf in ("acme", "initech")
+    ]
+
+
+def test_a_partial_base_is_not_held_to_a_rule(tmp_path):
+    root = _solution(tmp_path, leaves=False)
+    _write(root, "middle", "deployment", "  partial: true\n  extends: base\n", "  name_rule: ${param:spoke.tenant}\n")
+    assert _name_findings(root) == []
+
+
+@pytest.mark.parametrize("rule", ["${var:name}", "x-${param:}", "${secret:s}"])
+def test_a_name_rule_holds_only_param_tokens(tmp_path, rule):
+    root = _solution(tmp_path, base_meta=f"  name_rule: '{rule}'\n", leaves=False)
+    (finding,) = open_solution(root).diagnostics.errors
+    assert finding.location == "meta.name_rule"
+    assert "may only hold ${param:ROLE.KEY} tokens" in finding.message

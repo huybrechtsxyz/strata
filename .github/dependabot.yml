@@ -49,7 +49,7 @@ updates:
     commit-message:
       prefix: "chore(image)"
 
-  # Container image — the FROM lines of Dockerfile.cli: the Python base image, uv, the Docker CLI and Trivy
+  # Container image — the FROM lines of Dockerfile.cli: the Python base image, uv, the Docker CLI, Trivy and OpenTofu
   # (docs/design/cli-image.md). Helm's version is an ARG and is bumped by hand.
   - package-ecosystem: "docker"
     directory: "/"
