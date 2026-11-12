@@ -271,7 +271,7 @@ def test_deploy_run_accepts_a_relative_build_path(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     build_run(_context(root), "app", Path("build"))
 
-    diagnostics = deploy_run(_context(root), "app", Path("build"), force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", Path("build"), force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     lint, upgrade = (argv for argv, _ in calls if argv[0] == "helm")
@@ -290,7 +290,7 @@ def test_deploy_run_check_with_no_modules_of_the_type_does_not_claim_a_check_hap
     steps: list[str] = []
 
     diagnostics = deploy_run(
-        _context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check", on_step=steps.append
+        _context(root), "app", build_path, force=True, stages=("deploy_apps",), stop_after="check", on_step=steps.append
     )
 
     assert diagnostics.ok, diagnostics.messages()
@@ -307,7 +307,7 @@ def test_deploy_run_a_failing_helm_lint_stops_the_step_before_it_deploys(tmp_pat
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert not diagnostics.ok
     [error] = diagnostics.items
@@ -323,7 +323,7 @@ def test_deploy_run_use_saved_plan_does_not_lint_a_container_step(tmp_path: Path
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [argv[1] for argv, _ in calls if argv[0] == "helm"] == ["upgrade"]
@@ -336,7 +336,7 @@ def test_deploy_run_check_phase_uses_the_check_timeout(tmp_path: Path, monkeypat
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), stop_after="check")
 
     assert diagnostics.ok, diagnostics.messages()
     assert [(argv[1], timeout) for argv, timeout in calls if argv[0] == "helm"] == [("lint", 7)]
@@ -350,7 +350,7 @@ def test_deploy_run_helm_upgrade_uses_the_apply_timeout_and_gives_helm_half(tmp_
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     [(upgrade, timeout)] = [(argv, timeout) for argv, timeout in calls if argv[:2] == ["helm", "upgrade"]]
@@ -366,7 +366,7 @@ def test_deploy_run_helm_dry_run_uses_the_plan_timeout(tmp_path: Path, monkeypat
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", dry_run=True)
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), dry_run=True)
 
     assert diagnostics.ok, diagnostics.messages()
     [(upgrade, timeout)] = [(argv, timeout) for argv, timeout in calls if argv[:2] == ["helm", "upgrade"]]
@@ -389,9 +389,9 @@ def test_deploy_run_integration_without_a_check_phase_is_skipped_not_failed(tmp_
     steps: list[str] = []
 
     check = deploy_run(
-        _context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check", on_step=steps.append
+        _context(root), "app", build_path, force=True, stages=("deploy_apps",), stop_after="check", on_step=steps.append
     )
-    run = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    run = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert check.ok and run.ok
     assert any("has no check phase" in step for step in steps)
@@ -412,7 +412,9 @@ def test_deploy_run_a_real_integration_error_during_a_check_is_a_failure_not_a_s
     build_run(_context(root), "app", build_path)
     steps: list[str] = []
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", on_step=steps.append)
+    diagnostics = deploy_run(
+        _context(root), "app", build_path, force=True, stages=("deploy_apps",), on_step=steps.append
+    )
 
     [error] = diagnostics.items
     assert error.code == "check_failed" and "helm is misconfigured" in error.message
@@ -515,7 +517,7 @@ def _build_apps(root: Path, tmp_path: Path):
 
 def _deploy_apps(root: Path, tmp_path: Path, **kwargs):
     build_path, _ = _build_apps(root, tmp_path)
-    return deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", **kwargs)
+    return deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), **kwargs)
 
 
 def _helm_cache(root: Path) -> Path:
@@ -559,7 +561,7 @@ def test_deploy_run_installs_the_pinned_archive_without_contacting_the_registry(
     build_path, _ = _build_apps(root, tmp_path)
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [call["args"][1] for call in calls] == ["lint", "upgrade"]
@@ -580,7 +582,7 @@ def test_deploy_run_pulls_a_pinned_chart_missing_from_the_cache_with_the_registr
     shutil.rmtree(_helm_cache(root))  # a deploy job that does not share the build's cache
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [call["args"][1] for call in calls] == ["repo", "pull", "lint", "upgrade"]
@@ -595,7 +597,7 @@ def test_deploy_run_dry_run_previews_the_pinned_archive(tmp_path: Path, monkeypa
     build_path, _ = _build_apps(root, tmp_path)
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", dry_run=True)
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), dry_run=True)
 
     assert diagnostics.ok, diagnostics.messages()
     [preview] = [call for call in calls if call["args"][1] == "upgrade"]
@@ -616,7 +618,7 @@ def test_deploy_run_never_streams_the_registry_password(tmp_path: Path, monkeypa
         "app",
         build_path,
         force=True,
-        stage="deploy_apps",
+        stages=("deploy_apps",),
         on_line=lambda tool, stream, text: lines.append(text),
     )
 
@@ -673,7 +675,7 @@ def test_deploy_run_unusable_registry_credentials_fail_before_any_helm_call(tmp_
     )
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_registry_credentials_invalid"
@@ -688,7 +690,7 @@ def test_deploy_run_check_phase_lints_the_pinned_registry_chart(tmp_path: Path, 
     build_path, _ = _build_apps(root, tmp_path)
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), stop_after="check")
 
     assert diagnostics.ok, diagnostics.messages()
     [lint] = calls
@@ -722,7 +724,7 @@ def test_deploy_run_only_resolves_credentials_for_remotes_a_module_pulls_from(tm
     build_path, _ = _build_apps(root, tmp_path)
     shutil.rmtree(_helm_cache(root))
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert calls[0]["input"] == _PROGET_SECRET
@@ -734,7 +736,7 @@ def test_deploy_run_refuses_a_registry_chart_the_build_did_not_pin(tmp_path: Pat
     assert [item.code for item in build_diagnostics.items] == ["helm_chart_not_pinned"]
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_chart_not_pinned"
@@ -758,7 +760,7 @@ def test_deploy_run_refuses_a_local_chart_whose_dependency_the_build_did_not_pin
     assert [item.code for item in build_diagnostics.items] == ["helm_chart_dependency_not_pinned"]
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_chart_not_pinned"
@@ -778,7 +780,7 @@ def test_deploy_run_stops_when_the_registry_serves_a_different_archive(tmp_path:
     shutil.rmtree(_helm_cache(root))
     calls = _fake_helm_calls(monkeypatch, chart_values="replicaCount: 2\n")
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_chart_digest_changed"
@@ -797,7 +799,7 @@ def test_deploy_run_stops_when_the_cached_archive_differs_from_the_pin(tmp_path:
     _packaged_chart(entry, "gatus", "1.0.0", "tampered: true\n")
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_chart_digest_changed"
@@ -813,7 +815,7 @@ def test_deploy_run_smoke_test_only_says_it_would_verify_the_chart(tmp_path: Pat
     steps: list[str] = []
 
     diagnostics = deploy_run(
-        _context(root), "app", build_path, force=True, stage="deploy_apps", smoke_test=True, on_step=steps.append
+        _context(root), "app", build_path, force=True, stages=("deploy_apps",), smoke_test=True, on_step=steps.append
     )
 
     assert diagnostics.ok, diagnostics.messages()
@@ -889,7 +891,7 @@ def test_deploy_run_use_saved_plan_cross_invocation_output_handoff(tmp_path: Pat
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
     # First separate invocation: apply only apply_infra, from its saved plan.
-    diagnostics_a = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="apply_infra")
+    diagnostics_a = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stages=("apply_infra",))
     assert diagnostics_a.ok, diagnostics_a.messages()
     assert "strata/step-outputs/app/apply_infra" in backend_cls.shared_data
 
@@ -898,7 +900,7 @@ def test_deploy_run_use_saved_plan_cross_invocation_output_handoff(tmp_path: Pat
     # references `${output:apply_infra.vm_ip}`, which only exists because
     # the first invocation durably recorded it.
     (build_path / "infra_b" / "apply_apps.tfplan").write_text("fake plan", encoding="utf-8")
-    diagnostics_b = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="apply_apps")
+    diagnostics_b = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stages=("apply_apps",))
     assert diagnostics_b.ok, diagnostics_b.messages()
 
     apps_commands = [call[1] for call, cwd in calls if cwd is not None and cwd.name == "infra_b"]
@@ -1344,7 +1346,7 @@ def test_deploy_run_filters_by_stage(tmp_path: Path, _capture):
     build_run(_context(root), "app", build_path)
 
     steps: list[str] = []
-    deploy_run(_context(root), "app", build_path, force=True, stage="apply_infra", on_step=steps.append)
+    deploy_run(_context(root), "app", build_path, force=True, stages=("apply_infra",), on_step=steps.append)
 
     assert any("apply_infra" in s for s in steps)
     assert not any("apply_apps" in s for s in steps)
@@ -1356,10 +1358,50 @@ def test_deploy_run_filters_by_scope(tmp_path: Path, _capture):
     build_run(_context(root), "app", build_path)
 
     steps: list[str] = []
-    deploy_run(_context(root), "app", build_path, force=True, scope="apps", on_step=steps.append)
+    deploy_run(_context(root), "app", build_path, force=True, scopes=("apps",), on_step=steps.append)
 
     assert any("apply_apps" in s for s in steps)
     assert not any("apply_infra" in s for s in steps)
+
+
+def test_deploy_run_repeated_stages_select_each_named_step(tmp_path: Path, _capture):
+    root = _terraform_solution(tmp_path, second_step=True)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    steps: list[str] = []
+    deploy_run(
+        _context(root), "app", build_path, force=True, stages=("apply_infra", "apply_apps"), on_step=steps.append
+    )
+
+    assert any("apply_infra" in s for s in steps)
+    assert any("apply_apps" in s for s in steps)
+
+
+def test_deploy_run_repeated_scopes_select_any_of_them(tmp_path: Path, _capture):
+    root = _terraform_solution(tmp_path, second_step=True)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    steps: list[str] = []
+    deploy_run(_context(root), "app", build_path, force=True, scopes=("ghost", "apps"), on_step=steps.append)
+
+    assert any("apply_apps" in s for s in steps)
+    assert not any("apply_infra" in s for s in steps)
+
+
+def test_deploy_run_stage_and_scope_must_both_match(tmp_path: Path, _capture):
+    root = _terraform_solution(tmp_path, second_step=True)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    steps: list[str] = []
+    diagnostics = deploy_run(
+        _context(root), "app", build_path, force=True, stages=("apply_infra",), scopes=("apps",), on_step=steps.append
+    )
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert any("no steps match" in s for s in steps)
 
 
 def test_deploy_run_runs_dependent_steps_in_order(tmp_path: Path, _capture):
@@ -3910,7 +3952,7 @@ def test_deploy_run_resolves_output_token_from_a_durable_record_not_produced_thi
     monkeypatch.setattr(base_module, "run_command", _fake_run_command)
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
-    diagnostics = deploy_run(_context(root), "app", build_path, stage="apply_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, stages=("apply_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     apps_init_call = next(
@@ -3955,7 +3997,7 @@ def test_deploy_run_fails_when_durable_record_is_older_than_the_workspace_max_ag
     monkeypatch.setattr(base_module, "run_command", _fake_run_command)
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
-    diagnostics = deploy_run(_context(root), "app", build_path, stage="apply_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, stages=("apply_apps",))
 
     assert not diagnostics.ok
     assert any("unusable" in message for message in diagnostics.messages())
@@ -3998,7 +4040,7 @@ def test_deploy_run_output_max_age_overrides_the_workspace_setting(tmp_path: Pat
     monkeypatch.setattr(base_module, "run_command", _fake_run_command)
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
-    diagnostics = deploy_run(_context(root), "app", build_path, stage="apply_apps", output_max_age=60)
+    diagnostics = deploy_run(_context(root), "app", build_path, stages=("apply_apps",), output_max_age=60)
 
     assert not diagnostics.ok
     assert any("unusable" in message for message in diagnostics.messages())
@@ -4316,7 +4358,7 @@ def test_a_required_helm_document_does_not_block_a_destroy_of_other_steps(tmp_pa
     # The Helm step is filtered out, so the document is checked by the integration preflight, not the step loop.
     root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2", declared=">=3", required=True)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, destroy=True, stage="apply_infra")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, destroy=True, stages=("apply_infra",))
 
     assert "helm_3_not_declared" in [w.code for w in diagnostics.warnings]
     assert not diagnostics.errors, diagnostics.messages()
@@ -4326,7 +4368,7 @@ def test_a_required_helm_document_does_not_block_a_destroy_of_other_steps(tmp_pa
 def test_a_required_helm_document_still_blocks_a_deploy_of_other_steps(tmp_path: Path, monkeypatch):
     root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2", declared=">=3", required=True)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="apply_infra")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("apply_infra",))
 
     assert [e.code for e in diagnostics.errors] == ["helm_3_not_declared"]
     assert not any(call[:2] == ["terraform", "apply"] for call in calls)
@@ -4401,7 +4443,7 @@ def test_deploy_run_filters_helm_steps_by_scope_like_terraform_steps(tmp_path: P
     build_run(_context(root), "app", build_path)
 
     steps: list[str] = []
-    deploy_run(_context(root), "app", build_path, force=True, scope="apps", on_step=steps.append)
+    deploy_run(_context(root), "app", build_path, force=True, scopes=("apps",), on_step=steps.append)
 
     assert any("deploy_apps" in s for s in steps)
     assert not any("apply_infra" in s for s in steps)
@@ -4758,7 +4800,7 @@ def test_a_helm_dry_run_runs_against_the_deployments_kube_context(tmp_path: Path
     calls = _fake_tools_with_env(monkeypatch)
     root = _kube_context_solution(tmp_path, monkeypatch)
 
-    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stage="deploy_apps")
+    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     [upgrade] = [(argv, env) for argv, env in calls if argv[:2] == ["helm", "upgrade"]]
@@ -4828,7 +4870,7 @@ def test_a_run_without_a_helm_step_does_not_check_the_kube_context(tmp_path: Pat
     _fake_tools_with_env(monkeypatch)
     root = _kube_context_solution(tmp_path, monkeypatch, kube_context="forge-test")
 
-    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stage="apply_infra")
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
 
@@ -4906,7 +4948,7 @@ def test_a_compose_dry_run_runs_against_the_deployments_docker_context(tmp_path:
     calls = _fake_docker(monkeypatch)
     root = _docker_context_solution(tmp_path, monkeypatch)
 
-    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stage="deploy_apps")
+    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert _stack_calls(calls) == [("config", "hearth-prd")]
@@ -4979,7 +5021,7 @@ def test_a_run_without_a_compose_step_does_not_check_the_docker_context(tmp_path
     calls = _fake_docker(monkeypatch, contexts=())
     root = _docker_context_solution(tmp_path, monkeypatch)
 
-    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stage="apply_infra")
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [argv for argv, _ in calls if argv[1:2] == ["context"]] == []

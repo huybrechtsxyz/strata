@@ -49,7 +49,8 @@ reorganized existing seams rather than inventing new ones.
 All four accept the same `--stage`/`--scope`/`--pin`/`--output-max-age`/
 `--path`/`--build-path` options `deploy run` has — this design only adds
 *which phases run*, never *which steps* (`--stage`/`--scope` already
-solve that axis, unchanged).
+solve that axis; both are repeatable, and `strata deploy steps` lists the
+steps a selection keeps — [deploy-steps-command.md](deploy-steps-command.md)).
 
 None of the four is a literal "just call one integration method in
 isolation": every one shares `deploy run`'s own per-step preamble

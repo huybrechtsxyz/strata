@@ -10,6 +10,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **`strata deploy steps DEPLOYMENT`** lists the execution steps `deploy run` would run, in its order, for a
+  pipeline to plan its jobs. It runs nothing and needs no build or credentials.
+  - Each step has its `scope`, `order`, `level` (steps on one level do not depend on each other), `depends_on`,
+    the tool it needs, `capabilities` (`saved_plan`: `deploy apply` can take it; `destroy`; `container`), its
+    declared and effective targets (topologies expanded) and its stage `timeouts`.
+  - `data.scopes[]` gives each scope the scopes it waits for; scopes that depend on each other are marked
+    `orderable: false`, with a `scope_cycle` warning.
+  - `--stage` and `--scope` select as on `deploy run`. An empty selection exits 0; values that matched no step
+    are in `data.unmatched`.
+  - `--destroy` lists teardown order. `--check-tools` checks each listed step's tool on this machine (on `PATH`,
+    required version) and exits 3 when one is not ready.
+
 - **The SBOM, the image gate and the audit manifest say which images strata does not deliver.** A Helm module's
   declared service image is still listed and scanned, but the chart decides which image runs.
   - `sbom.json` gives it `strata:image-delivered: false` and `strata:image-delivery: helm module: the chart
@@ -89,6 +101,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Changed
 
+- **`--stage` and `--scope` are repeatable** on `deploy setup`, `check`, `plan`, `apply`, `run` and `destroy`.
+  A step is kept when it matches any value of an option, and both options when both are given
+  (`--scope infra --scope network`). One value of each works as before.
 - **`build run` renders Helm charts by default** (`sbom.render_charts` defaults to `true`). `sbom.json` lists
   the images every Helm chart runs, and `cve_policy`, `image_gate_policy` and `image_tag_policy` check them, so a
   pipeline with a Helm module and a `deny` gate can fail on a sidecar or init container nobody scanned before.

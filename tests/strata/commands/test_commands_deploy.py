@@ -315,6 +315,26 @@ def test_stage_option_restricts_execution(runner, solution, _stub_terraform):
     assert any(call[1] == "apply" for call in _stub_terraform)
 
 
+def test_stage_and_scope_options_are_repeatable(runner, solution, monkeypatch):
+    import strata.commands.deploy_command as deploy_command_module
+    from strata.utils.diagnostics import Diagnostics
+
+    seen: dict[str, object] = {}
+
+    def _fake_deploy_run(*args, **kwargs):
+        seen.update(kwargs)
+        return Diagnostics()
+
+    monkeypatch.setattr(deploy_command_module, "deploy_run", _fake_deploy_run)
+    result = runner.invoke(
+        cli,
+        ["deploy", "plan", "app", "--path", str(solution), "--stage", "a", "--stage", "b", "--scope", "infra"],
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert seen["stages"] == ("a", "b")
+    assert seen["scopes"] == ("infra",)
+
+
 def test_stage_option_rejects_unknown_stage(runner, solution, _stub_terraform):
     _build(runner, solution)
     result = _deploy(runner, "app", "--path", solution, "--force", "--stage", "ghost-stage")

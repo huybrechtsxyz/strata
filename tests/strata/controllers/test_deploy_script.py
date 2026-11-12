@@ -827,7 +827,7 @@ def test_a_destroy_listing_an_output_in_values_stops_before_anything_runs(tmp_pa
     )
     build_path = _built(tmp_path, root)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, destroy=True, force=True, stage="use_output")
+    diagnostics = deploy_run(_context(root), "app", build_path, destroy=True, force=True, stages=("use_output",))
 
     assert "destroy_output_unavailable" in [e.code for e in diagnostics.errors]
     assert "run_script.address" in " ".join(diagnostics.messages())

@@ -176,8 +176,10 @@ Notes on the workflow:
 - A release gate judges the commit being deployed and reads it from the CI variables (`GITHUB_SHA`,
   `BUILD_SOURCEVERSION`, `CI_COMMIT_SHA`, and others). Check out the commit you mean to deploy.
 - To limit a workflow to part of a deployment, use `--scope LABEL` (matches the `scope:` of an
-  execution step, for example `infra` or `apps`) or `--stage NAME`. A workflow that needs no
-  kubeconfig can then never touch the Helm steps.
+  execution step, for example `infra` or `apps`) or `--stage NAME`. Both can be repeated
+  (`--scope infra --scope network`). A workflow that needs no kubeconfig can then never touch the
+  Helm steps. `strata deploy steps D` lists the steps and scopes; see
+  [Plan jobs from the step list](#plan-jobs-from-the-step-list).
 - `--follow` streams the tools' output live; see [deploy-run-streaming.md](deploy-run-streaming.md).
 - To copy the deployment's images to a registry before `deploy run` (for example from a build feed to the
   registry the apps pull from), list them with `strata deploy images "$DEPLOYMENT" -o json`. Each entry in
@@ -254,6 +256,42 @@ Things to know:
   the run but never recorded in the `output_store`.
 - `deploy setup` and `deploy check` run only init, or init and validate, if you want those as
   separate stages.
+
+### Plan jobs from the step list
+
+`strata deploy steps D -o json` lists the steps `deploy run D` would run, in its order, without
+running anything or needing a build or credentials. Each entry in `data.steps[]` has `name`,
+`scope`, `order`, `level` (steps on one level do not depend on each other), `depends_on`, the
+`integration` it needs, and `capabilities`: `saved_plan` is false for a step `deploy apply` cannot
+take (a `script` or GitOps step; run it with `deploy run`), `destroy` false for one `deploy destroy`
+cannot tear down. `data.scopes[]` gives each scope the scopes it waits for. `--stage` and `--scope`
+select exactly as on `deploy run`.
+
+One job per scope, in scope order:
+
+```sh
+strata deploy steps "$DEPLOYMENT" -o json | jq -c '[.data.scopes[] | {scope, depends_on}]'
+```
+
+Skip a job when the deployment has no step in its scope. An empty selection exits 0, so check the
+count:
+
+```sh
+n=$(strata deploy steps "$DEPLOYMENT" --scope infra -o json | jq '.data.steps | length')
+if [ "$n" -eq 0 ]; then echo "no infra steps"; exit 0; fi
+```
+
+Send each step to the command that can run it:
+
+```sh
+strata deploy steps "$DEPLOYMENT" -o json | jq -r '.data.steps[]
+  | "\(.name) \(if .capabilities.saved_plan then "plan+apply" else "run" end)"'
+```
+
+`--check-tools` also checks each listed step's tool on the machine it runs on (on `PATH`, required
+version) and exits 3 when one is not ready, so a deploy job can fail before it starts:
+`strata deploy steps "$DEPLOYMENT" --scope apps --check-tools -q`. `--destroy` lists the steps in
+teardown order.
 
 ## 6. Tear a deployment down
 

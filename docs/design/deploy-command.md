@@ -206,17 +206,17 @@ spec:
 
 ```
 strata deploy run DEPLOYMENT [--path PATH] [--build-path PATH] --force
-  [--smoke-test | --dry-run] [--follow] [--stage NAME] [--scope LABEL]
+  [--smoke-test | --dry-run] [--follow] [--stage NAME]... [--scope LABEL]...
   └─ deploy_command.py: deploy_run_command()
        └─ diagnostics = deploy_run(context, deployment, build_path, force=force,
-              dry_run=dry_run, smoke_test=smoke_test, stage=stage, scope=scope,
+              dry_run=dry_run, smoke_test=smoke_test, stages=stage, scopes=scope,
               on_step=run.step, on_line=on_line, pin=pin, output_max_age=output_max_age)
 
 deploy_run(...)
   ├─ deployment, workspace, environments = resolve_deployment()/reachable_environments()
   ├─ resolved = resolve_values(...)                      # FULL resolution — secrets included
   ├─ steps = ordered_by_depends_on(workspace.spec.execution)
-  ├─ steps = filter by --stage/--scope
+  ├─ steps = select_steps(steps, stages=..., scopes=...)   # step_selection.py
   ├─ preflight: integration.is_available() for every filtered step, fail fast
   │    before any step runs (docs/design/deploy-command.md's own "Structural
   │    gotchas from v1": a later step's missing tool/credential must never
@@ -333,6 +333,16 @@ separation-of-concerns `ProvisioningStepModel`'s own "this step realizes
 topology X is derived, not declared" precedent (ADR-0011) already
 established. `--scope LABEL` filters `workspace.spec.execution` directly,
 independent of which deployment/environment is targeted.
+
+`--stage` and `--scope` are repeatable on every deploy command. One
+function, `select_steps()` (`step_selection.py`), applies them: a step is
+kept when its name is one of the `--stage` values and its scope one of the
+`--scope` values (OR within an option, AND across the two; an option not
+given keeps everything). A selection that keeps nothing is not an error:
+`deploy setup|check|plan|apply|run` say "no steps match" and exit 0, and
+only `deploy destroy` fails (`destroy_no_steps`). `strata deploy steps`
+lists the same selection without running it
+([deploy-steps-command.md](deploy-steps-command.md)).
 (Disambiguation: an unrelated, identically-named
 `DeploymentEnvironmentRef.scope` exists for the *promotion* system's own
 environment-file targeting — a different concept sharing a field name,
@@ -396,6 +406,11 @@ subcommand.
 | `deploy list`                                      | Scans every `kind: deployment` file, prints metadata — built for CI matrix generation.                                                 | None. No evidence either real repo needs this.                                                                                                                                                                                                                                                |
 | `deploy plan` (v1's viewer)                        | Shows a human-readable summary from an already-saved `.tfplan`, entirely offline.                                                      | **Mostly superseded** — v2's own `strata deploy plan` ([deploy-pipeline-stage-commands.md](deploy-pipeline-stage-commands.md)) computes *and* shows a diff by default, a strict superset for the common case. The one remaining gap: re-viewing an already-saved plan without recomputing it. |
 | `deploy drift`/`drift_history`/`acknowledge_drift` | `terraform plan -detailed-exitcode` without saving, severity classification, persisted history, suppression.                           | None. A whole new subsystem (`DriftController`, a history store) — zero v2 equivalent today. Largest unscoped gap in this survey.                                                                                                                                                             |
+
+Built since this survey, outside v1's set: `deploy list` (every deployment, the CI
+matrix) and `deploy steps` (one deployment's execution steps as `deploy run`
+selects and orders them, for a pipeline to plan its jobs; see
+[deploy-steps-command.md](deploy-steps-command.md)).
 
 ### Remaining Work — other subcommands (no evidence yet, build only if asked)
 

@@ -22,7 +22,7 @@ Compose/Helm to implement methods they have no use for.
 import json
 import os
 import re
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -52,6 +52,7 @@ from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import SourceSyncError, resolved_asset_info
 from strata.controllers.step_secrets import container_secret_keys, secret_uses, step_secret_keys
+from strata.controllers.step_selection import select_steps
 from strata.controllers.value_controller import (
     build_value_references,
     reachable_environments,
@@ -835,8 +836,8 @@ def deploy_run(
     smoke_test: bool = False,
     stop_after: Literal["setup", "check"] | None = None,
     use_saved_plan: bool = False,
-    stage: str | None = None,
-    scope: str | None = None,
+    stages: Sequence[str] = (),
+    scopes: Sequence[str] = (),
     on_step: Callable[[str], None] | None = None,
     on_line: Callable[[str, str, str], None] | None = None,
     pin: str | None = None,
@@ -909,10 +910,13 @@ def deploy_run(
             over). Mutually exclusive with `dry_run`/`smoke_test`/
             `stop_after` (enforced by `deploy_command.py`, not here,
             matching every other mutual-exclusivity rule above).
-        stage: Restrict to the one step named `stage`.
-        scope: Restrict to steps whose `ProvisioningStepModel.scope`
-            matches (docs/design/deploy-command.md's resolved `scope`
-            placement — workspace-owned, not deployment-owned).
+        stages: Restrict to the steps with one of these names.
+        scopes: Restrict to steps whose `ProvisioningStepModel.scope` is
+            one of these labels (docs/design/deploy-command.md's resolved
+            `scope` placement — workspace-owned, not deployment-owned).
+            Both through `select_steps()`
+            (docs/design/deploy-steps-command.md): OR within one, AND across
+            the two, empty keeps all.
         on_step: Called with a one-line progress message per step.
         on_line: Called as `(tool, stream, text)` for every subprocess
             output line as it arrives — `tool` is the resolved
@@ -1182,10 +1186,7 @@ def deploy_run(
     steps = ordered_by_depends_on(all_steps)
     if destroy:
         steps = list(reversed(steps))
-    if stage is not None:
-        steps = [s for s in steps if s.name == stage]
-    if scope is not None:
-        steps = [s for s in steps if s.scope == scope]
+    steps = select_steps(steps, stages=stages, scopes=scopes).steps
 
     if not steps:
         if destroy:

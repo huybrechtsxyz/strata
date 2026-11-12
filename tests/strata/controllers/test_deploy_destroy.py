@@ -365,7 +365,7 @@ def test_destroy_stage_filter_selects_the_one_step(tmp_path: Path, tools):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_apps")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert tools.terraform() == [("infra_b", "init"), ("infra_b", "destroy")]
@@ -376,10 +376,23 @@ def test_destroy_scope_filter_selects_the_steps_with_that_scope(tmp_path: Path, 
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, scope="apps")
+    diagnostics, _ = _destroy(root, build_path, force=True, scopes=("apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert tools.terraform() == [("infra_b", "init"), ("infra_b", "destroy")]
+
+
+def test_destroy_repeated_stages_destroy_in_reverse_order(tmp_path: Path, tools):
+    root = _tf_two(tmp_path)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_infra", "apply_apps"))
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [call for call in tools.terraform() if call[1] == "destroy"] == [
+        ("infra_b", "destroy"),
+        ("infra_a", "destroy"),
+    ]
 
 
 def test_destroy_does_not_evaluate_the_image_tag_policy(tmp_path: Path, tools, monkeypatch):
@@ -456,7 +469,7 @@ def test_destroy_needs_force_dry_run_or_smoke_test(tmp_path: Path, tools):
     assert tools.terraform() == []
 
 
-@pytest.mark.parametrize("filters", [{"stage": "no_such_stage"}, {"scope": "no_such_scope"}])
+@pytest.mark.parametrize("filters", [{"stages": ("no_such_stage",)}, {"scopes": ("no_such_scope",)}])
 def test_destroy_that_selects_no_step_fails_instead_of_reporting_success(tmp_path: Path, tools, filters):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
@@ -517,7 +530,7 @@ def test_a_step_that_cannot_destroy_can_be_left_out(tmp_path: Path, tools):
     root = _with_a_script_step(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert tools.terraform() == [("infra_a", "init"), ("infra_a", "destroy")]
@@ -527,7 +540,7 @@ def test_destroying_an_upstream_step_alone_warns_about_the_dependents_it_leaves(
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, scope="infra")
+    diagnostics, _ = _destroy(root, build_path, force=True, scopes=("infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert _codes(diagnostics, "warnings") == ["destroy_leaves_dependents"]
@@ -539,7 +552,7 @@ def test_the_leaves_dependents_warning_also_shows_under_dry_run(tmp_path: Path, 
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, dry_run=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, dry_run=True, stages=("apply_infra",))
 
     assert _codes(diagnostics, "warnings") == ["destroy_leaves_dependents"]
 
@@ -641,7 +654,7 @@ def test_a_stale_record_does_not_block_a_step_that_references_no_output(tmp_path
     _seed(backend, {"apply_infra": {"vm_ip": "10.0.0.5"}}, collected_at="2020-01-01T00:00:00+00:00")
     root, build_path = _chained(tmp_path, workspace_extra=_STORE + "  output_store_max_age: 60\n")
 
-    diagnostics, _ = _destroy(root, build_path, dry_run=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, dry_run=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert backend.get_calls == 0  # nothing referenced an output, so the store was never read
@@ -703,7 +716,7 @@ def test_a_smoke_test_warns_about_dependents_it_would_leave(tmp_path: Path, tool
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert _codes(diagnostics, "warnings") == ["destroy_leaves_dependents"]
@@ -713,7 +726,7 @@ def test_a_smoke_test_that_selects_no_step_fails(tmp_path: Path, tools):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stage="no_such_stage")
+    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stages=("no_such_stage",))
 
     assert _codes(diagnostics, "errors") == ["destroy_no_steps"]
 
@@ -751,7 +764,7 @@ def test_force_destroys_with_auto_approve(tmp_path: Path, tools):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [c.args for c in tools.of("terraform", "destroy")] == [["terraform", "destroy", "-auto-approve"]]
@@ -763,7 +776,7 @@ def test_the_variables_file_and_secrets_are_in_place_before_terraform_destroys(t
     )
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     [destroy] = tools.of("terraform", "destroy")
@@ -1052,7 +1065,7 @@ def test_a_partial_destroy_clears_only_the_steps_it_destroyed(tmp_path: Path, to
     _seed(backend, {"apply_infra": {"vm_ip": "10.0.0.5"}, "apply_apps": {"k": "v"}})
     root, build_path = _chained(tmp_path, workspace_extra=_STORE)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_apps")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert set(_record(backend)) == {"apply_infra"}
