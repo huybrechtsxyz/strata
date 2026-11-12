@@ -719,9 +719,11 @@ class HelmIntegration(InfraIntegration):
         render instead of fetching it. Run in an isolated Helm configuration, so the user's repositories and
         plugins play no part. Used by the SBOM's `chart-image` collector (docs/work/helm-image-delivery.md).
         """
+        # Absolute, because Helm runs in the chart's folder: a relative `--build-path` would otherwise not resolve.
+        chart_dir = chart_dir.resolve()
         args = ["template", release, str(chart_dir), "--namespace", namespace]
         if values is not None:
-            args.extend(["-f", str(values)])
+            args.extend(["-f", str(values.resolve())])
         cwd = chart_dir if chart_dir.is_dir() else chart_dir.parent
         with ExitStack() as isolated:
             return self.run(*args, cwd=cwd, env=_isolated_helm_env(isolated), timeout=timeout)

@@ -316,6 +316,23 @@ def test_a_real_local_chart_is_rendered_by_helm(tmp_path):
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
+def test_a_real_local_chart_is_rendered_from_a_relative_build_path(tmp_path, monkeypatch):
+    """`strata build run --build-path build`: Helm runs in the chart's folder, so the paths it gets are absolute."""
+    folder = _chart(tmp_path / "build", "apps/whoami")
+    (folder / "strata-values.yaml").write_text("tag: v1.11\n", encoding="utf-8")
+    (folder / "templates").mkdir()
+    (folder / "templates" / "pod.yaml").write_text(
+        "apiVersion: v1\nkind: Pod\nmetadata:\n  name: {{ .Release.Name }}\nspec:\n  containers:\n"
+        "    - name: whoami\n      image: traefik/whoami:{{ .Values.tag }}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    result = ChartImageCollector().collect(_graph(), [], Path("build"))
+    assert [(c.name, c.purl) for c in result.components] == [("whoami", "pkg:docker/traefik/whoami@v1.11")]
+    assert result.diagnostics == []
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
 def test_a_real_packaged_registry_chart_is_rendered_by_helm_with_strata_values(tmp_path):
     source = tmp_path / "src" / "immich"
     (source / "templates").mkdir(parents=True)
