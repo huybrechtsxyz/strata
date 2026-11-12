@@ -1011,9 +1011,12 @@ def deploy_run(
     # Image tag policy (docs/design/image-tag-policy.md): offline, so it runs first, ahead of any store access. The
     # tag in effect here can differ from the build's (`--pin` given only to `deploy run`), so the deploy result
     # replaces the build's entry for the same policy. It runs under `smoke_test` too (nothing is contacted), but
-    # a smoke test records nothing.
+    # a smoke test records nothing. The images the build's rendered charts run are judged from its `sbom.json`
+    # (docs/work/helm-image-delivery.md, plan item 9f): what this deploy installs.
     if workspace.spec.image_tag_policy is not None and not destroy:
-        tag_diagnostics = check_image_tag_policy(context, deployment, workspace, pinned_by_flag=pin is not None)
+        tag_diagnostics = check_image_tag_policy(
+            context, deployment, workspace, pinned_by_flag=pin is not None, build_path=build_path
+        )
         diagnostics.extend(tag_diagnostics)
         result = image_tag_policy_result(workspace, tag_diagnostics, "deploy")
         if result is not None and build_path.is_dir() and not smoke_test:

@@ -12,6 +12,7 @@ from strata.controllers.effective_images import (
     _received_variable_keys,
     effective_images,
     rendered_chart_images,
+    sbom_written_at,
     unknown_image_modules,
     with_rendered_images,
 )
@@ -578,3 +579,15 @@ def test_with_rendered_images_judges_a_shared_image_once_and_clears_rendered_mod
         ("whoami/shipper", True, None),
     ]
     assert [(m.module, m.namespace) for m in remaining] == [("whoami", "other"), ("immich", "apps")]
+
+
+def test_sbom_written_at_reads_the_metadata_timestamp_or_gives_none(tmp_path):
+    assert sbom_written_at(tmp_path) is None
+    (tmp_path / "sbom.json").write_text("{not json", encoding="utf-8")
+    assert sbom_written_at(tmp_path) is None
+    (tmp_path / "sbom.json").write_text(json.dumps({"metadata": {}}), encoding="utf-8")
+    assert sbom_written_at(tmp_path) is None
+    (tmp_path / "sbom.json").write_text(
+        json.dumps({"metadata": {"timestamp": "2026-11-12T12:00:00+00:00"}}), encoding="utf-8"
+    )
+    assert sbom_written_at(tmp_path) == "2026-11-12T12:00:00+00:00"

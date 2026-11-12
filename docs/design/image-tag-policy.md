@@ -79,19 +79,21 @@ selected and whose name is not allowed:
 
 ### Where it runs
 
-| Command                | Behavior                                                                                                                                                                 |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `strata build run`     | Right after the integration preflight and before anything is cleaned or written, so a `deny` breach leaves the build path as it was. Also under `--dry-run`.             |
-| `strata deploy run`    | Before any value is resolved, with the deployment's own images. Also under `--smoke-test`, which records nothing. Replaces the build's result with a `deploy` phase one. |
-| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first.                                     |
-| `strata policy check`  | Evaluates it offline, phase `build`, honours `--pin`, and records the result. `policy list` shows it. There is no `policy findings` row.                                 |
-| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                               |
+| Command                | Behavior                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata build run`     | At the end, right after `sbom.json` is written and before the CVE gate, so it also judges the images rendered charts run (`sbom.render_charts`). A `deny` fails the build with its output on disk, and the result is recorded. Under `--dry-run` it judges the declared images, since nothing is rendered. |
+| `strata deploy run`    | Before any value is resolved, with the deployment's own images and the images the build's rendered charts run, read from its `sbom.json`. Also under `--smoke-test`, which records nothing. Replaces the build's result with a `deploy` phase one.                                                         |
+| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first. It reads no build, so it judges the declared images only.                                                                                                             |
+| `strata policy check`  | Evaluates it offline, phase `build`, honours `--pin`, and records the result. With a build at `--build-path`, it also judges that build's rendered chart images and says which `sbom.json` they came from. `policy list` shows it. There is no `policy findings` row.                                      |
+| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                                                                                                                                                                 |
 
-`check_image_tag_policy(context, deployment, workspace, images=...)` is the one entry point. `build run` resolves
-`effective_images()` once and passes the rows, so they are not resolved twice. The result is a
-`ManifestPolicyResultModel` (`policy_name: image_tag_policy`, `policy_type: image_tag`) in `policy_results.json`,
-and the audit manifest picks it up. `build run` writes it with the other build-phase results at the end, so a build
-the policy denies records none.
+`check_image_tag_policy(context, deployment, workspace, images=..., build_path=...)` is the one entry point.
+`build run` resolves `effective_images()` once and passes the rows, so they are not resolved twice. With
+`build_path`, the rows `rendered_chart_images()` reads from the build's `sbom.json` are judged too (origin
+`chart`), and an info finding, `image_tag_policy_rendered_images`, names that file and when it was written. The
+result is a `ManifestPolicyResultModel` (`policy_name: image_tag_policy`, `policy_type: image_tag`) in
+`policy_results.json`, and the audit manifest picks it up. `build run` writes it with the other build-phase
+results at the end, a denied build's included.
 
 ### Version documents
 
@@ -129,10 +131,12 @@ is nothing honest to seed it with.
   declared tag: a strict default trains people to switch the policy to `warn`. `tag_pattern` is the opt-in for more.
 - It runs at both build and deploy because `--pin` given only to `deploy run` can change the tag. The deploy result
   replaces the build's for the same policy, so the audit record shows what was in effect at deploy.
-- `build run` judges before it cleans or writes so a breach fails fast with nothing changed. The cost is that a
-  denied build records no result in `policy_results.json`, since `build run` writes that file once at the end.
-  Whether a denied build should reach the audit trail at all is tracked in
-  `denied-build-audit.md` (work doc).
+- `build run` used to judge before it cleaned or wrote, so a breach failed fast with nothing changed, but a
+  denied build recorded no result in `policy_results.json`. Since 2026-11-12 it judges at the end, after the
+  SBOM, so it also sees the images rendered charts run (`helm-image-delivery.md` work doc, plan item 9), and a
+  denied build records its result. To fail fast, run `strata deploy images` or `strata policy check` before
+  `build run`: both judge the declared images offline in seconds. Whether a denied build should reach the
+  audit trail is tracked in `denied-build-audit.md` (work doc).
 - `deploy images` used to only warn on a missing tag and said nothing about `latest`. With the policy set it now
   fails on `deny`; without the policy it behaves as before.
 - Both origins are covered by default, so an untagged third-party module image such as `redis` is flagged, which is

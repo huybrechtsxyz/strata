@@ -338,6 +338,19 @@ def rendered_chart_images(context: SolutionContext, build_path: Path) -> list[Ef
     return rows
 
 
+def sbom_written_at(build_path: Path) -> str | None:
+    """`metadata.timestamp` of the build's `sbom.json`: when the rendered images `rendered_chart_images()` reads
+    were written (plan item 9f). `None` when the file is missing, unreadable or has no timestamp.
+    """
+    try:
+        sbom = json.loads((build_path / _SBOM_FILENAME).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    metadata = sbom.get("metadata") if isinstance(sbom, dict) else None
+    timestamp = metadata.get("timestamp") if isinstance(metadata, dict) else None
+    return timestamp if isinstance(timestamp, str) else None
+
+
 def with_rendered_images(
     images: Sequence[EffectiveImage], unknown: Sequence[UnknownImageModule], rendered: Sequence[EffectiveImage]
 ) -> tuple[list[EffectiveImage], list[UnknownImageModule]]:

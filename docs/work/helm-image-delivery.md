@@ -1,6 +1,6 @@
 # Helm module images - Work
 
-- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed, 9a to 9e built (2026-11-12)
+- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed, 9a to 9f built (2026-11-12)
 - Last updated: 2026-11-12
 
 ## Overview
@@ -570,6 +570,12 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
 - `policy check` judges the last build's rendered images. Its output says where they came from: "rendered images
   from the build of <time>", the `sbom.json` timestamp.
 - `deploy images` stays offline and build-free. Giving it `--build-path` is possible later, on demand.
+- **How it is built** (plan item 9f): `deploy_run()` and `policy check`'s `_image_tag_check()` pass their build
+  path to `check_image_tag_policy()`. Whenever rendered rows are judged, it adds an info finding,
+  `image_tag_policy_rendered_images`: "N image(s) rendered charts run judged too, from <build>/sbom.json written
+  <time>", the time being the SBOM's `metadata.timestamp` (`sbom_written_at()`). It shows at build and deploy too,
+  not only in `policy check`: one line, and at deploy it is just as useful to know which build was read. An info
+  finding is not a violation, so the recorded result is unchanged.
 
 ### 4. Registry charts
 
@@ -718,9 +724,11 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   - [x] 9e. Move the build check: `build run` judges the policy after the SBOM, next to the CVE gate, with its build
     path; a dry run judges declared images at the same point; the comment rewritten. Build tests for both `deny`
     cases, the dry run and the single result (section 1). Built 2026-11-12.
-  - [ ] 9f. `deploy run` and `policy check` pass their build path; `policy check` says where the rendered images
-    came from. Tests for both (section 3).
-  - [ ] 9g. Docs: the "Where it runs" tables in `image-tag-policy.md` and `workspace.md`, the `chart` origin and
+  - [x] 9f. `deploy run` and `policy check` pass their build path; `policy check` says where the rendered images
+    came from. Tests for both (section 3). Built 2026-11-12, with the "Where it runs" tables in
+    `image-tag-policy.md` and `workspace.md` (and the History bullet), and `denied-build-audit.md`'s current state:
+    its option C now holds.
+  - [ ] 9g. Docs: the `chart` origin and
     the `allow` name in `workspace.md`, the SBOM design and how-to (registry charts, the new finding), the CI
     how-to's "fail fast with `deploy images`" line, `.github/CHANGELOG.md` (Changed: the build check moves; Added:
     the rest). Then `strata validate config`, the full suite, and the dogfood build again: `whoami` loses its
@@ -779,7 +787,9 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   of a second use, so the `chart:` use now names the container too. 9b built the same day: registry charts are
   rendered from the cached archive once its digest matches. 9c built the same day: the
   `sbom_declared_image_not_rendered` finding. 9d built the same day: the `chart` origin and the rendered rows;
-  no caller passes a build yet. 9e built the same day: `build run` judges the policy after the SBOM.
+  no caller passes a build yet. 9e built the same day: `build run` judges the policy after the SBOM; the
+  dogfood build found that `helm template` got relative paths while running in the chart's folder, so a
+  relative `--build-path` rendered no chart (fixed in `HelmIntegration.template()`). 9f built the same day.
 
 - 2026-11-11: plan item 8 designed from the removed work doc `sbom-generation.md` (2026-11-07). The values-file
   finding there is resolved (`strata-values.yaml`). Rendering local charts is opt-in (`spec.sbom.render_charts`);

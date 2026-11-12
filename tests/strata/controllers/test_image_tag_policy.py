@@ -551,9 +551,16 @@ def _check_with_build(root: Path, build_path: Path):
 def test_with_a_build_the_images_its_rendered_charts_run_are_judged(tmp_path):
     root = _solution(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
     shipper = _rendered_component("ghcr.io/acme/log-shipper:latest", "chart:apps/whoami/shipper")
-    [item] = _check_with_build(root, _sbom(tmp_path / "build", shipper)).items
+    diagnostics = _check_with_build(root, _sbom(tmp_path / "build", shipper))
+    [item] = diagnostics.errors
     assert item.code == "image_floating_tag"
     assert item.message.startswith("image_tag_policy: chart 'whoami/shipper' (ghcr.io/acme/log-shipper;")
+    # Where the rendered images came from (plan item 9f); this SBOM has no metadata timestamp.
+    [source] = diagnostics.infos
+    assert (source.code, source.message) == (
+        "image_tag_policy_rendered_images",
+        f"image_tag_policy: 1 image(s) rendered charts run judged too, from {tmp_path / 'build' / 'sbom.json'}.",
+    )
 
 
 def test_a_build_without_an_sbom_is_judged_on_the_solution_alone(tmp_path):

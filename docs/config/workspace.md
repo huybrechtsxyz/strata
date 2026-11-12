@@ -322,16 +322,17 @@ spec:
 
 Where it runs:
 
-| Command                | Behavior                                                                                                                                                    |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `strata build run`     | Judged first, before anything is cleaned or written, so a `deny` breach leaves the build path as it was. Also under `--dry-run`.                            |
-| `strata deploy run`    | Judged again before any value is resolved, because `--pin` given only to `deploy run` can change the tag. Also under `--smoke-test`, which records nothing. |
-| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first.                        |
-| `strata policy check`  | Evaluates it offline and records the result. `strata policy list` shows it.                                                                                 |
-| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                  |
+| Command                | Behavior                                                                                                                                                                                                                                            |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata build run`     | Judged at the end, after `sbom.json` is written, so it also judges the images rendered charts run (`sbom.render_charts`). A `deny` fails the build with its output on disk. Under `--dry-run`, only the declared images, since nothing is rendered. |
+| `strata deploy run`    | Judged again before any value is resolved, because `--pin` given only to `deploy run` can change the tag. The images the build's rendered charts run are judged too, from its `sbom.json`. Also under `--smoke-test`, which records nothing.        |
+| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first. It reads no build, so it judges the declared images only.                                                      |
+| `strata policy check`  | Evaluates it offline and records the result. With a build at `--build-path`, it also judges that build's rendered chart images and says which `sbom.json` they came from. `strata policy list` shows it.                                            |
+| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                                                                                                          |
 
 The result is recorded in `policy_results.json` as `image_tag_policy` and ends up in the audit manifest. The
-`deploy run` entry replaces the one `build run` wrote.
+`deploy run` entry replaces the one `build run` wrote. Because `build run` judges at the end, a pipeline that
+wants the answer before it clones and renders runs `strata deploy images` or `strata policy check` first.
 
 The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
 module, strata does not write a service's `image` into the chart's values, so the chart decides what runs. Set a

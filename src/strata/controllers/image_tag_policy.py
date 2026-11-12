@@ -5,7 +5,7 @@
 `unknown_image_modules()` names, the policy and the deployment's ring, so it needs no solution, network or
 credential. Callers (`build run`, `deploy run`, `strata policy check`, `deploy images`) fetch the rows and the ring
 and decide when to run it. `check_image_tag_policy(..., build_path=)` adds the images the build's rendered charts
-run (docs/work/helm-image-delivery.md, plan item 9d).
+run (docs/work/helm-image-delivery.md, plan item 9d); `build run`, `deploy run` and `policy check` pass it (9e, 9f).
 """
 
 import re
@@ -16,6 +16,7 @@ from pathlib import Path
 from strata.controllers.effective_images import (
     effective_images,
     rendered_chart_images,
+    sbom_written_at,
     unknown_image_modules,
     with_rendered_images,
 )
@@ -48,7 +49,8 @@ def check_image_tag_policy(
 
     With `build_path`, the images the build's rendered charts run are judged too, read from its `sbom.json`
     (`rendered_chart_images()`, `with_rendered_images()`). A build without an SBOM, or without rendered charts,
-    is judged on the solution alone. An SBOM that cannot be read is a warning, and the solution is judged.
+    is judged on the solution alone. An SBOM that cannot be read is a warning, and the solution is judged. When
+    rendered images are judged, an info finding says how many and which `sbom.json` they came from.
     """
     policy = workspace.spec.image_tag_policy
     if policy is None:
@@ -69,6 +71,13 @@ def check_image_tag_policy(
             rendered = None
         if rendered:
             images, unknown = with_rendered_images(images, unknown, rendered)
+            # Which build the chart images came from: at deploy and in `policy check` it can be an old one.
+            written = sbom_written_at(build_path)
+            diagnostics.info(
+                f"image_tag_policy: {len(rendered)} image(s) rendered charts run judged too, from "
+                f"{build_path / 'sbom.json'}" + (f" written {written}" if written else "") + ".",
+                code="image_tag_policy_rendered_images",
+            )
     diagnostics.extend(evaluate_image_tag_policy(images, policy, deployment_ring(context, deployment), unknown=unknown))
     return diagnostics
 
