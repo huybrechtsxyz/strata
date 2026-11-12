@@ -1,6 +1,6 @@
 # Helm module images - Work
 
-- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed and 9a built (2026-11-12)
+- Status: option B and plan item 8 built (2026-11-11), not released; plan item 9 designed, 9a and 9b built (2026-11-12)
 - Last updated: 2026-11-12
 
 ## Overview
@@ -369,8 +369,8 @@ registered in `_KNOWN` after `helm`.
 - **Which charts:** every folder in the build path that holds a `Chart.yaml` and a `meta.yaml` without
   `chartName`, which is a local chart. `deploy run` installs from that same folder. The collector finds them by
   file, as the other file collectors do.
-  - Registry charts are not rendered yet. Their unpacked copy is in `.strata/helm/`, outside the build path, and
-    the collector reads only the build path. See the open questions.
+  - Registry charts were not rendered by item 8. Their unpacked copy is in `.strata/helm/`, outside the build
+    path, and the collector read only the build path. Plan item 9b renders them.
 - **Render:** `helm template <releaseName> <folder> --namespace <namespace> -f <folder>/strata-values.yaml`.
   - The release name and namespace come from `meta.yaml`.
   - It runs offline, with no `--dependency-update` and no repository access, through a new
@@ -563,9 +563,19 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   - the build did not pin it, for example `--offline` with an empty cache;
   - the archive is missing or has another digest.
 - **The cache path:** `write_sbom()` gains `helm_cache: Path | None`, which `build run` sets to
-  `helm_cache_dir(context.root)`, and passes it to the chart-image collector only. The `collect()` signature the
-  other collectors implement does not change.
+  `helm_cache_dir(context.root)`, and passes it to the chart-image collector only, as its `helm_cache` attribute.
+  The `collect()` signature the other collectors implement does not change. Without it, registry charts are
+  skipped silently, as before.
+- **Finding the folders:** every module folder whose `meta.yaml` has a release name and a namespace. One with
+  `chartName` is a registry chart; one without it needs a `Chart.yaml`, as before.
+- **The render:** `HelmIntegration.template()` takes the archive as the chart and runs in the archive's folder.
+  The values file is the module folder's `strata-values.yaml`, as for a local chart.
 - Offline, as for local charts: the archive already holds its subcharts.
+- **The findings** (`sbom_chart_not_rendered`, `info`), prefixed with the module folder and "chart images not
+  listed:":
+  - `chart 'immich' was not pinned by the build`;
+  - `chart 'immich' 0.13.1 is not in .strata/helm/`;
+  - `chart 'immich' 0.13.1 in .strata/helm/ is sha256:..., but the build pinned sha256:...`.
 
 ### 5. Declared but not rendered
 
@@ -664,9 +674,9 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
     use `chart:<namespace>/<reference>/<container>` (`chart_image_collector.py`, `IMAGE_REF_PROPERTY` in
     `sbom_utils.py`). Nothing reads them yet. Tests: the reference keeps the tag the purl drops; two containers of
     one image keep both uses after the merge. Built 2026-11-12.
-  - [ ] 9b. Registry charts: `write_sbom(..., helm_cache=)` from `build run`; the chart-image collector finds the
-    archive with `cached_pin()`, checks `chartDigest`, renders the `.tgz`; the two skip cases as `info`. Unit tests
-    with a stubbed `HelmIntegration`, one with real `helm` and a packaged chart (section 4).
+  - [x] 9b. Registry charts: `write_sbom(..., helm_cache=)` from `build run`; the chart-image collector finds the
+    archive with `cached_pin()`, checks `chartDigest`, renders the `.tgz`; the skip cases as `info`. Unit tests
+    with a stubbed `HelmIntegration`, one with real `helm` and a packaged chart (section 4). Built 2026-11-12.
   - [ ] 9c. Declared but not rendered: the `sbom_declared_image_not_rendered` finding in `write_sbom()` after the
     merge, and the reason `helm module: not in the rendered chart` (section 5).
   - [ ] 9d. Policy rows: the `chart` origin in `ImageTagPolicyModel.origins`; `rendered_chart_images()`;
@@ -734,7 +744,8 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   rendered images (the `chart` origin), at build, deploy and `policy check`; registry charts are rendered from the
   cache; a declared image the chart does not run gets an `info` finding. Two open questions answered, one added.
   `render_charts` by default is item 10. 9a built the same day: designing it showed the merge loses the container
-  of a second use, so the `chart:` use now names the container too.
+  of a second use, so the `chart:` use now names the container too. 9b built the same day: registry charts are
+  rendered from the cached archive once its digest matches.
 
 - 2026-11-11: plan item 8 designed from the removed work doc `sbom-generation.md` (2026-11-07). The values-file
   finding there is resolved (`strata-values.yaml`). Rendering local charts is opt-in (`spec.sbom.render_charts`);

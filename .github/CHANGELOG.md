@@ -18,14 +18,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - The deploy audit manifest records it with `delivered: false`.
   - `strata:used-by` now lists every use of an image found by more than one collector, not only the first
     collector's.
-- **`spec.sbom.render_charts`** (workspace, default `false`). `build run` renders every local Helm chart with
+- **`spec.sbom.render_charts`** (workspace, default `false`). `build run` renders every Helm chart with
   `helm template`, offline and with strata's values, and lists every image it deploys in `sbom.json`, sidecars and
   init containers included (`strata:found-in: rendered-chart`). Each records the container in its use
   (`strata:used-by: chart:<namespace>/<reference>/<container>`) and the reference as the chart writes it
   (`strata:image`), which keeps a tag the purl drops for a digest-pinned image.
-  - A chart that cannot be rendered gets an `info` line (`sbom_chart_not_rendered`): no `helm`, or a dependency
-    not vendored under `charts/`.
-  - Registry charts are not rendered yet.
+  - A registry chart is rendered from the archive the build pinned in `.strata/helm/`, only while its digest
+    still matches.
+  - A chart that cannot be rendered gets an `info` line (`sbom_chart_not_rendered`): no `helm`, a dependency
+    not vendored under `charts/`, or a registry chart that is not pinned or whose cached archive changed.
   - Turning it on adds those images to `cve_policy` and `image_gate_policy`, so a `deny` gate can fail on an
     image it never saw before.
 - **`strata deploy images` says which images strata delivers.** Strata delivers an image when it writes it into

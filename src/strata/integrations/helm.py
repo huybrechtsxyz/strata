@@ -712,17 +712,19 @@ class HelmIntegration(InfraIntegration):
     def template(
         self, chart_dir: Path, *, release: str, namespace: str, values: Path | None = None, timeout: int = 120
     ) -> CommandResult:
-        """`helm template release chart_dir --namespace ns [-f values]`: render a chart on disk, offline.
+        """`helm template release chart --namespace ns [-f values]`: render a chart on disk, offline.
 
-        No `--dependency-update` and no repository: a dependency that is not vendored under `charts/` fails the
+        `chart_dir` is a chart folder or a packaged chart (`.tgz`, a registry chart from `.strata/helm/`). No
+        `--dependency-update` and no repository: a dependency that is not vendored under `charts/` fails the
         render instead of fetching it. Run in an isolated Helm configuration, so the user's repositories and
         plugins play no part. Used by the SBOM's `chart-image` collector (docs/work/helm-image-delivery.md).
         """
         args = ["template", release, str(chart_dir), "--namespace", namespace]
         if values is not None:
             args.extend(["-f", str(values)])
+        cwd = chart_dir if chart_dir.is_dir() else chart_dir.parent
         with ExitStack() as isolated:
-            return self.run(*args, cwd=chart_dir, env=_isolated_helm_env(isolated), timeout=timeout)
+            return self.run(*args, cwd=cwd, env=_isolated_helm_env(isolated), timeout=timeout)
 
     def dependency_list(self, chart_dir: Path, *, timeout: int = 60) -> CommandResult:
         """`helm dependency list chart_dir`: each dependency's status in `charts/`, read offline."""

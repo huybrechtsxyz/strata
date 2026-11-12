@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Collect the container images local Helm charts deploy, by rendering them (docs/work/helm-image-delivery.md, the
-SBOM side, part 2).
+"""Collect the container images Helm charts deploy, by rendering them (docs/work/helm-image-delivery.md, the SBOM
+side, part 2, and plan item 9b for registry charts).
 
 Strata writes no image into a chart's values, so a Helm module's declared service images are only a statement
 about it, and the images its chart deploys by itself (the app, sidecars, init containers, subcharts) are in no
-SBOM. With the workspace's `sbom.render_charts`, this collector renders every local chart in the build path with
-`helm template`, offline, and lists the images in the manifests. They are what runs, so they carry no
+SBOM. With the workspace's `sbom.render_charts`, this collector renders every local chart in the build path, and
+every pinned registry chart from the `.strata/helm/` cache, with `helm template`, offline, and lists the images in
+the manifests. They are what runs, so they carry no
 declared-only marker, and `sbom_controller._merge_by_purl()` drops the marker from a declared image the chart also
 deploys.
 
@@ -20,7 +21,8 @@ from typing import Any
 
 import yaml
 
-from strata.integrations.helm import VALUES_FILE, HelmIntegration
+from strata.integrations.helm import VALUES_FILE, HelmIntegration, chart_cache_source
+from strata.integrations.helm_cache import cached_pin
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.sbom_collectors.base import CollectorResult, SbomCollector
 from strata.models.module_model import ModuleModel
@@ -84,22 +86,40 @@ def helm() -> HelmIntegration:
 
 
 class ChartImageCollector(SbomCollector):
-    """Renders each local chart the build placed (a folder with `Chart.yaml` and a `meta.yaml` without
-    `chartName`, the folder `deploy run` installs from) and lists the images it deploys. Off unless the workspace
-    sets `sbom.render_charts: true`."""
+    """Renders each chart the build placed and lists the images it deploys. Off unless the workspace sets
+    `sbom.render_charts: true`.
+
+    - A local chart is a module folder with `Chart.yaml` and a `meta.yaml` without `chartName`, the folder
+      `deploy run` installs from.
+    - A registry chart is a module folder whose `meta.yaml` has `chartName`. Its archive is rendered from the
+      `.strata/helm/` cache at `helm_cache`, only when its digest is the `chartDigest` the build pinned, the archive
+      `deploy run` installs (docs/work/helm-image-delivery.md, plan item 9b). Without `helm_cache`, registry charts
+      are not rendered.
+    """
+
+    def __init__(self, helm_cache: Path | None = None) -> None:
+        self.helm_cache = helm_cache
 
     def collect(self, graph: ResolvedWorkspaceGraph, modules: list[ModuleModel], build_path: Path) -> CollectorResult:
         settings = graph.workspace.spec.sbom
         if settings is None or not settings.render_charts:
             return CollectorResult()
-        charts = list(_local_charts(build_path))
-        if not charts:
-            return CollectorResult()
-
         result = CollectorResult()
+        charts: list[tuple[Path, dict[str, Any], Path]] = []
+        for folder, meta in _chart_folders(build_path):
+            chart, skipped = self._chart(folder, meta)
+            if skipped is not None:
+                result.diagnostics.append(
+                    _info(build_path, folder, f"chart images not listed: {skipped}", "sbom_chart_not_rendered")
+                )
+            elif chart is not None:
+                charts.append((folder, meta, chart))
+        if not charts:
+            return result
+
         integration = helm()
         if not integration.is_available():
-            for folder, _ in charts:
+            for folder, _, _ in charts:
                 result.diagnostics.append(
                     _info(
                         build_path, folder, "chart images not listed: helm is not installed", "sbom_chart_not_rendered"
@@ -107,10 +127,10 @@ class ChartImageCollector(SbomCollector):
                 )
             return result
 
-        for folder, meta in charts:
+        for folder, meta, chart in charts:
             values = folder / VALUES_FILE
             rendered = integration.template(
-                folder,
+                chart,
                 release=str(meta["releaseName"]),
                 namespace=str(meta["namespace"]),
                 values=values if values.is_file() else None,
@@ -126,7 +146,7 @@ class ChartImageCollector(SbomCollector):
                     )
                 )
                 continue
-            chart = f"chart:{_where(build_path, folder)}"
+            use = f"chart:{_where(build_path, folder)}"
             for name, image in rendered_images(rendered.stdout):
                 if "${" in image:
                     result.diagnostics.append(
@@ -139,8 +159,25 @@ class ChartImageCollector(SbomCollector):
                         )
                     )
                     continue
-                result.components.append(_component(name, image, f"{chart}/{name}", result.diagnostics))
+                result.components.append(_component(name, image, f"{use}/{name}", result.diagnostics))
         return result
+
+    def _chart(self, folder: Path, meta: dict[str, Any]) -> tuple[Path | None, str | None]:
+        """What to render for one module folder, or why it is skipped. `(None, None)`: nothing to say."""
+        if "chartName" not in meta:
+            return (folder, None) if (folder / "Chart.yaml").is_file() else (None, None)
+        if self.helm_cache is None:
+            return None, None
+        name, version, digest = str(meta["chartName"]), meta.get("chartVersion"), meta.get("chartDigest")
+        wanted = f"chart '{name}'" + (f" {version}" if version else "")
+        if version is None or digest is None:
+            return None, f"{wanted} was not pinned by the build"
+        pin = cached_pin(self.helm_cache, chart_cache_source(meta), name, str(version))
+        if pin is None:
+            return None, f"{wanted} is not in .strata/helm/"
+        if pin.digest != digest:
+            return None, f"{wanted} in .strata/helm/ is {pin.digest}, but the build pinned {digest}"
+        return pin.archive, None
 
 
 def _component(name: str, image: str, use: str, diagnostics: list[Diagnostic]) -> SbomComponentModel:
@@ -169,20 +206,19 @@ def _component(name: str, image: str, use: str, diagnostics: list[Diagnostic]) -
     )
 
 
-def _local_charts(build_path: Path) -> Iterator[tuple[Path, dict[str, Any]]]:
-    """`(folder, meta)` for each local chart folder below `build_path`, sorted, skipping vendored folders (and a
-    chart's own `charts/`) below the root only: the build path itself is routinely named `build`."""
+def _chart_folders(build_path: Path) -> Iterator[tuple[Path, dict[str, Any]]]:
+    """`(folder, meta)` for each Helm module folder below `build_path` (a `meta.yaml` with a release name and a
+    namespace), sorted, skipping vendored folders (and a chart's own `charts/`) below the root only: the build path
+    itself is routinely named `build`."""
     for meta_path in sorted(build_path.rglob("meta.yaml")):
         folder = meta_path.parent
         if not _SKIP_DIRS.isdisjoint(folder.relative_to(build_path).parts):
-            continue
-        if not (folder / "Chart.yaml").is_file():
             continue
         try:
             meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
         except (OSError, yaml.YAMLError):
             continue
-        if isinstance(meta, dict) and "chartName" not in meta and meta.get("releaseName") and meta.get("namespace"):
+        if isinstance(meta, dict) and meta.get("releaseName") and meta.get("namespace"):
             yield folder, meta
 
 

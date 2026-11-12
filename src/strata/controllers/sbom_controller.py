@@ -38,6 +38,7 @@ from strata.integrations.cve_scanner import CveScannerIntegration, GrypeIntegrat
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.sbom_collectors import registry
+from strata.integrations.sbom_collectors.chart_image_collector import ChartImageCollector
 from strata.logging.config import get_logger
 from strata.models.common_models import PlatformKind
 from strata.models.configuration_model import ConfigurationModel
@@ -84,6 +85,7 @@ def write_sbom(
     index: DocumentIndex,
     remotes: Mapping[str, SolutionRemoteModel] | None = None,
     commit: str | None = None,
+    helm_cache: Path | None = None,
 ) -> Diagnostics:
     """Collect every registered SBOM collector's components, serialise to
     CycloneDX 1.6 JSON, validate, and write `build_path / "sbom.json"`.
@@ -104,6 +106,10 @@ def write_sbom(
             URL as its repository.
         commit: The solution commit being built, recorded as the deployment's
             `strata:commit` property; omitted when unknown.
+        helm_cache: The `.strata/helm/` cache, handed to the `chart-image`
+            collector only, so it can render a pinned registry chart's
+            archive (docs/work/helm-image-delivery.md, plan item 9b).
+            `None`: registry charts are not rendered.
 
     Returns:
         `Diagnostics` carrying every collector's warnings (floating image
@@ -127,6 +133,8 @@ def write_sbom(
     collected: list[SbomComponentModel] = []
     for name in registry.list_collectors():
         collector = registry.get(name)
+        if isinstance(collector, ChartImageCollector):
+            collector.helm_cache = helm_cache
         result = collector.collect(graph, modules, build_path)
         collected.extend(result.components)
         diagnostics.items.extend(result.diagnostics)

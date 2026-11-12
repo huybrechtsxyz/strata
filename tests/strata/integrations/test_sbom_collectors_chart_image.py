@@ -3,12 +3,15 @@
 side, part 2)."""
 
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
 
-from strata.controllers.sbom_controller import _merge_by_purl
+from strata.controllers.sbom_controller import _merge_by_purl, write_sbom
+from strata.controllers.solution_controller import DocumentIndex
+from strata.integrations.helm_cache import archive_digest
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.sbom_collectors import chart_image_collector
 from strata.integrations.sbom_collectors.chart_image_collector import ChartImageCollector, rendered_images
@@ -112,12 +115,18 @@ def _graph(render_charts: bool | None = True) -> ResolvedWorkspaceGraph:
     return ResolvedWorkspaceGraph(workspace=workspace)
 
 
-def _chart(build_path: Path, where: str, *, registry: bool = False, values: bool = True) -> Path:
+def _chart(
+    build_path: Path, where: str, *, registry: bool = False, values: bool = True, pin: tuple[str, str] | None = None
+) -> Path:
+    """A module folder as the build writes it; `pin` is the registry chart's `(chartVersion, chartDigest)`."""
     folder = build_path / where
     folder.mkdir(parents=True)
     meta = {"releaseName": "whoami", "namespace": "apps-k8s"}
     if registry:
         meta["chartName"] = "immich"
+        meta["chartRemote"] = "charts"
+        if pin is not None:
+            meta["chartVersion"], meta["chartDigest"] = pin
     else:
         (folder / "Chart.yaml").write_text("apiVersion: v2\nname: whoami\nversion: 0.1.0\n", encoding="utf-8")
     (folder / "meta.yaml").write_text(yaml.safe_dump(meta), encoding="utf-8")
@@ -184,11 +193,70 @@ def test_a_chart_without_strata_values_is_rendered_with_its_defaults(tmp_path, f
     assert fake_helm.calls[0][3] is None
 
 
-def test_a_registry_chart_and_a_vendored_folder_are_not_rendered(tmp_path, fake_helm):
-    _chart(tmp_path, "apps/immich", registry=True)
+def test_without_the_cache_a_registry_chart_is_not_rendered_nor_a_vendored_folder(tmp_path, fake_helm):
+    _chart(tmp_path, "apps/immich", registry=True, pin=("0.13.1", "sha256:x"))
     _chart(tmp_path, "apps/whoami/charts/sub")
-    assert ChartImageCollector().collect(_graph(), [], tmp_path).components == []
-    assert fake_helm.calls == []
+    result = ChartImageCollector().collect(_graph(), [], tmp_path)
+    assert (result.components, result.diagnostics, fake_helm.calls) == ([], [], [])
+
+
+# Registry charts, rendered from the `.strata/helm/` cache (plan item 9b).
+
+
+def _cache_entry(cache: Path, version: str = "0.13.1", content: bytes = b"archive") -> Path:
+    """A cache entry as `pull_chart()` leaves it: one archive and its unpacked chart folder."""
+    entry = cache / "charts" / "immich" / version
+    (entry / "immich").mkdir(parents=True)
+    (entry / "immich" / "Chart.yaml").write_text(
+        f"apiVersion: v2\nname: immich\nversion: {version}\n", encoding="utf-8"
+    )
+    archive = entry / f"immich-{version}.tgz"
+    archive.write_bytes(content)
+    return archive
+
+
+def test_a_pinned_registry_chart_is_rendered_from_its_cached_archive(tmp_path, fake_helm):
+    cache = tmp_path / "cache"
+    archive = _cache_entry(cache)
+    folder = _chart(tmp_path / "build", "apps/immich", registry=True, pin=("0.13.1", archive_digest(archive)))
+    result = ChartImageCollector(helm_cache=cache).collect(_graph(), [], tmp_path / "build")
+    assert fake_helm.calls == [(archive, "whoami", "apps-k8s", folder / "strata-values.yaml")]
+    assert {c.properties["strata:used-by"] for c in result.components} == {
+        "chart:apps/immich/init",
+        "chart:apps/immich/web",
+        "chart:apps/immich/proxy",
+    }
+    assert result.diagnostics == []
+
+
+@pytest.mark.parametrize(
+    ("pin", "in_cache", "reason"),
+    [
+        (None, True, "chart 'immich' was not pinned by the build"),
+        (("0.13.1", "sha256:x"), False, "chart 'immich' 0.13.1 is not in .strata/helm/"),
+        (("0.13.1", "sha256:other"), True, "chart 'immich' 0.13.1 in .strata/helm/ is sha256:"),
+    ],
+    ids=["unpinned", "not-cached", "other-digest"],
+)
+def test_a_registry_chart_that_does_not_match_its_pin_gets_an_info_line(tmp_path, fake_helm, pin, in_cache, reason):
+    cache = tmp_path / "cache"
+    if in_cache:
+        _cache_entry(cache)
+    _chart(tmp_path / "build", "apps/immich", registry=True, pin=pin)
+    result = ChartImageCollector(helm_cache=cache).collect(_graph(), [], tmp_path / "build")
+    assert (result.components, fake_helm.calls) == ([], [])
+    [finding] = result.diagnostics
+    assert (finding.severity, finding.code) == (Severity.INFO, "sbom_chart_not_rendered")
+    assert finding.message.startswith(f"apps/immich: chart images not listed: {reason}")
+
+
+def test_write_sbom_hands_the_cache_to_the_collector(tmp_path, fake_helm):
+    cache = tmp_path / "cache"
+    archive = _cache_entry(cache)
+    build = tmp_path / "build"
+    _chart(build, "apps/immich", registry=True, pin=("0.13.1", archive_digest(archive)))
+    write_sbom(build, _graph(), DocumentIndex(), helm_cache=cache)
+    assert [call[0] for call in fake_helm.calls] == [archive]
 
 
 def test_without_helm_each_chart_gets_an_info_line(tmp_path, monkeypatch):
@@ -244,4 +312,36 @@ def test_a_real_local_chart_is_rendered_by_helm(tmp_path):
     )
     result = ChartImageCollector().collect(_graph(), [], tmp_path)
     assert [(c.name, c.purl) for c in result.components] == [("whoami", "pkg:docker/traefik/whoami@v1.11")]
+    assert result.diagnostics == []
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
+def test_a_real_packaged_registry_chart_is_rendered_by_helm_with_strata_values(tmp_path):
+    source = tmp_path / "src" / "immich"
+    (source / "templates").mkdir(parents=True)
+    (source / "Chart.yaml").write_text("apiVersion: v2\nname: immich\nversion: 0.13.1\n", encoding="utf-8")
+    (source / "values.yaml").write_text("tag: v1.0\n", encoding="utf-8")
+    (source / "templates" / "pod.yaml").write_text(
+        "apiVersion: v1\nkind: Pod\nmetadata:\n  name: {{ .Release.Name }}\nspec:\n  containers:\n"
+        "    - name: server\n      image: ghcr.io/immich-app/immich-server:{{ .Values.tag }}\n",
+        encoding="utf-8",
+    )
+    entry = tmp_path / "cache" / "charts" / "immich" / "0.13.1"
+    entry.mkdir(parents=True)
+    packaged = subprocess.run(
+        [shutil.which("helm") or "helm", "package", str(source), "--destination", str(entry)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert packaged.returncode == 0, packaged.stderr
+    shutil.copytree(source, entry / "immich")
+    [archive] = entry.glob("*.tgz")
+    folder = _chart(tmp_path / "build", "apps/immich", registry=True, pin=("0.13.1", archive_digest(archive)))
+    (folder / "strata-values.yaml").write_text("tag: v2.0\n", encoding="utf-8")
+
+    result = ChartImageCollector(helm_cache=tmp_path / "cache").collect(_graph(), [], tmp_path / "build")
+    assert [(c.name, c.properties["strata:image"]) for c in result.components] == [
+        ("server", "ghcr.io/immich-app/immich-server:v2.0")
+    ]
     assert result.diagnostics == []

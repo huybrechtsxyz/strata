@@ -57,15 +57,16 @@ Strata writes no image into a Helm chart's values, so the chart decides which im
       render_charts: true
   ```
 
-  `build run` then renders each local chart with `helm template`, offline, with strata's values.
+  `build run` then renders each chart with `helm template`, offline, with strata's values: a local chart from its
+  build folder, a registry chart from the archive the build pinned in `.strata/helm/`.
   - Every container image, sidecars and init containers included, is listed with
     `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<module reference>/<container>` and
     `strata:image`, the image reference exactly as the chart writes it.
   - A declared image the chart also renders loses its declared-only marker.
   - A chart that cannot be rendered gets one `info` line (`sbom_chart_not_rendered`) and is skipped. That
-    happens when `helm` is not installed, or when a dependency is not vendored under `charts/`.
+    happens when `helm` is not installed, when a dependency is not vendored under `charts/`, or when a registry
+    chart was not pinned (`--offline` with an empty cache) or its cached archive no longer has the pinned digest.
   - An image whose reference holds a token resolved only at deploy is left out (`sbom_chart_image_unresolved`).
-  - Registry charts are not rendered yet.
 - **Turning it on can fail a build.** `cve_policy` and `image_gate_policy` start checking the rendered images.
   Check with `strata policy findings` first.
 

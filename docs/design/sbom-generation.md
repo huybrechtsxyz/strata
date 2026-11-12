@@ -163,7 +163,10 @@ service image may not be what runs.
     image, so `strata:image` is where its tag survives.
   - A chart it cannot render gets an `info` finding (`sbom_chart_not_rendered`); an image holding a `${...}`
     token gets `sbom_chart_image_unresolved`. Neither fails the build.
-  - Registry charts, unpacked in `.strata/helm/` outside the build path, are not rendered yet.
+  - A registry chart is rendered from its archive in `.strata/helm/`, which `write_sbom(helm_cache=)` hands to
+    this collector only. It renders only an archive whose digest is the `chartDigest` the build pinned, the
+    archive `deploy run` installs. An unpinned chart, a missing archive or another digest is an
+    `sbom_chart_not_rendered` finding.
 - **Merging.** `_merge_by_purl()` joins every component's `strata:used-by` rather than keeping the first one's,
   and drops the declared-only marker when a component with the same purl comes from a rendered chart.
 

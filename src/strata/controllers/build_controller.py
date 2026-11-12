@@ -117,6 +117,7 @@ from strata.utils.dependency_order import topological_order
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import StrataError, SystemError, UsageError
+from strata.utils.layout import helm_cache_dir
 from strata.utils.terraform_outputs import read_declared_outputs
 
 
@@ -927,7 +928,14 @@ def build_run(
     # rendered, matching v1's own unconditional "sbom runs last" ordering.
     # Skipped in a dry run: nothing has actually been rendered to scan yet.
     if not dry_run:
-        sbom_diagnostics = write_sbom(build_path, graph, index, remotes, commit=built_commit_sha(context.root))
+        sbom_diagnostics = write_sbom(
+            build_path,
+            graph,
+            index,
+            remotes,
+            commit=built_commit_sha(context.root),
+            helm_cache=helm_cache_dir(context.root),
+        )
         diagnostics.extend(sbom_diagnostics)
         _step(f"wrote {build_path / 'sbom.json'}")
 
