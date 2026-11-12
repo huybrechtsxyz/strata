@@ -17,4 +17,4 @@ Thank you to everyone who has contributed to strata. This file lists people who 
 ## Notes
 
 - This list is community-maintained. Adding your name does not imply formal maintainership unless explicitly stated.
-- For contribution guidelines, see [CONTRIBUTING](./contributing.md)
+- For contribution guidelines, see [CONTRIBUTING](./CONTRIBUTING.md)

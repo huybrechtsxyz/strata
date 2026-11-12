@@ -177,10 +177,12 @@ def _lock_staged_archives(monkeypatch) -> None:
     """Windows refuses to delete a file another process holds open, as a virus scanner does a newly written archive."""
     real_unlink = os.unlink
 
-    def unlink(path, *args, **kwargs):
-        if ".pull-" in str(path) and str(path).endswith(".tgz"):
+    def unlink(path, *args, dir_fd=None, **kwargs):
+        # Windows' `shutil.rmtree` unlinks by full path; Linux's unlinks the bare file name relative to an open
+        # directory (`dir_fd`). These tests remove no archive but a staged one, so either form is the locked file.
+        if str(path).endswith(".tgz") and (".pull-" in str(path) or dir_fd is not None):
             raise PermissionError(13, "The process cannot access the file because it is being used", str(path))
-        return real_unlink(path, *args, **kwargs)
+        return real_unlink(path, *args, dir_fd=dir_fd, **kwargs)
 
     monkeypatch.setattr(os, "unlink", unlink)
 

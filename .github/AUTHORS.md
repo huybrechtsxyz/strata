@@ -8,7 +8,7 @@ This project was created and is maintained by the contributors listed below. Thi
 
 ## Major contributors
 
-See [CONTRIBUTORS](./contributors.md) for the list of contributors.
+See [CONTRIBUTORS](./CONTRIBUTORS.md) for the list of contributors.
 
 ## How to add or update entries
 

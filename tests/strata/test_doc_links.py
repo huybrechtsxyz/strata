@@ -11,6 +11,7 @@ Two rules over every relative Markdown link in a Markdown file of the repository
 Fenced code blocks and inline code spans are not links.
 """
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -58,6 +59,21 @@ def _docs() -> list[Path]:
     return [REPO_ROOT / name for name in listed if name.endswith(".md")]
 
 
+def _exists_as_written(path: Path) -> bool:
+    """`path` exists with every part spelled as on disk, so a link that resolves only on a case-insensitive file
+    system (`./contributing.md` for `CONTRIBUTING.md`) fails on Windows as it does on Linux and GitHub."""
+    try:
+        parts = path.relative_to(REPO_ROOT).parts
+    except ValueError:
+        return path.exists()
+    here = REPO_ROOT
+    for part in parts:
+        if not here.is_dir() or part not in os.listdir(here):
+            return False
+        here = here / part
+    return True
+
+
 def _problems() -> tuple[list[str], list[str]]:
     by_name: dict[str, list[str]] = {}
     for doc in DOCS.rglob("*.md"):
@@ -68,7 +84,7 @@ def _problems() -> tuple[list[str], list[str]]:
         where = doc.relative_to(REPO_ROOT).as_posix()
         for number, href in doc_links(doc.read_text(encoding="utf-8")):
             target = (doc.parent / href).resolve()
-            if not target.exists():
+            if not _exists_as_written(Path(os.path.normpath(doc.parent / href))):
                 now = ", ".join(sorted(by_name.get(Path(href).name, []))) or "no doc of that name"
                 broken.append(f"{where}:{number}: {href} (now: {now})")
             elif _is_work_doc(target) and not _is_work_doc(doc.resolve()):

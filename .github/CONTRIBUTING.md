@@ -139,7 +139,7 @@ The `config/` directory contains complete, validated reference workspaces that d
 
 ## Questions & Support
 
-- See [SUPPORT](./support.md) for where to get help and expected response times.
+- See [SUPPORT](./SUPPORT.md) for where to get help and expected response times.
 
 Thank you for contributing!
 
