@@ -264,12 +264,7 @@ class EnvironmentService(BaseService[EnvironmentModel]):
 
 
 def unresolved_value_tokens(
-    model: PlatformBaseModel,
-    declared: dict[str, set[str]],
-    owner_name: str,
-    *,
-    output_claimed: bool = False,
-    param_tokens: bool = False,
+    model: PlatformBaseModel, declared: dict[str, set[str]], owner_name: str, *, output_claimed: bool = False
 ) -> Diagnostics:
     """Check every Value token in `model` against an already-computed declared-keys set.
 
@@ -308,9 +303,9 @@ def unresolved_value_tokens(
             validation" — unchanged by this parameter, only the false
             rejection is fixed). `False` (default) preserves every existing
             caller's behavior unchanged.
-        param_tokens: True for a deployment: a well-formed load-time `${param:}` is then not malformed. It is
-            substituted when the deployment's chain is resolved, which reports a missing value itself, so a
-            partial base that still holds one is not a finding here.
+
+    A `${param:}` token is malformed here, as in any run-time check: a deployment that holds one is loaded as a
+    template and checked only once resolved, with every `${param:}` substituted.
 
     Returns:
         One error per malformed or unresolved token, each located at the
@@ -328,7 +323,7 @@ def unresolved_value_tokens(
     dumped = model.model_dump(by_alias=True, mode="json")
     dumped.pop("meta", None)
     for path, text in _iter_strings(dumped):
-        for candidate in find_malformed_value_tokens(text, param_tokens=param_tokens):
+        for candidate in find_malformed_value_tokens(text):
             kinds = "|".join(VALUE_TOKEN_KINDS)
             diagnostics.error(
                 f"Malformed Value token {candidate!r}. Expected '${{{kinds}:KEY}}', e.g. '${{var:region}}'. "

@@ -4,11 +4,11 @@ One named set of plain values: the instance data of a spoke, a hub, a customer o
 values a whole family of documents differs by (a name, a sequence number, a subscription ID) live
 in one place, so the documents that use them can share one base.
 
-> **Status: deployments, free-form fields only.** A deployment names sets in `meta.params`, and
-> `${param:<role>.<key>}` works in any field that takes free text (`properties`, `custom`,
-> `kube_context`, ...). Typed and reference fields (`tenant`, `environments`, `providers`,
-> `layers.segments`), environments and tenants come in the next steps of
-> `base-parameters-v2.md` (work doc).
+> **Status: deployments.** A deployment names sets in `meta.params`, and `${param:<role>.<key>}`
+> works in any field of its `spec` except `extends` and `partial`, reference fields included
+> (`tenant`, `environments`, `providers[].provider`). Environments and tenants come in the next
+> steps of `base-parameters-v2.md` (work doc). The YAML editor's schema does not know templates
+> yet, so it may underline a token in a typed field that `strata validate` accepts.
 
 ## Schema
 
@@ -107,6 +107,25 @@ spec:
 - A `partial: true` base may hold tokens no value fills yet; only a deployable deployment must
   resolve every token of its chain.
 
+### Templates are validated per deployment
+
+A deployment whose `spec` holds a `${param:}` token is a **template**, base or leaf. strata
+checks its `meta`, its `extends` and `partial`, and the syntax of its tokens when it loads it;
+the rest of its `spec` is checked once per deployable deployment whose chain it is in, after the
+values are filled in. So `hub-${param:spoke.hub}-env` is checked as `hub-hub01-env` for one spoke
+and as `hub-hub02-env` for the next, and a value that does not fit is reported for the deployment
+it was resolved for.
+
+- `strata deploy list` shows a template base as written, tokens and all, and every deployment
+  resolved.
+- A command run on a template base (`deploy run`, `build run`, ...) stops with an error saying it
+  is a partial base that reads parameter sets: only a deployment built on it can run.
+- `${param:}` is never allowed in `meta`, `spec.extends` or `spec.partial`: names, parameter sets
+  and chains stay fixed, so strata knows every chain before it reads a value.
+- In a YAML flow list (`[a, b]`) or map (`{ k: v }`), quote a value that holds a token:
+  `environments: [solution-env, 'hub-${param:spoke.hub}-env']`. In block style no quotes are
+  needed.
+
 ## Validation
 
 - A `${...}` token in a key or value of `spec.values` is a load error (`value_error`)
@@ -117,6 +136,15 @@ spec:
   deployment it was resolved for:
   `base spec.properties.envs[1]: ${param:spoke.hub} not found in spoke: [spoke-acme-001] (for spoke-acme-001)`
 - A list or map inside a longer string is `param_not_scalar`
+- A filled-in value the field does not accept (a tenant name with a space) is reported on the
+  template, for the deployment: `base spec.tenant: invalid after ${param:} substitution: ...
+  (for initech)`, with the model's own code (`string_pattern_mismatch`, ...)
+- A reference that names no document once filled in is an `unknown_reference` on the deployment:
+  `unknown environment 'hub-hub02-env' ... (in deployment 'initech' after ${param:} substitution)`.
+  A name a template writes literally (`workspace: main`) is checked the same way, once per
+  deployment that uses the template
+- A malformed token in a template (`${param:}`) is a load error
+- `${param:}` in `meta`, `spec.extends` or `spec.partial` is a load error
 - A `${param:}` in a document of another kind (an environment, a workspace, a module, ...) is not
   substituted, and the token check reports it as a `malformed_value_token`
 

@@ -47,7 +47,7 @@ from strata.services.asset_service import AssetService
 from strata.services.attributeconfig_service import AttributeConfigService
 from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
-from strata.services.deployment_service import DeploymentService
+from strata.services.deployment_service import DeploymentService, DeploymentTemplateService
 from strata.services.dns_service import DnsService
 from strata.services.environment_service import EnvironmentService
 from strata.services.firewall_service import FirewallService
@@ -71,6 +71,7 @@ from strata.utils.layout import (
     YAML_SUFFIXES,
     manifest_path,
 )
+from strata.utils.param_tokens import holds_param_tokens
 
 #: Every `apiVersion` value that marks a document as ours. Anything else (or
 #: nothing) means "not a strata document" and is skipped without complaint.
@@ -100,6 +101,13 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.ARTIFACT: ArtifactService,
     PlatformKind.ASSET: AssetService,
     PlatformKind.PARAMETERSET: ParameterSetService,
+}
+
+#: The kinds whose spec may read parameter sets, and the service that loads such a document as a template: meta
+#: validated, spec as written, validated per instance once the resolver substitutes `${param:}`
+#: (`base-parameters-v2.md` (work doc), "Templates are validated per instance").
+TEMPLATE_SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
+    PlatformKind.DEPLOYMENT: DeploymentTemplateService,
 }
 
 
@@ -351,6 +359,8 @@ class SolutionController:
             return
 
         service_class = SERVICE_BY_KIND[kind]
+        if kind in TEMPLATE_SERVICE_BY_KIND and holds_param_tokens(raw.get("spec")):
+            service_class = TEMPLATE_SERVICE_BY_KIND[kind]
         service = service_class(data=raw)
         result = service.validate()
         if not result.ok or service.model is None:

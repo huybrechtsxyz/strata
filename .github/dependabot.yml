@@ -5,8 +5,8 @@
 #
 # Author        : Vincent Huybrechts
 # Created       : 2026-05-07
-# Last Updated  : 2026-05-07
-# Version       : 1.0.0
+# Last Updated  : 2026-11-12
+# Version       : 1.1.0
 # ==============================================================================
 
 version: 2
@@ -24,8 +24,9 @@ updates:
     commit-message:
       prefix: "chore(actions)"
 
-  # Python — pyproject.toml dependencies
-  - package-ecosystem: "pip"
+  # Python — pyproject.toml and uv.lock together. Not "pip": it updates pyproject.toml alone, and the container
+  # image installs with `uv sync --locked`, which fails when the lockfile no longer matches.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -35,3 +36,28 @@ updates:
       - "python"
     commit-message:
       prefix: "chore(deps)"
+
+  # Checkov in the full container image only (docker/checkov/requirements.txt), not the project's dependencies
+  - package-ecosystem: "pip"
+    directory: "/docker/checkov"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(image)"
+
+  # Container image — the FROM lines of Dockerfile.cli: the Python base image, uv, the Docker CLI and Trivy
+  # (docs/design/cli-image.md). Helm's version is an ARG and is bumped by hand.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(image)"

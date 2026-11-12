@@ -18,6 +18,7 @@ from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import resolve_deployment
 from strata.models.artifact_model import ArtifactModel
 from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import AnyDeploymentModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import StrataError
 
@@ -30,7 +31,11 @@ def used_artifacts(context: SolutionContext) -> set[str] | None:
     caller then reports nothing.
     """
     used: set[str] = set()
-    for name in sorted(context.controller.index.names_of(PlatformKind.DEPLOYMENT)):
+    index = context.controller.index
+    for name in sorted(index.names_of(PlatformKind.DEPLOYMENT)):
+        entry = index.get(PlatformKind.DEPLOYMENT, name)
+        if entry is not None and cast(AnyDeploymentModel, entry.model).spec.partial:
+            continue  # a base deploys nothing, and a template base would not resolve on its own
         try:
             deployment = resolve_deployment(context, name)
             if deployment.spec.partial or deployment.spec.workspace is None:

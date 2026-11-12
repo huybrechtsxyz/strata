@@ -3,7 +3,7 @@
 
 from typing import Any
 
-from strata.models.deployment_model import DeploymentModel
+from strata.models.deployment_model import DeploymentModel, DeploymentTemplateModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
@@ -134,3 +134,15 @@ class DeploymentService(BaseService[DeploymentModel]):
                     code="unknown_execution_step",
                 )
         return diagnostics
+
+
+class DeploymentTemplateService(BaseService[DeploymentTemplateModel]):
+    """Loads a deployment whose spec holds `${param:}`: meta validated, spec kept as written.
+
+    The loader picks it over `DeploymentService` for such a document (`solution_controller.py`); the resolver
+    validates the spec per deployable deployment, once the values are substituted.
+    """
+
+    def _get_model_class(self) -> type[DeploymentTemplateModel]:
+        """Return the DeploymentTemplateModel class for validation."""
+        return DeploymentTemplateModel

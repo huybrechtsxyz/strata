@@ -1,6 +1,6 @@
 # Artifact gap analysis
 
-- Status: implemented. Designs 1 to 10 released in 2.6.0; design 11 built after it. Design 6 step 2 (a Compose
+- Status: implemented. Designs 1 to 11 built, not yet released (`[Unreleased]` in the CHANGELOG, after 2.6.0). Design 6 step 2 (a Compose
   `docker login`) is out of scope until a private-registry consumer needs it. Kept as the historical record of the
   artifact review; the current behaviour is in [artifact.md](../config/artifact.md) and
   [effective-images.md](../design/effective-images.md).
@@ -665,5 +665,5 @@ Each was decided as recommended and built that way:
 - 2026-11-10: design 10 implemented: the stale `artifact-references.md` citations, by the rule "now" -> reference, "why" -> archive.
 - 2026-11-12: design 11 (from the PR #330 review) designed and implemented: one Helm delivery rule for
   `artifact_not_delivered` and `effective_images()`.
-- 2026-11-12: archived. Designs 1 to 10 released in 2.6.0, design 11 after it; open questions marked resolved;
+- 2026-11-12: archived. designs 1 to 11 built, not yet released; open questions marked resolved;
   design 6 step 2 out of scope.

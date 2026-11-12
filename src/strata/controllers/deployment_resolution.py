@@ -58,15 +58,22 @@ the sets the chain names), so leaves that name the same sets, or none,
 still share their bases' work.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
 from pydantic import ValidationError
 
+from strata.controllers.references import model_references, unresolved_references
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.logging.config import get_logger
 from strata.models.common_models import PlatformKind
-from strata.models.deployment_model import DeploymentModel
+from strata.models.deployment_model import (
+    AnyDeploymentModel,
+    DeploymentModel,
+    DeploymentSpecModel,
+    DeploymentTemplateModel,
+)
 from strata.models.parameterset_model import ParameterSetModel
 from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
@@ -188,20 +195,23 @@ def list_deployments(
     resolved, _ = resolve_deployment_chains(index)
     rows = []
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        raw = cast(DeploymentModel, entry.model)
-        deployment = resolved.get(entry.ref.name, raw)
-        version_entry = index.get(PlatformKind.VERSION, deployment.spec.version) if deployment.spec.version else None
+        raw = cast(AnyDeploymentModel, entry.model)
+        deployment = deployment_of(entry, resolved)
+        # A template that did not resolve (a template base) is listed as written, `${param:}` tokens and all.
+        spec = deployment.spec.model_dump() if deployment is not None else raw.spec.model_dump()
+        version_name = spec.get("version")
+        version_entry = index.get(PlatformKind.VERSION, version_name) if isinstance(version_name, str) else None
         promotion = cast(VersionModel, version_entry.model).spec.promotion if version_entry is not None else None
         row = DeploymentSummary(
             name=entry.ref.name,
-            workspace=deployment.spec.workspace,
+            workspace=_text(spec.get("workspace")),
             extends=raw.spec.extends,
-            tenant=deployment.spec.tenant,
-            version=deployment.spec.version,
+            tenant=_text(spec.get("tenant")),
+            version=_text(version_name),
             ring=promotion.ring if promotion is not None else None,
             order=promotion.order if promotion is not None else None,
             wave=promotion.wave if promotion is not None else None,
-            environments=tuple(deployment.spec.environments or ()),
+            environments=tuple(str(item) for item in spec.get("environments") or ()),
             partial=bool(raw.spec.partial),
             source=str(entry.source),
         )
@@ -212,6 +222,11 @@ def list_deployments(
             continue
         rows.append(row)
     return rows
+
+
+def _text(value: Any) -> str | None:
+    """A summary field as text: `None` stays `None` (a template may hold anything as written)."""
+    return None if value is None else str(value)
 
 
 def deployment_workspace(index: DocumentIndex, deployment: DeploymentModel) -> WorkspaceModel | None:
@@ -267,8 +282,7 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
 
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         name = entry.ref.name
-        deployment = entry.model
-        assert isinstance(deployment, DeploymentModel)
+        deployment = cast(AnyDeploymentModel, entry.model)
 
         try:
             chain = _resolve_chain(name, index, chains, poisoned, visiting=[])
@@ -319,6 +333,14 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
             diagnostics.extend(diagnostics_from_validation_error(exc), source=str(entry.source))
             continue
 
+        for location, message in _resolved_reference_problems(index, merged_model, chain):
+            diagnostics.error(
+                f"{message} (in deployment '{name}' after ${{param:}} substitution)",
+                source=str(entry.source),
+                location=location,
+                code="unknown_reference",
+            )
+
         resolved[name] = ResolvedDeployment(model=merged_model, params=params, param_sets=param_sets, chain=chain)
 
     return resolved, diagnostics
@@ -328,7 +350,7 @@ def _param_sets(chain: tuple[str, ...], index: DocumentIndex) -> ParamSets | Non
     """Role -> the parameter sets `chain` (leaf first) names, root first; `None` if one does not exist."""
     sets: dict[str, list[str]] = {}
     for name in reversed(chain):
-        model = cast(DeploymentModel, _require(index, PlatformKind.DEPLOYMENT, name).model)
+        model = cast(AnyDeploymentModel, _require(index, PlatformKind.DEPLOYMENT, name).model)
         for role, named in (model.meta.params or {}).items():
             names = [named] if isinstance(named, str) else list(named)
             if any(index.get(PlatformKind.PARAMETERSET, set_name) is None for set_name in names):
@@ -364,8 +386,10 @@ def _merged_spec(
         return cache[key]
 
     entry = _require(index, PlatformKind.DEPLOYMENT, name)
-    own_raw = cast(DeploymentModel, entry.model).spec.model_dump(exclude_none=True)
-    own, own_problems = substitute_params(own_raw, params, param_sets, "spec")
+    document = cast(AnyDeploymentModel, entry.model)
+    own, own_problems = substitute_params(document.spec.model_dump(exclude_none=True), params, param_sets, "spec")
+    if isinstance(document, DeploymentTemplateModel) and not own_problems:
+        own, own_problems = _validate_substituted(own)
     problems = tuple((name, str(entry.source), problem) for problem in own_problems)
 
     if len(chain) == 1:
@@ -375,6 +399,66 @@ def _merged_spec(
         result = _MergedSpec(spec=merge_deployment_specs(base.spec, own), problems=base.problems + problems)
     cache[key] = result
     return result
+
+
+def _validate_substituted(spec: dict[str, Any]) -> tuple[dict[str, Any], list[ParamProblem]]:
+    """A template's spec, substituted, validated as the spec it now is and dumped as a loaded document's would be.
+
+    What the loader does for every other deployment, done per instance (`base-parameters-v2.md` (work doc),
+    "Templates are validated per instance"): the dump normalises the spec, so it merges like any other.
+    """
+    try:
+        model = DeploymentSpecModel.model_validate(spec)
+    except ValidationError as exc:
+        problems = [
+            ParamProblem(
+                location=f"spec.{finding.location}" if finding.location else "spec",
+                message=f"invalid after ${{param:}} substitution: {finding.message}",
+                code=finding.code or "invalid_value",
+            )
+            for finding in diagnostics_from_validation_error(exc).errors
+        ]
+        return spec, problems
+    return model.model_dump(exclude_none=True), []
+
+
+def _resolved_reference_problems(
+    index: DocumentIndex, model: DeploymentModel, chain: tuple[str, ...]
+) -> list[tuple[str, str]]:
+    """`(location, message)` for each reference of a resolved deployment that names no document, when a template
+    in its chain may have produced it.
+
+    The reference walk checks each document as written, which cannot see a name a template builds
+    (`hub-${param:spoke.hub}-env`). A name some non-template document of the chain writes itself is left out: the
+    walk already reported it on that document.
+    """
+    documents = [_require(index, PlatformKind.DEPLOYMENT, name).model for name in chain]
+    if not any(isinstance(document, DeploymentTemplateModel) for document in documents):
+        return []
+    written = {
+        name
+        for document in documents
+        if isinstance(document, DeploymentModel)
+        for _, name in model_references(document)
+    }
+    return [
+        (location, message)
+        for location, message in unresolved_references(index, model, ignore=written)
+        if not location.startswith("meta.")
+    ]
+
+
+def deployment_of(entry: IndexEntry, resolved: Mapping[str, DeploymentModel]) -> DeploymentModel | None:
+    """The deployment checks read for `entry`: its resolved model, else its own document, else `None`.
+
+    `None` is a template that did not resolve: a template base no leaf completes on its own, or a leaf whose
+    values are missing (already reported). Its spec is not a valid deployment as written, so a check skips it, as
+    it skips what a partial base lacks; the leaves that use it are checked resolved.
+    """
+    found = resolved.get(entry.ref.name)
+    if found is not None:
+        return found
+    return entry.model if isinstance(entry.model, DeploymentModel) else None
 
 
 def _merge_tenant_defaults(spec_dict: dict[str, Any], index: DocumentIndex) -> dict[str, Any]:
@@ -451,7 +535,7 @@ def _resolve_chain(
         return None  # missing ancestor — not a cycle, not cached: nothing to memoise
 
     deployment = entry.model
-    assert isinstance(deployment, DeploymentModel)
+    assert isinstance(deployment, (DeploymentModel, DeploymentTemplateModel))
 
     if not deployment.spec.extends:
         cache[name] = (name,)

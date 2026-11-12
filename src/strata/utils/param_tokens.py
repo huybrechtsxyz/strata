@@ -22,11 +22,24 @@ from typing import Any
 
 from strata.utils.dict_merge import deep_merge
 from strata.utils.value_paths import VALUE_PATH_MISSING, walk_value_path
-from strata.utils.value_tokens import PARAM_TOKEN_PATTERN
+from strata.utils.value_tokens import PARAM_TOKEN_PATTERN, strip_escaped_value_tokens
 
 #: An escaped `$${...}` (kept as written) or a `${param:...}` token, in one alternation so a single left-to-right
 #: pass never reads a token out of an escape.
 _SUBSTITUTE_PATTERN = re.compile(r"\$\$\{[^}]*\}|" + PARAM_TOKEN_PATTERN.pattern)
+
+
+def holds_param_tokens(node: Any) -> bool:
+    """Whether any string value under `node` holds a well-formed `${param:}` token (an escaped one does not count).
+
+    What makes a document a template (`base-parameters-v2.md` (work doc), "Templates are validated per instance").
+    Map keys are never substituted, so they do not count either.
+    """
+    if isinstance(node, dict):
+        return any(holds_param_tokens(child) for child in node.values())
+    if isinstance(node, list):
+        return any(holds_param_tokens(child) for child in node)
+    return isinstance(node, str) and PARAM_TOKEN_PATTERN.search(strip_escaped_value_tokens(node)) is not None
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,2 @@
+# Checkov for the full container image (Dockerfile.cli, target full). Kept current by Dependabot (pip, /docker/checkov).
+checkov==3.3.9

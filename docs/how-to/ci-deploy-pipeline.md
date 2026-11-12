@@ -71,29 +71,24 @@ strata needs Python 3.12 or later (tested on 3.12, 3.13 and 3.14). While v2 is i
 runner reaches PyPI through a corporate mirror, add `UV_INDEX_STRATEGY: unsafe-best-match` to the
 step's `env`.
 
-A container image is published to `ghcr.io/huybrechtsxyz/strata`. It holds strata and the tools strata
-itself calls (`git`, and `ssh` for `ssh_key` auth), not Terraform or Helm, and pre-release tags never move
-`latest`. Mount the checkout and work in it:
+A container image is published to `ghcr.io/huybrechtsxyz/strata` in two variants; pre-release tags never move
+`latest`:
+
+- **`strata:<version>`** (also `-slim`, and `latest`): strata and the tools strata itself calls (`git`, and `ssh`
+  for `ssh_key` auth). Enough for `validate`, `schema`, `deploy steps` and a build without Helm modules.
+- **`strata:<version>-full`** (and `latest-full`): adds Helm 4, the Docker CLI with Compose, Trivy and Checkov.
+  Use it for a workspace with Helm modules: `build run` itself calls Helm (it pins registry charts and renders
+  charts for the SBOM).
+
+Neither has Terraform: its licence is not settled for a public image. Mount the checkout and work in it:
 
 ```bash
-docker run --rm -v "$PWD:/work" -w /work ghcr.io/huybrechtsxyz/strata:2.6.0 validate config
+docker run --rm -v "$PWD:/work" -w /work ghcr.io/huybrechtsxyz/strata:<version> validate config
 ```
 
-A workspace with Helm or Terraform steps needs those tools too, and so does `build run` for a Helm module (it
-pins registry charts and renders charts for the SBOM). Extend the image with the versions you pin:
-
-```dockerfile
-FROM ghcr.io/huybrechtsxyz/strata:2.6.0
-USER root
-ARG HELM_VERSION=v4.3.1
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
-    && curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
-       | tar -xz -C /usr/local/bin --strip-components=1 linux-amd64/helm \
-    && apt-get purge -y curl && rm -rf /var/lib/apt/lists/*
-USER appuser
-```
-
-What is in the image, and why, is in [cli-image.md](../design/cli-image.md).
+For Terraform, or another version of a tool, build your own image on either variant;
+[cli-image.md](../design/cli-image.md) has the example, the Docker socket mount for Compose steps, and what each
+variant holds and why.
 
 If your pipeline installs packages through Aikido Safe Chain, a freshly released strata is held back
 for 48 hours; see [aikido-safe-chain.md](aikido-safe-chain.md).

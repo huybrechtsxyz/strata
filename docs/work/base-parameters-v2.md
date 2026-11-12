@@ -772,14 +772,14 @@ Phases. Each step is shippable on its own; tests are listed with the step that n
         embedded tokens; a list inserted whole; a missing key names the document, field and sets; substituted text
         is not rescanned; `${var:}` is left for run time; one base shared by two leaves with different values (the
         cache). Done 2026-11-12, see the changelog for what differs from this plan.
-  - [ ] 1c. **Templates.** A document whose `spec` holds `${param:}` loads as a template (meta validated, spec a
+  - [x] 1c. **Templates.** A document whose `spec` holds `${param:}` loads as a template (meta validated, spec a
         plain dict), partial or not. The token checks accept `${param:}` in it. Every consumer that falls back to
         `entry.model` (the list in "Templates are validated per instance") skips templates or reads the resolved
         document. References are checked on each resolved document, so a wrong `${param:spoke.tenant}` is an error,
         not silently missing tenant defaults. The risky step. Tests: `tenant`, `environments[]`,
         `providers[].provider` and `layers.segments` filled from values; an unknown environment after substitution is
         reported on the leaf; a template leaf; each listed consumer with a template in the index; `${param:}` in
-        `meta.name`, `meta.params` or `spec.extends` is an error (rule 5).
+        `meta.name`, `meta.params` or `spec.extends` is an error (rule 5). Done 2026-11-12, see the changelog.
   - [ ] 1d. **`meta.name_rule`** (rule 10), `name_rule_mismatch` with both names. Tests: match, mismatch, a rule on a
         middle base applies to every leaf below it.
   - [ ] 1e. **Diagnostics with origins, and unused values.** The origin of each substituted string, so a finding on a
@@ -889,3 +889,30 @@ Open questions:
   - **Shared walk.** `${value:}`'s dotted walk moved to `utils/value_paths.py`, so `${param:}` walks named list
     items (`${param:spoke.subnets.app.cidr}`) the same way.
   - The `${value:parameterset...}` question above stays open.
+- 2026-11-12: Step 1c built. Deployments only; environments and tenants follow in phase 2.
+  - **The template model.** `DeploymentTemplateModel`: `meta` as a deployment's, a spec that keeps every field as
+    written (`extra="allow"`) except `partial` (a bool) and `extends` (a reference), and a load-time check that
+    every `${...}` in the spec is well formed, `${param:}` included. The loader picks it through
+    `TEMPLATE_SERVICE_BY_KIND` when the raw spec holds a well-formed `${param:}` (`holds_param_tokens()`; an
+    escaped `$${param:}` does not count). `spec.partial` joins rule 5's list: it decides deployability before any
+    value is read.
+  - **Per-instance validation.** In `_merged_spec()`, a template document's substituted spec is validated as a
+    `DeploymentSpecModel` and dumped, so it merges exactly as a loaded document's would. A failure is reported on
+    the template with the leaf: `base spec.tenant: invalid after ${param:} substitution: ... (for initech)`.
+  - **References on the resolved document.** When a chain holds a template, the merged model's references are
+    checked (`references.unresolved_references()`), reported on the leaf. Names a non-template document of the
+    chain writes itself are skipped: the ordinary walk reported them already. A literal name inside a template
+    (`workspace: mian`) is reported once per leaf until the origin map (1e) can put it on the template.
+  - **Consumers.** One helper, `deployment_of(entry, resolved)`: the resolved model, else the document as loaded,
+    else `None` for a template that did not resolve. Used by five checks in `semantic_checks.py`,
+    `promotion_controller.py`, `list_deployments()` (a template base listed as written) and
+    `value_controller.resolve_deployment()` (a `UsageError` for a template base). `artifact_usage.py` skips every
+    partial base before resolving, so a template base no longer turns "unused artifacts" off. `effective_images.py`,
+    `artifact_tokens.py` and `reachable_documents.py` take a resolved model already; `value_references.py` and
+    `graph_controller.py` read any model generically and need nothing.
+  - **The `param_tokens` flag** on `unresolved_value_tokens()` (1b) is gone: a deployment that holds a well-formed
+    `${param:}` is now always a template and is token-checked only resolved. `find_malformed_value_tokens(
+    param_tokens=True)` stays, for the template's load-time check.
+  - **Open:** the exported JSON schema does not know templates, so the YAML editor underlines `${param:}` in a
+    typed field (`tenant`) that `strata validate` accepts. Candidate for 1f: allow a `${param:...}` pattern
+    alongside each `PlatformName` pattern in the deployment schema, or document it.

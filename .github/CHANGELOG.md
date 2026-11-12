@@ -10,6 +10,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **A full container image, `ghcr.io/huybrechtsxyz/strata:<version>-full`** (and `latest-full`): strata with Helm 4,
+  the Docker CLI with Compose, Trivy and Checkov, for a pipeline that runs Helm or Compose steps or the CVE and
+  Checkov policies. The image you pull today is the slim variant: `strata:<version>` and `latest` are unchanged, and
+  are also tagged `-slim` and `latest-slim`. Neither variant has Terraform, whose licence is not settled for a public
+  image; extend either one with your own (`docs/design/cli-image.md`).
 - **`strata deploy steps DEPLOYMENT`** lists the execution steps `deploy run` would run, in its order, for a
   pipeline to plan its jobs. It runs nothing and needs no build or credentials.
   - Each step has its `scope`, `order`, `level` (steps on one level do not depend on each other), `depends_on`,
@@ -57,7 +62,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - **`strata deploy images` says which images strata delivers.** Strata delivers an image when it writes it into
   what runs:
   - a Compose service;
-  - an artifact a step receives through a variable, or one an `${artifact:}` token delivers.
+  - an artifact a step receives through a variable, or one an `${artifact:}` token delivers. In a Helm module only
+    a token in the chart's own keys (the module's or a service's `configuration`) delivers it; a token in a
+    service's `environment` sets an environment variable, so it is a use, not delivery
+    (`no (helm module: no ${artifact:} token in the chart's values)`), as `artifact_not_delivered` judges it.
 
   A Helm module's service image is only declared, because the chart decides which image runs.
   - The console gets a `DELIVERED` column whenever an image is not delivered, for example
@@ -69,6 +77,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   images strata does not know (`image_unknown_to_strata`). It is independent of `enforcement`. `allow` does not
   exempt a module; declare its images to have them judged.
   - A workspace with an `image_tag_policy` and such a module now gets a warning on `build run` and `deploy run`.
+  - The module is reported when `origins` covers `module-service` or `chart` (or is omitted): a chart-only policy
+    hears about a chart whose images it could not judge.
   - A declared Helm image is still judged, and its finding says "declared only, the chart decides which image
     runs".
 - `${artifact:NAME.FIELD}`, a token for an artifact's `image_name`, `image_tag` or `image_ref`, with the
@@ -81,7 +91,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   `strata deploy images` lists it with `via: token:KIND/NAME`, and the SBOM, the image gates and `image_tag_policy`
   judge it.
 - `strata validate` warns `artifact_not_delivered` for a Helm module service that names an `artifact` while no
-  `${artifact:NAME.FIELD}` token for it appears in the module's or the service's `configuration`. Strata writes no
+  `${artifact:NAME.FIELD}` token for it appears in the module's or a service's `configuration`. Strata writes no
   image into a chart's values, so such an artifact (and its version pin) changes `deploy images` and the SBOM but not
   what runs. Deliver it in the chart's own keys, for example
   `configuration: {image: {repository: "${artifact:NAME.image_name}", tag: "${artifact:NAME.image_tag}"}}`.
@@ -147,7 +157,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   a `build run` with a remote no longer fails in it, and `ssh_key` auth works. git trusts a checkout mounted with
   `docker run -v`, so the audit record and the image gate get the commit SHA instead of silently none. The user has a
   home directory. The image installs the dependency versions in `uv.lock`, the ones CI tested, with a pinned `uv`.
-  Terraform and Helm stay out; the CI how-to shows how to extend the image with the versions you pin.
+  Provisioner tools stay out of it; see the new full variant under "Added".
+- **An `sbom.json` that cannot be read no longer crashes a run.**
+  - The image gate (`deploy run`, `policy findings`) follows `on_missing_data` when the file is locked or has no
+    read permission, instead of stopping on a raw `OSError`.
+  - The deploy audit record warns `audit_sbom_unreadable` instead of crashing after the deploy has run. A corrupt
+    file is still referenced and hashed, without a component count; one that cannot be read is left out.
+  - An SBOM with no components (CycloneDX then leaves out the `components` key) is an empty SBOM, not a broken
+    one: the image gate says there are no images instead of reporting missing data.
+- **A version pin is logged once, where it is applied** (`version pin applied`). `build run` logged each image and
+  chart pin a second time while writing the SBOM, and `deploy run` again while writing the audit record; both only
+  re-read what the build applied. `deploy run` logs an `${artifact:}` pin only for an artifact a token of that
+  deployment names, and `strata validate` logs none.
 - Schema descriptions (`strata schema`) and docstrings cite each doc where it is now. 139 citations of 13 docs
   pointed to a path the doc had moved from; a test now fails on any such citation.
 - `strata promote status` marks an `images` pin `← behind` by its tag. An image pin is a whole reference

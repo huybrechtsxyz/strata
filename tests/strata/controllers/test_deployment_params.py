@@ -12,28 +12,45 @@ from strata.controllers.references import validate_references
 from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.models.common_models import PlatformKind
-from strata.models.deployment_model import DeploymentModel
+from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel, DeploymentTemplateModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.parameterset_model import ParameterSetModel
+from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import unresolved_value_tokens
+from strata.utils.param_tokens import holds_param_tokens
 from strata.utils.value_tokens import find_malformed_value_tokens
 
 
-def _deployment(name: str, spec: dict, params: dict | None = None) -> DeploymentModel:
+def _deployment(name: str, spec: dict, params: dict | None = None) -> AnyDeploymentModel:
+    """As the loader would hold it: a template when the spec holds `${param:}`."""
     meta: dict = {"name": name}
     if params is not None:
         meta["params"] = params
-    return DeploymentModel.model_validate({"meta": meta, "spec": spec})
+    model_class = DeploymentTemplateModel if holds_param_tokens(spec) else DeploymentModel
+    return model_class.model_validate({"meta": meta, "spec": spec})
 
 
 def _set(name: str, values: dict) -> ParameterSetModel:
     return ParameterSetModel.model_validate({"meta": {"name": name}, "spec": {"values": values}})
 
 
-def _index(*models: DeploymentModel | ParameterSetModel) -> DocumentIndex:
+def _index(*models: AnyDeploymentModel | ParameterSetModel) -> DocumentIndex:
+    """The documents, plus the `main` workspace and `prd` environment the bases name."""
     index = DocumentIndex()
+    workspace = WorkspaceModel.model_validate(
+        {
+            "meta": {"name": "main"},
+            "spec": {
+                "providers": ["p"],
+                "provisioners": [{"name": "tf", "tool": "terraform", "source": {"source_path": "infra"}}],
+            },
+        }
+    )
+    environment = EnvironmentModel.model_validate({"meta": {"name": "prd"}, "spec": {}})
+    for kind, model in ((PlatformKind.WORKSPACE, workspace), (PlatformKind.ENVIRONMENT, environment)):
+        index.add(IndexEntry(ref=DocumentRef(kind=kind, name=model.meta.name), model=model, source=Path("x.yaml")))
     for model in models:
-        kind = PlatformKind.DEPLOYMENT if isinstance(model, DeploymentModel) else PlatformKind.PARAMETERSET
+        kind = PlatformKind.PARAMETERSET if isinstance(model, ParameterSetModel) else PlatformKind.DEPLOYMENT
         ref = DocumentRef(kind=kind, name=model.meta.name)
         index.add(IndexEntry(ref=ref, model=model, source=Path(f"{model.meta.name}.yaml")))
     return index
@@ -42,7 +59,7 @@ def _index(*models: DeploymentModel | ParameterSetModel) -> DocumentIndex:
 LEAF_SPEC = {"extends": "base"}
 
 
-def _base(properties: dict, params: dict | None = None) -> DeploymentModel:
+def _base(properties: dict, params: dict | None = None) -> AnyDeploymentModel:
     spec = {"partial": True, "workspace": "main", "environments": ["prd"], "properties": properties}
     return _deployment("base", spec, params)
 
@@ -237,10 +254,9 @@ def test_param_tokens_are_well_formed_only_when_allowed():
     assert find_malformed_value_tokens(text, param_tokens=True) == ["${param:}", "${params:x}"]
 
 
-def test_a_partial_base_keeps_its_param_tokens_without_a_malformed_finding():
-    base = _base({"name": "${param:spoke.name}"})
-    assert unresolved_value_tokens(base, {}, "prd", param_tokens=True).ok
-    assert [d.code for d in unresolved_value_tokens(base, {}, "prd").errors] == ["malformed_value_token"]
+def test_a_deployment_with_param_tokens_is_a_template():
+    assert isinstance(_base({"name": "${param:spoke.name}"}), DeploymentTemplateModel)
+    assert isinstance(_base({"name": "$${param:spoke.name}"}), DeploymentModel)  # an escape is not a token
 
 
 def test_a_param_token_in_an_environment_is_still_malformed():

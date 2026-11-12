@@ -46,7 +46,7 @@ class/instance split as `WorkspaceResourceModel.resource` and
 
 from typing import Annotated, Any, ClassVar, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from strata.models.common_models import (
     CommonLifecycleModel,
@@ -59,6 +59,7 @@ from strata.models.common_models import (
 )
 from strata.models.reference_fields import References
 from strata.utils.names import check_unique_names
+from strata.utils.value_tokens import find_malformed_value_tokens
 
 
 class DeploymentHealthCheckModel(PlatformBaseModel):
@@ -614,3 +615,83 @@ class DeploymentModel(PlatformBaseModel):
         if self.spec.extends and self.spec.extends == self.meta.name:
             raise ValueError(f"Deployment '{self.meta.name}' cannot extend itself.")
         return self
+
+
+def _strings(node: Any, path: str) -> list[tuple[str, str]]:
+    """Every `(path, string)` under `node`, values only, paths as `spec.layers.segments.hub`."""
+    if isinstance(node, str):
+        return [(path, node)]
+    if isinstance(node, dict):
+        return [found for key, child in node.items() for found in _strings(child, f"{path}.{key}")]
+    if isinstance(node, list):
+        return [found for position, child in enumerate(node) for found in _strings(child, f"{path}[{position}]")]
+    return []
+
+
+class DeploymentTemplateSpecModel(PlatformBaseModel):
+    """The spec of a deployment template, as written: only `partial` and `extends` are read before substitution.
+
+    Design notes:
+    Every other field is kept as written (`extra="allow"`) and validated per instance, once `${param:}` is
+    substituted from the chain of each deployable deployment (`base-parameters-v2.md` (work doc), "Templates are
+    validated per instance"). `extends` and `partial` stay typed: the chain must be known before any value is
+    (rule 5), and `extends` is a reference the reference walk checks like any other.
+    """
+
+    model_config = ConfigDict(extra="allow", validate_assignment=True, str_strip_whitespace=True)
+
+    partial: bool = Field(
+        default=False, description="A reusable base, not deployable itself. Never filled from a parameter set."
+    )
+    extends: Annotated[PlatformName, References(PlatformKind.DEPLOYMENT)] | None = Field(
+        None, description="Base deployment to inherit from. Never filled from a parameter set."
+    )
+
+
+class DeploymentTemplateModel(PlatformBaseModel):
+    """A deployment whose spec reads parameter sets (`${param:<role>.<key>}`): loaded with its meta validated and
+    its spec as written, and validated as a deployment once per deployable deployment whose chain it is in, after
+    the values are substituted.
+
+    Design notes:
+    Not a document kind of its own and never exported as a schema: the loader picks it instead of
+    `DeploymentModel` when a deployment's spec holds a `${param:}` token (`solution_controller.py`). The
+    resolver turns it into a `DeploymentModel` per leaf; checks that read a deployment skip a template that did not
+    resolve (`deployment_resolution.deployment_of()`), as they skip what a partial base lacks.
+    """
+
+    apiVersion: PlatformVersion = Field(
+        default=PlatformVersion.v2, frozen=True, description="API version for deployment configuration"
+    )
+    kind: PlatformKind = Field(
+        default=PlatformKind.DEPLOYMENT, frozen=True, description="Platform kind (always 'deployment')"
+    )
+    meta: DeploymentMetaModel = Field(description="Deployment metadata (name, params, annotations, labels, tags)")
+    spec: DeploymentTemplateSpecModel = Field(description="Deployment specification, as written")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.DEPLOYMENT)
+
+    @model_validator(mode="after")
+    def validate_template(self) -> "DeploymentTemplateModel":
+        """No self-`extends`, and every `${...}` token in the spec well formed, `${param:}` included."""
+        if self.spec.extends and self.spec.extends == self.meta.name:
+            raise ValueError(f"Deployment '{self.meta.name}' cannot extend itself.")
+        malformed = [
+            f"{path}: {candidate!r}"
+            for path, text in _strings(self.spec.model_dump(exclude_none=True), "spec")
+            for candidate in find_malformed_value_tokens(text, param_tokens=True)
+        ]
+        if malformed:
+            raise ValueError(
+                f"Malformed token(s) {'; '.join(malformed)}. Expected '${{param:ROLE.KEY}}' or a run-time token "
+                "such as '${var:KEY}'; escape a literal as '$${...}'."
+            )
+        return self
+
+
+#: A deployment as the index holds it: validated, or a template validated per instance.
+AnyDeploymentModel = DeploymentModel | DeploymentTemplateModel

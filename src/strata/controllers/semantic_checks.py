@@ -36,7 +36,7 @@ from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
 from strata.controllers.artifact_tokens import artifact_token_values, helm_delivered_artifacts
-from strata.controllers.deployment_resolution import deployment_workspace
+from strata.controllers.deployment_resolution import deployment_of, deployment_workspace
 from strata.controllers.reachable_documents import documents_reached_by_deployment, reachable_environment_names
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
@@ -57,7 +57,7 @@ from strata.models.asset_model import AssetModel
 from strata.models.attributeconfig_model import AttributeConfigModel
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
-from strata.models.deployment_model import DeploymentModel
+from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel
 from strata.models.dns_model import DnsModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.integration_model import Capability, IntegrationModel
@@ -176,8 +176,10 @@ def _check_deployments(
 ) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        raw = cast(DeploymentModel, entry.model)
-        deployment = resolved.get(entry.ref.name, raw)
+        raw = cast(AnyDeploymentModel, entry.model)
+        deployment = deployment_of(entry, resolved)
+        if deployment is None:
+            continue  # a template that did not resolve: checked through the deployments that resolve it
         workspace = deployment_workspace(index, deployment)
         if workspace is not None:
             service = DeploymentService.from_model(deployment)
@@ -689,16 +691,16 @@ def _check_version_workspace(index: DocumentIndex, resolved: dict[str, Deploymen
     diagnostics = Diagnostics()
     referrers_by_version: dict[str, list[IndexEntry]] = {}
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
-        if deployment.spec.version:
+        deployment = deployment_of(entry, resolved)
+        if deployment is not None and deployment.spec.version:
             referrers_by_version.setdefault(deployment.spec.version, []).append(entry)
 
     for entry in index.all_of(PlatformKind.VERSION):
         version = cast(VersionModel, entry.model)
         expected = version.spec.workspace
         for referrer_entry in referrers_by_version.get(entry.ref.name, []):
-            deployment = resolved.get(referrer_entry.ref.name, cast(DeploymentModel, referrer_entry.model))
-            if deployment.spec.workspace is None:
+            deployment = deployment_of(referrer_entry, resolved)
+            if deployment is None or deployment.spec.workspace is None:
                 continue
             if expected is None:
                 expected = deployment.spec.workspace
@@ -872,8 +874,8 @@ def _check_attributeconfig_effective_view(
     matched_any = False
 
     for deployment_entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = resolved.get(deployment_entry.ref.name, cast(DeploymentModel, deployment_entry.model))
-        if deployment.spec.partial or deployment.spec.workspace is None:
+        deployment = deployment_of(deployment_entry, resolved)
+        if deployment is None or deployment.spec.partial or deployment.spec.workspace is None:
             continue
         if not evaluate_selector(deployment, selector):
             continue
@@ -1460,7 +1462,9 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
+        deployment = deployment_of(entry, resolved)
+        if deployment is None:
+            continue  # a template that did not resolve: its tokens are checked in the deployments that resolve it
         declared = _merged_declared_keys(index, deployment)
         # A partial base is judged once merged into a deployable deployment, where its tenant is known. A chain that
         # could not be merged is reported as such, and judging its unmerged document would add a false finding.
@@ -1474,13 +1478,7 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
         for reached in documents_reached_by_deployment(index, deployment, entry.source):
             if declared is not None:
                 diagnostics.extend(
-                    unresolved_value_tokens(
-                        reached.model,
-                        declared,
-                        owner,
-                        output_claimed=reached.claimed,
-                        param_tokens=reached.kind is PlatformKind.DEPLOYMENT,
-                    ),
+                    unresolved_value_tokens(reached.model, declared, owner, output_claimed=reached.claimed),
                     source=str(reached.source),
                 )
             if check_deployment_tokens:
@@ -1504,7 +1502,9 @@ def _check_script_values(index: DocumentIndex, resolved: dict[str, DeploymentMod
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
+        deployment = deployment_of(entry, resolved)
+        if deployment is None:
+            continue
         declared = _merged_declared_keys(index, deployment)
         workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace or "")
         if declared is None or workspace_entry is None:
