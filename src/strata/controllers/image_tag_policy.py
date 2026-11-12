@@ -27,6 +27,7 @@ from strata.models.deployment_model import DeploymentModel
 from strata.models.image_tag_policy_model import ImageTagAllowEntryModel, ImageTagPolicyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.sbom_file import SBOM_FILENAME, read_sbom
 from strata.utils.sbom_utils import MUTABLE_ALIAS_TAGS
 
 
@@ -62,20 +63,21 @@ def check_image_tag_policy(
     diagnostics = Diagnostics()
     if build_path is not None:
         try:
-            rendered = rendered_chart_images(context, build_path)
+            sbom = read_sbom(build_path)
         except ValueError as exc:
             diagnostics.warning(
                 f"image_tag_policy: the images rendered charts run are not judged: {exc}",
                 code="image_tag_policy_sbom_unreadable",
             )
-            rendered = None
-        if rendered:
+            sbom = None
+        rendered = rendered_chart_images(context, sbom) if sbom is not None else []
+        if sbom is not None and rendered:
             images, unknown = with_rendered_images(images, unknown, rendered)
             # Which build the chart images came from: at deploy and in `policy check` it can be an old one.
-            written = sbom_written_at(build_path)
+            written = sbom_written_at(sbom)
             diagnostics.info(
                 f"image_tag_policy: {len(rendered)} image(s) rendered charts run judged too, from "
-                f"{build_path / 'sbom.json'}" + (f" written {written}" if written else "") + ".",
+                f"{build_path / SBOM_FILENAME}" + (f" written {written}" if written else "") + ".",
                 code="image_tag_policy_rendered_images",
             )
     diagnostics.extend(evaluate_image_tag_policy(images, policy, deployment_ring(context, deployment), unknown=unknown))
@@ -98,7 +100,9 @@ def evaluate_image_tag_policy(
     today: date | None = None,
 ) -> Diagnostics:
     """One finding per breached rule per image: an error for `deny`, a warning for `warn`. Plus one finding per
-    Helm module in `unknown`, as `on_unknown_image` says, when `origins` covers `module-service`.
+    Helm module in `unknown`, as `on_unknown_image` says, when `origins` covers `module-service` or `chart`: the
+    images such a module runs are the ones its chart would render, so a chart-only policy must hear that they
+    were not judged.
 
     Args:
         images: The deployment's `effective_images()` rows.
@@ -136,10 +140,15 @@ def evaluate_image_tag_policy(
         for code, problem in _problems(image, policy, rejected, pattern):
             report(f"image_tag_policy: {_describe(image)} {problem}{note}", code=code)
 
-    if policy.origins is None or "module-service" in policy.origins:
+    if policy.origins is None or not _UNKNOWN_MODULE_ORIGINS.isdisjoint(policy.origins):
         for module in unknown:
             _report_unknown_module(diagnostics, policy, module)
     return diagnostics
+
+
+#: The origins whose policy hears about Helm modules whose images strata does not know: the images are a declared
+#: service's (`module-service`) or a rendered chart's (`chart`), and neither is known.
+_UNKNOWN_MODULE_ORIGINS = frozenset({"module-service", "chart"})
 
 
 def unknown_module_message(module: UnknownImageModule) -> str:

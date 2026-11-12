@@ -22,6 +22,7 @@ from strata.integrations.resolved_context import EffectiveImage, UnknownImageMod
 from strata.models.common_models import ModuleReferenceModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.workspace_model import WorkspaceModel
+from strata.utils.sbom_file import read_sbom
 from strata.utils.sbom_utils import image_to_purl
 
 _HEADER = "apiVersion: strata.huybrechts.xyz/v2\nkind: {kind}\nmeta:\n  name: {name}\nspec:\n"
@@ -498,16 +499,6 @@ def _context(*namespaces: NamespaceModel) -> SimpleNamespace:
     return SimpleNamespace(controller=SimpleNamespace(index=SimpleNamespace(get=lambda kind, name: by_name.get(name))))
 
 
-def test_rendered_chart_images_is_none_without_an_sbom(tmp_path):
-    assert rendered_chart_images(_context(), tmp_path) is None
-
-
-def test_rendered_chart_images_rejects_an_sbom_it_cannot_read(tmp_path):
-    (tmp_path / "sbom.json").write_text("[]", encoding="utf-8")
-    with pytest.raises(ValueError, match="no components list"):
-        rendered_chart_images(_context(), tmp_path)
-
-
 def test_rendered_chart_images_gives_one_row_per_container_and_keeps_tag_and_digest(tmp_path):
     digest = "sha256:" + "b" * 64
     build = _sbom_file(
@@ -517,7 +508,7 @@ def test_rendered_chart_images_gives_one_row_per_container_and_keeps_tag_and_dig
         _component("redis:7", "service:cache/redis", rendered=False),
         _component("nginx:1", "chart:apps/web/nginx", reference=False),
     )
-    rows = rendered_chart_images(_context(), build)
+    rows = rendered_chart_images(_context(), read_sbom(build))
     assert [(r.origin, r.name, r.module, r.via, r.tag_source, r.delivered) for r in rows] == [
         ("chart", "whoami/whoami", "whoami", ("chart:apps/whoami/whoami",), "chart", True),
         ("chart", "whoami/wait", "whoami", ("chart:apps/whoami/wait",), "chart", True),
@@ -534,7 +525,7 @@ def test_rendered_chart_images_names_the_module_the_reference_points_at(tmp_path
         ),
     )
     build = _sbom_file(tmp_path, _component("goauthentik/server:1", "chart:apps/auth/server"))
-    [row] = rendered_chart_images(_context(namespace), build)
+    [row] = rendered_chart_images(_context(namespace), read_sbom(build))
     assert (row.name, row.module) == ("auth/server", "authentik")
 
 
@@ -581,13 +572,9 @@ def test_with_rendered_images_judges_a_shared_image_once_and_clears_rendered_mod
     assert [(m.module, m.namespace) for m in remaining] == [("whoami", "other"), ("immich", "apps")]
 
 
-def test_sbom_written_at_reads_the_metadata_timestamp_or_gives_none(tmp_path):
-    assert sbom_written_at(tmp_path) is None
-    (tmp_path / "sbom.json").write_text("{not json", encoding="utf-8")
-    assert sbom_written_at(tmp_path) is None
-    (tmp_path / "sbom.json").write_text(json.dumps({"metadata": {}}), encoding="utf-8")
-    assert sbom_written_at(tmp_path) is None
-    (tmp_path / "sbom.json").write_text(
-        json.dumps({"metadata": {"timestamp": "2026-11-12T12:00:00+00:00"}}), encoding="utf-8"
+def test_sbom_written_at_reads_the_metadata_timestamp_or_gives_none():
+    assert sbom_written_at({"components": []}) is None
+    assert sbom_written_at({"components": [], "metadata": {}}) is None
+    assert sbom_written_at({"components": [], "metadata": {"timestamp": "2026-11-12T12:00:00+00:00"}}) == (
+        "2026-11-12T12:00:00+00:00"
     )
-    assert sbom_written_at(tmp_path) == "2026-11-12T12:00:00+00:00"

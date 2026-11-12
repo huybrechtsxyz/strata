@@ -253,8 +253,9 @@ spec:
 
 - The policy's existing filters apply to unknown modules too:
   - **`rings`:** a deployment outside the policy's rings gets nothing, as today.
-  - **`origins`:** unknown modules are reported only when `origins` covers `module-service`, because they are
-    module images.
+  - **`origins`:** unknown modules are reported when `origins` covers `module-service` or `chart`. Their images
+    are module images, and they are also the images the chart would render: a chart whose images are unknown
+    (it declares none and was not rendered) must not pass a chart-only policy silently.
 - **`allow` does not exempt an unknown module.** Its names are image names (an artifact or a service), not module
   names. To clear the finding, declare the chart's images. They are then judged as declared, which is what the
   author can vouch for.
@@ -537,8 +538,9 @@ This item does 1 to 3. Number 4 waits for a release with 1 to 3 in it (see the o
   pin a chart version that ships the tag you want." For `require_digest`: "Set the image as `TAG@sha256:<hex>` in
   the chart's values through the module's configuration."
 - **How it is built** (plan item 9d):
-  - `rendered_chart_images(context, build_path)` in `effective_images.py` reads `sbom.json` itself, as
-    `images_from_sbom()` does for the image gate. It takes only components with `strata:found-in: rendered-chart`
+  - `read_sbom(build_path)` in `utils/sbom_file.py` reads `sbom.json` once (an unreadable file is a `ValueError`),
+    the same loader the image gate and the audit manifest use; `rendered_chart_images(context, sbom)` and `sbom_written_at(sbom)` both work on that one read.
+    `rendered_chart_images()` takes only components with `strata:found-in: rendered-chart`
     and a `strata:image`, and gives one row per `chart:` use. `module` is resolved through the namespace document
     in the solution; when the solution no longer has that reference, it falls back to the reference name.
   - `with_rendered_images(images, unknown, rendered)` is pure. Images are compared by purl, as the SBOM merge

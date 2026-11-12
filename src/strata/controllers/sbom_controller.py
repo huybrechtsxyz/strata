@@ -55,6 +55,7 @@ from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
+from strata.utils.sbom_file import SBOM_FILENAME
 from strata.utils.sbom_utils import (
     FOUND_IN_PROPERTY,
     FOUND_IN_RENDERED_CHART,
@@ -64,8 +65,6 @@ from strata.utils.sbom_utils import (
 )
 
 log = get_logger(__name__)
-
-_SBOM_FILENAME = "sbom.json"
 
 #: Public — `audit_run.py`'s `_sbom_reference()` reuses this as the single
 #: source of truth rather than hardcoding a second copy of the format string
@@ -146,7 +145,7 @@ def write_sbom(
     if validation_error is not None:
         raise RuntimeError(f"generated SBOM failed CycloneDX schema validation: {validation_error}")
 
-    sbom_path = build_path / _SBOM_FILENAME
+    sbom_path = build_path / SBOM_FILENAME
     sbom_bytes = bom_json.encode("utf-8")
     build_path.mkdir(parents=True, exist_ok=True)
     sbom_path.write_bytes(sbom_bytes)
@@ -423,9 +422,9 @@ def cve_findings(build_path: Path, index: DocumentIndex, threshold: str) -> CveF
         UsageError: No `sbom.json` under `build_path`.
         SystemError: No scanner available, or the scan failed.
     """
-    sbom_path = build_path / _SBOM_FILENAME
+    sbom_path = build_path / SBOM_FILENAME
     if not sbom_path.is_file():
-        raise UsageError(f"No {_SBOM_FILENAME} in '{build_path}'; run 'strata build run' first.")
+        raise UsageError(f"No {SBOM_FILENAME} in '{build_path}'; run 'strata build run' first.")
     scanner = declared_cve_scanner(index) or CveScannerIntegration()
     try:
         scanner.ensure_available()
@@ -474,7 +473,7 @@ def evaluate_cve_policy(build_path: Path, workspace: WorkspaceModel, index: Docu
         return diagnostics
 
     severity = diagnostics.error if policy.enforcement == "deny" else diagnostics.warning
-    sbom_path = build_path / _SBOM_FILENAME
+    sbom_path = build_path / SBOM_FILENAME
     declared = declared_cve_scanner(index)
     scanner = declared or CveScannerIntegration()
 

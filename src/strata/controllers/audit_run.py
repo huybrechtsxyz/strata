@@ -40,7 +40,6 @@ misconfigured audit sink never takes down a deploy that already succeeded.
 """
 
 import hashlib
-import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
@@ -96,6 +95,7 @@ from strata.utils import layout
 from strata.utils.actor import resolve_actor
 from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.errors import StrataError
+from strata.utils.sbom_file import SBOM_FILENAME, parse_sbom
 from strata.utils.transport import run_command
 
 #: Public — `controllers/audit_read.py` (docs/design/audit-commands.md) reads
@@ -234,7 +234,7 @@ def finalize_and_distribute_deploy_audit(
             charts=charts,
             providers=list(providers) or None,
         ),
-        sbom=_sbom_reference(build_path),
+        sbom=_sbom_reference(build_path, diagnostics),
         change_reference=change_reference,
         policy_results=None if action == "destroy" else read_policy_results(build_path),
         errors=run_diagnostics.messages(Severity.ERROR) or None,
@@ -707,7 +707,7 @@ def _platform_reference(build_path: Path) -> tuple[ManifestPlatformReferenceMode
     return ManifestPlatformReferenceModel(hash=f"sha256:{file_hash}", path="resolved.yaml"), diagnostics
 
 
-def _sbom_reference(build_path: Path) -> ManifestSbomReferenceModel | None:
+def _sbom_reference(build_path: Path, diagnostics: Diagnostics) -> ManifestSbomReferenceModel | None:
     """Hash + reference `build_path/sbom.json`, re-derived fresh at deploy
     time — same reasoning as `_platform_reference()` (build and deploy are
     separate CLI invocations; there is no in-memory value to carry between
@@ -717,17 +717,35 @@ def _sbom_reference(build_path: Path) -> ManifestSbomReferenceModel | None:
     raises no diagnostic — SBOM generation is itself optional (a workspace
     with nothing SBOM-relevant produces none at all), and `deploy run`
     without a preceding `build run` is a legitimate, if unusual, sequence.
+
+    A file that is there but unusable is a warning, never a failure: the deploy has already run, so failing here
+    would only lose its audit record. A corrupt file is still referenced and hashed, without a component count, so
+    the record shows what was on disk. One that cannot be read at all is left out. Blocking a deploy on a bad SBOM
+    belongs before it, in the gates that read it (`image_gate_policy.on_missing_data: block`).
     """
-    sbom_path = build_path / "sbom.json"
+    sbom_path = build_path / SBOM_FILENAME
     if not sbom_path.exists():
         return None
-    sbom_bytes = sbom_path.read_bytes()
-    file_hash = hashlib.sha256(sbom_bytes).hexdigest()
-    component_count = len(json.loads(sbom_bytes).get("components", []))
+    try:
+        sbom_bytes = sbom_path.read_bytes()
+    except OSError as exc:
+        diagnostics.warning(
+            f"'{sbom_path}' cannot be read ({exc}), so the audit manifest records no SBOM for this run.",
+            code="audit_sbom_unreadable",
+        )
+        return None
+    try:
+        component_count: int | None = len(parse_sbom(sbom_bytes, sbom_path)["components"])
+    except ValueError as exc:
+        diagnostics.warning(
+            f"The audit manifest references the SBOM without a component count: {exc}.",
+            code="audit_sbom_unreadable",
+        )
+        component_count = None
     return ManifestSbomReferenceModel(
-        path="sbom.json",
+        path=SBOM_FILENAME,
         format=SBOM_FORMAT,
-        sha256=f"sha256:{file_hash}",
+        sha256=f"sha256:{hashlib.sha256(sbom_bytes).hexdigest()}",
         component_count=component_count,
     )
 

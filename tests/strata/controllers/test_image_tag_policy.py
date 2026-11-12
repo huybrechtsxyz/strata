@@ -451,6 +451,13 @@ def test_an_unknown_module_is_not_reported_outside_the_policys_rings_or_origins(
     assert artifacts_only.items == []
 
 
+def test_an_unknown_module_is_reported_to_a_chart_only_policy():
+    # Its chart was not rendered, so the images it runs are unjudged chart images: a chart-only policy must say so.
+    chart_only = _policy(origins=["chart"], on_unknown_image="block")
+    diagnostics = evaluate_image_tag_policy([], chart_only, None, unknown=[_IMMICH])
+    assert [(item.code, item.severity) for item in diagnostics.items] == [("image_unknown_to_strata", Severity.ERROR)]
+
+
 def test_allow_does_not_exempt_an_unknown_module():
     policy = _policy(allow=[{"name": "immich", "reason": "the chart pins its own tags"}])
     assert _codes(evaluate_image_tag_policy([], policy, None, unknown=[_IMMICH])) == ["image_unknown_to_strata"]

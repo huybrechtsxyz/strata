@@ -116,8 +116,8 @@ class ImageTagPolicyModel(PlatformBaseModel):
         description="What to do about a Helm module that declares no service `image` or `artifact`: strata does "
         "not know the images its chart deploys, so it cannot judge them. 'block' stops the run, 'warn' reports "
         "and continues, 'skip' only notes it in verbose and JSON output. Independent of `enforcement`; `allow` "
-        "does not exempt a module. Declare the chart's images under the module's `services` to have them "
-        "judged.\n\n"
+        "does not exempt a module. Applies when `origins` covers `module-service` or `chart` (or is omitted). "
+        "Declare the chart's images under the module's `services` to have them judged.\n\n"
         "Design notes: docs/work/helm-image-delivery.md, option B. Mirrors `image_gate_policy.on_unknown_image`.",
     )
 

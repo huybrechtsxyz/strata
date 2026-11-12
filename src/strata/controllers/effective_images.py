@@ -30,7 +30,6 @@ Never resolves a store: a `store: artifact` value is an in-solution document
 lookup, so this needs no network and reveals no secret.
 """
 
-import json
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -58,6 +57,7 @@ from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
+from strata.utils.sbom_file import component_properties
 from strata.utils.sbom_utils import (
     FOUND_IN_PROPERTY,
     FOUND_IN_RENDERED_CHART,
@@ -70,9 +70,6 @@ from strata.utils.sbom_utils import (
 )
 from strata.utils.templater import template_variable_keys
 from strata.utils.value_tokens import referenced_artifact_keys, referenced_variable_keys, split_artifact_token_key
-
-#: What `build run` writes (`sbom_controller.write_sbom()`); read back by `rendered_chart_images()`.
-_SBOM_FILENAME = "sbom.json"
 
 
 def effective_images(
@@ -287,8 +284,8 @@ def _received_variable_keys(context: SolutionContext, workspace: WorkspaceModel 
     return received & keys
 
 
-def rendered_chart_images(context: SolutionContext, build_path: Path) -> list[EffectiveImage] | None:
-    """The images a build's rendered charts run, read from its `sbom.json`, or `None` when there is no SBOM
+def rendered_chart_images(context: SolutionContext, sbom: dict[str, Any]) -> list[EffectiveImage]:
+    """The images a build's rendered charts run, from its SBOM as `read_sbom()` gives it
     (docs/work/helm-image-delivery.md, plan item 9d).
 
     One row per `chart:NAMESPACE/REFERENCE/CONTAINER` use of a component the `chart-image` collector wrote, so an
@@ -296,26 +293,12 @@ def rendered_chart_images(context: SolutionContext, build_path: Path) -> list[Ef
     names), `module` is the module the namespace's reference points at, and the reference is `strata:image`, the
     image as the chart writes it. `tag_source` is `chart`: strata did not choose the tag. A component without
     `strata:image` is skipped.
-
-    Raises:
-        ValueError: `sbom.json` exists but cannot be read as an SBOM.
     """
-    path = build_path / _SBOM_FILENAME
-    if not path.is_file():
-        return None
-    try:
-        sbom = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"'{path}' is not valid JSON ({exc})") from None
-    except OSError as exc:
-        raise ValueError(f"'{path}' cannot be read ({exc})") from None
-    components = sbom.get("components") if isinstance(sbom, dict) else None
-    if not isinstance(components, list):
-        raise ValueError(f"'{path}' has no components list")
-
     rows: list[EffectiveImage] = []
-    for component in components:
-        properties = _properties(component)
+    for component in sbom["components"]:
+        if not isinstance(component, dict) or component.get("type") != "container":
+            continue
+        properties = component_properties(component)
         reference = properties.get(IMAGE_REF_PROPERTY)
         if properties.get(FOUND_IN_PROPERTY) != FOUND_IN_RENDERED_CHART or not reference:
             continue
@@ -340,15 +323,11 @@ def rendered_chart_images(context: SolutionContext, build_path: Path) -> list[Ef
     return rows
 
 
-def sbom_written_at(build_path: Path) -> str | None:
-    """`metadata.timestamp` of the build's `sbom.json`: when the rendered images `rendered_chart_images()` reads
-    were written (plan item 9f). `None` when the file is missing, unreadable or has no timestamp.
+def sbom_written_at(sbom: dict[str, Any]) -> str | None:
+    """`metadata.timestamp` of the build's SBOM: when the rendered images `rendered_chart_images()` reads were
+    written (plan item 9f). `None` when it has no timestamp.
     """
-    try:
-        sbom = json.loads((build_path / _SBOM_FILENAME).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    metadata = sbom.get("metadata") if isinstance(sbom, dict) else None
+    metadata = sbom.get("metadata")
     timestamp = metadata.get("timestamp") if isinstance(metadata, dict) else None
     return timestamp if isinstance(timestamp, str) else None
 
@@ -373,17 +352,6 @@ def with_rendered_images(
     rendered_modules = {(_chart_use(row.via[0])[0], row.module) for row in rendered if row.via}
     remaining = [module for module in unknown if (module.namespace, module.module) not in rendered_modules]
     return merged, remaining
-
-
-def _properties(component: Any) -> dict[str, str]:
-    """A CycloneDX component's `properties` as a mapping; empty for anything that is not a component."""
-    if not isinstance(component, dict) or component.get("type") != "container":
-        return {}
-    found: dict[str, str] = {}
-    for item in component.get("properties") or []:
-        if isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("value"), str):
-            found.setdefault(item["name"], item["value"])
-    return found
 
 
 def _chart_use(use: str) -> tuple[str, str, str | None]:

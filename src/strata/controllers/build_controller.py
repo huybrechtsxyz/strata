@@ -118,6 +118,7 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import StrataError, SystemError, UsageError
 from strata.utils.layout import helm_cache_dir
+from strata.utils.sbom_file import SBOM_FILENAME
 from strata.utils.terraform_outputs import read_declared_outputs
 
 
@@ -931,7 +932,7 @@ def build_run(
             helm_cache=helm_cache_dir(context.root),
         )
         diagnostics.extend(sbom_diagnostics)
-        _step(f"wrote {build_path / 'sbom.json'}")
+        _step(f"wrote {build_path / SBOM_FILENAME}")
 
         # Image tag policy (docs/design/image-tag-policy.md, docs/work/helm-image-delivery.md plan item 9e): after
         # the SBOM, so it also judges the images the rendered charts run (`sbom.render_charts`). A `deny` fails the
@@ -998,7 +999,7 @@ def build_run(
         if policy_results:
             write_policy_results(build_path, policy_results)
     else:
-        _step(f"would write {build_path / 'sbom.json'}")
+        _step(f"would write {build_path / SBOM_FILENAME}")
         # Offline, so a dry run still judges the declared images; nothing is rendered, so there are no others.
         diagnostics.extend(check_image_tag_policy(context, deployment, workspace, images=images))
 

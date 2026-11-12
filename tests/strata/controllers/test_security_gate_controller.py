@@ -591,6 +591,23 @@ def test_no_sbom_is_missing_data_and_no_containers_passes(tmp_path, script):
     assert "image_gate_no_images" in _codes(evaluation.diagnostics)
 
 
+def test_an_sbom_that_cannot_be_read_follows_on_missing_data(tmp_path, script, monkeypatch):
+    # Locked by a scanner on Windows, or no permission: `on_missing_data` decides, the gate never crashes.
+    _sbom(tmp_path, "pkg:docker/org/api@1.0")
+    real_read_text = Path.read_text
+
+    def locked(self, *args, **kwargs):
+        if self.name == "sbom.json":
+            raise PermissionError("locked by a scanner")
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", locked)
+    evaluation = _images(tmp_path, script, {"on_missing_data": "warn"})
+    assert _codes(evaluation.diagnostics.warnings) == ["image_gate_missing_data"]
+    assert "cannot be read" in evaluation.diagnostics.warnings[0].message
+    assert script.lookups_asked == []
+
+
 def test_a_platform_failure_stops_the_image_gate_as_missing_data(tmp_path, script):
     _sbom(tmp_path, "pkg:docker/org/api@1.0", "pkg:docker/org/worker@1.0")
     script.lookups["org/api"] = IntegrationError("unreachable")
