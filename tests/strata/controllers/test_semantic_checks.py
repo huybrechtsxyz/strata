@@ -5128,3 +5128,6 @@ def test_validate_checks_an_artifacts_registry_against_its_image_name(tmp_path, 
     assert [d.code for d in findings] == expected
     assert all(d.source.endswith("api.yaml") for d in findings)
     assert context.ok
+    # Information, never a warning: `validate --strict` fails on warnings, and a host-less image_name is right
+    # where a consumer adds its own registry.
+    assert not [d for d in context.diagnostics.warnings if d.code == "artifact_registry_mismatch"]

@@ -310,6 +310,21 @@ def registry_host(registry: str) -> str | None:
     return _canonical_registry(host) if host else None
 
 
+def registry_prefix(registry: str) -> str | None:
+    """A free-text registry setting as the prefix of an image reference: scheme and surrounding `/` dropped, the
+    path kept as written (a ProGet feed, a Harbor project, an ACR namespace). `None` when nothing is left.
+
+    Examples:
+        "https://cdn-feeds.example.com/int-docker/" -> "cdn-feeds.example.com/int-docker"
+        "acr.example.io" -> "acr.example.io"
+    """
+    text = registry.strip()
+    for scheme in ("https://", "http://"):
+        if text.lower().startswith(scheme):
+            text = text[len(scheme) :]
+    return text.strip("/") or None
+
+
 def image_to_purl(image: str) -> str:
     """Convert a container image reference to a Package URL string (purl-spec `docker` type).
 

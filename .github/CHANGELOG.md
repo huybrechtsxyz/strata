@@ -8,6 +8,21 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.6.2] - 2026-11-13
+
+`validate --strict` passes again on solutions whose artifacts name a registry a consumer prefixes.
+
+### Fixed
+
+- **`artifact_registry_mismatch` no longer fails `validate --strict`.** It is information now, not a warning. Since
+  2.6.0 it warned on every artifact whose `image_name` has no host while `spec.registry` names one, which is right
+  where a consumer adds its own registry: a Terraform root that imports the image into a per-deployment registry
+  through a `store: artifact` variable, or a chart with its own `image.registry`. Where `image_name` is pulled as
+  written (a Compose service), the information still says to write the full reference.
+- The reference `artifact_registry_mismatch` suggests keeps `spec.registry`'s path: `cdn-feeds.example.com/int-docker`
+  with `src/api` gives `cdn-feeds.example.com/int-docker/src/api`, not `cdn-feeds.example.com/src/api`, which a
+  ProGet feed, a Harbor project or an ACR namespace does not resolve.
+
 ## [2.6.1] - 2026-11-13
 
 The container image builds again; for 2.6.0 the build failed.
@@ -660,7 +675,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.6.1...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.6.2...HEAD
+[2.6.2]: https://github.com/huybrechtsxyz/strata/compare/v2.6.1...v2.6.2
 [2.6.1]: https://github.com/huybrechtsxyz/strata/compare/v2.6.0...v2.6.1
 [2.6.0]: https://github.com/huybrechtsxyz/strata/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/huybrechtsxyz/strata/compare/v2.4.0...v2.5.0
