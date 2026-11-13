@@ -32,7 +32,7 @@ where their licence lets a public image carry them.**
 
 | Tool | slim | full | Why |
 | --- | --- | --- | --- |
-| Python 3.13, strata | yes | yes | installed from `uv.lock` with `--locked`, the versions CI tested |
+| Python 3.13, strata | yes | yes | resolved from `pyproject.toml` with a pinned `uv`, as CI's test job resolves them |
 | `git` | yes | yes | strata calls it: remotes at build, the commit SHA in the audit record and the image gate, audit push, GitOps |
 | `openssh-client` | yes | yes | `auth.method: ssh_key` runs git over ssh; the host key comes from `ssh_key.known_hosts` |
 | OpenTofu (`tofu`) | no | yes | `tool: opentofu` steps: Terraform's MPL fork, the IaC tool a public image can carry ([opentofu.md](opentofu.md)) |
@@ -71,15 +71,18 @@ Every input has an exact version, so a build does not depend on the day it ran:
 | OpenTofu | `FROM ghcr.io/opentofu/opentofu:<v>-minimal AS tofu`, binary copied | Dependabot (`docker`) |
 | Checkov | `docker/checkov/requirements.txt` | Dependabot (`pip`, `/docker/checkov`) |
 | Helm | `ARG HELM_VERSION`, release archive checked with its `.sha256sum` | by hand: Helm has no official image |
-| strata's dependencies | `uv.lock`, `uv sync --locked` | Dependabot (`uv`) |
+| strata's dependencies | ranges in `pyproject.toml`, `uv sync` (not yet `--locked`, see below) | Dependabot (`uv`) |
 
 Dependabot's `docker` ecosystem updates `FROM` lines only, which is why `uv`, the Docker CLI and Trivy are stages of
-their own. Its `uv` ecosystem updates `pyproject.toml` and `uv.lock` together; `pip` would update `pyproject.toml`
-alone, and `--locked` would then fail the image build. Trivy is pinned to an exact version on purpose: a poisoned
-release (v0.69.4) was published through several channels in March 2026.
+their own. Trivy is pinned to an exact version on purpose: a poisoned release (v0.69.4) was published through several
+channels in March 2026.
+
+strata's dependencies are the one input not pinned exactly. `uv.lock` is git-ignored until it no longer holds internal
+package index URLs, so a CI checkout has none, and the image resolves `pyproject.toml` the way CI's test job does.
+Once a lock resolved against public PyPI is committed, the build copies it and syncs with `--locked`.
 
 `tests/repo/test_cli_image.py` checks these rules on the Dockerfile text (what each variant holds, OpenTofu in full
-only, no Terraform anywhere, slim as the default target, a non-root user with a home, every `FROM` pinned, the lockfile, Helm's checksum),
+only, no Terraform anywhere, slim as the default target, a non-root user with a home, every `FROM` pinned, no lockfile while it is git-ignored, Helm's checksum),
 since the image itself is only built in CI.
 
 ### Extending an image
@@ -119,8 +122,9 @@ An image built this way for an organization's own pipelines is internal use, whi
 - The image first held strata only, on the reading that every external tool belongs to the pipeline. strata calls
   git for its own features, though, and without it a `build run` with a remote failed and the audit record lost its
   commit SHA, so git and the ssh client moved in.
-- The build first resolved dependencies fresh (`uv.lock` was not copied) with `uv:latest`, so an image could run
-  versions CI never tested.
+- The build first resolved dependencies fresh with `uv:latest`. `uv` was pinned, and the build was changed to copy
+  `uv.lock` and sync `--locked`, but `uv.lock` is git-ignored, so the image build failed in CI ("/uv.lock": not
+  found). The build resolves `pyproject.toml` again until a public lock is committed.
 - Since 2.4 and 2.6, `build run` itself calls Helm, so a strata-only image could not build a Helm module properly.
   Putting Helm in the one image would have grown every existing pull; a second, opt-in variant keeps the bare tag
   unchanged. `-full` was chosen over `-toolbox`, `-ci` and `-stack` as the usual partner of `-slim`.

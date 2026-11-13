@@ -119,12 +119,17 @@ def test_every_image_input_is_pinned():
         assert re.search(r":v?\d+\.\d+(\.\d+)?", image), f"{line}: pin a version"
 
 
-def test_the_build_is_reproducible():
-    """The dependencies are installed from `uv.lock`, the versions CI tested; Checkov from a pinned requirement."""
+def test_the_build_does_not_need_an_uncommitted_lockfile():
+    """`uv.lock` is git-ignored, so the CI checkout has none: the build must not copy it or sync `--locked`.
+
+    The dependencies resolve from `pyproject.toml`, as CI's test job resolves them; Checkov from a pinned requirement.
+    """
     instructions = _instructions()
-    assert any(line.startswith("COPY") and "uv.lock" in line for line in instructions)
-    [sync] = [line for line in instructions if "uv sync" in line]
-    assert "--locked" in sync or "--frozen" in sync
+    ignored = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    if "uv.lock" in ignored:
+        assert not any(line.startswith("COPY") and "uv.lock" in line for line in instructions)
+        [sync] = [line for line in instructions if "uv sync" in line]
+        assert "--locked" not in sync and "--frozen" not in sync
     requirements = (REPO_ROOT / "docker" / "checkov" / "requirements.txt").read_text(encoding="utf-8")
     assert re.search(r"^checkov==\d+\.\d+\.\d+$", requirements, re.MULTILINE)
 

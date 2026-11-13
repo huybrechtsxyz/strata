@@ -21,7 +21,7 @@ FROM aquasec/trivy:0.71.1 AS trivy
 FROM ghcr.io/opentofu/opentofu:1.13.9-minimal AS tofu
 
 # ==================================================================================================================
-# builder: strata and its production dependencies, at the versions in uv.lock (what CI tested)
+# builder: strata and its production dependencies, resolved from pyproject.toml as CI's test job resolves them
 # ==================================================================================================================
 FROM python:3.13-slim AS builder
 
@@ -29,12 +29,12 @@ COPY --from=uv /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy manifest, lockfile and version first for layer caching
-COPY pyproject.toml uv.lock VERSION.txt ./
+# Copy manifest and version first for layer caching. No uv.lock: it is not committed yet (.gitignore: the local one
+# holds internal index URLs), so the CI checkout has none. Once a public lock is committed, copy it and add --locked.
+COPY pyproject.toml VERSION.txt ./
 COPY src/ src/
 
-# --locked fails the build when the lockfile no longer matches pyproject.toml, instead of resolving afresh.
-RUN uv sync --locked --no-dev --no-editable
+RUN uv sync --no-dev --no-editable
 
 # ==================================================================================================================
 # checkov-builder: Checkov in a venv of its own, so its dependencies never meet strata's
