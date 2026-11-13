@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Artifact (kind: artifact) &mdash; strata 2.6.1 documentation</title>
+  <title>Artifact (kind: artifact) &mdash; strata 2.6.2 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=0a414f3d"></script>
+      <script src="../_static/documentation_options.js?v=3db9c557"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -154,11 +154,17 @@ field (see <a class="reference internal" href="module.html"><span class="std std
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.image_tag</span></code> — what to deploy, in one of three shapes (see <a class="reference internal" href="#tag-and-digest">Tag and digest</a>);
 optional, omit it when a <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin always supplies it. Overridden by <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>’s
 <code class="docutils literal notranslate"><span class="pre">spec.pins.artifacts[name]</span></code> when set; with neither, the tag is blank</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.registry</span></code> — free-text registry host, documentation only — <strong>not</strong> a remote reference
-(strata never fetches an image; the runtime pulls it at deploy time). It is not added to the image
-reference: <code class="docutils literal notranslate"><span class="pre">image_name</span></code> holds the full path the runtime pulls, registry host included. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>
-warns when the two name different registries (<code class="docutils literal notranslate"><span class="pre">artifact_registry_mismatch</span></code>), counting an <code class="docutils literal notranslate"><span class="pre">image_name</span></code>
-with no host as Docker Hub</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.registry</span></code> — free-text registry (host, and a feed or project path if it has one), documentation
+only — <strong>not</strong> a remote reference (strata never fetches an image; the runtime pulls it at deploy time).
+It is not added to the image reference. When the two name different registries, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>
+gives information (<code class="docutils literal notranslate"><span class="pre">artifact_registry_mismatch</span></code>, never a warning, so <code class="docutils literal notranslate"><span class="pre">--strict</span></code> passes):</p>
+<ul>
+<li><p>where <code class="docutils literal notranslate"><span class="pre">image_name</span></code> is pulled as written (a Compose service), it must hold the full reference, registry
+included; an <code class="docutils literal notranslate"><span class="pre">image_name</span></code> with no host is pulled from Docker Hub;</p></li>
+<li><p>where a consumer adds its own registry, a host-less path is right: a Terraform root that imports the
+image into a per-deployment registry, or a chart with its own <code class="docutils literal notranslate"><span class="pre">image.registry</span></code></p></li>
+</ul>
+</li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.integration</span></code> — names an existing <a class="reference internal" href="integration.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">integration</span></code></span></a> that holds the registry’s
 credentials. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> reports it per image (<code class="docutils literal notranslate"><span class="pre">INTEGRATION</span></code>, <code class="docutils literal notranslate"><span class="pre">data.images[].integration</span></code>),
 so a pipeline that copies the image knows which credentials to use. Strata resolves nothing from it

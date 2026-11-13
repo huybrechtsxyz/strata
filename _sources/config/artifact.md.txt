@@ -14,11 +14,14 @@ field (see [`module`](module.md)).
 - `spec.image_tag` — what to deploy, in one of three shapes (see [Tag and digest](#tag-and-digest));
   optional, omit it when a [`version`](version.md) pin always supplies it. Overridden by `kind: version`'s
   `spec.pins.artifacts[name]` when set; with neither, the tag is blank
-- `spec.registry` — free-text registry host, documentation only — **not** a remote reference
-  (strata never fetches an image; the runtime pulls it at deploy time). It is not added to the image
-  reference: `image_name` holds the full path the runtime pulls, registry host included. `strata validate`
-  warns when the two name different registries (`artifact_registry_mismatch`), counting an `image_name`
-  with no host as Docker Hub
+- `spec.registry` — free-text registry (host, and a feed or project path if it has one), documentation
+  only — **not** a remote reference (strata never fetches an image; the runtime pulls it at deploy time).
+  It is not added to the image reference. When the two name different registries, `strata validate`
+  gives information (`artifact_registry_mismatch`, never a warning, so `--strict` passes):
+  - where `image_name` is pulled as written (a Compose service), it must hold the full reference, registry
+    included; an `image_name` with no host is pulled from Docker Hub;
+  - where a consumer adds its own registry, a host-less path is right: a Terraform root that imports the
+    image into a per-deployment registry, or a chart with its own `image.registry`
 - `spec.integration` — names an existing [`integration`](integration.md) that holds the registry's
   credentials. `strata deploy images` reports it per image (`INTEGRATION`, `data.images[].integration`),
   so a pipeline that copies the image knows which credentials to use. Strata resolves nothing from it
