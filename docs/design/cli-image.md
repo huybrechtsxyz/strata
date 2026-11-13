@@ -32,7 +32,7 @@ where their licence lets a public image carry them.**
 
 | Tool | slim | full | Why |
 | --- | --- | --- | --- |
-| Python 3.13, strata | yes | yes | resolved from `pyproject.toml` with a pinned `uv`, as CI's test job resolves them |
+| Python 3.14, strata | yes | yes | resolved from `pyproject.toml` with a pinned `uv`, as CI's test job resolves them |
 | `git` | yes | yes | strata calls it: remotes at build, the commit SHA in the audit record and the image gate, audit push, GitOps |
 | `openssh-client` | yes | yes | `auth.method: ssh_key` runs git over ssh; the host key comes from `ssh_key.known_hosts` |
 | OpenTofu (`tofu`) | no | yes | `tool: opentofu` steps: Terraform's MPL fork, the IaC tool a public image can carry ([opentofu.md](opentofu.md)) |
@@ -64,7 +64,7 @@ Every input has an exact version, so a build does not depend on the day it ran:
 
 | Input | Where | Kept current by |
 | --- | --- | --- |
-| `python:3.13-slim` | `FROM` | Dependabot (`docker`) |
+| `python:3.14-slim` | `FROM` | by hand, with CI's Python matrix: Dependabot (`docker`) ignores Python minor versions |
 | `uv` | `FROM ghcr.io/astral-sh/uv:<v> AS uv` | Dependabot (`docker`) |
 | Docker CLI + Compose | `FROM docker:<v>-cli AS docker-cli`, binaries copied | Dependabot (`docker`) |
 | Trivy | `FROM aquasec/trivy:<v> AS trivy`, binary copied | Dependabot (`docker`) |

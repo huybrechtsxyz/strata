@@ -24,8 +24,8 @@ updates:
     commit-message:
       prefix: "chore(actions)"
 
-  # Python — pyproject.toml and uv.lock together. Not "pip": it updates pyproject.toml alone, and the container
-  # image installs with `uv sync --locked`, which fails when the lockfile no longer matches.
+  # Python — pyproject.toml, and uv.lock with it once a lock is committed (it is git-ignored for now, and the
+  # container image resolves pyproject.toml: docs/design/cli-image.md).
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
@@ -51,11 +51,16 @@ updates:
 
   # Container image — the FROM lines of Dockerfile.cli: the Python base image, uv, the Docker CLI, Trivy and OpenTofu
   # (docs/design/cli-image.md). Helm's version is an ARG and is bumped by hand.
+  # The Python base image moves by hand, with CI's Python matrix: the image must run a Python strata is tested on.
+  # The `3.x-slim` tag picks up patch releases on its own.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     labels:
       - "dependencies"
       - "docker"
