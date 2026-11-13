@@ -18,6 +18,7 @@ models, so this module only shapes Pydantic's output; it never holds field knowl
 
 import copy
 import re
+from functools import lru_cache
 from typing import Any
 
 from pydantic import BaseModel
@@ -231,10 +232,19 @@ def _accept_templates(schema: dict[str, Any], kind: PlatformKind) -> None:
     definitions[_PARAM_TOKEN_DEF] = copy.deepcopy(_PARAM_TOKEN_SCHEMA)
 
 
-def export_schema(model_cls: type[BaseModel], kind: PlatformKind) -> dict[str, Any]:
-    """The schema written to `.strata/schemas/<kind>.json`."""
+@lru_cache(maxsize=128)
+def _templated_schema(model_cls: type[BaseModel], kind: PlatformKind) -> dict[str, Any]:
+    """`export_schema()` without the examples. Rendering takes tens of milliseconds and depends only on the model
+    and the kind, while `sln init`/`update` need every kind's schema twice (the files, then the skill's kind table)."""
     schema = render_schema(model_cls)
     _accept_templates(schema, kind)
+    return schema
+
+
+def export_schema(model_cls: type[BaseModel], kind: PlatformKind) -> dict[str, Any]:
+    """The schema written to `.strata/schemas/<kind>.json`. Rendered once per model and kind; every call returns its
+    own copy, with the current `EXAMPLES`."""
+    schema = copy.deepcopy(_templated_schema(model_cls, kind))
     examples = EXAMPLES.get(kind)
     if examples:
         schema["examples"] = copy.deepcopy(examples)

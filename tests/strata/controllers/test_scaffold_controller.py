@@ -26,8 +26,6 @@ from strata.utils.errors import UsageError
 from strata.utils.value_tokens import VALUE_TOKEN_KINDS
 from strata.utils.version import get_version
 
-pytestmark = pytest.mark.slow
-
 
 def test_init_creates_the_manifest(tmp_path):
     ScaffoldController(tmp_path).init("acme-platform")
@@ -245,6 +243,7 @@ def test_project_gotchas_skill_is_team_owned(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_init_exports_one_schema_file_per_registered_kind(tmp_path):
     ScaffoldController(tmp_path).init("acme-platform")
 
@@ -267,6 +266,7 @@ def test_init_exports_an_umbrella_schema_dispatching_on_kind(tmp_path):
     assert environment_branch["then"] == {"$ref": "environment.json"}
 
 
+@pytest.mark.slow
 def test_no_exported_schema_carries_a_title(tmp_path):
     """The YAML editor heads every hover with the nearest title, so a stray one shows on every field."""
     ScaffoldController(tmp_path).init("acme-platform")
@@ -310,6 +310,7 @@ def _repo_config_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "config"
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
 def test_shipped_example_validates_against_its_exported_schemas(tmp_path):
     """The editor schema must accept every document the example ships, shorthand forms included

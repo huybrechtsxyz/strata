@@ -9,6 +9,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from strata.controllers.solution_controller import SERVICE_BY_KIND
+from strata.models import schema_export
 from strata.models.common_models import PlatformKind, PlatformName
 from strata.models.reference_fields import References, RemoteReference, extract_references
 from strata.models.schema_examples import EXAMPLES
@@ -283,7 +284,6 @@ _EXAMPLE_CASES = [(kind, i) for kind, docs in EXAMPLES.items() for i in range(le
 
 
 @pytest.mark.parametrize(("kind", "index"), _EXAMPLE_CASES, ids=[f"{k.value}-{i}" for k, i in _EXAMPLE_CASES])
-@pytest.mark.slow
 def test_every_example_is_a_valid_document_of_its_own_kind(kind, index):
     document = EXAMPLES[kind][index]
     assert document["kind"] == kind.value
@@ -298,6 +298,52 @@ def test_examples_are_exported_as_the_root_examples_keyword(monkeypatch):
     assert export_schema(_model_of(kind), kind)["examples"] == [{"kind": "provider"}]
     monkeypatch.delitem(EXAMPLES, kind)
     assert "examples" not in export_schema(_model_of(kind), kind)
+
+
+# ---------------------------------------------------------------------------
+# Rendered once per model and kind
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def counted_renders(monkeypatch):
+    """Counts the real renders, on an empty cache that is emptied again afterwards."""
+    renders: list[type[BaseModel]] = []
+    real = schema_export.render_schema
+
+    def _render(model_cls):
+        renders.append(model_cls)
+        return real(model_cls)
+
+    schema_export._templated_schema.cache_clear()
+    monkeypatch.setattr(schema_export, "render_schema", _render)
+    yield renders
+    schema_export._templated_schema.cache_clear()
+
+
+def test_a_model_and_kind_are_rendered_once(counted_renders):
+    kind = PlatformKind.PROVIDER
+
+    assert export_schema(_model_of(kind), kind) == export_schema(_model_of(kind), kind)
+    assert len(counted_renders) == 1
+
+
+def test_each_kind_is_rendered_on_its_own(counted_renders):
+    for kind in (PlatformKind.PROVIDER, PlatformKind.ENVIRONMENT):
+        export_schema(_model_of(kind), kind)
+
+    assert len(counted_renders) == 2
+
+
+def test_changing_a_returned_schema_does_not_change_the_next(counted_renders):
+    kind = PlatformKind.DEPLOYMENT
+    first = export_schema(_model_of(kind), kind)
+    first["properties"].clear()
+    first["$defs"].clear()
+
+    second = export_schema(_model_of(kind), kind)
+
+    assert second["properties"] and second["$defs"]
 
 
 # ---------------------------------------------------------------------------

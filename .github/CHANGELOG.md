@@ -13,7 +13,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - **Faster `build run` and `deploy run`.** strata reads the installed plugins (integrations and SBOM collectors)
   once per command instead of on every lookup, each read having scanned every installed Python package. A plugin
   installed while a command runs is picked up by the next one. A Terraform file read more than once in a command
-  (for the SBOM, then for the declared outputs and variables) is parsed once.
+  (for the SBOM, then for the declared outputs and variables) is parsed once. `sln init` and `sln update` render
+  each kind's schema once.
 
 ## [2.6.0] - 2026-11-13
 
