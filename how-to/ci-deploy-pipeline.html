@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Run strata in a CI pipeline &mdash; strata 2.5.0 documentation</title>
+  <title>How To: Run strata in a CI pipeline &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -61,15 +61,21 @@
 <li class="toctree-l2"><a class="reference internal" href="#install-strata">2. Install strata</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#give-the-pipeline-its-credentials">3. Give the pipeline its credentials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#a-complete-workflow">4. A complete workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#plan-in-one-job-apply-in-another">5. Plan in one job, apply in another</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#plan-in-one-job-apply-in-another">5. Plan in one job, apply in another</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#plan-jobs-from-the-step-list">Plan jobs from the step list</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#tear-a-deployment-down">6. Tear a deployment down</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#exit-codes">7. Exit codes</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -97,6 +103,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -150,7 +157,7 @@ the deployable ones of one workspace and ring: <code class="docutils literal not
 returns <code class="docutils literal notranslate"><span class="pre">data.deployments[]</span></code> (<code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">tenant</span></code>, <code class="docutils literal notranslate"><span class="pre">version</span></code>, <code class="docutils literal notranslate"><span class="pre">ring</span></code>, <code class="docutils literal notranslate"><span class="pre">order</span></code>, …). A filter that names nothing
 exits 2 instead of returning an empty list.</p>
 <section id="the-four-steps">
-<h2>1. The four steps<a class="headerlink" href="#the-four-steps" title="Link to this heading"></a></h2>
+<span id="1-the-four-steps"></span><h2>1. The four steps<a class="headerlink" href="#the-four-steps" title="Link to this heading"></a></h2>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Step</p></th>
@@ -197,8 +204,11 @@ the step out if there are none. See <a class="reference internal" href="security
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> also judge image tags</strong> when the workspace sets <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code>: an image
 with no tag, a floating tag such as <code class="docutils literal notranslate"><span class="pre">latest</span></code>, or a tag that does not match the shape you require fails the
 step (<code class="docutils literal notranslate"><span class="pre">enforcement:</span> <span class="pre">deny</span></code>) or warns (<code class="docutils literal notranslate"><span class="pre">warn</span></code>). It is offline and needs no credentials. <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> judges it
-before it writes anything, and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> again before any value is resolved, so pass the same <code class="docutils literal notranslate"><span class="pre">--pin</span></code> to
-both. See “Image tag policy” in <a class="reference internal" href="../config/workspace.html"><span class="std std-doc">the workspace reference</span></a>.</p></li>
+at the end, after the SBOM, so it also judges the images the charts run (<code class="docutils literal notranslate"><span class="pre">sbom.render_charts</span></code>, on by default;
+the build agent needs <code class="docutils literal notranslate"><span class="pre">helm</span></code> for that, else each chart is an <code class="docutils literal notranslate"><span class="pre">info</span></code> line and skipped). <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>
+judges it again before any value is resolved, so pass the same <code class="docutils literal notranslate"><span class="pre">--pin</span></code> to both. To fail fast, before the build
+clones and renders, run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span> <span class="pre">&quot;$DEPLOYMENT&quot;</span></code> first: it judges the declared images in seconds.
+See “Image tag policy” in <a class="reference internal" href="../config/workspace.html"><span class="std std-doc">the workspace reference</span></a>.</p></li>
 </ul>
 <p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">--force</span></code> is accepted for compatibility with v1 pipelines and currently does
 nothing. <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> runs init, validate and plan and stops before any change; the security gates
@@ -206,7 +216,7 @@ still run. <code class="docutils literal notranslate"><span class="pre">--smoke-
 credentials.</p>
 </section>
 <section id="install-strata">
-<h2>2. Install strata<a class="headerlink" href="#install-strata" title="Link to this heading"></a></h2>
+<span id="2-install-strata"></span><h2>2. Install strata<a class="headerlink" href="#install-strata" title="Link to this heading"></a></h2>
 <p>strata needs Python 3.12 or later (tested on 3.12, 3.13 and 3.14). While v2 is in release-candidate, <strong>pin the version</strong>: an unpinned
 <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">xyz-strata</span></code> still resolves to the last v1 release.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">astral-sh/setup-uv@v8.1.0</span>
@@ -216,13 +226,29 @@ credentials.</p>
 <p><code class="docutils literal notranslate"><span class="pre">setup-uv</span></code> puts <code class="docutils literal notranslate"><span class="pre">~/.local/bin</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>, so <code class="docutils literal notranslate"><span class="pre">strata</span></code> is available to the following steps. If your
 runner reaches PyPI through a corporate mirror, add <code class="docutils literal notranslate"><span class="pre">UV_INDEX_STRATEGY:</span> <span class="pre">unsafe-best-match</span></code> to the
 step’s <code class="docutils literal notranslate"><span class="pre">env</span></code>.</p>
-<p>A container image is published to <code class="docutils literal notranslate"><span class="pre">ghcr.io/huybrechtsxyz/strata</span></code>. It holds strata only, not Terraform
-or Helm, and pre-release tags never move <code class="docutils literal notranslate"><span class="pre">latest</span></code>.</p>
+<p>A container image is published to <code class="docutils literal notranslate"><span class="pre">ghcr.io/huybrechtsxyz/strata</span></code> in two variants; pre-release tags never move
+<code class="docutils literal notranslate"><span class="pre">latest</span></code>:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">strata:&lt;version&gt;</span></code></strong> (also <code class="docutils literal notranslate"><span class="pre">-slim</span></code>, and <code class="docutils literal notranslate"><span class="pre">latest</span></code>): strata and the tools strata itself calls (<code class="docutils literal notranslate"><span class="pre">git</span></code>, and <code class="docutils literal notranslate"><span class="pre">ssh</span></code>
+for <code class="docutils literal notranslate"><span class="pre">ssh_key</span></code> auth). Enough for <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">schema</span></code>, <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">steps</span></code> and a build without Helm modules.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">strata:&lt;version&gt;-full</span></code></strong> (and <code class="docutils literal notranslate"><span class="pre">latest-full</span></code>): adds OpenTofu, Helm 4, the Docker CLI with Compose, Trivy and
+Checkov.
+Use it for a workspace with Helm modules: <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> itself calls Helm (it pins registry charts and renders
+charts for the SBOM).</p></li>
+</ul>
+<p>Neither has Terraform: its licence is not settled for a public image. The full image runs root modules with
+OpenTofu instead (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">opentofu</span></code>, see <a class="reference internal" href="../config/workspace.html#opentofu"><span class="std std-ref">workspace.md</span></a>). Mount the checkout and work in it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">:/work"</span><span class="w"> </span>-w<span class="w"> </span>/work<span class="w"> </span>ghcr.io/huybrechtsxyz/strata:&lt;version&gt;<span class="w"> </span>validate<span class="w"> </span>config
+</pre></div>
+</div>
+<p>For Terraform, or another version of a tool, build your own image on either variant;
+<span class="xref myst">cli-image.md</span> has the example, the Docker socket mount for Compose steps, and what each
+variant holds and why.</p>
 <p>If your pipeline installs packages through Aikido Safe Chain, a freshly released strata is held back
 for 48 hours; see <a class="reference internal" href="aikido-safe-chain.html"><span class="std std-doc">aikido-safe-chain.md</span></a>.</p>
 </section>
 <section id="give-the-pipeline-its-credentials">
-<h2>3. Give the pipeline its credentials<a class="headerlink" href="#give-the-pipeline-its-credentials" title="Link to this heading"></a></h2>
+<span id="3-give-the-pipeline-its-credentials"></span><h2>3. Give the pipeline its credentials<a class="headerlink" href="#give-the-pipeline-its-credentials" title="Link to this heading"></a></h2>
 <p>strata reads credentials from the process environment, so the workflow only has to export the CI
 secrets that each store needs. Which step needs which:</p>
 <table class="docutils align-default">
@@ -261,7 +287,7 @@ workflow only needs the credential for that store. Give each step only what it r
 usually needs nothing beyond a git token.</p>
 </section>
 <section id="a-complete-workflow">
-<h2>4. A complete workflow<a class="headerlink" href="#a-complete-workflow" title="Link to this heading"></a></h2>
+<span id="4-a-complete-workflow"></span><h2>4. A complete workflow<a class="headerlink" href="#a-complete-workflow" title="Link to this heading"></a></h2>
 <p>One job, run by hand, with a dry-run switch. The <code class="docutils literal notranslate"><span class="pre">environment:</span></code> line lets you scope secrets and add
 required reviewers in the repository settings.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deploy</span>
@@ -339,8 +365,10 @@ rendered.</p></li>
 <li><p>A release gate judges the commit being deployed and reads it from the CI variables (<code class="docutils literal notranslate"><span class="pre">GITHUB_SHA</span></code>,
 <code class="docutils literal notranslate"><span class="pre">BUILD_SOURCEVERSION</span></code>, <code class="docutils literal notranslate"><span class="pre">CI_COMMIT_SHA</span></code>, and others). Check out the commit you mean to deploy.</p></li>
 <li><p>To limit a workflow to part of a deployment, use <code class="docutils literal notranslate"><span class="pre">--scope</span> <span class="pre">LABEL</span></code> (matches the <code class="docutils literal notranslate"><span class="pre">scope:</span></code> of an
-execution step, for example <code class="docutils literal notranslate"><span class="pre">infra</span></code> or <code class="docutils literal notranslate"><span class="pre">apps</span></code>) or <code class="docutils literal notranslate"><span class="pre">--stage</span> <span class="pre">NAME</span></code>. A workflow that needs no
-kubeconfig can then never touch the Helm steps.</p></li>
+execution step, for example <code class="docutils literal notranslate"><span class="pre">infra</span></code> or <code class="docutils literal notranslate"><span class="pre">apps</span></code>) or <code class="docutils literal notranslate"><span class="pre">--stage</span> <span class="pre">NAME</span></code>. Both can be repeated
+(<code class="docutils literal notranslate"><span class="pre">--scope</span> <span class="pre">infra</span> <span class="pre">--scope</span> <span class="pre">network</span></code>). A workflow that needs no kubeconfig can then never touch the
+Helm steps. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">steps</span> <span class="pre">D</span></code> lists the steps and scopes; see
+<a class="reference internal" href="#plan-jobs-from-the-step-list">Plan jobs from the step list</a>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--follow</span></code> streams the tools’ output live; see <a class="reference internal" href="deploy-run-streaming.html"><span class="std std-doc">deploy-run-streaming.md</span></a>.</p></li>
 <li><p>To copy the deployment’s images to a registry before <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> (for example from a build feed to the
 registry the apps pull from), list them with <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span> <span class="pre">&quot;$DEPLOYMENT&quot;</span> <span class="pre">-o</span> <span class="pre">json</span></code>. Each entry in
@@ -351,7 +379,7 @@ and a <code class="docutils literal notranslate"><span class="pre">deny</span></
 </ul>
 </section>
 <section id="plan-in-one-job-apply-in-another">
-<h2>5. Plan in one job, apply in another<a class="headerlink" href="#plan-in-one-job-apply-in-another" title="Link to this heading"></a></h2>
+<span id="5-plan-in-one-job-apply-in-another"></span><h2>5. Plan in one job, apply in another<a class="headerlink" href="#plan-in-one-job-apply-in-another" title="Link to this heading"></a></h2>
 <p>To review the plan before anything changes, split the deploy with <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">plan</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">apply</span></code>.
 <code class="docutils literal notranslate"><span class="pre">plan</span></code> saves a <code class="docutils literal notranslate"><span class="pre">&lt;step&gt;.tfplan</span></code> file inside the build directory. <code class="docutils literal notranslate"><span class="pre">apply</span></code> applies exactly that file,
 re-running <code class="docutils literal notranslate"><span class="pre">init</span></code> first, and skips validate and plan. Put the apply job behind a protected
@@ -417,9 +445,38 @@ the run but never recorded in the <code class="docutils literal notranslate"><sp
 <li><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">setup</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">check</span></code> run only init, or init and validate, if you want those as
 separate stages.</p></li>
 </ul>
+<section id="plan-jobs-from-the-step-list">
+<h3>Plan jobs from the step list<a class="headerlink" href="#plan-jobs-from-the-step-list" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">steps</span> <span class="pre">D</span> <span class="pre">-o</span> <span class="pre">json</span></code> lists the steps <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">D</span></code> would run, in its order, without
+running anything or needing a build or credentials. Each entry in <code class="docutils literal notranslate"><span class="pre">data.steps[]</span></code> has <code class="docutils literal notranslate"><span class="pre">name</span></code>,
+<code class="docutils literal notranslate"><span class="pre">scope</span></code>, <code class="docutils literal notranslate"><span class="pre">order</span></code>, <code class="docutils literal notranslate"><span class="pre">level</span></code> (steps on one level do not depend on each other), <code class="docutils literal notranslate"><span class="pre">depends_on</span></code>, the
+<code class="docutils literal notranslate"><span class="pre">integration</span></code> it needs, and <code class="docutils literal notranslate"><span class="pre">capabilities</span></code>: <code class="docutils literal notranslate"><span class="pre">saved_plan</span></code> is false for a step <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">apply</span></code> cannot
+take (a <code class="docutils literal notranslate"><span class="pre">script</span></code> or GitOps step; run it with <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>), <code class="docutils literal notranslate"><span class="pre">destroy</span></code> false for one <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code>
+cannot tear down. <code class="docutils literal notranslate"><span class="pre">data.scopes[]</span></code> gives each scope the scopes it waits for. <code class="docutils literal notranslate"><span class="pre">--stage</span></code> and <code class="docutils literal notranslate"><span class="pre">--scope</span></code>
+select exactly as on <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>.</p>
+<p>One job per scope, in scope order:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>steps<span class="w"> </span><span class="s2">"</span><span class="nv">$DEPLOYMENT</span><span class="s2">"</span><span class="w"> </span>-o<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-c<span class="w"> </span><span class="s1">'[.data.scopes[] | {scope, depends_on}]'</span>
+</pre></div>
+</div>
+<p>Skip a job when the deployment has no step in its scope. An empty selection exits 0, so check the
+count:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="nv">n</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>deploy<span class="w"> </span>steps<span class="w"> </span><span class="s2">"</span><span class="nv">$DEPLOYMENT</span><span class="s2">"</span><span class="w"> </span>--scope<span class="w"> </span>infra<span class="w"> </span>-o<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.data.steps | length'</span><span class="k">)</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">"</span><span class="nv">$n</span><span class="s2">"</span><span class="w"> </span>-eq<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"no infra steps"</span><span class="p">;</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span><span class="p">;</span><span class="w"> </span><span class="k">fi</span>
+</pre></div>
+</div>
+<p>Send each step to the command that can run it:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>steps<span class="w"> </span><span class="s2">"</span><span class="nv">$DEPLOYMENT</span><span class="s2">"</span><span class="w"> </span>-o<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.data.steps[]</span>
+<span class="s1">  | "\(.name) \(if .capabilities.saved_plan then "plan+apply" else "run" end)"'</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">--check-tools</span></code> also checks each listed step’s tool on the machine it runs on (on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>, required
+version) and exits 3 when one is not ready, so a deploy job can fail before it starts:
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">steps</span> <span class="pre">&quot;$DEPLOYMENT&quot;</span> <span class="pre">--scope</span> <span class="pre">apps</span> <span class="pre">--check-tools</span> <span class="pre">-q</span></code>. <code class="docutils literal notranslate"><span class="pre">--destroy</span></code> lists the steps in
+teardown order.</p>
+</section>
 </section>
 <section id="tear-a-deployment-down">
-<h2>6. Tear a deployment down<a class="headerlink" href="#tear-a-deployment-down" title="Link to this heading"></a></h2>
+<span id="6-tear-a-deployment-down"></span><h2>6. Tear a deployment down<a class="headerlink" href="#tear-a-deployment-down" title="Link to this heading"></a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">destroy</span> <span class="pre">D</span></code> removes what <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> created: Terraform-managed resources, Helm releases, Compose
 stacks and GitOps files, last step first. It cannot be undone, so it needs exactly one of <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> (preview,
 changes nothing), <code class="docutils literal notranslate"><span class="pre">--smoke-test</span></code> (report only) or <code class="docutils literal notranslate"><span class="pre">--force</span></code> (destroy, no prompt). Anything else exits 2. Preview in one job and destroy in a
@@ -470,7 +527,7 @@ type in the sink’s <code class="docutils literal notranslate"><span class="pre
 </ul>
 </section>
 <section id="exit-codes">
-<h2>7. Exit codes<a class="headerlink" href="#exit-codes" title="Link to this heading"></a></h2>
+<span id="7-exit-codes"></span><h2>7. Exit codes<a class="headerlink" href="#exit-codes" title="Link to this heading"></a></h2>
 <p>Every command uses the same four codes, so a pipeline can react without parsing output.</p>
 <table class="docutils align-default">
 <thead>

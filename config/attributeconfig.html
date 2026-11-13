@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AttributeConfig (kind: attributeconfig) &mdash; strata 2.5.0 documentation</title>
+  <title>AttributeConfig (kind: attributeconfig) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -59,8 +59,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -80,6 +83,7 @@
 <li class="toctree-l1"><a class="reference internal" href="topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#parameter-sets-two-views">Parameter sets: two views</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
@@ -93,6 +97,7 @@
 <li class="toctree-l1"><a class="reference internal" href="version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -146,12 +151,55 @@ for a worked example.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.target.kind</span></code> — which <a class="reference internal" href="../GLOSSARY.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">PlatformKind</span></code></span></a> this schema targets (e.g. <code class="docutils literal notranslate"><span class="pre">resource</span></code>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.target.block</span></code> — which blob field on that kind to validate: <code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>,
 <code class="docutils literal notranslate"><span class="pre">configuration</span></code>, <code class="docutils literal notranslate"><span class="pre">variables</span></code>, <code class="docutils literal notranslate"><span class="pre">features</span></code> (whichever the target kind actually has), or <code class="docutils literal notranslate"><span class="pre">composite</span></code>
-(all four merged blocks together; <code class="docutils literal notranslate"><span class="pre">view:</span> <span class="pre">effective</span></code> only). Never <code class="docutils literal notranslate"><span class="pre">secrets</span></code>.</p></li>
+(all four merged blocks together; <code class="docutils literal notranslate"><span class="pre">view:</span> <span class="pre">effective</span></code> only). <code class="docutils literal notranslate"><span class="pre">values</span></code> is a
+<a class="reference internal" href="parameterset.html"><span class="std std-doc">parameter set</span></a>’s own values (<code class="docutils literal notranslate"><span class="pre">view:</span> <span class="pre">document</span></code>); <code class="docutils literal notranslate"><span class="pre">params</span></code> is the merged
+parameter values a document receives (<code class="docutils literal notranslate"><span class="pre">view:</span> <span class="pre">effective</span></code>, see below). Never <code class="docutils literal notranslate"><span class="pre">secrets</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.target.view</span></code> — required: <code class="docutils literal notranslate"><span class="pre">document</span></code> validates each matching document’s own block in
-isolation; <code class="docutils literal notranslate"><span class="pre">effective</span></code> validates each deployable deployment’s merged result (<code class="docutils literal notranslate"><span class="pre">target.kind:</span> <span class="pre">deployment</span></code> only)</p></li>
+isolation; <code class="docutils literal notranslate"><span class="pre">effective</span></code> validates each deployable deployment’s merged result (<code class="docutils literal notranslate"><span class="pre">target.kind:</span> <span class="pre">deployment</span></code> only), or with <code class="docutils literal notranslate"><span class="pre">block:</span> <span class="pre">params</span></code>, what a deployment, environment or tenant receives
+from its parameter sets</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.target.selector</span></code> — optional <code class="docutils literal notranslate"><span class="pre">field.path:</span> <span class="pre">required-value</span></code> equality map narrowing which
 documents of <code class="docutils literal notranslate"><span class="pre">target.kind</span></code> this schema applies to. Omitted means every document of that kind.
-Equality only — no wildcards or regex.</p></li>
+Equality only — no wildcards or regex. A path walks into a map by key: <code class="docutils literal notranslate"><span class="pre">meta.labels.role:</span> <span class="pre">spoke</span></code> selects on a label.</p></li>
+</ul>
+</section>
+<section id="parameter-sets-two-views">
+<h2>Parameter sets: two views<a class="headerlink" href="#parameter-sets-two-views" title="Link to this heading"></a></h2>
+<p>Values are layered, so they are checked in two places:</p>
+<ul>
+<li><p><strong>One set at a time</strong> (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>, <code class="docutils literal notranslate"><span class="pre">block:</span> <span class="pre">values</span></code>, <code class="docutils literal notranslate"><span class="pre">view:</span> <span class="pre">document</span></code>): the shape of
+what one file holds. A set does not know its role, so select on an optional label:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> kind</span><span class="p">:</span><span class="w"> </span><span class="nv">parameterset</span><span class="p p-Indicator">,</span><span class="nt"> block</span><span class="p">:</span><span class="w"> </span><span class="nv">values</span><span class="p p-Indicator">,</span><span class="nt"> view</span><span class="p">:</span><span class="w"> </span><span class="nv">document</span><span class="p p-Indicator">,</span><span class="nt"> selector</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> meta.labels.role</span><span class="p">:</span><span class="w"> </span><span class="nv">spoke</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">schema</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">object</span>
+<span class="w">    </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">hub</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">tenant</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">string</span><span class="p p-Indicator">,</span><span class="nt"> pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[a-z][a-z0-9]*-[0-9]{3}$"</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>What a document receives</strong> (<code class="docutils literal notranslate"><span class="pre">block:</span> <span class="pre">params</span></code>, <code class="docutils literal notranslate"><span class="pre">view:</span> <span class="pre">effective</span></code>, for <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>,
+<code class="docutils literal notranslate"><span class="pre">environment</span></code> or <code class="docutils literal notranslate"><span class="pre">tenant</span></code>): the values its chain’s sets give it once merged per role (root
+first, leaf last), with the roles as top-level keys. “Everything a base needs is there” can
+only be checked here: a hub’s set does not fill the <code class="docutils literal notranslate"><span class="pre">spoke</span></code> role.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> kind</span><span class="p">:</span><span class="w"> </span><span class="nv">deployment</span><span class="p p-Indicator">,</span><span class="nt"> block</span><span class="p">:</span><span class="w"> </span><span class="nv">params</span><span class="p p-Indicator">,</span><span class="nt"> view</span><span class="p">:</span><span class="w"> </span><span class="nv">effective</span><span class="p p-Indicator">,</span><span class="nt"> selector</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> spec.workspace</span><span class="p">:</span><span class="w"> </span><span class="nv">bootstrap</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">schema</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">spoke</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">hub</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">spoke</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> required</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">name</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">hub</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">tenant</span><span class="p p-Indicator">]</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="nt">hub</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> properties</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> provider</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> enum</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">azure-westeurope</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">azure-westus2</span><span class="p p-Indicator">]</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<p>A deployment is checked when it is deployable, with its selector evaluated on the resolved
+deployment; an environment or tenant when it is not <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code>. A document that names no
+set receives <code class="docutils literal notranslate"><span class="pre">{}</span></code>, so narrow the selector to the documents that use the base. Findings are
+located at <code class="docutils literal notranslate"><span class="pre">meta.params.&lt;role&gt;.&lt;key&gt;</span></code> on the document, and name it.</p>
+</li>
+</ul>
+<p>A schema cannot check that a value names an existing tenant or provider; the reference check on
+the resolved document does.</p>
+<ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.schema</span></code> — a verbatim JSON Schema fragment (<code class="docutils literal notranslate"><span class="pre">type</span></code>, <code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">required</span></code>,
 <code class="docutils literal notranslate"><span class="pre">additionalProperties</span></code>, <code class="docutils literal notranslate"><span class="pre">patternProperties</span></code>, <code class="docutils literal notranslate"><span class="pre">if</span></code>/<code class="docutils literal notranslate"><span class="pre">then</span></code>, …), authored directly — no
 strata-invented vocabulary.</p></li>

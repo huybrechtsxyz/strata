@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Strata Glossary &mdash; strata 2.5.0 documentation</title>
+  <title>Strata Glossary &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="_static/documentation_options.js?v=ae39cb24"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/toggleprompt.js?v=cec9bd37"></script>
@@ -88,8 +88,11 @@
 <li class="toctree-l1"><a class="reference internal" href="how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how-to/deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how-to/environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how-to/parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="how-to/sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -117,6 +120,7 @@
 <li class="toctree-l1"><a class="reference internal" href="config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -292,14 +296,14 @@ Resolved at build/deploy time against the named key’s declared <code class="do
 <code class="docutils literal notranslate"><span class="pre">environment</span></code>, <code class="docutils literal notranslate"><span class="pre">artifact</span></code>, or an integration-backed secret store).</p>
 </section>
 <section id="source-remote">
-<h3>Source / Remote<a class="headerlink" href="#source-remote" title="Link to this heading"></a></h3>
+<span id="source--remote"></span><h3>Source / Remote<a class="headerlink" href="#source-remote" title="Link to this heading"></a></h3>
 <p>A <code class="docutils literal notranslate"><span class="pre">remotes[]</span></code> entry on the solution manifest names an external module source — <code class="docutils literal notranslate"><span class="pre">local</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>,
 or <code class="docutils literal notranslate"><span class="pre">helm</span></code>/OCI-chart — that a workspace’s provisioner or module can pull from
 (<code class="docutils literal notranslate"><span class="pre">SourceModel</span></code>, ADR-0018). <code class="docutils literal notranslate"><span class="pre">vendor/</span></code> in an example solution is typically a local stand-in for
 what would otherwise be a real remote.</p>
 </section>
 <section id="provisioner-provisioning-step">
-<h3>Provisioner / Provisioning Step<a class="headerlink" href="#provisioner-provisioning-step" title="Link to this heading"></a></h3>
+<span id="provisioner--provisioning-step"></span><h3>Provisioner / Provisioning Step<a class="headerlink" href="#provisioner-provisioning-step" title="Link to this heading"></a></h3>
 <p>A workspace’s execution recipe: which tool (Terraform, Helm, Compose) provisions which part of
 the topology, in what order, with what dependencies (<code class="docutils literal notranslate"><span class="pre">ProvisionerModel</span></code>/<code class="docutils literal notranslate"><span class="pre">ProvisioningStepModel</span></code>,
 ADR-0011). <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> executes these steps in dependency order; <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> renders them.</p>

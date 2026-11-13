@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Run a Script as a Pipeline Step (tool: script) &mdash; strata 2.5.0 documentation</title>
+  <title>How To: Run a Script as a Pipeline Step (tool: script) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -59,8 +59,11 @@
 <li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#declare-the-step">1. Declare the step</a></li>
@@ -96,6 +99,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -140,7 +144,7 @@ A schedule runs <code class="docutils literal notranslate"><span class="pre">rel
 <p>How it works, and why, is in <span class="xref myst">script-provisioner.md</span>. The fields are in
 <a class="reference internal" href="../config/workspace.html#script-provisioner"><span class="std std-ref">workspace.md</span></a>.</p>
 <section id="declare-the-step">
-<h2>1. Declare the step<a class="headerlink" href="#declare-the-step" title="Link to this heading"></a></h2>
+<span id="1-declare-the-step"></span><h2>1. Declare the step<a class="headerlink" href="#declare-the-step" title="Link to this heading"></a></h2>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secrets</span>
@@ -199,7 +203,7 @@ Leave it out with <code class="docutils literal notranslate"><span class="pre">-
 </ul>
 </section>
 <section id="write-the-script">
-<h2>2. Write the script<a class="headerlink" href="#write-the-script" title="Link to this heading"></a></h2>
+<span id="2-write-the-script"></span><h2>2. Write the script<a class="headerlink" href="#write-the-script" title="Link to this heading"></a></h2>
 <p>strata cannot check that a script is free of side effects when it runs with <code class="docutils literal notranslate"><span class="pre">plan_args</span></code>. The script has to guard
 itself. <code class="docutils literal notranslate"><span class="pre">STRATA_PHASE</span></code> says which phase it was started in, whatever the arguments are:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
@@ -263,7 +267,7 @@ itself. <code class="docutils literal notranslate"><span class="pre">STRATA_PHAS
 environment.</p>
 </section>
 <section id="give-it-only-the-values-it-needs">
-<h2>3. Give it only the values it needs<a class="headerlink" href="#give-it-only-the-values-it-needs" title="Link to this heading"></a></h2>
+<span id="3-give-it-only-the-values-it-needs"></span><h2>3. Give it only the values it needs<a class="headerlink" href="#give-it-only-the-values-it-needs" title="Link to this heading"></a></h2>
 <p>By default <code class="docutils literal notranslate"><span class="pre">STRATA_VALUES</span></code> holds every resolved value of the deployment, so a script that needs one token also
 receives every unrelated secret. List the keys it needs in <code class="docutils literal notranslate"><span class="pre">values</span></code>:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">VAULT_TOKEN</span><span class="p p-Indicator">]</span>
@@ -280,7 +284,7 @@ the process list of the machine. Prefer <code class="docutils literal notranslat
 </ul>
 </section>
 <section id="pass-results-to-the-next-step">
-<h2>4. Pass results to the next step<a class="headerlink" href="#pass-results-to-the-next-step" title="Link to this heading"></a></h2>
+<span id="4-pass-results-to-the-next-step"></span><h2>4. Pass results to the next step<a class="headerlink" href="#pass-results-to-the-next-step" title="Link to this heading"></a></h2>
 <p>A script writes one JSON object to the file named by <code class="docutils literal notranslate"><span class="pre">STRATA_OUTPUT_FILE</span></code>. The steps that depend on it read the keys as
 <code class="docutils literal notranslate"><span class="pre">${output:&lt;step&gt;.&lt;key&gt;}</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="nt">"token"</span><span class="p">:</span><span class="w"> </span><span class="s2">"abc"</span><span class="p">,</span><span class="w"> </span><span class="nt">"_sensitive"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"token"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
@@ -305,7 +309,7 @@ warning naming the step. The step itself does not fail.</p></li>
 </ul>
 </section>
 <section id="trust-it-step-by-step">
-<h2>5. Trust it step by step<a class="headerlink" href="#trust-it-step-by-step" title="Link to this heading"></a></h2>
+<span id="5-trust-it-step-by-step"></span><h2>5. Trust it step by step<a class="headerlink" href="#trust-it-step-by-step" title="Link to this heading"></a></h2>
 <p>A preview that runs the script is only as safe as the script. Before it goes on a schedule:</p>
 <ol class="arabic simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">D</span> <span class="pre">--smoke-test</span></code> runs nothing and reports which steps would run. A value that cannot be resolved

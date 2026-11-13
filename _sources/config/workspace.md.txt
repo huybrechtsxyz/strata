@@ -27,8 +27,9 @@ parameters.
 - `spec.topology[]` — inline topology groupings (type/components/namespaces/volumes) — see
   "Topology grouping" below. Inline since ADR-0028 (reverted from a standalone `kind: topology`
   document, ADR-0011) — not a list of names.
-- `spec.provisioners[]` — tool definitions (`ProvisionerModel`): `name`, `tool` (terraform, ansible,
-  helm, compose, script, ...), `source`, `backend` (terraform only), `properties` (ansible only),
+- `spec.provisioners[]` — tool definitions (`ProvisionerModel`): `name`, `tool` (terraform, opentofu,
+  helm, compose, script, ...; see "OpenTofu" below), `source`, `backend` (terraform and opentofu only),
+  `properties` (ansible only),
   `script` (script only, see "Script provisioner" below),
   `integration` (which [`integration`](integration.md) document supplies version/auth), `output`
   (Jinja2 template escape hatch)
@@ -58,6 +59,11 @@ parameters.
 - `spec.image_tag_policy` — fail `build run` and `deploy run` when an image the deployment runs has no
   tag, a floating tag such as `latest`, or a tag that does not match the shape you require (see "Image
   tag policy" below)
+- `spec.sbom` — what `build run` adds to `sbom.json`. `render_charts` (default `true`) renders every Helm
+  chart, local or pinned from a registry, with `helm template` and lists the images it deploys, so the CVE and
+  image gates and `image_tag_policy` check them (see
+  [how-to/sbom-generation.md](../how-to/sbom-generation.md#helm-images)). `render_charts: false` lists only the
+  images modules declare.
 - `spec.provisioner_lock_policy` — fail `build run` when a Terraform or OpenTofu provisioner has no
   `.terraform.lock.hcl`, or one that does not lock every provider it declares (see "Provisioner lock policy"
   below)
@@ -123,7 +129,8 @@ one `-backend-config key=value` each. The `backend "azurerm" {}` block itself st
 `type` is not sent to Terraform.
 
 The values are resolved when `deploy run` starts the step, so they may contain `${var:}`, `${secret:}`,
-`${feature:}` and `${output:STEP.KEY}` tokens, and two tokens for the deployment being run. A workspace is shared
+`${feature:}`, `${output:STEP.KEY}` and [`${artifact:NAME.FIELD}`](artifact.md) tokens, and two tokens for the
+deployment being run. A workspace is shared
 by every deployment, so these are the way to give each deployment its own state without typing a key into every
 deployment's environment:
 
@@ -190,6 +197,57 @@ Things to know:
   The design, and why it is a token rather than a default key, is in
   [deployment-tokens.md](../design/deployment-tokens.md).
 
+## OpenTofu
+
+`tool: opentofu` runs a root module with `tofu` instead of `terraform`. Everything above applies unchanged: the
+`backend` settings, the `strata` payload and `TF_VAR_<key>` values, `deploy plan`/`deploy apply` with a saved plan,
+`deploy destroy`, outputs, the [provisioner lock policy](#provisioner-lock-policy), the SBOM and the Checkov policy.
+
+```yaml
+provisioners:
+  - name: infra
+    tool: opentofu
+    integration: tofu        # optional: a `type: opentofu` integration, to pin the version or the binary
+    source:
+      source_path: infra
+```
+
+```yaml
+kind: integration
+meta:
+  name: tofu
+spec:
+  type: opentofu
+  capabilities: [infrastructure]
+  version: ">= 1.6"          # OpenTofu's own numbering, not Terraform's
+```
+
+- **Version.** OpenTofu 1.6, its first stable release, or later: every command and flag strata passes exists there.
+  `spec.version` is checked against `tofu version`.
+- **Its own type.** A `tool: opentofu` provisioner binds a `type: opentofu` integration, and a `type: terraform`
+  integration does not run `tofu` through `spec.command`; `strata validate` reports either
+  (`provisioner_integration_type_mismatch`, `integration_command_other_tool`). The type decides the version check,
+  the init advice and the provider registry.
+- **Lock files.** `tofu init` keys a short provider source (`hashicorp/azurerm`) as `registry.opentofu.org/...` in
+  `.terraform.lock.hcl`. The lock policy and the SBOM read the host the lock file holds, so a root locked by either
+  tool is read correctly.
+- **`.tf` roots only.** strata reads `*.tf` (and `*.tf.json`) files to find the `strata` variable, outputs and
+  providers. OpenTofu 1.8's `*.tofu` files are run by `tofu` but not read by strata: declare those in `.tf` files.
+- **State encryption.** OpenTofu's `encryption {}` block in the root module works as is; strata does not deliver
+  `TF_ENCRYPTION` keys.
+
+### Moving a deployment from Terraform to OpenTofu
+
+State backends and the state format are shared, so `backend` does not change.
+
+1. Set `tool: opentofu` (and `type: opentofu` on its integration, if it has one).
+2. Run `tofu init` in the root module and commit the updated `.terraform.lock.hcl`: it adds the
+   `registry.opentofu.org` entries. Until then the lock policy reports the providers as unlocked.
+3. Run `strata deploy plan` and check it shows no changes before the first apply. OpenTofu's migration guide is per
+   Terraform version; state written by a Terraform newer than the one OpenTofu forked from is worth checking there.
+4. Do not apply a saved plan across the switch: a `.tfplan` written by `terraform` cannot be applied by `tofu`. Plan
+   again after changing the tool.
+
 ## Script provisioner
 
 `tool: script` runs a `.ps1`, `.sh`, `.bash`, `.py` or `.bat` file as a step. `script` is required for this tool and
@@ -232,6 +290,41 @@ provisioners:
 A worked example, with the script, is in [how-to/script-provisioner.md](../how-to/script-provisioner.md).
 The design is in [script-provisioner.md](../design/script-provisioner.md).
 
+## Output store
+
+`spec.output_store` (a backend type, such as `azure-appconfig` or `azure-blob`) or `spec.output_store_integration`
+(an Integration document) keeps each step's outputs after `deploy run`, so a later run can resolve
+`${output:STEP.KEY}` for a step it does not run. `spec.output_store_max_age` (seconds) rejects a record older than
+that; `deploy run --output-max-age` overrides it for one run. The backend must support compare-and-swap.
+
+- Each step has its own key, `strata/step-outputs/<deployment>/<step>`, holding when it was collected and its
+  non-sensitive values. A sensitive output is never stored. Destroy marks the step's key as destroyed.
+- A backend can limit the size of one key. `azure-appconfig` allows 10 KB, counting the key itself; `azure-blob` has
+  no practical limit. Above 8,000 bytes, `deploy run` warns (`output_store_record`); above the backend's limit, the
+  step's outputs are not recorded and `deploy run` warns with the step, its size and the limit. A step's deploy
+  never fails over this. To fix it, make the largest outputs smaller, mark them sensitive, or use `azure-blob`.
+- Next to it, `strata/deployment-report/<deployment>/<step>` holds what only `strata deploy output` and `strata deploy
+  report` read: the names of the step's sensitive outputs, the `description` of each output from the root module's
+  `output` blocks, and the secrets the step used, each with its store, location, `description` and the environment
+  file that declares it. Never a value. Helm and Compose steps get one too (secrets only: they have no outputs).
+- `strata/deployment-audit/<deployment>` holds the last successful deploy's audit summary (who, when, the commit,
+  the audit record's id), which `strata deploy report` shows at the top. Above the backend's limit, descriptions are shortened to 200 characters, then left out
+  (`report_store_record` warning); names are always kept. `strata build run` sizes this record from the rendered
+  `.tf` files and warns early (`report_record_size`). A failed write is a warning, never a failed deploy.
+- `strata deploy report DEPLOYMENT` shows the handover document: outputs, every secret a step used by location
+  (`********` for the value, always), and the images. `output_store` is a prerequisite for it, as for `deploy output`.
+  A location comes from the resolver's own settings where the deploy ran (`AZURE_KEYVAULT_URL`, `INFISICAL_*`), so
+  it says where the deploy actually read the secret.
+- `strata deploy output DEPLOYMENT [STEP | STEP.KEY]` shows the recorded outputs, like `terraform output`; it needs
+  `output_store` and access to it, but no Terraform state. A sensitive output shows as `<sensitive>`. A record older
+  than `output_store_max_age` is shown with a warning, not refused.
+- Records written by strata 2.5 and earlier sit under one key per deployment, `strata/deployment-outputs/<deployment>`.
+  They are still read for a step that has no key of its own, and while that key exists each deploy updates it too,
+  so an older strata version reading it never gets an outdated value. A later release stops both.
+
+The design is in [ADR-0036](../decisions/0036-cross-run-key-value-output-store.md) and
+[ADR-0057](../decisions/0057-output-record-one-key-per-step.md).
+
 ## Image tag policy
 
 `spec.image_tag_policy` is an opt-in guard rail over the images `strata deploy images` lists: the artifacts a
@@ -243,27 +336,32 @@ is already a useful policy: every image needs a tag, and the mutable aliases are
 spec:
   image_tag_policy:
     enforcement: deny              # deny (default) | warn
-    origins: [artifact]            # artifact | module-service; default: both
+    origins: [artifact]            # artifact | module-service | chart; default: all three
     require_tag: true              # default true
     reject_tags: [latest, main]    # default: latest, main, master, dev, develop, staging, edge, nightly, canary
     tag_pattern: '^\d+\.\d+\.\d+$'  # a tag must match it (searched, so anchor it); a digest is not checked
     require_pin: false             # the tag must come from a kind: version pin (or --pin)
+    require_digest: false          # the image must carry a digest (name@sha256:... or name:tag@sha256:...)
     rings: [acc, prd]              # only deployments whose version document is in these rings; default all
+    on_unknown_image: warn         # a Helm module that declares no image: skip | warn (default) | block
     allow:
-      - name: redis                # the image's name as `strata deploy images` lists it
+      - name: redis                # as `strata deploy images` lists it, or REFERENCE/CONTAINER for a chart's image
         reason: third-party image, covered by cve_policy
         expires: 2026-12-31        # optional ISO date, honoured through that day
 ```
 
-| Rule          | An image fails when                           | Finding code         |
-| ------------- | --------------------------------------------- | -------------------- |
-| `require_tag` | it has no tag and no pin supplies one         | `image_without_tag`  |
-| `reject_tags` | its tag is in the list, ignoring case         | `image_floating_tag` |
-| `tag_pattern` | its tag does not match the regular expression | `image_tag_pattern`  |
-| `require_pin` | its tag does not come from a version pin      | `image_not_pinned`   |
+| Rule             | An image fails when                              | Finding code           |
+| ---------------- | ------------------------------------------------ | ---------------------- |
+| `require_tag`    | it has no tag or digest and no pin supplies one  | `image_without_tag`    |
+| `reject_tags`    | its tag is in the list, ignoring case            | `image_floating_tag`   |
+| `tag_pattern`    | its tag does not match the regular expression    | `image_tag_pattern`    |
+| `require_pin`    | its tag does not come from a version pin         | `image_not_pinned`     |
+| `require_digest` | it has no digest                                 | `image_without_digest` |
 
-- A digest (`sha256:...`) is immutable, so it passes `reject_tags` and `tag_pattern`. It still has to satisfy
-  `require_tag` and `require_pin`.
+- A digest (`sha256:...`) is immutable, so a digest alone satisfies `require_tag` and is never judged by
+  `reject_tags` or `tag_pattern`. With `tag@digest` ([artifact](artifact.md#tag-and-digest)), those two judge
+  the tag part, so `latest@sha256:...` is still a floating tag name. Every image still has to satisfy
+  `require_pin`, except an image a chart runs (below).
 - A tag that merely is not a semantic version, such as a build number (`env_sbx_20260907.11`), is not floating.
   `reject_tags` is an explicit list; use `tag_pattern` to be stricter. Set `reject_tags: []` to reject none.
 - An image with no tag gets one finding, not also `image_not_pinned`, unless `require_tag` is `false`.
@@ -278,22 +376,47 @@ spec:
 
 Where it runs:
 
-| Command                | Behavior                                                                                                                                                    |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `strata build run`     | Judged first, before anything is cleaned or written, so a `deny` breach leaves the build path as it was. Also under `--dry-run`.                            |
-| `strata deploy run`    | Judged again before any value is resolved, because `--pin` given only to `deploy run` can change the tag. Also under `--smoke-test`, which records nothing. |
-| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first.                        |
-| `strata policy check`  | Evaluates it offline and records the result. `strata policy list` shows it.                                                                                 |
-| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                  |
+| Command                | Behavior                                                                                                                                                                                                                                            |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata build run`     | Judged at the end, after `sbom.json` is written, so it also judges the images rendered charts run (`sbom.render_charts`). A `deny` fails the build with its output on disk. Under `--dry-run`, only the declared images, since nothing is rendered. |
+| `strata deploy run`    | Judged again before any value is resolved, because `--pin` given only to `deploy run` can change the tag. The images the build's rendered charts run are judged too, from its `sbom.json`. Also under `--smoke-test`, which records nothing.        |
+| `strata deploy images` | The policy replaces the plain missing-tag warning, and `deny` exits 3, so an image copy step at the start of a pipeline fails first. It reads no build, so it judges the declared images only.                                                      |
+| `strata policy check`  | Evaluates it offline and records the result. With a build at `--build-path`, it also judges that build's rendered chart images and says which `sbom.json` they came from. `strata policy list` shows it.                                            |
+| `strata validate`      | Not evaluated: the effective tag depends on the deployment and on `--pin`.                                                                                                                                                                          |
 
 The result is recorded in `policy_results.json` as `image_tag_policy` and ends up in the audit manifest. The
-`deploy run` entry replaces the one `build run` wrote.
+`deploy run` entry replaces the one `build run` wrote. Because `build run` judges at the end, a pipeline that
+wants the answer before it clones and renders runs `strata deploy images` or `strata policy check` first.
 
 The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
-module, strata does not write a service's `image` into the chart's values, so the chart decides what runs: the
-policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
-the module's `configuration`, in the chart's own key shape. See
-[helm-image-delivery.md](../work/helm-image-delivery.md).
+module, strata does not write a service's `image` into the chart's values, so the chart decides what runs. Set a
+Helm image through the module's `configuration`, in the chart's own key shape. See
+[helm-image-delivery.md](../design/helm-image-delivery.md).
+
+- **With [`sbom.render_charts`](../how-to/sbom-generation.md#helm-images)**, on by default, the policy also judges every image the
+  rendered charts run, sidecars and init containers included, read from the build's `sbom.json`. That is origin
+  `chart`; a workspace that lists `origins` must add `chart` to get them.
+  - Each is named `REFERENCE/CONTAINER`, the module reference in the namespace and the container, for example
+    `whoami/shipper`. That is the name an `allow` entry uses.
+  - `require_pin` does not apply: strata cannot pin an image inside a chart. The chart's version pin fixes it.
+  - The fix the finding gives is to set the tag in the chart's values through the module's `configuration`, or
+    to pin a chart version that ships the tag you want.
+  - A declared image the chart also runs is judged once, as delivered. A Helm module whose chart rendered at
+    least one image is no longer reported by `on_unknown_image`.
+  - One info line, `image_tag_policy_rendered_images`, says how many images came from which `sbom.json`, and when
+    it was written. At deploy and in `policy check` that tells you which build was judged.
+  - `strata deploy images` reads no build, so it still judges the declared images only.
+- **A declared Helm image** is still judged, by the same rules. With `render_charts: false`, or when the chart was not
+  rendered, its finding says "declared only, the chart decides which image runs". `strata deploy images` shows it
+  as `DELIVERED no (helm module: the chart decides)`.
+- **A Helm module that declares no service `image` or `artifact`** has images that only the chart knows.
+  - `on_unknown_image` decides what happens, apart from `enforcement`. The finding is `image_unknown_to_strata`.
+    - `warn` (the default) reports it.
+    - `block` stops the run.
+    - `skip` keeps it as an info finding, shown only in verbose and JSON output.
+  - The policy's `rings` and `origins` apply: the module counts as a `module-service` image.
+  - `allow` does not exempt a module. To have its images judged, declare them under the module's `services`.
+  - Without a policy, `strata deploy images` still lists such a module under "Known only to Helm".
 
 ## Provisioner lock policy
 

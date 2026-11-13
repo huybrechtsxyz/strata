@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value &mdash; strata 2.5.0 documentation</title>
+  <title>How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -24,7 +24,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" href="migrate-v1-workspace-topology-provisioning.html" />
-    <link rel="prev" title="How To: Stream deploy run Output Live (--follow)" href="deploy-run-streaming.html" /> 
+    <link rel="prev" title="How To: Give every customer a tenant and an environment from shared bases" href="environment-and-tenant-bases.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -59,6 +59,8 @@
 <li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#the-short-answer">The short answer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#worked-example">Worked example</a></li>
@@ -67,6 +69,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -94,6 +97,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -131,7 +135,7 @@
            <div itemprop="articleBody">
              
   <section id="how-to-generate-repeated-per-instance-terraform-blocks-providers-modules-from-one-composite-value">
-<h1>How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value<a class="headerlink" href="#how-to-generate-repeated-per-instance-terraform-blocks-providers-modules-from-one-composite-value" title="Link to this heading"></a></h1>
+<span id="how-to-generate-repeated-per-instance-terraform-blocks-providersmodules-from-one-composite-value"></span><h1>How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value<a class="headerlink" href="#how-to-generate-repeated-per-instance-terraform-blocks-providers-modules-from-one-composite-value" title="Link to this heading"></a></h1>
 <p>You have many instances of the same pattern — e.g. one <code class="docutils literal notranslate"><span class="pre">provider</span> <span class="pre">&quot;azurerm&quot;</span></code> alias + one
 <code class="docutils literal notranslate"><span class="pre">module</span></code> block per customer, each needing its own subscription/provider configuration — and
 Terraform’s own language rules won’t let you collapse them into a single <code class="docutils literal notranslate"><span class="pre">for_each</span></code>/<code class="docutils literal notranslate"><span class="pre">count</span></code>
@@ -264,7 +268,7 @@ was designed and where its actual render was implemented.</p></li>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="deploy-run-streaming.html" class="btn btn-neutral float-left" title="How To: Stream deploy run Output Live (--follow)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="environment-and-tenant-bases.html" class="btn btn-neutral float-left" title="How To: Give every customer a tenant and an environment from shared bases" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="migrate-v1-workspace-topology-provisioning.html" class="btn btn-neutral float-right" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

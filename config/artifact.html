@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Artifact (kind: artifact) &mdash; strata 2.5.0 documentation</title>
+  <title>Artifact (kind: artifact) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -59,8 +59,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -88,11 +91,17 @@
 <li class="toctree-l1"><a class="reference internal" href="version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example">Example</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#tag-and-digest">Tag and digest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-artifact-name-field-token">The <code class="docutils literal notranslate"><span class="pre">${artifact:NAME.FIELD}</span></code> token</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#a-store-artifact-variable">A <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code> variable</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -133,24 +142,32 @@
 <h1>Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)<a class="headerlink" href="#artifact-kind-artifact" title="Link to this heading"></a></h1>
 <p>A pinnable, named reference to something external strata doesn’t fetch or deploy itself — a
 container image today, possibly other identifiers later. Referenced by identity from anywhere in
-the solution: a <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code> variable (an external provisioner’s own input) or a module
-service’s <code class="docutils literal notranslate"><span class="pre">artifact</span></code> field (see <a class="reference internal" href="module.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">module</span></code></span></a>).</p>
+the solution: an <code class="docutils literal notranslate"><span class="pre">${artifact:NAME.FIELD}</span></code> token in any field strata resolves at deploy, a
+<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code> variable (to hand a Terraform root a variable), or a module service’s <code class="docutils literal notranslate"><span class="pre">artifact</span></code>
+field (see <a class="reference internal" href="module.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">module</span></code></span></a>).</p>
 <section id="schema">
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.image_name</span></code> — the container image path (e.g. <code class="docutils literal notranslate"><span class="pre">example/scheduler-api</span></code>) —
-identity, never overridden by a <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.image_tag</span></code> — the tag/digest to deploy; optional, omit it when a <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin
-always supplies it. Overridden by <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>’s <code class="docutils literal notranslate"><span class="pre">spec.pins.artifacts[name]</span></code> when set; with
-neither, the tag is blank</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.image_name</span></code> — the full path the runtime pulls, registry host included (e.g.
+<code class="docutils literal notranslate"><span class="pre">ghcr.io/example/scheduler-api</span></code>; no host means Docker Hub) — identity, never overridden by a
+<a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.image_tag</span></code> — what to deploy, in one of three shapes (see <a class="reference internal" href="#tag-and-digest">Tag and digest</a>);
+optional, omit it when a <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin always supplies it. Overridden by <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>’s
+<code class="docutils literal notranslate"><span class="pre">spec.pins.artifacts[name]</span></code> when set; with neither, the tag is blank</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.registry</span></code> — free-text registry host, documentation only — <strong>not</strong> a remote reference
-(strata never fetches an image; the runtime pulls it at deploy time)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.integration</span></code> — reserved. Must name an existing <a class="reference internal" href="integration.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">integration</span></code></span></a>, but
-nothing reads it: no registry credentials are resolved from it. Supply registry credentials to
-whatever pulls or copies the image (your pipeline, the runtime)</p></li>
+(strata never fetches an image; the runtime pulls it at deploy time). It is not added to the image
+reference: <code class="docutils literal notranslate"><span class="pre">image_name</span></code> holds the full path the runtime pulls, registry host included. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>
+warns when the two name different registries (<code class="docutils literal notranslate"><span class="pre">artifact_registry_mismatch</span></code>), counting an <code class="docutils literal notranslate"><span class="pre">image_name</span></code>
+with no host as Docker Hub</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.integration</span></code> — names an existing <a class="reference internal" href="integration.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">integration</span></code></span></a> that holds the registry’s
+credentials. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> reports it per image (<code class="docutils literal notranslate"><span class="pre">INTEGRATION</span></code>, <code class="docutils literal notranslate"><span class="pre">data.images[].integration</span></code>),
+so a pipeline that copies the image knows which credentials to use. Strata resolves nothing from it
+and never logs in: supply the credentials to whatever pulls or copies the image (your pipeline, the
+runtime)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> / <code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> / <code class="docutils literal notranslate"><span class="pre">spec.custom</span></code> — free-form/passthrough data, never
 merged and never read by strata. Reach a literal field from another document’s string with
-<code class="docutils literal notranslate"><span class="pre">${value:artifact.&lt;name&gt;.spec.configuration.&lt;key&gt;}</span></code></p></li>
+<code class="docutils literal notranslate"><span class="pre">${value:artifact.&lt;name&gt;.spec.configuration.&lt;key&gt;}</span></code>. <code class="docutils literal notranslate"><span class="pre">spec.image_name</span></code> and <code class="docutils literal notranslate"><span class="pre">spec.image_tag</span></code> cannot be
+read that way (<code class="docutils literal notranslate"><span class="pre">value_reference_pinnable_field</span></code>): use the <code class="docutils literal notranslate"><span class="pre">${artifact:NAME.FIELD}</span></code> token below</p></li>
 </ul>
 </section>
 <section id="example">
@@ -160,14 +177,101 @@ merged and never read by strata. Reach a literal field from another document’s
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scheduler-api</span>
 <span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">image_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example/scheduler-api</span>
+<span class="w">  </span><span class="nt">image_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cdn-feeds.acme.com/example/scheduler-api</span>
 <span class="w">  </span><span class="nt">image_tag</span><span class="p">:</span><span class="w"> </span><span class="s">"1.4.2"</span>
 <span class="w">  </span><span class="nt">registry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cdn-feeds.acme.com</span>
 </pre></div>
 </div>
-<p>Referenced from an environment’s <code class="docutils literal notranslate"><span class="pre">variables</span></code>. <code class="docutils literal notranslate"><span class="pre">field</span></code> is required: <code class="docutils literal notranslate"><span class="pre">image_name</span></code>, <code class="docutils literal notranslate"><span class="pre">image_tag</span></code> (with
-any <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin applied; <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when there is no tag) or <code class="docutils literal notranslate"><span class="pre">image_ref</span></code> (<code class="docutils literal notranslate"><span class="pre">image_name:image_tag</span></code>,
-<code class="docutils literal notranslate"><span class="pre">image_name&#64;sha256:...</span></code> for a digest, or just <code class="docutils literal notranslate"><span class="pre">image_name</span></code> when the tag is blank):</p>
+<section id="tag-and-digest">
+<h3>Tag and digest<a class="headerlink" href="#tag-and-digest" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">spec.image_tag</span></code>, and a pin under <code class="docutils literal notranslate"><span class="pre">pins.artifacts</span></code>, take one of three shapes:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Value</p></th>
+<th class="head"><p>Image reference</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">1.4.2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">name:1.4.2</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sha256:&lt;hex&gt;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">name&#64;sha256:&lt;hex&gt;</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">1.4.2&#64;sha256:&lt;hex&gt;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">name:1.4.2&#64;sha256:&lt;hex&gt;</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<ul class="simple">
+<li><p>A tag is letters, digits, <code class="docutils literal notranslate"><span class="pre">_</span></code>, <code class="docutils literal notranslate"><span class="pre">.</span></code> and <code class="docutils literal notranslate"><span class="pre">-</span></code>, at most 128 characters, not starting with <code class="docutils literal notranslate"><span class="pre">.</span></code> or <code class="docutils literal notranslate"><span class="pre">-</span></code>. A digest is
+an algorithm, <code class="docutils literal notranslate"><span class="pre">:</span></code> and at least 32 lowercase hex characters.</p></li>
+<li><p>Anything else fails: an artifact’s <code class="docutils literal notranslate"><span class="pre">image_tag</span></code> when the document loads, a pin in <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>
+(<code class="docutils literal notranslate"><span class="pre">artifact_tag_invalid</span></code>), and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">set</span> <span class="pre">NAME</span> <span class="pre">artifacts</span> <span class="pre">TARGET</span> <span class="pre">VALUE</span></code> before it writes the file.</p></li>
+<li><p>Pin both together. One string moves the tag and the digest at once, so they cannot drift apart.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> shows the digest in a <code class="docutils literal notranslate"><span class="pre">DIGEST</span></code> column (<code class="docutils literal notranslate"><span class="pre">data.images[].image_digest</span></code>); <code class="docutils literal notranslate"><span class="pre">image_tag</span></code> there is
+the tag part only. <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> judges the tag part, and <code class="docutils literal notranslate"><span class="pre">require_digest</span></code> fails an image with no digest
+(<a class="reference internal" href="workspace.html"><span class="std std-doc">workspace</span></a>).</p></li>
+</ul>
+</section>
+<section id="the-artifact-name-field-token">
+<span id="the-artifactnamefield-token"></span><h3>The <code class="docutils literal notranslate"><span class="pre">${artifact:NAME.FIELD}</span></code> token<a class="headerlink" href="#the-artifact-name-field-token" title="Link to this heading"></a></h3>
+<p>Read an artifact directly, with no variable to declare:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Token</p></th>
+<th class="head"><p>Value</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">${artifact:NAME.image_name}</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.image_name</span></code>, never pinned</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">${artifact:NAME.image_tag}</span></code></p></td>
+<td><p>the whole value after the deployment’s <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin, else <code class="docutils literal notranslate"><span class="pre">spec.image_tag</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">${artifact:NAME.image_ref}</span></code></p></td>
+<td><p>the image reference built from both, as in the table above, or just <code class="docutils literal notranslate"><span class="pre">image_name</span></code> with no value</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">${artifact:NAME.image_tag_name}</span></code></p></td>
+<td><p>the tag part of <code class="docutils literal notranslate"><span class="pre">1.4.2&#64;sha256:&lt;hex&gt;</span></code> (<code class="docutils literal notranslate"><span class="pre">1.4.2</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">${artifact:NAME.image_digest}</span></code></p></td>
+<td><p>the digest part (<code class="docutils literal notranslate"><span class="pre">sha256:&lt;hex&gt;</span></code>)</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># A Helm module: the chart's own keys, the pinned values</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="s">"${artifact:scheduler-api.image_name}"</span>
+<span class="w">      </span><span class="nt">tag</span><span class="p">:</span><span class="w"> </span><span class="s">"${artifact:scheduler-api.image_tag}"</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>For a Helm module this is how an artifact becomes the image that runs: strata writes no image into a chart’s
+values, so a service’s <code class="docutils literal notranslate"><span class="pre">artifact</span></code> alone is only declared (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> warns, <code class="docutils literal notranslate"><span class="pre">artifact_not_delivered</span></code>).
+Use the chart’s own keys, as above (the module’s or a service’s <code class="docutils literal notranslate"><span class="pre">configuration</span></code>); a token in a service’s
+<code class="docutils literal notranslate"><span class="pre">environment</span></code> only sets an environment variable, so <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">images</span></code> both call the artifact
+not delivered. For a Compose module the service’s <code class="docutils literal notranslate"><span class="pre">artifact</span></code> is enough.</p></li>
+<li><p>It resolves at deploy, in every field a <code class="docutils literal notranslate"><span class="pre">${var:}</span></code> token resolves in: a Terraform payload or backend, Helm values,
+a Compose file, a script’s arguments. <code class="docutils literal notranslate"><span class="pre">--pin</span> <span class="pre">NAME</span></code> on <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> picks the version, as for every other pin.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">${artifact:NAME.image_tag}</span></code> on an artifact with no <code class="docutils literal notranslate"><span class="pre">image_tag</span></code> and no pin for the deployment is an error
+(<code class="docutils literal notranslate"><span class="pre">unavailable_artifact_token</span></code>), never an empty tag. So is <code class="docutils literal notranslate"><span class="pre">image_tag_name</span></code> or <code class="docutils literal notranslate"><span class="pre">image_digest</span></code> when the value
+has no such part: a chart that takes <code class="docutils literal notranslate"><span class="pre">image.digest</span></code> needs the pin to carry one. An unknown artifact or field
+is <code class="docutils literal notranslate"><span class="pre">unknown_artifact_token</span></code>.
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> judges both per deployment, and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> stops on them before the step’s tool runs.</p></li>
+<li><p>An environment store’s own <code class="docutils literal notranslate"><span class="pre">value</span></code> cannot use it: a store value is resolved before a deployment is chosen.</p></li>
+<li><p>Write <code class="docutils literal notranslate"><span class="pre">$${artifact:...}</span></code> for a literal.</p></li>
+</ul>
+</section>
+<section id="a-store-artifact-variable">
+<h3>A <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code> variable<a class="headerlink" href="#a-store-artifact-variable" title="Link to this heading"></a></h3>
+<p>To hand the value to a Terraform root as a variable (<code class="docutils literal notranslate"><span class="pre">strata.variables</span></code> and <code class="docutils literal notranslate"><span class="pre">TF_VAR_&lt;key&gt;</span></code>), or to
+override it per environment, declare a variable. <code class="docutils literal notranslate"><span class="pre">field</span></code> is required: <code class="docutils literal notranslate"><span class="pre">image_name</span></code>, <code class="docutils literal notranslate"><span class="pre">image_tag</span></code> (with
+any <a class="reference internal" href="version.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">version</span></code></span></a> pin applied; <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when there is no tag), <code class="docutils literal notranslate"><span class="pre">image_ref</span></code>, <code class="docutils literal notranslate"><span class="pre">image_tag_name</span></code> or
+<code class="docutils literal notranslate"><span class="pre">image_digest</span></code> (each <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> when the value has no such part):</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">variables</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SCHEDULER_API_IMAGE_TAG</span>
 <span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">artifact</span>
@@ -175,13 +279,21 @@ any <a class="reference internal" href="version.html"><span class="std std-doc">
 <span class="w">    </span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">image_tag</span>
 </pre></div>
 </div>
-<p>The pinned tag is also what a build writes to <code class="docutils literal notranslate"><span class="pre">strata.variables</span></code>. Read it with a <code class="docutils literal notranslate"><span class="pre">${var:KEY}</span></code> token
-in <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> and it resolves at deploy. <code class="docutils literal notranslate"><span class="pre">${value:artifact.&lt;name&gt;.spec.image_tag}</span></code> is
-rejected, as it would read the unpinned tag.</p>
+<p>The pinned tag is also what a build writes to <code class="docutils literal notranslate"><span class="pre">strata.variables</span></code>.</p>
+<p>A declared variable only counts as using the artifact when the deployment can receive it: a <code class="docutils literal notranslate"><span class="pre">${var:KEY}</span></code>
+token in a document it reaches, or an execution step that gets every variable (Terraform, which reads
+<code class="docutils literal notranslate"><span class="pre">strata.variables</span></code> and <code class="docutils literal notranslate"><span class="pre">TF_VAR_&lt;key&gt;</span></code>; a script without <code class="docutils literal notranslate"><span class="pre">script.values</span></code>; an <code class="docutils literal notranslate"><span class="pre">output.template</span></code> that reads it).
+A variable nothing receives does not make <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">images</span></code> or <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> list the artifact.</p>
+<p>An artifact that no deployment uses in any of these ways is reported by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>
+(<code class="docutils literal notranslate"><span class="pre">artifact_unused</span></code>, a warning; <code class="docutils literal notranslate"><span class="pre">--strict</span></code> fails on it), and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">update</span></code> does not offer a pin for it.</p>
+<p>Every way of reaching an artifact counts as using it: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> lists the artifact with each use in
+<code class="docutils literal notranslate"><span class="pre">via</span></code> (<code class="docutils literal notranslate"><span class="pre">variable:KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">service:MODULE/SERVICE</span></code>, or <code class="docutils literal notranslate"><span class="pre">token:KIND/NAME</span></code> for the document holding an
+<code class="docutils literal notranslate"><span class="pre">${artifact:}</span></code> token), and so the SBOM, the image gates and <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> judge it.</p>
 <p>To see which images a deployment runs, with the tag after the pin and where it came from, run
 <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span> <span class="pre">DEPLOYMENT</span> <span class="pre">[--pin</span> <span class="pre">NAME]</span> <span class="pre">-o</span> <span class="pre">json</span></code>. It reads the solution only (no build, no
 store, no secret), so a pipeline can use it to copy the images to a registry before <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>. The
 same list feeds the SBOM and the audit manifest.</p>
+</section>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>

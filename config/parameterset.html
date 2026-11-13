@@ -1,0 +1,401 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parameter set (kind: parameterset) &mdash; strata 2.6.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Integration (kind: integration)" href="integration.html" />
+    <link rel="prev" title="Asset (kind: asset)" href="asset.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="attributeconfig.html">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#values-are-plain">Values are plain</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#using-a-parameter-set">Using a parameter set</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#templates-are-validated-per-deployment">Templates are validated per deployment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#names-follow-the-values-meta-name-rule">Names follow the values: <code class="docutils literal notranslate"><span class="pre">meta.name_rule</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#validation">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#seeing-the-result">Seeing the result</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/chart-registries.html">Chart registries (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/config/parameterset.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="parameter-set-kind-parameterset">
+<h1>Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)<a class="headerlink" href="#parameter-set-kind-parameterset" title="Link to this heading"></a></h1>
+<p>One named set of plain values: the instance data of a spoke, a hub, a customer or a tenant. The
+values a whole family of documents differs by (a name, a sequence number, a subscription ID) live
+in one place, so the documents that use them can share one base.</p>
+<blockquote>
+<div><p><strong>Status: deployments, environments and tenants.</strong> Each names sets in <code class="docutils literal notranslate"><span class="pre">meta.params</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">${param:&lt;role&gt;.&lt;key&gt;}</span></code> works in any field of its <code class="docutils literal notranslate"><span class="pre">spec</span></code> except <code class="docutils literal notranslate"><span class="pre">extends</span></code> and <code class="docutils literal notranslate"><span class="pre">partial</span></code>,
+reference fields included (<code class="docutils literal notranslate"><span class="pre">tenant</span></code>, <code class="docutils literal notranslate"><span class="pre">environments</span></code>, <code class="docutils literal notranslate"><span class="pre">providers[].provider</span></code>). Environments and
+tenants are resolved when the solution loads, before deployments: see
+<a class="reference internal" href="environment.html#bases-extends-and-partial"><span class="std std-ref">environment</span></a> and
+<a class="reference internal" href="tenant.html#bases-extends-and-partial"><span class="std std-ref">tenant</span></a>. The exported schemas of the three kinds accept a
+<code class="docutils literal notranslate"><span class="pre">${param:}</span></code> token in the same fields, so the YAML editor does not underline one.</p>
+</div></blockquote>
+<p>For a full, worked solution (two hubs, two spokes, a customer project), see
+<a class="reference internal" href="../how-to/parameterised-deployment-bases.html"><span class="std std-doc">How To: Write one deployment base for many spokes</span></a>;
+for tenants and environments,
+<a class="reference internal" href="../how-to/environment-and-tenant-bases.html"><span class="std std-doc">How To: Give every customer a tenant and an environment from shared bases</span></a>.
+How it works inside: <span class="xref myst">the design</span>.
+The decision is <span class="xref myst">ADR-0061</span>.</p>
+<section id="schema">
+<h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.values</span></code> — required: a map of any YAML (scalars, lists and nested maps). Its shape is the
+solution’s own; strata does not prescribe keys. An empty map is valid</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meta.name</span></code> — the name a document will use in <code class="docutils literal notranslate"><span class="pre">meta.params</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meta.labels</span></code> — optional, as on any kind. A label such as <code class="docutils literal notranslate"><span class="pre">role:</span> <span class="pre">spoke</span></code> is only for
+<a class="reference internal" href="attributeconfig.html"><span class="std std-doc">attributeconfig</span></a> selectors: a set does not know its role. The document that
+names the set gives the role</p></li>
+</ul>
+<p>A parameter set has no <code class="docutils literal notranslate"><span class="pre">extends</span></code>, no <code class="docutils literal notranslate"><span class="pre">partial</span></code> and no <code class="docutils literal notranslate"><span class="pre">params</span></code>: it builds on nothing.</p>
+</section>
+<section id="values-are-plain">
+<h2>Values are plain<a class="headerlink" href="#values-are-plain" title="Link to this heading"></a></h2>
+<p>No <code class="docutils literal notranslate"><span class="pre">${...}</span></code> token may appear in <code class="docutils literal notranslate"><span class="pre">spec.values</span></code>, in a key or in a value: not <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>, not
+<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>, not <code class="docutils literal notranslate"><span class="pre">${param:}</span></code>. A parameter set depends on nothing, so it can be loaded first, and a
+value can never insert a token into the document that reads it. A token in a parameter set is a
+load error that names every key holding one:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>spec.values: a parameter set holds plain values, but values.name holds a ${...} token. Move the
+token into the document that reads the value, or write $${...} for the literal text.
+</pre></div>
+</div>
+<p>The usual escape works: <code class="docutils literal notranslate"><span class="pre">$${TOKEN}</span></code> is the literal text <code class="docutils literal notranslate"><span class="pre">${TOKEN}</span></code>, as in any other document (for
+example a Helm chart’s own substitution syntax).</p>
+<p>A parameter set is plain text in git, so it must not hold secrets. Keep <code class="docutils literal notranslate"><span class="pre">${secret:}</span></code> in the <code class="docutils literal notranslate"><span class="pre">spec</span></code>
+of the document that needs the secret. A <code class="docutils literal notranslate"><span class="pre">${param:}</span></code> token in an environment’s
+<code class="docutils literal notranslate"><span class="pre">secrets[].value</span></code> is a load error, so a secret can never be filled in from a parameter set.</p>
+</section>
+<section id="example">
+<h2>Example<a class="headerlink" href="#example" title="Link to this heading"></a></h2>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parameterset</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-acme-001</span>
+<span class="w">  </span><span class="nt">labels</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> role</span><span class="p">:</span><span class="w"> </span><span class="nv">spoke</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># optional: for attributeconfig selectors</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">values</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme-001</span>
+<span class="w">    </span><span class="nt">hub</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub01</span>
+<span class="w">    </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="w">    </span><span class="nt">code</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="w">    </span><span class="nt">seq</span><span class="p">:</span><span class="w"> </span><span class="s">"001"</span>
+<span class="w">    </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">00000000-0000-0000-0000-000000000001</span>
+<span class="w">    </span><span class="nt">network</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">cidr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.1.0.0/16</span>
+<span class="w">    </span><span class="nt">customers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">acmep01</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">acmep02</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>Quote values YAML would otherwise read as another type: <code class="docutils literal notranslate"><span class="pre">seq:</span> <span class="pre">&quot;001&quot;</span></code> stays the text <code class="docutils literal notranslate"><span class="pre">001</span></code>, while
+<code class="docutils literal notranslate"><span class="pre">seq:</span> <span class="pre">001</span></code> is the number <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p>
+</section>
+<section id="using-a-parameter-set">
+<h2>Using a parameter set<a class="headerlink" href="#using-a-parameter-set" title="Link to this heading"></a></h2>
+<p>A deployment names sets per <strong>role</strong> in <code class="docutils literal notranslate"><span class="pre">meta.params</span></code>, and any document of its <code class="docutils literal notranslate"><span class="pre">extends</span></code> chain
+reads them with <code class="docutils literal notranslate"><span class="pre">${param:&lt;role&gt;.&lt;key&gt;}</span></code>. The role is chosen where the set is used, so a base reads
+<code class="docutils literal notranslate"><span class="pre">${param:spoke.name}</span></code> whichever spoke a leaf names:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># the base: shared by every spoke</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke_deployment_base</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> hub</span><span class="p">:</span><span class="w"> </span><span class="nv">hub-defaults</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">          </span><span class="c1"># optional: defaults, like a chart's values.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prd</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">subscription_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sub-${param:spoke.name}</span>
+<span class="w">    </span><span class="nt">provider_region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:hub.region}</span>
+<span class="w">    </span><span class="nt">customers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:spoke.customers}</span><span class="w">  </span><span class="c1"># the whole value: the list is inserted as a list</span>
+<span class="nn">---</span>
+<span class="c1"># a leaf: one per spoke</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-acme-001</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> spoke</span><span class="p">:</span><span class="w"> </span><span class="nv">spoke-acme-001</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">      </span><span class="c1"># or a list per role, merged in order</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke_deployment_base</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Merging.</strong> Every document of the chain may name sets. Per role they merge root first, then
+down the chain, then the leaf’s, later winning: maps merge per key, lists and scalars are
+replaced. A base’s sets are defaults; the leaf’s override them.</p></li>
+<li><p><strong>Whole value or embedded.</strong> A token that is the entire value is replaced by the value with its
+type (a list, a map, a number). A token inside a longer string needs a single value; <code class="docutils literal notranslate"><span class="pre">true</span></code> and
+<code class="docutils literal notranslate"><span class="pre">false</span></code> are written as YAML writes them.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">${param:spoke}</span></code></strong> alone is the whole map of the role. Nested keys and named list items use
+dots, as <code class="docutils literal notranslate"><span class="pre">${value:}</span></code> does: <code class="docutils literal notranslate"><span class="pre">${param:spoke.network.cidr}</span></code>.</p></li>
+<li><p><strong>Once, at load.</strong> Values are substituted when the chain is resolved, before anything runs.
+Run-time tokens (<code class="docutils literal notranslate"><span class="pre">${var:x}</span></code>, <code class="docutils literal notranslate"><span class="pre">${secret:x}</span></code>) are left for run time, and <code class="docutils literal notranslate"><span class="pre">$${param:x}</span></code> stays the
+literal text <code class="docutils literal notranslate"><span class="pre">${param:x}</span></code>.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> base may hold tokens no value fills yet; only a deployable deployment must
+resolve every token of its chain.</p></li>
+</ul>
+<section id="templates-are-validated-per-deployment">
+<h3>Templates are validated per deployment<a class="headerlink" href="#templates-are-validated-per-deployment" title="Link to this heading"></a></h3>
+<p>A deployment whose <code class="docutils literal notranslate"><span class="pre">spec</span></code> holds a <code class="docutils literal notranslate"><span class="pre">${param:}</span></code> token is a <strong>template</strong>, base or leaf. strata
+checks its <code class="docutils literal notranslate"><span class="pre">meta</span></code>, its <code class="docutils literal notranslate"><span class="pre">extends</span></code> and <code class="docutils literal notranslate"><span class="pre">partial</span></code>, and the syntax of its tokens when it loads it;
+the rest of its <code class="docutils literal notranslate"><span class="pre">spec</span></code> is checked once per deployable deployment whose chain it is in, after the
+values are filled in. So <code class="docutils literal notranslate"><span class="pre">hub-${param:spoke.hub}-env</span></code> is checked as <code class="docutils literal notranslate"><span class="pre">hub-hub01-env</span></code> for one spoke
+and as <code class="docutils literal notranslate"><span class="pre">hub-hub02-env</span></code> for the next, and a value that does not fit is reported for the deployment
+it was resolved for.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">list</span></code> shows a template base as written, tokens and all, and every deployment
+resolved.</p></li>
+<li><p>A command run on a template base (<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>, <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code>, …) stops with an error saying it
+is a partial base that reads parameter sets: only a deployment built on it can run.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">${param:}</span></code> is never allowed in <code class="docutils literal notranslate"><span class="pre">meta</span></code>, <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> or <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code>: names, parameter sets
+and chains stay fixed, so strata knows every chain before it reads a value.</p></li>
+<li><p>In a YAML flow list (<code class="docutils literal notranslate"><span class="pre">[a,</span> <span class="pre">b]</span></code>) or map (<code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">k:</span> <span class="pre">v</span> <span class="pre">}</span></code>), quote a value that holds a token:
+<code class="docutils literal notranslate"><span class="pre">environments:</span> <span class="pre">[solution-env,</span> <span class="pre">'hub-${param:spoke.hub}-env']</span></code>. In block style no quotes are
+needed.</p></li>
+</ul>
+</section>
+<section id="names-follow-the-values-meta-name-rule">
+<span id="names-follow-the-values-metaname_rule"></span><h3>Names follow the values: <code class="docutils literal notranslate"><span class="pre">meta.name_rule</span></code><a class="headerlink" href="#names-follow-the-values-meta-name-rule" title="Link to this heading"></a></h3>
+<p>A deployment’s <code class="docutils literal notranslate"><span class="pre">meta.name</span></code> is never filled in from a parameter set: names stay plain text, so
+every tool that finds a deployment by name keeps working. A base can still keep names from
+drifting away from their values with <code class="docutils literal notranslate"><span class="pre">meta.name_rule</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bootstrap_deployment_base</span>
+<span class="w">  </span><span class="nt">name_rule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bootstrap-${param:spoke.name}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="c1"># ...</span>
+</pre></div>
+</div>
+<p>Every deployable deployment built on this base, at any depth, must then be named as the rule
+says once its values are filled in: the leaf that names <code class="docutils literal notranslate"><span class="pre">spoke-acme-001</span></code> (<code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">acme-001</span></code>) must
+be <code class="docutils literal notranslate"><span class="pre">bootstrap-acme-001</span></code>. Any other name is a <code class="docutils literal notranslate"><span class="pre">name_rule_mismatch</span></code> on the leaf, with both names:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Deployment 'bootstrap-acme' must be named 'bootstrap-acme-001' by the name_rule of
+'bootstrap_deployment_base' ('bootstrap-${param:spoke.name}').
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Any document of the chain may have a rule, the leaf included; each one applies.</p></li>
+<li><p>A rule holds only <code class="docutils literal notranslate"><span class="pre">${param:}</span></code> tokens: run-time tokens have no value when names are checked.</p></li>
+<li><p>A partial base is not held to a rule; only the deployments that can run are.</p></li>
+</ul>
+</section>
+</section>
+<section id="validation">
+<h2>Validation<a class="headerlink" href="#validation" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>A <code class="docutils literal notranslate"><span class="pre">${...}</span></code> token in a key or value of <code class="docutils literal notranslate"><span class="pre">spec.values</span></code> is a load error (<code class="docutils literal notranslate"><span class="pre">value_error</span></code>)</p></li>
+<li><p>Two parameter sets with the same name are a <code class="docutils literal notranslate"><span class="pre">duplicate_document</span></code> error, as for every kind</p></li>
+<li><p>A name in <code class="docutils literal notranslate"><span class="pre">meta.params</span></code> that is no parameter set is an <code class="docutils literal notranslate"><span class="pre">unknown_reference</span></code></p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">${param:}</span></code> whose key the chain’s sets do not hold, or whose role no document of the chain
+names, is <code class="docutils literal notranslate"><span class="pre">param_missing</span></code>. It is reported on the document that holds the token, for each
+deployment it was resolved for:
+<code class="docutils literal notranslate"><span class="pre">base</span> <span class="pre">spec.properties.envs[1]:</span> <span class="pre">${param:spoke.hub}</span> <span class="pre">not</span> <span class="pre">found</span> <span class="pre">in</span> <span class="pre">spoke:</span> <span class="pre">[spoke-acme-001]</span> <span class="pre">(for</span> <span class="pre">spoke-acme-001)</span></code></p></li>
+<li><p>A list or map inside a longer string is <code class="docutils literal notranslate"><span class="pre">param_not_scalar</span></code></p></li>
+<li><p>A filled-in value the field does not accept (a tenant name with a space) is reported on the
+template, for the deployment: <code class="docutils literal notranslate"><span class="pre">base</span> <span class="pre">spec.tenant:</span> <span class="pre">invalid</span> <span class="pre">after</span> <span class="pre">${param:}</span> <span class="pre">substitution:</span> <span class="pre">...</span> <span class="pre">(for</span> <span class="pre">initech)</span></code>, with the model’s own code (<code class="docutils literal notranslate"><span class="pre">string_pattern_mismatch</span></code>, …)</p></li>
+<li><p>A reference that names no document once filled in is an <code class="docutils literal notranslate"><span class="pre">unknown_reference</span></code> on the template’s
+own field, saying which values made it, for the deployment:
+<code class="docutils literal notranslate"><span class="pre">base</span> <span class="pre">spec.environments[1]:</span> <span class="pre">unknown</span> <span class="pre">environment</span> <span class="pre">'hub-hub02-env'.</span> <span class="pre">Available:</span> <span class="pre">[...],</span> <span class="pre">from</span> <span class="pre">'hub-${param:spoke.hub}-env':</span> <span class="pre">spoke.hub</span> <span class="pre">=</span> <span class="pre">'hub02'</span> <span class="pre">(spoke-initech)</span> <span class="pre">(for</span> <span class="pre">initech)</span></code>. A rejected value
+says the same. A name a template writes literally (<code class="docutils literal notranslate"><span class="pre">workspace:</span> <span class="pre">mian</span></code>) is reported once, on the
+template, not once per deployment</p></li>
+<li><p>A malformed token in a template (<code class="docutils literal notranslate"><span class="pre">${param:}</span></code>) is a load error</p></li>
+<li><p>A deployable deployment whose name differs from a <code class="docutils literal notranslate"><span class="pre">name_rule</span></code> of its chain is
+<code class="docutils literal notranslate"><span class="pre">name_rule_mismatch</span></code>; a rule that reads a missing key is <code class="docutils literal notranslate"><span class="pre">param_missing</span></code> on the rule’s document;
+any token other than <code class="docutils literal notranslate"><span class="pre">${param:}</span></code> in a rule is a load error</p></li>
+<li><p>The shape of a set’s values, and what a deployment, environment or tenant receives once its
+sets are merged, are checked with <a class="reference internal" href="attributeconfig.html#parameter-sets-two-views"><span class="std std-ref">attributeconfig</span></a>
+(<code class="docutils literal notranslate"><span class="pre">block:</span> <span class="pre">values</span></code> and <code class="docutils literal notranslate"><span class="pre">block:</span> <span class="pre">params</span></code>), when a solution declares one. Without it, a missing key
+is still <code class="docutils literal notranslate"><span class="pre">param_missing</span></code>, and a filled-in value is still checked against the field it lands in</p></li>
+<li><p>A value no document reads is reported as <strong>information</strong> (<code class="docutils literal notranslate"><span class="pre">param_unused</span></code>), never as an error
+or warning, so <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--strict</span></code> still passes: a set may hold more than any one
+deployment needs, like a Helm values file. A top-level key counts as read when some deployment
+whose chain names the set under a role reads <code class="docutils literal notranslate"><span class="pre">${param:&lt;role&gt;.&lt;key&gt;...}</span></code>, or any document reads
+<code class="docutils literal notranslate"><span class="pre">${value:parameterset.&lt;name&gt;.spec.values.&lt;key&gt;...}</span></code>; <code class="docutils literal notranslate"><span class="pre">${param:&lt;role&gt;}</span></code> alone reads every key. A
+set nothing names or reads is reported once</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">${param:}</span></code> in <code class="docutils literal notranslate"><span class="pre">meta</span></code>, <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> or <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code> is a load error</p></li>
+<li><p>In an environment or tenant, the same findings are reported when the solution loads, on the
+document that holds the token, for the environment or tenant it was resolved for</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">${param:}</span></code> in a document of another kind (a workspace, a module, …) is not substituted, and
+the token check reports it as a <code class="docutils literal notranslate"><span class="pre">malformed_value_token</span></code></p></li>
+</ul>
+</section>
+<section id="seeing-the-result">
+<h2>Seeing the result<a class="headerlink" href="#seeing-the-result" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">render</span> <span class="pre">deployment|environment|tenant</span> <span class="pre">NAME</span></code> shows a document as strata uses it, field by
+field: the document that wrote each value, and for a value filled in from a parameter set, the
+text as written and the role, key and set it read. <code class="docutils literal notranslate"><span class="pre">-o</span> <span class="pre">json</span></code> gives the same as data. Secret values
+are always masked. A <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> base is not rendered; render a document built on it.</p>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Where parameter sets live is up to the solution: strata finds documents by <code class="docutils literal notranslate"><span class="pre">kind</span></code> and
+<code class="docutils literal notranslate"><span class="pre">meta.name</span></code>, never by folder. Keeping a spoke’s set next to the documents that use it reads well.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">${value:parameterset.&lt;name&gt;.spec.values.&lt;key&gt;}</span></code> also reads a set, from any document: raw and
+by name, with no role, no merge and no defaults, resolved once per solution. Use it for values
+every deployment shares (a constants set read by an environment or a workspace). In a
+deployment, use <code class="docutils literal notranslate"><span class="pre">${param:}</span></code>: a base that names one set serves only that instance, and does not
+see the defaults and overrides of its chain. Either way, a value read counts for <code class="docutils literal notranslate"><span class="pre">param_unused</span></code>.</p></li>
+<li><p>A parameter set is not an <a class="reference internal" href="environment.html"><span class="std std-doc">environment</span></a>: an environment declares run-time
+variables, secrets and feature flags that <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code> resolve at build
+and deploy time. A parameter set’s values are read when the solution is loaded, before any of
+that runs.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="asset.html" class="btn btn-neutral float-left" title="Asset (kind: asset)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="integration.html" class="btn btn-neutral float-right" title="Integration (kind: integration)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

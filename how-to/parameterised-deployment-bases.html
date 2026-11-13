@@ -1,0 +1,578 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Write one deployment base for many spokes with parameter sets &mdash; strata 2.6.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How To: Use the SBOM (CycloneDX)" href="sbom-generation.html" />
+    <link rel="prev" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" href="migrate-v1-workspace-topology-provisioning.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Write one deployment base for many spokes with parameter sets</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-layout">The layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-shared-documents">1. The shared documents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#one-parameter-set-per-hub-spoke-and-customer-project">2. One parameter set per hub, spoke and customer project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#one-base-per-stack">3. One base per stack</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#one-short-leaf-per-spoke-and-per-project">4. One short leaf per spoke and per project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#check-it">5. Check it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#when-something-is-wrong">6. When something is wrong</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-a-spoke">Adding a spoke</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/attributeconfig.html">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/chart-registries.html">Chart registries (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Write one deployment base for many spokes with parameter sets</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/parameterised-deployment-bases.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-write-one-deployment-base-for-many-spokes-with-parameter-sets">
+<h1>How To: Write one deployment base for many spokes with parameter sets<a class="headerlink" href="#how-to-write-one-deployment-base-for-many-spokes-with-parameter-sets" title="Link to this heading"></a></h1>
+<p>A hub-and-spoke platform repeats the same deployment for every spoke: the same workspace, the
+same environments, the same properties, with only a name, a subscription and a code changed.
+Copying the deployment per spoke works until the copies drift. This guide writes the deployment
+<strong>once</strong>, as a base that reads its values with <code class="docutils literal notranslate"><span class="pre">${param:&lt;role&gt;.&lt;key&gt;}</span></code>, and gives each spoke one
+<a class="reference internal" href="../config/parameterset.html"><span class="std std-doc">parameter set</span></a> and one short leaf.</p>
+<p>The solution below is complete: two hubs, two spokes and one customer project. Every file is shown
+with its path. strata finds documents by <code class="docutils literal notranslate"><span class="pre">kind</span></code> and <code class="docutils literal notranslate"><span class="pre">meta.name</span></code>, never by folder, so the layout is
+one that reads well, not one strata requires. A test builds this exact solution from this page and
+validates it, so what you see here works.</p>
+<section id="the-layout">
+<h2>The layout<a class="headerlink" href="#the-layout" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span><span class="o">.</span><span class="n">yaml</span>
+<span class="n">platform</span><span class="o">/</span>                       <span class="n">shared</span> <span class="n">documents</span><span class="p">:</span> <span class="n">providers</span><span class="p">,</span> <span class="n">workspaces</span><span class="p">,</span> <span class="n">shared</span> <span class="n">environments</span>
+  <span class="n">provider</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">workspace</span><span class="o">-</span><span class="n">spoke</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">workspace</span><span class="o">-</span><span class="n">customer</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">environment</span><span class="o">-</span><span class="n">solution</span><span class="o">.</span><span class="n">yaml</span>
+<span class="n">tenants</span><span class="o">/</span>
+  <span class="n">acme</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">initech</span><span class="o">.</span><span class="n">yaml</span>
+<span class="n">stacks</span><span class="o">/</span>                         <span class="n">one</span> <span class="n">base</span> <span class="n">per</span> <span class="n">stack</span><span class="p">,</span> <span class="k">with</span> <span class="n">its</span> <span class="n">defaults</span>
+  <span class="n">spoke</span><span class="o">/</span><span class="n">deployment</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">spoke</span><span class="o">/</span><span class="n">defaults</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">customer</span><span class="o">/</span><span class="n">deployment</span><span class="o">.</span><span class="n">yaml</span>
+<span class="n">hubs</span><span class="o">/</span>
+  <span class="n">hub01</span><span class="o">/</span><span class="n">hub</span><span class="o">.</span><span class="n">yaml</span>                <span class="n">the</span> <span class="n">hub</span><span class="s1">'s parameter set and environment</span>
+  <span class="n">hub01</span><span class="o">/</span><span class="n">environment</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">hub01</span><span class="o">/</span><span class="n">acme</span><span class="o">-</span><span class="mi">001</span><span class="o">/</span><span class="n">spoke</span><span class="o">.</span><span class="n">yaml</span>     <span class="n">the</span> <span class="n">spoke</span><span class="s1">'s parameter set</span>
+  <span class="n">hub01</span><span class="o">/</span><span class="n">acme</span><span class="o">-</span><span class="mi">001</span><span class="o">/</span><span class="n">deploy</span><span class="o">-</span><span class="n">spoke</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">hub01</span><span class="o">/</span><span class="n">acme</span><span class="o">-</span><span class="mi">001</span><span class="o">/</span><span class="n">acmep01</span><span class="o">/</span><span class="n">customer</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">hub01</span><span class="o">/</span><span class="n">acme</span><span class="o">-</span><span class="mi">001</span><span class="o">/</span><span class="n">acmep01</span><span class="o">/</span><span class="n">deploy</span><span class="o">-</span><span class="n">customer</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">hub02</span><span class="o">/</span><span class="n">hub</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">hub02</span><span class="o">/</span><span class="n">environment</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">hub02</span><span class="o">/</span><span class="n">initech</span><span class="o">-</span><span class="mi">001</span><span class="o">/</span><span class="n">spoke</span><span class="o">.</span><span class="n">yaml</span>
+  <span class="n">hub02</span><span class="o">/</span><span class="n">initech</span><span class="o">-</span><span class="mi">001</span><span class="o">/</span><span class="n">deploy</span><span class="o">-</span><span class="n">spoke</span><span class="o">.</span><span class="n">yaml</span>
+</pre></div>
+</div>
+<p>Everything about one spoke lives in its folder, and everything every spoke shares lives in
+<code class="docutils literal notranslate"><span class="pre">stacks/</span></code>.</p>
+</section>
+<section id="the-shared-documents">
+<span id="1-the-shared-documents"></span><h2>1. The shared documents<a class="headerlink" href="#the-shared-documents" title="Link to this heading"></a></h2>
+<p>Nothing here is new. A solution, a provider, a workspace per stack, a shared environment and two
+tenants:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># strata.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solution</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform</span>
+<span class="nt">spec</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># platform/provider.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provider</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
+<span class="w">  </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">westeurope</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># platform/workspace-spoke.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">providers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">azure</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf</span>
+<span class="w">      </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra/spoke</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># platform/workspace-customer.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">providers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">azure</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf</span>
+<span class="w">      </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra/customer</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># platform/environment-solution.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solution-env</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> key</span><span class="p">:</span><span class="w"> </span><span class="nv">owner</span><span class="p p-Indicator">,</span><span class="nt"> store</span><span class="p">:</span><span class="w"> </span><span class="nv">constant</span><span class="p p-Indicator">,</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">string</span><span class="p p-Indicator">,</span><span class="nt"> value</span><span class="p">:</span><span class="w"> </span><span class="nv">platform-team</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/acme.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">display_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Acme</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/initech.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">initech</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">display_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Initech</span>
+</pre></div>
+</div>
+</section>
+<section id="one-parameter-set-per-hub-spoke-and-customer-project">
+<span id="2-one-parameter-set-per-hub-spoke-and-customer-project"></span><h2>2. One parameter set per hub, spoke and customer project<a class="headerlink" href="#one-parameter-set-per-hub-spoke-and-customer-project" title="Link to this heading"></a></h2>
+<p>A parameter set is plain values. It does not say what it is for: the deployment that names it
+gives it a <strong>role</strong> (<code class="docutils literal notranslate"><span class="pre">hub</span></code>, <code class="docutils literal notranslate"><span class="pre">spoke</span></code>, <code class="docutils literal notranslate"><span class="pre">customer</span></code>), and bases read <code class="docutils literal notranslate"><span class="pre">${param:&lt;role&gt;.&lt;key&gt;}</span></code>. So the
+spoke’s <code class="docutils literal notranslate"><span class="pre">code</span></code> and the customer’s <code class="docutils literal notranslate"><span class="pre">code</span></code> never collide: one is <code class="docutils literal notranslate"><span class="pre">spoke.code</span></code>, the other
+<code class="docutils literal notranslate"><span class="pre">customer.code</span></code>.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub01/hub.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parameterset</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-hub01</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">values</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub01</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub02/hub.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parameterset</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-hub02</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">values</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub02</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">westus2</span><span class="w">          </span><span class="c1"># overrides the stack default below</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub01/acme-001/spoke.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parameterset</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-acme-001</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">values</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme-001</span>
+<span class="w">    </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="w">    </span><span class="nt">code</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="w">    </span><span class="nt">seq</span><span class="p">:</span><span class="w"> </span><span class="s">"001"</span><span class="w">               </span><span class="c1"># quoted: 001 unquoted is the number 1</span>
+<span class="w">    </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">00000000-0000-0000-0000-000000000001</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub02/initech-001/spoke.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parameterset</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-initech-001</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">values</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">initech-001</span>
+<span class="w">    </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">initech</span>
+<span class="w">    </span><span class="nt">code</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">initech</span>
+<span class="w">    </span><span class="nt">seq</span><span class="p">:</span><span class="w"> </span><span class="s">"001"</span>
+<span class="w">    </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">00000000-0000-0000-0000-000000000002</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub01/acme-001/acmep01/customer.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parameterset</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer-acmep01</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">values</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">code</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acmep01</span>
+<span class="w">    </span><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">p01</span>
+</pre></div>
+</div>
+<p>A parameter set holds no <code class="docutils literal notranslate"><span class="pre">${...}</span></code> tokens and no secrets: it is plain text in git. Keep
+<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code> in the document that needs the secret.</p>
+</section>
+<section id="one-base-per-stack">
+<span id="3-one-base-per-stack"></span><h2>3. One base per stack<a class="headerlink" href="#one-base-per-stack" title="Link to this heading"></a></h2>
+<p>The spoke base is the whole spoke deployment, written once. Its own <code class="docutils literal notranslate"><span class="pre">params</span></code> names a set of
+defaults for the <code class="docutils literal notranslate"><span class="pre">hub</span></code> role, like a chart’s <code class="docutils literal notranslate"><span class="pre">values.yaml</span></code>: a hub’s own set overrides them key by
+key.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># stacks/spoke/defaults.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parameterset</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-defaults</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">values</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">westeurope</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># stacks/spoke/deployment.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke_deployment_base</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> hub</span><span class="p">:</span><span class="w"> </span><span class="nv">hub-defaults</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">name_rule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-${param:spoke.name}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:spoke.tenant}</span>
+<span class="w">  </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">segments</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">hub</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:hub.name}</span>
+<span class="w">      </span><span class="nt">spoke</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:spoke.name}</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solution-env</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-${param:hub.name}-env</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:hub.region}</span>
+<span class="w">    </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:spoke.subscription_id}</span>
+<span class="w">    </span><span class="nt">state_account</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sttfstate${param:spoke.code}${param:spoke.seq}</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">${param:}</span></code> works in reference fields too: <code class="docutils literal notranslate"><span class="pre">tenant</span></code> and the environment <code class="docutils literal notranslate"><span class="pre">hub-${param:hub.name}-env</span></code>
+are checked as real names once each spoke’s values are filled in.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">name_rule</span></code> keeps names honest: every deployment built on this base must be named
+<code class="docutils literal notranslate"><span class="pre">spoke-&lt;spoke</span> <span class="pre">name&gt;</span></code>. Names stay plain text, so every command still finds a deployment by its
+name, but they cannot drift from the values.</p></li>
+</ul>
+<p>The customer base reads three roles: the spoke it runs in, the hub, and its own project.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># stacks/customer/deployment.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer_deployment_base</span>
+<span class="w">  </span><span class="nt">name_rule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer-${param:spoke.name}-${param:customer.code}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:spoke.tenant}</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solution-env</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-${param:hub.name}-env</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:customer.project}</span>
+<span class="w">    </span><span class="nt">deploy_code</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:customer.code}</span>
+<span class="w">    </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:spoke.subscription_id}</span>
+</pre></div>
+</div>
+</section>
+<section id="one-short-leaf-per-spoke-and-per-project">
+<span id="4-one-short-leaf-per-spoke-and-per-project"></span><h2>4. One short leaf per spoke and per project<a class="headerlink" href="#one-short-leaf-per-spoke-and-per-project" title="Link to this heading"></a></h2>
+<p>A leaf names its sets per role and extends the base. That is all it holds, unless it has an
+exception of its own.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub01/acme-001/deploy-spoke.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-acme-001</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> hub</span><span class="p">:</span><span class="w"> </span><span class="nv">hub-hub01</span><span class="p p-Indicator">,</span><span class="nt"> spoke</span><span class="p">:</span><span class="w"> </span><span class="nv">spoke-acme-001</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke_deployment_base</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub02/initech-001/deploy-spoke.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-initech-001</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> hub</span><span class="p">:</span><span class="w"> </span><span class="nv">hub-hub02</span><span class="p p-Indicator">,</span><span class="nt"> spoke</span><span class="p">:</span><span class="w"> </span><span class="nv">spoke-initech-001</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke_deployment_base</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub01/acme-001/acmep01/deploy-customer.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer-acme-001-acmep01</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> hub</span><span class="p">:</span><span class="w"> </span><span class="nv">hub-hub01</span><span class="p p-Indicator">,</span><span class="nt"> spoke</span><span class="p">:</span><span class="w"> </span><span class="nv">spoke-acme-001</span><span class="p p-Indicator">,</span><span class="nt"> customer</span><span class="p">:</span><span class="w"> </span><span class="nv">customer-acmep01</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer_deployment_base</span>
+</pre></div>
+</div>
+<p>Every leaf behind <code class="docutils literal notranslate"><span class="pre">hub02</span></code> names <code class="docutils literal notranslate"><span class="pre">hub:</span> <span class="pre">hub-hub02</span></code>. A set never names the sets it builds on, and
+nothing is implied by the folder: one name per leaf is the price of every value being explicit.</p>
+<p>Each hub still has its own environment. An environment can also be built on a base that reads
+parameter sets (<a class="reference internal" href="environment-and-tenant-bases.html"><span class="std std-doc">How To: tenant and environment bases</span></a>); with
+one variable per hub, writing each out is shorter:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub01/environment.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-hub01-env</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> key</span><span class="p">:</span><span class="w"> </span><span class="nv">hub_vnet</span><span class="p p-Indicator">,</span><span class="nt"> store</span><span class="p">:</span><span class="w"> </span><span class="nv">constant</span><span class="p p-Indicator">,</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">string</span><span class="p p-Indicator">,</span><span class="nt"> value</span><span class="p">:</span><span class="w"> </span><span class="nv">vnet-hub01</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># hubs/hub02/environment.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-hub02-env</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> key</span><span class="p">:</span><span class="w"> </span><span class="nv">hub_vnet</span><span class="p p-Indicator">,</span><span class="nt"> store</span><span class="p">:</span><span class="w"> </span><span class="nv">constant</span><span class="p p-Indicator">,</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">string</span><span class="p p-Indicator">,</span><span class="nt"> value</span><span class="p">:</span><span class="w"> </span><span class="nv">vnet-hub02</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+</section>
+<section id="check-it">
+<span id="5-check-it"></span><h2>5. Check it<a class="headerlink" href="#check-it" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">validate</span>
+<span class="n">strata</span> <span class="n">deploy</span> <span class="nb">list</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">list</span></code> shows each leaf as resolved (<code class="docutils literal notranslate"><span class="pre">spoke-initech-001</span></code> with tenant <code class="docutils literal notranslate"><span class="pre">initech</span></code>
+and environments <code class="docutils literal notranslate"><span class="pre">solution-env,</span> <span class="pre">hub-hub02-env</span></code>) and each base as written, tokens and all. The
+merged result for <code class="docutils literal notranslate"><span class="pre">spoke-initech-001</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">initech</span>
+<span class="w">  </span><span class="nt">layers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> segments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> hub</span><span class="p">:</span><span class="w"> </span><span class="nv">hub02</span><span class="p p-Indicator">,</span><span class="nt"> spoke</span><span class="p">:</span><span class="w"> </span><span class="nv">initech-001</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">solution-env</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">hub-hub02-env</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">westus2</span><span class="w">                 </span><span class="c1"># hub-hub02 overrides hub-defaults</span>
+<span class="w">    </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">00000000-0000-0000-0000-000000000002</span>
+<span class="w">    </span><span class="nt">state_account</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sttfstateinitech001</span>
+</pre></div>
+</div>
+<p>To see where each value comes from, render the deployment. Every field names the document that
+wrote it; a value filled in from a parameter set shows the text as written and the set it read:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">render</span> <span class="n">deployment</span> <span class="n">spoke</span><span class="o">-</span><span class="n">initech</span><span class="o">-</span><span class="mi">001</span>
+</pre></div>
+</div>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>  deployment spoke-initech-001
+  chain: spoke-initech-001 &lt;- spoke_deployment_base
+  parameter sets: hub: hub-defaults, hub-hub02; spoke: spoke-initech-001
+
+  FIELD                          VALUE                FROM                   FILLED IN FROM
+  spec.workspace                 spoke                spoke_deployment_base
+  spec.environments[1]           hub-hub02-env        spoke_deployment_base  'hub-${param:hub.name}-env': hub.name = hub02 (hub-hub02)
+  spec.tenant                    initech              spoke_deployment_base  '${param:spoke.tenant}': spoke.tenant = initech (spoke-initech-001)
+  spec.properties.region         westus2              spoke_deployment_base  '${param:hub.region}': hub.region = westus2 (hub-hub02)
+  spec.properties.state_account  sttfstateinitech001  spoke_deployment_base  'sttfstate${param:spoke.code}${param:spoke.seq}': spoke.code = initech (spoke-initech-001), spoke.seq = 001 (spoke-initech-001)
+  ...
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">render</span></code> also takes <code class="docutils literal notranslate"><span class="pre">environment</span></code> and <code class="docutils literal notranslate"><span class="pre">tenant</span></code>, and <code class="docutils literal notranslate"><span class="pre">-o</span> <span class="pre">json</span></code> for the full origin of
+every field. Secret values are always masked.</p>
+<p>A deployment built on a base runs like any other: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span> <span class="pre">spoke-initech-001</span></code>. A base
+does not run on its own.</p>
+</section>
+<section id="when-something-is-wrong">
+<span id="6-when-something-is-wrong"></span><h2>6. When something is wrong<a class="headerlink" href="#when-something-is-wrong" title="Link to this heading"></a></h2>
+<p>strata reports a problem on the file you wrote, says which values made it, and names the
+deployment it was resolving:</p>
+<ul class="simple">
+<li><p><strong>A value is missing.</strong> <code class="docutils literal notranslate"><span class="pre">${param:spoke.subscription}</span></code> in the base, but the sets hold
+<code class="docutils literal notranslate"><span class="pre">subscription_id</span></code>:
+<code class="docutils literal notranslate"><span class="pre">spoke_deployment_base</span> <span class="pre">spec.properties.subscription_id:</span> <span class="pre">${param:spoke.subscription}</span> <span class="pre">not</span> <span class="pre">found</span> <span class="pre">in</span> <span class="pre">spoke:</span> <span class="pre">[spoke-acme-001]</span> <span class="pre">(for</span> <span class="pre">spoke-acme-001)</span></code></p></li>
+<li><p><strong>A name does not exist once filled in.</strong> A spoke set says <code class="docutils literal notranslate"><span class="pre">tenant:</span> <span class="pre">acmee</span></code>:
+<code class="docutils literal notranslate"><span class="pre">spoke_deployment_base</span> <span class="pre">spec.tenant:</span> <span class="pre">unknown</span> <span class="pre">tenant</span> <span class="pre">'acmee'</span> <span class="pre">...</span> <span class="pre">from</span> <span class="pre">'${param:spoke.tenant}':</span> <span class="pre">spoke.tenant</span> <span class="pre">=</span> <span class="pre">'acmee'</span> <span class="pre">(spoke-acme-001)</span> <span class="pre">(for</span> <span class="pre">spoke-acme-001)</span></code></p></li>
+<li><p><strong>A leaf has the wrong name.</strong> <code class="docutils literal notranslate"><span class="pre">meta.name:</span> <span class="pre">spoke-acme</span></code> under the spoke base:
+<code class="docutils literal notranslate"><span class="pre">Deployment</span> <span class="pre">'spoke-acme'</span> <span class="pre">must</span> <span class="pre">be</span> <span class="pre">named</span> <span class="pre">'spoke-acme-001'</span> <span class="pre">by</span> <span class="pre">the</span> <span class="pre">name_rule</span> <span class="pre">of</span> <span class="pre">'spoke_deployment_base'</span></code></p></li>
+<li><p><strong>A value nothing reads</strong> is information, not an error (<code class="docutils literal notranslate"><span class="pre">param_unused</span></code>): a set may hold more
+than one deployment needs. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--strict</span></code> still passes.</p></li>
+</ul>
+</section>
+<section id="adding-a-spoke">
+<h2>Adding a spoke<a class="headerlink" href="#adding-a-spoke" title="Link to this heading"></a></h2>
+<p>Two files in a new folder, nothing else:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">hubs/hub02/umbrella-001/spoke.yaml</span></code>: a parameter set <code class="docutils literal notranslate"><span class="pre">spoke-umbrella-001</span></code> with the spoke’s
+values.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hubs/hub02/umbrella-001/deploy-spoke.yaml</span></code>: a leaf <code class="docutils literal notranslate"><span class="pre">spoke-umbrella-001</span></code> with
+<code class="docutils literal notranslate"><span class="pre">params:</span> <span class="pre">{</span> <span class="pre">hub:</span> <span class="pre">hub-hub02,</span> <span class="pre">spoke:</span> <span class="pre">spoke-umbrella-001</span> <span class="pre">}</span></code> and <code class="docutils literal notranslate"><span class="pre">extends:</span> <span class="pre">spoke_deployment_base</span></code>.</p></li>
+</ol>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> then checks the new spoke’s tenant, environments, name and values like every
+other.</p>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Quote a value that holds a token inside a YAML flow list or map:
+<code class="docutils literal notranslate"><span class="pre">environments:</span> <span class="pre">[solution-env,</span> <span class="pre">'hub-${param:hub.name}-env']</span></code>. In block style, as above, no quotes
+are needed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">${param:}</span></code> is never allowed in <code class="docutils literal notranslate"><span class="pre">meta</span></code>, <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> or <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code>: names, parameter sets
+and chains stay fixed.</p></li>
+<li><p>The YAML editor’s schema (<code class="docutils literal notranslate"><span class="pre">.strata/schemas/</span></code>, refreshed by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">update</span></code>) accepts a
+<code class="docutils literal notranslate"><span class="pre">${param:}</span></code> token wherever <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> does, and still underlines one in <code class="docutils literal notranslate"><span class="pre">meta</span></code>,
+<code class="docutils literal notranslate"><span class="pre">extends</span></code> or <code class="docutils literal notranslate"><span class="pre">partial</span></code>. Whether the filled-in value is right, only <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> can tell.</p></li>
+<li><p>The full rules are in <a class="reference internal" href="../config/parameterset.html"><span class="std std-doc">parameterset.md</span></a>; the decision is
+<span class="xref myst">ADR-0061</span>.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="migrate-v1-workspace-topology-provisioning.html" class="btn btn-neutral float-left" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="sbom-generation.html" class="btn btn-neutral float-right" title="How To: Use the SBOM (CycloneDX)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

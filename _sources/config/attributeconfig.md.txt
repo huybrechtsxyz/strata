@@ -16,13 +16,57 @@ for a worked example.
 - `spec.target.kind` — which [`PlatformKind`](../GLOSSARY.md) this schema targets (e.g. `resource`)
 - `spec.target.block` — which blob field on that kind to validate: `properties`, `custom`,
   `configuration`, `variables`, `features` (whichever the target kind actually has), or `composite`
-  (all four merged blocks together; `view: effective` only). Never `secrets`.
+  (all four merged blocks together; `view: effective` only). `values` is a
+  [parameter set](parameterset.md)'s own values (`view: document`); `params` is the merged
+  parameter values a document receives (`view: effective`, see below). Never `secrets`.
 - `spec.target.view` — required: `document` validates each matching document's own block in
   isolation; `effective` validates each deployable deployment's merged result (`target.kind:
-  deployment` only)
+  deployment` only), or with `block: params`, what a deployment, environment or tenant receives
+  from its parameter sets
 - `spec.target.selector` — optional `field.path: required-value` equality map narrowing which
   documents of `target.kind` this schema applies to. Omitted means every document of that kind.
-  Equality only — no wildcards or regex.
+  Equality only — no wildcards or regex. A path walks into a map by key: `meta.labels.role:
+  spoke` selects on a label.
+
+## Parameter sets: two views
+
+Values are layered, so they are checked in two places:
+
+- **One set at a time** (`kind: parameterset`, `block: values`, `view: document`): the shape of
+  what one file holds. A set does not know its role, so select on an optional label:
+
+  ```yaml
+  spec:
+    target: { kind: parameterset, block: values, view: document, selector: { meta.labels.role: spoke } }
+    schema:
+      type: object
+      required: [name, hub, tenant]
+      properties:
+        name: { type: string, pattern: "^[a-z][a-z0-9]*-[0-9]{3}$" }
+  ```
+
+- **What a document receives** (`block: params`, `view: effective`, for `kind: deployment`,
+  `environment` or `tenant`): the values its chain's sets give it once merged per role (root
+  first, leaf last), with the roles as top-level keys. "Everything a base needs is there" can
+  only be checked here: a hub's set does not fill the `spoke` role.
+
+  ```yaml
+  spec:
+    target: { kind: deployment, block: params, view: effective, selector: { spec.workspace: bootstrap } }
+    schema:
+      required: [spoke, hub]
+      properties:
+        spoke: { required: [name, hub, tenant] }
+        hub: { properties: { provider: { enum: [azure-westeurope, azure-westus2] } } }
+  ```
+
+  A deployment is checked when it is deployable, with its selector evaluated on the resolved
+  deployment; an environment or tenant when it is not `partial: true`. A document that names no
+  set receives `{}`, so narrow the selector to the documents that use the base. Findings are
+  located at `meta.params.<role>.<key>` on the document, and name it.
+
+A schema cannot check that a value names an existing tenant or provider; the reference check on
+the resolved document does.
 - `spec.schema` — a verbatim JSON Schema fragment (`type`, `properties`, `required`,
   `additionalProperties`, `patternProperties`, `if`/`then`, ...), authored directly — no
   strata-invented vocabulary.

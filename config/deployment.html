@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deployment (kind: deployment) &mdash; strata 2.5.0 documentation</title>
+  <title>Deployment (kind: deployment) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -59,8 +59,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -90,17 +93,20 @@
 <li class="toctree-l2"><a class="reference internal" href="#rebinding-a-provider">Rebinding a provider</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#rebinding-an-asset">Rebinding an asset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#tokens-from-the-deployment">Tokens from the deployment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#parameter-sets">Parameter sets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#choosing-the-target">Choosing the target</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#kubernetes-kube-context">Kubernetes (<code class="docutils literal notranslate"><span class="pre">kube_context</span></code>)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#docker-docker-context">Docker (<code class="docutils literal notranslate"><span class="pre">docker_context</span></code>)</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#handover-document">Handover document</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -146,6 +152,13 @@ with what runtime behavior</em>. <code class="docutils literal notranslate"><spa
 <section id="schema">
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
 <ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">meta.params</span></code> — the <a class="reference internal" href="parameterset.html"><span class="std std-doc">parameter sets</span></a> this deployment reads, per role:
+<code class="docutils literal notranslate"><span class="pre">{spoke:</span> <span class="pre">spoke-acme-001}</span></code>, or a list per role merged in order. Any document of the <code class="docutils literal notranslate"><span class="pre">extends</span></code>
+chain may name sets; per role they merge root first, leaf last. <code class="docutils literal notranslate"><span class="pre">${param:&lt;role&gt;.&lt;key&gt;}</span></code> in the
+spec of any document of the chain reads them — see “Parameter sets” below</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meta.name_rule</span></code> — optional: the name every deployable deployment built on this one must have,
+with <code class="docutils literal notranslate"><span class="pre">${param:}</span></code> tokens filled from its values (<code class="docutils literal notranslate"><span class="pre">spoke-${param:spoke.name}</span></code>); any other name is
+<code class="docutils literal notranslate"><span class="pre">name_rule_mismatch</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.workspace</span></code> — the <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">workspace</span></code></span></a> document this deployment instantiates</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.environments[]</span></code> — <a class="reference internal" href="environment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">environment</span></code></span></a> documents, merged left-to-right (later wins)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> — optional <a class="reference internal" href="tenant.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">tenant</span></code></span></a> reference; its defaults merge in first</p></li>
@@ -164,6 +177,8 @@ document to use instead of the slot’s default — see “Rebinding a provider�
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.assets[]</span></code> — rebind <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">workspace</span></code></span></a> asset slots for this deployment, each
 <code class="docutils literal notranslate"><span class="pre">{slot,</span> <span class="pre">asset}</span></code>: the workspace’s <code class="docutils literal notranslate"><span class="pre">spec.assets[].slot</span></code> and the <a class="reference internal" href="asset.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">asset</span></code></span></a> document to use
 instead of the slot’s default — see “Rebinding an asset” below</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.documentation</span></code> — render the handover document after each successful <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> and store it with the
+audit record — see “Handover document” below</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.locking</span></code> — deployment lock configuration</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.layers</span></code> — deployment layer/scope segments</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.stages[]</span></code> — runtime parameters per provisioning step, each:</p>
@@ -294,6 +309,39 @@ it from the deployment that is:</p>
 reaches the document: <code class="docutils literal notranslate"><span class="pre">${deployment:tenant}</span></code> on a deployment without a tenant is an error, as is any other key. A
 <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> base is judged only once a deployment extends it.</p>
 </section>
+<section id="parameter-sets">
+<h2>Parameter sets<a class="headerlink" href="#parameter-sets" title="Link to this heading"></a></h2>
+<p>When many deployments differ only in their values (one per spoke, one per customer project), write the
+deployment once as a base that reads <code class="docutils literal notranslate"><span class="pre">${param:&lt;role&gt;.&lt;key&gt;}</span></code>, and give each instance a
+<a class="reference internal" href="parameterset.html"><span class="std std-doc">parameter set</span></a> and a short leaf:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke_deployment_base</span>
+<span class="w">  </span><span class="nt">name_rule</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-${param:spoke.name}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:spoke.tenant}</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solution-env</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-${param:hub.name}-env</span>
+<span class="nn">---</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-acme-001</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> hub</span><span class="p">:</span><span class="w"> </span><span class="nv">hub-hub01</span><span class="p p-Indicator">,</span><span class="nt"> spoke</span><span class="p">:</span><span class="w"> </span><span class="nv">spoke-acme-001</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke_deployment_base</span>
+</pre></div>
+</div>
+<p>The values are filled in when the solution loads, before anything runs, so they work in reference fields
+(<code class="docutils literal notranslate"><span class="pre">tenant</span></code>, <code class="docutils literal notranslate"><span class="pre">environments</span></code>, <code class="docutils literal notranslate"><span class="pre">providers[].provider</span></code>) as well as free text. Each deployment is then checked as if it
+had been written out in full; a problem is reported on the field you wrote, with the values that made it. Not in
+<code class="docutils literal notranslate"><span class="pre">meta</span></code>, <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> or <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code>. The rules are in <a class="reference internal" href="parameterset.html"><span class="std std-doc">parameter sets</span></a>, a full example in
+<a class="reference internal" href="../how-to/parameterised-deployment-bases.html"><span class="std std-doc">How To: Write one deployment base for many spokes</span></a>.</p>
+</section>
 <section id="choosing-the-target">
 <h2>Choosing the target<a class="headerlink" href="#choosing-the-target" title="Link to this heading"></a></h2>
 <p>Helm and Compose steps deploy to whatever cluster or Docker engine the caller’s environment points at. Without a
@@ -313,7 +361,7 @@ the field. The value is a literal: a <code class="docutils literal notranslate">
 configuration: it does not set <code class="docutils literal notranslate"><span class="pre">KUBECONFIG</span></code> or <code class="docutils literal notranslate"><span class="pre">DOCKER_HOST</span></code>, write the kubeconfig, create a Docker context, or switch
 the active context.</p>
 <section id="kubernetes-kube-context">
-<h3>Kubernetes (<code class="docutils literal notranslate"><span class="pre">kube_context</span></code>)<a class="headerlink" href="#kubernetes-kube-context" title="Link to this heading"></a></h3>
+<span id="kubernetes-kube_context"></span><h3>Kubernetes (<code class="docutils literal notranslate"><span class="pre">kube_context</span></code>)<a class="headerlink" href="#kubernetes-kube-context" title="Link to this heading"></a></h3>
 <p>A Helm step deploys to a Kubernetes cluster through the kubeconfig the caller provides (<code class="docutils literal notranslate"><span class="pre">KUBECONFIG</span></code>, else
 <code class="docutils literal notranslate"><span class="pre">~/.kube/config</span></code>). <code class="docutils literal notranslate"><span class="pre">kube_context</span></code> names a context in it:</p>
 <ul class="simple">
@@ -327,7 +375,7 @@ for the cluster; <code class="docutils literal notranslate"><span class="pre">ku
 </ul>
 </section>
 <section id="docker-docker-context">
-<h3>Docker (<code class="docutils literal notranslate"><span class="pre">docker_context</span></code>)<a class="headerlink" href="#docker-docker-context" title="Link to this heading"></a></h3>
+<span id="docker-docker_context"></span><h3>Docker (<code class="docutils literal notranslate"><span class="pre">docker_context</span></code>)<a class="headerlink" href="#docker-docker-context" title="Link to this heading"></a></h3>
 <p>A Compose step runs <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stack</span></code> against the engine Docker picks: <code class="docutils literal notranslate"><span class="pre">DOCKER_HOST</span></code>, else <code class="docutils literal notranslate"><span class="pre">DOCKER_CONTEXT</span></code>, else the
 context chosen with <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">context</span> <span class="pre">use</span></code>. Create a context for each engine once
 (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">context</span> <span class="pre">create</span> <span class="pre">hearth-prd</span> <span class="pre">--docker</span> <span class="pre">host=ssh://deploy&#64;hearth</span></code>) and name it:</p>
@@ -343,6 +391,33 @@ workflow with a context created from the same host.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">docker_context:</span> <span class="pre">default</span></code> is the local engine.</p></li>
 </ul>
 </section>
+</section>
+<section id="handover-document">
+<h2>Handover document<a class="headerlink" href="#handover-document" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">spec.documentation</span></code> renders the handover document at the end of every successful <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>: each step’s outputs,
+the secrets each step used with where to find them, and the images. It is the same document as
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">report</span> <span class="pre">--format</span> <span class="pre">markdown</span></code>, with that run’s audit entry at the top. No secret value is ever in it:
+every secret and every sensitive output shows as <code class="docutils literal notranslate"><span class="pre">********</span></code>.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">documentation</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">sink</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">audit</span><span class="w">                     </span><span class="c1"># the only sink: `_handover.md` next to the audit manifest</span>
+<span class="w">    </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docs/handover.md.j2</span><span class="w">   </span><span class="c1"># optional; the built-in Markdown when unset</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">sink:</span> <span class="pre">audit</span></code> writes <code class="docutils literal notranslate"><span class="pre">_handover.md</span></code> next to <code class="docutils literal notranslate"><span class="pre">_manifest.json</span></code> and pushes it with every enabled <code class="docutils literal notranslate"><span class="pre">git</span></code> audit sink
+(Configuration <code class="docutils literal notranslate"><span class="pre">spec.audit.sinks[].git</span></code>). An integration sink sends events, not files, and does not carry it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">template</span></code> is a Jinja2 template relative to the solution root. It receives the data of
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">report</span> <span class="pre">--output</span> <span class="pre">json</span></code>: <code class="docutils literal notranslate"><span class="pre">deployment</span></code>, <code class="docutils literal notranslate"><span class="pre">workspace</span></code>, <code class="docutils literal notranslate"><span class="pre">environments</span></code>, <code class="docutils literal notranslate"><span class="pre">steps</span></code>, <code class="docutils literal notranslate"><span class="pre">secrets</span></code>, <code class="docutils literal notranslate"><span class="pre">images</span></code>,
+<code class="docutils literal notranslate"><span class="pre">audit</span></code>, <code class="docutils literal notranslate"><span class="pre">generated_at</span></code>, and <code class="docutils literal notranslate"><span class="pre">MASK</span></code> (<code class="docutils literal notranslate"><span class="pre">********</span></code>). It runs sandboxed, and an unknown name fails.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> rejects it when the workspace has no <code class="docutils literal notranslate"><span class="pre">output_store</span></code> (<code class="docutils literal notranslate"><span class="pre">documentation_needs_output_store</span></code>), when
+no enabled git audit sink is configured (<code class="docutils literal notranslate"><span class="pre">documentation_needs_git_audit_sink</span></code>), or when the template is missing or
+uses a name the report does not have (<code class="docutils literal notranslate"><span class="pre">documentation_template_missing</span></code>, <code class="docutils literal notranslate"><span class="pre">documentation_template_invalid</span></code>).</p></li>
+<li><p>A render failure at the end of a deploy is a warning (<code class="docutils literal notranslate"><span class="pre">documentation_render_failed</span></code>), never a failed deploy:
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">report</span></code> can render the document again.</p></li>
+</ul>
+<p>The workflow, including handing a secret over with Password Pusher, is in
+<a class="reference internal" href="../how-to/deployment-handover.html"><span class="std std-doc">deployment-handover.md</span></a>.</p>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>

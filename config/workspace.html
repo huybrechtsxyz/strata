@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workspace (kind: workspace) &mdash; strata 2.5.0 documentation</title>
+  <title>Workspace (kind: workspace) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -59,8 +59,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -83,7 +86,12 @@
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#terraform-backend">Terraform backend</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#opentofu">OpenTofu</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#moving-a-deployment-from-terraform-to-opentofu">Moving a deployment from Terraform to OpenTofu</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#script-provisioner">Script provisioner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#output-store">Output store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#image-tag-policy">Image tag policy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#provisioner-lock-policy">Provisioner lock policy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#provider-slots">Provider slots</a></li>
@@ -100,6 +108,7 @@
 <li class="toctree-l1"><a class="reference internal" href="version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -168,8 +177,9 @@ if fully externally managed)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.topology[]</span></code> — inline topology groupings (type/components/namespaces/volumes) — see
 “Topology grouping” below. Inline since ADR-0028 (reverted from a standalone <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topology</span></code>
 document, ADR-0011) — not a list of names.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">spec.provisioners[]</span></code> — tool definitions (<code class="docutils literal notranslate"><span class="pre">ProvisionerModel</span></code>): <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">tool</span></code> (terraform, ansible,
-helm, compose, script, …), <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">backend</span></code> (terraform only), <code class="docutils literal notranslate"><span class="pre">properties</span></code> (ansible only),
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.provisioners[]</span></code> — tool definitions (<code class="docutils literal notranslate"><span class="pre">ProvisionerModel</span></code>): <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">tool</span></code> (terraform, opentofu,
+helm, compose, script, …; see “OpenTofu” below), <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">backend</span></code> (terraform and opentofu only),
+<code class="docutils literal notranslate"><span class="pre">properties</span></code> (ansible only),
 <code class="docutils literal notranslate"><span class="pre">script</span></code> (script only, see “Script provisioner” below),
 <code class="docutils literal notranslate"><span class="pre">integration</span></code> (which <a class="reference internal" href="integration.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">integration</span></code></span></a> document supplies version/auth), <code class="docutils literal notranslate"><span class="pre">output</span></code>
 (Jinja2 template escape hatch)</p></li>
@@ -199,6 +209,11 @@ image in <code class="docutils literal notranslate"><span class="pre">sbom.json<
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.image_tag_policy</span></code> — fail <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> when an image the deployment runs has no
 tag, a floating tag such as <code class="docutils literal notranslate"><span class="pre">latest</span></code>, or a tag that does not match the shape you require (see “Image
 tag policy” below)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.sbom</span></code> — what <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> adds to <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>. <code class="docutils literal notranslate"><span class="pre">render_charts</span></code> (default <code class="docutils literal notranslate"><span class="pre">true</span></code>) renders every Helm
+chart, local or pinned from a registry, with <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">template</span></code> and lists the images it deploys, so the CVE and
+image gates and <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> check them (see
+<a class="reference internal" href="../how-to/sbom-generation.html#helm-images"><span class="std std-ref">how-to/sbom-generation.md</span></a>). <code class="docutils literal notranslate"><span class="pre">render_charts:</span> <span class="pre">false</span></code> lists only the
+images modules declare.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.provisioner_lock_policy</span></code> — fail <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> when a Terraform or OpenTofu provisioner has no
 <code class="docutils literal notranslate"><span class="pre">.terraform.lock.hcl</span></code>, or one that does not lock every provider it declares (see “Provisioner lock policy”
 below)</p>
@@ -264,7 +279,8 @@ below)</p>
 one <code class="docutils literal notranslate"><span class="pre">-backend-config</span> <span class="pre">key=value</span></code> each. The <code class="docutils literal notranslate"><span class="pre">backend</span> <span class="pre">&quot;azurerm&quot;</span> <span class="pre">{}</span></code> block itself stays in the Terraform code, and
 <code class="docutils literal notranslate"><span class="pre">type</span></code> is not sent to Terraform.</p>
 <p>The values are resolved when <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> starts the step, so they may contain <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>, <code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>,
-<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code> and <code class="docutils literal notranslate"><span class="pre">${output:STEP.KEY}</span></code> tokens, and two tokens for the deployment being run. A workspace is shared
+<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code>, <code class="docutils literal notranslate"><span class="pre">${output:STEP.KEY}</span></code> and <a class="reference internal" href="artifact.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">${artifact:NAME.FIELD}</span></code></span></a> tokens, and two tokens for the
+deployment being run. A workspace is shared
 by every deployment, so these are the way to give each deployment its own state without typing a key into every
 deployment’s environment:</p>
 <table class="docutils align-default">
@@ -334,6 +350,57 @@ The design, and why it is a token rather than a default key, is in
 <span class="xref myst">deployment-tokens.md</span>.</p></li>
 </ul>
 </section>
+<section id="opentofu">
+<h2>OpenTofu<a class="headerlink" href="#opentofu" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">opentofu</span></code> runs a root module with <code class="docutils literal notranslate"><span class="pre">tofu</span></code> instead of <code class="docutils literal notranslate"><span class="pre">terraform</span></code>. Everything above applies unchanged: the
+<code class="docutils literal notranslate"><span class="pre">backend</span></code> settings, the <code class="docutils literal notranslate"><span class="pre">strata</span></code> payload and <code class="docutils literal notranslate"><span class="pre">TF_VAR_&lt;key&gt;</span></code> values, <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">plan</span></code>/<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">apply</span></code> with a saved plan,
+<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code>, outputs, the <a class="reference internal" href="#provisioner-lock-policy">provisioner lock policy</a>, the SBOM and the Checkov policy.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra</span>
+<span class="w">    </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">opentofu</span>
+<span class="w">    </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tofu</span><span class="w">        </span><span class="c1"># optional: a `type: opentofu` integration, to pin the version or the binary</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integration</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tofu</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">opentofu</span>
+<span class="w">  </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">infrastructure</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"&gt;=</span><span class="nv"> </span><span class="s">1.6"</span><span class="w">          </span><span class="c1"># OpenTofu's own numbering, not Terraform's</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Version.</strong> OpenTofu 1.6, its first stable release, or later: every command and flag strata passes exists there.
+<code class="docutils literal notranslate"><span class="pre">spec.version</span></code> is checked against <code class="docutils literal notranslate"><span class="pre">tofu</span> <span class="pre">version</span></code>.</p></li>
+<li><p><strong>Its own type.</strong> A <code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">opentofu</span></code> provisioner binds a <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">opentofu</span></code> integration, and a <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">terraform</span></code>
+integration does not run <code class="docutils literal notranslate"><span class="pre">tofu</span></code> through <code class="docutils literal notranslate"><span class="pre">spec.command</span></code>; <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> reports either
+(<code class="docutils literal notranslate"><span class="pre">provisioner_integration_type_mismatch</span></code>, <code class="docutils literal notranslate"><span class="pre">integration_command_other_tool</span></code>). The type decides the version check,
+the init advice and the provider registry.</p></li>
+<li><p><strong>Lock files.</strong> <code class="docutils literal notranslate"><span class="pre">tofu</span> <span class="pre">init</span></code> keys a short provider source (<code class="docutils literal notranslate"><span class="pre">hashicorp/azurerm</span></code>) as <code class="docutils literal notranslate"><span class="pre">registry.opentofu.org/...</span></code> in
+<code class="docutils literal notranslate"><span class="pre">.terraform.lock.hcl</span></code>. The lock policy and the SBOM read the host the lock file holds, so a root locked by either
+tool is read correctly.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">.tf</span></code> roots only.</strong> strata reads <code class="docutils literal notranslate"><span class="pre">*.tf</span></code> (and <code class="docutils literal notranslate"><span class="pre">*.tf.json</span></code>) files to find the <code class="docutils literal notranslate"><span class="pre">strata</span></code> variable, outputs and
+providers. OpenTofu 1.8’s <code class="docutils literal notranslate"><span class="pre">*.tofu</span></code> files are run by <code class="docutils literal notranslate"><span class="pre">tofu</span></code> but not read by strata: declare those in <code class="docutils literal notranslate"><span class="pre">.tf</span></code> files.</p></li>
+<li><p><strong>State encryption.</strong> OpenTofu’s <code class="docutils literal notranslate"><span class="pre">encryption</span> <span class="pre">{}</span></code> block in the root module works as is; strata does not deliver
+<code class="docutils literal notranslate"><span class="pre">TF_ENCRYPTION</span></code> keys.</p></li>
+</ul>
+<section id="moving-a-deployment-from-terraform-to-opentofu">
+<h3>Moving a deployment from Terraform to OpenTofu<a class="headerlink" href="#moving-a-deployment-from-terraform-to-opentofu" title="Link to this heading"></a></h3>
+<p>State backends and the state format are shared, so <code class="docutils literal notranslate"><span class="pre">backend</span></code> does not change.</p>
+<ol class="arabic simple">
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">opentofu</span></code> (and <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">opentofu</span></code> on its integration, if it has one).</p></li>
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">tofu</span> <span class="pre">init</span></code> in the root module and commit the updated <code class="docutils literal notranslate"><span class="pre">.terraform.lock.hcl</span></code>: it adds the
+<code class="docutils literal notranslate"><span class="pre">registry.opentofu.org</span></code> entries. Until then the lock policy reports the providers as unlocked.</p></li>
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">plan</span></code> and check it shows no changes before the first apply. OpenTofu’s migration guide is per
+Terraform version; state written by a Terraform newer than the one OpenTofu forked from is worth checking there.</p></li>
+<li><p>Do not apply a saved plan across the switch: a <code class="docutils literal notranslate"><span class="pre">.tfplan</span></code> written by <code class="docutils literal notranslate"><span class="pre">terraform</span></code> cannot be applied by <code class="docutils literal notranslate"><span class="pre">tofu</span></code>. Plan
+again after changing the tool.</p></li>
+</ol>
+</section>
+</section>
 <section id="script-provisioner">
 <h2>Script provisioner<a class="headerlink" href="#script-provisioner" title="Link to this heading"></a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code> runs a <code class="docutils literal notranslate"><span class="pre">.ps1</span></code>, <code class="docutils literal notranslate"><span class="pre">.sh</span></code>, <code class="docutils literal notranslate"><span class="pre">.bash</span></code>, <code class="docutils literal notranslate"><span class="pre">.py</span></code> or <code class="docutils literal notranslate"><span class="pre">.bat</span></code> file as a step. <code class="docutils literal notranslate"><span class="pre">script</span></code> is required for this tool and
@@ -397,6 +464,40 @@ appended to <code class="docutils literal notranslate"><span class="pre">args</s
 <p>A worked example, with the script, is in <a class="reference internal" href="../how-to/script-provisioner.html"><span class="std std-doc">how-to/script-provisioner.md</span></a>.
 The design is in <span class="xref myst">script-provisioner.md</span>.</p>
 </section>
+<section id="output-store">
+<h2>Output store<a class="headerlink" href="#output-store" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">spec.output_store</span></code> (a backend type, such as <code class="docutils literal notranslate"><span class="pre">azure-appconfig</span></code> or <code class="docutils literal notranslate"><span class="pre">azure-blob</span></code>) or <code class="docutils literal notranslate"><span class="pre">spec.output_store_integration</span></code>
+(an Integration document) keeps each step’s outputs after <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>, so a later run can resolve
+<code class="docutils literal notranslate"><span class="pre">${output:STEP.KEY}</span></code> for a step it does not run. <code class="docutils literal notranslate"><span class="pre">spec.output_store_max_age</span></code> (seconds) rejects a record older than
+that; <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">--output-max-age</span></code> overrides it for one run. The backend must support compare-and-swap.</p>
+<ul class="simple">
+<li><p>Each step has its own key, <code class="docutils literal notranslate"><span class="pre">strata/step-outputs/&lt;deployment&gt;/&lt;step&gt;</span></code>, holding when it was collected and its
+non-sensitive values. A sensitive output is never stored. Destroy marks the step’s key as destroyed.</p></li>
+<li><p>A backend can limit the size of one key. <code class="docutils literal notranslate"><span class="pre">azure-appconfig</span></code> allows 10 KB, counting the key itself; <code class="docutils literal notranslate"><span class="pre">azure-blob</span></code> has
+no practical limit. Above 8,000 bytes, <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> warns (<code class="docutils literal notranslate"><span class="pre">output_store_record</span></code>); above the backend’s limit, the
+step’s outputs are not recorded and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> warns with the step, its size and the limit. A step’s deploy
+never fails over this. To fix it, make the largest outputs smaller, mark them sensitive, or use <code class="docutils literal notranslate"><span class="pre">azure-blob</span></code>.</p></li>
+<li><p>Next to it, <code class="docutils literal notranslate"><span class="pre">strata/deployment-report/&lt;deployment&gt;/&lt;step&gt;</span></code> holds what only <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">output</span></code> and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">report</span></code> read: the names of the step’s sensitive outputs, the <code class="docutils literal notranslate"><span class="pre">description</span></code> of each output from the root module’s
+<code class="docutils literal notranslate"><span class="pre">output</span></code> blocks, and the secrets the step used, each with its store, location, <code class="docutils literal notranslate"><span class="pre">description</span></code> and the environment
+file that declares it. Never a value. Helm and Compose steps get one too (secrets only: they have no outputs).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata/deployment-audit/&lt;deployment&gt;</span></code> holds the last successful deploy’s audit summary (who, when, the commit,
+the audit record’s id), which <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">report</span></code> shows at the top. Above the backend’s limit, descriptions are shortened to 200 characters, then left out
+(<code class="docutils literal notranslate"><span class="pre">report_store_record</span></code> warning); names are always kept. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> sizes this record from the rendered
+<code class="docutils literal notranslate"><span class="pre">.tf</span></code> files and warns early (<code class="docutils literal notranslate"><span class="pre">report_record_size</span></code>). A failed write is a warning, never a failed deploy.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">report</span> <span class="pre">DEPLOYMENT</span></code> shows the handover document: outputs, every secret a step used by location
+(<code class="docutils literal notranslate"><span class="pre">********</span></code> for the value, always), and the images. <code class="docutils literal notranslate"><span class="pre">output_store</span></code> is a prerequisite for it, as for <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">output</span></code>.
+A location comes from the resolver’s own settings where the deploy ran (<code class="docutils literal notranslate"><span class="pre">AZURE_KEYVAULT_URL</span></code>, <code class="docutils literal notranslate"><span class="pre">INFISICAL_*</span></code>), so
+it says where the deploy actually read the secret.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">output</span> <span class="pre">DEPLOYMENT</span> <span class="pre">[STEP</span> <span class="pre">|</span> <span class="pre">STEP.KEY]</span></code> shows the recorded outputs, like <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">output</span></code>; it needs
+<code class="docutils literal notranslate"><span class="pre">output_store</span></code> and access to it, but no Terraform state. A sensitive output shows as <code class="docutils literal notranslate"><span class="pre">&lt;sensitive&gt;</span></code>. A record older
+than <code class="docutils literal notranslate"><span class="pre">output_store_max_age</span></code> is shown with a warning, not refused.</p></li>
+<li><p>Records written by strata 2.5 and earlier sit under one key per deployment, <code class="docutils literal notranslate"><span class="pre">strata/deployment-outputs/&lt;deployment&gt;</span></code>.
+They are still read for a step that has no key of its own, and while that key exists each deploy updates it too,
+so an older strata version reading it never gets an outdated value. A later release stops both.</p></li>
+</ul>
+<p>The design is in <span class="xref myst">ADR-0036</span> and
+<span class="xref myst">ADR-0057</span>.</p>
+</section>
 <section id="image-tag-policy">
 <h2>Image tag policy<a class="headerlink" href="#image-tag-policy" title="Link to this heading"></a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">spec.image_tag_policy</span></code> is an opt-in guard rail over the images <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> lists: the artifacts a
@@ -406,14 +507,16 @@ is already a useful policy: every image needs a tag, and the mutable aliases are
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">image_tag_policy</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span><span class="w">              </span><span class="c1"># deny (default) | warn</span>
-<span class="w">    </span><span class="nt">origins</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">artifact</span><span class="p p-Indicator">]</span><span class="w">            </span><span class="c1"># artifact | module-service; default: both</span>
+<span class="w">    </span><span class="nt">origins</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">artifact</span><span class="p p-Indicator">]</span><span class="w">            </span><span class="c1"># artifact | module-service | chart; default: all three</span>
 <span class="w">    </span><span class="nt">require_tag</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">              </span><span class="c1"># default true</span>
 <span class="w">    </span><span class="nt">reject_tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">latest</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">main</span><span class="p p-Indicator">]</span><span class="w">    </span><span class="c1"># default: latest, main, master, dev, develop, staging, edge, nightly, canary</span>
 <span class="w">    </span><span class="nt">tag_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">'^\d+\.\d+\.\d+$'</span><span class="w">  </span><span class="c1"># a tag must match it (searched, so anchor it); a digest is not checked</span>
 <span class="w">    </span><span class="nt">require_pin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">             </span><span class="c1"># the tag must come from a kind: version pin (or --pin)</span>
+<span class="w">    </span><span class="nt">require_digest</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">          </span><span class="c1"># the image must carry a digest (name@sha256:... or name:tag@sha256:...)</span>
 <span class="w">    </span><span class="nt">rings</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">acc</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">prd</span><span class="p p-Indicator">]</span><span class="w">              </span><span class="c1"># only deployments whose version document is in these rings; default all</span>
+<span class="w">    </span><span class="nt">on_unknown_image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span><span class="w">         </span><span class="c1"># a Helm module that declares no image: skip | warn (default) | block</span>
 <span class="w">    </span><span class="nt">allow</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis</span><span class="w">                </span><span class="c1"># the image's name as `strata deploy images` lists it</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis</span><span class="w">                </span><span class="c1"># as `strata deploy images` lists it, or REFERENCE/CONTAINER for a chart's image</span>
 <span class="w">        </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">third-party image, covered by cve_policy</span>
 <span class="w">        </span><span class="nt">expires</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-12-31</span><span class="w">        </span><span class="c1"># optional ISO date, honoured through that day</span>
 </pre></div>
@@ -427,7 +530,7 @@ is already a useful policy: every image needs a tag, and the mutable aliases are
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">require_tag</span></code></p></td>
-<td><p>it has no tag and no pin supplies one</p></td>
+<td><p>it has no tag or digest and no pin supplies one</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">image_without_tag</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">reject_tags</span></code></p></td>
@@ -442,11 +545,17 @@ is already a useful policy: every image needs a tag, and the mutable aliases are
 <td><p>its tag does not come from a version pin</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">image_not_pinned</span></code></p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">require_digest</span></code></p></td>
+<td><p>it has no digest</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">image_without_digest</span></code></p></td>
+</tr>
 </tbody>
 </table>
 <ul class="simple">
-<li><p>A digest (<code class="docutils literal notranslate"><span class="pre">sha256:...</span></code>) is immutable, so it passes <code class="docutils literal notranslate"><span class="pre">reject_tags</span></code> and <code class="docutils literal notranslate"><span class="pre">tag_pattern</span></code>. It still has to satisfy
-<code class="docutils literal notranslate"><span class="pre">require_tag</span></code> and <code class="docutils literal notranslate"><span class="pre">require_pin</span></code>.</p></li>
+<li><p>A digest (<code class="docutils literal notranslate"><span class="pre">sha256:...</span></code>) is immutable, so a digest alone satisfies <code class="docutils literal notranslate"><span class="pre">require_tag</span></code> and is never judged by
+<code class="docutils literal notranslate"><span class="pre">reject_tags</span></code> or <code class="docutils literal notranslate"><span class="pre">tag_pattern</span></code>. With <code class="docutils literal notranslate"><span class="pre">tag&#64;digest</span></code> (<a class="reference internal" href="artifact.html#tag-and-digest"><span class="std std-ref">artifact</span></a>), those two judge
+the tag part, so <code class="docutils literal notranslate"><span class="pre">latest&#64;sha256:...</span></code> is still a floating tag name. Every image still has to satisfy
+<code class="docutils literal notranslate"><span class="pre">require_pin</span></code>, except an image a chart runs (below).</p></li>
 <li><p>A tag that merely is not a semantic version, such as a build number (<code class="docutils literal notranslate"><span class="pre">env_sbx_20260907.11</span></code>), is not floating.
 <code class="docutils literal notranslate"><span class="pre">reject_tags</span></code> is an explicit list; use <code class="docutils literal notranslate"><span class="pre">tag_pattern</span></code> to be stricter. Set <code class="docutils literal notranslate"><span class="pre">reject_tags:</span> <span class="pre">[]</span></code> to reject none.</p></li>
 <li><p>An image with no tag gets one finding, not also <code class="docutils literal notranslate"><span class="pre">image_not_pinned</span></code>, unless <code class="docutils literal notranslate"><span class="pre">require_tag</span></code> is <code class="docutils literal notranslate"><span class="pre">false</span></code>.</p></li>
@@ -468,16 +577,16 @@ acc and prd can be strict while dev floats.</p></li>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code></p></td>
-<td><p>Judged first, before anything is cleaned or written, so a <code class="docutils literal notranslate"><span class="pre">deny</span></code> breach leaves the build path as it was. Also under <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>.</p></td>
+<td><p>Judged at the end, after <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code> is written, so it also judges the images rendered charts run (<code class="docutils literal notranslate"><span class="pre">sbom.render_charts</span></code>). A <code class="docutils literal notranslate"><span class="pre">deny</span></code> fails the build with its output on disk. Under <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>, only the declared images, since nothing is rendered.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code></p></td>
-<td><p>Judged again before any value is resolved, because <code class="docutils literal notranslate"><span class="pre">--pin</span></code> given only to <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> can change the tag. Also under <code class="docutils literal notranslate"><span class="pre">--smoke-test</span></code>, which records nothing.</p></td>
+<td><p>Judged again before any value is resolved, because <code class="docutils literal notranslate"><span class="pre">--pin</span></code> given only to <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> can change the tag. The images the build’s rendered charts run are judged too, from its <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>. Also under <code class="docutils literal notranslate"><span class="pre">--smoke-test</span></code>, which records nothing.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code></p></td>
-<td><p>The policy replaces the plain missing-tag warning, and <code class="docutils literal notranslate"><span class="pre">deny</span></code> exits 3, so an image copy step at the start of a pipeline fails first.</p></td>
+<td><p>The policy replaces the plain missing-tag warning, and <code class="docutils literal notranslate"><span class="pre">deny</span></code> exits 3, so an image copy step at the start of a pipeline fails first. It reads no build, so it judges the declared images only.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">check</span></code></p></td>
-<td><p>Evaluates it offline and records the result. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">list</span></code> shows it.</p></td>
+<td><p>Evaluates it offline and records the result. With a build at <code class="docutils literal notranslate"><span class="pre">--build-path</span></code>, it also judges that build’s rendered chart images and says which <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code> they came from. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">list</span></code> shows it.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code></p></td>
 <td><p>Not evaluated: the effective tag depends on the deployment and on <code class="docutils literal notranslate"><span class="pre">--pin</span></code>.</p></td>
@@ -485,12 +594,47 @@ acc and prd can be strict while dev floats.</p></li>
 </tbody>
 </table>
 <p>The result is recorded in <code class="docutils literal notranslate"><span class="pre">policy_results.json</span></code> as <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> and ends up in the audit manifest. The
-<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> entry replaces the one <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> wrote.</p>
+<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> entry replaces the one <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> wrote. Because <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> judges at the end, a pipeline that
+wants the answer before it clones and renders runs <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> or <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">check</span></code> first.</p>
 <p>The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
-module, strata does not write a service’s <code class="docutils literal notranslate"><span class="pre">image</span></code> into the chart’s values, so the chart decides what runs: the
-policy judges the declared image, and an image that only the chart knows is not judged. Set a Helm image through
-the module’s <code class="docutils literal notranslate"><span class="pre">configuration</span></code>, in the chart’s own key shape. See
+module, strata does not write a service’s <code class="docutils literal notranslate"><span class="pre">image</span></code> into the chart’s values, so the chart decides what runs. Set a
+Helm image through the module’s <code class="docutils literal notranslate"><span class="pre">configuration</span></code>, in the chart’s own key shape. See
 <span class="xref myst">helm-image-delivery.md</span>.</p>
+<ul class="simple">
+<li><p><strong>With <a class="reference internal" href="../how-to/sbom-generation.html#helm-images"><span class="std std-ref"><code class="docutils literal notranslate"><span class="pre">sbom.render_charts</span></code></span></a></strong>, on by default, the policy also judges every image the
+rendered charts run, sidecars and init containers included, read from the build’s <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>. That is origin
+<code class="docutils literal notranslate"><span class="pre">chart</span></code>; a workspace that lists <code class="docutils literal notranslate"><span class="pre">origins</span></code> must add <code class="docutils literal notranslate"><span class="pre">chart</span></code> to get them.</p>
+<ul>
+<li><p>Each is named <code class="docutils literal notranslate"><span class="pre">REFERENCE/CONTAINER</span></code>, the module reference in the namespace and the container, for example
+<code class="docutils literal notranslate"><span class="pre">whoami/shipper</span></code>. That is the name an <code class="docutils literal notranslate"><span class="pre">allow</span></code> entry uses.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">require_pin</span></code> does not apply: strata cannot pin an image inside a chart. The chart’s version pin fixes it.</p></li>
+<li><p>The fix the finding gives is to set the tag in the chart’s values through the module’s <code class="docutils literal notranslate"><span class="pre">configuration</span></code>, or
+to pin a chart version that ships the tag you want.</p></li>
+<li><p>A declared image the chart also runs is judged once, as delivered. A Helm module whose chart rendered at
+least one image is no longer reported by <code class="docutils literal notranslate"><span class="pre">on_unknown_image</span></code>.</p></li>
+<li><p>One info line, <code class="docutils literal notranslate"><span class="pre">image_tag_policy_rendered_images</span></code>, says how many images came from which <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>, and when
+it was written. At deploy and in <code class="docutils literal notranslate"><span class="pre">policy</span> <span class="pre">check</span></code> that tells you which build was judged.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> reads no build, so it still judges the declared images only.</p></li>
+</ul>
+</li>
+<li><p><strong>A declared Helm image</strong> is still judged, by the same rules. With <code class="docutils literal notranslate"><span class="pre">render_charts:</span> <span class="pre">false</span></code>, or when the chart was not
+rendered, its finding says “declared only, the chart decides which image runs”. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> shows it
+as <code class="docutils literal notranslate"><span class="pre">DELIVERED</span> <span class="pre">no</span> <span class="pre">(helm</span> <span class="pre">module:</span> <span class="pre">the</span> <span class="pre">chart</span> <span class="pre">decides)</span></code>.</p></li>
+<li><p><strong>A Helm module that declares no service <code class="docutils literal notranslate"><span class="pre">image</span></code> or <code class="docutils literal notranslate"><span class="pre">artifact</span></code></strong> has images that only the chart knows.</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">on_unknown_image</span></code> decides what happens, apart from <code class="docutils literal notranslate"><span class="pre">enforcement</span></code>. The finding is <code class="docutils literal notranslate"><span class="pre">image_unknown_to_strata</span></code>.</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">warn</span></code> (the default) reports it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">block</span></code> stops the run.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">skip</span></code> keeps it as an info finding, shown only in verbose and JSON output.</p></li>
+</ul>
+</li>
+<li><p>The policy’s <code class="docutils literal notranslate"><span class="pre">rings</span></code> and <code class="docutils literal notranslate"><span class="pre">origins</span></code> apply: the module counts as a <code class="docutils literal notranslate"><span class="pre">module-service</span></code> image.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">allow</span></code> does not exempt a module. To have its images judged, declare them under the module’s <code class="docutils literal notranslate"><span class="pre">services</span></code>.</p></li>
+<li><p>Without a policy, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> still lists such a module under “Known only to Helm”.</p></li>
+</ul>
+</li>
+</ul>
 </section>
 <section id="provisioner-lock-policy">
 <h2>Provisioner lock policy<a class="headerlink" href="#provisioner-lock-policy" title="Link to this heading"></a></h2>

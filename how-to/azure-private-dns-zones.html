@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones) &mdash; strata 2.5.0 documentation</title>
+  <title>How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -66,8 +66,11 @@
 <li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -95,6 +98,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -132,7 +136,7 @@
            <div itemprop="articleBody">
              
   <section id="how-to-model-azure-private-dns-zones-vnet-links-externally-owned-zones">
-<h1>How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)<a class="headerlink" href="#how-to-model-azure-private-dns-zones-vnet-links-externally-owned-zones" title="Link to this heading"></a></h1>
+<span id="how-to-model-azure-private-dns-zones-vnet-links--externally-owned-zones"></span><h1>How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)<a class="headerlink" href="#how-to-model-azure-private-dns-zones-vnet-links-externally-owned-zones" title="Link to this heading"></a></h1>
 <p>You are driving an Azure private DNS Terraform component (e.g. AKS’s private cluster zone, an
 application zone linked to a VNet, or a hub-owned zone a spoke only writes a few records into)
 from strata, and <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>’s schema has no <code class="docutils literal notranslate"><span class="pre">vnet_id</span></code>/<code class="docutils literal notranslate"><span class="pre">private</span></code>/<code class="docutils literal notranslate"><span class="pre">external_id</span></code>-shaped fields.
@@ -173,7 +177,7 @@ way they would in a dedicated field — <code class="docutils literal notranslat
 into every nested <code class="docutils literal notranslate"><span class="pre">dict</span></code>/<code class="docutils literal notranslate"><span class="pre">list</span></code>, not just known top-level keys.</p>
 </section>
 <section id="why-not-a-dedicated-private-vnet-links-external-id-schema">
-<h2>Why not a dedicated <code class="docutils literal notranslate"><span class="pre">private</span></code>/<code class="docutils literal notranslate"><span class="pre">vnet_links</span></code>/<code class="docutils literal notranslate"><span class="pre">external_id</span></code> schema?<a class="headerlink" href="#why-not-a-dedicated-private-vnet-links-external-id-schema" title="Link to this heading"></a></h2>
+<span id="why-not-a-dedicated-privatevnet_linksexternal_id-schema"></span><h2>Why not a dedicated <code class="docutils literal notranslate"><span class="pre">private</span></code>/<code class="docutils literal notranslate"><span class="pre">vnet_links</span></code>/<code class="docutils literal notranslate"><span class="pre">external_id</span></code> schema?<a class="headerlink" href="#why-not-a-dedicated-private-vnet-links-external-id-schema" title="Link to this heading"></a></h2>
 <p>Checked against the real, named consumer’s Terraform component before deciding: its actual
 <code class="docutils literal notranslate"><span class="pre">variables.tf</span></code> takes a single <code class="docutils literal notranslate"><span class="pre">vnet_id</span></code> string and a <code class="docutils literal notranslate"><span class="pre">hub_zone</span> <span class="pre">=</span> <span class="pre">{</span> <span class="pre">resource_id</span> <span class="pre">}</span></code> object — not
 the generalized <code class="docutils literal notranslate"><span class="pre">vnet_links:</span> <span class="pre">list[str]</span></code>/<code class="docutils literal notranslate"><span class="pre">external_id:</span> <span class="pre">str</span></code> shape a first pass at this schema
@@ -188,7 +192,7 @@ consumer so far — the bar isn’t met yet. Revisit if a second, independently-
 private-DNS Terraform component needs the same shape.</p>
 </section>
 <section id="worked-example-1-zone-strata-owns-linked-to-a-vnet">
-<h2>Worked example 1 — zone strata owns, linked to a VNet<a class="headerlink" href="#worked-example-1-zone-strata-owns-linked-to-a-vnet" title="Link to this heading"></a></h2>
+<span id="worked-example-1--zone-strata-owns-linked-to-a-vnet"></span><h2>Worked example 1 — zone strata owns, linked to a VNet<a class="headerlink" href="#worked-example-1-zone-strata-owns-linked-to-a-vnet" title="Link to this heading"></a></h2>
 <p>A zone created and fully owned by this deployment (e.g. an application domain for an AKS
 cluster), linked to the spoke’s own VNet:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
@@ -220,7 +224,7 @@ resolves, and <code class="docutils literal notranslate"><span class="pre">confi
 module has none.</p>
 </section>
 <section id="worked-example-2-externally-owned-hub-zone-records-only">
-<h2>Worked example 2 — externally-owned hub zone, records only<a class="headerlink" href="#worked-example-2-externally-owned-hub-zone-records-only" title="Link to this heading"></a></h2>
+<span id="worked-example-2--externally-owned-hub-zone-records-only"></span><h2>Worked example 2 — externally-owned hub zone, records only<a class="headerlink" href="#worked-example-2-externally-owned-hub-zone-records-only" title="Link to this heading"></a></h2>
 <p>A zone owned by a separate, centrally-managed hub subscription. This deployment doesn’t create
 it — it only links its own VNet to it and writes a couple of its own records:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>

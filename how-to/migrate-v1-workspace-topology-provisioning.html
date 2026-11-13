@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling) &mdash; strata 2.5.0 documentation</title>
+  <title>How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -23,7 +23,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="How To: Use the SBOM (CycloneDX)" href="sbom-generation.html" />
+    <link rel="next" title="How To: Write one deployment base for many spokes with parameter sets" href="parameterised-deployment-bases.html" />
     <link rel="prev" title="How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value" href="generate-per-instance-terraform-blocks.html" /> 
 </head>
 
@@ -59,6 +59,8 @@
 <li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#the-short-answer">The short answer</a></li>
@@ -74,6 +76,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#checklist-for-your-own-workspace">Checklist for your own workspace</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -101,6 +104,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -138,7 +142,7 @@
            <div itemprop="articleBody">
              
   <section id="how-to-migrate-a-v1-workspace-yaml-topology-provisioning-decoupling">
-<h1>How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)<a class="headerlink" href="#how-to-migrate-a-v1-workspace-yaml-topology-provisioning-decoupling" title="Link to this heading"></a></h1>
+<span id="how-to-migrate-a-v1-workspaceyaml-topologyprovisioning-decoupling"></span><h1>How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)<a class="headerlink" href="#how-to-migrate-a-v1-workspace-yaml-topology-provisioning-decoupling" title="Link to this heading"></a></h1>
 <blockquote>
 <div><p><strong>Update (2026-10-01, ADR-0028):</strong> the step that used to be the hard part
 of this guide — splitting the topology entry into a standalone
@@ -156,14 +160,14 @@ itself lives.</p>
 <code class="docutils literal notranslate"><span class="pre">provider</span></code>/<code class="docutils literal notranslate"><span class="pre">provisioner</span></code> fields directly, and a <code class="docutils literal notranslate"><span class="pre">deployment.yaml</span></code> whose
 <code class="docutils literal notranslate"><span class="pre">stages[]</span></code> re-declare <code class="docutils literal notranslate"><span class="pre">topology</span></code>/<code class="docutils literal notranslate"><span class="pre">provisioner</span></code> bindings per stage. This is
 the one part of a v1 → v2 migration that isn’t a mechanical field rename
-(<span class="xref myst">docs/work/gap_fit_v1.md</span> gap #5) — the
+(<code class="docutils literal notranslate"><span class="pre">gap_fit_v1.md</span></code> (work doc) gap #5) — the
 <em>binding</em> between “what infrastructure” and “which tool builds it” moves to
 a new place entirely, even though the grouping itself stays exactly where
 v1 had it. This guide walks through converting one real example end to end.</p>
 <p>See also: <span class="xref myst">ADR-0011</span>
 (the full from-first-principles reasoning this migration follows),
 <span class="xref myst">ADR-0028</span> (why the
-grouping itself reverted to inline), <span class="xref myst">docs/work/gap_fit_v1.md</span> gap #5
+grouping itself reverted to inline), <code class="docutils literal notranslate"><span class="pre">gap_fit_v1.md</span></code> (work doc) gap #5
 (where this migration effort is tracked), and the real worked example this
 guide is built from:
 <a class="reference internal" href="#../../.v2-cfg/workspaces/spoke.yaml"><span class="xref myst"><code class="docutils literal notranslate"><span class="pre">.v2-cfg/workspaces/spoke.yaml</span></code></span></a>
@@ -208,7 +212,7 @@ every <code class="docutils literal notranslate"><span class="pre">docker</span>
 <section id="step-by-step-using-the-real-spoke-stack">
 <h2>Step by step, using the real spoke stack<a class="headerlink" href="#step-by-step-using-the-real-spoke-stack" title="Link to this heading"></a></h2>
 <section id="find-the-provider-provisioner-binding-on-the-topology-entry">
-<h3>1. Find the <code class="docutils literal notranslate"><span class="pre">provider</span></code>/<code class="docutils literal notranslate"><span class="pre">provisioner</span></code> binding on the topology entry<a class="headerlink" href="#find-the-provider-provisioner-binding-on-the-topology-entry" title="Link to this heading"></a></h3>
+<span id="1-find-the-providerprovisioner-binding-on-the-topology-entry"></span><h3>1. Find the <code class="docutils literal notranslate"><span class="pre">provider</span></code>/<code class="docutils literal notranslate"><span class="pre">provisioner</span></code> binding on the topology entry<a class="headerlink" href="#find-the-provider-provisioner-binding-on-the-topology-entry" title="Link to this heading"></a></h3>
 <p>Real v1 <code class="docutils literal notranslate"><span class="pre">stacks/spoke/workspace.yaml</span></code>:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">topology</span><span class="p">:</span>
@@ -225,7 +229,7 @@ survive the move — everything else on this entry (<code class="docutils litera
 does.</p>
 </section>
 <section id="drop-the-provider-provisioner-fields-the-entry-stays-inline">
-<h3>2. Drop the <code class="docutils literal notranslate"><span class="pre">provider</span></code>/<code class="docutils literal notranslate"><span class="pre">provisioner</span></code> fields — the entry stays inline<a class="headerlink" href="#drop-the-provider-provisioner-fields-the-entry-stays-inline" title="Link to this heading"></a></h3>
+<span id="2-drop-the-providerprovisioner-fields--the-entry-stays-inline"></span><h3>2. Drop the <code class="docutils literal notranslate"><span class="pre">provider</span></code>/<code class="docutils literal notranslate"><span class="pre">provisioner</span></code> fields — the entry stays inline<a class="headerlink" href="#drop-the-provider-provisioner-fields-the-entry-stays-inline" title="Link to this heading"></a></h3>
 <p>Everything <strong>except</strong> <code class="docutils literal notranslate"><span class="pre">provider</span></code>/<code class="docutils literal notranslate"><span class="pre">provisioner</span></code> stays exactly where it was,
 on the workspace’s own <code class="docutils literal notranslate"><span class="pre">spec.topology[]</span></code> entry — same field names, same
 values, same file:</p>
@@ -243,7 +247,7 @@ checked against this same workspace’s own <code class="docutils literal notran
 (ADR-0028), the same way v1 could.</p>
 </section>
 <section id="confirm-the-provisioner-already-exists-it-almost-always-does">
-<h3>3. Confirm the provisioner already exists (it almost always does)<a class="headerlink" href="#confirm-the-provisioner-already-exists-it-almost-always-does" title="Link to this heading"></a></h3>
+<span id="3-confirm-the-provisioner-already-exists-it-almost-always-does"></span><h3>3. Confirm the provisioner already exists (it almost always does)<a class="headerlink" href="#confirm-the-provisioner-already-exists-it-almost-always-does" title="Link to this heading"></a></h3>
 <p>v1’s <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> already declared <code class="docutils literal notranslate"><span class="pre">core_iac</span></code> independently under
 <code class="docutils literal notranslate"><span class="pre">spec.workspace.provisioners[]</span></code> (or <code class="docutils literal notranslate"><span class="pre">spec.provisioners[]</span></code>, depending on how
 deep your v1 solution nested it) — the topology entry’s <code class="docutils literal notranslate"><span class="pre">provisioner:</span> <span class="pre">core_iac</span></code> was always just a <em>second, redundant reference</em> to a provisioner
@@ -254,7 +258,7 @@ block for the field-name changes unrelated to this gap, e.g. v1’s
 <code class="docutils literal notranslate"><span class="pre">repository:</span></code> → v2’s <code class="docutils literal notranslate"><span class="pre">remote:</span></code>, v1’s <code class="docutils literal notranslate"><span class="pre">provisioner:</span> <span class="pre">terraform</span></code> → v2’s <code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">terraform</span></code>).</p>
 </section>
 <section id="write-the-execution-step-that-carries-the-old-binding-forward">
-<h3>4. Write the <code class="docutils literal notranslate"><span class="pre">execution[]</span></code> step that carries the old binding forward<a class="headerlink" href="#write-the-execution-step-that-carries-the-old-binding-forward" title="Link to this heading"></a></h3>
+<span id="4-write-the-execution-step-that-carries-the-old-binding-forward"></span><h3>4. Write the <code class="docutils literal notranslate"><span class="pre">execution[]</span></code> step that carries the old binding forward<a class="headerlink" href="#write-the-execution-step-that-carries-the-old-binding-forward" title="Link to this heading"></a></h3>
 <p>This is the one genuinely new piece of authoring. One <code class="docutils literal notranslate"><span class="pre">ProvisioningStepModel</span></code>
 entry per binding v1 had scattered across <code class="docutils literal notranslate"><span class="pre">topology[].provisioner</span></code> and every
 deployment stage that referenced it:</p>
@@ -288,7 +292,7 @@ direct relationship” decision, see below).</p></li>
 this binding (<code class="docutils literal notranslate"><span class="pre">infra</span></code>/<code class="docutils literal notranslate"><span class="pre">apps</span></code> is v1’s own free-form vocabulary,
 unchanged) — not a new concept, just relocated from the deployment’s
 stage onto the workspace’s own step (see gap #6 in
-<span class="xref myst">docs/work/gap_fit_v1.md</span>, already resolved: <code class="docutils literal notranslate"><span class="pre">scope</span></code> was always
+<code class="docutils literal notranslate"><span class="pre">gap_fit_v1.md</span></code> (work doc), already resolved: <code class="docutils literal notranslate"><span class="pre">scope</span></code> was always
 meant to live here, not on <code class="docutils literal notranslate"><span class="pre">DeploymentStageModel</span></code>).</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">depends_on</span></code></strong> — only needed if this step must run after another named
 step (v1 had no equivalent field here at all; if v1’s real ordering came
@@ -297,7 +301,7 @@ that steps are addressable by name instead of positional).</p></li>
 </ul>
 </section>
 <section id="delete-the-per-stage-topology-provisioner-fields-from-deployment-yaml">
-<h3>5. Delete the per-stage <code class="docutils literal notranslate"><span class="pre">topology</span></code>/<code class="docutils literal notranslate"><span class="pre">provisioner</span></code> fields from <code class="docutils literal notranslate"><span class="pre">deployment.yaml</span></code><a class="headerlink" href="#delete-the-per-stage-topology-provisioner-fields-from-deployment-yaml" title="Link to this heading"></a></h3>
+<span id="5-delete-the-per-stage-topologyprovisioner-fields-from-deploymentyaml"></span><h3>5. Delete the per-stage <code class="docutils literal notranslate"><span class="pre">topology</span></code>/<code class="docutils literal notranslate"><span class="pre">provisioner</span></code> fields from <code class="docutils literal notranslate"><span class="pre">deployment.yaml</span></code><a class="headerlink" href="#delete-the-per-stage-topology-provisioner-fields-from-deployment-yaml" title="Link to this heading"></a></h3>
 <p>Nothing replaces them — a v2 <code class="docutils literal notranslate"><span class="pre">Deployment</span></code> runs whatever <code class="docutils literal notranslate"><span class="pre">execution[]</span></code> recipe
 its <code class="docutils literal notranslate"><span class="pre">Workspace</span></code> already declares. If your v1 <code class="docutils literal notranslate"><span class="pre">deployment.yaml</span></code>’s stages
 carried nothing else useful (no per-stage timeout/lifecycle override), the
@@ -356,7 +360,7 @@ same-file, same-phase, the same way v1 could.</p></li>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="generate-per-instance-terraform-blocks.html" class="btn btn-neutral float-left" title="How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="sbom-generation.html" class="btn btn-neutral float-right" title="How To: Use the SBOM (CycloneDX)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="parameterised-deployment-bases.html" class="btn btn-neutral float-right" title="How To: Write one deployment base for many spokes with parameter sets" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

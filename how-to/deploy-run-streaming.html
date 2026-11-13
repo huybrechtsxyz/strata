@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Stream deploy run Output Live (--follow) &mdash; strata 2.5.0 documentation</title>
+  <title>How To: Stream deploy run Output Live (--follow) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -23,7 +23,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value" href="generate-per-instance-terraform-blocks.html" />
+    <link rel="next" title="How To: Hand Over a Deployment Without Sharing Secrets" href="deployment-handover.html" />
     <link rel="prev" title="How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)" href="composite-variable-fragments.html" /> 
 </head>
 
@@ -73,8 +73,11 @@
 <li class="toctree-l2"><a class="reference internal" href="#what-s-not-covered-yet">What’s not covered yet</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -102,6 +105,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -139,7 +143,7 @@
            <div itemprop="articleBody">
              
   <section id="how-to-stream-deploy-run-output-live-follow">
-<h1>How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)<a class="headerlink" href="#how-to-stream-deploy-run-output-live-follow" title="Link to this heading"></a></h1>
+<span id="how-to-stream-deploy-run-output-live---follow"></span><h1>How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)<a class="headerlink" href="#how-to-stream-deploy-run-output-live-follow" title="Link to this heading"></a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code> can show subprocess output (Terraform/Helm/Compose) live as
 it happens instead of only at the very end. This guide covers both streaming
 modes, how they interact with <code class="docutils literal notranslate"><span class="pre">--output</span></code>/<code class="docutils literal notranslate"><span class="pre">STRATA_OUTPUT</span></code>, and what’s piped
@@ -161,7 +165,7 @@ the format of the <em>stream</em> is always <code class="docutils literal notran
 </ul>
 </section>
 <section id="mode-1-follow-console-streaming">
-<h2>Mode 1 — <code class="docutils literal notranslate"><span class="pre">--follow</span></code> (console streaming)<a class="headerlink" href="#mode-1-follow-console-streaming" title="Link to this heading"></a></h2>
+<span id="mode-1----follow-console-streaming"></span><h2>Mode 1 — <code class="docutils literal notranslate"><span class="pre">--follow</span></code> (console streaming)<a class="headerlink" href="#mode-1-follow-console-streaming" title="Link to this heading"></a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>my-deployment<span class="w"> </span>--follow
 </pre></div>
 </div>
@@ -176,7 +180,7 @@ the format of the <em>stream</em> is always <code class="docutils literal notran
 disables this like everywhere else in the CLI). This is the default, console
 output shape — nothing new here if <code class="docutils literal notranslate"><span class="pre">--output</span></code> is left at its default.</p>
 <section id="under-output-json">
-<h3>Under <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code><a class="headerlink" href="#under-output-json" title="Link to this heading"></a></h3>
+<span id="under---output-json"></span><h3>Under <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code><a class="headerlink" href="#under-output-json" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>my-deployment<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span>--follow
 </pre></div>
 </div>
@@ -195,7 +199,7 @@ no warning) — if you’re on an older build and see no output here, upgrade.</
 </section>
 </section>
 <section id="mode-2-follow-ndjson-structured-streaming">
-<h2>Mode 2 — <code class="docutils literal notranslate"><span class="pre">--follow</span> <span class="pre">ndjson</span></code> (structured streaming)<a class="headerlink" href="#mode-2-follow-ndjson-structured-streaming" title="Link to this heading"></a></h2>
+<span id="mode-2----follow-ndjson-structured-streaming"></span><h2>Mode 2 — <code class="docutils literal notranslate"><span class="pre">--follow</span> <span class="pre">ndjson</span></code> (structured streaming)<a class="headerlink" href="#mode-2-follow-ndjson-structured-streaming" title="Link to this heading"></a></h2>
 <p>For a pipeline that wants to <em>parse</em> the live progress too — not just watch
 it — <code class="docutils literal notranslate"><span class="pre">--follow</span> <span class="pre">ndjson</span></code> streams one JSON object per line to stdout instead,
 ending with the normal result as the final line:</p>
@@ -271,7 +275,7 @@ stdout/stderr-origin lines separated, filter on the <code class="docutils litera
 </table>
 </section>
 <section id="what-s-not-covered-yet">
-<h2>What’s not covered yet<a class="headerlink" href="#what-s-not-covered-yet" title="Link to this heading"></a></h2>
+<span id="whats-not-covered-yet"></span><h2>What’s not covered yet<a class="headerlink" href="#what-s-not-covered-yet" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p><strong>Other commands.</strong> <code class="docutils literal notranslate"><span class="pre">--follow</span></code>/<code class="docutils literal notranslate"><span class="pre">--follow</span> <span class="pre">ndjson</span></code> only exist on <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>
 today. <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> has no subprocess/line-callback plumbing at all — there’s
@@ -292,7 +296,7 @@ whole-step boundaries (step started/finished) — there’s no separate
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="composite-variable-fragments.html" class="btn btn-neutral float-left" title="How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="generate-per-instance-terraform-blocks.html" class="btn btn-neutral float-right" title="How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="deployment-handover.html" class="btn btn-neutral float-right" title="How To: Hand Over a Deployment Without Sharing Secrets" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

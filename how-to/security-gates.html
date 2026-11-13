@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Gate deploys on security findings &mdash; strata 2.5.0 documentation</title>
+  <title>How To: Gate deploys on security findings &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -59,8 +59,11 @@
 <li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Gate deploys on security findings</a><ul>
@@ -96,6 +99,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -146,7 +150,7 @@ their own with <code class="docutils literal notranslate"><span class="pre">stra
 <code class="docutils literal notranslate"><span class="pre">release_gate</span></code> or <code class="docutils literal notranslate"><span class="pre">image_findings</span></code> capability backs each one. Aikido Security (<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">aikido</span></code>) is
 the first such integration; this guide uses it throughout.</p>
 <section id="create-the-credentials-in-aikido">
-<h2>1. Create the credentials in Aikido<a class="headerlink" href="#create-the-credentials-in-aikido" title="Link to this heading"></a></h2>
+<span id="1-create-the-credentials-in-aikido"></span><h2>1. Create the credentials in Aikido<a class="headerlink" href="#create-the-credentials-in-aikido" title="Link to this heading"></a></h2>
 <p>Aikido uses two unrelated credentials, one per API:</p>
 <table class="docutils align-default">
 <thead>
@@ -170,7 +174,7 @@ the first such integration; this guide uses it throughout.</p>
 them from YAML.</p>
 </section>
 <section id="declare-them-in-an-environment">
-<h2>2. Declare them in an Environment<a class="headerlink" href="#declare-them-in-an-environment" title="Link to this heading"></a></h2>
+<span id="2-declare-them-in-an-environment"></span><h2>2. Declare them in an Environment<a class="headerlink" href="#declare-them-in-an-environment" title="Link to this heading"></a></h2>
 <p>Any store works; the deployment must reach this environment.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
@@ -186,7 +190,7 @@ them from YAML.</p>
 </div>
 </section>
 <section id="add-one-integration-document-per-credential">
-<h2>3. Add one Integration document per credential<a class="headerlink" href="#add-one-integration-document-per-credential" title="Link to this heading"></a></h2>
+<span id="3-add-one-integration-document-per-credential"></span><h2>3. Add one Integration document per credential<a class="headerlink" href="#add-one-integration-document-per-credential" title="Link to this heading"></a></h2>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integration</span>
 <span class="nt">meta</span><span class="p">:</span>
@@ -230,7 +234,7 @@ and <code class="docutils literal notranslate"><span class="pre">AIKIDO_CLIENT_I
 <code class="docutils literal notranslate"><span class="pre">oauth2</span></code> on a <code class="docutils literal notranslate"><span class="pre">release_gate</span></code> one) fail validation.</p>
 </section>
 <section id="add-the-policies-to-the-workspace">
-<h2>4. Add the policies to the workspace<a class="headerlink" href="#add-the-policies-to-the-workspace" title="Link to this heading"></a></h2>
+<span id="4-add-the-policies-to-the-workspace"></span><h2>4. Add the policies to the workspace<a class="headerlink" href="#add-the-policies-to-the-workspace" title="Link to this heading"></a></h2>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">release_gate_policy</span><span class="p">:</span>
@@ -263,7 +267,7 @@ deploys. To judge a different commit on purpose, pass <code class="docutils lite
 </ul>
 </section>
 <section id="check-before-deploying">
-<h2>5. Check before deploying<a class="headerlink" href="#check-before-deploying" title="Link to this heading"></a></h2>
+<span id="5-check-before-deploying"></span><h2>5. Check before deploying<a class="headerlink" href="#check-before-deploying" title="Link to this heading"></a></h2>
 <div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">integration</span> <span class="n">check</span> <span class="n">aikido-ci</span> <span class="p">-</span><span class="n">-deployment</span> <span class="n">prd-app</span>      <span class="c"># 0 ok, 1 unreachable, 3 credential rejected</span>
 <span class="n">strata</span> <span class="n">integration</span> <span class="n">check</span> <span class="n">aikido-api</span> <span class="p">-</span><span class="n">-deployment</span> <span class="n">prd-app</span>
 <span class="n">strata</span> <span class="n">build</span> <span class="n">run</span> <span class="n">prd-app</span>                                     <span class="c"># writes sbom.json</span>

@@ -46,8 +46,11 @@ Five things worth knowing:
 - **`build run` and `deploy run` also judge image tags** when the workspace sets `image_tag_policy`: an image
   with no tag, a floating tag such as `latest`, or a tag that does not match the shape you require fails the
   step (`enforcement: deny`) or warns (`warn`). It is offline and needs no credentials. `build run` judges it
-  before it writes anything, and `deploy run` again before any value is resolved, so pass the same `--pin` to
-  both. See "Image tag policy" in [the workspace reference](../config/workspace.md).
+  at the end, after the SBOM, so it also judges the images the charts run (`sbom.render_charts`, on by default;
+  the build agent needs `helm` for that, else each chart is an `info` line and skipped). `deploy run`
+  judges it again before any value is resolved, so pass the same `--pin` to both. To fail fast, before the build
+  clones and renders, run `strata deploy images "$DEPLOYMENT"` first: it judges the declared images in seconds.
+  See "Image tag policy" in [the workspace reference](../config/workspace.md).
 
 `strata deploy run --force` is accepted for compatibility with v1 pipelines and currently does
 nothing. `--dry-run` runs init, validate and plan and stops before any change; the security gates
@@ -68,8 +71,26 @@ strata needs Python 3.12 or later (tested on 3.12, 3.13 and 3.14). While v2 is i
 runner reaches PyPI through a corporate mirror, add `UV_INDEX_STRATEGY: unsafe-best-match` to the
 step's `env`.
 
-A container image is published to `ghcr.io/huybrechtsxyz/strata`. It holds strata only, not Terraform
-or Helm, and pre-release tags never move `latest`.
+A container image is published to `ghcr.io/huybrechtsxyz/strata` in two variants; pre-release tags never move
+`latest`:
+
+- **`strata:<version>`** (also `-slim`, and `latest`): strata and the tools strata itself calls (`git`, and `ssh`
+  for `ssh_key` auth). Enough for `validate`, `schema`, `deploy steps` and a build without Helm modules.
+- **`strata:<version>-full`** (and `latest-full`): adds OpenTofu, Helm 4, the Docker CLI with Compose, Trivy and
+  Checkov.
+  Use it for a workspace with Helm modules: `build run` itself calls Helm (it pins registry charts and renders
+  charts for the SBOM).
+
+Neither has Terraform: its licence is not settled for a public image. The full image runs root modules with
+OpenTofu instead (`tool: opentofu`, see [workspace.md](../config/workspace.md#opentofu)). Mount the checkout and work in it:
+
+```bash
+docker run --rm -v "$PWD:/work" -w /work ghcr.io/huybrechtsxyz/strata:<version> validate config
+```
+
+For Terraform, or another version of a tool, build your own image on either variant;
+[cli-image.md](../design/cli-image.md) has the example, the Docker socket mount for Compose steps, and what each
+variant holds and why.
 
 If your pipeline installs packages through Aikido Safe Chain, a freshly released strata is held back
 for 48 hours; see [aikido-safe-chain.md](aikido-safe-chain.md).
@@ -173,8 +194,10 @@ Notes on the workflow:
 - A release gate judges the commit being deployed and reads it from the CI variables (`GITHUB_SHA`,
   `BUILD_SOURCEVERSION`, `CI_COMMIT_SHA`, and others). Check out the commit you mean to deploy.
 - To limit a workflow to part of a deployment, use `--scope LABEL` (matches the `scope:` of an
-  execution step, for example `infra` or `apps`) or `--stage NAME`. A workflow that needs no
-  kubeconfig can then never touch the Helm steps.
+  execution step, for example `infra` or `apps`) or `--stage NAME`. Both can be repeated
+  (`--scope infra --scope network`). A workflow that needs no kubeconfig can then never touch the
+  Helm steps. `strata deploy steps D` lists the steps and scopes; see
+  [Plan jobs from the step list](#plan-jobs-from-the-step-list).
 - `--follow` streams the tools' output live; see [deploy-run-streaming.md](deploy-run-streaming.md).
 - To copy the deployment's images to a registry before `deploy run` (for example from a build feed to the
   registry the apps pull from), list them with `strata deploy images "$DEPLOYMENT" -o json`. Each entry in
@@ -251,6 +274,42 @@ Things to know:
   the run but never recorded in the `output_store`.
 - `deploy setup` and `deploy check` run only init, or init and validate, if you want those as
   separate stages.
+
+### Plan jobs from the step list
+
+`strata deploy steps D -o json` lists the steps `deploy run D` would run, in its order, without
+running anything or needing a build or credentials. Each entry in `data.steps[]` has `name`,
+`scope`, `order`, `level` (steps on one level do not depend on each other), `depends_on`, the
+`integration` it needs, and `capabilities`: `saved_plan` is false for a step `deploy apply` cannot
+take (a `script` or GitOps step; run it with `deploy run`), `destroy` false for one `deploy destroy`
+cannot tear down. `data.scopes[]` gives each scope the scopes it waits for. `--stage` and `--scope`
+select exactly as on `deploy run`.
+
+One job per scope, in scope order:
+
+```sh
+strata deploy steps "$DEPLOYMENT" -o json | jq -c '[.data.scopes[] | {scope, depends_on}]'
+```
+
+Skip a job when the deployment has no step in its scope. An empty selection exits 0, so check the
+count:
+
+```sh
+n=$(strata deploy steps "$DEPLOYMENT" --scope infra -o json | jq '.data.steps | length')
+if [ "$n" -eq 0 ]; then echo "no infra steps"; exit 0; fi
+```
+
+Send each step to the command that can run it:
+
+```sh
+strata deploy steps "$DEPLOYMENT" -o json | jq -r '.data.steps[]
+  | "\(.name) \(if .capabilities.saved_plan then "plan+apply" else "run" end)"'
+```
+
+`--check-tools` also checks each listed step's tool on the machine it runs on (on `PATH`, required
+version) and exits 3 when one is not ready, so a deploy job can fail before it starts:
+`strata deploy steps "$DEPLOYMENT" --scope apps --check-tools -q`. `--destroy` lists the steps in
+teardown order.
 
 ## 6. Tear a deployment down
 

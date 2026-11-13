@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tenant (kind: tenant) &mdash; strata 2.5.0 documentation</title>
+  <title>Tenant (kind: tenant) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -59,8 +59,11 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
@@ -84,6 +87,7 @@
 <li class="toctree-l1"><a class="reference internal" href="namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bases-extends-and-partial">Bases: <code class="docutils literal notranslate"><span class="pre">extends</span></code> and <code class="docutils literal notranslate"><span class="pre">partial</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
@@ -93,6 +97,7 @@
 <li class="toctree-l1"><a class="reference internal" href="version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -148,6 +153,82 @@ deployment’s own environments (tenant-wide defaults; deployment values still w
 (deployment’s own properties win)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> — tenant-specific settings emitted verbatim to the provisioner, never merged</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.custom</span></code> — merged as a base layer into every deployment’s own <code class="docutils literal notranslate"><span class="pre">spec.custom</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> — a base tenant whose spec is merged into this one (see “Bases” below)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.partial</span></code> — <code class="docutils literal notranslate"><span class="pre">true</span></code> for a base meant only to be extended; it may leave out <code class="docutils literal notranslate"><span class="pre">display_name</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meta.params</span></code> — <a class="reference internal" href="parameterset.html"><span class="std std-doc">parameter sets</span></a> per role, read with <code class="docutils literal notranslate"><span class="pre">${param:&lt;role&gt;.&lt;key&gt;}</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meta.name_rule</span></code> — the name (tenant code) every tenant built on this one must have, with
+<code class="docutils literal notranslate"><span class="pre">${param:}</span></code> tokens filled in</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">display_name</span></code> is required, unless the tenant is <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> or gets it through <code class="docutils literal notranslate"><span class="pre">extends</span></code>.</p>
+</section>
+<section id="bases-extends-and-partial">
+<h2>Bases: <code class="docutils literal notranslate"><span class="pre">extends</span></code> and <code class="docutils literal notranslate"><span class="pre">partial</span></code><a class="headerlink" href="#bases-extends-and-partial" title="Link to this heading"></a></h2>
+<p>Tenants that share their defaults can share one base (a worked example:
+<a class="reference internal" href="../how-to/environment-and-tenant-bases.html"><span class="std std-doc">How To: tenant and environment bases</span></a>). The child is
+merged over the base when the solution loads, before deployments merge the tenant’s defaults in:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Merge with <code class="docutils literal notranslate"><span class="pre">extends</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">display_name</span></code>, <code class="docutils literal notranslate"><span class="pre">onboarded</span></code></p></td>
+<td><p>child wins</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">geographies</span></code></p></td>
+<td><p>replaced by the child’s list when it sets one</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">environments</span></code></p></td>
+<td><p>base’s list, then the child’s, as on a deployment; still unique after the merge</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>, <code class="docutils literal notranslate"><span class="pre">configuration</span></code></p></td>
+<td><p>deep merge per leaf key, child wins</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">extends</span></code>, <code class="docutils literal notranslate"><span class="pre">partial</span></code></p></td>
+<td><p>consumed, not part of the result</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">geographies</span></code> is replaced, never joined: it is a data-residency limit, and a child that writes
+<code class="docutils literal notranslate"><span class="pre">[us]</span></code> must not also allow its base’s <code class="docutils literal notranslate"><span class="pre">europe</span></code>.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span>
+<span class="nt">meta</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> name</span><span class="p">:</span><span class="w"> </span><span class="nv">customer_tenant_base</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">display_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:tenant.display_name}</span>
+<span class="w">  </span><span class="nt">geographies</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:tenant.geographies}</span><span class="w">   </span><span class="c1"># the whole value: inserts the list</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">deploy_profile</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> tenancy</span><span class="p">:</span><span class="w"> </span><span class="nv">isolated</span><span class="p p-Indicator">,</span><span class="nt"> audience</span><span class="p">:</span><span class="w"> </span><span class="nv">customer</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">dns_slug</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${param:tenant.dns_slug}</span>
+<span class="w">    </span><span class="nt">sso</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> enabled</span><span class="p">:</span><span class="w"> </span><span class="nv">false</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nn">---</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parameterset</span>
+<span class="nt">meta</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> name</span><span class="p">:</span><span class="w"> </span><span class="nv">tenant-initech</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">values</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> display_name</span><span class="p">:</span><span class="w"> </span><span class="nv">Initech</span><span class="p p-Indicator">,</span><span class="nt"> dns_slug</span><span class="p">:</span><span class="w"> </span><span class="nv">initech</span><span class="p p-Indicator">,</span><span class="nt"> geographies</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">us</span><span class="p p-Indicator">]</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nn">---</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">initech</span>
+<span class="w">  </span><span class="nt">params</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> tenant</span><span class="p">:</span><span class="w"> </span><span class="nv">tenant-initech</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer_tenant_base</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">sso</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> enabled</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Every reader (tenant defaults on deployments, geography checks, <code class="docutils literal notranslate"><span class="pre">${value:}</span></code>, attributeconfig)
+sees the merged tenant; findings about it name the child’s file.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> tenant is a base only. A deployment whose <code class="docutils literal notranslate"><span class="pre">tenant</span></code> names it is an error
+(<code class="docutils literal notranslate"><span class="pre">tenant_not_selectable</span></code>), and so is a <code class="docutils literal notranslate"><span class="pre">${value:tenant.&lt;base&gt;...}</span></code> token
+(<code class="docutils literal notranslate"><span class="pre">value_reference_to_base</span></code>). <code class="docutils literal notranslate"><span class="pre">meta.name</span></code> is the tenant code, so give a base a name that cannot
+be mistaken for one (<code class="docutils literal notranslate"><span class="pre">customer_tenant_base</span></code>).</p></li>
+<li><p>A spec that holds <code class="docutils literal notranslate"><span class="pre">${param:}</span></code> is validated once per tenant built on it, after the values are
+filled in. A cycle is <code class="docutils literal notranslate"><span class="pre">circular_extends</span></code>; a base that does not exist is an <code class="docutils literal notranslate"><span class="pre">unknown_reference</span></code>
+on <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code>.</p></li>
 </ul>
 </section>
 <section id="example">

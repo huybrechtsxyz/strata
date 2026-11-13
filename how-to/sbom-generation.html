@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Use the SBOM (CycloneDX) &mdash; strata 2.5.0 documentation</title>
+  <title>How To: Use the SBOM (CycloneDX) &mdash; strata 2.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3c4615cf"></script>
+      <script src="../_static/documentation_options.js?v=ae39cb24"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -24,7 +24,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="How To: Run a Script as a Pipeline Step (tool: script)" href="script-provisioner.html" />
-    <link rel="prev" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" href="migrate-v1-workspace-topology-provisioning.html" /> 
+    <link rel="prev" title="How To: Write one deployment base for many spokes with parameter sets" href="parameterised-deployment-bases.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -59,10 +59,16 @@
 <li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
 <li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Use the SBOM (CycloneDX)</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#what-is-in-it">What is in it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-is-in-it">What is in it</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#helm-images">Helm images</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#how-strata-uses-it">How strata uses it</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#using-it-in-other-tools">Using it in other tools</a></li>
@@ -96,6 +102,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
@@ -135,7 +142,8 @@
   <section id="how-to-use-the-sbom-cyclonedx">
 <h1>How To: Use the SBOM (CycloneDX)<a class="headerlink" href="#how-to-use-the-sbom-cyclonedx" title="Link to this heading"></a></h1>
 <p>Every <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> writes a CycloneDX 1.6 Software Bill of Materials, <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>, at the
-root of the build path (next to <code class="docutils literal notranslate"><span class="pre">resolved.yaml</span></code>). There is nothing to configure. This guide covers
+root of the build path (next to <code class="docutils literal notranslate"><span class="pre">resolved.yaml</span></code>). It needs no configuration; it also lists the images Helm
+charts deploy, unless the workspace sets <code class="docutils literal notranslate"><span class="pre">sbom.render_charts:</span> <span class="pre">false</span></code> (below). This guide covers
 what it contains, how strata and other tools use it, and how to add a collector. The design is in
 <span class="xref myst">docs/design/sbom-generation.md</span>.</p>
 <section id="what-is-in-it">
@@ -166,7 +174,10 @@ the same deployment can be diffed component by component:</p></li>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">helm</span></code></p></td>
 <td><p>Chart modules (<code class="docutils literal notranslate"><span class="pre">chart_name</span></code>/<code class="docutils literal notranslate"><span class="pre">chart_version</span></code>, the repository or the remote’s URL), every rendered <code class="docutils literal notranslate"><span class="pre">Chart.yaml</span></code> and its <code class="docutils literal notranslate"><span class="pre">dependencies[]</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">terraform</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">chart-image</span></code></p></td>
+<td><p>The images each chart deploys, from <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">template</span></code>; off with <code class="docutils literal notranslate"><span class="pre">sbom.render_charts:</span> <span class="pre">false</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">terraform</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">required_providers</span> <span class="pre">{}</span></code> and <code class="docutils literal notranslate"><span class="pre">module</span> <span class="pre">&quot;x&quot;</span> <span class="pre">{}</span></code> blocks in every rendered <code class="docutils literal notranslate"><span class="pre">*.tf</span></code>, and each root module’s <code class="docutils literal notranslate"><span class="pre">.terraform.lock.hcl</span></code></p></td>
 </tr>
 </tbody>
@@ -184,6 +195,43 @@ version that a <a class="reference internal" href="../config/version.html"><span
 <p>An image you reference by digest (<code class="docutils literal notranslate"><span class="pre">image:</span> <span class="pre">ghcr.io/acme/api:1.4.2&#64;sha256:...</span></code>) also lists that
 digest under <code class="docutils literal notranslate"><span class="pre">hashes</span></code> (<code class="docutils literal notranslate"><span class="pre">{&quot;alg&quot;:</span> <span class="pre">&quot;SHA-256&quot;,</span> <span class="pre">&quot;content&quot;:</span> <span class="pre">&quot;...&quot;}</span></code>). An image referenced by tag has
 none: strata does not ask the registry.</p>
+<section id="helm-images">
+<h3>Helm images<a class="headerlink" href="#helm-images" title="Link to this heading"></a></h3>
+<p>Strata writes no image into a Helm chart’s values, so the chart decides which images run.</p>
+<ul>
+<li><p><strong>Declared only.</strong> A Helm module’s declared service image is listed with <code class="docutils literal notranslate"><span class="pre">strata:image-delivered:</span> <span class="pre">false</span></code> and
+<code class="docutils literal notranslate"><span class="pre">strata:image-delivery:</span> <span class="pre">helm</span> <span class="pre">module:</span> <span class="pre">the</span> <span class="pre">chart</span> <span class="pre">decides</span></code>. It is still scanned. The image gate names it
+<code class="docutils literal notranslate"><span class="pre">...</span> <span class="pre">(declared</span> <span class="pre">only)</span></code>, and the audit manifest records it with <code class="docutils literal notranslate"><span class="pre">delivered:</span> <span class="pre">false</span></code>.</p></li>
+<li><p><strong>Rendered charts.</strong> To list what a chart really deploys, <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> renders each chart with <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">template</span></code>,
+offline, with strata’s values: a local chart from its build folder, a registry chart from the archive the build
+pinned in <code class="docutils literal notranslate"><span class="pre">.strata/helm/</span></code>. It needs <code class="docutils literal notranslate"><span class="pre">helm</span></code> on the build agent, which <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> already uses to pin registry
+charts.</p>
+<ul class="simple">
+<li><p>Every container image, sidecars and init containers included, is listed with
+<code class="docutils literal notranslate"><span class="pre">strata:found-in:</span> <span class="pre">rendered-chart</span></code>, <code class="docutils literal notranslate"><span class="pre">strata:used-by:</span> <span class="pre">chart:&lt;namespace&gt;/&lt;module</span> <span class="pre">reference&gt;/&lt;container&gt;</span></code> and
+<code class="docutils literal notranslate"><span class="pre">strata:image</span></code>, the image reference exactly as the chart writes it.</p></li>
+<li><p>A declared image the chart also renders loses its declared-only marker. One the rendered chart does not
+run keeps it, with the reason <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">module:</span> <span class="pre">not</span> <span class="pre">in</span> <span class="pre">the</span> <span class="pre">rendered</span> <span class="pre">chart</span></code>, and gets an <code class="docutils literal notranslate"><span class="pre">info</span></code> line
+(<code class="docutils literal notranslate"><span class="pre">sbom_declared_image_not_rendered</span></code>). Either the declaration is out of date, or the chart picks the image
+by a value strata does not set.</p></li>
+<li><p>A chart that cannot be rendered gets one <code class="docutils literal notranslate"><span class="pre">info</span></code> line (<code class="docutils literal notranslate"><span class="pre">sbom_chart_not_rendered</span></code>) and is skipped. That
+happens when <code class="docutils literal notranslate"><span class="pre">helm</span></code> is not installed, when a dependency is not vendored under <code class="docutils literal notranslate"><span class="pre">charts/</span></code>, or when a registry
+chart was not pinned (<code class="docutils literal notranslate"><span class="pre">--offline</span></code> with an empty cache) or its cached archive no longer has the pinned digest.</p></li>
+<li><p>An image whose reference holds a token resolved only at deploy is left out (<code class="docutils literal notranslate"><span class="pre">sbom_chart_image_unresolved</span></code>).</p></li>
+</ul>
+</li>
+<li><p><strong>The policies check them.</strong> <code class="docutils literal notranslate"><span class="pre">cve_policy</span></code>, <code class="docutils literal notranslate"><span class="pre">image_gate_policy</span></code> and <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> check the rendered images
+too, so a <code class="docutils literal notranslate"><span class="pre">deny</span></code> gate can fail on a sidecar nobody scanned before. Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> and
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policy</span> <span class="pre">check</span></code>, and fix or <code class="docutils literal notranslate"><span class="pre">allow</span></code> what they report.</p></li>
+<li><p><strong>Turning it off.</strong> To list only the images modules declare, set this on the workspace:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">sbom</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">render_charts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</section>
 </section>
 <section id="example">
 <h2>Example<a class="headerlink" href="#example" title="Link to this heading"></a></h2>
@@ -302,7 +350,7 @@ overlap with an existing one.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="migrate-v1-workspace-topology-provisioning.html" class="btn btn-neutral float-left" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="parameterised-deployment-bases.html" class="btn btn-neutral float-left" title="How To: Write one deployment base for many spokes with parameter sets" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="script-provisioner.html" class="btn btn-neutral float-right" title="How To: Run a Script as a Pipeline Step (tool: script)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
