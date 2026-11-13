@@ -7,6 +7,13 @@ with what runtime behavior*. `strata build run`/`strata deploy run` both take a 
 
 ## Schema
 
+- `meta.params` — the [parameter sets](parameterset.md) this deployment reads, per role:
+  `{spoke: spoke-acme-001}`, or a list per role merged in order. Any document of the `extends`
+  chain may name sets; per role they merge root first, leaf last. `${param:<role>.<key>}` in the
+  spec of any document of the chain reads them — see "Parameter sets" below
+- `meta.name_rule` — optional: the name every deployable deployment built on this one must have,
+  with `${param:}` tokens filled from its values (`spoke-${param:spoke.name}`); any other name is
+  `name_rule_mismatch`
 - `spec.workspace` — the [`workspace`](workspace.md) document this deployment instantiates
 - `spec.environments[]` — [`environment`](environment.md) documents, merged left-to-right (later wins)
 - `spec.tenant` — optional [`tenant`](tenant.md) reference; its defaults merge in first
@@ -154,6 +161,41 @@ The usual use is a Terraform state key, `key: ${deployment:name}.tfstate`, in th
 "Terraform backend" in [workspace](workspace.md)). `strata validate` checks them for every deployment that
 reaches the document: `${deployment:tenant}` on a deployment without a tenant is an error, as is any other key. A
 `partial: true` base is judged only once a deployment extends it.
+
+## Parameter sets
+
+When many deployments differ only in their values (one per spoke, one per customer project), write the
+deployment once as a base that reads `${param:<role>.<key>}`, and give each instance a
+[parameter set](parameterset.md) and a short leaf:
+
+```yaml
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: spoke_deployment_base
+  name_rule: spoke-${param:spoke.name}
+spec:
+  partial: true
+  workspace: spoke
+  tenant: ${param:spoke.tenant}
+  environments:
+    - solution-env
+    - hub-${param:hub.name}-env
+---
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: spoke-acme-001
+  params: { hub: hub-hub01, spoke: spoke-acme-001 }
+spec:
+  extends: spoke_deployment_base
+```
+
+The values are filled in when the solution loads, before anything runs, so they work in reference fields
+(`tenant`, `environments`, `providers[].provider`) as well as free text. Each deployment is then checked as if it
+had been written out in full; a problem is reported on the field you wrote, with the values that made it. Not in
+`meta`, `spec.extends` or `spec.partial`. The rules are in [parameter sets](parameterset.md), a full example in
+[How To: Write one deployment base for many spokes](../how-to/parameterised-deployment-bases.md).
 
 ## Choosing the target
 

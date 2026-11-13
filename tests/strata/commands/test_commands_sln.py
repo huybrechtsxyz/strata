@@ -25,6 +25,7 @@ def _update(runner, path):
     return runner.invoke(cli, ["sln", "update", "--path", str(path)])
 
 
+@pytest.mark.slow
 def test_init_exits_zero_and_creates_the_manifest(runner, tmp_path):
     result = _init(runner, tmp_path)
     assert result.exit_code == EXIT_SUCCESS, result.output
@@ -64,6 +65,7 @@ def test_agent_skill_documents_every_visible_command(parent, name):
         assert any(parent in line and re.search(rf"[ /]{name}\b", line.split(parent, 1)[1]) for line in table)
 
 
+@pytest.mark.slow
 def test_init_is_safe_to_re_run(runner, tmp_path):
     _init(runner, tmp_path, name="acme-platform")
     result = _init(runner, tmp_path, name="a-different-name")
@@ -79,6 +81,7 @@ def test_update_before_init_exits_with_usage_error(runner, tmp_path):
     assert result.exit_code == EXIT_USAGE, result.output
 
 
+@pytest.mark.slow
 def test_update_after_init_exits_zero_and_preserves_a_github_customization(runner, tmp_path):
     _init(runner, tmp_path)
     pr_template = tmp_path / ".github" / "pull_request_template.md"

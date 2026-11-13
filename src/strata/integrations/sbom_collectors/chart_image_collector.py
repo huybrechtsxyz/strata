@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect the container images Helm charts deploy, by rendering them (docs/work/helm-image-delivery.md, the SBOM
+"""Collect the container images Helm charts deploy, by rendering them (docs/design/helm-image-delivery.md, the SBOM
 side, part 2, and plan item 9b for registry charts).
 
 Strata writes no image into a chart's values, so a Helm module's declared service images are only a statement
@@ -43,7 +43,6 @@ _SOURCE = "sbom:chart-image"
 _FLOATING_PROPERTY = "strata:tag-stability"
 #: The pod spec lists whose entries carry an `image`, wherever a manifest embeds a pod spec.
 _CONTAINER_LISTS = ("containers", "initContainers", "ephemeralContainers")
-_SKIP_DIRS = frozenset({"node_modules", ".venv", "venv", "dist", "build", ".git", "__pycache__", "charts"})
 
 
 def rendered_images(text: str) -> list[tuple[str, str]]:
@@ -87,13 +86,13 @@ def helm() -> HelmIntegration:
 
 class ChartImageCollector(SbomCollector):
     """Renders each chart the build placed and lists the images it deploys. On unless the workspace sets
-    `sbom.render_charts: false` (the default since docs/work/helm-image-delivery.md, plan item 10b).
+    `sbom.render_charts: false` (docs/design/helm-image-delivery.md, "The SBOM: rendering charts").
 
     - A local chart is a module folder with `Chart.yaml` and a `meta.yaml` without `chartName`, the folder
       `deploy run` installs from.
     - A registry chart is a module folder whose `meta.yaml` has `chartName`. Its archive is rendered from the
       `.strata/helm/` cache at `helm_cache`, only when its digest is the `chartDigest` the build pinned, the archive
-      `deploy run` installs (docs/work/helm-image-delivery.md, plan item 9b). Without `helm_cache`, registry charts
+      `deploy run` installs (docs/design/helm-image-delivery.md, "The SBOM: rendering charts"). Without `helm_cache`, registry charts
       are not rendered.
     """
 
@@ -207,13 +206,14 @@ def _component(name: str, image: str, use: str, diagnostics: list[Diagnostic]) -
 
 
 def _chart_folders(build_path: Path) -> Iterator[tuple[Path, dict[str, Any]]]:
-    """`(folder, meta)` for each Helm module folder below `build_path` (a `meta.yaml` with a release name and a
-    namespace), sorted, skipping vendored folders (and a chart's own `charts/`) below the root only: the build path
-    itself is routinely named `build`."""
-    for meta_path in sorted(build_path.rglob("meta.yaml")):
+    """`(folder, meta)` for each Helm module folder of the build (a `meta.yaml` with a release name and a
+    namespace), sorted.
+
+    Only `build_path/NAMESPACE/REFERENCE/`, where `build_workload_modules()` places a module: the provisioner sources
+    and a chart's own `charts/` are never walked, and a namespace or reference may have any name.
+    """
+    for meta_path in sorted(build_path.glob("*/*/meta.yaml")):
         folder = meta_path.parent
-        if not _SKIP_DIRS.isdisjoint(folder.relative_to(build_path).parts):
-            continue
         try:
             meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
         except (OSError, yaml.YAMLError):

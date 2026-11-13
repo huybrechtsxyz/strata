@@ -12,13 +12,12 @@ Progress is reported through `on_step` and results through `Diagnostics`, like t
 deploy path; this module does not log.
 """
 
-import json
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from packageurl import PackageURL
 
@@ -46,11 +45,9 @@ from strata.models.security_gate_model import ImageGatePolicyModel, ReleaseGateP
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.errors import SystemError, UsageError, ValidationError
+from strata.utils.sbom_file import SBOM_FILENAME, component_properties, read_sbom
 from strata.utils.sbom_utils import IMAGE_DELIVERED_PROPERTY, split_registry
 from strata.utils.transport import run_command
-
-#: Same file `sbom_controller.write_sbom()` writes during `build run`.
-_SBOM_FILENAME = "sbom.json"
 
 #: Commit sources after the policy pin, first match wins (design D6): strata's own, then each CI's.
 _COMMIT_ENV_VARS = (
@@ -422,20 +419,13 @@ def images_from_sbom(build_path: Path) -> list[ImageRef] | None:
     Raises:
         ValueError: `sbom.json` exists but cannot be read as an SBOM.
     """
-    path = build_path / _SBOM_FILENAME
-    if not path.is_file():
+    sbom = read_sbom(build_path)
+    if sbom is None:
         return None
-    try:
-        sbom = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"'{path}' is not valid JSON ({exc})") from None
-    components = sbom.get("components") if isinstance(sbom, Mapping) else None
-    if not isinstance(components, list):
-        raise ValueError(f"'{path}' has no components list")
 
     images: list[ImageRef] = []
     seen: set[tuple[str, str | None, str | None]] = set()
-    for component in components:
+    for component in sbom["components"]:
         if not isinstance(component, Mapping) or component.get("type") != "container":
             continue
         purl = component.get("purl")
@@ -461,19 +451,10 @@ def images_from_sbom(build_path: Path) -> list[ImageRef] | None:
                 repository=repository,
                 tag=tag,
                 digest=digest,
-                delivered=_property(component, IMAGE_DELIVERED_PROPERTY) != "false",
+                delivered=component_properties(component).get(IMAGE_DELIVERED_PROPERTY) != "false",
             )
         )
     return images
-
-
-def _property(component: Mapping[str, Any], name: str) -> str | None:
-    """A CycloneDX component property's value, or `None` when it has none."""
-    for item in component.get("properties") or []:
-        if isinstance(item, Mapping) and item.get("name") == name:
-            value = item.get("value")
-            return value if isinstance(value, str) else None
-    return None
 
 
 def _image_gate(
@@ -510,12 +491,12 @@ def _image_gate(
             diagnostics,
             "image_gate",
             policy.on_missing_data,
-            f"no {_SBOM_FILENAME} in '{build_path}' (run 'strata build run' first)",
+            f"no {SBOM_FILENAME} in '{build_path}' (run 'strata build run' first)",
         )
         return diagnostics
     if not images:
         diagnostics.info(
-            f"{field_name}: no container images in {_SBOM_FILENAME}; nothing to check.", code="image_gate_no_images"
+            f"{field_name}: no container images in {SBOM_FILENAME}; nothing to check.", code="image_gate_no_images"
         )
         return diagnostics
 
@@ -631,7 +612,7 @@ def list_image_findings(
     except ValueError as exc:
         raise UsageError(str(exc)) from None
     if images is None:
-        raise UsageError(f"No {_SBOM_FILENAME} in '{build_path}'; run 'strata build run {deployment_name}' first.")
+        raise UsageError(f"No {SBOM_FILENAME} in '{build_path}'; run 'strata build run {deployment_name}' first.")
 
     severities = SECURITY_SEVERITY_ORDER[: SECURITY_SEVERITY_ORDER.index(max_severity) + 1]
     allowed = _active_allowlist(index)

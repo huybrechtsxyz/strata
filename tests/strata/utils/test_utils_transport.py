@@ -70,6 +70,7 @@ def test_empty_argv_is_handled():
     assert result.returncode == EXECUTABLE_NOT_FOUND
 
 
+@pytest.mark.slow
 def test_timeout_sets_the_flag_and_keeps_partial_output():
     """Output written before the kill is usually what explains the hang."""
     result = run_command(
@@ -177,6 +178,7 @@ def test_streaming_command_reports_non_zero_exit():
     assert result.returncode == 5
 
 
+@pytest.mark.slow
 def test_streaming_timeout_sets_the_flag_and_keeps_partial_output():
     lines: list[tuple[str, str]] = []
     result = run_command(
@@ -202,6 +204,7 @@ def test_streaming_accepts_input_on_stdin():
     assert ("stdout", "piped-value") in lines
 
 
+@pytest.mark.slow
 def test_line_callback_is_never_invoked_concurrently():
     """Code review finding 3 (2026-10-06): stdout and stderr are drained on
     two separate threads, both calling `line_callback` — regression test

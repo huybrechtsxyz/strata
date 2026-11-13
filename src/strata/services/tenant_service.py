@@ -1,10 +1,35 @@
 #!/usr/bin/env python3
 """Service for loading and validating tenant configuration."""
 
+from typing import Any
+
 from strata.models.provider_config_model import ProviderConfigModel
-from strata.models.tenant_model import TenantModel
+from strata.models.tenant_model import TenantModel, TenantTemplateModel
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.dict_merge import deep_merge
+
+
+def merge_tenant_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
+    """Merge a base tenant's spec into a child's, on dumped dicts (docs/design/parameter-sets.md).
+
+    - `display_name`, `onboarded`: the child's when it sets one.
+    - `geographies`: **replaced** by the child's list when it sets one, never joined: it is a data-residency limit,
+      and a child that writes `[us]` must not also allow its base's `europe`.
+    - `environments`: the base's list, then the child's entries not already in it, as on a deployment.
+    - `properties`, `custom`, `configuration`: deep-merged per leaf key, child wins.
+    - `partial`, `extends`: consumed and stripped from the result.
+
+    Neither input is mutated.
+    """
+    merged: dict[str, Any] = deep_merge(base, child)
+    base_envs = base.get("environments") or []
+    child_envs = child.get("environments") or []
+    if base_envs or child_envs:
+        merged["environments"] = [*base_envs, *[name for name in child_envs if name not in base_envs]]
+    merged.pop("partial", None)
+    merged.pop("extends", None)
+    return merged
 
 
 class TenantService(BaseService[TenantModel]):
@@ -73,3 +98,15 @@ class TenantService(BaseService[TenantModel]):
                     code="unknown_geography",
                 )
         return diagnostics
+
+
+class TenantTemplateService(BaseService[TenantTemplateModel]):
+    """Loads a tenant whose spec holds `${param:}`: meta validated, spec kept as written.
+
+    The loader picks it over `TenantService` for such a document (`solution_controller.py`); resolution validates
+    the spec per tenant that resolves through it, once the values are substituted.
+    """
+
+    def _get_model_class(self) -> type[TenantTemplateModel]:
+        """Return the TenantTemplateModel class for validation."""
+        return TenantTemplateModel

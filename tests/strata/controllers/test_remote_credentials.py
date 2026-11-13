@@ -311,7 +311,7 @@ def test_redact_leaves_a_value_too_short_to_be_a_secret(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Chart registries (docs/work/helm-registry-chart-checks.md, Phase 2)
+# Chart registries (docs/design/helm-chart-deployment.md, "Registry charts")
 # ---------------------------------------------------------------------------
 
 

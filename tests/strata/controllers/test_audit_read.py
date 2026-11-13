@@ -574,6 +574,7 @@ def _git_available() -> bool:
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_real_audit_status_round_trip(tmp_path: Path):
     """Push two manifests for the same deployment (an older and a newer run)
     plus one for a different deployment, via the real `push_audit_files()`,

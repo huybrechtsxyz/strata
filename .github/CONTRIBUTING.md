@@ -175,9 +175,21 @@ uv sync --group dev
 # Run all tests
 uv run pytest tests/ --no-cov -q
 
+# Fast loop: skip the tests marked `slow` (real git, helm, terraform and scripts; scale checks)
+uv run pytest tests/ --no-cov -q -m "not slow"
+
+# Run all tests on every core (pytest-xdist; what CI does)
+uv run pytest tests/ --no-cov -q -n auto --dist loadfile
+
 # Run with coverage
 uv run pytest tests/ --cov=strata --cov-report=term-missing
 ```
+
+The default run and CI include the `slow` tests. Mark a new test `@pytest.mark.slow` when it takes 0.1s or more; a
+`-m "not slow"` run lists unmarked tests over 1s under "tests that could be marked slow".
+
+Tests run `git` with `tests/gitconfig` as their only configuration (`tests/conftest.py`): your own hooks, credential
+helpers and signing settings do not apply, the same as on a CI runner.
 
 ### Nox (all checks in one command)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The container images a deployment will run, after `kind: version` pins
-(docs/work/effective-images.md).
+(docs/design/effective-images.md).
 
 Three places used to answer "which images does this deployment use", each
 incompletely: the SBOM (no pins, no artifacts), the audit manifest's bill of
@@ -16,11 +16,11 @@ artifact nothing references is not deployed, so it is not listed.
 
 A `store: artifact` variable counts when a `${var:KEY}` token in a reached
 document reads it, or an execution step receives it without a token
-(`_received_variable_keys()`, docs/work/artifact-gap-analysis.md, design 7).
+(`_received_variable_keys()`, docs/archive/artifact-gap-analysis.md, design 7).
 Where strata cannot tell, it counts: over-reporting an image is the safe side.
 
 Each row says whether strata delivers the image, that is writes it into what
-runs (docs/work/helm-image-delivery.md, option B): only the Compose integration
+runs (docs/design/helm-image-delivery.md, "Delivered: one rule, in the resolver"): only the Compose integration
 writes a service `image`, a `store: artifact` variable reaches a step, and an
 `${artifact:}` token is resolved into a document the deployment uses. A Helm
 module's service image is a declaration; the chart decides what runs.
@@ -30,12 +30,12 @@ Never resolves a store: a `store: artifact` value is an in-solution document
 lookup, so this needs no network and reveals no secret.
 """
 
-import json
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
+from strata.controllers.artifact_tokens import helm_delivered_artifacts
 from strata.controllers.deployment_resolution import deployment_workspace
 from strata.controllers.reachable_documents import documents_reached_by_deployment
 from strata.controllers.solution_context import SolutionContext
@@ -58,6 +58,7 @@ from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
+from strata.utils.sbom_file import component_properties
 from strata.utils.sbom_utils import (
     FOUND_IN_PROPERTY,
     FOUND_IN_RENDERED_CHART,
@@ -70,9 +71,6 @@ from strata.utils.sbom_utils import (
 )
 from strata.utils.templater import template_variable_keys
 from strata.utils.value_tokens import referenced_artifact_keys, referenced_variable_keys, split_artifact_token_key
-
-#: What `build run` writes (`sbom_controller.write_sbom()`); read back by `rendered_chart_images()`.
-_SBOM_FILENAME = "sbom.json"
 
 
 def effective_images(
@@ -91,11 +89,17 @@ def effective_images(
     workspace = deployment_workspace(index, deployment)
     deployment_entry = index.get(PlatformKind.DEPLOYMENT, deployment.meta.name)
     source = deployment_entry.source if deployment_entry is not None else Path()
-    reached: list[tuple[str, dict[str, Any]]] = []
+    # `(use, dumped document, what it delivers)`: `None` delivers every artifact it has a token for; a Helm module
+    # delivers only those its chart's own keys name (`helm_delivered_artifacts()`, design 11).
+    reached: list[tuple[str, dict[str, Any], set[str] | None]] = []
     for document in documents_reached_by_deployment(index, deployment, source, enabled_only=True):
         dumped = document.model.model_dump(by_alias=True, mode="json")
         dumped.pop("meta", None)
-        reached.append((f"token:{document.kind.value}/{document.name}", dumped))
+        model = document.model
+        delivers = (
+            helm_delivered_artifacts(model) if isinstance(model, ModuleModel) and model.spec.type == "helm" else None
+        )
+        reached.append((f"token:{document.kind.value}/{document.name}", dumped, delivers))
 
     artifact_uses: dict[str, list[str]] = {}
     # An artifact is delivered when any use delivers it; otherwise the first non-delivering service use says why.
@@ -103,7 +107,7 @@ def effective_images(
     artifact_undelivered: dict[str, str] = {}
     variables, _, _ = merge_environment_models(reachable_environments(context, deployment))
     artifact_keys = {key for key, store in variables.items() if store.store == VariableStoreType.ARTIFACT}
-    used_keys = {key for _, dumped in reached for key in referenced_variable_keys(dumped)}
+    used_keys = {key for _, dumped, _ in reached for key in referenced_variable_keys(dumped)}
     delivered = (used_keys & artifact_keys) | _received_variable_keys(context, workspace, artifact_keys)
     for key, store in variables.items():
         if key in delivered:
@@ -143,19 +147,24 @@ def effective_images(
                     )
                 )
 
-    # `${artifact:NAME.FIELD}` anywhere `deploy run` resolves tokens (docs/work/artifact-gap-analysis.md, design 3):
+    # `${artifact:NAME.FIELD}` anywhere `deploy run` resolves tokens (docs/archive/artifact-gap-analysis.md, design 3):
     # without this, an image delivered only through the token would escape the policy, the SBOM and the gates.
-    for use, dumped in reached:
+    # In a Helm module only a token in the chart's own keys delivers; one elsewhere (a service's `environment`) is a
+    # use, not delivery, as `artifact_not_delivered` judges it (design 11).
+    for use, dumped, delivers in reached:
         for artifact_name in sorted({split_artifact_token_key(key)[0] for key in referenced_artifact_keys(dumped)}):
             uses = artifact_uses.setdefault(artifact_name, [])
             if use not in uses:
                 uses.append(use)
-            artifact_delivered.add(artifact_name)
+            if delivers is None or artifact_name in delivers:
+                artifact_delivered.add(artifact_name)
+            else:
+                artifact_undelivered.setdefault(artifact_name, _HELM_NOT_DELIVERED)
 
     artifact_rows: list[EffectiveImage] = []
     for artifact_name, via in artifact_uses.items():
         artifact = resolve_artifact(context, artifact_name)
-        artifact_tag = resolve_artifact_tag(context, deployment, artifact_name)
+        artifact_tag = resolve_artifact_tag(context, deployment, artifact_name, log=False)
         if artifact is None or artifact_tag is None:
             continue
         tag, digest = split_image_tag(artifact_tag.value)
@@ -184,7 +193,7 @@ def effective_images(
 
 def unknown_image_modules(context: SolutionContext, deployment: DeploymentModel) -> list[UnknownImageModule]:
     """The enabled Helm modules of `deployment` whose services declare no `image` and no `artifact`, so every
-    image their chart deploys is known only to Helm (docs/work/helm-image-delivery.md, option B).
+    image their chart deploys is known only to Helm (docs/design/helm-image-delivery.md, "Modules whose images strata does not know").
 
     Helm only: a GitOps, script or custom module may run no container at all. A Helm module that declares some
     images but whose chart runs more is not listed: telling that needs the chart rendered (option D).
@@ -224,7 +233,7 @@ def _enabled_modules(
             if not reference.enabled:
                 continue
             declared = resolve_module(index, reference)
-            yield str(namespace_name), declared, apply_version_pins(declared, version)
+            yield str(namespace_name), declared, apply_version_pins(declared, version, log=False)
 
 
 def _not_delivered(module: ModuleModel) -> str | None:
@@ -240,15 +249,19 @@ def _not_delivered(module: ModuleModel) -> str | None:
 def _artifact_not_delivered(module: ModuleModel) -> str:
     """Why an artifact that `module`'s services name, and nothing else delivers, does not reach what runs."""
     if module.spec.type == "helm":
-        return "helm module: no ${artifact:} token"
+        return _HELM_NOT_DELIVERED
     return f"{module.spec.type or 'untyped'} module: strata writes no image"
 
 
+#: Why a Helm module does not deliver an artifact: no token for it in the chart's own keys (design 11).
+_HELM_NOT_DELIVERED = "helm module: no ${artifact:} token in the chart's values"
+
+
 def _received_variable_keys(context: SolutionContext, workspace: WorkspaceModel | None, keys: set[str]) -> set[str]:
-    """Which of `keys` an execution step receives without a `${var:KEY}` token (docs/work/artifact-gap-analysis.md,
+    """Which of `keys` an execution step receives without a `${var:KEY}` token (docs/archive/artifact-gap-analysis.md,
     design 7), with `step_secret_keys()`'s rules for secrets:
 
-    - a tool that takes the strata payload (`ENV_VAR_PREFIX`: Terraform, and OpenTofu once ported): every variable,
+    - a tool that takes the strata payload (`ENV_VAR_PREFIX`: Terraform and OpenTofu): every variable,
       through `strata.variables` and `TF_VAR_<key>`. The root module is not read, so a variable it does not declare
       still counts;
     - a script without `script.values`: every variable (`STRATA_VALUES`); with it, the keys it lists;
@@ -287,33 +300,21 @@ def _received_variable_keys(context: SolutionContext, workspace: WorkspaceModel 
     return received & keys
 
 
-def rendered_chart_images(context: SolutionContext, build_path: Path) -> list[EffectiveImage] | None:
-    """The images a build's rendered charts run, read from its `sbom.json`, or `None` when there is no SBOM
-    (docs/work/helm-image-delivery.md, plan item 9d).
+def rendered_chart_images(context: SolutionContext, sbom: dict[str, Any]) -> list[EffectiveImage]:
+    """The images a build's rendered charts run, from its SBOM as `read_sbom()` gives it
+    (docs/design/helm-image-delivery.md, "Rendered chart images as a build fact").
 
     One row per `chart:NAMESPACE/REFERENCE/CONTAINER` use of a component the `chart-image` collector wrote, so an
     image two containers run is two rows. `origin` is `chart`, `name` is `REFERENCE/CONTAINER` (what `allow`
     names), `module` is the module the namespace's reference points at, and the reference is `strata:image`, the
     image as the chart writes it. `tag_source` is `chart`: strata did not choose the tag. A component without
     `strata:image` is skipped.
-
-    Raises:
-        ValueError: `sbom.json` exists but cannot be read as an SBOM.
     """
-    path = build_path / _SBOM_FILENAME
-    if not path.is_file():
-        return None
-    try:
-        sbom = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"'{path}' is not valid JSON ({exc})") from None
-    components = sbom.get("components") if isinstance(sbom, dict) else None
-    if not isinstance(components, list):
-        raise ValueError(f"'{path}' has no components list")
-
     rows: list[EffectiveImage] = []
-    for component in components:
-        properties = _properties(component)
+    for component in sbom["components"]:
+        if not isinstance(component, dict) or component.get("type") != "container":
+            continue
+        properties = component_properties(component)
         reference = properties.get(IMAGE_REF_PROPERTY)
         if properties.get(FOUND_IN_PROPERTY) != FOUND_IN_RENDERED_CHART or not reference:
             continue
@@ -338,15 +339,11 @@ def rendered_chart_images(context: SolutionContext, build_path: Path) -> list[Ef
     return rows
 
 
-def sbom_written_at(build_path: Path) -> str | None:
-    """`metadata.timestamp` of the build's `sbom.json`: when the rendered images `rendered_chart_images()` reads
-    were written (plan item 9f). `None` when the file is missing, unreadable or has no timestamp.
+def sbom_written_at(sbom: dict[str, Any]) -> str | None:
+    """`metadata.timestamp` of the build's SBOM: when the rendered images `rendered_chart_images()` reads were
+    written (plan item 9f). `None` when it has no timestamp.
     """
-    try:
-        sbom = json.loads((build_path / _SBOM_FILENAME).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    metadata = sbom.get("metadata") if isinstance(sbom, dict) else None
+    metadata = sbom.get("metadata")
     timestamp = metadata.get("timestamp") if isinstance(metadata, dict) else None
     return timestamp if isinstance(timestamp, str) else None
 
@@ -371,17 +368,6 @@ def with_rendered_images(
     rendered_modules = {(_chart_use(row.via[0])[0], row.module) for row in rendered if row.via}
     remaining = [module for module in unknown if (module.namespace, module.module) not in rendered_modules]
     return merged, remaining
-
-
-def _properties(component: Any) -> dict[str, str]:
-    """A CycloneDX component's `properties` as a mapping; empty for anything that is not a component."""
-    if not isinstance(component, dict) or component.get("type") != "container":
-        return {}
-    found: dict[str, str] = {}
-    for item in component.get("properties") or []:
-        if isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("value"), str):
-            found.setdefault(item["name"], item["value"])
-    return found
 
 
 def _chart_use(use: str) -> tuple[str, str, str | None]:

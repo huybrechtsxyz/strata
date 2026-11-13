@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the `chart-image` SBOM collector and `rendered_images()` (docs/work/helm-image-delivery.md, the SBOM
+"""Tests for the `chart-image` SBOM collector and `rendered_images()` (docs/design/helm-image-delivery.md, the SBOM
 side, part 2)."""
 
 import shutil
@@ -156,7 +156,7 @@ def _graph_with_sbom(sbom: WorkspaceSbomModel | None) -> ResolvedWorkspaceGraph:
 
 @pytest.mark.parametrize("sbom", [None, WorkspaceSbomModel()], ids=["no-sbom-section", "sbom-section-without-it"])
 def test_it_renders_by_default(tmp_path, fake_helm, sbom):
-    """`render_charts` defaults to `true` (docs/work/helm-image-delivery.md, plan item 10b)."""
+    """`render_charts` defaults to `true` (docs/design/helm-image-delivery.md, "The SBOM: rendering charts")."""
     _chart(tmp_path, "apps/whoami")
     ChartImageCollector().collect(_graph_with_sbom(sbom), [], tmp_path)
     assert len(fake_helm.calls) == 1
@@ -312,6 +312,7 @@ def test_a_floating_rendered_image_is_flagged(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
+@pytest.mark.slow
 def test_a_real_local_chart_is_rendered_by_helm(tmp_path):
     folder = _chart(tmp_path, "apps/whoami")
     (folder / "values.yaml").write_text("tag: v1.10\n", encoding="utf-8")
@@ -329,6 +330,7 @@ def test_a_real_local_chart_is_rendered_by_helm(tmp_path):
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
+@pytest.mark.slow
 def test_a_real_local_chart_is_rendered_from_a_relative_build_path(tmp_path, monkeypatch):
     """`strata build run --build-path build`: Helm runs in the chart's folder, so the paths it gets are absolute."""
     folder = _chart(tmp_path / "build", "apps/whoami")
@@ -346,6 +348,7 @@ def test_a_real_local_chart_is_rendered_from_a_relative_build_path(tmp_path, mon
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
+@pytest.mark.slow
 def test_a_real_packaged_registry_chart_is_rendered_by_helm_with_strata_values(tmp_path):
     source = tmp_path / "src" / "immich"
     (source / "templates").mkdir(parents=True)

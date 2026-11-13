@@ -221,7 +221,7 @@ class InfraIntegration(Integration):
 
     #: The deployment field naming the context this tool deploys to (`kube_context`, `docker_context`), or `None`
     #: when the tool is never pinned. Lets `deploy run` and `strata validate` pin a step without naming a tool
-    #: (docs/work/compose-docker-context.md).
+    #: (docs/design/deploy-command.md).
     TARGET_CONTEXT_FIELD: ClassVar[str | None] = None
 
     def target_context_env(self, context: str) -> dict[str, str]:

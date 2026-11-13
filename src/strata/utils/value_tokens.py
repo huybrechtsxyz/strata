@@ -34,7 +34,7 @@ builds them.
 
 A 7th kind, ``${artifact:NAME.FIELD}`` (``FIELD`` is ``image_name``,
 ``image_tag`` or ``image_ref``), is a built-in for an artifact's image as the
-deployment being run pins it (docs/work/artifact-gap-analysis.md, design 1).
+deployment being run pins it (docs/archive/artifact-gap-analysis.md, design 1).
 It is stored the same way, under ``artifact:NAME.FIELD``; this module only
 knows the key shape (`artifact_key()`), the controllers build the entries
 (`controllers/artifact_tokens.py`), since a pin needs the document index.
@@ -54,6 +54,12 @@ VALUE_TOKEN_KINDS = ("var", "secret", "feature", "output", "value", "deployment"
 VALUE_TOKEN_PATTERN = re.compile(
     r"\$\{(?P<kind>var|secret|feature|output|value|deployment|artifact):(?P<key>[A-Za-z0-9_.-]+)\}"
 )
+
+#: ``${param:ROLE.PATH}`` (docs/design/parameter-sets.md): a *load-time* token, substituted from the
+#: parameter sets a deployment's chain names when the chain is resolved (`utils/param_tokens.py`). Deliberately
+#: not one of `VALUE_TOKEN_KINDS`: those resolve at run time, and no `${param:}` may ever reach run time.
+#: Syntax checks accept it only where a caller says it may appear (`find_malformed_value_tokens(param_tokens=)`).
+PARAM_TOKEN_PATTERN = re.compile(r"\$\{param:(?P<key>[A-Za-z0-9_.-]+)\}")
 
 _VALUE_TOKEN_CANDIDATE_PATTERN = re.compile(r"\$\{[^}]*\}")
 
@@ -103,40 +109,31 @@ def split_artifact_token_key(key: str) -> tuple[str, str | None]:
     return name, (field if dot and field else None)
 
 
+def _referenced_keys(node: object, token_kind: str) -> set[str]:
+    """Every ``${token_kind:KEY}`` token's ``KEY`` found anywhere in `node`: a recursive dict/list/str walk, the one
+    the `referenced_*_keys()` functions share."""
+    if isinstance(node, str):
+        return {key for kind, key in extract_value_tokens(node) if kind == token_kind}
+    keys: set[str] = set()
+    if isinstance(node, dict):
+        for value in node.values():
+            keys |= _referenced_keys(value, token_kind)
+    elif isinstance(node, list):
+        for item in node:
+            keys |= _referenced_keys(item, token_kind)
+    return keys
+
+
 def referenced_variable_keys(node: object) -> set[str]:
     """Every ``${var:KEY}`` token's ``KEY`` found anywhere in `node`, with the same walk as
     `referenced_output_keys()`."""
-    if isinstance(node, str):
-        return {key for kind, key in extract_value_tokens(node) if kind == "var"}
-    if isinstance(node, dict):
-        keys: set[str] = set()
-        for value in node.values():
-            keys |= referenced_variable_keys(value)
-        return keys
-    if isinstance(node, list):
-        keys = set()
-        for item in node:
-            keys |= referenced_variable_keys(item)
-        return keys
-    return set()
+    return _referenced_keys(node, "var")
 
 
 def referenced_artifact_keys(node: object) -> set[str]:
     """Every ``${artifact:NAME.FIELD}`` token's ``"NAME.FIELD"`` found anywhere in `node`, with the same walk as
     `referenced_output_keys()`."""
-    if isinstance(node, str):
-        return {key for kind, key in extract_value_tokens(node) if kind == _ARTIFACT_PREFIX}
-    if isinstance(node, dict):
-        keys: set[str] = set()
-        for value in node.values():
-            keys |= referenced_artifact_keys(value)
-        return keys
-    if isinstance(node, list):
-        keys = set()
-        for item in node:
-            keys |= referenced_artifact_keys(item)
-        return keys
-    return set()
+    return _referenced_keys(node, _ARTIFACT_PREFIX)
 
 
 def _deployment_key(key: str) -> str:
@@ -226,8 +223,11 @@ def strip_escaped_value_tokens(value: str) -> str:
     return _ESCAPED_VALUE_TOKEN_PATTERN.sub("", value)
 
 
-def find_malformed_value_tokens(value: str) -> list[str]:
+def find_malformed_value_tokens(value: str, *, param_tokens: bool = False) -> list[str]:
     """Return every malformed ``${...}``-shaped candidate in `value`, escapes ignored.
+
+    `param_tokens` accepts a well-formed load-time ``${param:ROLE.PATH}`` too: only in a document whose chain
+    resolution substitutes it (a deployment), never elsewhere, where it would reach run time unresolved.
 
     The non-raising counterpart to `validate_value_tokens()` (which wraps
     this and raises on the first hit) — for callers that collect
@@ -237,7 +237,20 @@ def find_malformed_value_tokens(value: str) -> list[str]:
     `custom` passthrough dicts included).
     """
     stripped = strip_escaped_value_tokens(value)
-    return [c for c in _VALUE_TOKEN_CANDIDATE_PATTERN.findall(stripped) if not VALUE_TOKEN_PATTERN.fullmatch(c)]
+    return [
+        c
+        for c in _VALUE_TOKEN_CANDIDATE_PATTERN.findall(stripped)
+        if not VALUE_TOKEN_PATTERN.fullmatch(c) and not (param_tokens and PARAM_TOKEN_PATTERN.fullmatch(c))
+    ]
+
+
+def find_non_param_tokens(value: str) -> list[str]:
+    """Every ``${...}``-shaped candidate in `value` that is not a well-formed ``${param:ROLE.PATH}``, escapes ignored.
+
+    For a string read only at load time (a deployment's `meta.name_rule`), where a run-time token has no value.
+    """
+    stripped = strip_escaped_value_tokens(value)
+    return [c for c in _VALUE_TOKEN_CANDIDATE_PATTERN.findall(stripped) if not PARAM_TOKEN_PATTERN.fullmatch(c)]
 
 
 def validate_value_tokens(value: str) -> None:
@@ -313,38 +326,14 @@ def referenced_output_keys(node: object) -> set[str]:
     Phase 1 schema validation, so anything reaching this point is either
     well-formed or belongs to a document that never validated.
     """
-    if isinstance(node, str):
-        return {key for kind, key in extract_value_tokens(node) if kind == "output"}
-    if isinstance(node, dict):
-        keys: set[str] = set()
-        for value in node.values():
-            keys |= referenced_output_keys(value)
-        return keys
-    if isinstance(node, list):
-        keys = set()
-        for item in node:
-            keys |= referenced_output_keys(item)
-        return keys
-    return set()
+    return _referenced_keys(node, "output")
 
 
 def referenced_secret_keys(node: object) -> set[str]:
     """Return every ``${secret:KEY}`` token's ``KEY`` found anywhere in `node`, with the same walk as
     `referenced_output_keys()`. Used to record which secrets a step's real input uses
     (docs/design/deployment-documentation.md, section 1)."""
-    if isinstance(node, str):
-        return {key for kind, key in extract_value_tokens(node) if kind == "secret"}
-    if isinstance(node, dict):
-        keys: set[str] = set()
-        for value in node.values():
-            keys |= referenced_secret_keys(value)
-        return keys
-    if isinstance(node, list):
-        keys = set()
-        for item in node:
-            keys |= referenced_secret_keys(item)
-        return keys
-    return set()
+    return _referenced_keys(node, "secret")
 
 
 def validate_cidr_or_token(value: str) -> None:

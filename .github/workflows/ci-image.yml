@@ -39,12 +39,17 @@ jobs:
   # Job: Build and push a CLI image to GHCR for the dispatched branch
   # ---------------------------------------------------------------------------
   publish-ghcr-cli:
-    name: Publish CLI image to GHCR
+    name: Publish CLI image to GHCR (${{ matrix.variant }})
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    # Two variants of Dockerfile.cli (docs/design/cli-image.md): slim gets the bare tag and `-slim`, full gets `-full`.
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [slim, full]
 
     steps:
       - name: Checkout
@@ -82,21 +87,24 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/strata
           tags: |
-            type=raw,value=${{ steps.vars.outputs.tag }}
-            type=sha,prefix=sha-,format=short
+            type=raw,value=${{ steps.vars.outputs.tag }},enable=${{ matrix.variant == 'slim' }}
+            type=raw,value=${{ steps.vars.outputs.tag }},suffix=-${{ matrix.variant }}
+            type=sha,prefix=sha-,format=short,enable=${{ matrix.variant == 'slim' }}
+            type=sha,prefix=sha-,suffix=-${{ matrix.variant }},format=short
 
       - name: Build and push CLI image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.cli
+          target: ${{ matrix.variant }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.vars.outputs.tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=cli-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=cli-${{ matrix.variant }}
 
   # ---------------------------------------------------------------------------
   # Job: Delete stray (non-release) CLI images from GHCR once a branch is gone
@@ -115,5 +123,6 @@ jobs:
           package-type: container
           token: ${{ secrets.GITHUB_TOKEN }}
           delete-only-untagged-versions: false
-          ignore-versions: "^(latest|edge|\\d+\\.\\d+(\\.\\d+)?)$"
+          # release and edge tags, bare or with a variant suffix (docs/design/cli-image.md)
+          ignore-versions: "^(latest|edge|\\d+\\.\\d+(\\.\\d+)?)(-(slim|full))?$"
           min-versions-to-keep: 0

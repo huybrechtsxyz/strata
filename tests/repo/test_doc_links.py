@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Links between docs (docs/work/doc-citations.md).
+"""Links between docs (docs/work/README.md).
 
 Two rules over every relative Markdown link in a Markdown file of the repository (`docs/`, the root `README.md`,
 `.github/`, ...):
@@ -56,7 +56,8 @@ def _docs() -> list[Path]:
         text=True,
         check=True,
     ).stdout.split()
-    return [REPO_ROOT / name for name in listed if name.endswith(".md")]
+    # `--cached` still lists a file deleted or moved in the working tree until the change is staged.
+    return [REPO_ROOT / name for name in listed if name.endswith(".md") and (REPO_ROOT / name).is_file()]
 
 
 def _exists_as_written(path: Path) -> bool:
@@ -92,6 +93,7 @@ def _problems() -> tuple[list[str], list[str]]:
     return broken, into_work
 
 
+@pytest.mark.slow
 def test_every_link_between_docs_resolves():
     broken, _ = _problems()
     assert broken == [], "Links to a doc that does not exist; point each at the doc's current place:\n" + "\n".join(
@@ -99,6 +101,7 @@ def test_every_link_between_docs_resolves():
     )
 
 
+@pytest.mark.slow
 def test_only_a_work_doc_links_to_a_work_doc():
     _, into_work = _problems()
     assert into_work == [], "A finished doc links to a work doc, which will move; name it without a link:\n" + (

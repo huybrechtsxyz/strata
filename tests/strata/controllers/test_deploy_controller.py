@@ -16,7 +16,7 @@ import pytest
 import yaml
 
 from strata.controllers.build_controller import build_run
-from strata.controllers.deploy_controller import deploy_run, tf_var_env
+from strata.controllers.deploy_controller import check_build_version, deploy_run, tf_var_env
 from strata.controllers.solution_context import open_solution
 from strata.integrations.base import ReadinessProblem
 from strata.integrations.helm import HelmIntegration, _repo_alias
@@ -271,7 +271,7 @@ def test_deploy_run_accepts_a_relative_build_path(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     build_run(_context(root), "app", Path("build"))
 
-    diagnostics = deploy_run(_context(root), "app", Path("build"), force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", Path("build"), force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     lint, upgrade = (argv for argv, _ in calls if argv[0] == "helm")
@@ -290,7 +290,7 @@ def test_deploy_run_check_with_no_modules_of_the_type_does_not_claim_a_check_hap
     steps: list[str] = []
 
     diagnostics = deploy_run(
-        _context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check", on_step=steps.append
+        _context(root), "app", build_path, force=True, stages=("deploy_apps",), stop_after="check", on_step=steps.append
     )
 
     assert diagnostics.ok, diagnostics.messages()
@@ -299,6 +299,7 @@ def test_deploy_run_check_with_no_modules_of_the_type_does_not_claim_a_check_hap
     assert [argv for argv, _ in calls if argv[0] == "helm"] == []
 
 
+@pytest.mark.slow
 def test_deploy_run_a_failing_helm_lint_stops_the_step_before_it_deploys(tmp_path: Path, monkeypatch):
     calls = _fake_helm(
         monkeypatch, lint_returncode=1, lint_stdout="==> Linting x\n[INFO] icon\n[ERROR] templates/: boom\n"
@@ -307,7 +308,7 @@ def test_deploy_run_a_failing_helm_lint_stops_the_step_before_it_deploys(tmp_pat
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert not diagnostics.ok
     [error] = diagnostics.items
@@ -323,7 +324,7 @@ def test_deploy_run_use_saved_plan_does_not_lint_a_container_step(tmp_path: Path
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [argv[1] for argv, _ in calls if argv[0] == "helm"] == ["upgrade"]
@@ -336,7 +337,7 @@ def test_deploy_run_check_phase_uses_the_check_timeout(tmp_path: Path, monkeypat
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), stop_after="check")
 
     assert diagnostics.ok, diagnostics.messages()
     assert [(argv[1], timeout) for argv, timeout in calls if argv[0] == "helm"] == [("lint", 7)]
@@ -350,7 +351,7 @@ def test_deploy_run_helm_upgrade_uses_the_apply_timeout_and_gives_helm_half(tmp_
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     [(upgrade, timeout)] = [(argv, timeout) for argv, timeout in calls if argv[:2] == ["helm", "upgrade"]]
@@ -366,7 +367,7 @@ def test_deploy_run_helm_dry_run_uses_the_plan_timeout(tmp_path: Path, monkeypat
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", dry_run=True)
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), dry_run=True)
 
     assert diagnostics.ok, diagnostics.messages()
     [(upgrade, timeout)] = [(argv, timeout) for argv, timeout in calls if argv[:2] == ["helm", "upgrade"]]
@@ -374,6 +375,7 @@ def test_deploy_run_helm_dry_run_uses_the_plan_timeout(tmp_path: Path, monkeypat
     assert "--dry-run=client" in upgrade and "--timeout" not in upgrade
 
 
+@pytest.mark.slow
 def test_deploy_run_integration_without_a_check_phase_is_skipped_not_failed(tmp_path: Path, monkeypatch):
     from strata.integrations.errors import CheckPhaseUnsupportedError
     from strata.integrations.helm import HelmIntegration
@@ -389,9 +391,9 @@ def test_deploy_run_integration_without_a_check_phase_is_skipped_not_failed(tmp_
     steps: list[str] = []
 
     check = deploy_run(
-        _context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check", on_step=steps.append
+        _context(root), "app", build_path, force=True, stages=("deploy_apps",), stop_after="check", on_step=steps.append
     )
-    run = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    run = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert check.ok and run.ok
     assert any("has no check phase" in step for step in steps)
@@ -412,7 +414,9 @@ def test_deploy_run_a_real_integration_error_during_a_check_is_a_failure_not_a_s
     build_run(_context(root), "app", build_path)
     steps: list[str] = []
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", on_step=steps.append)
+    diagnostics = deploy_run(
+        _context(root), "app", build_path, force=True, stages=("deploy_apps",), on_step=steps.append
+    )
 
     [error] = diagnostics.items
     assert error.code == "check_failed" and "helm is misconfigured" in error.message
@@ -515,7 +519,7 @@ def _build_apps(root: Path, tmp_path: Path):
 
 def _deploy_apps(root: Path, tmp_path: Path, **kwargs):
     build_path, _ = _build_apps(root, tmp_path)
-    return deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", **kwargs)
+    return deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), **kwargs)
 
 
 def _helm_cache(root: Path) -> Path:
@@ -526,6 +530,7 @@ _PROGET_URL = "https://proget.example.com/helm/charts"
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_build_pins_a_private_registry_chart_with_the_integrations_credentials(tmp_path: Path, monkeypatch):
     calls = _fake_helm_calls(monkeypatch)
 
@@ -553,13 +558,14 @@ def test_build_pins_a_private_registry_chart_with_the_integrations_credentials(t
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_installs_the_pinned_archive_without_contacting_the_registry(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     _fake_helm_calls(monkeypatch)
     build_path, _ = _build_apps(root, tmp_path)
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [call["args"][1] for call in calls] == ["lint", "upgrade"]
@@ -571,6 +577,7 @@ def test_deploy_run_installs_the_pinned_archive_without_contacting_the_registry(
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_pulls_a_pinned_chart_missing_from_the_cache_with_the_registry_credentials(
     tmp_path: Path, monkeypatch
 ):
@@ -580,7 +587,7 @@ def test_deploy_run_pulls_a_pinned_chart_missing_from_the_cache_with_the_registr
     shutil.rmtree(_helm_cache(root))  # a deploy job that does not share the build's cache
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [call["args"][1] for call in calls] == ["repo", "pull", "lint", "upgrade"]
@@ -589,13 +596,14 @@ def test_deploy_run_pulls_a_pinned_chart_missing_from_the_cache_with_the_registr
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_dry_run_previews_the_pinned_archive(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     _fake_helm_calls(monkeypatch)
     build_path, _ = _build_apps(root, tmp_path)
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", dry_run=True)
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), dry_run=True)
 
     assert diagnostics.ok, diagnostics.messages()
     [preview] = [call for call in calls if call["args"][1] == "upgrade"]
@@ -603,6 +611,7 @@ def test_deploy_run_dry_run_previews_the_pinned_archive(tmp_path: Path, monkeypa
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_never_streams_the_registry_password(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     _fake_helm_calls(monkeypatch)
@@ -616,7 +625,7 @@ def test_deploy_run_never_streams_the_registry_password(tmp_path: Path, monkeypa
         "app",
         build_path,
         force=True,
-        stage="deploy_apps",
+        stages=("deploy_apps",),
         on_line=lambda tool, stream, text: lines.append(text),
     )
 
@@ -661,6 +670,7 @@ def test_build_unusable_registry_credentials_fail_before_any_helm_call(
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_unusable_registry_credentials_fail_before_any_helm_call(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     _fake_helm_calls(monkeypatch)
@@ -673,7 +683,7 @@ def test_deploy_run_unusable_registry_credentials_fail_before_any_helm_call(tmp_
     )
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_registry_credentials_invalid"
@@ -682,13 +692,14 @@ def test_deploy_run_unusable_registry_credentials_fail_before_any_helm_call(tmp_
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_check_phase_lints_the_pinned_registry_chart(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     _fake_helm_calls(monkeypatch)
     build_path, _ = _build_apps(root, tmp_path)
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps", stop_after="check")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",), stop_after="check")
 
     assert diagnostics.ok, diagnostics.messages()
     [lint] = calls
@@ -697,6 +708,7 @@ def test_deploy_run_check_phase_lints_the_pinned_registry_chart(tmp_path: Path, 
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_only_resolves_credentials_for_remotes_a_module_pulls_from(tmp_path: Path, monkeypatch):
     calls = _fake_helm_calls(monkeypatch)
     root = _proget_solution(tmp_path)
@@ -722,19 +734,20 @@ def test_deploy_run_only_resolves_credentials_for_remotes_a_module_pulls_from(tm
     build_path, _ = _build_apps(root, tmp_path)
     shutil.rmtree(_helm_cache(root))
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert calls[0]["input"] == _PROGET_SECRET
 
 
+@pytest.mark.slow
 def test_deploy_run_refuses_a_registry_chart_the_build_did_not_pin(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     build_path, build_diagnostics = _build_apps(root, tmp_path)
     assert [item.code for item in build_diagnostics.items] == ["helm_chart_not_pinned"]
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_chart_not_pinned"
@@ -746,6 +759,7 @@ def test_deploy_run_refuses_a_registry_chart_the_build_did_not_pin(tmp_path: Pat
     assert calls == []
 
 
+@pytest.mark.slow
 def test_deploy_run_refuses_a_local_chart_whose_dependency_the_build_did_not_pin(tmp_path: Path, monkeypatch):
     root = _helm_solution(tmp_path)
     _write(
@@ -758,7 +772,7 @@ def test_deploy_run_refuses_a_local_chart_whose_dependency_the_build_did_not_pin
     assert [item.code for item in build_diagnostics.items] == ["helm_chart_dependency_not_pinned"]
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_chart_not_pinned"
@@ -771,6 +785,7 @@ def test_deploy_run_refuses_a_local_chart_whose_dependency_the_build_did_not_pin
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_stops_when_the_registry_serves_a_different_archive(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     _fake_helm_calls(monkeypatch)
@@ -778,7 +793,7 @@ def test_deploy_run_stops_when_the_registry_serves_a_different_archive(tmp_path:
     shutil.rmtree(_helm_cache(root))
     calls = _fake_helm_calls(monkeypatch, chart_values="replicaCount: 2\n")
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_chart_digest_changed"
@@ -788,6 +803,7 @@ def test_deploy_run_stops_when_the_registry_serves_a_different_archive(tmp_path:
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_stops_when_the_cached_archive_differs_from_the_pin(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     _fake_helm_calls(monkeypatch)
@@ -797,7 +813,7 @@ def test_deploy_run_stops_when_the_cached_archive_differs_from_the_pin(tmp_path:
     _packaged_chart(entry, "gatus", "1.0.0", "tampered: true\n")
     calls = _fake_helm_calls(monkeypatch)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="deploy_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
 
     [error] = diagnostics.errors
     assert error.code == "helm_chart_digest_changed"
@@ -805,6 +821,7 @@ def test_deploy_run_stops_when_the_cached_archive_differs_from_the_pin(tmp_path:
 
 
 @pytest.mark.chart_pulls
+@pytest.mark.slow
 def test_deploy_run_smoke_test_only_says_it_would_verify_the_chart(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     _fake_helm_calls(monkeypatch)
@@ -813,7 +830,7 @@ def test_deploy_run_smoke_test_only_says_it_would_verify_the_chart(tmp_path: Pat
     steps: list[str] = []
 
     diagnostics = deploy_run(
-        _context(root), "app", build_path, force=True, stage="deploy_apps", smoke_test=True, on_step=steps.append
+        _context(root), "app", build_path, force=True, stages=("deploy_apps",), smoke_test=True, on_step=steps.append
     )
 
     assert diagnostics.ok, diagnostics.messages()
@@ -851,6 +868,7 @@ def test_deploy_run_use_saved_plan_applies_existing_plan_without_revalidating_or
     assert "apply_infra.tfplan" in apply_call
 
 
+@pytest.mark.slow
 def test_deploy_run_use_saved_plan_cross_invocation_output_handoff(tmp_path: Path, monkeypatch):
     """Each step applied via `use_saved_plan=True` in its OWN separate
     `deploy_run()` call — simulating two separate `deploy apply`
@@ -889,7 +907,7 @@ def test_deploy_run_use_saved_plan_cross_invocation_output_handoff(tmp_path: Pat
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
     # First separate invocation: apply only apply_infra, from its saved plan.
-    diagnostics_a = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="apply_infra")
+    diagnostics_a = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stages=("apply_infra",))
     assert diagnostics_a.ok, diagnostics_a.messages()
     assert "strata/step-outputs/app/apply_infra" in backend_cls.shared_data
 
@@ -898,13 +916,14 @@ def test_deploy_run_use_saved_plan_cross_invocation_output_handoff(tmp_path: Pat
     # references `${output:apply_infra.vm_ip}`, which only exists because
     # the first invocation durably recorded it.
     (build_path / "infra_b" / "apply_apps.tfplan").write_text("fake plan", encoding="utf-8")
-    diagnostics_b = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stage="apply_apps")
+    diagnostics_b = deploy_run(_context(root), "app", build_path, use_saved_plan=True, stages=("apply_apps",))
     assert diagnostics_b.ok, diagnostics_b.messages()
 
     apps_commands = [call[1] for call, cwd in calls if cwd is not None and cwd.name == "infra_b"]
     assert apps_commands == ["init", "apply", "output"]
 
 
+@pytest.mark.slow
 def test_deploy_run_dry_run_plan_failure_is_a_hard_error(tmp_path: Path, monkeypatch):
     root = _terraform_solution(tmp_path)
     build_path = tmp_path / "build"
@@ -1278,6 +1297,7 @@ def test_deploy_run_projects_the_deployments_bound_asset(tmp_path: Path, _captur
     assert (api["asset"], api["files"]) == ("openapi-alt", ["alt.json"])
 
 
+@pytest.mark.slow
 def test_deploy_run_path_from_step_is_per_step_and_leads_to_the_files(tmp_path: Path, _capture):
     root = _asset_terraform_solution(tmp_path)
     _write(root, "terraform/apim/main.tf", "# apim\n")
@@ -1344,7 +1364,7 @@ def test_deploy_run_filters_by_stage(tmp_path: Path, _capture):
     build_run(_context(root), "app", build_path)
 
     steps: list[str] = []
-    deploy_run(_context(root), "app", build_path, force=True, stage="apply_infra", on_step=steps.append)
+    deploy_run(_context(root), "app", build_path, force=True, stages=("apply_infra",), on_step=steps.append)
 
     assert any("apply_infra" in s for s in steps)
     assert not any("apply_apps" in s for s in steps)
@@ -1356,10 +1376,50 @@ def test_deploy_run_filters_by_scope(tmp_path: Path, _capture):
     build_run(_context(root), "app", build_path)
 
     steps: list[str] = []
-    deploy_run(_context(root), "app", build_path, force=True, scope="apps", on_step=steps.append)
+    deploy_run(_context(root), "app", build_path, force=True, scopes=("apps",), on_step=steps.append)
 
     assert any("apply_apps" in s for s in steps)
     assert not any("apply_infra" in s for s in steps)
+
+
+def test_deploy_run_repeated_stages_select_each_named_step(tmp_path: Path, _capture):
+    root = _terraform_solution(tmp_path, second_step=True)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    steps: list[str] = []
+    deploy_run(
+        _context(root), "app", build_path, force=True, stages=("apply_infra", "apply_apps"), on_step=steps.append
+    )
+
+    assert any("apply_infra" in s for s in steps)
+    assert any("apply_apps" in s for s in steps)
+
+
+def test_deploy_run_repeated_scopes_select_any_of_them(tmp_path: Path, _capture):
+    root = _terraform_solution(tmp_path, second_step=True)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    steps: list[str] = []
+    deploy_run(_context(root), "app", build_path, force=True, scopes=("ghost", "apps"), on_step=steps.append)
+
+    assert any("apply_apps" in s for s in steps)
+    assert not any("apply_infra" in s for s in steps)
+
+
+def test_deploy_run_stage_and_scope_must_both_match(tmp_path: Path, _capture):
+    root = _terraform_solution(tmp_path, second_step=True)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    steps: list[str] = []
+    diagnostics = deploy_run(
+        _context(root), "app", build_path, force=True, stages=("apply_infra",), scopes=("apps",), on_step=steps.append
+    )
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert any("no steps match" in s for s in steps)
 
 
 def test_deploy_run_runs_dependent_steps_in_order(tmp_path: Path, _capture):
@@ -1404,6 +1464,7 @@ def test_deploy_run_passes_stage_declared_timeout_overrides(tmp_path: Path, monk
     assert seen["apply"] == 1800  # unset 'apply' field -> TerraformIntegration's own default
 
 
+@pytest.mark.slow
 def test_deploy_run_env_var_timeout_override_wins_over_stage_declared(tmp_path: Path, monkeypatch):
     """STRATA_TIMEOUT_<STEP>_<PHASE> always wins over the stage's own 'timeouts' field,
     for a one-off override with no document edit."""
@@ -1451,6 +1512,7 @@ def test_tf_var_env_empty_when_prefix_is_none():
     assert tf_var_env(resolved, None) == {}
 
 
+@pytest.mark.slow
 def test_deploy_run_injects_tf_var_env_for_every_step(tmp_path: Path, monkeypatch):
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
@@ -1579,6 +1641,7 @@ def _artifact_pin_solution(tmp_path: Path, *, reference_version_from_deployment:
     return root
 
 
+@pytest.mark.slow
 def test_deploy_run_pin_resolves_the_artifacts_category(tmp_path: Path, monkeypatch):
     root = _artifact_pin_solution(tmp_path, reference_version_from_deployment=False)
     assert "version" not in (root / "deployment.yaml").read_text(encoding="utf-8")
@@ -1662,6 +1725,7 @@ def test_deploy_run_pin_raises_for_an_unknown_version(tmp_path: Path):
         deploy_run(_context(root), "app", build_path, force=True, pin="ghost")
 
 
+@pytest.mark.slow
 def test_deploy_run_pin_matches_hand_editing_spec_version(tmp_path: Path, monkeypatch):
     """The exact "Done when" criterion, deploy side: a --pin'd deploy
     produces identical resolution to hand-editing spec.version."""
@@ -1687,6 +1751,7 @@ def test_deploy_run_pin_matches_hand_editing_spec_version(tmp_path: Path, monkey
     assert hand_edited_diagnostics.ok and pinned_diagnostics.ok
 
 
+@pytest.mark.slow
 def test_deploy_run_stops_on_plan_failure(tmp_path: Path, monkeypatch):
     root = _terraform_solution(tmp_path)
     build_path = tmp_path / "build"
@@ -1879,6 +1944,7 @@ def _install(monkeypatch, stubs) -> None:
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
 
+@pytest.mark.slow
 def test_deploy_run_preflight_fails_on_a_version_mismatch(tmp_path: Path, monkeypatch):
     root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.5.7")
     _install(monkeypatch, stubs)
@@ -1892,6 +1958,7 @@ def test_deploy_run_preflight_fails_on_a_version_mismatch(tmp_path: Path, monkey
     assert calls == [["terraform", "version"]]
 
 
+@pytest.mark.slow
 def test_deploy_run_checks_the_version_once_per_integration(tmp_path: Path, monkeypatch):
     root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.9.2", second_step=True)
     _install(monkeypatch, stubs)
@@ -1903,6 +1970,7 @@ def test_deploy_run_checks_the_version_once_per_integration(tmp_path: Path, monk
     assert calls[0] == ["terraform", "version"] and len(calls) > 1
 
 
+@pytest.mark.slow
 def test_deploy_run_smoke_test_reports_the_version_check_without_running_the_tool(tmp_path: Path, monkeypatch):
     root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.5.7")
     _install(monkeypatch, stubs)
@@ -1915,6 +1983,7 @@ def test_deploy_run_smoke_test_reports_the_version_check_without_running_the_too
     assert "would check terraform 'terraform' version '>= 1.7'" in steps
 
 
+@pytest.mark.slow
 def test_deploy_run_names_each_tool_version_once_and_reports_every_step_to_on_tool(tmp_path: Path, monkeypatch):
     root, build_path, _, stubs = _versioned_terraform(tmp_path, "1.9.2", second_step=True)
     _install(monkeypatch, stubs)
@@ -1939,6 +2008,7 @@ def test_deploy_run_names_each_tool_version_once_and_reports_every_step_to_on_to
     assert [(version, path) for _, version, path in tools] == [("1.9.2", "/usr/bin/terraform")] * 2
 
 
+@pytest.mark.slow
 def test_deploy_run_smoke_test_names_no_tool_version(tmp_path: Path, monkeypatch):
     root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.9.2")
     _install(monkeypatch, stubs)
@@ -1967,6 +2037,7 @@ def _flags_only_problem(monkeypatch) -> None:
     )
 
 
+@pytest.mark.slow
 def test_a_flags_only_problem_stops_a_deploy(tmp_path: Path, monkeypatch):
     root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.9.2")
     _install(monkeypatch, stubs)
@@ -1978,6 +2049,7 @@ def test_a_flags_only_problem_stops_a_deploy(tmp_path: Path, monkeypatch):
     assert calls == [["terraform", "version"]]
 
 
+@pytest.mark.slow
 def test_a_flags_only_problem_is_a_warning_under_destroy_and_the_step_runs(tmp_path: Path, monkeypatch):
     root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.9.2")
     _install(monkeypatch, stubs)
@@ -1993,6 +2065,7 @@ def test_a_flags_only_problem_is_a_warning_under_destroy_and_the_step_runs(tmp_p
     assert len(tools) == 1 and any("destroy" in call for call in calls)
 
 
+@pytest.mark.slow
 def test_a_problem_not_flags_only_still_stops_a_destroy(tmp_path: Path, monkeypatch):
     root, build_path, calls, stubs = _versioned_terraform(tmp_path, "1.5.7")
     _install(monkeypatch, stubs)
@@ -2122,6 +2195,7 @@ def _script_solution(tmp_path: Path, *, output_template: bool = False) -> Path:
     return root
 
 
+@pytest.mark.slow
 def test_deploy_run_resolves_script_args_and_delivers_strata_values_env(tmp_path: Path):
     root = _script_solution(tmp_path)
     build_path = tmp_path / "build"
@@ -2153,6 +2227,7 @@ def test_deploy_run_resolves_script_args_and_delivers_strata_values_env(tmp_path
     assert json.loads(deploy_call["env"]["STRATA_VALUES"])["REGION"] == "westeurope"
 
 
+@pytest.mark.slow
 def test_deploy_run_appends_rendered_output_path_as_the_final_script_arg(tmp_path: Path):
     root = _script_solution(tmp_path, output_template=True)
     build_path = tmp_path / "build"
@@ -2208,6 +2283,7 @@ def test_deploy_run_script_end_to_end_materialises_source_renders_skeleton_and_e
     assert "westeurope" in deploy_call
 
 
+@pytest.mark.slow
 def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: Path):
     """ADR-0035 Phase 7: a '${var:KEY}' inside a DNS record's value (or a
     network/firewall field) is delivered as part of the one unified
@@ -2311,6 +2387,7 @@ def test_deploy_run_never_creates_dns_networks_firewalls_files_when_unused(tmp_p
     assert after == before
 
 
+@pytest.mark.slow
 def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: Path):
     """ADR-0035 Phase 7: a '${secret:KEY}' inside a resource's
     'configuration' is delivered via the one TF_VAR_strata_secrets env
@@ -2385,6 +2462,7 @@ def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: 
     assert secrets_payload["resources.r1.configuration.admin_password"] == "hunter2"
 
 
+@pytest.mark.slow
 def test_deploy_run_merges_multiple_resx_types_into_one_tf_var_resources(tmp_path: Path):
     """ADR-0035 Phase 2: `strata.resources` is one flat map keyed by
     resource name, not nested by resource type — two active resource
@@ -2457,6 +2535,7 @@ def test_deploy_run_merges_multiple_resx_types_into_one_tf_var_resources(tmp_pat
     assert resources_payload["r2"]["resource_type"] == "storage"
 
 
+@pytest.mark.slow
 def test_deploy_run_delivers_flat_categories_as_one_env_var_per_key(tmp_path: Path):
     """ADR-0035 Phase 2/7: `flags`/`variables` (and `workspace`/`properties`/
     `custom`) are each their own nested key inside the one unified
@@ -2591,6 +2670,7 @@ def test_deploy_run_no_longer_collides_on_shared_flat_category_key_names(tmp_pat
     assert strata["workspace"]["name"] == "main"
 
 
+@pytest.mark.slow
 def test_deploy_run_projects_the_deployments_provider_binding(tmp_path: Path, _capture):
     """A deployment rebinding a workspace provider slot reaches the deploy-time payload:
     keyed by the slot, holding the bound document (docs/design/provider-slots.md)."""
@@ -2770,6 +2850,7 @@ def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Pat
     assert "not supported outside dns/networks/firewalls" in diagnostics.messages()[0]
 
 
+@pytest.mark.slow
 def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_path: Path):
     """docs/work/gap_fit_v1.md gap #12: a DNS document claimed by a step's `targets`
     resolves '${output:...}' using THAT step's own dependency-scoped
@@ -2860,6 +2941,7 @@ def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_pat
     assert record_value == "20.1.2.3"
 
 
+@pytest.mark.slow
 def test_deploy_run_sentinels_an_output_token_when_the_real_output_is_sensitive(tmp_path: Path):
     """Regression test for the real gap found 2026-10-10: an
     '${output:...}' reference to a Terraform output marked
@@ -3130,6 +3212,7 @@ def test_deploy_run_reports_a_diagnostic_when_a_backend_configuration_token_is_u
     assert "was not produced by it" in message
 
 
+@pytest.mark.slow
 def test_deploy_run_output_preflight_reports_every_missing_key_in_one_pass(tmp_path: Path, monkeypatch):
     """docs/design/output-declarations.md Phase 2 — the concrete proof this
     phase adds real value over the already-shipped (2026-10-12)
@@ -3215,6 +3298,7 @@ def test_deploy_run_output_preflight_reports_every_missing_key_in_one_pass(tmp_p
     assert "'${output:apply_infra.public_ip}'" in messages
 
 
+@pytest.mark.slow
 def test_deploy_run_output_preflight_runs_under_dry_run_too(tmp_path: Path, monkeypatch):
     """The output pre-flight check is unconditional, placed before any
     `dry_run` branching — a missing key must be reported, and the
@@ -3793,6 +3877,7 @@ def _register_fake_output_store_backend(monkeypatch):
     return _FakeOutputStoreBackend
 
 
+@pytest.mark.slow
 def test_deploy_run_records_step_output_to_the_configured_output_store(tmp_path: Path, monkeypatch):
     backend_cls = _register_fake_output_store_backend(monkeypatch)
     root = _output_chained_solution(tmp_path)
@@ -3834,6 +3919,7 @@ def test_deploy_run_records_step_output_to_the_configured_output_store(tmp_path:
         (10_500, "could not durably record output"),  # above the limit: not recorded, still a warning
     ],
 )
+@pytest.mark.slow
 def test_deploy_run_warns_about_an_output_record_near_or_over_the_backends_limit(
     tmp_path: Path, monkeypatch, value_length: int, expected: str
 ):
@@ -3870,6 +3956,7 @@ def test_deploy_run_warns_about_an_output_record_near_or_over_the_backends_limit
     assert any(expected in warning.message for warning in diagnostics.warnings), diagnostics.messages()
 
 
+@pytest.mark.slow
 def test_deploy_run_resolves_output_token_from_a_durable_record_not_produced_this_invocation(
     tmp_path: Path, monkeypatch
 ):
@@ -3910,7 +3997,7 @@ def test_deploy_run_resolves_output_token_from_a_durable_record_not_produced_thi
     monkeypatch.setattr(base_module, "run_command", _fake_run_command)
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
-    diagnostics = deploy_run(_context(root), "app", build_path, stage="apply_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, stages=("apply_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     apps_init_call = next(
@@ -3919,6 +4006,7 @@ def test_deploy_run_resolves_output_token_from_a_durable_record_not_produced_thi
     assert "host=10.0.0.5" in apps_init_call
 
 
+@pytest.mark.slow
 def test_deploy_run_fails_when_durable_record_is_older_than_the_workspace_max_age(tmp_path: Path, monkeypatch):
     """`WorkspaceSpecModel.output_store_max_age` is the default trust window
     \u2014 a record older than it is a hard pre-flight failure, before
@@ -3955,12 +4043,13 @@ def test_deploy_run_fails_when_durable_record_is_older_than_the_workspace_max_ag
     monkeypatch.setattr(base_module, "run_command", _fake_run_command)
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
-    diagnostics = deploy_run(_context(root), "app", build_path, stage="apply_apps")
+    diagnostics = deploy_run(_context(root), "app", build_path, stages=("apply_apps",))
 
     assert not diagnostics.ok
     assert any("unusable" in message for message in diagnostics.messages())
 
 
+@pytest.mark.slow
 def test_deploy_run_output_max_age_overrides_the_workspace_setting(tmp_path: Path, monkeypatch):
     """`output_max_age` (CLI's '--output-max-age') wins over the workspace's
     own 'output_store_max_age' for a single invocation \u2014 a generous
@@ -3998,7 +4087,7 @@ def test_deploy_run_output_max_age_overrides_the_workspace_setting(tmp_path: Pat
     monkeypatch.setattr(base_module, "run_command", _fake_run_command)
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
-    diagnostics = deploy_run(_context(root), "app", build_path, stage="apply_apps", output_max_age=60)
+    diagnostics = deploy_run(_context(root), "app", build_path, stages=("apply_apps",), output_max_age=60)
 
     assert not diagnostics.ok
     assert any("unusable" in message for message in diagnostics.messages())
@@ -4179,6 +4268,7 @@ def _helm_two_namespace_solution(tmp_path: Path) -> Path:
     return root
 
 
+@pytest.mark.slow
 def test_deploy_run_deploys_container_capable_step_namespaces_in_sorted_order(tmp_path: Path, _capture):
     """`namespaces:` listed as `[zzz, aaa]` must still deploy `aaa` before
     `zzz` — the effective namespace set is derived (a `set`, no inherent
@@ -4196,6 +4286,7 @@ def test_deploy_run_deploys_container_capable_step_namespaces_in_sorted_order(tm
     assert helm_namespaces == ["aaa", "zzz"]
 
 
+@pytest.mark.slow
 def test_deploy_run_dispatches_container_capable_step_to_deploy_namespace(tmp_path: Path, _capture):
     root = _helm_solution(tmp_path)
     build_path = tmp_path / "build"
@@ -4267,6 +4358,7 @@ def _helm_versioned(
     return root, build_path, calls
 
 
+@pytest.mark.slow
 def test_undeclared_helm_3_stops_the_deploy_before_any_step_runs(tmp_path: Path, monkeypatch):
     root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2")
 
@@ -4278,6 +4370,7 @@ def test_undeclared_helm_3_stops_the_deploy_before_any_step_runs(tmp_path: Path,
     assert not any(call[0] == "terraform" and call[1] == "apply" for call in calls)
 
 
+@pytest.mark.slow
 def test_declared_helm_3_deploys_with_the_v1_flags_and_a_deprecation_warning(tmp_path: Path, monkeypatch):
     root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2", declared="<4")
     steps: list[str] = []
@@ -4291,6 +4384,7 @@ def test_declared_helm_3_deploys_with_the_v1_flags_and_a_deprecation_warning(tmp
     assert "helm 3.13.2 (/usr/bin/helm)" in steps
 
 
+@pytest.mark.slow
 def test_helm_4_deploys_with_its_own_flags_and_no_finding(tmp_path: Path, monkeypatch):
     root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "4.3.1")
     steps: list[str] = []
@@ -4303,6 +4397,7 @@ def test_helm_4_deploys_with_its_own_flags_and_no_finding(tmp_path: Path, monkey
     assert "helm 4.3.1 (/usr/bin/helm)" in steps
 
 
+@pytest.mark.slow
 def test_declared_helm_3_with_helm_4_installed_stops_on_the_spec_version(tmp_path: Path, monkeypatch):
     root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "4.3.1", declared="<4")
 
@@ -4312,26 +4407,29 @@ def test_declared_helm_3_with_helm_4_installed_stops_on_the_spec_version(tmp_pat
     assert not any(call[:2] == ["helm", "upgrade"] for call in calls)
 
 
+@pytest.mark.slow
 def test_a_required_helm_document_does_not_block_a_destroy_of_other_steps(tmp_path: Path, monkeypatch):
     # The Helm step is filtered out, so the document is checked by the integration preflight, not the step loop.
     root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2", declared=">=3", required=True)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, destroy=True, stage="apply_infra")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, destroy=True, stages=("apply_infra",))
 
     assert "helm_3_not_declared" in [w.code for w in diagnostics.warnings]
     assert not diagnostics.errors, diagnostics.messages()
     assert any(call[:2] == ["terraform", "destroy"] for call in calls)
 
 
+@pytest.mark.slow
 def test_a_required_helm_document_still_blocks_a_deploy_of_other_steps(tmp_path: Path, monkeypatch):
     root, build_path, calls = _helm_versioned(tmp_path, monkeypatch, "3.13.2", declared=">=3", required=True)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage="apply_infra")
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("apply_infra",))
 
     assert [e.code for e in diagnostics.errors] == ["helm_3_not_declared"]
     assert not any(call[:2] == ["terraform", "apply"] for call in calls)
 
 
+@pytest.mark.slow
 def test_an_unparseable_tool_version_is_not_printed(tmp_path: Path, monkeypatch):
     root, build_path, _ = _helm_versioned(tmp_path, monkeypatch, "4.3.1")
     monkeypatch.setattr(HelmIntegration, "get_version", lambda self: "Welcome to the wrapper")
@@ -4360,6 +4458,7 @@ def test_undeclared_helm_3_still_destroys(tmp_path: Path, monkeypatch):
     assert any(call[:2] == ["helm", "uninstall"] for call in calls)
 
 
+@pytest.mark.slow
 def test_deploy_run_dry_run_previews_container_capable_step_via_plan(tmp_path: Path, _capture):
     """A container-capable step gets a real preview under `--dry-run` too:
     `helm upgrade --dry-run --install` via `deploy_namespace()`'s
@@ -4401,13 +4500,14 @@ def test_deploy_run_filters_helm_steps_by_scope_like_terraform_steps(tmp_path: P
     build_run(_context(root), "app", build_path)
 
     steps: list[str] = []
-    deploy_run(_context(root), "app", build_path, force=True, scope="apps", on_step=steps.append)
+    deploy_run(_context(root), "app", build_path, force=True, scopes=("apps",), on_step=steps.append)
 
     assert any("deploy_apps" in s for s in steps)
     assert not any("apply_infra" in s for s in steps)
     assert [call[:2] for call in _capture] == [["helm", "lint"], ["helm", "upgrade"]]
 
 
+@pytest.mark.slow
 def test_deploy_run_container_step_with_no_matching_namespace_target_errors(tmp_path: Path, _capture):
     root = _helm_solution(tmp_path)
     _write(
@@ -4618,6 +4718,7 @@ def test_deploy_run_reports_a_missing_tenant_as_a_diagnostic_before_running_anyt
     assert _capture == []
 
 
+@pytest.mark.slow
 def test_deploy_run_resolves_a_deployment_token_in_a_compose_module(tmp_path: Path, _capture):
     """The token map is shared, so a container module sees it too, not only the backend."""
     root = _compose_solution(tmp_path)
@@ -4668,6 +4769,7 @@ def test_deploy_run_resolves_a_tenant_that_only_a_base_deployment_sets(tmp_path:
     assert "key=contoso.tfstate" in _init_call(_capture)
 
 
+@pytest.mark.slow
 def test_deploy_run_resolves_a_deployment_token_in_the_terraform_variables_file(tmp_path: Path, _capture):
     """Not only a backend: a workspace `custom` value reaches Terraform through the rewritten `strata.auto.tfvars.json`,
     which `build run` leaves unresolved and `deploy run` rewrites."""
@@ -4688,7 +4790,7 @@ def test_deploy_run_resolves_a_deployment_token_in_the_terraform_variables_file(
 
 
 # ---------------------------------------------------------------------------
-# The kube context a deployment names (docs/work/helm-kube-context.md)
+# The kube context a deployment names (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 KUBECONFIG = """apiVersion: v1
@@ -4741,6 +4843,7 @@ def _deploy_kube(root: Path, tmp_path: Path, **kwargs):
     return diagnostics, steps
 
 
+@pytest.mark.slow
 def test_every_helm_call_runs_against_the_deployments_kube_context(tmp_path: Path, monkeypatch):
     calls = _fake_tools_with_env(monkeypatch)
     root = _kube_context_solution(tmp_path, monkeypatch)
@@ -4754,11 +4857,12 @@ def test_every_helm_call_runs_against_the_deployments_kube_context(tmp_path: Pat
     assert "step 'deploy_apps' via HelmIntegration: kube context 'forge-prd'" in steps
 
 
+@pytest.mark.slow
 def test_a_helm_dry_run_runs_against_the_deployments_kube_context(tmp_path: Path, monkeypatch):
     calls = _fake_tools_with_env(monkeypatch)
     root = _kube_context_solution(tmp_path, monkeypatch)
 
-    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stage="deploy_apps")
+    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     [upgrade] = [(argv, env) for argv, env in calls if argv[:2] == ["helm", "upgrade"]]
@@ -4766,6 +4870,7 @@ def test_a_helm_dry_run_runs_against_the_deployments_kube_context(tmp_path: Path
     assert upgrade[1]["HELM_KUBECONTEXT"] == "forge-prd"
 
 
+@pytest.mark.slow
 def test_a_kube_context_missing_from_the_kubeconfig_stops_the_deploy_before_any_tool_runs(tmp_path: Path, monkeypatch):
     calls = _fake_tools_with_env(monkeypatch)
     root = _kube_context_solution(tmp_path, monkeypatch, kube_context="forge-test")
@@ -4779,6 +4884,7 @@ def test_a_kube_context_missing_from_the_kubeconfig_stops_the_deploy_before_any_
     assert [argv for argv, _ in calls if argv[0] in ("terraform", "helm") and argv[1] != "version"] == []
 
 
+@pytest.mark.slow
 def test_a_different_helm_kubecontext_in_the_environment_is_a_conflict(tmp_path: Path, monkeypatch):
     calls = _fake_tools_with_env(monkeypatch)
     root = _kube_context_solution(tmp_path, monkeypatch)
@@ -4802,6 +4908,7 @@ def test_the_same_helm_kubecontext_in_the_environment_is_accepted(tmp_path: Path
     assert diagnostics.ok, diagnostics.messages()
 
 
+@pytest.mark.slow
 def test_helm_kubeapiserver_in_the_environment_is_a_conflict(tmp_path: Path, monkeypatch):
     _fake_tools_with_env(monkeypatch)
     root = _kube_context_solution(tmp_path, monkeypatch)
@@ -4828,11 +4935,12 @@ def test_a_run_without_a_helm_step_does_not_check_the_kube_context(tmp_path: Pat
     _fake_tools_with_env(monkeypatch)
     root = _kube_context_solution(tmp_path, monkeypatch, kube_context="forge-test")
 
-    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stage="apply_infra")
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
 
 
+@pytest.mark.slow
 def test_without_a_kube_context_helm_uses_the_active_context(tmp_path: Path, monkeypatch):
     calls = _fake_tools_with_env(monkeypatch)
     root = _kube_context_solution(tmp_path, monkeypatch, kube_context=None)
@@ -4845,7 +4953,7 @@ def test_without_a_kube_context_helm_uses_the_active_context(tmp_path: Path, mon
 
 
 # ---------------------------------------------------------------------------
-# The docker context a deployment names (docs/work/compose-docker-context.md)
+# The docker context a deployment names (docs/design/deploy-command.md)
 # ---------------------------------------------------------------------------
 
 
@@ -4887,6 +4995,7 @@ def _stack_calls(calls) -> list[tuple[str, str | None]]:
     return [(argv[2], env.get("DOCKER_CONTEXT")) for argv, env in calls if argv[:2] == ["docker", "stack"]]
 
 
+@pytest.mark.slow
 def test_every_compose_call_runs_against_the_deployments_docker_context(tmp_path: Path, monkeypatch):
     calls = _fake_docker(monkeypatch)
     root = _docker_context_solution(tmp_path, monkeypatch)
@@ -4906,7 +5015,7 @@ def test_a_compose_dry_run_runs_against_the_deployments_docker_context(tmp_path:
     calls = _fake_docker(monkeypatch)
     root = _docker_context_solution(tmp_path, monkeypatch)
 
-    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stage="deploy_apps")
+    diagnostics, _ = _deploy_kube(root, tmp_path, dry_run=True, stages=("deploy_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert _stack_calls(calls) == [("config", "hearth-prd")]
@@ -4979,7 +5088,7 @@ def test_a_run_without_a_compose_step_does_not_check_the_docker_context(tmp_path
     calls = _fake_docker(monkeypatch, contexts=())
     root = _docker_context_solution(tmp_path, monkeypatch)
 
-    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stage="apply_infra")
+    diagnostics, _ = _deploy_kube(root, tmp_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [argv for argv, _ in calls if argv[1:2] == ["context"]] == []
@@ -4996,6 +5105,7 @@ def test_without_a_docker_context_compose_uses_the_environment(tmp_path: Path, m
     assert _stack_calls(calls) == [("deploy", None)]
 
 
+@pytest.mark.slow
 def test_helm_and_compose_steps_are_each_pinned_to_their_own_context(tmp_path: Path, monkeypatch):
     calls = _fake_docker(monkeypatch)
     root = _docker_context_solution(tmp_path, monkeypatch)
@@ -5140,6 +5250,7 @@ def test_deploy_run_warns_and_still_succeeds_when_the_report_record_cannot_be_wr
     assert "strata/step-outputs/app/apply_infra" in backend_cls.shared_data
 
 
+@pytest.mark.slow
 def test_deploy_run_destroy_marks_the_report_record_destroyed(tmp_path: Path, monkeypatch):
     backend_cls, root = _report_record_solution(tmp_path, monkeypatch)
     build_path = tmp_path / "build"
@@ -5153,6 +5264,7 @@ def test_deploy_run_destroy_marks_the_report_record_destroyed(tmp_path: Path, mo
     assert report.keys() == {"destroyed_at"}
 
 
+@pytest.mark.slow
 def test_build_run_estimates_the_report_record_and_warns_near_the_limit(tmp_path: Path, monkeypatch):
     backend_cls, root = _report_record_solution(tmp_path, monkeypatch)
     monkeypatch.setattr(backend_cls, "MAX_VALUE_BYTES", 10_000, raising=False)
@@ -5172,6 +5284,7 @@ def test_build_run_estimates_the_report_record_and_warns_near_the_limit(tmp_path
     assert not any(key.startswith("strata/") for key in backend_cls.shared_data)  # build never writes
 
 
+@pytest.mark.slow
 def test_deploy_run_records_the_secrets_a_compose_step_used(tmp_path: Path, monkeypatch, _capture):
     """The scan reads the built docker-compose.yml, whose `${secret:KEY}` tokens a deploy leaves as they are."""
     backend_cls = _register_fake_output_store_backend(monkeypatch)
@@ -5237,6 +5350,7 @@ def test_build_run_skips_the_report_estimate_with_a_warning_when_the_output_stor
     assert not any("report record" in step for step in steps), steps
 
 
+@pytest.mark.slow
 def test_a_compose_deploy_after_a_dry_run_still_delivers_its_secrets(tmp_path: Path, monkeypatch):
     """`deploy run --dry-run` then `deploy run` on one build: the second must not start from the first's
     resolved docker-compose.yml, where `${secret:DB_PWD}` is already `${DB_PWD}` and no token is left."""
@@ -5281,7 +5395,7 @@ def test_a_compose_deploy_after_a_dry_run_still_delivers_its_secrets(tmp_path: P
 
 
 # ---------------------------------------------------------------------------
-# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1): the artifacts' pinned
+# ${artifact:NAME.FIELD} (docs/archive/artifact-gap-analysis.md, design 1): the artifacts' pinned
 # images are in the deploy-time token map
 # ---------------------------------------------------------------------------
 
@@ -5318,7 +5432,7 @@ def test_deploy_run_resolves_an_artifact_tag_in_a_backend(tmp_path: Path, _captu
 
 def test_deploy_run_applies_the_pin_to_an_artifact_token(tmp_path: Path, _capture, monkeypatch):
     """`--pin` picks the version. The token map is built once for the run, logging its pins, not once per step;
-    the audit manifest's `effective_images()` logs the pin again, as it does for a `store: artifact` variable."""
+    the audit manifest's `effective_images()` re-derives the tag without logging it again."""
     import strata.controllers.deploy_controller as deploy_controller
 
     builds: list[bool] = []
@@ -5334,11 +5448,16 @@ def test_deploy_run_applies_the_pin_to_an_artifact_token(tmp_path: Path, _captur
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path, pin="prd")
 
+    import strata.controllers.artifact_tokens as artifact_tokens
+
+    logged: list[str] = []
+    monkeypatch.setattr(artifact_tokens, "log_pin_applied", lambda _category, name, *_args: logged.append(name))
     diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
 
     assert diagnostics.ok, diagnostics.messages()
     assert "key=2.0.0.tfstate" in _init_call(_capture)
     assert builds == [True]
+    assert logged == ["api"], "the pin is logged once for the run: not per step, not again by the audit manifest"
 
 
 def test_deploy_run_reports_an_untagged_artifact_before_running_anything(tmp_path: Path, _capture):
@@ -5356,6 +5475,7 @@ def test_deploy_run_reports_an_untagged_artifact_before_running_anything(tmp_pat
     assert _capture == []
 
 
+@pytest.mark.slow
 def test_deploy_run_resolves_an_artifact_token_in_a_compose_module(tmp_path: Path, _capture):
     root = _compose_solution(tmp_path)
     _write_artifact(root, image_tag="1.0.0")
@@ -5380,8 +5500,9 @@ def test_deploy_run_resolves_an_artifact_token_in_a_compose_module(tmp_path: Pat
     assert "${artifact:" not in compose_text
 
 
+@pytest.mark.slow
 def test_deploy_run_delivers_a_pinned_artifact_to_a_helm_chart_through_its_values(tmp_path: Path, _capture):
-    """Design 2 (docs/work/artifact-gap-analysis.md): the chart's own keys, the deployment's pin."""
+    """Design 2 (docs/archive/artifact-gap-analysis.md): the chart's own keys, the deployment's pin."""
     root = _helm_solution(tmp_path)
     _write_artifact(root, image_tag="1.0.0", pin="2.0.0")
     module = root / "module.yaml"
@@ -5403,3 +5524,94 @@ def test_deploy_run_delivers_a_pinned_artifact_to_a_helm_chart_through_its_value
     assert diagnostics.ok, diagnostics.messages()
     values = yaml.safe_load((build_path / "apps" / "auth" / "strata-values.yaml").read_text(encoding="utf-8"))
     assert values["image"] == {"repository": "example/api", "tag": "2.0.0"}
+
+
+# ---------------------------------------------------------------------------
+# A Helm module's pins come from the build (docs/design/helm-chart-deployment.md, "Version pins at deploy")
+# ---------------------------------------------------------------------------
+
+
+def _helm_solution_with_version(tmp_path: Path) -> Path:
+    root = _helm_solution(tmp_path)
+    _write(
+        root,
+        "version.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n  pins: {}\n",
+    )
+    return root
+
+
+def test_deploy_run_refuses_a_pin_the_helm_build_was_not_made_with(tmp_path: Path, _capture):
+    """The chart would install the build's versions while the run and its audit record name `--pin prd`."""
+    root = _helm_solution_with_version(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
+
+    [error] = diagnostics.errors
+    assert error.code == "build_version_mismatch"
+    assert error.message.startswith("This deploy uses --pin prd, but the build was made with no version.")
+    assert "apps/auth" in error.message and "strata build run --pin prd" in error.message
+    assert _capture == [], "nothing runs before the check"
+
+
+@pytest.mark.slow
+def test_deploy_run_takes_the_pin_the_helm_build_was_made_with(tmp_path: Path, _capture):
+    root = _helm_solution_with_version(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path, pin="prd")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd", stop_after="setup")
+
+    assert "build_version_mismatch" not in [d.code for d in diagnostics.items]
+    assert diagnostics.ok, diagnostics.messages()
+
+
+def test_a_destroy_is_not_held_to_the_builds_version(tmp_path: Path, _capture):
+    """Uninstalling a release does not depend on the versions it was installed with."""
+    root = _helm_solution_with_version(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, destroy=True, smoke_test=True, pin="prd")
+
+    assert "build_version_mismatch" not in [d.code for d in diagnostics.items]
+
+
+def _build(tmp_path: Path, resolved: str | None, *, helm: bool = True) -> Path:
+    build_path = tmp_path / "build"
+    build_path.mkdir()
+    if resolved is not None:
+        (build_path / "resolved.yaml").write_text(resolved, encoding="utf-8")
+    if helm:
+        (build_path / "apps" / "auth").mkdir(parents=True)
+        (build_path / "apps" / "auth" / "meta.yaml").write_text("releaseName: auth\n", encoding="utf-8")
+    return build_path
+
+
+@pytest.mark.parametrize(
+    ("resolved", "helm", "version"),
+    [
+        ("version: prd\n", True, "prd"),
+        ("version: null\n", True, None),
+        ("version: prd\n", False, "acc"),
+        ("variables: []\n", True, "acc"),
+        (None, True, "acc"),
+        ("[not, a, mapping]\n", True, "acc"),
+    ],
+    ids=["same", "both-none", "no-helm-module", "build-before-the-key", "no-resolved-yaml", "not-a-mapping"],
+)
+@pytest.mark.slow
+def test_check_build_version_has_nothing_to_report(tmp_path: Path, resolved, helm, version):
+    assert check_build_version(_build(tmp_path, resolved, helm=helm), version, pinned_by_flag=True).items == []
+
+
+def test_check_build_version_names_a_changed_spec_version(tmp_path: Path):
+    """Without `--pin`, the deployment's own `spec.version` changed since the build."""
+    build_path = _build(tmp_path, "version: prd-1\n")
+
+    [error] = check_build_version(build_path, "prd-2", pinned_by_flag=False).errors
+
+    assert error.message.startswith("This deploy uses version 'prd-2', but the build was made with version 'prd-1'.")
+    assert "strata build run --pin prd-2" in error.message

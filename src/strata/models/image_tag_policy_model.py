@@ -3,7 +3,7 @@
 
 An opt-in workspace guard rail on the tag of every image a deployment runs. The rules read the solution (the
 effective images of a deployment) and, given a build, the images its rendered charts run
-(docs/work/helm-image-delivery.md, plan item 9). Unlike the security gates there is no `on_missing_data`: a build
+(docs/design/helm-image-delivery.md, "Where the policy is judged"). Unlike the security gates there is no `on_missing_data`: a build
 without rendered charts is judged on the solution alone, as before.
 """
 
@@ -116,9 +116,10 @@ class ImageTagPolicyModel(PlatformBaseModel):
         description="What to do about a Helm module that declares no service `image` or `artifact`: strata does "
         "not know the images its chart deploys, so it cannot judge them. 'block' stops the run, 'warn' reports "
         "and continues, 'skip' only notes it in verbose and JSON output. Independent of `enforcement`; `allow` "
-        "does not exempt a module. Declare the chart's images under the module's `services` to have them "
-        "judged.\n\n"
-        "Design notes: docs/work/helm-image-delivery.md, option B. Mirrors `image_gate_policy.on_unknown_image`.",
+        "does not exempt a module. Applies when `origins` covers `module-service` or `chart` (or is omitted). "
+        "Declare the chart's images under the module's `services` to have them judged.\n\n"
+        "Design notes: docs/design/helm-image-delivery.md, 'image_tag_policy.on_unknown_image'. Mirrors "
+        "`image_gate_policy.on_unknown_image`.",
     )
 
     @field_validator("reject_tags")

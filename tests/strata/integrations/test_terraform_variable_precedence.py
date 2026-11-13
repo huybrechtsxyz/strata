@@ -32,6 +32,9 @@ from strata.controllers.build_controller import build_run
 from strata.controllers.deploy_controller import deploy_run
 from strata.controllers.solution_context import open_solution
 
+pytestmark = pytest.mark.slow
+
+
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
 meta:

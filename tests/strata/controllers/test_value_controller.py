@@ -559,7 +559,7 @@ def test_resolve_artifact_tag_is_none_for_an_unknown_artifact(tmp_path):
     assert resolve_artifact_tag(context, deployment, "ghost") is None
 
 
-# `${artifact:NAME.FIELD}` entries (docs/work/artifact-gap-analysis.md, design 1)
+# `${artifact:NAME.FIELD}` entries (docs/archive/artifact-gap-analysis.md, design 1)
 
 
 def test_artifact_token_values_apply_the_deployments_pin(tmp_path):
@@ -649,15 +649,47 @@ def test_artifact_token_values_agree_with_a_store_artifact_variable(tmp_path, fi
     )
 
 
-@pytest.mark.parametrize(("log", "expected"), [(False, []), (True, ["api_container"])])
-def test_artifact_token_values_log_a_pin_only_when_asked(tmp_path, monkeypatch, log, expected):
+@pytest.mark.parametrize(
+    ("log", "token", "expected"),
+    [(False, True, []), (True, True, ["api_container"]), (True, False, [])],
+    ids=["not-asked", "used-by-a-token", "pinned-but-unused"],
+)
+def test_artifact_token_values_log_a_pin_only_when_asked_and_a_token_uses_it(
+    tmp_path, monkeypatch, log, token, expected
+):
+    """The map has every artifact, but only the ones a token names are substituted, so only their pins are
+    logged: a pinned artifact this deployment never uses must not show in its log as applied."""
+    import strata.controllers.artifact_tokens as artifact_tokens
+
+    logged: list[str] = []
+    monkeypatch.setattr(artifact_tokens, "log_pin_applied", lambda _category, name, *_args: logged.append(name))
+    root = _solution(tmp_path)
+    _artifact(root, "api_container", image_name="int/api", image_tag="1.0.0")
+    _artifact(root, "worker", image_name="int/worker", image_tag="1.0.0")
+    _version_doc(root, "prd", artifact_pins={"api_container": "2.0.0", "worker": "3.0.0"})
+    value = "${artifact:api_container.image_ref}" if token else "westeurope"
+    _environment(root, "prd", variables=[{"key": "IMAGE", "store": "constant", "value": value}])
+    _deployment(root, "app", version="prd", environments=["prd"])
+    context = _context(root)
+
+    artifact_token_values(context.controller.index, resolve_deployment(context, "app"), log=log)
+
+    assert logged == expected
+
+
+def test_resolve_artifact_tag_logs_a_winning_pin_only_when_asked(tmp_path, monkeypatch):
+    """`effective_images()` only reports the tag, so it passes `log=False`; a `store: artifact` variable resolved
+    for a run keeps the default and logs."""
     import strata.controllers.artifact_tokens as artifact_tokens
 
     logged: list[str] = []
     monkeypatch.setattr(artifact_tokens, "log_pin_applied", lambda _category, name, *_args: logged.append(name))
     context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins={"api_container": "2.0.0"}, version=True)
-    artifact_token_values(context.controller.index, deployment, log=log)
-    assert logged == expected
+
+    assert resolve_artifact_tag(context, deployment, "api_container", log=False).value == "2.0.0"
+    assert logged == []
+    resolve_artifact_tag(context, deployment, "api_container")
+    assert logged == ["api_container"]
 
 
 @pytest.mark.parametrize("declared", [None, ""])
@@ -1005,7 +1037,7 @@ def test_resolve_document_value_references_rejects_a_field_a_version_pin_overrid
 
 @pytest.mark.parametrize("field", ["image_name", "image_tag"])
 def test_resolve_document_value_references_points_an_artifact_image_at_the_artifact_token(tmp_path, field):
-    """Design 3 (docs/work/artifact-gap-analysis.md): an image read through `${value:}` is never pinned and
+    """Design 3 (docs/archive/artifact-gap-analysis.md): an image read through `${value:}` is never pinned and
     never listed, so both image fields are rejected and the message names the token."""
     root = _solution(tmp_path)
     _artifact(root, "api", image_name="int/api", image_tag="1.0.0")

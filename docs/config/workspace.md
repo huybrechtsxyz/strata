@@ -27,8 +27,9 @@ parameters.
 - `spec.topology[]` — inline topology groupings (type/components/namespaces/volumes) — see
   "Topology grouping" below. Inline since ADR-0028 (reverted from a standalone `kind: topology`
   document, ADR-0011) — not a list of names.
-- `spec.provisioners[]` — tool definitions (`ProvisionerModel`): `name`, `tool` (terraform, ansible,
-  helm, compose, script, ...), `source`, `backend` (terraform only), `properties` (ansible only),
+- `spec.provisioners[]` — tool definitions (`ProvisionerModel`): `name`, `tool` (terraform, opentofu,
+  helm, compose, script, ...; see "OpenTofu" below), `source`, `backend` (terraform and opentofu only),
+  `properties` (ansible only),
   `script` (script only, see "Script provisioner" below),
   `integration` (which [`integration`](integration.md) document supplies version/auth), `output`
   (Jinja2 template escape hatch)
@@ -196,6 +197,57 @@ Things to know:
   The design, and why it is a token rather than a default key, is in
   [deployment-tokens.md](../design/deployment-tokens.md).
 
+## OpenTofu
+
+`tool: opentofu` runs a root module with `tofu` instead of `terraform`. Everything above applies unchanged: the
+`backend` settings, the `strata` payload and `TF_VAR_<key>` values, `deploy plan`/`deploy apply` with a saved plan,
+`deploy destroy`, outputs, the [provisioner lock policy](#provisioner-lock-policy), the SBOM and the Checkov policy.
+
+```yaml
+provisioners:
+  - name: infra
+    tool: opentofu
+    integration: tofu        # optional: a `type: opentofu` integration, to pin the version or the binary
+    source:
+      source_path: infra
+```
+
+```yaml
+kind: integration
+meta:
+  name: tofu
+spec:
+  type: opentofu
+  capabilities: [infrastructure]
+  version: ">= 1.6"          # OpenTofu's own numbering, not Terraform's
+```
+
+- **Version.** OpenTofu 1.6, its first stable release, or later: every command and flag strata passes exists there.
+  `spec.version` is checked against `tofu version`.
+- **Its own type.** A `tool: opentofu` provisioner binds a `type: opentofu` integration, and a `type: terraform`
+  integration does not run `tofu` through `spec.command`; `strata validate` reports either
+  (`provisioner_integration_type_mismatch`, `integration_command_other_tool`). The type decides the version check,
+  the init advice and the provider registry.
+- **Lock files.** `tofu init` keys a short provider source (`hashicorp/azurerm`) as `registry.opentofu.org/...` in
+  `.terraform.lock.hcl`. The lock policy and the SBOM read the host the lock file holds, so a root locked by either
+  tool is read correctly.
+- **`.tf` roots only.** strata reads `*.tf` (and `*.tf.json`) files to find the `strata` variable, outputs and
+  providers. OpenTofu 1.8's `*.tofu` files are run by `tofu` but not read by strata: declare those in `.tf` files.
+- **State encryption.** OpenTofu's `encryption {}` block in the root module works as is; strata does not deliver
+  `TF_ENCRYPTION` keys.
+
+### Moving a deployment from Terraform to OpenTofu
+
+State backends and the state format are shared, so `backend` does not change.
+
+1. Set `tool: opentofu` (and `type: opentofu` on its integration, if it has one).
+2. Run `tofu init` in the root module and commit the updated `.terraform.lock.hcl`: it adds the
+   `registry.opentofu.org` entries. Until then the lock policy reports the providers as unlocked.
+3. Run `strata deploy plan` and check it shows no changes before the first apply. OpenTofu's migration guide is per
+   Terraform version; state written by a Terraform newer than the one OpenTofu forked from is worth checking there.
+4. Do not apply a saved plan across the switch: a `.tfplan` written by `terraform` cannot be applied by `tofu`. Plan
+   again after changing the tool.
+
 ## Script provisioner
 
 `tool: script` runs a `.ps1`, `.sh`, `.bash`, `.py` or `.bat` file as a step. `script` is required for this tool and
@@ -339,7 +391,7 @@ wants the answer before it clones and renders runs `strata deploy images` or `st
 The policy judges the images strata knows. For a Compose module and for an artifact that is what runs. For a Helm
 module, strata does not write a service's `image` into the chart's values, so the chart decides what runs. Set a
 Helm image through the module's `configuration`, in the chart's own key shape. See
-`helm-image-delivery.md` (work doc).
+[helm-image-delivery.md](../design/helm-image-delivery.md).
 
 - **With [`sbom.render_charts`](../how-to/sbom-generation.md#helm-images)**, on by default, the policy also judges every image the
   rendered charts run, sidecars and init containers included, read from the build's `sbom.json`. That is origin

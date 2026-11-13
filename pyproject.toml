@@ -58,6 +58,7 @@ docs = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pytest-xdist>=3.5",
     "mypy>=1.0",
     "ruff>=0.1.0",
     "import-linter>=2.0",
@@ -96,7 +97,10 @@ strata = ["py.typed", "templates/**/*"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-v"
+# No `-n` here: pytest-xdist pays a few seconds of worker start-up on every run, which makes a
+# single file or a small directory slower. Add `-n auto` for a full run; CI does
+# (.github/actions/test-python/action.yml).
+addopts = "-ra"
 
 [tool.mypy]
 # The oldest supported version, so a 3.13-only standard library API fails the check.

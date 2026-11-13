@@ -825,7 +825,7 @@ doc's own Phase 1 can start.
     comparable. An `images` pin is a whole reference (`acme/api:1.2.0`),
     so its tag is what is compared, and only when every sibling names the
     same image; an `artifacts` pin of `tag@digest` compares its tag
-    ([image-pin-validation.md](image-pin-validation.md)).
+    ([image-pin-validation.md](../design/version-pin-overlay.md#image-pin-shape)).
   Tests:
   [test_promotion_controller.py](../../tests/strata/controllers/test_promotion_controller.py)
   (5 new, for the new `build_status_rows()` — the placeholder row, one

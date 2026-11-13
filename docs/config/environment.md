@@ -34,6 +34,59 @@ of that machinery is ported.
 - `spec.properties` — merged as a layer into every deployment using this environment (tenant
   properties merge first, then this, then the deployment's own)
 - `spec.custom` — free-form data for scripts/extensions
+- `spec.extends` — a base environment whose spec is merged into this one (see "Bases" below)
+- `spec.partial` — `true` for a base meant only to be extended
+- `meta.params` — [parameter sets](parameterset.md) per role, read with `${param:<role>.<key>}`
+- `meta.name_rule` — the name every environment built on this one must have, with `${param:}`
+  tokens filled in
+
+## Bases: `extends` and `partial`
+
+Environments that differ in a few values can share one base (a worked example:
+[How To: tenant and environment bases](../how-to/environment-and-tenant-bases.md)). The child is
+merged over the base when the solution loads:
+
+| Field                              | Merge with `extends`                                                         |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| `properties`, `custom`             | deep merge per leaf key, child wins                                          |
+| `variables`, `secrets`, `features` | by `key`: a child entry **replaces the whole entry**; new keys are appended  |
+| `extends`, `partial`               | consumed, not part of the result                                             |
+
+A store entry is replaced, never merged field by field: a variable moved from `store: constant`
+to an integration-backed store keeps none of the base's fields. A child can override an inherited
+entry, not remove it. This is the same rule a deployment's list of environments follows at run
+time, applied when the solution loads.
+
+```yaml
+kind: environment
+meta: { name: spoke_flags_base }
+spec:
+  partial: true
+  features:
+    - { key: enable_nsp, store: constant, value: true }
+    - { key: enable_apim, store: constant, value: false }
+---
+kind: environment
+meta: { name: spoke-initech-001-env }
+spec:
+  extends: spoke_flags_base
+  features:
+    - { key: enable_apim, store: constant, value: true }   # replaces the base's entry
+```
+
+- Every reader (value assembly, `strata values`, token checks, `${value:}`, attributeconfig) sees
+  the merged environment; findings about it name the child's file.
+- A `partial: true` environment is a base only. A deployment or tenant that lists it in
+  `environments` is an error (`environment_not_listable`), and so is a
+  `${value:environment.<base>...}` token (`value_reference_to_base`). An environment without
+  `partial` may be extended and listed.
+- A base may read [parameter sets](parameterset.md): `deploy_code: ${param:customer.code}` in the
+  base, `meta.params: { customer: customer-acmep01 }` in the child. A spec that holds `${param:}`
+  is validated once per environment built on it, after the values are filled in. A secret's
+  `value` never reads a parameter set: that is a load error, since a parameter set is plain text
+  in git.
+- A cycle (`a` extends `b` extends `a`) is `circular_extends`; a base that does not exist is an
+  `unknown_reference` on `spec.extends`.
 
 ## Example
 

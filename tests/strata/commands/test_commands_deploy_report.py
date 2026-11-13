@@ -28,6 +28,9 @@ from strata.integrations.resolved_context import KeyValueEntry
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
 
+pytestmark = pytest.mark.slow
+
+
 _KV_VALUE = "kv-Secret-Value-123"
 _ENV_VALUE = "env-Secret-Value-456"
 _CONSTANT_VALUE = "c0nstant-Secret-Value"

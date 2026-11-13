@@ -46,7 +46,7 @@ class/instance split as `WorkspaceResourceModel.resource` and
 
 from typing import Annotated, Any, ClassVar, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from strata.models.common_models import (
     CommonLifecycleModel,
@@ -58,6 +58,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.reference_fields import References
+from strata.models.template_model import DocumentTemplateModel, ParamSetNames, check_name_rule
 from strata.utils.names import check_unique_names
 
 
@@ -548,6 +549,22 @@ class DeploymentMetaModel(PlatformBaseModel):
     """Deployment metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique deployment name")
+    params: ParamSetNames | None = Field(
+        None,
+        description="Parameter sets this deployment reads, per role: `{spoke: spoke-acme-001}`, or a list per "
+        "role merged in order (`{hub: [hub-defaults, hub-hub02]}`). Any document of the extends chain may name "
+        "sets: per role they merge root first, leaf last, later winning per leaf key, so a base's sets are "
+        "defaults and the leaf's override them. `${param:<role>.<key>}` in the spec of any document of the chain "
+        "reads the merged values. Not inherited as meta: each document names its own.",
+    )
+    name_rule: str | None = Field(
+        None,
+        min_length=1,
+        description="The name every deployable deployment built on this one must have, with `${param:<role>.<key>}` "
+        "tokens filled from that deployment's parameter sets (`bootstrap-${param:spoke.name}`). A deployment whose "
+        "meta.name differs is a `name_rule_mismatch` error that gives both names: names stay plain text, but cannot "
+        "drift from their values. Only `${param:}` tokens are allowed.",
+    )
     annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
@@ -555,6 +572,12 @@ class DeploymentMetaModel(PlatformBaseModel):
         None, description="Optional labels (key-value pairs for classification/filtering)"
     )
     tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
+
+    @field_validator("name_rule")
+    @classmethod
+    def validate_name_rule_tokens(cls, value: str | None) -> str | None:
+        """Only well-formed `${param:}` tokens: a run-time token (`${var:x}`) has no value when names are checked."""
+        return check_name_rule(value)
 
 
 class DeploymentModel(PlatformBaseModel):
@@ -599,3 +622,55 @@ class DeploymentModel(PlatformBaseModel):
         if self.spec.extends and self.spec.extends == self.meta.name:
             raise ValueError(f"Deployment '{self.meta.name}' cannot extend itself.")
         return self
+
+
+class DeploymentTemplateSpecModel(PlatformBaseModel):
+    """The spec of a deployment template, as written: only `partial` and `extends` are read before substitution.
+
+    Design notes:
+    Every other field is kept as written (`extra="allow"`) and validated per instance, once `${param:}` is
+    substituted from the chain of each deployable deployment (docs/design/parameter-sets.md, "Templates are
+    validated per instance"). `extends` and `partial` stay typed: the chain must be known before any value is
+    (rule 5), and `extends` is a reference the reference walk checks like any other.
+    """
+
+    model_config = ConfigDict(extra="allow", validate_assignment=True, str_strip_whitespace=True)
+
+    partial: bool = Field(
+        default=False, description="A reusable base, not deployable itself. Never filled from a parameter set."
+    )
+    extends: Annotated[PlatformName, References(PlatformKind.DEPLOYMENT)] | None = Field(
+        None, description="Base deployment to inherit from. Never filled from a parameter set."
+    )
+
+
+class DeploymentTemplateModel(DocumentTemplateModel):
+    """A deployment whose spec reads parameter sets (`${param:<role>.<key>}`): loaded with its meta validated and
+    its spec as written, and validated as a deployment once per deployable deployment whose chain it is in, after
+    the values are substituted.
+
+    Design notes:
+    Not a document kind of its own and never exported as a schema: the loader picks it instead of
+    `DeploymentModel` when a deployment's spec holds a `${param:}` token (`solution_controller.py`). The
+    resolver turns it into a `DeploymentModel` per leaf; checks that read a deployment skip a template that did not
+    resolve (`deployment_resolution.deployment_of()`), as they skip what a partial base lacks.
+    """
+
+    apiVersion: PlatformVersion = Field(
+        default=PlatformVersion.v2, frozen=True, description="API version for deployment configuration"
+    )
+    kind: PlatformKind = Field(
+        default=PlatformKind.DEPLOYMENT, frozen=True, description="Platform kind (always 'deployment')"
+    )
+    meta: DeploymentMetaModel = Field(description="Deployment metadata (name, params, annotations, labels, tags)")
+    spec: DeploymentTemplateSpecModel = Field(description="Deployment specification, as written")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.DEPLOYMENT)
+
+
+#: A deployment as the index holds it: validated, or a template validated per instance.
+AnyDeploymentModel = DeploymentModel | DeploymentTemplateModel

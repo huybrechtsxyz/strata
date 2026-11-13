@@ -47,19 +47,20 @@ from strata.services.asset_service import AssetService
 from strata.services.attributeconfig_service import AttributeConfigService
 from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
-from strata.services.deployment_service import DeploymentService
+from strata.services.deployment_service import DeploymentService, DeploymentTemplateService
 from strata.services.dns_service import DnsService
-from strata.services.environment_service import EnvironmentService
+from strata.services.environment_service import EnvironmentService, EnvironmentTemplateService
 from strata.services.firewall_service import FirewallService
 from strata.services.integration_service import IntegrationService
 from strata.services.module_service import ModuleService
 from strata.services.namespace_service import NamespaceService
 from strata.services.network_service import NetworkService
+from strata.services.parameterset_service import ParameterSetService
 from strata.services.provider_config_service import ProviderConfigService
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
 from strata.services.solution_service import SolutionService
-from strata.services.tenant_service import TenantService
+from strata.services.tenant_service import TenantService, TenantTemplateService
 from strata.services.topology_config_service import TopologyConfigService
 from strata.services.version_service import VersionService
 from strata.services.workspace_service import WorkspaceService
@@ -70,6 +71,7 @@ from strata.utils.layout import (
     YAML_SUFFIXES,
     manifest_path,
 )
+from strata.utils.param_tokens import holds_param_tokens
 
 #: Every `apiVersion` value that marks a document as ours. Anything else (or
 #: nothing) means "not a strata document" and is skipped without complaint.
@@ -98,6 +100,16 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.VERSION: VersionService,
     PlatformKind.ARTIFACT: ArtifactService,
     PlatformKind.ASSET: AssetService,
+    PlatformKind.PARAMETERSET: ParameterSetService,
+}
+
+#: The kinds whose spec may read parameter sets, and the service that loads such a document as a template: meta
+#: validated, spec as written, validated per instance once the resolver substitutes `${param:}`
+#: (docs/design/parameter-sets.md, "Templates are validated per instance").
+TEMPLATE_SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
+    PlatformKind.DEPLOYMENT: DeploymentTemplateService,
+    PlatformKind.ENVIRONMENT: EnvironmentTemplateService,
+    PlatformKind.TENANT: TenantTemplateService,
 }
 
 
@@ -120,11 +132,22 @@ class DocumentRef:
 
 @dataclass(frozen=True)
 class IndexEntry:
-    """A validated document plus where it was found."""
+    """A validated document plus where it was found.
+
+    `written` is the document as written when `model` is what resolution made of it: an environment or tenant
+    resolved through `extends` and `${param:}` (`document_chains.resolve_environments_and_tenants()`). Every check
+    reads `model`; the chain walks read `as_written`.
+    """
 
     ref: DocumentRef
     model: PlatformBaseModel
     source: Path
+    written: PlatformBaseModel | None = None
+
+    @property
+    def as_written(self) -> PlatformBaseModel:
+        """The document as its file holds it."""
+        return self.written if self.written is not None else self.model
 
 
 class DocumentIndex:
@@ -141,6 +164,16 @@ class DocumentIndex:
             raise ValueError(f"Duplicate {entry.ref}: defined in both '{existing.source}' and '{entry.source}'")
         self._entries[entry.ref] = entry
         self._names.setdefault(entry.ref.kind, set()).add(entry.ref.name)
+
+    def replace(self, entry: IndexEntry) -> None:
+        """Put a resolved document in place of the one indexed under the same identity. Used only by resolution.
+
+        Raises:
+            KeyError: Nothing is indexed under `entry.ref`.
+        """
+        if entry.ref not in self._entries:
+            raise KeyError(f"cannot replace {entry.ref}: it is not in the index")
+        self._entries[entry.ref] = entry
 
     def get(self, kind: PlatformKind, name: str, remote: str | None = None) -> IndexEntry | None:
         """Return the entry for this identity, or None."""
@@ -349,6 +382,8 @@ class SolutionController:
             return
 
         service_class = SERVICE_BY_KIND[kind]
+        if kind in TEMPLATE_SERVICE_BY_KIND and holds_param_tokens(raw.get("spec")):
+            service_class = TEMPLATE_SERVICE_BY_KIND[kind]
         service = service_class(data=raw)
         result = service.validate()
         if not result.ok or service.model is None:

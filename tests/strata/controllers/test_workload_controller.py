@@ -221,6 +221,32 @@ def test_apply_version_pins_logs_each_application():
     assert categories == {"charts", "images"}
 
 
+def test_apply_version_pins_without_logging_still_applies_every_pin(monkeypatch):
+    """`log=False` is for callers that only re-derive what the build applied (`effective_images()`, the SBOM, the
+    audit manifest): the overlay is the same, nothing is logged."""
+    import strata.controllers.workload_controller as workload_controller
+
+    logged: list[str] = []
+    monkeypatch.setattr(workload_controller, "log_pin_applied", lambda category, *_args: logged.append(category))
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="redis"),
+        spec=ModuleSpecModel(
+            source=SourceModel(remote="goauthentik", chart_name="authentik", chart_version="2024.1.0"),
+            type="helm",
+            services=[ModuleServiceModel(name="redis", image="redis:7")],
+            default_labels={},
+        ),
+    )
+    version = _version(chart_pins={"redis": "2024.2.0"}, image_pins={"redis": "redis:7.2"})
+
+    overlaid = apply_version_pins(module, version, log=False)
+
+    assert (overlaid.spec.source.chart_version, overlaid.spec.services[0].image) == ("2024.2.0", "redis:7.2")
+    assert logged == []
+    apply_version_pins(module, version)
+    assert logged == ["charts", "images"]
+
+
 # ---------------------------------------------------------------------------
 # resolve_artifact_services() (docs/archive/artifact-references.md Path 1)
 # ---------------------------------------------------------------------------
@@ -288,7 +314,7 @@ def test_resolve_artifact_services_overrides_image_and_clears_artifact(tmp_path:
 )
 def test_resolve_artifact_services_writes_a_digest_as_a_runtime_pulls_it(tmp_path: Path, image_tag, image):
     """`1.2.3@sha256:...` gives `name:1.2.3@sha256:...`, never `name@1.2.3@sha256:...`
-    (docs/work/artifact-gap-analysis.md, design 4)."""
+    (docs/archive/artifact-gap-analysis.md, design 4)."""
     module = _module_with_artifact("scheduler", "api_container")
     index = DocumentIndex()
     index.add(
@@ -507,7 +533,7 @@ def test_build_workload_modules_cannot_key_check_an_unpinned_registry_chart(tmp_
 
 
 # ---------------------------------------------------------------------------
-# Registry charts pinned at build (docs/work/helm-registry-chart-checks.md, Phase 3)
+# Registry charts pinned at build (docs/design/helm-chart-deployment.md, "Registry charts")
 # ---------------------------------------------------------------------------
 
 _REPOSITORY = "https://charts.example.com"
@@ -779,7 +805,7 @@ def test_registry_credentials_that_need_resolve_unpin_and_broken_ones_fail(tmp_p
 
 
 # ---------------------------------------------------------------------------
-# Local chart dependencies placed at build (docs/work/helm-chart-dependencies.md, Phase 2)
+# Local chart dependencies placed at build (docs/design/helm-chart-deployment.md, "Chart dependencies")
 # ---------------------------------------------------------------------------
 
 
@@ -1004,6 +1030,7 @@ def test_an_out_of_sync_lock_is_an_error(tmp_path: Path):
 
 @pytest.mark.chart_pulls
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+@pytest.mark.slow
 def test_real_helm_installs_from_the_dependencies_the_build_placed(tmp_path: Path):
     """A remote dependency served over local HTTP and a `file://` one; `helm template` then renders the build copy."""
     root = tmp_path / "sln"

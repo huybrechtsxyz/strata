@@ -39,7 +39,7 @@ provisioned resource.
 from datetime import date
 from typing import Annotated, Any, ClassVar
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
@@ -49,7 +49,28 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.reference_fields import References
+from strata.models.template_model import DocumentTemplateModel, ParamSetNames, check_name_rule
 from strata.utils.names import check_unique_names
+
+_PARTIAL_DESCRIPTION = (
+    "When true this is a base for other tenants (`extends`), not a tenant of its own: `display_name` may be absent, "
+    "no deployment may name it in `tenant`, and no `${value:}` token may read it."
+)
+_EXTENDS_DESCRIPTION = (
+    "Name of a base Tenant whose spec is merged into this one when the solution loads. Child always wins: "
+    "`display_name` and `onboarded` are replaced, `geographies` is replaced by the child's list when it sets one, "
+    "`environments` is the base's list then the child's, and `properties`, `custom` and `configuration` deep-merge "
+    "per leaf key. Circular chains are rejected."
+)
+_PARAMS_DESCRIPTION = (
+    "Parameter sets this tenant reads, per role: `{tenant: tenant-initech}`, or a list per role merged in order. "
+    "Any document of the extends chain may name sets: per role they merge root first, leaf last, later winning per "
+    "leaf key. `${param:<role>.<key>}` in the spec of any document of the chain reads the merged values."
+)
+_NAME_RULE_DESCRIPTION = (
+    "The name every tenant built on this one must have, with `${param:<role>.<key>}` tokens filled from that "
+    "tenant's parameter sets (`${param:tenant.code}`). Only `${param:}` tokens are allowed."
+)
 
 
 class TenantSpecModel(PlatformBaseModel):
@@ -63,12 +84,19 @@ class TenantSpecModel(PlatformBaseModel):
     schema_rules: ClassVar[tuple[str, ...]] = (
         "Geographies must be unique.",
         "Environment references must be unique, because a repeat would merge twice.",
+        "A tenant needs `display_name`. A `partial: true` tenant, or one with `extends`, is exempt because its "
+        "missing fields come from the base.",
     )
 
-    display_name: str = Field(
+    partial: bool = Field(default=False, description=_PARTIAL_DESCRIPTION)
+    extends: Annotated[PlatformName, References(PlatformKind.TENANT)] | None = Field(
+        None, description=_EXTENDS_DESCRIPTION
+    )
+    display_name: str | None = Field(
+        None,
         min_length=1,
         description="Human-readable tenant name (e.g. 'Acme Corporation'). The tenant's identifier/code is "
-        "meta.name (e.g. 'contoso').",
+        "meta.name (e.g. 'contoso'). Required, unless the tenant is `partial` or gets it through `extends`.",
     )
     geographies: list[str] | None = Field(
         default=None,
@@ -138,11 +166,26 @@ class TenantSpecModel(PlatformBaseModel):
             check_unique_names(self.environments, "environment references in tenant spec")
         return self
 
+    @model_validator(mode="after")
+    def validate_complete_unless_partial(self) -> "TenantSpecModel":
+        """A tenant needs `display_name`, unless it is a `partial: true` base or gets it through `extends`.
+
+        The merged result is validated without `extends`, so the check still applies to every tenant in use.
+        """
+        if not (self.partial or self.extends or self.display_name):
+            raise ValueError(
+                "Tenant is missing required field 'display_name'. Set 'partial: true' if this is a reusable "
+                "base, or 'extends' if another tenant supplies it."
+            )
+        return self
+
 
 class TenantMetaModel(PlatformBaseModel):
     """Tenant metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Tenant code — the unique identifier (e.g. 'contoso')")
+    params: ParamSetNames | None = Field(None, description=_PARAMS_DESCRIPTION)
+    name_rule: str | None = Field(None, min_length=1, description=_NAME_RULE_DESCRIPTION)
     annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
@@ -150,6 +193,12 @@ class TenantMetaModel(PlatformBaseModel):
         None, description="Optional labels (key-value pairs for classification/filtering)"
     )
     tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
+
+    @field_validator("name_rule")
+    @classmethod
+    def validate_name_rule_tokens(cls, value: str | None) -> str | None:
+        """Only well-formed `${param:}` tokens: a run-time token has no value when names are checked."""
+        return check_name_rule(value)
 
 
 class TenantModel(PlatformBaseModel):
@@ -159,6 +208,10 @@ class TenantModel(PlatformBaseModel):
     Design notes:
     Root model for a tenant configuration file.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "A tenant cannot extend itself; longer extends cycles are rejected when the solution loads.",
+    )
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,
@@ -172,6 +225,52 @@ class TenantModel(PlatformBaseModel):
     )
     meta: TenantMetaModel = Field(description="Tenant metadata (name, annotations, labels, tags)")
     spec: TenantSpecModel = Field(description="Tenant specification (identity, geographies, environments, defaults)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.TENANT)
+
+    @model_validator(mode="after")
+    def validate_not_self_extending(self) -> "TenantModel":
+        """A tenant cannot extend itself; longer cycles are rejected when the chain is resolved."""
+        if self.spec.extends and self.spec.extends == self.meta.name:
+            raise ValueError(f"Tenant '{self.meta.name}' cannot extend itself.")
+        return self
+
+
+class TenantTemplateSpecModel(PlatformBaseModel):
+    """The spec of a tenant template, as written: only `partial` and `extends` are read before substitution.
+
+    Design notes:
+    Every other field is kept as written and validated per tenant that resolves through it, once `${param:}` is
+    substituted (docs/design/parameter-sets.md, "Templates are validated per instance").
+    """
+
+    model_config = ConfigDict(extra="allow", validate_assignment=True, str_strip_whitespace=True)
+
+    partial: bool = Field(default=False, description=_PARTIAL_DESCRIPTION)
+    extends: Annotated[PlatformName, References(PlatformKind.TENANT)] | None = Field(
+        None, description=_EXTENDS_DESCRIPTION
+    )
+
+
+class TenantTemplateModel(DocumentTemplateModel):
+    """A tenant whose spec reads parameter sets (`${param:<role>.<key>}`): meta validated, spec as written.
+
+    Design notes:
+    Not a kind of its own and never exported as a schema: the loader picks it over `TenantModel` when the spec holds
+    a `${param:}` token. Resolution (`controllers/document_chains.py`) replaces a non-partial one in the index with
+    the `TenantModel` it resolves to.
+    """
+
+    apiVersion: PlatformVersion = Field(
+        default=PlatformVersion.v2, frozen=True, description="API version for tenant configuration"
+    )
+    kind: PlatformKind = Field(default=PlatformKind.TENANT, frozen=True, description="Platform kind (always 'tenant')")
+    meta: TenantMetaModel = Field(description="Tenant metadata (name, params, annotations, labels, tags)")
+    spec: TenantTemplateSpecModel = Field(description="Tenant specification, as written")
 
     @field_validator("kind")
     @classmethod

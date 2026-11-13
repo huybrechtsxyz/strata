@@ -12,7 +12,7 @@ matching Terraform's own class rather than v1's inconsistency.
 Argv shapes (flag ordering) copied exactly from v1's real
 `HelmDeployer.plan()`/`.apply()`/`.destroy()` — proven, not redesigned. Helm 4 gets its own flags
 (`--dry-run=client`, `--wait=watcher`, `--rollback-on-failure`); v1's (`--dry-run`, `--wait`, `--atomic`) are kept
-for a Helm integration whose `spec.version` excludes Helm 4 (ADR-0055, docs/work/helm-4-support.md).
+for a Helm integration whose `spec.version` excludes Helm 4 (ADR-0055, docs/design/helm-chart-deployment.md).
 
 Chart reference resolution (`meta.yaml` parsing, OCI-vs-HTTP-vs-local,
 repo aliasing) and value substitution (`${var:}/${secret:}/${feature:}`
@@ -47,7 +47,7 @@ from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.errors import IntegrationError, RegistryAuthError
 from strata.integrations.helm_cache import ChartPin, ChartPullError, pull_chart
 
-#: A registry chart with no archive verified against the build's pin (docs/work/helm-registry-chart-checks.md).
+#: A registry chart with no archive verified against the build's pin (docs/design/helm-chart-deployment.md).
 CHART_NOT_PINNED = "helm_chart_not_pinned"
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.models.auth_models import AuthenticationModel
@@ -233,7 +233,7 @@ class HelmIntegration(InfraIntegration):
         does (docs/design/deploy-destroy.md, D7).
 
         `chart_archives`, keyed by module build directory: the registry charts `deploy_run()` verified
-        against the pin `build run` recorded (docs/work/helm-registry-chart-checks.md). A registry-chart
+        against the pin `build run` recorded (docs/design/helm-chart-deployment.md). A registry-chart
         module is installed from that archive, so no repository or registry is contacted here; one with
         no verified archive is an error (`helm_chart_not_pinned`) and the others still run.
 
@@ -412,7 +412,7 @@ class HelmIntegration(InfraIntegration):
         secret, so none reaches disk or argv. The overlay lives outside the build directory, which a check
         must not alter. A `${output:}` whose upstream step has not applied yet gets a placeholder, because a
         check must not depend on infrastructure that does not exist yet. A registry chart is linted from its
-        verified archive in `chart_archives` (docs/work/helm-registry-chart-checks.md) and skipped without one.
+        verified archive in `chart_archives` (docs/design/helm-chart-deployment.md) and skipped without one.
         Only `[ERROR]` findings fail (lint exits non-zero on nothing else).
         """
         del kwargs
@@ -675,7 +675,7 @@ class HelmIntegration(InfraIntegration):
         diagnostics: Diagnostics | None = None,
         location: str | None = None,
     ) -> ChartPin:
-        """Pull the registry chart `meta` names into the `.strata/helm/` cache (docs/work/helm-registry-chart-checks.md).
+        """Pull the registry chart `meta` names into the `.strata/helm/` cache (docs/design/helm-chart-deployment.md).
 
         Always in an isolated Helm configuration, credentialed or not, so neither `build run` nor the deploy's
         verification touches the user's own repositories or registry logins. `version` may be a range at build;
@@ -717,7 +717,7 @@ class HelmIntegration(InfraIntegration):
         `chart_dir` is a chart folder or a packaged chart (`.tgz`, a registry chart from `.strata/helm/`). No
         `--dependency-update` and no repository: a dependency that is not vendored under `charts/` fails the
         render instead of fetching it. Run in an isolated Helm configuration, so the user's repositories and
-        plugins play no part. Used by the SBOM's `chart-image` collector (docs/work/helm-image-delivery.md).
+        plugins play no part. Used by the SBOM's `chart-image` collector (docs/design/helm-image-delivery.md).
         """
         # Absolute, because Helm runs in the chart's folder: a relative `--build-path` would otherwise not resolve.
         chart_dir = chart_dir.resolve()
@@ -809,7 +809,7 @@ def check_configuration_keys(
     close-match suggestion. An empty default mapping (`env: {}`) is a free-form bag, so its children are not
     checked. No chart defaults means nothing to check against. `subchart_keys` (each dependency's name or alias,
     and `global`) pass Helm on to subcharts, so they and their children are not checked
-    (docs/work/helm-chart-dependencies.md).
+    (docs/design/helm-chart-deployment.md).
     """
     if not chart_values:
         return []

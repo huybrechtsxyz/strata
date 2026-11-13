@@ -16,10 +16,12 @@ from strata.models.deployment_model import DeploymentModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.builtin_types import TERRAFORM_COMPATIBLE_TYPES
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.sbom_utils import TERRAFORM_DEFAULT_REGISTRY
+from strata.utils.sbom_utils import DEFAULT_PROVIDER_REGISTRIES, default_provider_registry
 
 _LOCK_FILENAME = ".terraform.lock.hcl"
 _TOOLS = {tool.value for tool in TERRAFORM_COMPATIBLE_TYPES}
+#: The command that writes the lock file, by tool (docs/design/opentofu.md).
+_INIT = {"terraform": "terraform init", "opentofu": "tofu init"}
 
 
 def check_provisioner_lock_policy(
@@ -77,7 +79,8 @@ def evaluate_provisioner_lock_policy(
                 continue
             note = f" (its allow entry expired on {entry.expires})"
 
-        locks = read_provider_locks(path)
+        locks = read_provider_locks(path, default_provider_registry(str(provisioner.tool)))
+        init = _INIT.get(str(provisioner.tool), "init")
         if not locks.needs_providers:
             continue
         if locks.lock_file is None:
@@ -85,13 +88,13 @@ def evaluate_provisioner_lock_policy(
             listed = f" ({providers})" if providers else ""
             report(
                 f"provisioner_lock_policy: provisioner '{provisioner.name}' has no {_LOCK_FILENAME}{listed}. "
-                f"Run terraform init and commit the lock file it writes next to the *.tf files.{note}",
+                f"Run {init} and commit the lock file it writes next to the *.tf files.{note}",
                 code="provisioner_lock_missing",
             )
         elif locks.unlocked:
             report(
                 f"provisioner_lock_policy: provisioner '{provisioner.name}': {_LOCK_FILENAME} does not lock "
-                f"{', '.join(_short(a) for a in locks.unlocked)}. Run terraform init and commit the updated lock "
+                f"{', '.join(_short(a) for a in locks.unlocked)}. Run {init} and commit the updated lock "
                 f"file.{note}",
                 code="provisioner_lock_missing",
             )
@@ -99,8 +102,10 @@ def evaluate_provisioner_lock_policy(
 
 
 def _short(address: str) -> str:
-    """`hashicorp/azurerm` for the default registry; another registry keeps its host."""
-    return address.removeprefix(f"{TERRAFORM_DEFAULT_REGISTRY}/")
+    """`hashicorp/azurerm` for a default registry (Terraform's or OpenTofu's); another registry keeps its host."""
+    for host in DEFAULT_PROVIDER_REGISTRIES:
+        address = address.removeprefix(f"{host}/")
+    return address
 
 
 def _named(addresses: list[str]) -> str:

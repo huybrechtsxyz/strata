@@ -176,6 +176,7 @@ def test_a_tool_missing_from_path_keeps_the_preflight_message():
     ("installed", "codes"),
     [("1.9.2", []), ("1.5.0", ["integration_version_mismatch"]), (None, ["integration_version_mismatch"])],
 )
+@pytest.mark.slow
 def test_the_installed_version_is_read_once_and_compared(installed, codes):
     readiness = assess_integration(_cli(installed)(_document(version="~> 1.7")))
     assert _codes(readiness) == codes
@@ -257,6 +258,7 @@ def test_only_a_real_version_is_reported(output, reported):
     assert readiness.installed_version is not None and readiness.reported_version == reported
 
 
+@pytest.mark.slow
 def test_flags_only_problems_can_be_warnings_and_others_cannot():
     readiness = replace(
         assess_integration(_versioned("3.13.2")(None)),

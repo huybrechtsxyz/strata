@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `strata deploy images` (docs/work/effective-images.md)."""
+"""Tests for `strata deploy images` (docs/design/effective-images.md)."""
 
 import json
 from pathlib import Path
@@ -146,7 +146,7 @@ def test_console_prints_a_table_with_the_tag_source(tmp_path):
     )
 
 
-# A tag and a digest (docs/work/artifact-gap-analysis.md, design 4).
+# A tag and a digest (docs/archive/artifact-gap-analysis.md, design 4).
 
 _DIGEST = "sha256:" + "9f86d081" * 8
 
@@ -251,7 +251,7 @@ def test_the_policy_judges_the_deployment_under_pin(tmp_path):
     assert _invoke(root, "other", "--pin", "prd").exit_code == EXIT_SUCCESS
 
 
-# `integration` (docs/work/artifact-gap-analysis.md, design 6 step 1): which credentials a copy needs, by name.
+# `integration` (docs/archive/artifact-gap-analysis.md, design 6 step 1): which credentials a copy needs, by name.
 
 
 def _rows(result) -> dict:
@@ -294,7 +294,7 @@ def test_the_integration_never_carries_a_credential(tmp_path):
     assert "FEED_API_KEY" not in result.output
 
 
-# Images strata does not deliver or does not know (docs/work/helm-image-delivery.md, option B).
+# Images strata does not deliver or does not know (docs/design/helm-image-delivery.md, "Modules whose images strata does not know").
 
 
 def _with_helm(root: Path, *, services: str = "") -> None:

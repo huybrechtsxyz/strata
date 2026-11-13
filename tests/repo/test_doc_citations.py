@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every doc path (`docs/<dir>/<name>.md`) cited in a file under `src/` or `tests/` (tracked or new) exists (docs/work/doc-citations.md).
+"""Every doc path (`docs/<dir>/<name>.md`) cited in a file under `src/` or `tests/` (tracked or new) exists (docs/work/README.md).
 
 A doc moves between `docs/work/`, `docs/design/` and `docs/archive/` as it matures, and nothing else updates the
 docstrings, comments and schema descriptions that cite it. This test is that update's reminder.
@@ -37,9 +37,11 @@ def _tracked_files() -> list[Path]:
         text=True,
         check=True,
     ).stdout.split()
-    return [REPO_ROOT / name for name in listed if name.endswith(_SUFFIXES)]
+    # `--cached` still lists a file deleted or moved in the working tree until the change is staged.
+    return [REPO_ROOT / name for name in listed if name.endswith(_SUFFIXES) and (REPO_ROOT / name).is_file()]
 
 
+@pytest.mark.slow
 def test_every_cited_doc_exists():
     docs = REPO_ROOT / "docs"
     by_name: dict[str, list[str]] = {}

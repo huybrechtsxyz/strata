@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The dependencies of a local Helm chart, planned and recorded by `build run` (docs/work/helm-chart-dependencies.md).
+"""The dependencies of a local Helm chart, planned and recorded by `build run` (docs/design/helm-chart-deployment.md).
 
 Strata fills the build copy's `charts/` itself instead of running `helm dependency build`: without a `Chart.lock`
 that command writes one (ADR-0054 rules out inventing a tool's lock), with one it needs every HTTP repository in the
@@ -104,7 +104,7 @@ def values_keys(chart_dir: Path) -> set[str]:
 
 
 def plan_dependencies(chart_dir: Path) -> list[PlannedDependency]:
-    """What each dependency of the chart at `chart_dir` needs (the table in docs/work/helm-chart-dependencies.md)."""
+    """What each dependency of the chart at `chart_dir` needs (the table in docs/design/helm-chart-deployment.md)."""
     committed = {sub.name for sub in subcharts(chart_dir / "charts")}
     lock = _read_lock(chart_dir)
     planned: list[PlannedDependency] = []

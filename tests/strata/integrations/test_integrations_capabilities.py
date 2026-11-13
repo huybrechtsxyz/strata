@@ -785,6 +785,7 @@ def test_every_infra_integration_type_is_a_known_real_integration():
     names = {cls.__name__ for cls in _all_infra_integration_types()}
     assert names == {
         "TerraformIntegration",
+        "OpenTofuIntegration",
         "HelmIntegration",
         "ComposeIntegration",
         "ScriptIntegration",

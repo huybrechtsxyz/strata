@@ -30,6 +30,9 @@ import pytest
 
 from strata.integrations.terraform_projection import rewrite_strata_payload
 
+pytestmark = pytest.mark.slow
+
+
 ROOT_MODULE = """
 variable "strata" {
   type = any

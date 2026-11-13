@@ -1,12 +1,14 @@
-# Artifact gap analysis - Work
+# Artifact gap analysis
 
-- Status: in-progress (all designs agreed; every design built except 6 step 2, which waits for a private-registry
-  user; ADR-0058 written)
-- Last updated: 2026-11-10
+- Status: implemented. Designs 1 to 11 built, not yet released (`[Unreleased]` in the CHANGELOG, after 2.6.0). Design 6 step 2 (a Compose
+  `docker login`) is out of scope until a private-registry consumer needs it. Kept as the historical record of the
+  artifact review; the current behaviour is in [artifact.md](../config/artifact.md) and
+  [effective-images.md](../design/effective-images.md).
+- Last updated: 2026-11-12
 - Related: [artifact.md](../config/artifact.md) (the reference),
   [ADR-0026](../decisions/0026-pinnable-artifact-references.md) (pinnable artifact references),
   [artifact-references.md](../archive/artifact-references.md) (the original design, archived),
-  [helm-image-delivery.md](helm-image-delivery.md) (which image a Helm module runs),
+  [helm-image-delivery.md](../design/helm-image-delivery.md) (which image a Helm module runs),
   [deployment-tokens.md](../design/deployment-tokens.md) (the built-in token the main design copies),
   [image-tag-policy.md](../design/image-tag-policy.md) (the policy over effective images)
 
@@ -150,7 +152,7 @@ the map key cannot collide with a variable, an output `artifact.x` or a deployme
 ### 2. Deliver a Helm service's artifact to the chart
 
 **Problem.** A module service's `artifact` is resolved into `service.image`, and the Helm integration never writes
-`service.image` into the chart values ([helm-image-delivery.md](helm-image-delivery.md)). For a Helm module,
+`service.image` into the chart values ([helm-image-delivery.md](../design/helm-image-delivery.md)). For a Helm module,
 `artifact:` and its pin change `deploy images`, the SBOM, the policies and the audit manifest, but not what runs.
 `artifact.md` and `module.md` do not say so.
 
@@ -501,8 +503,70 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 - `artifact_model.py`'s module docstring also lists the ways an artifact is referenced; it gains the token.
 - Out of scope: the same drift for other moved docs (`gap_fit_v1.md`, `audit-trail.md`,
   `cross-run-step-output-delivery.md` and five more, 135 citations in all). Listed as a follow-up, with a guard
-  test that would have caught all of it. Done 2026-11-10 in [doc-citations.md](doc-citations.md): 139 citations
-  of 13 docs, counted with the ones wrapped across lines, and `tests/strata/test_doc_citations.py`.
+  test that would have caught all of it. Done 2026-11-10: 139 citations of 13 docs, counted with the ones wrapped
+  across lines, and `tests/strata/test_doc_citations.py`. The rule is now "Citing docs, and moving them" in
+  `docs/work/README.md`.
+
+### 11. One delivery rule for a Helm module's `${artifact:}` tokens
+
+**Problem** (found in the review of PR #330). Design 2 and design 3 answer "does this Helm module deliver the
+artifact?" with different rules. `artifact_not_delivered` (design 2) counts a token only in the chart's own keys:
+the module's `spec.configuration` or a service's `configuration`. `effective_images()` (design 3) counts a token
+anywhere in a reached document as delivery, `services[].environment` included. A token in `environment` becomes an
+environment variable (`helm.py`'s `_render_values()` writes it under `<entry>.env`), which never changes the image
+a pod runs:
+
+```yaml
+kind: module
+spec:
+  type: helm
+  services:
+    - name: api
+      artifact: api
+      environment:
+        - key: IMAGE
+          value: ${artifact:api.image_ref}   # an env var for the app, not the chart's image
+```
+
+`strata validate` warns `artifact_not_delivered`, rightly. `deploy images` shows the row as delivered, and so do
+the SBOM (no `strata:image-delivered: false`), the audit manifest, `image_tag_policy` (no "declared only") and the
+image gate, because every one of them reads `effective_images()`. Remove the `environment` entry and all of them say
+"not delivered": adding an environment variable changed the answer without changing what runs.
+
+**Decision.** Design 2's rule wins, and both checks call one function for it.
+
+- `artifact_tokens.helm_delivered_artifacts(module)`: the artifact names an `${artifact:}` token names in the
+  module's `spec.configuration` or in any service's `configuration`, the parts of `_render_values()` that land in
+  the chart's own keys. `semantic_checks` already imports `artifact_tokens` (index-based, no import cycle).
+- **`effective_images()`**: in a reached `type: helm` module document, a token still counts as a **use** (the
+  `token:module/<name>` in USED BY, and the artifact is not `artifact_unused`), but it marks the artifact
+  **delivered** only when `helm_delivered_artifacts()` has it. A token anywhere else in a Helm module marks it not
+  delivered, with the reason `helm module: no ${artifact:} token in the chart's values`. Tokens in every other
+  document (deployment, tenant, environment, workspace, other module types) are unchanged: they reach a provisioner
+  that consumes them.
+- **`artifact_not_delivered`**: uses the same function, so a token in **another** service's `configuration` now
+  counts too. That service's configuration is also written into the chart's values, so the image can run through
+  it; the per-service rule was stricter than what `_render_values()` does. The only loosening.
+- The `_artifact_not_delivered()` reason for a service's `artifact` gains the same "in the chart's values", so
+  `deploy images` says why in the words the warning uses.
+
+**Out of scope.** An artifact used by a Helm module without a chart-key token and **also** received by another step
+(a `store: artifact` variable for Terraform) stays delivered in `effective_images()`, which judges a deployment,
+while `artifact_not_delivered` still warns on the module, which it judges alone. Both are right about what they
+judge. A Compose module's `environment` token is the same shape, but Compose delivers a service's `artifact` through
+its `image` anyway, so no row is wrong there.
+
+**Implementation plan.**
+
+1. `artifact_tokens.py`: `helm_delivered_artifacts(module: ModuleModel) -> set[str]`.
+2. `semantic_checks._check_helm_artifact_delivery()`: one call per module instead of the module and service checks.
+3. `effective_images.py`: the reached documents keep their model; for a `type: helm` module the token loop adds the
+   use, and adds the artifact to `artifact_delivered` or `artifact_undelivered` by the rule above.
+   `_artifact_not_delivered()` gains "in the chart's values".
+4. Tests: an `environment`-only token is a use but not delivered (`effective_images()`, `deploy images`); a token in
+   `configuration` still delivers; another service's `configuration` satisfies `artifact_not_delivered`; the two
+   agree on the review's example.
+5. Docs: design 2's "Changes" and this design's progress line; `module.md` if it states the rule.
 
 ### Smaller notes
 
@@ -521,44 +585,47 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 - [ADR-0058](../decisions/0058-artifact-token-for-pinned-image-fields.md) - the `${artifact:NAME.FIELD}` token
   (designs 1 and 3): deploy time only, `store: artifact` kept for Terraform, `${value:}` off the image fields
 
-## Remaining Work / Open Questions
+## Progress and resolved questions
 
 ### Progress
 
-- **Design 1, built 2026-11-10** (not released). As planned, with one difference: the `${artifact:}` entries hold
+- **Design 1, built 2026-11-10**. As planned, with one difference: the `${artifact:}` entries hold
   every artifact in the solution, so a script without `script.values` sees them all in `STRATA_VALUES` (they are not
   secrets).
-- **Design 3, built 2026-11-10** (not released), as planned. `effective_images()` scans the same documents
+- **Design 3, built 2026-11-10**, as planned. `effective_images()` scans the same documents
   `strata validate` checks (`controllers/reachable_documents.py`), leaving out modules reached only through a
   disabled namespace reference; each use is `token:<kind>/<name>`. `${value:artifact.N.spec.image_name}` is now
   rejected, with the token in the message.
-- **Design 10, built 2026-11-10** (not released), as planned: 21 citations in 14 source and test files, plus the
+- **Design 10, built 2026-11-10**, as planned: 21 citations in 14 source and test files, plus the
   one unlinked mention in `version-pin-overlay.md`. Nothing in `src/` or `tests/` cites `docs/work/` or
   `docs/design/artifact-references.md` any more.
-- **Design 2, built 2026-11-10** (not released), as planned. `artifact_not_delivered` looks in the module's and the
+- **Design 2, built 2026-11-10**, as planned. `artifact_not_delivered` looks in the module's and the
   service's `configuration` only. A `deploy run` test shows the pinned tag in the chart's `strata-values.yaml`.
   Also corrected `module.md`, which said a Helm service's `configuration` lands under `values.<service>`; it lands
   under `<module>-<service>` (or `<service>` when the names are equal).
-- **Design 9, built 2026-11-10** (not released), as planned. `strata deploy images prd-deployment --path config` now
+- **Design 9, built 2026-11-10**, as planned. `strata deploy images prd-deployment --path config` now
   lists `example-api` (`variable:API_IMAGE_TAG`, `token:workspace/main`) and `portainer`
   (`service:portainer/portainer`), both `pin prd`; `prd-acme-deployment` shows both as `declared`.
-- **Design 5, built 2026-11-10** (not released), as planned. It found the mismatch it was written for in
+- **Design 5, built 2026-11-10**, as planned. It found the mismatch it was written for in
   `config/artifacts/example-api.yaml`, and the same one in the `artifact.md` example and the schema example; all
   three now carry the host in `image_name`. The `image_name` and `registry` descriptions say the host belongs in
   `image_name`.
-- **Design 6 step 1, built 2026-11-10** (not released), as planned. `deploy images` shows `INTEGRATION`
+- **Design 6 step 1, built 2026-11-10**, as planned. `deploy images` shows `INTEGRATION`
   only when some image names one; `deploy report`'s `images[]` carries the field too. Step 2 (a Compose
-  `docker login`) waits for a real private-registry consumer.
-- **Design 7, built 2026-11-10** (not released), as planned. `template_secret_keys()` is now one case of
+  `docker login`) is out of scope until a real private-registry consumer needs it.
+- **Design 7, built 2026-11-10**, as planned. `template_secret_keys()` is now one case of
   `template_context_keys()`. The effective-images and `deploy images` test fixtures had a Terraform
   provisioner but no `execution` step, so their variables reached nothing; they gained the step.
-- **Design 8, built 2026-11-10** (not released), as planned: `controllers/artifact_usage.py`, called by
+- **Design 8, built 2026-11-10**, as planned: `controllers/artifact_usage.py`, called by
   `strata validate` and `strata version update`, not a semantic check (an import cycle and no context there).
   Release 3 (designs 5, 6 step 1, 7 and 8) is complete.
-- **Design 4, built 2026-11-10** (not released), as planned, plus two things the plan found in the code: an image
+- **Design 4, built 2026-11-10**, as planned, plus two things the plan found in the code: an image
   with a digest is never floating in the SBOM (it called `latest@sha256:...` floating, and would have called a
   digest-only row floating once `image_tag` held only the tag), and the handover report shows `tag@digest`. Release
   4 is complete.
+- **Design 11, built 2026-11-12**, as planned. `helm_delivered_artifacts()` in `artifact_tokens.py`
+  is the one rule; the review's example now reads `DELIVERED no (helm module: no ${artifact:} token in the chart's
+  values)` in `deploy images`, beside the `artifact_not_delivered` warning, and the token stays in USED BY.
 
 ### Implementation order
 
@@ -568,11 +635,11 @@ this doc's successor design doc instead. About 20 places: docstrings in `artifac
 | 2       | 2, 9                    | Helm delivery through the token and `artifact_not_delivered`; the example solution.       |
 | 3       | 5, 6 step 1, 7, 8       | Small checks and the `integration` column.                                                |
 | 4       | 4                       | Tag plus digest, with `require_digest`.                                                   |
-| later   | 6 step 2                | Compose `docker login`, on a real private-registry consumer.                              |
+| -       | 6 step 2                | Out of scope: Compose `docker login`, only for a real private-registry consumer.          |
 
-### Open questions
+### Resolved questions
 
-Decided here as recommendations, to confirm before building:
+Each was decided as recommended and built that way:
 
 - Design 1: a blank `image_tag` is an error, not `""`. (`store: artifact` keeps returning `""`, unchanged.)
 - Design 1: deploy time only, and not in `ValueResolution.values`; GitOps reads `graph.images`.
@@ -596,3 +663,7 @@ Decided here as recommendations, to confirm before building:
 - 2026-11-10: design 9 implemented: the example solution uses an artifact all three ways.
 - 2026-11-10: ADR-0058 written for designs 1 and 3. Design 2 implemented (`artifact_not_delivered`).
 - 2026-11-10: design 10 implemented: the stale `artifact-references.md` citations, by the rule "now" -> reference, "why" -> archive.
+- 2026-11-12: design 11 (from the PR #330 review) designed and implemented: one Helm delivery rule for
+  `artifact_not_delivered` and `effective_images()`.
+- 2026-11-12: archived. designs 1 to 11 built, not yet released; open questions marked resolved;
+  design 6 step 2 out of scope.

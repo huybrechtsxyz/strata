@@ -48,6 +48,7 @@ def test_version_file_holds_a_pep440_version():
         pytest.fail(f"VERSION.txt holds a non-PEP440 version: {raw!r}")
 
 
+@pytest.mark.slow
 def test_installed_version_matches_the_version_file():
     """Metadata is built from VERSION.txt, so the two must agree.
 
@@ -86,6 +87,7 @@ def test_strata_version_is_not_duplicated_in_source():
     assert not offenders, f"The version must come from VERSION.txt, found: {offenders}"
 
 
+@pytest.mark.slow
 def test_package_exposes_a_derived_version():
     """`strata.__version__` resolves rather than declaring."""
     import strata
@@ -114,6 +116,7 @@ def test_package_rejects_unknown_attributes():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_distribution_is_resolved_from_the_import_package():
     """The permanent name is 'strata'; the distribution name is looked up."""
     assert PACKAGE_NAME == "strata"
@@ -144,6 +147,7 @@ def test_version_survives_a_distribution_rename(monkeypatch):
     assert get_version() == "9.9.9"
 
 
+@pytest.mark.slow
 def test_version_comes_from_package_metadata():
     """Metadata, not a literal, is what the runtime reports."""
     distribution = get_distribution_name()

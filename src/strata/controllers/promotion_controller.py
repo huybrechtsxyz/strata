@@ -46,6 +46,7 @@ from pydantic import BaseModel
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
+from strata.controllers.deployment_resolution import deployment_of
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
@@ -197,8 +198,8 @@ def build_promotion_view(
     # Orphan-ring warning: a tagged document no Deployment references.
     referenced_versions: set[str] = set()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = (resolved or {}).get(entry.ref.name, cast(DeploymentModel, entry.model))
-        if deployment.spec.version:
+        deployment = deployment_of(entry, resolved or {})
+        if deployment is not None and deployment.spec.version:
             referenced_versions.add(deployment.spec.version)
     for entry in tagged:
         if entry.ref.name in referenced_versions:

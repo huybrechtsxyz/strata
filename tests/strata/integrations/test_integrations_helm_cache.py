@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the registry chart cache (docs/work/helm-registry-chart-checks.md, Phase 1)."""
+"""Tests for the registry chart cache (docs/design/helm-chart-deployment.md, "Registry charts")."""
 
 import functools
 import gzip
@@ -274,6 +274,7 @@ def test_an_archive_with_more_than_one_top_level_directory_is_not_a_chart(tmp_pa
 
 
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+@pytest.mark.slow
 def test_real_helm_pulls_a_packaged_chart_into_the_cache(tmp_path: Path):
     """`helm package` a chart with a subchart, serve it over local HTTP, and pull it into the cache for real."""
     source = tmp_path / "src" / "demo"

@@ -333,3 +333,17 @@ class TerraformIntegration(InfraIntegration):
             output["strata_variables.tf"] = self._STRATA_VARIABLES_TEMPLATE.read_text(encoding="utf-8")
             output["strata_locals.tf"] = build_strata_locals(find_secret_paths(data["strata"]))
         return output
+
+
+class OpenTofuIntegration(TerraformIntegration):
+    """OpenTofu CLI (`tofu`) — the same CLI contract as Terraform (ADR-0060, docs/design/opentofu.md).
+
+    Every subcommand and flag `TerraformIntegration` passes predates the fork, so OpenTofu 1.6.0 (its first stable
+    release) and later take them unchanged; `TF_VAR_` delivery, the `strata` payload and the generated files are the
+    same. Its own type, so a provisioner says which tool runs (`tool: opentofu`), the version check reads OpenTofu's
+    own numbering (`parse_version()` reads `OpenTofu vX.Y.Z` as it reads `Terraform vX.Y.Z`), and the lock policy and
+    SBOM default a short provider source to `registry.opentofu.org`.
+    """
+
+    TYPE = "opentofu"
+    COMMAND = "tofu"

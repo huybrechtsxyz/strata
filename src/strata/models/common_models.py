@@ -109,6 +109,7 @@ class PlatformKind(str, Enum):
     VERSION = "version"
     ARTIFACT = "artifact"
     ASSET = "asset"
+    PARAMETERSET = "parameterset"
 
 
 def validate_kind_matches(value: "PlatformKind", expected: "PlatformKind") -> "PlatformKind":

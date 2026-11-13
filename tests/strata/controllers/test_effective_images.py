@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `effective_images()` (docs/work/effective-images.md)."""
+"""Tests for `effective_images()` (docs/design/effective-images.md)."""
 
 import json
 from pathlib import Path
@@ -22,6 +22,7 @@ from strata.integrations.resolved_context import EffectiveImage, UnknownImageMod
 from strata.models.common_models import ModuleReferenceModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.workspace_model import WorkspaceModel
+from strata.utils.sbom_file import read_sbom
 from strata.utils.sbom_utils import image_to_purl
 
 _HEADER = "apiVersion: strata.huybrechts.xyz/v2\nkind: {kind}\nmeta:\n  name: {name}\nspec:\n"
@@ -216,7 +217,7 @@ def test_artifact_rows_come_before_module_service_rows(tmp_path):
     assert [row.origin for row in rows] == ["artifact", "module-service"]
 
 
-# `${artifact:NAME.FIELD}` uses (docs/work/artifact-gap-analysis.md, design 3): an image delivered only
+# `${artifact:NAME.FIELD}` uses (docs/archive/artifact-gap-analysis.md, design 3): an image delivered only
 # through the token is still an image the deployment runs.
 
 _TOKEN_SERVICE = (
@@ -291,7 +292,7 @@ def test_image_tag_policy_judges_an_image_delivered_only_through_the_token(tmp_p
 
 
 # A `store: artifact` variable counts only where the deployment can receive it
-# (docs/work/artifact-gap-analysis.md, design 7).
+# (docs/archive/artifact-gap-analysis.md, design 7).
 
 _HELM_STEP = (
     "  provisioners:\n    - name: charts\n      tool: helm\n      source:\n        source_path: infra\n"
@@ -337,7 +338,7 @@ def _workspace(provisioner: str) -> WorkspaceModel:
         ("      tool: script\n      source: {source_path: s}\n      script: {file: run.py, values: [A]}\n", {"A"}),
         ("      tool: helm\n      source: {source_path: c}\n", set()),
     ],
-    ids=["terraform", "unknown-tool", "script-all-values", "script-listed-values", "helm"],
+    ids=["terraform", "opentofu", "script-all-values", "script-listed-values", "helm"],
 )
 def test_which_steps_receive_variables_without_a_token(tmp_path, provisioner, expected):
     context = SimpleNamespace(root=tmp_path)
@@ -367,7 +368,7 @@ def test_an_output_template_that_cannot_be_read_receives_every_variable(tmp_path
     assert _received_variable_keys(context, _workspace(provisioner), {"A", "B"}) == {"A", "B"}
 
 
-# Delivered (docs/work/helm-image-delivery.md, option B): strata delivers an image only when it writes it into
+# Delivered (docs/design/helm-image-delivery.md, "Delivered: one rule, in the resolver"): strata delivers an image only when it writes it into
 # what runs. A Helm module's service image is a declaration; the chart decides.
 
 _CHART_SOURCE = (
@@ -413,7 +414,48 @@ def test_an_artifact_only_a_helm_service_names_is_not_delivered(tmp_path):
     root = _solution(tmp_path, variable_artifacts=())
     _with_module(root, services="    - name: server\n      artifact: catalog\n")
     row = _images(root)["catalog"]
-    assert (row.delivered, row.delivery) == (False, "helm module: no ${artifact:} token")
+    assert (row.delivered, row.delivery) == (False, _HELM_NOT_DELIVERED)
+
+
+_HELM_NOT_DELIVERED = "helm module: no ${artifact:} token in the chart's values"
+_ENV_TOKEN = "      environment:\n        - key: IMAGE\n          value: ${artifact:catalog.image_ref}\n"
+
+
+@pytest.mark.parametrize("names_it", [True, False], ids=["service-names-it", "token-only"])
+def test_a_token_in_a_helm_service_environment_is_a_use_not_delivery(tmp_path, names_it):
+    """Design 11: the token becomes an environment variable, not the chart's image, so the chart still decides which
+    image runs. It is still a use (USED BY, not `artifact_unused`), as `artifact_not_delivered` judges it."""
+    root = _solution(tmp_path, variable_artifacts=())
+    artifact = "      artifact: catalog\n" if names_it else ""
+    _with_module(root, services=f"    - name: server\n{artifact}{_ENV_TOKEN}")
+    row = _images(root)["catalog"]
+    assert row.via == (("service:chart/server",) if names_it else ()) + ("token:module/chart",)
+    assert (row.delivered, row.delivery) == (False, _HELM_NOT_DELIVERED)
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        "  configuration:\n    image:\n      repository: ${artifact:catalog.image_name}\n",
+        "    - name: worker\n      configuration:\n        image: ${artifact:catalog.image_ref}\n",
+    ],
+    ids=["module-configuration", "another-services-configuration"],
+)
+def test_a_token_in_the_charts_own_keys_delivers_even_beside_an_environment_token(tmp_path, where):
+    root = _solution(tmp_path, variable_artifacts=())
+    services = f"    - name: server\n      artifact: catalog\n{_ENV_TOKEN}"
+    if where.startswith("    - name"):
+        _with_module(root, services=services + where)
+    else:
+        _with_module(root, services=services, extra=where)
+    assert (_images(root)["catalog"].delivered, _images(root)["catalog"].delivery) == (True, None)
+
+
+def test_a_token_in_a_compose_service_environment_still_delivers(tmp_path):
+    """Only a Helm module's tokens are judged by where they sit: elsewhere a token reaches a provisioner that uses it."""
+    root = _solution(tmp_path, variable_artifacts=())
+    _with_module(root, kind="compose", services=f"    - name: server\n      image: redis:7\n{_ENV_TOKEN}")
+    assert _images(root)["catalog"].delivered
 
 
 def test_an_artifact_a_helm_module_writes_with_a_token_is_delivered(tmp_path):
@@ -474,7 +516,7 @@ def test_a_helm_service_without_an_image_does_not_make_the_module_known(tmp_path
     assert [module.module for module in _unknown(root)] == ["chart"]
 
 
-# Rendered chart images read back from a build (docs/work/helm-image-delivery.md, plan item 9d).
+# Rendered chart images read back from a build (docs/design/helm-image-delivery.md, "Rendered chart images as a build fact").
 
 
 def _sbom_file(build_path: Path, *components: dict) -> Path:
@@ -498,16 +540,6 @@ def _context(*namespaces: NamespaceModel) -> SimpleNamespace:
     return SimpleNamespace(controller=SimpleNamespace(index=SimpleNamespace(get=lambda kind, name: by_name.get(name))))
 
 
-def test_rendered_chart_images_is_none_without_an_sbom(tmp_path):
-    assert rendered_chart_images(_context(), tmp_path) is None
-
-
-def test_rendered_chart_images_rejects_an_sbom_it_cannot_read(tmp_path):
-    (tmp_path / "sbom.json").write_text("[]", encoding="utf-8")
-    with pytest.raises(ValueError, match="no components list"):
-        rendered_chart_images(_context(), tmp_path)
-
-
 def test_rendered_chart_images_gives_one_row_per_container_and_keeps_tag_and_digest(tmp_path):
     digest = "sha256:" + "b" * 64
     build = _sbom_file(
@@ -517,7 +549,7 @@ def test_rendered_chart_images_gives_one_row_per_container_and_keeps_tag_and_dig
         _component("redis:7", "service:cache/redis", rendered=False),
         _component("nginx:1", "chart:apps/web/nginx", reference=False),
     )
-    rows = rendered_chart_images(_context(), build)
+    rows = rendered_chart_images(_context(), read_sbom(build))
     assert [(r.origin, r.name, r.module, r.via, r.tag_source, r.delivered) for r in rows] == [
         ("chart", "whoami/whoami", "whoami", ("chart:apps/whoami/whoami",), "chart", True),
         ("chart", "whoami/wait", "whoami", ("chart:apps/whoami/wait",), "chart", True),
@@ -534,7 +566,7 @@ def test_rendered_chart_images_names_the_module_the_reference_points_at(tmp_path
         ),
     )
     build = _sbom_file(tmp_path, _component("goauthentik/server:1", "chart:apps/auth/server"))
-    [row] = rendered_chart_images(_context(namespace), build)
+    [row] = rendered_chart_images(_context(namespace), read_sbom(build))
     assert (row.name, row.module) == ("auth/server", "authentik")
 
 
@@ -581,13 +613,9 @@ def test_with_rendered_images_judges_a_shared_image_once_and_clears_rendered_mod
     assert [(m.module, m.namespace) for m in remaining] == [("whoami", "other"), ("immich", "apps")]
 
 
-def test_sbom_written_at_reads_the_metadata_timestamp_or_gives_none(tmp_path):
-    assert sbom_written_at(tmp_path) is None
-    (tmp_path / "sbom.json").write_text("{not json", encoding="utf-8")
-    assert sbom_written_at(tmp_path) is None
-    (tmp_path / "sbom.json").write_text(json.dumps({"metadata": {}}), encoding="utf-8")
-    assert sbom_written_at(tmp_path) is None
-    (tmp_path / "sbom.json").write_text(
-        json.dumps({"metadata": {"timestamp": "2026-11-12T12:00:00+00:00"}}), encoding="utf-8"
+def test_sbom_written_at_reads_the_metadata_timestamp_or_gives_none():
+    assert sbom_written_at({"components": []}) is None
+    assert sbom_written_at({"components": [], "metadata": {}}) is None
+    assert sbom_written_at({"components": [], "metadata": {"timestamp": "2026-11-12T12:00:00+00:00"}}) == (
+        "2026-11-12T12:00:00+00:00"
     )
-    assert sbom_written_at(tmp_path) == "2026-11-12T12:00:00+00:00"

@@ -6,7 +6,7 @@
 ## Overview
 
 Strata resolves the tag of every image a deployment runs (`strata deploy images`, see
-[effective-images.md](effective-images.md)) but never judges it. An artifact with no tag and no
+[effective-images.md](../design/effective-images.md)) but never judges it. An artifact with no tag and no
 `kind: version` pin resolves to an empty tag, and an image tagged `latest` is accepted. Whether that is
 acceptable is left to whatever consumes the value, for example a Terraform root that rejects an empty tag. The
 failure then shows up late, at `terraform plan`, and says nothing about which image or which pin is missing.
@@ -138,7 +138,7 @@ ring. A team will want `deny` on acc and prd, and a dev ring that may float. Opt
 - [policy-engine-architecture.md](policy-engine-architecture.md) - bespoke policies, no generic engine
 - [ADR-0019](../decisions/0019-version-pinning.md), [ADR-0026](../decisions/0026-pinnable-artifact-references.md) -
   pins and artifacts
-- [effective-images.md](effective-images.md) - the resolver this policy reads
+- [effective-images.md](../design/effective-images.md) - the resolver this policy reads
 
 ## Remaining Work / Open Questions
 
@@ -181,7 +181,7 @@ Nothing is open.
 
 ## Changelog
 
-- 2026-11-01: created. Follows the "guard rails" item left open in [effective-images.md](effective-images.md).
+- 2026-11-01: created. Follows the "guard rails" item left open in [effective-images.md](../design/effective-images.md).
 - 2026-11-01: phase 1 (model). Decided for the model: `rings`, `require_pin` and `allow[].expires` are in the
   first cut; `reject_tags` omitted means the alias set and `[]` means none (stored lower-case); `tag_pattern` is
   searched, not full-matched, and must compile; `allow` names are unique; `on_missing_data` is not a field.

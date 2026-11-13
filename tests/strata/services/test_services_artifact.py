@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `ArtifactService.validate_registry()` (docs/work/artifact-gap-analysis.md, design 5): an artifact's
+"""Tests for `ArtifactService.validate_registry()` (docs/archive/artifact-gap-analysis.md, design 5): an artifact's
 `registry` agrees with the registry its `image_name` is pulled from."""
 
 import pytest

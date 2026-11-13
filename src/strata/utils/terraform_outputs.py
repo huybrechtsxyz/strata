@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import hcl2
+from strata.utils.hcl import load_hcl_file
 
 
 @dataclass(frozen=True)
@@ -74,8 +74,7 @@ def _blocks(root: Path, kind: str) -> Iterator[tuple[str, dict[str, Any], bool]]
 
 def _load_hcl(path: Path) -> dict[str, Any] | None:
     try:
-        with path.open("r", encoding="utf-8") as fh:
-            data = hcl2.load(fh)
+        data = load_hcl_file(path)
     except Exception:
         return None
     return data if isinstance(data, dict) else None

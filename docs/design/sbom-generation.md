@@ -156,7 +156,7 @@ service image may not be what runs.
   - The CVE gate does not read it: the scanners scan every component.
 - **Rendered charts.** The `chart-image` collector runs unless the workspace sets `spec.sbom.render_charts:
   false`. It was opt-in while it was built, because the images it adds reach the gates; since plan item 10b of
-  docs/work/helm-image-delivery.md it is the default, so the gates check what runs.
+  docs/design/helm-image-delivery.md it is the default, so the gates check what runs.
   - It runs `HelmIntegration.template()` in an isolated Helm configuration, with no `--dependency-update`. The
     rendered text stays in memory, and strata's values file holds tokens, never a secret value.
   - Each image gets `strata:found-in: rendered-chart`, `strata:used-by: chart:<namespace>/<reference>/<container>`
@@ -278,6 +278,11 @@ mechanism as `strata.integrations` (ADR-0021 D10).
 - Writing the SBOM without a manifest to reference it was a deliberate "write now, reference
   later" split. The deploy audit record now re-derives the reference (`audit_run._sbom_reference()`)
   from the file on disk, since build and deploy are separate invocations.
+- Every reader of `sbom.json` (image tag policy, image gate, audit record) shares one loader,
+  `utils/sbom_file.read_sbom()`: no file is `None`, a file that cannot be read or parsed is a
+  `ValueError`, and a missing `components` key (CycloneDX's empty SBOM) is an empty list. Each
+  reader decides what a bad file means: the gates follow their `on_missing_data`, and the audit
+  record warns (`audit_sbom_unreadable`) without failing, because the deploy has already run.
 - Image purls first put the registry in the name (`pkg:docker/ghcr.io/org/app@1.0`, v1's shape).
   2.3.3 moved it to the `repository_url` qualifier the purl spec defines, so scanners and
   Dependency-Track match images, and normalised Docker Hub spellings. `images_from_sbom()` reads

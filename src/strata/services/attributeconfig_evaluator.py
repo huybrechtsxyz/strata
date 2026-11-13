@@ -107,7 +107,8 @@ def _leaves(value: Any, segments: list[str]) -> Iterator[Any]:
     head, *rest = segments
     iterate = head.endswith("[]")
     attribute = head[:-2] if iterate else head
-    child = getattr(value, attribute, None)
+    # A map field (`meta.labels`, `spec.properties`) is walked by key, so `meta.labels.role` selects on a label.
+    child = value.get(attribute) if isinstance(value, dict) else getattr(value, attribute, None)
     if child is None:
         return
 

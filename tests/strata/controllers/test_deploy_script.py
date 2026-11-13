@@ -362,6 +362,7 @@ def real_python(monkeypatch):
     )
 
 
+@pytest.mark.slow
 def test_a_real_script_runs_with_resolved_arguments_and_values(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_REAL_SCRIPT)
     build_path = _built(tmp_path, root)
@@ -373,6 +374,7 @@ def test_a_real_script_runs_with_resolved_arguments_and_values(tmp_path: Path, r
     assert result == {"args": ["--environment", "westeurope"], "region": "westeurope", "phase": "apply"}
 
 
+@pytest.mark.slow
 def test_a_real_failing_script_reports_its_exit_code_and_stdout(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, region="boom")
     build_path = _built(tmp_path, root)
@@ -385,6 +387,7 @@ def test_a_real_failing_script_reports_its_exit_code_and_stdout(tmp_path: Path, 
     assert "it broke: boom" in message
 
 
+@pytest.mark.slow
 def test_a_real_script_that_overruns_its_timeout_is_reported_as_a_timeout(tmp_path: Path, real_python, monkeypatch):
     monkeypatch.setenv("STRATA_TIMEOUT_RUN_SCRIPT_APPLY", "1")
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, region="sleep")
@@ -493,6 +496,7 @@ def test_a_destroy_argument_that_needs_an_output_nothing_can_serve_stops_the_run
     assert run.calls == []
 
 
+@pytest.mark.slow
 def test_a_real_dry_run_runs_plan_args_in_the_plan_phase(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, plan_args=["--environment", "previewed"])
     build_path = _built(tmp_path, root)
@@ -505,6 +509,7 @@ def test_a_real_dry_run_runs_plan_args_in_the_plan_phase(tmp_path: Path, real_py
     assert result["args"] == ["--environment", "previewed"]
 
 
+@pytest.mark.slow
 def test_a_real_run_never_executes_plan_args(tmp_path: Path, real_python):
     """`boom` makes the script exit 3: if plan_args ran before the apply, this run would fail."""
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, plan_args=["--environment", "boom"])
@@ -516,6 +521,7 @@ def test_a_real_run_never_executes_plan_args(tmp_path: Path, real_python):
     assert json.loads((build_path / "scripts" / "result.json").read_text())["phase"] == "apply"
 
 
+@pytest.mark.slow
 def test_a_real_destroy_runs_destroy_args_in_the_destroy_phase(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, destroy_args=["--environment", "${var:REGION}"])
     build_path = _built(tmp_path, root)
@@ -617,6 +623,7 @@ _KEYS_SCRIPT = (
 )
 
 
+@pytest.mark.slow
 def test_a_real_script_does_not_see_a_secret_it_did_not_list(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_KEYS_SCRIPT, secret=True, unrelated_secret=True, values=["API_TOKEN"])
     build_path = _built(tmp_path, root)
@@ -706,6 +713,7 @@ def _chained_solution(
     return root
 
 
+@pytest.mark.slow
 def test_a_real_script_output_reaches_the_step_that_depends_on_it(tmp_path: Path, real_python):
     args = ["--address", "${output:run_script.address}", "--token", "${output:run_script.token}"]
     root = _chained_solution(tmp_path, producer=_PRODUCER, consumer_args=args)
@@ -718,6 +726,7 @@ def test_a_real_script_output_reaches_the_step_that_depends_on_it(tmp_path: Path
     assert result == ["--address", "10.0.0.5", "--token", TOKEN_OUTPUT]
 
 
+@pytest.mark.slow
 def test_a_malformed_output_file_warns_and_does_not_fail_the_run(tmp_path: Path, real_python):
     root = _chained_solution(tmp_path, producer=_BAD_PRODUCER, consumer_args=["--region", "${var:REGION}"])
     build_path = _built(tmp_path, root)
@@ -731,6 +740,7 @@ def test_a_malformed_output_file_warns_and_does_not_fail_the_run(tmp_path: Path,
     assert (build_path / "scripts_next" / "result.json").exists()  # the next step still ran
 
 
+@pytest.mark.slow
 def test_a_step_needing_an_output_the_script_never_wrote_fails_naming_it(tmp_path: Path, real_python):
     root = _chained_solution(tmp_path, producer="pass\n", consumer_args=["${output:run_script.address}"])
     build_path = _built(tmp_path, root)
@@ -781,6 +791,7 @@ def _fake_output_store(monkeypatch) -> dict[str, tuple[bytes, str]]:
     return data
 
 
+@pytest.mark.slow
 def test_a_sensitive_script_output_is_never_recorded_to_the_output_store(tmp_path: Path, real_python, monkeypatch):
     data = _fake_output_store(monkeypatch)
     args = ["--address", "${output:run_script.address}", "--token", "${output:run_script.token}"]
@@ -799,6 +810,7 @@ def test_a_sensitive_script_output_is_never_recorded_to_the_output_store(tmp_pat
 _NOISY_CONSUMER = "import sys\nprint('using ' + ' '.join(sys.argv[1:]))\nsys.exit(3)\n"
 
 
+@pytest.mark.slow
 def test_a_sensitive_output_is_redacted_from_a_later_steps_failure(tmp_path: Path, real_python):
     """The consumer echoes the token it was given and fails: the error must not carry the real value."""
     root = _chained_solution(
@@ -827,7 +839,7 @@ def test_a_destroy_listing_an_output_in_values_stops_before_anything_runs(tmp_pa
     )
     build_path = _built(tmp_path, root)
 
-    diagnostics = deploy_run(_context(root), "app", build_path, destroy=True, force=True, stage="use_output")
+    diagnostics = deploy_run(_context(root), "app", build_path, destroy=True, force=True, stages=("use_output",))
 
     assert "destroy_output_unavailable" in [e.code for e in diagnostics.errors]
     assert "run_script.address" in " ".join(diagnostics.messages())

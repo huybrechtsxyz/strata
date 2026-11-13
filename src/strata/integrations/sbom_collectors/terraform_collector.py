@@ -12,15 +12,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import hcl2
-
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.sbom_collectors.base import CollectorResult, SbomCollector
 from strata.models.module_model import ModuleModel
 from strata.models.sbom_model import SbomComponentModel
 from strata.utils.diagnostics import Diagnostic, Severity
+from strata.utils.hcl import load_hcl_file
 from strata.utils.sbom_utils import (
+    TERRAFORM_DEFAULT_REGISTRY,
     exact_version,
+    locked_provider_address,
     terraform_module_to_purl,
     terraform_provider_address,
     terraform_provider_to_purl,
@@ -66,13 +67,19 @@ class ProviderLocks:
         return sorted(self.declared - self.locked)
 
 
-def read_provider_locks(root: Path) -> ProviderLocks:
+def read_provider_locks(root: Path, default_registry: str = TERRAFORM_DEFAULT_REGISTRY) -> ProviderLocks:
     """The providers a root module's `*.tf` tree declares, and the ones its own lock file locks.
 
     A root needs providers when any file declares `required_providers`, or a root-level file has a
     `provider`, `resource`, `data` or `module` block. A nested folder with its own lock file is another
     root and is not read. An unparseable file is skipped; `build run`'s SBOM already reports it.
+
+    A short provider source resolves to the default host its lock file holds, or to `default_registry` (the
+    tool's: `registry.opentofu.org` for OpenTofu) when the lock file has neither (`locked_provider_address()`).
     """
+    lock_file = root / _LOCK_FILENAME
+    present = lock_file.is_file()
+    locked = frozenset(_read_lock(lock_file, []) if present else {})
     declared: set[str] = set()
     needs = False
     for tf_file in _terraform_files(root, separate_roots=True):
@@ -81,23 +88,23 @@ def read_provider_locks(root: Path) -> ProviderLocks:
             continue
         providers: dict[str, dict[str, str]] = {}
         TerraformCollector._extract_required_providers(data, providers)
-        declared.update(terraform_provider_address(cfg.get("source", name)) for name, cfg in providers.items())
+        declared.update(
+            locked_provider_address(cfg.get("source", name), locked, default_registry)
+            for name, cfg in providers.items()
+        )
         if tf_file.parent == root and any(data.get(block) for block in _PROVIDER_USING_BLOCKS):
             needs = True
-    lock_file = root / _LOCK_FILENAME
-    present = lock_file.is_file()
     return ProviderLocks(
         lock_file=lock_file if present else None,
         declared=frozenset(declared),
-        locked=frozenset(_read_lock(lock_file, []) if present else {}),
+        locked=locked,
         needs_providers=needs or bool(declared),
     )
 
 
 def _load_hcl(path: Path) -> dict[str, Any] | None:
     try:
-        with path.open("r", encoding="utf-8") as fh:
-            data = hcl2.load(fh)
+        data = load_hcl_file(path)
     except Exception:
         return None
     return data if isinstance(data, dict) else None
@@ -138,8 +145,7 @@ def _read_lock(lock_file: Path, diagnostics: list[Diagnostic]) -> dict[str, tupl
     if not lock_file.is_file():
         return {}
     try:
-        with lock_file.open("r", encoding="utf-8") as fh:
-            data = hcl2.load(fh)
+        data = load_hcl_file(lock_file)
     except Exception as exc:
         diagnostics.append(
             Diagnostic(
@@ -199,8 +205,7 @@ class TerraformCollector(SbomCollector):
 
         for tf_file in _terraform_files(build_path):
             try:
-                with tf_file.open("r", encoding="utf-8") as fh:
-                    data = hcl2.load(fh)
+                data = load_hcl_file(tf_file)
             except Exception as exc:
                 diagnostics.append(
                     Diagnostic(
@@ -230,7 +235,7 @@ class TerraformCollector(SbomCollector):
             names = {
                 name
                 for name, cfg in declared.items()
-                if terraform_provider_address(cfg.get("source", name)) not in locked
+                if locked_provider_address(cfg.get("source", name), locked) not in locked
             }
             if names:
                 folder = lock_file.parent if lock_file is not None else _topmost(key, unlocked_folders)
@@ -289,7 +294,8 @@ class TerraformCollector(SbomCollector):
         """
         entries: dict[str, tuple[str, str | None, str | None]] = {}
         for local_name, cfg in declared.items():
-            address = terraform_provider_address(cfg.get("source", local_name))
+            # A short source takes the host the lock file holds: an OpenTofu root locks `registry.opentofu.org`.
+            address = locked_provider_address(cfg.get("source", local_name), locked)
             version, lock_constraint = locked.get(address, (None, None))
             entries.setdefault(address, (local_name, version, cfg.get("version") or lock_constraint))
         for address, (version, constraint) in locked.items():

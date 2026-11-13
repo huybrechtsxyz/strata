@@ -1,7 +1,8 @@
-# Helm gap analysis - Work
+# Helm gap analysis
 
-- Status: in-progress
-- Last updated: 2026-11-07
+- Status: implemented — all ten gaps fixed, released in 2.4.0 (PR #327). Kept as the historical
+  record; how Helm works now is [helm-chart-deployment.md](../design/helm-chart-deployment.md).
+- Last updated: 2026-11-12
 
 ## Overview
 
@@ -11,7 +12,7 @@ against [helm-chart-deployment.md](../design/helm-chart-deployment.md), ADR-0042
 suspect behaviour with real `helm` 3.13.2 on a small chart (`helm template`, no cluster).
 
 Out of scope here, because it has its own doc: which image a Helm module runs
-([helm-image-delivery.md](helm-image-delivery.md)).
+(`helm-image-delivery.md` (work doc)).
 
 ## Current Design / Progress
 
@@ -125,11 +126,11 @@ Options, smallest first: print the active context at the start of a Helm step; a
 per deployment stage, checked before any `helm` call; or strata passing `--kube-context` and `--kubeconfig`
 itself. The second keeps the ADR-0020 split and only adds a guard.
 
-**Done (2026-11-07)**, as designed in [helm-kube-context.md](helm-kube-context.md): an optional `kube_context` on the
+**Done (2026-11-07)**, as designed in [helm-chart-deployment.md, Kube context pin](../design/helm-chart-deployment.md#kube-context-pin): an optional `kube_context` on the
 deployment, which pins every `helm` call to that context through `HELM_KUBECONTEXT`, with a check before the first
 step that the kubeconfig defines it. `strata validate` warns when a deployment with a Helm step has none. Compose has the
 same gap with `DOCKER_HOST`, closed the same way by `docker_context`
-([compose-docker-context.md](compose-docker-context.md)).
+(`compose-docker-context.md` (work doc)).
 
 #### 7. Release and Kubernetes namespace names are not validated
 
@@ -139,7 +140,7 @@ label for the namespace. A name like `My_App` passes `strata validate` and fails
 that end up with the same release name in the same Kubernetes namespace (possible through `kubernetes_namespace`)
 would install one over the other, and nothing detects it.
 
-**Done (2026-11-07)**, as designed in [helm-release-names.md](helm-release-names.md). Helm modules only for now (Argo CD later), and strict:
+**Done (2026-11-07)**, as designed in [helm-chart-deployment.md, Release names](../design/helm-chart-deployment.md#release-names). Helm modules only for now (Argo CD later), and strict:
 both rules are errors in `strata validate`, defaults included, and the (Kubernetes namespace, release) pair must be
 unique within a workspace.
 
@@ -155,16 +156,16 @@ inside the same isolated configuration.
 **Done (2026-11-07)**, redesigned under [ADR-0054](../decisions/0054-build-fetches-release-inputs-never-targets.md):
 `build run` pulls registry charts into `.strata/helm/` and records their version and digest, they get the key check and
 `helm lint`, and the deploy verifies and installs that archive. A machine without `helm` or the credentials leaves the
-chart unpinned, and the deploy refuses it. See [helm-registry-chart-checks.md](helm-registry-chart-checks.md).
+chart unpinned, and the deploy refuses it. See [helm-chart-deployment.md, Registry charts](../design/helm-chart-deployment.md#registry-charts).
 
 #### 9. Local chart dependencies are never built
 
 A local chart that declares `dependencies:` in `Chart.yaml` and does not vendor them in `charts/` fails lint and
 install with "found in Chart.yaml, but missing in charts/ directory". Strata never runs `helm dependency build`.
-[sbom-generation.md](sbom-generation.md) notes the same need for rendering. Whether any haven chart has
+`sbom-generation.md` (work doc) notes the same need for rendering. Whether any haven chart has
 unvendored dependencies is not checked; if none does, documenting "vendor your dependencies" may be enough.
 
-**Done (2026-11-08)**, see [helm-chart-dependencies.md](helm-chart-dependencies.md). Correction: `helm lint` only
+**Done (2026-11-08)**, see [helm-chart-deployment.md, Chart dependencies](../design/helm-chart-deployment.md#chart-dependencies). Correction: `helm lint` only
 warns about missing dependencies; the failure is at `helm upgrade`. A `file://` dependency also breaks, because the
 chart is copied alone into the build directory. Most OMP charts with dependencies commit no `Chart.lock`, so the
 build resolves dependencies itself into the gap 8 cache instead of running `helm dependency build`.
@@ -196,7 +197,7 @@ What changes:
 | (no flag)            | `--server-side auto`: server-side apply for a new release, the previous method for an existing one | no such flag |
 
 So `--rollback-on-failure` and `--wait=legacy` need the major version, and `--dry-run=client` needs Helm 3.13 or later.
-Design: [helm-4-support.md](helm-4-support.md) (Helm 4 by default; Helm 3, deprecated, only when a `helm`
+Design: [helm-chart-deployment.md, Helm versions](../design/helm-chart-deployment.md#helm-versions) (Helm 4 by default; Helm 3, deprecated, only when a `helm`
 integration's `spec.version` excludes Helm 4; [ADR-0055](../decisions/0055-helm-4-by-default-helm-3-only-when-declared.md)).
 
 **Done (2026-11-08)**: Helm 4's flags (`--dry-run=client`, `--wait=watcher`, `--rollback-on-failure`) by default; a
@@ -210,6 +211,7 @@ binaries. A breaking change for undeclared Helm 3.
 - An anonymous HTTP repository is added to the user's own Helm configuration (`repo add --force-update`). Only
   credentialed modules are isolated. That is harmless, but the design doc's "the user's own Helm configuration is
   never touched" is true only for credentialed modules.
+  Resolved by gap 8: every pull, credentialed or not, now runs in an isolated Helm configuration.
 - `HelmIntegration.get_values()` is unused.
 - Helm steps produce no `${output:}` values. That is consistent with v1 and has no known consumer.
 
@@ -222,14 +224,15 @@ binaries. A breaking change for undeclared Helm 3.
 - [ADR-0032](../decisions/0032-deploy-time-step-timeout-overrides.md) - deferred Helm timeouts (gap 5)
 - [ADR-0020](../decisions/0020-v1-consumer-feature-priority.md) - the caller provides `KUBECONFIG` (gap 6)
 - [helm-chart-deployment.md](../design/helm-chart-deployment.md) - how Helm works today
-- [helm-image-delivery.md](helm-image-delivery.md) - the image gap, tracked separately
+- `helm-image-delivery.md` (work doc) - the image gap, tracked separately
 
-## Remaining Work / Open Questions
+## Remaining Work / Open Questions (resolved)
 
 ### Proposed order
 
 - [x] 1. Gap 1: write strata's values to their own file
-- [ ] 1a. Check the ADR-0043 haven failure and haven's local charts against gap 1
+- [ ] 1a. Check the ADR-0043 haven failure and haven's local charts against gap 1 (a check in haven, not strata
+  work; see below)
 - [x] 2. Gap 2: secrets on stdin with `-f -`
 - [x] 3. Gap 4: always write the values file
 - [x] 4. Gap 3: summarise the dry-run instead of streaming the manifest
@@ -238,20 +241,28 @@ binaries. A breaking change for undeclared Helm 3.
 - [x] 7. Gap 6: the kube context pin
 - [x] 8. Gap 8: registry charts pinned at build, checked, and installed from the pinned archive
 - [x] 9. Gap 9: local chart dependencies placed at build
-- [x] 10. Gap 10: Helm 4 by default, Helm 3 on request ([helm-4-support.md](helm-4-support.md))
+- [x] 10. Gap 10: Helm 4 by default, Helm 3 on request ([Helm versions](../design/helm-chart-deployment.md#helm-versions))
 
 ### Open questions
 
-- **Gap 1 compatibility.** Does any haven module depend on the chart defaults being dropped? A `build run` of haven
-  followed by `helm template` for each local chart, with and without the fix, answers it.
+All closed when the doc was archived:
+
+- **Gap 1 compatibility.** Whether any haven module depended on the chart defaults being dropped is a check to run in
+  haven (a `build run` followed by `helm template` for each local chart, with and without the fix), not strata design
+  work. Strata's side is done.
 - **Gap 6 shape.** Decided: per deployment (one deployment is one environment, so one cluster). A per-stage override
-  waits for a workspace whose Helm steps target two clusters.
-- **A real plan diff.** Should `deploy plan` show what would change in the cluster (`helm diff upgrade`)? It needs a
-  plugin, so it would be optional, with the summary from gap 3 as the fallback.
-- **Release status and rollback.** No `deploy status` or rollback exists for Helm. No consumer has asked for either.
+  waits for a workspace whose Helm steps target two clusters; out of scope until one exists.
+- **A real plan diff** (`helm diff upgrade`, a plugin). Out of scope; the summary from gap 3 is the preview.
+- **Release status and rollback.** Out of scope; no consumer has asked for either.
+
+The follow-ups the gap docs left open (the kube context warning becoming an error, `--require-pinned`, a cache prune,
+Argo CD names, two clusters per workspace, the kube context in the audit manifest, dependency planning under `--dry-run`)
+are recorded as out of scope in [helm-chart-deployment.md's Scope boundaries](../design/helm-chart-deployment.md#scope-boundaries).
 
 ## Changelog
 
+- 2026-11-12: archived. All ten gaps released in 2.4.0; links to the per-gap work docs now point at the sections of
+  helm-chart-deployment.md that took them over; open questions closed.
 - 2026-11-08: gap 10 fixed (Helm 4 flags by default, Helm 3 only when declared, ADR-0055).
 - 2026-11-08: gap 10 checked against Helm 4.3.1: nothing breaks; deprecation warnings and a `--wait` behaviour
   change remain.

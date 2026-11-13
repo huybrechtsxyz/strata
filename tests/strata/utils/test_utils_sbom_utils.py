@@ -26,7 +26,7 @@ from strata.utils.sbom_utils import (
 )
 
 # ---------------------------------------------------------------------------
-# An artifact's image_tag: a tag, a digest or tag@digest (docs/work/artifact-gap-analysis.md, design 4)
+# An artifact's image_tag: a tag, a digest or tag@digest (docs/archive/artifact-gap-analysis.md, design 4)
 # ---------------------------------------------------------------------------
 
 _HEX = "9f86d081" * 8
@@ -443,3 +443,41 @@ def test_image_pin_problem_suggests_a_fix_from_the_service_image(value, hint, fi
 )
 def test_canonical_image_name_is_the_name_a_runtime_pulls(name, canonical):
     assert canonical_image_name(name) == canonical
+
+
+# ---------------------------------------------------------------------------
+# The default provider registry by tool (docs/design/opentofu.md)
+# ---------------------------------------------------------------------------
+
+
+def test_a_short_provider_source_takes_the_tools_default_registry():
+    from strata.utils.sbom_utils import default_provider_registry, terraform_provider_address
+
+    assert terraform_provider_address("hashicorp/null") == "registry.terraform.io/hashicorp/null"
+    tofu = default_provider_registry("opentofu")
+    assert terraform_provider_address("null", tofu) == "registry.opentofu.org/hashicorp/null"
+    assert terraform_provider_address("registry.example.com/acme/x", tofu) == "registry.example.com/acme/x"
+    assert default_provider_registry("terraform") == "registry.terraform.io"
+
+
+@pytest.mark.parametrize(
+    ("locked", "default", "expected"),
+    [
+        ({"registry.opentofu.org/hashicorp/null"}, "registry.terraform.io", "registry.opentofu.org/hashicorp/null"),
+        ({"registry.terraform.io/hashicorp/null"}, "registry.opentofu.org", "registry.terraform.io/hashicorp/null"),
+        (set(), "registry.opentofu.org", "registry.opentofu.org/hashicorp/null"),
+        (set(), "registry.terraform.io", "registry.terraform.io/hashicorp/null"),
+    ],
+    ids=["tofu-lock", "terraform-lock-under-tofu", "no-lock-tofu", "no-lock-terraform"],
+)
+def test_a_short_provider_source_takes_the_host_its_lock_file_holds(locked, default, expected):
+    from strata.utils.sbom_utils import locked_provider_address
+
+    assert locked_provider_address("hashicorp/null", locked, default) == expected
+
+
+def test_a_provider_source_with_a_host_ignores_the_lock_file():
+    from strata.utils.sbom_utils import locked_provider_address
+
+    locked = {"registry.opentofu.org/acme/thing"}
+    assert locked_provider_address("registry.example.com/acme/thing", locked) == "registry.example.com/acme/thing"

@@ -22,7 +22,7 @@ Compose/Helm to implement methods they have no use for.
 import json
 import os
 import re
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -52,6 +52,7 @@ from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import SourceSyncError, resolved_asset_info
 from strata.controllers.step_secrets import container_secret_keys, secret_uses, step_secret_keys
+from strata.controllers.step_selection import select_steps
 from strata.controllers.value_controller import (
     build_value_references,
     reachable_environments,
@@ -691,10 +692,10 @@ def _verify_registry_charts(
 ) -> dict[Path, ChartPin]:
     """The archive of every registry chart in `targets`, verified against the pin `build run` recorded.
 
-    docs/work/helm-registry-chart-checks.md (ADR-0054, condition 5): a chart the build did not pin is refused; a
+    docs/design/helm-chart-deployment.md (ADR-0054, condition 5): a chart the build did not pin is refused; a
     pinned one comes from the `.strata/helm/` cache, else is pulled again at exactly its version, and either way
     its digest must match. A local chart is refused when the build left any of its dependencies unpinned
-    (docs/work/helm-chart-dependencies.md); its pinned dependencies are already in the build's `charts/`. Every problem is an error on `diagnostics`; the caller stops before any step runs.
+    (docs/design/helm-chart-deployment.md); its pinned dependencies are already in the build's `charts/`. Every problem is an error on `diagnostics`; the caller stops before any step runs.
     `targets` pairs each module with its namespace name. Keyed by module build directory.
     """
     verified: dict[Path, ChartPin] = {}
@@ -825,6 +826,47 @@ def _chart_registry_credentials(
     return credentials
 
 
+def check_build_version(build_path: Path, version: str | None, *, pinned_by_flag: bool) -> Diagnostics:
+    """An error when the deploy's version differs from the build's and the build holds Helm modules
+    (`build_version_mismatch`, docs/design/helm-chart-deployment.md, "Version pins at deploy").
+
+    A Helm module's chart version and its `${artifact:}` values are written into the build (`meta.yaml`,
+    `strata-values.yaml`), and the deploy installs what is there: a different `--pin` would reach the other steps
+    but not the charts, while the run and its audit record name the deploy's version. Nothing to judge when the build
+    records no version (made before `resolved.yaml` carried one) or has no Helm module.
+
+    Args:
+        build_path: The build being deployed.
+        version: The deploy's version: `--pin` when given, else the deployment's `spec.version`.
+        pinned_by_flag: Whether `version` came from `--pin`, for the message.
+    """
+    diagnostics = Diagnostics()
+    try:
+        resolved = yaml.safe_load((build_path / "resolved.yaml").read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return diagnostics
+    if not isinstance(resolved, dict) or "version" not in resolved:
+        return diagnostics
+    built = resolved["version"]
+    if built == version:
+        return diagnostics
+    helm_modules = sorted(path.parent.relative_to(build_path).as_posix() for path in build_path.glob("*/*/meta.yaml"))
+    if not helm_modules:
+        return diagnostics
+
+    shown = ", ".join(helm_modules[:5]) + (f" and {len(helm_modules) - 5} more" if len(helm_modules) > 5 else "")
+    deploy_side = f"--pin {version}" if pinned_by_flag else (f"version '{version}'" if version else "no version")
+    build_side = f"version '{built}'" if built else "no version"
+    rebuild = f"strata build run --pin {version}" if version else "strata build run without --pin"
+    diagnostics.error(
+        f"This deploy uses {deploy_side}, but the build was made with {build_side}. A Helm module's pins are applied "
+        f"by the build, so its chart would still install the build's versions ({shown}). Rebuild with the same "
+        f"version ({rebuild}), or deploy with the build's.",
+        code="build_version_mismatch",
+    )
+    return diagnostics
+
+
 def deploy_run(
     context: SolutionContext,
     deployment_name: str,
@@ -835,8 +877,8 @@ def deploy_run(
     smoke_test: bool = False,
     stop_after: Literal["setup", "check"] | None = None,
     use_saved_plan: bool = False,
-    stage: str | None = None,
-    scope: str | None = None,
+    stages: Sequence[str] = (),
+    scopes: Sequence[str] = (),
     on_step: Callable[[str], None] | None = None,
     on_line: Callable[[str, str, str], None] | None = None,
     pin: str | None = None,
@@ -909,10 +951,13 @@ def deploy_run(
             over). Mutually exclusive with `dry_run`/`smoke_test`/
             `stop_after` (enforced by `deploy_command.py`, not here,
             matching every other mutual-exclusivity rule above).
-        stage: Restrict to the one step named `stage`.
-        scope: Restrict to steps whose `ProvisioningStepModel.scope`
-            matches (docs/design/deploy-command.md's resolved `scope`
-            placement — workspace-owned, not deployment-owned).
+        stages: Restrict to the steps with one of these names.
+        scopes: Restrict to steps whose `ProvisioningStepModel.scope` is
+            one of these labels (docs/design/deploy-command.md's resolved
+            `scope` placement — workspace-owned, not deployment-owned).
+            Both through `select_steps()`
+            (docs/design/deploy-steps-command.md): OR within one, AND across
+            the two, empty keeps all.
         on_step: Called with a one-line progress message per step.
         on_line: Called as `(tool, stream, text)` for every subprocess
             output line as it arrives — `tool` is the resolved
@@ -951,7 +996,7 @@ def deploy_run(
             cannot be combined with `stop_after` or `use_saved_plan`. A readiness problem marked `flags_only` is a
             warning here, and its step still runs.
         on_tool: Called as `(provisioner name, readiness)` for every step the preflight lets run, so the caller
-            can record which tool, version and path deployed it (docs/work/helm-4-support.md). Called before any
+            can record which tool, version and path deployed it (docs/design/helm-chart-deployment.md). Called before any
             step runs, also when a later step then fails.
 
     Returns:
@@ -1008,11 +1053,17 @@ def deploy_run(
 
     diagnostics = Diagnostics()
 
+    # A Helm module's pins were applied by the build; a deploy cannot change them. Offline, so it runs first.
+    if not destroy:
+        diagnostics.extend(check_build_version(build_path, deployment.spec.version, pinned_by_flag=pin is not None))
+        if not diagnostics.ok:
+            return diagnostics
+
     # Image tag policy (docs/design/image-tag-policy.md): offline, so it runs first, ahead of any store access. The
     # tag in effect here can differ from the build's (`--pin` given only to `deploy run`), so the deploy result
     # replaces the build's entry for the same policy. It runs under `smoke_test` too (nothing is contacted), but
     # a smoke test records nothing. The images the build's rendered charts run are judged from its `sbom.json`
-    # (docs/work/helm-image-delivery.md, plan item 9f): what this deploy installs.
+    # (docs/design/helm-image-delivery.md, "Where the policy is judged"): what this deploy installs.
     if workspace.spec.image_tag_policy is not None and not destroy:
         tag_diagnostics = check_image_tag_policy(
             context, deployment, workspace, pinned_by_flag=pin is not None, build_path=build_path
@@ -1182,10 +1233,7 @@ def deploy_run(
     steps = ordered_by_depends_on(all_steps)
     if destroy:
         steps = list(reversed(steps))
-    if stage is not None:
-        steps = [s for s in steps if s.name == stage]
-    if scope is not None:
-        steps = [s for s in steps if s.scope == scope]
+    steps = select_steps(steps, stages=stages, scopes=scopes).steps
 
     if not steps:
         if destroy:
@@ -1216,7 +1264,7 @@ def deploy_run(
             label = f"Provisioner '{provisioner.name}' (step '{step.name}')"
             for problem in readiness.problems:
                 # `uninstall`/`destroy` pass none of the flags a `flags_only` problem is about
-                # (docs/work/helm-4-support.md), so a teardown is not blocked by it.
+                # (docs/design/helm-chart-deployment.md), so a teardown is not blocked by it.
                 report = diagnostics.warning if destroy and problem.flags_only else diagnostics.error
                 report(f"{label}: {problem.message}", location=step.name, code=problem.code)
             for notice in readiness.warnings:
@@ -1257,7 +1305,7 @@ def deploy_run(
             return diagnostics
 
     # A tool with a target context (Helm's `kube_context`, Compose's `docker_context`) runs against the one the
-    # deployment names (docs/work/compose-docker-context.md). Checked once per tool, before any step, so a wrong
+    # deployment names (docs/design/deploy-command.md). Checked once per tool, before any step, so a wrong
     # environment stops the run before anything has changed.
     checked_tools: set[tuple[str, str | None]] = set()
     for _, _, integration in resolved_steps:
@@ -1280,7 +1328,7 @@ def deploy_run(
             )
             return diagnostics
 
-    # Registry charts are installed from the archive the build pinned (docs/work/helm-registry-chart-checks.md).
+    # Registry charts are installed from the archive the build pinned (docs/design/helm-chart-deployment.md).
     # Each is verified once, before any step, so an unpinned or changed chart stops the run before anything changes.
     chart_archives: dict[Path, ChartPin] = {}
     if not destroy and stop_after != "setup":
@@ -1333,7 +1381,7 @@ def deploy_run(
         if not diagnostics.ok:
             return diagnostics
 
-    # `${artifact:NAME.FIELD}` (docs/work/artifact-gap-analysis.md, design 1): once per run, so each pin that wins
+    # `${artifact:NAME.FIELD}` (docs/archive/artifact-gap-analysis.md, design 1): once per run, so each pin that wins
     # is logged once, not once per step.
     artifact_tokens = artifact_token_values(index, deployment, log=True)
 

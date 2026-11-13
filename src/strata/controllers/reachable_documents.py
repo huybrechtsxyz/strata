@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The documents a deployment reaches: one answer for the token checks in `strata validate` and for the images
-`effective_images()` lists (docs/work/artifact-gap-analysis.md, design 3).
+`effective_images()` lists (docs/archive/artifact-gap-analysis.md, design 3).
 
 Moved out of `semantic_checks.py`, which validates every token in these documents, so that
 `effective_images()` can count the `${artifact:}` tokens in the same set.

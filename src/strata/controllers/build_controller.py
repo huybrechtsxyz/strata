@@ -118,6 +118,7 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import StrataError, SystemError, UsageError
 from strata.utils.layout import helm_cache_dir
+from strata.utils.sbom_file import SBOM_FILENAME
 from strata.utils.terraform_outputs import read_declared_outputs
 
 
@@ -342,8 +343,13 @@ def write_resolved_manifest(build_path: Path, graph: ResolvedWorkspaceGraph) -> 
     `_dump_promotion()`) when `graph.version` resolved to a document tagged
     with a ring — omitted entirely, not written as `null`/`{}`, for the
     common untagged case (Worked Example A).
+
+    `version` is the version document the build applied (`--pin`, else the deployment's `spec.version`), or `null`
+    without one. `deploy run` compares it with its own, because a Helm module's pins are applied here and not again
+    at deploy (`build_version_mismatch`, docs/design/helm-chart-deployment.md).
     """
     manifest = {
+        "version": graph.version.meta.name if graph.version is not None else None,
         "variables": _dump_refs(graph.variable_refs),
         "features": _dump_refs(graph.feature_refs),
         "secrets": _dump_refs(graph.secret_refs),
@@ -931,9 +937,9 @@ def build_run(
             helm_cache=helm_cache_dir(context.root),
         )
         diagnostics.extend(sbom_diagnostics)
-        _step(f"wrote {build_path / 'sbom.json'}")
+        _step(f"wrote {build_path / SBOM_FILENAME}")
 
-        # Image tag policy (docs/design/image-tag-policy.md, docs/work/helm-image-delivery.md plan item 9e): after
+        # Image tag policy (docs/design/image-tag-policy.md, docs/design/helm-image-delivery.md, "Where the policy is judged"): after
         # the SBOM, so it also judges the images the rendered charts run (`sbom.render_charts`). A `deny` fails the
         # build here, with the output on disk, as the gates below do. A no-op when the field is unset.
         image_tag_diagnostics = check_image_tag_policy(
@@ -998,7 +1004,7 @@ def build_run(
         if policy_results:
             write_policy_results(build_path, policy_results)
     else:
-        _step(f"would write {build_path / 'sbom.json'}")
+        _step(f"would write {build_path / SBOM_FILENAME}")
         # Offline, so a dry run still judges the declared images; nothing is rendered, so there are no others.
         diagnostics.extend(check_image_tag_policy(context, deployment, workspace, images=images))
 

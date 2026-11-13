@@ -22,7 +22,7 @@ Verified against the source on 2026-11-03.
 
 | Step                                           | Records a result in `policy_results.json` when it denies?                                                                                                      |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `build run`, `image_tag_policy`                | Yes, since 2026-11-12: it moved to the end, after the SBOM (helm-image-delivery.md, plan item 9e). Not written under `--dry-run`.                               |
+| `build run`, `image_tag_policy`                | Yes, since 2026-11-12: it moved to the end, after the SBOM ([helm-image-delivery.md](../design/helm-image-delivery.md#where-the-policy-is-judged)). Not written under `--dry-run`.                               |
 | `build run`, `cve_policy` and `checkov_policy` | Yes. Both are evaluated after the SBOM, their results are written together at the end, even when a breach already failed the build. Skipped under `--dry-run`. |
 | `deploy run`, `image_tag_policy`               | Yes. The result is appended to the sidecar before the run returns on a breach.                                                                                 |
 | `strata policy check`                          | Yes, appended when the build path exists.                                                                                                                      |
@@ -51,7 +51,7 @@ build shows its last result locally, for every build-phase policy.
   gate stopped something", which a compliance reviewer might ask. It is a new producer, new status semantics and
   noise in the sink for every failed CI build.
 - **C. Local consistency only.** Done on 2026-11-12 as a side effect: `image_tag_policy` moved to the end of the
-  build to judge rendered chart images (helm-image-delivery.md, plan item 9e), so its result is written even when it
+  build to judge rendered chart images ([helm-image-delivery.md](../design/helm-image-delivery.md#where-the-policy-is-judged)), so its result is written even when it
   denies, and the "nothing changed on a breach" promise is gone. What follows is the original analysis. Write the
   `image_tag_policy` result to the sidecar even when it denies, as the CVE and Checkov policies do. The cost is that `build run` would have to create the build path (or a result file
   somewhere else) before the "nothing changed on a breach" promise holds, since the design chose to fail before

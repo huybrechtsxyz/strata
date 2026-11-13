@@ -19,3 +19,6 @@ uv.lock
 
 # Local machine settings (internal package index URL)
 scripts/setup.env
+
+# Claude Code worktrees
+.claude/worktrees/

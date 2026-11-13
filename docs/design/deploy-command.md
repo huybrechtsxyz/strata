@@ -136,27 +136,87 @@ Read directly from `.github/workflows/*.yml` in both reference repos
   / `docker_context` pins every Helm / Compose step to that context,
   checked once per tool before the first step, through the
   integration's own `TARGET_CONTEXT_FIELD`, `target_context_env()` and
-  `target_context_problem()` (docs/work/compose-docker-context.md), so
+  `target_context_problem()` (see "Docker context pin" below), so
   the orchestrator still names no tool. `ComposeIntegration.deploy_namespace()` resolves the
   namespace's already-merged compose file and does one `docker stack
   deploy` for the whole namespace. The orchestrator dispatches purely on
   `integration.CAPABILITIES` — never a tool-name string comparison.
 
+### Docker context pin
+
+A Compose step deploys a Swarm stack to whatever Docker engine the
+caller's environment points at: `DOCKER_HOST`, else `DOCKER_CONTEXT`,
+else the context chosen with `docker context use`. Without a pin, a
+production `deploy run` with the wrong context active deploys to a
+development swarm, and a `deploy destroy` removes a stack from the wrong
+one. `docker_context` is the Compose counterpart of Helm's
+`kube_context` ([helm-chart-deployment.md](helm-chart-deployment.md)).
+
+```yaml
+kind: deployment
+meta:
+  name: hearth-prd
+spec:
+  extends: hearth-base
+  environments: [prd]
+  docker_context: hearth-prd
+```
+
+- **The field.** `DeploymentSpecModel.docker_context: str | None` names a
+  Docker context the caller created (`docker context create hearth-prd
+  --docker host=ssh://deploy@hearth`). It merges through `extends`, and
+  is a literal: a `${...}` token is a schema error, as for
+  `kube_context`. The two fields are independent; a deployment with Helm
+  and Compose steps sets both. `docker_context: default` is the local
+  engine.
+- **Pinning.** `ComposeIntegration.target_context_env()` adds
+  `DOCKER_CONTEXT=<docker_context>` to the env of every Compose step, so
+  `docker stack deploy`, `stack config` (dry-run), `stack rm` and
+  `stack services` (destroy and its preview) all use that context.
+- **The pre-flight check.** `deploy_run()` checks each distinct tool
+  with a target context once, before the first step of `deploy run`,
+  `plan`, `apply` and `destroy`, `--dry-run` included. Compose's
+  `target_context_problem()` stops the run with:
+
+  | Code                              | When                                                                                       |
+  | --------------------------------- | ------------------------------------------------------------------------------------------ |
+  | `compose_docker_context_conflict` | the caller sets `DOCKER_HOST`, or sets `DOCKER_CONTEXT` to another context                 |
+  | `compose_docker_context_missing`  | `docker context inspect <docker_context>` fails; the message lists `docker context ls`     |
+
+  `docker context inspect` reads only the local context store (it
+  honours `DOCKER_CONFIG`) and contacts no engine. `--smoke-test` runs
+  no tool and only says it would check the context. Each Compose step
+  prints the context it uses.
+- **When unset.** Nothing changes at deploy. `strata validate` warns
+  `compose_docker_context_unset` on a deployment that is not a partial
+  base and runs a Compose step (a provisioner whose tool, or named
+  integration, is `compose`). It stays a warning, not an error, because
+  deploying without a context worked before the field existed.
+- **One mechanism for both tools.** `InfraIntegration.TARGET_CONTEXT_FIELD`
+  (`kube_context`, `docker_context`, `None` for every other tool),
+  `target_context_env()` and `target_context_problem()` carry the
+  tool-specific parts; `deploy_run()` and the validate warning
+  (`<integration type>_<field>_unset`) read only those.
+- **What strata never does.** Set `DOCKER_HOST`, create or switch a
+  Docker context, or give a Terraform step `DOCKER_CONTEXT` (a Terraform
+  Docker provider has its own `host`). The caller provides the
+  connection ([ADR-0020](../decisions/0020-v1-consumer-feature-priority.md)).
+
 ### Orchestrator shape
 
 ```
 strata deploy run DEPLOYMENT [--path PATH] [--build-path PATH] --force
-  [--smoke-test | --dry-run] [--follow] [--stage NAME] [--scope LABEL]
+  [--smoke-test | --dry-run] [--follow] [--stage NAME]... [--scope LABEL]...
   └─ deploy_command.py: deploy_run_command()
        └─ diagnostics = deploy_run(context, deployment, build_path, force=force,
-              dry_run=dry_run, smoke_test=smoke_test, stage=stage, scope=scope,
+              dry_run=dry_run, smoke_test=smoke_test, stages=stage, scopes=scope,
               on_step=run.step, on_line=on_line, pin=pin, output_max_age=output_max_age)
 
 deploy_run(...)
   ├─ deployment, workspace, environments = resolve_deployment()/reachable_environments()
   ├─ resolved = resolve_values(...)                      # FULL resolution — secrets included
   ├─ steps = ordered_by_depends_on(workspace.spec.execution)
-  ├─ steps = filter by --stage/--scope
+  ├─ steps = select_steps(steps, stages=..., scopes=...)   # step_selection.py
   ├─ preflight: integration.is_available() for every filtered step, fail fast
   │    before any step runs (docs/design/deploy-command.md's own "Structural
   │    gotchas from v1": a later step's missing tool/credential must never
@@ -273,6 +333,16 @@ separation-of-concerns `ProvisioningStepModel`'s own "this step realizes
 topology X is derived, not declared" precedent (ADR-0011) already
 established. `--scope LABEL` filters `workspace.spec.execution` directly,
 independent of which deployment/environment is targeted.
+
+`--stage` and `--scope` are repeatable on every deploy command. One
+function, `select_steps()` (`step_selection.py`), applies them: a step is
+kept when its name is one of the `--stage` values and its scope one of the
+`--scope` values (OR within an option, AND across the two; an option not
+given keeps everything). A selection that keeps nothing is not an error:
+`deploy setup|check|plan|apply|run` say "no steps match" and exit 0, and
+only `deploy destroy` fails (`destroy_no_steps`). `strata deploy steps`
+lists the same selection without running it
+([deploy-steps-command.md](deploy-steps-command.md)).
 (Disambiguation: an unrelated, identically-named
 `DeploymentEnvironmentRef.scope` exists for the *promotion* system's own
 environment-file targeting — a different concept sharing a field name,
@@ -336,6 +406,11 @@ subcommand.
 | `deploy list`                                      | Scans every `kind: deployment` file, prints metadata — built for CI matrix generation.                                                 | None. No evidence either real repo needs this.                                                                                                                                                                                                                                                |
 | `deploy plan` (v1's viewer)                        | Shows a human-readable summary from an already-saved `.tfplan`, entirely offline.                                                      | **Mostly superseded** — v2's own `strata deploy plan` ([deploy-pipeline-stage-commands.md](deploy-pipeline-stage-commands.md)) computes *and* shows a diff by default, a strict superset for the common case. The one remaining gap: re-viewing an already-saved plan without recomputing it. |
 | `deploy drift`/`drift_history`/`acknowledge_drift` | `terraform plan -detailed-exitcode` without saving, severity classification, persisted history, suppression.                           | None. A whole new subsystem (`DriftController`, a history store) — zero v2 equivalent today. Largest unscoped gap in this survey.                                                                                                                                                             |
+
+Built since this survey, outside v1's set: `deploy list` (every deployment, the CI
+matrix) and `deploy steps` (one deployment's execution steps as `deploy run`
+selects and orders them, for a pipeline to plan its jobs; see
+[deploy-steps-command.md](deploy-steps-command.md)).
 
 ### Remaining Work — other subcommands (no evidence yet, build only if asked)
 
@@ -434,3 +509,20 @@ subcommand.
   other-subcommands survey remains real, tracked, unimplemented work,
   kept in this doc's own Remaining Work section rather than scattered
   across separate files.
+- Docker context pin: `DOCKER_HOST` silently overrides `DOCKER_CONTEXT`
+  (probed against Docker CLI 28.3.2, as are the rest of these findings),
+  so a pin through the environment holds only without it. Passing
+  `--context` on every command would win over `DOCKER_HOST`, but was
+  rejected: a caller who set `DOCKER_HOST` meant an engine, quietly
+  deploying elsewhere is the confusion the pin guards against, and the
+  env variable keeps the argv shapes and matches Helm's
+  `HELM_KUBECONTEXT`. So a set `DOCKER_HOST` is an error.
+- The Docker context check asks Docker (`docker context inspect`)
+  rather than reading the context store, which is a directory of hashed
+  folders; Docker's own answer covers `DOCKER_CONFIG` for free. It runs
+  on `--dry-run` too because `docker stack config` never resolves the
+  context: without the check a dry-run against a missing context passes
+  and only the real deploy fails.
+- A `${...}` token in `kube_context` or `docker_context` became a schema
+  error rather than a semantic `*_token` code: a literal-only rule needs
+  no cross-document check.

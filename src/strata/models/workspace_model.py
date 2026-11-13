@@ -756,7 +756,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         None,
         description="What `build run` adds to `sbom.json`. Omitted, it lists the images Helm charts deploy "
         "(`render_charts` defaults to `true`); `render_charts: false` lists only the images modules declare.\n\n"
-        "Design notes: docs/work/helm-image-delivery.md, the SBOM side.",
+        "Design notes: docs/design/helm-image-delivery.md, 'The SBOM: rendering charts'.",
     )
 
     @model_validator(mode="after")

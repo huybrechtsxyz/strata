@@ -74,6 +74,7 @@ def test_unknown_command_is_a_usage_error(runner):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_module_execution_runs_this_strata():
     """`python -m strata` must resolve through imports, not PATH.
 

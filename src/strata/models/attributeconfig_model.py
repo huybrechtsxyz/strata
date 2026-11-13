@@ -57,6 +57,7 @@ BLOCKS_BY_KIND: dict[PlatformKind, frozenset[str]] = {
     PlatformKind.INTEGRATION: frozenset({"custom", "configuration"}),
     PlatformKind.MODULE: frozenset({"custom", "configuration"}),
     PlatformKind.NAMESPACE: frozenset({"custom", "configuration"}),
+    PlatformKind.PARAMETERSET: frozenset({"values"}),
     PlatformKind.PROVIDER: frozenset({"custom", "configuration"}),
     PlatformKind.RESOURCE: frozenset({"custom", "configuration"}),
 }
@@ -66,7 +67,23 @@ BLOCKS_BY_KIND: dict[PlatformKind, frozenset[str]] = {
 #: `deployment` is the one thing every merge (`properties`/`custom`'s workspace+environments+deployment,
 #: `variables`/`features`'s environments-only, `composite`'s all four) is scoped against, not necessarily the kind
 #: that owns the field.
-_EFFECTIVE_VIEW_BLOCKS: frozenset[str] = frozenset({"properties", "custom", "variables", "features", "composite"})
+_EFFECTIVE_VIEW_BLOCKS: frozenset[str] = frozenset(
+    {"properties", "custom", "variables", "features", "composite", "params"}
+)
+
+#: `block: params` (docs/design/parameter-sets.md, "Constraints: attributeconfig"): the merged parameter-set
+#: values a document receives, per role. Every kind that names parameter sets has them, so the effective view of
+#: `params` is valid for all three; the other effective blocks stay deployment-only.
+_EFFECTIVE_PARAMS_KINDS: frozenset[PlatformKind] = frozenset(
+    {PlatformKind.DEPLOYMENT, PlatformKind.ENVIRONMENT, PlatformKind.TENANT}
+)
+
+
+def effective_view_supported(kind: PlatformKind, block: str) -> bool:
+    """Whether `view: effective` has a merge to evaluate for `(kind, block)`."""
+    if block == "params":
+        return kind in _EFFECTIVE_PARAMS_KINDS
+    return kind is PlatformKind.DEPLOYMENT and block in _EFFECTIVE_VIEW_BLOCKS
 
 
 class AttributeConfigTargetModel(PlatformBaseModel):
@@ -87,14 +104,19 @@ class AttributeConfigTargetModel(PlatformBaseModel):
         + ".",
         "`view: effective` is only valid with `kind: deployment` and a block of "
         + ", ".join(sorted(_EFFECTIVE_VIEW_BLOCKS))
-        + ".",
+        + ", or with `kind: environment` or `tenant` and `block: params`.",
     )
 
     kind: PlatformKind = Field(description="The kind of document this schema targets (e.g. 'environment').")
-    block: Literal["properties", "custom", "configuration", "variables", "features", "composite"] = Field(
+    block: Literal[
+        "properties", "custom", "configuration", "variables", "features", "composite", "values", "params"
+    ] = Field(
         description="Which free-form block of the targeted kind to validate. `composite` (only "
         "with `view: effective`) validates one object holding the merged `properties`, "
         "`custom`, `variables` and `features` together, for rules that span blocks. "
+        "`values` is a parameter set's own values (`view: document`). `params` (only with `view: effective`, "
+        "for a deployment, environment or tenant) is the parameter-set values the document receives once its "
+        "chain's sets are merged, one top-level key per role. "
         "`secrets` is deliberately not allowed, because a failure message could echo "
         "the secret value.\n\n"
         "Design notes: Which passthrough blob field on the targeted kind this schema "
@@ -118,7 +140,8 @@ class AttributeConfigTargetModel(PlatformBaseModel):
         description="Required, no default: the two views check different data. 'document': evaluate each "
         "matching document's own block in isolation. 'effective': evaluate the merged "
         "`properties`/`custom`/`variables`/`features` of each deployable deployment instead — only valid for "
-        "`kind: deployment`.",
+        "`kind: deployment` — or, with `block: params`, the merged parameter-set values of each deployable "
+        "deployment, environment or tenant.",
     )
 
     # Must stay defined before validate_block_exists_on_kind(): Pydantic stops at the first failing after-validator.
@@ -156,13 +179,11 @@ class AttributeConfigTargetModel(PlatformBaseModel):
         properties()`, `variables`/`features` via `merge_environment_models()` (docs/archive/
         environment-value-metadata.md's `variables`/`features` design). No merge exists for `configuration`,
         or for any block on any other kind."""
-        if self.view == "effective" and (
-            self.kind != PlatformKind.DEPLOYMENT or self.block not in _EFFECTIVE_VIEW_BLOCKS
-        ):
+        if self.view == "effective" and not effective_view_supported(self.kind, self.block):
             raise ValueError(
                 "view: effective is only supported for target.kind: deployment and "
-                f"target.block: {', '.join(sorted(_EFFECTIVE_VIEW_BLOCKS))} "
-                f"(got kind: '{self.kind.value}', block: '{self.block}')"
+                f"target.block: {', '.join(sorted(_EFFECTIVE_VIEW_BLOCKS))}, or for target.kind: environment or "
+                f"tenant and target.block: params (got kind: '{self.kind.value}', block: '{self.block}')"
             )
         return self
 

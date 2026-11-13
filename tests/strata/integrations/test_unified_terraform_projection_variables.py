@@ -178,11 +178,13 @@ def _validate_payload_against_generated_type(tmp_path: Path, graph: ResolvedWork
 
 
 @pytest.mark.skipif(not _terraform_available(), reason="terraform not on PATH")
+@pytest.mark.slow
 def test_generated_type_accepts_a_fully_populated_strata_payload(tmp_path: Path):
     _validate_payload_against_generated_type(tmp_path, _full_graph())
 
 
 @pytest.mark.skipif(not _terraform_available(), reason="terraform not on PATH")
+@pytest.mark.slow
 def test_generated_type_accepts_a_minimal_payload_with_no_tenant(tmp_path: Path):
     """The `tenant` edge case: `build_strata_payload()` returns a bare `{}`
     for `tenant` when no tenant is referenced — found while authoring the
@@ -278,6 +280,7 @@ def test_packaged_type_declares_every_attribute_the_payload_emits():
 
 
 @pytest.mark.skipif(not _terraform_available(), reason="terraform not on PATH")
+@pytest.mark.slow
 def test_terraform_can_read_the_bound_provider_document_name(tmp_path: Path):
     """The D-B symptom itself: an attribute missing from the type reads as an error in HCL."""
     output = TerraformIntegration().default_output(tmp_path, None, None, _full_graph())  # type: ignore[arg-type]
@@ -305,6 +308,7 @@ def test_terraform_can_read_the_bound_provider_document_name(tmp_path: Path):
 
 
 @pytest.mark.skipif(not _terraform_available(), reason="terraform not on PATH")
+@pytest.mark.slow
 def test_generated_strata_assets_local_reads_the_files_from_the_step_directory(tmp_path: Path):
     """`local.strata_assets` is what a Terraform author uses; prove with a real
     Terraform, run from a step directory two levels below the build root, that it

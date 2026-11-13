@@ -201,7 +201,7 @@ def _check_image_pin(
     diagnostics: Diagnostics,
 ) -> None:
     """One `images` pin: a whole image reference with a tag or digest, for a service that has an `image` to replace,
-    and naming the image that service runs (`docs/work/image-pin-validation.md`).
+    and naming the image that service runs (`docs/design/version-pin-overlay.md`).
 
     `services` holds every `(module name, service)` whose service is called `name`.
     """

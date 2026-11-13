@@ -220,9 +220,15 @@ jobs:
   # Job 4: Build and push the CLI Docker image to GHCR
   # ---------------------------------------------------------------------------
   publish:
-    name: Build and push Docker image
+    name: Build and push Docker image (${{ matrix.variant }})
     runs-on: ubuntu-latest
     needs: release # only publish if the GitHub Release succeeded
+    # Two variants of Dockerfile.cli (docs/design/cli-image.md): slim gets the bare tags, `-slim` and `latest`; full
+    # gets `-full` and `latest-full`.
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [slim, full]
 
     steps:
       - name: Checkout
@@ -244,10 +250,15 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/strata
+          flavor: |
+            latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=semver,pattern={{version}},enable=${{ matrix.variant == 'slim' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ matrix.variant == 'slim' }}
+            type=raw,value=latest,enable=${{ matrix.variant == 'slim' && !contains(github.ref_name, '-') }}
+            type=semver,pattern={{version}},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{major}}.{{minor}},suffix=-${{ matrix.variant }}
+            type=raw,value=latest-${{ matrix.variant }},enable=${{ !contains(github.ref_name, '-') }}
 
       # Build multi-stage CLI image and push; pass the tag as VERSION build arg
       - name: Build and push image
@@ -255,6 +266,7 @@ jobs:
         with:
           context: .
           file: Dockerfile.cli
+          target: ${{ matrix.variant }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -265,10 +277,16 @@ jobs:
   # Job 5: Build and push CLI Docker image to Docker Hub (only if registry secrets are set)
   # ---------------------------------------------------------------------------
   publish-hub-cli:
-    name: Publish CLI image to Docker Hub
+    name: Publish CLI image to Docker Hub (${{ matrix.variant }})
     runs-on: ubuntu-latest
     needs: release
     if: vars.REGISTRY_URL != ''
+    # Two variants of Dockerfile.cli (docs/design/cli-image.md): slim gets the bare tags, `-slim` and `latest`; full
+    # gets `-full` and `latest-full`.
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [slim, full]
 
     steps:
       - name: Checkout
@@ -289,16 +307,22 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME }}/strata
+          flavor: |
+            latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=semver,pattern={{version}},enable=${{ matrix.variant == 'slim' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ matrix.variant == 'slim' }}
+            type=raw,value=latest,enable=${{ matrix.variant == 'slim' && !contains(github.ref_name, '-') }}
+            type=semver,pattern={{version}},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{major}}.{{minor}},suffix=-${{ matrix.variant }}
+            type=raw,value=latest-${{ matrix.variant }},enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build and push CLI image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.cli
+          target: ${{ matrix.variant }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

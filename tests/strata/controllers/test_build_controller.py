@@ -604,6 +604,7 @@ def test_build_run_projects_the_asset_into_the_consuming_steps_strata_payload(tm
     }
 
 
+@pytest.mark.slow
 def test_build_run_path_from_step_resolves_from_each_steps_own_directory(tmp_path: Path):
     """Two provisioners at different depths see different `path_from_step`
     values, and each one really leads from that step's directory to the files."""
@@ -721,6 +722,7 @@ def _built_assets(build_path: Path) -> dict:
     return json.loads((build_path / "infra" / "strata.auto.tfvars.json").read_text())["strata"]["assets"]
 
 
+@pytest.mark.slow
 def test_two_deployments_of_one_workspace_get_different_files_at_the_same_slot_path(tmp_path: Path):
     root = _bound_asset_solution(tmp_path)
 
@@ -735,6 +737,7 @@ def test_two_deployments_of_one_workspace_get_different_files_at_the_same_slot_p
     assert (alt["asset"], alt["files"]) == ("openapi-alt", ["alt.json"])
 
 
+@pytest.mark.slow
 def test_build_run_inherits_an_asset_binding_through_extends(tmp_path: Path):
     root = _bound_asset_solution(tmp_path)
 
@@ -743,6 +746,7 @@ def test_build_run_inherits_an_asset_binding_through_extends(tmp_path: Path):
     assert _built_assets(tmp_path / "build")["api"]["asset"] == "openapi-alt"
 
 
+@pytest.mark.slow
 def test_rebuilding_into_the_same_build_path_drops_the_previous_bindings_files(tmp_path: Path):
     root = _bound_asset_solution(tmp_path)
     build_path = tmp_path / "build"
@@ -808,6 +812,7 @@ _NEEDS_GIT = pytest.mark.skipif(shutil.which("git") is None, reason="git not on 
 
 
 @_NEEDS_GIT
+@pytest.mark.slow
 def test_customers_with_their_own_repositories_need_no_manifest_remote(tmp_path: Path):
     root = _located_asset_solution(tmp_path)
 
@@ -822,6 +827,7 @@ def test_customers_with_their_own_repositories_need_no_manifest_remote(tmp_path:
 
 
 @_NEEDS_GIT
+@pytest.mark.slow
 def test_a_version_pin_moves_one_customers_asset_to_another_reference(tmp_path: Path):
     root = _located_asset_solution(tmp_path)
 
@@ -989,6 +995,7 @@ def _terraform_solution_with_transitive_dependency(tmp_path: Path) -> Path:
     return root
 
 
+@pytest.mark.slow
 def test_build_run_materialises_a_dependency_provisioner_with_no_execution_step(tmp_path: Path):
     root = _terraform_solution_with_dependency(tmp_path)
     build_path = tmp_path / "build"
@@ -1001,6 +1008,7 @@ def test_build_run_materialises_a_dependency_provisioner_with_no_execution_step(
     assert (build_path / "primitives" / "main.tf").exists()
 
 
+@pytest.mark.slow
 def test_build_run_materialises_a_transitive_dependency_chain(tmp_path: Path):
     root = _terraform_solution_with_transitive_dependency(tmp_path)
     build_path = tmp_path / "build"
@@ -1013,6 +1021,7 @@ def test_build_run_materialises_a_transitive_dependency_chain(tmp_path: Path):
     assert (build_path / "primitives" / "main.tf").exists()
 
 
+@pytest.mark.slow
 def test_build_run_materialises_a_shared_dependency_only_once(tmp_path: Path, monkeypatch):
     root = _terraform_solution_with_shared_dependency(tmp_path)
     build_path = tmp_path / "build"
@@ -1178,6 +1187,7 @@ def test_build_run_captures_every_execution_step_provisioners_source_path(tmp_pa
     assert materialised["tf_main"] == build_path / "infra"
 
 
+@pytest.mark.slow
 def test_build_run_unified_mapping_survives_a_provisioner_reached_both_ways(tmp_path: Path, monkeypatch):
     """A provisioner that is both a `depends_on` target and the subject of
     its own execution step (the documented double-sync case) ends up with
@@ -1229,6 +1239,7 @@ def _terraform_solution_with_target_path_and_unreached(tmp_path: Path) -> Path:
         _terraform_solution_with_target_path_and_unreached,
     ],
 )
+@pytest.mark.slow
 def test_expected_source_paths_matches_what_build_run_hands_the_checkov_gate(tmp_path: Path, monkeypatch, fixture):
     """Security-gates plan P9-2: `policy check` re-derives the paths `build run` used, so they must agree."""
     from strata.controllers import build_controller as build_controller_module
@@ -1335,6 +1346,7 @@ def _fake_clone_run_command(args, *, cwd=None, env=None, timeout=60, input=None,
     return CommandResult(returncode=0, stdout="", stderr="")
 
 
+@pytest.mark.slow
 def test_build_run_remote_pin_overrides_the_materialised_checkout_path(tmp_path: Path, monkeypatch):
     from strata.controllers import remote_resolution as remote_resolution_module
     from strata.utils import layout
@@ -1375,6 +1387,7 @@ def test_build_run_without_version_uses_the_manifests_declared_reference(tmp_pat
     assert declared_checkout.exists()
 
 
+@pytest.mark.slow
 def test_build_run_writes_tenant_output_when_deployment_references_one(tmp_path: Path):
     root = _terraform_solution(tmp_path)
     _write(
@@ -1515,6 +1528,7 @@ def test_build_run_raises_for_unknown_deployment(tmp_path: Path):
         build_run(_context(root), "ghost", tmp_path / "build")
 
 
+@pytest.mark.slow
 def test_build_run_renders_helm_workload_modules(tmp_path: Path):
     """End to end for the workload pipeline (ADR-0022 D5-D7): a namespace's
     helm module is materialised and rendered alongside the provisioner loop,
@@ -1584,6 +1598,7 @@ def test_build_run_renders_helm_workload_modules(tmp_path: Path):
     assert meta == {"releaseName": "auth", "namespace": "apps"}
 
 
+@pytest.mark.slow
 def test_build_run_writes_a_valid_sbom(tmp_path: Path):
     """docs/design/sbom-generation.md Phase 1 — build_run() writes
     sbom.json unconditionally, right after the workload pipeline."""
@@ -1875,6 +1890,7 @@ def test_build_run_writes_policy_results_when_checkov_policy_breaches(tmp_path: 
     assert len(results[0]["violations"]) >= 1
 
 
+@pytest.mark.slow
 def test_build_run_snapshots_checkov_config_file_and_passes_it_to_the_scan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -2010,6 +2026,7 @@ def _helm_solution(tmp_path: Path, *, checkov_policy_yaml: str = "") -> Path:
     return root
 
 
+@pytest.mark.slow
 def test_build_run_checkov_policy_helm_scans_the_real_materialised_chart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -2042,6 +2059,7 @@ def test_build_run_checkov_policy_helm_scans_the_real_materialised_chart(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_build_run_applies_remotes_charts_and_images_pins_simultaneously(tmp_path: Path, monkeypatch):
     """One `Version` document pinning `remotes`, `charts`, and `images` at
     once, exercised through a real `build_run()` — catches an
@@ -2125,6 +2143,7 @@ def test_build_run_applies_remotes_charts_and_images_pins_simultaneously(tmp_pat
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_build_run_pin_produces_identical_output_to_hand_editing_spec_version(tmp_path: Path, monkeypatch):
     """The exact "Done when" criterion: a --pin'd build produces identical
     output to hand-editing spec.version and building without the flag."""
@@ -2279,6 +2298,7 @@ def test_build_run_without_resolve_never_attempts_integration_backed_values(tmp_
     assert diagnostics.ok
 
 
+@pytest.mark.slow
 def test_build_run_resolve_flag_validates_every_declared_value(tmp_path: Path):
     """With `--resolve`, the same integration-backed secret IS attempted,
     and its failure is reported — but never written anywhere."""
@@ -2296,6 +2316,7 @@ def test_build_run_resolve_flag_validates_every_declared_value(tmp_path: Path):
     assert "value" not in manifest["secrets"]["VAULT_SECRET"]
 
 
+@pytest.mark.slow
 def test_build_run_env_file_supplies_a_missing_environment_store_variable(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("PHASE3_PROBE_VAR", raising=False)
     root = _solution_with_values(
@@ -2314,6 +2335,7 @@ def test_build_run_env_file_supplies_a_missing_environment_store_variable(tmp_pa
     assert manifest["variables"]["GREETING"] == {"store": "environment", "value": "hello-from-file"}
 
 
+@pytest.mark.slow
 def test_build_run_env_file_never_overrides_a_real_env_var(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("PHASE3_PROBE_VAR2", "real-shell-value")
     root = _solution_with_values(
@@ -2576,6 +2598,7 @@ def _capturing_clone(calls: list[dict]):
     return _run
 
 
+@pytest.mark.slow
 def test_build_run_clones_with_the_integrations_credentials_and_never_writes_them(tmp_path: Path, monkeypatch):
     from strata.controllers import remote_resolution as remote_resolution_module
 
@@ -2596,6 +2619,7 @@ def test_build_run_clones_with_the_integrations_credentials_and_never_writes_the
     assert leaked == []
 
 
+@pytest.mark.slow
 def test_build_run_dry_run_and_cached_checkouts_resolve_no_credentials(tmp_path: Path, monkeypatch):
     from strata.controllers import remote_resolution as remote_resolution_module
     from strata.utils import layout
@@ -2643,6 +2667,7 @@ def test_build_run_integration_backed_credential_needs_resolve(tmp_path: Path, m
 
 
 @pytest.mark.parametrize("resolve", [False, True])
+@pytest.mark.slow
 def test_build_run_creates_the_resolver_with_the_resolve_flag_and_pin(tmp_path: Path, monkeypatch, resolve: bool):
     from strata.controllers import build_controller as build_controller_module
     from strata.controllers import remote_resolution as remote_resolution_module

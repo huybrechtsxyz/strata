@@ -30,6 +30,7 @@ from strata.commands.deploy_images_command import deploy_images_command
 from strata.commands.deploy_list_command import deploy_list_command
 from strata.commands.deploy_output_command import deploy_output_command
 from strata.commands.deploy_report_command import deploy_report_command
+from strata.commands.deploy_steps_command import deploy_steps_command
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
@@ -42,6 +43,16 @@ from strata.utils.layout import build_dir
 
 _F = TypeVar("_F", bound=Callable[..., object])
 
+# One wording for every deploy command; the selection itself is `select_steps()` (docs/design/deploy-steps-command.md).
+_STAGE_HELP = (
+    "Restrict to the workspace execution step named NAME. Repeatable: a step named by any of them is kept. "
+    "'strata deploy steps' lists the names."
+)
+_SCOPE_HELP = (
+    "Restrict to steps whose scope: label is LABEL. Repeatable: a step with any of them is kept. "
+    "With --stage too, a step must match both."
+)
+
 
 @click.group("deploy")
 def deploy_command() -> None:
@@ -52,6 +63,7 @@ deploy_command.add_command(deploy_list_command)
 deploy_command.add_command(deploy_images_command)
 deploy_command.add_command(deploy_output_command)
 deploy_command.add_command(deploy_report_command)
+deploy_command.add_command(deploy_steps_command)
 
 
 def _shared_deploy_options(follow_default: str | None = None) -> Callable[[_F], _F]:
@@ -86,19 +98,20 @@ def _shared_deploy_options(follow_default: str | None = None) -> Callable[[_F], 
             help="Override spec.version with this kind: version document for this invocation only "
             "(ADR-0019) — zero persisted mutation, the deployment document on disk is never touched. "
             "Covers the artifacts pin category (the one that resolves live, at deploy time); pass the "
-            "same value to 'build run --pin' too so a deploy matches the build it is executing.",
+            "same value to 'build run --pin' too so a deploy matches the build it is executing. A build "
+            "with Helm modules must have been made with the same version: their pins are applied at build.",
         )(f)
         f = click.option(
             "--scope",
-            default=None,
+            multiple=True,
             metavar="LABEL",
-            help="Restrict to steps whose ProvisioningStepModel.scope matches LABEL.",
+            help=_SCOPE_HELP,
         )(f)
         f = click.option(
             "--stage",
-            default=None,
+            multiple=True,
             metavar="NAME",
-            help="Restrict to the one workspace execution step named NAME.",
+            help=_STAGE_HELP,
         )(f)
         f = click.option(
             "--follow",
@@ -133,7 +146,7 @@ def _shared_deploy_options(follow_default: str | None = None) -> Callable[[_F], 
 
 def _provider_recorder() -> tuple[dict[str, ManifestProviderModel], Callable[[str, IntegrationReadiness], None]]:
     """`deploy_run(on_tool=...)` and what it collects: one manifest entry per provisioner, with the tool version
-    and path its preflight found (docs/work/helm-4-support.md)."""
+    and path its preflight found (docs/design/helm-chart-deployment.md)."""
     providers: dict[str, ManifestProviderModel] = {}
 
     def _record(provisioner: str, readiness: IntegrationReadiness) -> None:
@@ -342,15 +355,15 @@ def _validate_change_reference_flags(
 )
 @click.option(
     "--stage",
-    default=None,
+    multiple=True,
     metavar="NAME",
-    help="Restrict to the one workspace execution step named NAME.",
+    help=_STAGE_HELP,
 )
 @click.option(
     "--scope",
-    default=None,
+    multiple=True,
     metavar="LABEL",
-    help="Restrict to steps whose ProvisioningStepModel.scope matches LABEL.",
+    help=_SCOPE_HELP,
 )
 @click.option(
     "--pin",
@@ -359,7 +372,8 @@ def _validate_change_reference_flags(
     help="Override spec.version with this kind: version document for this invocation only "
     "(ADR-0019) — zero persisted mutation, the deployment document on disk is never touched. "
     "Covers the artifacts pin category (the one that resolves live, at deploy time); pass the "
-    "same value to 'build run --pin' too so a deploy matches the build it is executing.",
+    "same value to 'build run --pin' too so a deploy matches the build it is executing. A build "
+    "with Helm modules must have been made with the same version: their pins are applied at build.",
 )
 @click.option(
     "--output-max-age",
@@ -383,8 +397,8 @@ def deploy_run_command(
     dry_run: bool,
     smoke_test: bool,
     follow: str | None,
-    stage: str | None,
-    scope: str | None,
+    stage: tuple[str, ...],
+    scope: tuple[str, ...],
     pin: str | None,
     output_max_age: int | None,
     change_system: str | None,
@@ -465,8 +479,8 @@ def deploy_run_command(
             force=force,
             dry_run=dry_run,
             smoke_test=smoke_test,
-            stage=stage,
-            scope=scope,
+            stages=stage,
+            scopes=scope,
             on_step=on_step,
             on_line=on_line,
             pin=pin,
@@ -512,8 +526,8 @@ def _run_partial_deploy(
     path: Path | None,
     build_path: Path | None,
     follow: str | None,
-    stage: str | None,
-    scope: str | None,
+    stage: tuple[str, ...],
+    scope: tuple[str, ...],
     pin: str | None,
     output_max_age: int | None,
     output: str,
@@ -555,8 +569,8 @@ def _run_partial_deploy(
             target,
             stop_after=stop_after,
             dry_run=dry_run,
-            stage=stage,
-            scope=scope,
+            stages=stage,
+            scopes=scope,
             on_step=on_step,
             on_line=on_line,
             pin=pin,
@@ -578,8 +592,8 @@ def deploy_setup_command(
     path: Path | None,
     build_path: Path | None,
     follow: str | None,
-    stage: str | None,
-    scope: str | None,
+    stage: tuple[str, ...],
+    scope: tuple[str, ...],
     pin: str | None,
     output_max_age: int | None,
     output: str,
@@ -627,8 +641,8 @@ def deploy_check_command(
     path: Path | None,
     build_path: Path | None,
     follow: str | None,
-    stage: str | None,
-    scope: str | None,
+    stage: tuple[str, ...],
+    scope: tuple[str, ...],
     pin: str | None,
     output_max_age: int | None,
     output: str,
@@ -706,8 +720,8 @@ def deploy_apply_command(
     build_path: Path | None,
     force: bool,
     follow: str | None,
-    stage: str | None,
-    scope: str | None,
+    stage: tuple[str, ...],
+    scope: tuple[str, ...],
     pin: str | None,
     output_max_age: int | None,
     change_system: str | None,
@@ -777,8 +791,8 @@ def deploy_apply_command(
             target,
             force=force,
             use_saved_plan=True,
-            stage=stage,
-            scope=scope,
+            stages=stage,
+            scopes=scope,
             on_step=on_step,
             on_line=on_line,
             pin=pin,
@@ -854,8 +868,8 @@ def deploy_destroy_command(
     dry_run: bool,
     smoke_test: bool,
     follow: str | None,
-    stage: str | None,
-    scope: str | None,
+    stage: tuple[str, ...],
+    scope: tuple[str, ...],
     pin: str | None,
     output_max_age: int | None,
     change_system: str | None,
@@ -938,8 +952,8 @@ def deploy_destroy_command(
             force=force,
             dry_run=dry_run,
             smoke_test=smoke_test,
-            stage=stage,
-            scope=scope,
+            stages=stage,
+            scopes=scope,
             on_step=on_step,
             on_line=on_line,
             pin=pin,
@@ -986,8 +1000,8 @@ def deploy_plan_command(
     path: Path | None,
     build_path: Path | None,
     follow: str | None,
-    stage: str | None,
-    scope: str | None,
+    stage: tuple[str, ...],
+    scope: tuple[str, ...],
     pin: str | None,
     output_max_age: int | None,
     output: str,

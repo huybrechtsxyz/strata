@@ -147,6 +147,7 @@ spec:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_multi_ring_with_wave_divergence_groups_and_sorts_correctly(tmp_path):
     root = _base(tmp_path)
     _write(root, "version-dev.yaml", _version("api-dev", promotion="    ring: dev\n    order: 1"))

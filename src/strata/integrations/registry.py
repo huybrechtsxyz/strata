@@ -15,15 +15,18 @@ contamination (v1's own `IntegrationRegistry.reset()`), for a problem
 yet. Callers that want reuse across a batch keep their own short-lived cache
 (e.g. `value_controller.resolve_values()`), the same pattern `values get`
 already used before this registry existed.
+
+What is cached is the list of installed plugins (`strata.utils.plugins`): read
+once per process, because each read scans every installed package.
 """
 
 from importlib import import_module
-from importlib.metadata import entry_points
 from typing import cast
 
 from strata.integrations.base import Integration
 from strata.integrations.errors import IntegrationError
 from strata.models.integration_model import IntegrationModel
+from strata.utils.plugins import installed_entry_points as entry_points
 
 #: Entry point group a third-party package registers a custom integration
 #: class under (ADR-0021 D10) — e.g. `[project.entry-points."strata.integrations"]`.
@@ -38,6 +41,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "azure-appconfig": ("strata.integrations.azure_appconfig_resolver", "AzureAppConfigResolver"),
     "azure-blob": ("strata.integrations.azure_blob_keyvalue_store", "AzureBlobKeyValueStore"),
     "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
+    "opentofu": ("strata.integrations.terraform", "OpenTofuIntegration"),
     "compose": ("strata.integrations.compose", "ComposeIntegration"),
     "helm": ("strata.integrations.helm", "HelmIntegration"),
     "script": ("strata.integrations.script", "ScriptIntegration"),
@@ -51,7 +55,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "trivy": ("strata.integrations.cve_scanner", "TrivyIntegration"),
     "grype": ("strata.integrations.cve_scanner", "GrypeIntegration"),
     "checkov": ("strata.integrations.checkov", "CheckovIntegration"),
-    # ansible/git/bicep/opentofu/vault/consul/etcd/bitwarden/flagsmith/cost/
+    # ansible/git/bicep/vault/consul/etcd/bitwarden/flagsmith/cost/
     # cve/splunk/syslog/identity as each gets a real v2 consumer (ADR-0021
     # Phase 7+).
 }
@@ -60,7 +64,6 @@ _KNOWN: dict[str, tuple[str, str]] = {
 #: type) reads differently from "not real" (a typo) in `get()`'s error.
 _KNOWN_V1_TYPES = frozenset(
     {
-        "opentofu",
         "ansible",
         "bicep",
         "vault",

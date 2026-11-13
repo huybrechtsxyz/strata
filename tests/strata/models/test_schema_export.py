@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the JSON Schema export (docs/design/schema-export.md)."""
 
+import copy
 from typing import Annotated, Any, ClassVar
 
 import jsonschema
@@ -8,6 +9,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from strata.controllers.solution_controller import SERVICE_BY_KIND
+from strata.models import schema_export
 from strata.models.common_models import PlatformKind, PlatformName
 from strata.models.reference_fields import References, RemoteReference, extract_references
 from strata.models.schema_examples import EXAMPLES
@@ -158,10 +160,12 @@ def _candidates(schema: dict[str, Any], node: dict[str, Any]) -> list[dict[str, 
 
 
 def _leaf_candidates(schema: dict[str, Any], path: str) -> list[dict[str, Any]]:
-    """The schema node(s) a dotted reference path (`spec.providers[]`) ends at, through $ref/anyOf/items."""
+    """The schema node(s) a dotted reference path (`spec.providers[]`, `meta.params{}`) ends at, through
+    $ref/anyOf/items/additionalProperties."""
     nodes = [schema]
     for part in path.split("."):
-        name, is_list = part.removesuffix("[]"), part.endswith("[]")
+        is_list, is_map = part.endswith("[]"), part.endswith("{}")
+        name = part[:-2] if is_list or is_map else part
         stepped = [
             c["properties"][name]
             for node in nodes
@@ -170,6 +174,14 @@ def _leaf_candidates(schema: dict[str, Any], path: str) -> list[dict[str, Any]]:
         ]
         if is_list:
             stepped = [c["items"] for node in stepped for c in _candidates(schema, node) if "items" in c]
+        if is_map:  # a map's values: `additionalProperties`, or `patternProperties` when its keys have a pattern
+            stepped = [
+                value
+                for node in stepped
+                for c in _candidates(schema, node)
+                for value in [c.get("additionalProperties"), *c.get("patternProperties", {}).values()]
+                if isinstance(value, dict)
+            ]
         nodes = stepped
     return [c for node in nodes for c in _candidates(schema, node)]
 
@@ -272,6 +284,7 @@ _EXAMPLE_CASES = [(kind, i) for kind, docs in EXAMPLES.items() for i in range(le
 
 
 @pytest.mark.parametrize(("kind", "index"), _EXAMPLE_CASES, ids=[f"{k.value}-{i}" for k, i in _EXAMPLE_CASES])
+@pytest.mark.slow
 def test_every_example_is_a_valid_document_of_its_own_kind(kind, index):
     document = EXAMPLES[kind][index]
     assert document["kind"] == kind.value
@@ -286,3 +299,142 @@ def test_examples_are_exported_as_the_root_examples_keyword(monkeypatch):
     assert export_schema(_model_of(kind), kind)["examples"] == [{"kind": "provider"}]
     monkeypatch.delitem(EXAMPLES, kind)
     assert "examples" not in export_schema(_model_of(kind), kind)
+
+
+# ---------------------------------------------------------------------------
+# Rendered once per model and kind
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def counted_renders(monkeypatch):
+    """Counts the real renders, on an empty cache that is emptied again afterwards."""
+    renders: list[type[BaseModel]] = []
+    real = schema_export.render_schema
+
+    def _render(model_cls):
+        renders.append(model_cls)
+        return real(model_cls)
+
+    schema_export._templated_schema.cache_clear()
+    monkeypatch.setattr(schema_export, "render_schema", _render)
+    yield renders
+    schema_export._templated_schema.cache_clear()
+
+
+def test_a_model_and_kind_are_rendered_once(counted_renders):
+    kind = PlatformKind.PROVIDER
+
+    assert export_schema(_model_of(kind), kind) == export_schema(_model_of(kind), kind)
+    assert len(counted_renders) == 1
+
+
+def test_each_kind_is_rendered_on_its_own(counted_renders):
+    for kind in (PlatformKind.PROVIDER, PlatformKind.ENVIRONMENT):
+        export_schema(_model_of(kind), kind)
+
+    assert len(counted_renders) == 2
+
+
+def test_changing_a_returned_schema_does_not_change_the_next(counted_renders):
+    kind = PlatformKind.DEPLOYMENT
+    first = export_schema(_model_of(kind), kind)
+    first["properties"].clear()
+    first["$defs"].clear()
+
+    second = export_schema(_model_of(kind), kind)
+
+    assert second["properties"] and second["$defs"]
+
+
+# ---------------------------------------------------------------------------
+# Templates: a deployment's spec may hold `${param:}` anywhere but `extends` and `partial` (ADR-0061)
+# ---------------------------------------------------------------------------
+
+_TEMPLATE = {
+    "apiVersion": "strata.huybrechts.xyz/v2",
+    "kind": "deployment",
+    "meta": {"name": "spoke_deployment_base", "params": {"hub": "hub-defaults"}, "name_rule": "spoke-${param:x.y}"},
+    "spec": {
+        "partial": True,
+        "workspace": "${param:spoke.workspace}",
+        "tenant": "${param:spoke.tenant}",
+        "environments": ["solution-env", "hub-${param:hub.name}-env"],
+        "providers": [{"slot": "azure", "provider": "${param:hub.provider}"}],
+        "layers": {"segments": {"hub": "${param:hub.name}"}},
+        "properties": "${param:spoke}",  # a whole-value token: a map
+        "stages": [{"step": "infra", "timeouts": {"apply": "${param:hub.apply_timeout}"}}],  # an integer
+    },
+}
+
+
+def _deployment_schema() -> dict[str, Any]:
+    return export_schema(_model_of(PlatformKind.DEPLOYMENT), PlatformKind.DEPLOYMENT)
+
+
+@pytest.mark.slow
+def test_the_editor_schema_accepts_a_deployment_template():
+    jsonschema.validate(_TEMPLATE, _deployment_schema())
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("meta", "name", "${param:spoke.name}"),
+        ("meta", "params", {"spoke": "${param:x}"}),
+        ("spec", "extends", "base-${param:spoke.hub}"),
+        ("spec", "partial", "${param:spoke.partial}"),
+        ("spec", "tenant", "Not A Name"),  # a plain value is still checked as before
+    ],
+)
+@pytest.mark.slow
+def test_the_editor_schema_still_rejects_what_validate_rejects(section, field, value):
+    document = copy.deepcopy(_TEMPLATE)
+    document[section][field] = value
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(document, _deployment_schema())
+
+
+@pytest.mark.slow
+def test_a_token_needs_the_param_kind_and_a_key():
+    for value in ("${var:tenant}", "${param:}"):
+        document = copy.deepcopy(_TEMPLATE)
+        document["spec"]["tenant"] = value
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(document, _deployment_schema())
+
+
+def test_only_kinds_that_can_be_templates_take_param_tokens():
+    for kind in (PlatformKind.WORKSPACE, PlatformKind.PARAMETERSET):
+        assert "ParamToken" not in str(export_schema(_model_of(kind), kind))
+
+
+def test_the_editor_schema_accepts_environment_and_tenant_templates():
+    environment = {
+        "kind": "environment",
+        "meta": {"name": "deploy_env_base", "params": {"customer": "customer-defaults"}},
+        "spec": {
+            "partial": True,
+            "properties": {"deploy_code": "${param:customer.code}"},
+            "features": [{"key": "enable_apim", "store": "constant", "value": "${param:customer.apim}"}],
+        },
+    }
+    tenant = {
+        "kind": "tenant",
+        "meta": {"name": "customer_tenant_base"},
+        "spec": {"partial": True, "display_name": "${param:tenant.display_name}", "geographies": "${param:tenant.geo}"},
+    }
+    jsonschema.validate(environment, export_schema(_model_of(PlatformKind.ENVIRONMENT), PlatformKind.ENVIRONMENT))
+    jsonschema.validate(tenant, export_schema(_model_of(PlatformKind.TENANT), PlatformKind.TENANT))
+
+
+@pytest.mark.parametrize("kind", [PlatformKind.ENVIRONMENT, PlatformKind.TENANT])
+@pytest.mark.slow
+def test_extends_and_partial_take_no_token_in_environments_and_tenants(kind):
+    schema = export_schema(_model_of(kind), kind)
+    for field, value in (("extends", "base-${param:x.y}"), ("partial", "${param:x.y}")):
+        document = {"kind": kind.value, "meta": {"name": "leaf"}, "spec": {"display_name": "x", field: value}}
+        if kind is PlatformKind.ENVIRONMENT:
+            del document["spec"]["display_name"]
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(document, schema)

@@ -107,7 +107,7 @@ def template_secret_keys(source: str) -> set[str] | None:
 
 def template_variable_keys(source: str) -> set[str] | None:
     """The `variables` keys `source` (an `output.template`) reads, with the same rules as `template_secret_keys()`
-    (docs/work/artifact-gap-analysis.md, design 7)."""
+    (docs/archive/artifact-gap-analysis.md, design 7)."""
     return template_context_keys(source, "variables")
 
 

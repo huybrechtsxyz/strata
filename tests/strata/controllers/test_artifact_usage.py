@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `artifact_usage` (docs/work/artifact-gap-analysis.md, design 8): which artifacts some deployment
+"""Tests for `artifact_usage` (docs/archive/artifact-gap-analysis.md, design 8): which artifacts some deployment
 uses, the `artifact_unused` warning, and `version update` leaving unused artifacts out."""
 
 import json
@@ -117,6 +117,40 @@ def test_nothing_is_reported_when_a_deployment_cannot_be_evaluated(tmp_path, mon
     assert used_artifacts(context) is None
     assert unused_artifacts(context) == []
     assert check_unused_artifacts(context).items == []
+
+
+@pytest.mark.parametrize("service_artifact", ["web", None], ids=["artifact-pin", "image-pin"])
+def test_looking_for_unused_artifacts_logs_no_pin(tmp_path, monkeypatch, service_artifact):
+    """`strata validate` applies nothing, so it must not log a pin as applied (ADR-0019 decision 7 is about
+    applications): `effective_images()` re-derives the tags with logging off."""
+    import strata.controllers.artifact_tokens as artifact_tokens
+    import strata.controllers.workload_controller as workload_controller
+
+    logged: list[str] = []
+    for module in (artifact_tokens, workload_controller):
+        monkeypatch.setattr(module, "log_pin_applied", lambda _category, name, *_args: logged.append(name))
+    root = _solution(tmp_path, service_artifact=service_artifact)
+    _write(
+        root,
+        "version.yaml",
+        "version",
+        "prd",
+        "  pins:\n    artifacts:\n      web: '2.0.0'\n    images:\n      web: redis:7.2\n",
+    )
+    _write(
+        root,
+        "app.yaml",
+        "deployment",
+        "app",
+        "  workspace: main\n  docker_context: apps-prd\n  version: prd\n  environments:\n    - prd\n",
+    )
+    context = _context(root)
+
+    check_unused_artifacts(context)
+    rows = used_artifacts(context)
+
+    assert rows == ({"web"} if service_artifact else set())
+    assert logged == []
 
 
 def _validate(root: Path, *args: str):

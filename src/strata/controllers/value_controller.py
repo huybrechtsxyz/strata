@@ -27,7 +27,7 @@ from sys import stdin
 from typing import Any, cast
 
 from strata.controllers.artifact_tokens import ArtifactTag, effective_artifact_tag
-from strata.controllers.deployment_resolution import deployment_workspace, resolve_deployment_chains
+from strata.controllers.deployment_resolution import deployment_of, deployment_workspace, resolve_deployment_chains
 from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
@@ -39,7 +39,7 @@ from strata.integrations.registry import get as get_integration
 from strata.integrations.resolved_context import ValueReference, ValueResolution
 from strata.models.artifact_model import ArtifactModel
 from strata.models.common_models import PlatformKind
-from strata.models.deployment_model import DeploymentModel
+from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.store_model import (
     FeatureStoreModel,
@@ -165,7 +165,15 @@ def resolve_deployment(
             f"No deployment named '{deployment_name}'. Available: {sorted(index.names_of(PlatformKind.DEPLOYMENT))}"
         )
     resolved_deployments, _ = resolve_deployment_chains(index)
-    deployment = resolved_deployments.get(deployment_name, cast(DeploymentModel, entry.model))
+    found = deployment_of(entry, resolved_deployments)
+    if found is None:
+        partial = cast(AnyDeploymentModel, entry.model).spec.partial
+        what = "a partial base that reads parameter sets" if partial else "a deployment"
+        raise UsageError(
+            f"Deployment '{deployment_name}' is {what} whose ${{param:}} values could not be resolved. "
+            "Run `strata validate` for the reason."
+        )
+    deployment = found
 
     if version_pin is not None:
         if index.get(PlatformKind.VERSION, version_pin) is None:
@@ -250,11 +258,13 @@ def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactMo
 
 
 def resolve_artifact_tag(
-    context: SolutionContext, deployment: DeploymentModel, artifact_name: str
+    context: SolutionContext, deployment: DeploymentModel, artifact_name: str, *, log: bool = True
 ) -> ArtifactTag | None:
     """The effective tag of `artifact_name` for `deployment`, or `None` when the artifact does not exist; a pin
-    that wins is logged. See `artifact_tokens.effective_artifact_tag()`, the one pin lookup for artifacts."""
-    return effective_artifact_tag(context.controller.index, deployment, artifact_name)
+    that wins is logged when `log` is set (a `store: artifact` variable resolved for a run). A caller that only
+    reports the tag (`effective_images()`) passes `log=False`. See `artifact_tokens.effective_artifact_tag()`, the
+    one pin lookup for artifacts."""
+    return effective_artifact_tag(context.controller.index, deployment, artifact_name, log=log)
 
 
 def resolve_artifact_field(

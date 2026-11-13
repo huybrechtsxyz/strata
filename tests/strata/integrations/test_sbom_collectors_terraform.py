@@ -213,6 +213,24 @@ def test_a_provider_from_another_registry_carries_it_as_repository_url(tmp_path:
     assert provider.properties == {"strata:version-constraint": ">= 3.0.0"}  # the lock's, none was declared
 
 
+def test_a_short_source_in_an_opentofu_root_is_listed_once_with_its_locked_version(tmp_path: Path):
+    """`tofu init` keys `hashicorp/null` as `registry.opentofu.org/hashicorp/null`. Read as Terraform's host, the
+    declared provider got no version and the lock entry a second component (docs/design/opentofu.md)."""
+    (tmp_path / "main.tf").write_text(
+        'terraform {\n  required_providers {\n    null = {\n      source  = "hashicorp/null"\n'
+        '      version = ">= 3.0.0"\n    }\n  }\n}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / ".terraform.lock.hcl").write_text(
+        _lock(("registry.opentofu.org/hashicorp/null", "3.2.1", ">= 3.0.0")), encoding="utf-8"
+    )
+
+    [provider] = _providers(tmp_path)
+
+    assert provider.purl == "pkg:terraform/hashicorp/null@3.2.1?repository_url=registry.opentofu.org"
+    assert read_provider_locks(tmp_path).unlocked == []
+
+
 def test_a_child_module_uses_its_roots_lock_file(tmp_path: Path):
     """Terraform keeps the lock file at the root; it locks the providers its child modules declare too."""
     (tmp_path / "main.tf").write_text('module "net" {\n  source = "./modules/net"\n}\n', encoding="utf-8")

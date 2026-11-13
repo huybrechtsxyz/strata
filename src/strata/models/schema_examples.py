@@ -573,4 +573,26 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
             },
         },
     ],
+    PlatformKind.PARAMETERSET: [
+        {
+            "apiVersion": _API,
+            "kind": "parameterset",
+            "meta": {"name": "spoke-example-001"},
+            "spec": {"values": {"name": "example-001", "hub": "hub01", "seq": "001"}},
+        },
+        {
+            "apiVersion": _API,
+            "kind": "parameterset",
+            "meta": {"name": "spoke-example-002", "labels": {"role": "spoke"}},
+            "spec": {
+                "values": {
+                    "name": "example-002",
+                    "hub": "hub01",
+                    "subscription_id": "00000000-0000-0000-0000-000000000002",
+                    "network": {"cidr": "10.2.0.0/16"},
+                    "customers": ["example-a", "example-b"],
+                }
+            },
+        },
+    ],
 }

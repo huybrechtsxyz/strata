@@ -61,7 +61,7 @@ selected and whose name is not allowed:
 | `require_digest` | `image_digest` is unset                        | `image_without_digest` |
 
 - A row carries the tag part in `image_tag` and the digest part in `image_digest`
-  (docs/work/artifact-gap-analysis.md, design 4). A digest (`sha256:...`) is immutable: a digest alone satisfies
+  (docs/archive/artifact-gap-analysis.md, design 4). A digest (`sha256:...`) is immutable: a digest alone satisfies
   `require_tag`, and `reject_tags` and `tag_pattern` judge only a tag part. Every row still has to satisfy
   `require_pin`, except a `chart` row.
 - **Chart rows.** Given a build, `check_image_tag_policy()` adds a row per container a rendered chart runs, read
@@ -140,7 +140,7 @@ is nothing honest to seed it with.
   replaces the build's for the same policy, so the audit record shows what was in effect at deploy.
 - `build run` used to judge before it cleaned or wrote, so a breach failed fast with nothing changed, but a
   denied build recorded no result in `policy_results.json`. Since 2026-11-12 it judges at the end, after the
-  SBOM, so it also sees the images rendered charts run (`helm-image-delivery.md` work doc, plan item 9), and a
+  SBOM, so it also sees the images rendered charts run ([helm-image-delivery.md](helm-image-delivery.md)), and a
   denied build records its result. To fail fast, run `strata deploy images` or `strata policy check` before
   `build run`: both judge the declared images offline in seconds. Whether a denied build should reach the
   audit trail is tracked in `denied-build-audit.md` (work doc).

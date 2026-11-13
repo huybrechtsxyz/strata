@@ -29,6 +29,9 @@ from strata.utils import layout
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
 
+pytestmark = pytest.mark.slow
+
+
 MANIFEST_TEMPLATE = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
 meta:
@@ -636,6 +639,41 @@ def test_manifest_omits_sbom_reference_without_error_when_absent(tmp_path: Path,
     assert '"sbom"' not in manifest_path.read_text()
 
 
+def test_a_corrupt_sbom_is_referenced_and_warned_about_never_failing_the_audit(tmp_path: Path, _terraform_stub):
+    """The deploy has already run: a corrupt SBOM must not lose its audit record. The file is still referenced
+    and hashed (what was on disk), without a component count, and a warning says why."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    (build_path / "sbom.json").write_text("{truncated", encoding="utf-8")
+
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok
+    assert [w.code for w in diagnostics.warnings] == ["audit_sbom_unreadable"]
+    manifest_text = next(layout.audit_dir(root).rglob("_manifest.json")).read_text()
+    assert '"path": "sbom.json"' in manifest_text
+    assert '"sha256": "sha256:' in manifest_text
+    assert '"component_count"' not in manifest_text
+
+
+def test_an_sbom_that_cannot_be_read_is_left_out_with_a_warning(tmp_path: Path, _terraform_stub, monkeypatch):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    real_read_bytes = Path.read_bytes
+
+    def locked(self, *args, **kwargs):
+        if self.name == "sbom.json":
+            raise PermissionError("locked by a scanner")
+        return real_read_bytes(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_bytes", locked)
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok
+    assert [w.code for w in diagnostics.warnings] == ["audit_sbom_unreadable"]
+    assert '"sbom"' not in next(layout.audit_dir(root).rglob("_manifest.json")).read_text()
+
+
 # ---------------------------------------------------------------------------
 # event_overrides gate
 # ---------------------------------------------------------------------------
@@ -1186,7 +1224,7 @@ def test_a_path_remote_that_is_not_a_git_checkout_records_no_commit(tmp_path: Pa
 
 def test_manifest_marks_an_image_strata_does_not_deliver(tmp_path: Path, _terraform_stub):
     """A Helm module's declared service image is recorded with `delivered: false`; a Compose image carries no
-    such key, so a manifest without Helm images is unchanged (docs/work/helm-image-delivery.md, the SBOM side)."""
+    such key, so a manifest without Helm images is unchanged (docs/design/helm-image-delivery.md, "The SBOM: the declared-only marker")."""
     root = _solution_with_workload(tmp_path)
     module = root / "module-authentik.yaml"
     module.write_text(

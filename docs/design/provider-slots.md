@@ -76,7 +76,7 @@ composition root — carries the choice.
 key, through one table:
 
 ```python
-_LIST_MERGE_KEYS = {"stages": "step", "providers": "slot", "assets": "slot"}
+LIST_MERGE_KEYS = {"stages": "step", "providers": "slot", "assets": "slot"}
 ```
 
 Base items first; a child item with the same key deep-merges over it (child wins, position kept);

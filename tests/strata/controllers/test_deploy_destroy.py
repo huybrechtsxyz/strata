@@ -365,7 +365,7 @@ def test_destroy_stage_filter_selects_the_one_step(tmp_path: Path, tools):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_apps")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert tools.terraform() == [("infra_b", "init"), ("infra_b", "destroy")]
@@ -376,12 +376,26 @@ def test_destroy_scope_filter_selects_the_steps_with_that_scope(tmp_path: Path, 
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, scope="apps")
+    diagnostics, _ = _destroy(root, build_path, force=True, scopes=("apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert tools.terraform() == [("infra_b", "init"), ("infra_b", "destroy")]
 
 
+def test_destroy_repeated_stages_destroy_in_reverse_order(tmp_path: Path, tools):
+    root = _tf_two(tmp_path)
+    build_path = _built(tmp_path, root)
+
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_infra", "apply_apps"))
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [call for call in tools.terraform() if call[1] == "destroy"] == [
+        ("infra_b", "destroy"),
+        ("infra_a", "destroy"),
+    ]
+
+
+@pytest.mark.slow
 def test_destroy_does_not_evaluate_the_image_tag_policy(tmp_path: Path, tools, monkeypatch):
     root = _tf_two(tmp_path, workspace_extra="  image_tag_policy: {}\n")
     build_path = _built(tmp_path, root)
@@ -401,6 +415,7 @@ def test_destroy_does_not_evaluate_the_image_tag_policy(tmp_path: Path, tools, m
     assert evaluated == ["evaluated"]  # the same solution does evaluate it on a deploy
 
 
+@pytest.mark.slow
 def test_destroy_does_not_evaluate_the_security_gates(tmp_path: Path, tools, monkeypatch):
     root = _tf_two(
         tmp_path,
@@ -456,7 +471,7 @@ def test_destroy_needs_force_dry_run_or_smoke_test(tmp_path: Path, tools):
     assert tools.terraform() == []
 
 
-@pytest.mark.parametrize("filters", [{"stage": "no_such_stage"}, {"scope": "no_such_scope"}])
+@pytest.mark.parametrize("filters", [{"stages": ("no_such_stage",)}, {"scopes": ("no_such_scope",)}])
 def test_destroy_that_selects_no_step_fails_instead_of_reporting_success(tmp_path: Path, tools, filters):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
@@ -517,7 +532,7 @@ def test_a_step_that_cannot_destroy_can_be_left_out(tmp_path: Path, tools):
     root = _with_a_script_step(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert tools.terraform() == [("infra_a", "init"), ("infra_a", "destroy")]
@@ -527,7 +542,7 @@ def test_destroying_an_upstream_step_alone_warns_about_the_dependents_it_leaves(
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, scope="infra")
+    diagnostics, _ = _destroy(root, build_path, force=True, scopes=("infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert _codes(diagnostics, "warnings") == ["destroy_leaves_dependents"]
@@ -539,7 +554,7 @@ def test_the_leaves_dependents_warning_also_shows_under_dry_run(tmp_path: Path, 
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, dry_run=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, dry_run=True, stages=("apply_infra",))
 
     assert _codes(diagnostics, "warnings") == ["destroy_leaves_dependents"]
 
@@ -601,6 +616,7 @@ def test_a_referenced_output_with_no_record_is_unavailable(tmp_path: Path, tools
     assert tools.terraform() == []
 
 
+@pytest.mark.slow
 def test_a_referenced_output_missing_from_its_record_is_unavailable(tmp_path: Path, tools, monkeypatch):
     backend = _register_output_store(monkeypatch)
     _seed(backend, {"apply_infra": {"something_else": "x"}})
@@ -641,7 +657,7 @@ def test_a_stale_record_does_not_block_a_step_that_references_no_output(tmp_path
     _seed(backend, {"apply_infra": {"vm_ip": "10.0.0.5"}}, collected_at="2020-01-01T00:00:00+00:00")
     root, build_path = _chained(tmp_path, workspace_extra=_STORE + "  output_store_max_age: 60\n")
 
-    diagnostics, _ = _destroy(root, build_path, dry_run=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, dry_run=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert backend.get_calls == 0  # nothing referenced an output, so the store was never read
@@ -689,6 +705,7 @@ def test_a_smoke_test_covers_a_container_step_without_calling_its_tool(tmp_path:
     assert tools.of("helm") == []
 
 
+@pytest.mark.slow
 def test_a_smoke_test_still_refuses_a_step_that_cannot_destroy(tmp_path: Path, tools):
     root = _with_a_script_step(tmp_path)
     build_path = _built(tmp_path, root)
@@ -703,7 +720,7 @@ def test_a_smoke_test_warns_about_dependents_it_would_leave(tmp_path: Path, tool
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert _codes(diagnostics, "warnings") == ["destroy_leaves_dependents"]
@@ -713,7 +730,7 @@ def test_a_smoke_test_that_selects_no_step_fails(tmp_path: Path, tools):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stage="no_such_stage")
+    diagnostics, _ = _destroy(root, build_path, smoke_test=True, stages=("no_such_stage",))
 
     assert _codes(diagnostics, "errors") == ["destroy_no_steps"]
 
@@ -751,7 +768,7 @@ def test_force_destroys_with_auto_approve(tmp_path: Path, tools):
     root = _tf_two(tmp_path)
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert [c.args for c in tools.of("terraform", "destroy")] == [["terraform", "destroy", "-auto-approve"]]
@@ -763,7 +780,7 @@ def test_the_variables_file_and_secrets_are_in_place_before_terraform_destroys(t
     )
     build_path = _built(tmp_path, root)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_infra")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_infra",))
 
     assert diagnostics.ok, diagnostics.messages()
     [destroy] = tools.of("terraform", "destroy")
@@ -884,6 +901,7 @@ def _release(build_path: Path) -> str:
     return str(meta.get("releaseName") or "auth")
 
 
+@pytest.mark.slow
 def test_a_helm_step_is_uninstalled_before_the_infrastructure_it_runs_on(tmp_path: Path, tools):
     root = _helm_solution(tmp_path)
     build_path = _built(tmp_path, root)
@@ -922,6 +940,7 @@ def test_a_helm_dry_run_lists_the_resources_and_never_the_secret_data(tmp_path: 
     assert "c3VwZXJzZWNyZXQ=" not in shown
 
 
+@pytest.mark.slow
 def test_a_compose_stack_is_removed_by_name(tmp_path: Path, tools):
     root = _compose_solution(tmp_path)
     build_path = _built(tmp_path, root)
@@ -932,6 +951,7 @@ def test_a_compose_stack_is_removed_by_name(tmp_path: Path, tools):
     assert [c.args for c in tools.of("docker")] == [["docker", "stack", "rm", "--detach=false", "apps"]]
 
 
+@pytest.mark.slow
 def test_a_failing_helm_uninstall_stops_the_run(tmp_path: Path, tools):
     root = _helm_solution(tmp_path)
     build_path = _built(tmp_path, root)
@@ -1006,6 +1026,7 @@ def test_a_gitops_preview_is_shown_without_follow(tmp_path: Path, tools, monkeyp
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
+@pytest.mark.slow
 def test_a_gitops_step_goes_from_build_to_deploy_to_destroy_against_a_real_repo(tmp_path: Path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -1052,7 +1073,7 @@ def test_a_partial_destroy_clears_only_the_steps_it_destroyed(tmp_path: Path, to
     _seed(backend, {"apply_infra": {"vm_ip": "10.0.0.5"}, "apply_apps": {"k": "v"}})
     root, build_path = _chained(tmp_path, workspace_extra=_STORE)
 
-    diagnostics, _ = _destroy(root, build_path, force=True, stage="apply_apps")
+    diagnostics, _ = _destroy(root, build_path, force=True, stages=("apply_apps",))
 
     assert diagnostics.ok, diagnostics.messages()
     assert set(_record(backend)) == {"apply_infra"}
@@ -1069,6 +1090,7 @@ def test_a_dry_run_clears_nothing(tmp_path: Path, tools, monkeypatch):
     assert set(_record(backend)) == {"apply_infra", "apply_apps"}
 
 
+@pytest.mark.slow
 def test_a_failure_to_clear_the_record_is_a_warning_not_a_failed_destroy(tmp_path: Path, tools, monkeypatch):
     backend = _register_output_store(monkeypatch)
     _seed(backend, {"apply_infra": {"vm_ip": "10.0.0.5"}, "apply_apps": {"k": "v"}})
@@ -1091,11 +1113,25 @@ def test_a_failure_to_clear_the_record_is_a_warning_not_a_failed_destroy(tmp_pat
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(shutil.which("terraform") is None, reason="terraform not on PATH")
-def test_a_real_terraform_destroy_removes_what_deploy_run_created(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("tool", "binary"),
+    [
+        pytest.param(
+            "terraform",
+            "terraform",
+            marks=pytest.mark.skipif(shutil.which("terraform") is None, reason="terraform not on PATH"),
+        ),
+        # OpenTofu runs the same contract (ADR-0060): the same steps, through `tofu`.
+        pytest.param(
+            "opentofu", "tofu", marks=pytest.mark.skipif(shutil.which("tofu") is None, reason="tofu not on PATH")
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_a_real_terraform_destroy_removes_what_deploy_run_created(tmp_path: Path, tool: str, binary: str):
     root = _solution(
         tmp_path,
-        provisioners="    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n",
+        provisioners=f"    - name: tf_main\n      tool: {tool}\n      source:\n        source_path: infra\n",
         execution="    - name: apply_infra\n      provisioner: tf_main\n      resources:\n        - r1\n",
         files={
             "infra/main.tf": (
@@ -1108,9 +1144,7 @@ def test_a_real_terraform_destroy_removes_what_deploy_run_created(tmp_path: Path
     step_dir = build_path / "infra"
 
     def _state() -> list[str]:
-        result = subprocess.run(
-            ["terraform", "state", "list"], cwd=step_dir, capture_output=True, text=True, check=False
-        )
+        result = subprocess.run([binary, "state", "list"], cwd=step_dir, capture_output=True, text=True, check=False)
         return [line for line in result.stdout.splitlines() if line.strip()]
 
     applied = deploy_run(_context(root), "app", build_path, force=True)
@@ -1137,6 +1171,7 @@ def _pinned_to_a_kube_context(root: Path, tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("HELM_KUBEAPISERVER", raising=False)
 
 
+@pytest.mark.slow
 def test_a_helm_uninstall_runs_against_the_deployments_kube_context(tmp_path: Path, tools, monkeypatch):
     root = _helm_solution(tmp_path)
     _pinned_to_a_kube_context(root, tmp_path, monkeypatch)
@@ -1149,6 +1184,7 @@ def test_a_helm_uninstall_runs_against_the_deployments_kube_context(tmp_path: Pa
     assert uninstall.env is not None and uninstall.env["HELM_KUBECONTEXT"] == "forge-prd"
 
 
+@pytest.mark.slow
 def test_a_helm_destroy_preview_runs_against_the_deployments_kube_context(tmp_path: Path, tools, monkeypatch):
     root = _helm_solution(tmp_path)
     _pinned_to_a_kube_context(root, tmp_path, monkeypatch)

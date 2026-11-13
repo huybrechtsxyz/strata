@@ -243,6 +243,7 @@ def _resolve(root: Path):
     return context
 
 
+@pytest.mark.slow
 def test_base_solution_passes_every_check(tmp_path):
     """The control case: nothing wrong anywhere."""
     context = _resolve(_base_solution(tmp_path))
@@ -2034,6 +2035,80 @@ def test_a_depends_on_only_provisioner_bound_to_a_disabled_integration_is_not_re
     _bind_step_provisioner(root, "tf-cli", dependency="tf-off")
 
     assert _disabled_findings(_resolve(root)) == []
+
+
+# ---------------------------------------------------------------------------
+# Terraform and OpenTofu are bound to their own type (docs/design/opentofu.md, ADR-0060)
+# ---------------------------------------------------------------------------
+
+
+def _typed_integration(root: Path, name: str, integration_type: str, command: str | None = None) -> None:
+    command_line = f"  command: {command}\n" if command else ""
+    _write(
+        root,
+        f"integrations/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: {name}\nspec:\n"
+        f"  type: {integration_type}\n  capabilities: [x-test]\n{command_line}",
+    )
+
+
+def _set_step_tool(root: Path, tool: str) -> None:
+    path = root / "workspace.yaml"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("      tool: terraform\n", f"      tool: {tool}\n", 1), encoding="utf-8")
+
+
+def _codes_of(context, code: str) -> list:
+    return [d for d in context.diagnostics.items if d.code == code]
+
+
+@pytest.mark.parametrize(("tool", "integration_type"), [("opentofu", "terraform"), ("terraform", "opentofu")])
+def test_a_terraform_family_provisioner_bound_to_the_other_type_is_an_error(tmp_path, tool, integration_type):
+    root = _base_solution(tmp_path)
+    _typed_integration(root, "iac", integration_type)
+    _set_step_tool(root, tool)
+    _bind_step_provisioner(root, "iac")
+
+    context = _resolve(root)
+
+    [finding] = _codes_of(context, "provisioner_integration_type_mismatch")
+    assert finding.severity.value == "error" and not context.ok
+    assert finding.location == "spec.provisioners.0.integration"
+    assert f"(tool: {tool}) names integration 'iac' of type '{integration_type}'" in finding.message
+
+
+def test_an_opentofu_provisioner_bound_to_an_opentofu_integration_passes(tmp_path):
+    root = _base_solution(tmp_path)
+    _typed_integration(root, "tofu", "opentofu")
+    _set_step_tool(root, "opentofu")
+    _bind_step_provisioner(root, "tofu")
+
+    context = _resolve(root)
+
+    assert _codes_of(context, "provisioner_integration_type_mismatch") == []
+    assert context.ok, context.diagnostics.messages()
+
+
+@pytest.mark.parametrize(
+    ("integration_type", "command", "flagged"),
+    [
+        ("terraform", "tofu", True),
+        ("terraform", "/usr/local/bin/tofu", True),
+        ("opentofu", "terraform.exe", True),
+        ("terraform", "/opt/terraform-1.9/terraform", False),
+        ("terraform", "terraform-wrapper", False),
+        ("opentofu", "/usr/bin/tofu", False),
+    ],
+)
+def test_a_terraform_family_integration_does_not_run_the_other_tool(tmp_path, integration_type, command, flagged):
+    root = _base_solution(tmp_path)
+    _typed_integration(root, "iac", integration_type, command)
+
+    findings = _codes_of(_resolve(root), "integration_command_other_tool")
+
+    assert len(findings) == (1 if flagged else 0)
+    if flagged:
+        assert findings[0].location == "spec.command"
 
 
 def test_a_provisioner_naming_an_unknown_integration_is_only_a_reference_error(tmp_path):
@@ -4476,7 +4551,7 @@ def test_an_absolute_path_remote_outside_the_solution_has_no_finding(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Helm release names and Kubernetes namespaces (docs/work/helm-release-names.md)
+# Helm release names and Kubernetes namespaces (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 _HELM_NAME_CODES = {"helm_release_name_invalid", "helm_kubernetes_namespace_invalid", "helm_release_conflict"}
@@ -4692,7 +4767,7 @@ def test_an_invalid_name_is_not_also_reported_as_a_conflict(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# The kube context of a deployment with a Helm step (docs/work/helm-kube-context.md)
+# The kube context of a deployment with a Helm step (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 _HELM_STEP = """    - name: helm
@@ -4853,7 +4928,7 @@ def test_a_value_token_in_a_context_field_is_a_schema_error(tmp_path, field):
 
 
 # ---------------------------------------------------------------------------
-# ${artifact:NAME.FIELD} (docs/work/artifact-gap-analysis.md, design 1) - end to end through
+# ${artifact:NAME.FIELD} (docs/archive/artifact-gap-analysis.md, design 1) - end to end through
 # `strata validate`: judged per deployment, its version's pins applied
 # ---------------------------------------------------------------------------
 
@@ -4933,7 +5008,7 @@ def test_an_artifact_token_in_an_environment_store_value_is_caught(tmp_path):
 
 # ---------------------------------------------------------------------------
 # A Helm service's artifact reaches the chart only through an ${artifact:} token in
-# its values (docs/work/artifact-gap-analysis.md, design 2)
+# its values (docs/archive/artifact-gap-analysis.md, design 2)
 # ---------------------------------------------------------------------------
 
 
@@ -4991,6 +5066,15 @@ def test_a_token_in_the_service_configuration_delivers_the_artifact(tmp_path):
     assert _delivery_findings(context) == []
 
 
+def test_a_token_in_another_services_configuration_delivers_the_artifact(tmp_path):
+    """Design 11: every service's `configuration` is written into the chart's values, so the image can run through
+    it; `effective_images()` uses the same rule (`helm_delivered_artifacts()`)."""
+    service_extra = '    - name: worker\n      configuration:\n        image: "${artifact:immich.image_ref}"\n'
+    context = _resolve(_helm_artifact_solution(tmp_path, service_extra=service_extra))
+
+    assert _delivery_findings(context) == []
+
+
 def test_a_token_in_the_service_environment_does_not_deliver_the_artifact(tmp_path):
     """It becomes an environment variable of the chart's pods, not the image the chart runs."""
     service_extra = "      environment:\n        - key: IMAGE\n          value: ${artifact:immich.image_ref}\n"
@@ -5021,7 +5105,7 @@ def test_a_compose_service_artifact_is_delivered_by_strata(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# An artifact's registry agrees with its image_name (docs/work/artifact-gap-analysis.md, design 5)
+# An artifact's registry agrees with its image_name (docs/archive/artifact-gap-analysis.md, design 5)
 # ---------------------------------------------------------------------------
 
 

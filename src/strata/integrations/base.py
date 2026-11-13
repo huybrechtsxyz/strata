@@ -42,7 +42,7 @@ class ReadinessProblem:
     """One readiness finding (docs/work/integration-readiness.md), here so an integration can return its own.
 
     `flags_only`: the problem is about the flags strata would pass, not whether the tool works at all, so a command
-    that passes none of those flags may treat it as a warning (docs/work/helm-4-support.md).
+    that passes none of those flags may treat it as a warning (docs/design/helm-chart-deployment.md).
     """
 
     code: str
@@ -97,7 +97,7 @@ class Integration(ABC):
     VERSION_ARGS: ClassVar[tuple[str, ...]] = ("--version",)
 
     #: Read the installed version in the readiness check even when the document declares no `spec.version`,
-    #: for a class whose `version_problems()`/`version_notices()` need it (docs/work/helm-4-support.md).
+    #: for a class whose `version_problems()`/`version_notices()` need it (docs/design/helm-chart-deployment.md).
     READ_VERSION: ClassVar[bool] = False
 
     def __init__(self, config: IntegrationModel | None = None) -> None:

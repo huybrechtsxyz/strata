@@ -154,6 +154,7 @@ def _git_available() -> bool:
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_real_sync_round_trip(tmp_path: Path):
     """Real clone -> fetch -> reset against a real local bare repository, run
     twice: once against a genuinely empty remote (no commits at all), once

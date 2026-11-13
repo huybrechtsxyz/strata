@@ -55,6 +55,7 @@ from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
+from strata.utils.sbom_file import SBOM_FILENAME
 from strata.utils.sbom_utils import (
     FOUND_IN_PROPERTY,
     FOUND_IN_RENDERED_CHART,
@@ -64,8 +65,6 @@ from strata.utils.sbom_utils import (
 )
 
 log = get_logger(__name__)
-
-_SBOM_FILENAME = "sbom.json"
 
 #: Public — `audit_run.py`'s `_sbom_reference()` reuses this as the single
 #: source of truth rather than hardcoding a second copy of the format string
@@ -108,7 +107,7 @@ def write_sbom(
             `strata:commit` property; omitted when unknown.
         helm_cache: The `.strata/helm/` cache, handed to the `chart-image`
             collector only, so it can render a pinned registry chart's
-            archive (docs/work/helm-image-delivery.md, plan item 9b).
+            archive (docs/design/helm-image-delivery.md, "The SBOM: rendering charts").
             `None`: registry charts are not rendered.
 
     Returns:
@@ -146,7 +145,7 @@ def write_sbom(
     if validation_error is not None:
         raise RuntimeError(f"generated SBOM failed CycloneDX schema validation: {validation_error}")
 
-    sbom_path = build_path / _SBOM_FILENAME
+    sbom_path = build_path / SBOM_FILENAME
     sbom_bytes = bom_json.encode("utf-8")
     build_path.mkdir(parents=True, exist_ok=True)
     sbom_path.write_bytes(sbom_bytes)
@@ -189,7 +188,8 @@ def _resolve_all_modules(
         for reference in namespace.spec.modules or []:
             if not reference.enabled:
                 continue
-            module = apply_version_pins(resolve_module(index, reference), graph.version)
+            # The build render already logged each pin; this only lists what it rendered.
+            module = apply_version_pins(resolve_module(index, reference), graph.version, log=False)
             source = module.spec.source
             remote = remotes.get(source.remote) if source.remote and source.chart_name else None
             if remote is not None and source.chart_repository is None:
@@ -205,7 +205,7 @@ def _merge_by_purl(components: list[SbomComponentModel]) -> list[SbomComponentMo
     Two collectors can find the same image (the module declares it, the rendered compose file
     names it); listed twice it would be two components with one `bom-ref`, an invalid BOM.
 
-    Two properties do not simply keep the first value (docs/work/helm-image-delivery.md, the SBOM side):
+    Two properties do not simply keep the first value (docs/design/helm-image-delivery.md, "The SBOM: the declared-only marker"):
     `strata:used-by` joins every use, so a rendered chart's use is not lost behind a declared one, and the
     declared-only marker is dropped once a rendered chart deploys the image, which makes it what runs.
     """
@@ -259,7 +259,7 @@ def _declared_not_rendered(
     components: list[SbomComponentModel], graph: ResolvedWorkspaceGraph, diagnostics: Diagnostics
 ) -> list[SbomComponentModel]:
     """An `info` finding for each declared Helm service image whose module's chart was rendered without it
-    (docs/work/helm-image-delivery.md, plan item 9c).
+    (docs/design/helm-image-delivery.md, "The SBOM: declared but not rendered").
 
     Runs after the merge, so a declared image the chart also runs has already lost its marker. A chart counts as
     rendered when it yielded at least one image. The declaration may be deliberate documentation, so the image is
@@ -423,9 +423,9 @@ def cve_findings(build_path: Path, index: DocumentIndex, threshold: str) -> CveF
         UsageError: No `sbom.json` under `build_path`.
         SystemError: No scanner available, or the scan failed.
     """
-    sbom_path = build_path / _SBOM_FILENAME
+    sbom_path = build_path / SBOM_FILENAME
     if not sbom_path.is_file():
-        raise UsageError(f"No {_SBOM_FILENAME} in '{build_path}'; run 'strata build run' first.")
+        raise UsageError(f"No {SBOM_FILENAME} in '{build_path}'; run 'strata build run' first.")
     scanner = declared_cve_scanner(index) or CveScannerIntegration()
     try:
         scanner.ensure_available()
@@ -474,7 +474,7 @@ def evaluate_cve_policy(build_path: Path, workspace: WorkspaceModel, index: Docu
         return diagnostics
 
     severity = diagnostics.error if policy.enforcement == "deny" else diagnostics.warning
-    sbom_path = build_path / _SBOM_FILENAME
+    sbom_path = build_path / SBOM_FILENAME
     declared = declared_cve_scanner(index)
     scanner = declared or CveScannerIntegration()
 

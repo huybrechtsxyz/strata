@@ -8,7 +8,97 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster `build run` and `deploy run`.** strata reads the installed plugins (integrations and SBOM collectors)
+  once per command instead of on every lookup, each read having scanned every installed Python package. A plugin
+  installed while a command runs is picked up by the next one. A Terraform file read more than once in a command
+  (for the SBOM, then for the declared outputs and variables) is parsed once. `sln init` and `sln update` render
+  each kind's schema once.
+
+## [2.6.0] - 2026-11-13
+
+Deployment documentation: `strata deploy output`, `strata deploy report` and `spec.documentation`, built on a
+per-step output store ([docs/design/deployment-documentation.md](../docs/design/deployment-documentation.md)).
+
+Also: parameter sets, so one deployment, environment or tenant base serves many instances
+([docs/design/parameter-sets.md](../docs/design/parameter-sets.md)), with `strata render` to see where each value
+comes from; OpenTofu as a provisioner tool; a full container image; `strata deploy steps`; and Helm charts rendered by
+default, so the image policies judge the images they run.
+
 ### Added
+
+- **Parameter sets: one deployment base for many spokes.** A new kind, `parameterset`, holds one instance's plain
+  values. A deployment names sets per role in `meta.params` (`params: { hub: hub-hub01, spoke: spoke-acme-001 }`),
+  and any document of its `extends` chain reads them with `${param:<role>.<key>}`, in any field of its spec,
+  reference fields included (`tenant`, `environments`). Values are filled in when the solution loads, and each
+  deployment is then validated as if written out in full (ADR-0061).
+  - Sets named along the chain merge per role, base first: a base's sets are defaults, the leaf's override them.
+  - `meta.name_rule` (`spoke-${param:spoke.name}`) checks each deployment's name against its values
+    (`name_rule_mismatch`).
+  - A problem is reported on the field you wrote, with the values that made it and the deployment it was resolved
+    for (`param_missing`, `param_not_scalar`, `unknown_reference`). A value nothing reads is information
+    (`param_unused`), so `validate --strict` still passes.
+  - Deployments only for now; environments and tenants follow.
+  - The exported deployment schema (`.strata/schemas/deployment.json`, from `strata sln init`/`update`) accepts a
+    `${param:}` token in every spec field but `extends` and `partial`, so the YAML editor no longer underlines
+    `tenant: ${param:spoke.tenant}`. Run `strata sln update` to refresh the schemas.
+  - `docs/how-to/parameterised-deployment-bases.md` walks through a full example.
+
+- **`extends`, `partial` and parameter sets on environments and tenants.** An environment or tenant can build on a
+  `partial: true` base with `spec.extends`, name parameter sets in `meta.params`, read them with `${param:}`, and
+  require a name with `meta.name_rule`, as a deployment can. Both are merged when the solution loads, so every reader
+  (value assembly, `strata values`, tenant defaults, `${value:}`, attributeconfig) sees the merged document.
+  - Environments merge `properties` and `custom` per leaf key; a `variables`, `secrets` or `features` entry with the
+    same `key` replaces the base's whole entry. Tenants replace `geographies` (never join them), append
+    `environments` after the base's, and merge `properties`, `custom` and `configuration` per leaf key.
+  - A base is never used: listing a partial environment is `environment_not_listable`, naming a partial tenant is
+    `tenant_not_selectable`, and reading either with `${value:}` is `value_reference_to_base`.
+  - A tenant's `display_name` is now required only when the tenant is neither `partial` nor built with `extends`.
+  - The exported environment and tenant schemas accept `${param:}` tokens; run `strata sln update` to refresh them.
+  - `docs/how-to/environment-and-tenant-bases.md` walks through a full example.
+
+- **attributeconfig checks parameter sets.** `kind: parameterset, block: values, view: document` checks the shape of
+  each set; `block: params, view: effective` checks the values a deployment, environment or tenant receives once its
+  sets are merged, with one top-level key per role (`required: [spoke, hub]`). A selector path now walks into a map,
+  so `meta.labels.role: spoke` selects sets by label.
+
+- **`strata render KIND NAME`: where each value comes from.** Shows a deployment, environment or tenant as strata
+  uses it (its `extends` chain merged, its parameter sets filled in, a deployment's tenant defaults folded in), one
+  line per field, with the document that wrote each value and, for a value filled in from a parameter set, the text
+  as written and the role, key and parameter set it read. `-o json` gives the same as data. Secret values are always
+  masked. Runs nothing and needs no valid solution, like `deploy list`.
+
+- **The strata agent skill covers parameter sets**: the `${param:}` token, bases for environments and tenants,
+  `meta.name_rule`, the attributeconfig views and the pitfalls. Run `strata sln update` to refresh
+  `.claude/skills/strata/SKILL.md`.
+
+- **A full container image, `ghcr.io/huybrechtsxyz/strata:<version>-full`** (and `latest-full`): strata with
+  OpenTofu, Helm 4, the Docker CLI with Compose, Trivy and Checkov, for a pipeline that runs Helm or Compose steps or the CVE and
+  Checkov policies. The image you pull today is the slim variant: `strata:<version>` and `latest` are unchanged, and
+  are also tagged `-slim` and `latest-slim`. Neither variant has Terraform, whose licence is not settled for a public
+  image; extend either one with your own (`docs/design/cli-image.md`).
+- **OpenTofu: `tool: opentofu`** runs a root module with `tofu` (OpenTofu 1.6 or later), with everything a
+  `tool: terraform` step has: the `backend`, the `strata` payload and `TF_VAR_` values, saved plans, destroy,
+  outputs, the lock policy, the SBOM and the Checkov policy. Bind a `type: opentofu` integration to pin its version.
+  - The lock policy and the SBOM read a short provider source as `registry.opentofu.org` when `tofu init` locked it
+    so, and the lock policy says `tofu init`.
+  - `strata validate` errors when a Terraform or OpenTofu provisioner binds an integration of the other type
+    (`provisioner_integration_type_mismatch`), or when a `terraform` integration's `spec.command` runs `tofu` or
+    the reverse (`integration_command_other_tool`). Running `tofu` through `type: terraform` worked by accident,
+    with Terraform's version check and registry; switch it to `tool: opentofu` and `type: opentofu`.
+  - `docs/config/workspace.md` has the migration steps from Terraform.
+- **`strata deploy steps DEPLOYMENT`** lists the execution steps `deploy run` would run, in its order, for a
+  pipeline to plan its jobs. It runs nothing and needs no build or credentials.
+  - Each step has its `scope`, `order`, `level` (steps on one level do not depend on each other), `depends_on`,
+    the tool it needs, `capabilities` (`saved_plan`: `deploy apply` can take it; `destroy`; `container`), its
+    declared and effective targets (topologies expanded) and its stage `timeouts`.
+  - `data.scopes[]` gives each scope the scopes it waits for; scopes that depend on each other are marked
+    `orderable: false`, with a `scope_cycle` warning.
+  - `--stage` and `--scope` select as on `deploy run`. An empty selection exits 0; values that matched no step
+    are in `data.unmatched`.
+  - `--destroy` lists teardown order. `--check-tools` checks each listed step's tool on this machine (on `PATH`,
+    required version) and exits 3 when one is not ready.
 
 - **The SBOM, the image gate and the audit manifest say which images strata does not deliver.** A Helm module's
   declared service image is still listed and scanned, but the chart decides which image runs.
@@ -45,7 +135,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - **`strata deploy images` says which images strata delivers.** Strata delivers an image when it writes it into
   what runs:
   - a Compose service;
-  - an artifact a step receives through a variable, or one an `${artifact:}` token delivers.
+  - an artifact a step receives through a variable, or one an `${artifact:}` token delivers. In a Helm module only
+    a token in the chart's own keys (the module's or a service's `configuration`) delivers it; a token in a
+    service's `environment` sets an environment variable, so it is a use, not delivery
+    (`no (helm module: no ${artifact:} token in the chart's values)`), as `artifact_not_delivered` judges it.
 
   A Helm module's service image is only declared, because the chart decides which image runs.
   - The console gets a `DELIVERED` column whenever an image is not delivered, for example
@@ -57,6 +150,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   images strata does not know (`image_unknown_to_strata`). It is independent of `enforcement`. `allow` does not
   exempt a module; declare its images to have them judged.
   - A workspace with an `image_tag_policy` and such a module now gets a warning on `build run` and `deploy run`.
+  - The module is reported when `origins` covers `module-service` or `chart` (or is omitted): a chart-only policy
+    hears about a chart whose images it could not judge.
   - A declared Helm image is still judged, and its finding says "declared only, the chart decides which image
     runs".
 - `${artifact:NAME.FIELD}`, a token for an artifact's `image_name`, `image_tag` or `image_ref`, with the
@@ -69,7 +164,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   `strata deploy images` lists it with `via: token:KIND/NAME`, and the SBOM, the image gates and `image_tag_policy`
   judge it.
 - `strata validate` warns `artifact_not_delivered` for a Helm module service that names an `artifact` while no
-  `${artifact:NAME.FIELD}` token for it appears in the module's or the service's `configuration`. Strata writes no
+  `${artifact:NAME.FIELD}` token for it appears in the module's or a service's `configuration`. Strata writes no
   image into a chart's values, so such an artifact (and its version pin) changes `deploy images` and the SBOM but not
   what runs. Deliver it in the chart's own keys, for example
   `configuration: {image: {repository: "${artifact:NAME.image_name}", tag: "${artifact:NAME.image_tag}"}}`.
@@ -86,85 +181,6 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   `name:1.4.2@sha256:<hex>`. Two more fields read the parts, `image_tag_name` and `image_digest`, as a
   `${artifact:}` token or a `store: artifact` variable's `field`. `strata deploy images` gains a `DIGEST` column and
   `data.images[].image_digest`. `image_tag_policy` gains `require_digest` (`image_without_digest`).
-
-### Changed
-
-- **`build run` renders Helm charts by default** (`sbom.render_charts` defaults to `true`). `sbom.json` lists
-  the images every Helm chart runs, and `cve_policy`, `image_gate_policy` and `image_tag_policy` check them, so a
-  pipeline with a Helm module and a `deny` gate can fail on a sidecar or init container nobody scanned before.
-  Run `strata build run` and `strata policy check` before upgrading the pipeline, and fix or `allow` what they
-  report. To keep the declared images only, set `sbom: {render_charts: false}` on the workspace. Without `helm`
-  on the build agent each chart is an `info` line and is skipped.
-- **`build run` judges `image_tag_policy` at the end**, after `sbom.json` is written, next to the other build
-  policies, so it can judge the images rendered charts run. A `deny` (and `on_unknown_image: block`) now fails the
-  build after the sources are cloned and the charts rendered, with the output on disk. With `--clean`, the previous
-  build is gone by then. A denied build now records its result in `policy_results.json`. To fail fast, run
-  `strata deploy images` or `strata policy check` before `build run`. `--dry-run` still judges the declared images.
-- An artifact's `image_tag` must be a tag, a digest or `tag@digest`; another shape fails when the document loads.
-  An `artifacts` pin of another shape is an error in `strata validate` (`artifact_tag_invalid`), and
-  `strata version set` refuses to write one. Before this, `1.4.2@sha256:...` gave `name@1.4.2@sha256:...`, which
-  no runtime pulls.
-- An `images` pin must be a whole image reference with a tag, a digest or both (`postgres:16-alpine`); another
-  value is an error in `strata validate` (`image_pin_invalid`), and `strata version set` refuses to write one. A pin
-  replaces the service's whole image, so `db: 16-alpine` ran the image `16-alpine` from Docker Hub, and
-  `db: postgres` floated on `latest`. Two warnings join it: `image_pin_renamed` when the pin names another image
-  than the service runs (`postgres` and `docker.io/library/postgres` are the same image), and `pin_not_applicable`
-  when the service declares no `image`, so the pin changed nothing. `--available` is not checked.
-- In `strata deploy images -o json`, `data.images[].image_tag` is now only the tag part. A digest is in
-  `image_digest`, so a digest-only image has `image_tag: null` where it had the digest. The same split
-  applies to a module service's literal `name:tag@sha256:...`. An image with a digest is never floating in the SBOM,
-  and `image_tag_policy`'s `reject_tags` and `tag_pattern` judge the tag part of `tag@digest`.
-
-- An artifact reached only through a `store: artifact` variable is listed by `deploy images`, and judged by the
-  SBOM, the image gates and `image_tag_policy`, only when the deployment can receive that variable: a `${var:KEY}`
-  token in a document it reaches, or an execution step that gets every variable (Terraform, a script without
-  `script.values`, an `output.template` that reads it, or a tool strata does not know). A variable declared for
-  a Helm- or Compose-only workspace that nothing reads no longer makes the policy fail on an image that never runs.
-- `strata validate` rejects `${value:artifact.NAME.spec.image_name}`, as it already rejected `spec.image_tag`
-  (`value_reference_pinnable_field`). Such an image was never pinned and never listed by `deploy images`, the SBOM
-  or `image_tag_policy`. Replace it with `${artifact:NAME.image_name}`, which the message names. The artifact's
-  free-form fields (`spec.configuration.*`, `spec.properties.*`, `spec.registry`, ...) stay readable through
-  `${value:}`.
-
-### Fixed
-
-- Schema descriptions (`strata schema`) and docstrings cite each doc where it is now. 139 citations of 13 docs
-  pointed to a path the doc had moved from; a test now fails on any such citation.
-- `strata promote status` marks an `images` pin `← behind` by its tag. An image pin is a whole reference
-  (`acme/api:1.2.0`), which never parsed as a version, so no image pin was ever marked behind. Siblings that pin
-  different images are not compared, and an `artifacts` pin of `tag@digest` compares its tag.
-- A registry chart pull on Windows no longer fails with a bare `PermissionError` when another process (a virus
-  scanner reading the new archive) briefly holds a file in its staging directory. Removing that directory is best
-  effort, so the pull's own result stands, such as `helm_chart_digest_changed`. A failure to store the entry is
-  reported as `helm_chart_pull_failed`. A later pull removes a `.pull-*` directory left in `.strata/helm/` once it
-  is more than an hour old.
-
-## [2.6.0] - 2026-11-09
-
-Deployment documentation: `strata deploy output`, `strata deploy report` and `spec.documentation`, built on a
-per-step output store ([docs/design/deployment-documentation.md](../docs/design/deployment-documentation.md)).
-
-### Changed
-
-- The output store keeps one key per step, `strata/step-outputs/<deployment>/<step>`, instead of one key for the
-  whole deployment (ADR-0057). On `azure-appconfig`, which allows 10 KB per key, the limit now applies to one step
-  instead of all steps together. Existing records keep working without a redeploy: a step without a key of its own
-  is read from the old `strata/deployment-outputs/<deployment>` key, and while that key exists each deploy updates
-  it too, so an older strata version reading it never gets an outdated value. A later release removes both.
-- `deploy run` warns when a step's recorded outputs pass 8,000 bytes on a backend with a size limit
-  (`output_store_record`), and when they pass the limit it names the step, its size and the limit instead of
-  passing on the backend's own error. The step's deploy still succeeds, as before. No value is recorded then, and
-  the step's earlier values are no longer read either: its key holds an "omitted" marker and it is removed from the
-  old key, so a later step reading one of its outputs fails with that reason instead of getting a value from an
-  earlier deploy. `deploy output` shows it as "too large for the output store".
-- `strata values get --format raw|env|export` writes the run's header, findings and footer to stderr, so stdout
-  holds only the values and `$(strata values get app KEY --format raw)` captures just the value. `--format table`
-  and `--output json` are unchanged.
-- The audit manifest records `commit_sha`, the commit that was deployed (`STRATA_COMMIT_SHA`, `GITHUB_SHA`,
-  `BUILD_SOURCEVERSION`, else `git rev-parse HEAD`). The field existed but was never filled. `strata audit status`
-  and `strata audit changes` include it in their JSON output.
-
-### Added
 
 - `strata deploy output DEPLOYMENT [STEP | STEP.KEY]`, the `terraform output` equivalent. It reads the outputs each
   step recorded in the workspace's `output_store`, so it needs no Terraform state or provider credentials, only
@@ -208,7 +224,99 @@ per-step output store ([docs/design/deployment-documentation.md](../docs/design/
   value is the secret's name in the vault the integration points at. A resource that needs the secret's address,
   such as App Gateway's `key_vault_secret_id`, takes it as a variable.
 
+### Changed
+
+- **`--stage` and `--scope` are repeatable** on `deploy setup`, `check`, `plan`, `apply`, `run` and `destroy`.
+  A step is kept when it matches any value of an option, and both options when both are given
+  (`--scope infra --scope network`). One value of each works as before.
+- **`build run` renders Helm charts by default** (`sbom.render_charts` defaults to `true`). `sbom.json` lists
+  the images every Helm chart runs, and `cve_policy`, `image_gate_policy` and `image_tag_policy` check them, so a
+  pipeline with a Helm module and a `deny` gate can fail on a sidecar or init container nobody scanned before.
+  Run `strata build run` and `strata policy check` before upgrading the pipeline, and fix or `allow` what they
+  report. To keep the declared images only, set `sbom: {render_charts: false}` on the workspace. Without `helm`
+  on the build agent each chart is an `info` line and is skipped.
+- **`build run` judges `image_tag_policy` at the end**, after `sbom.json` is written, next to the other build
+  policies, so it can judge the images rendered charts run. A `deny` (and `on_unknown_image: block`) now fails the
+  build after the sources are cloned and the charts rendered, with the output on disk. With `--clean`, the previous
+  build is gone by then. A denied build now records its result in `policy_results.json`. To fail fast, run
+  `strata deploy images` or `strata policy check` before `build run`. `--dry-run` still judges the declared images.
+- An artifact's `image_tag` must be a tag, a digest or `tag@digest`; another shape fails when the document loads.
+  An `artifacts` pin of another shape is an error in `strata validate` (`artifact_tag_invalid`), and
+  `strata version set` refuses to write one. Before this, `1.4.2@sha256:...` gave `name@1.4.2@sha256:...`, which
+  no runtime pulls.
+- An `images` pin must be a whole image reference with a tag, a digest or both (`postgres:16-alpine`); another
+  value is an error in `strata validate` (`image_pin_invalid`), and `strata version set` refuses to write one. A pin
+  replaces the service's whole image, so `db: 16-alpine` ran the image `16-alpine` from Docker Hub, and
+  `db: postgres` floated on `latest`. Two warnings join it: `image_pin_renamed` when the pin names another image
+  than the service runs (`postgres` and `docker.io/library/postgres` are the same image), and `pin_not_applicable`
+  when the service declares no `image`, so the pin changed nothing. `--available` is not checked.
+- In `strata deploy images -o json`, `data.images[].image_tag` is now only the tag part. A digest is in
+  `image_digest`, so a digest-only image has `image_tag: null` where it had the digest. The same split
+  applies to a module service's literal `name:tag@sha256:...`. An image with a digest is never floating in the SBOM,
+  and `image_tag_policy`'s `reject_tags` and `tag_pattern` judge the tag part of `tag@digest`.
+
+- An artifact reached only through a `store: artifact` variable is listed by `deploy images`, and judged by the
+  SBOM, the image gates and `image_tag_policy`, only when the deployment can receive that variable: a `${var:KEY}`
+  token in a document it reaches, or an execution step that gets every variable (Terraform, a script without
+  `script.values`, an `output.template` that reads it, or a tool strata does not know). A variable declared for
+  a Helm- or Compose-only workspace that nothing reads no longer makes the policy fail on an image that never runs.
+- `strata validate` rejects `${value:artifact.NAME.spec.image_name}`, as it already rejected `spec.image_tag`
+  (`value_reference_pinnable_field`). Such an image was never pinned and never listed by `deploy images`, the SBOM
+  or `image_tag_policy`. Replace it with `${artifact:NAME.image_name}`, which the message names. The artifact's
+  free-form fields (`spec.configuration.*`, `spec.properties.*`, `spec.registry`, ...) stay readable through
+  `${value:}`.
+
+- The output store keeps one key per step, `strata/step-outputs/<deployment>/<step>`, instead of one key for the
+  whole deployment (ADR-0057). On `azure-appconfig`, which allows 10 KB per key, the limit now applies to one step
+  instead of all steps together. Existing records keep working without a redeploy: a step without a key of its own
+  is read from the old `strata/deployment-outputs/<deployment>` key, and while that key exists each deploy updates
+  it too, so an older strata version reading it never gets an outdated value. A later release removes both.
+- `deploy run` warns when a step's recorded outputs pass 8,000 bytes on a backend with a size limit
+  (`output_store_record`), and when they pass the limit it names the step, its size and the limit instead of
+  passing on the backend's own error. The step's deploy still succeeds, as before. No value is recorded then, and
+  the step's earlier values are no longer read either: its key holds an "omitted" marker and it is removed from the
+  old key, so a later step reading one of its outputs fails with that reason instead of getting a value from an
+  earlier deploy. `deploy output` shows it as "too large for the output store".
+- `strata values get --format raw|env|export` writes the run's header, findings and footer to stderr, so stdout
+  holds only the values and `$(strata values get app KEY --format raw)` captures just the value. `--format table`
+  and `--output json` are unchanged.
+- The audit manifest records `commit_sha`, the commit that was deployed (`STRATA_COMMIT_SHA`, `GITHUB_SHA`,
+  `BUILD_SOURCEVERSION`, else `git rev-parse HEAD`). The field existed but was never filled. `strata audit status`
+  and `strata audit changes` include it in their JSON output.
+
 ### Fixed
+
+- **`deploy run` refuses a version the Helm build was not made with** (`build_version_mismatch`). A Helm module's
+  pins are applied by `build run`, so `deploy run --pin prd-1.5` on a build made with `prd-1.4` installed the
+  charts at 1.4 while the run and its audit record named 1.5. The deploy now stops before any step, naming both
+  versions and the rebuild command. Build and deploy with the same `--pin`. A destroy, a build without Helm modules
+  and a build made before this release are not checked. `resolved.yaml` gains a `version` key.
+- **The container image** (`ghcr.io/huybrechtsxyz/strata`) now has `git` and `ssh`, which strata calls itself:
+  a `build run` with a remote no longer fails in it, and `ssh_key` auth works. git trusts a checkout mounted with
+  `docker run -v`, so the audit record and the image gate get the commit SHA instead of silently none. The user has a
+  home directory. The image installs the dependency versions in `uv.lock`, the ones CI tested, with a pinned `uv`.
+  Provisioner tools stay out of it; see the new full variant under "Added".
+- **An `sbom.json` that cannot be read no longer crashes a run.**
+  - The image gate (`deploy run`, `policy findings`) follows `on_missing_data` when the file is locked or has no
+    read permission, instead of stopping on a raw `OSError`.
+  - The deploy audit record warns `audit_sbom_unreadable` instead of crashing after the deploy has run. A corrupt
+    file is still referenced and hashed, without a component count; one that cannot be read is left out.
+  - An SBOM with no components (CycloneDX then leaves out the `components` key) is an empty SBOM, not a broken
+    one: the image gate says there are no images instead of reporting missing data.
+- **A version pin is logged once, where it is applied** (`version pin applied`). `build run` logged each image and
+  chart pin a second time while writing the SBOM, and `deploy run` again while writing the audit record; both only
+  re-read what the build applied. `deploy run` logs an `${artifact:}` pin only for an artifact a token of that
+  deployment names, and `strata validate` logs none.
+- Schema descriptions (`strata schema`) and docstrings cite each doc where it is now. 139 citations of 13 docs
+  pointed to a path the doc had moved from; a test now fails on any such citation.
+- `strata promote status` marks an `images` pin `← behind` by its tag. An image pin is a whole reference
+  (`acme/api:1.2.0`), which never parsed as a version, so no image pin was ever marked behind. Siblings that pin
+  different images are not compared, and an `artifacts` pin of `tag@digest` compares its tag.
+- A registry chart pull on Windows no longer fails with a bare `PermissionError` when another process (a virus
+  scanner reading the new archive) briefly holds a file in its staging directory. Removing that directory is best
+  effort, so the pull's own result stands, such as `helm_chart_digest_changed`. A failure to store the entry is
+  reported as `helm_chart_pull_failed`. A later pull removes a `.pull-*` directory left in `.strata/helm/` once it
+  is more than an hour old.
 
 - A Compose step deployed twice from one build (`deploy run --dry-run` then `deploy run`, or a retry) deployed its
   stack with every secret empty: the first run rewrote the built `docker-compose.yml` with its tokens resolved, so

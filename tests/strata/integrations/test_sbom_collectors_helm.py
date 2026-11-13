@@ -152,7 +152,7 @@ def test_collect_declarative_and_file_based_results_merge_and_dedup(tmp_path: Pa
 
 
 # ---------------------------------------------------------------------------
-# Registry charts pinned by the build (docs/work/helm-registry-chart-checks.md, Phase 5)
+# Registry charts pinned by the build (docs/design/helm-chart-deployment.md, "Registry charts")
 # ---------------------------------------------------------------------------
 
 

@@ -25,6 +25,8 @@ from collections.abc import Set as AbstractSet
 from difflib import get_close_matches
 from typing import Any
 
+from pydantic import BaseModel
+
 from strata.controllers.solution_controller import DocumentIndex
 from strata.models.reference_fields import extract_references
 from strata.models.solution_model import SolutionModel
@@ -47,13 +49,17 @@ def _walk(value: Any, segments: list[str], prefix: str) -> Iterator[tuple[str, s
 
     head, *rest = segments
     iterate = head.endswith("[]")
-    attribute = head[:-2] if iterate else head
+    mapping = head.endswith("{}")
+    attribute = head[:-2] if iterate or mapping else head
     child = getattr(value, attribute, None)
     if child is None:
         return
 
     location = f"{prefix}.{attribute}" if prefix else attribute
-    if iterate:
+    if mapping:
+        for key, item in child.items():
+            yield from _walk(item, rest, f"{location}.{key}")
+    elif iterate:
         for position, item in enumerate(child):
             yield from _walk(item, rest, f"{location}.{position}")
     else:
@@ -73,6 +79,23 @@ def _unresolved(name: str, known: AbstractSet[str], target: str) -> str:
     if not known:
         return f"unknown {target} '{name}' — no {target} documents exist in this solution"
     return f"unknown {target} '{name}'. Available: {sorted(known)}"
+
+
+def unresolved_references(
+    index: DocumentIndex, model: BaseModel, *, ignore: AbstractSet[str] = frozenset()
+) -> Iterator[tuple[str, str]]:
+    """Yield `(location, message)` for every document reference of `model` that names no document.
+
+    For a document the index does not hold as such: a template's spec once its values are substituted, whose
+    references exist only then. Names in `ignore` are skipped; remotes are not checked.
+    """
+    for rule in extract_references(type(model)):
+        if rule.kind is None:
+            continue
+        known = index.names_of(rule.kind)
+        for location, name in references_in(model, rule.path):
+            if name not in known and name not in ignore:
+                yield location, _unresolved(name, known, rule.kind.value)
 
 
 def validate_references(index: DocumentIndex, solution: SolutionModel | None = None) -> Diagnostics:

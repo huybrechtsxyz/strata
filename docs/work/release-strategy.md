@@ -264,7 +264,7 @@ Execution order (each its own small, checked phase per repo convention —
   matrix leg and classifier, with no change to the floor or the 3.12 check targets.
 
 - 2026-11-08: **Built 2.4.0** - bumped `VERSION.txt` from `2.3.3` to `2.4.0`. The Helm gap analysis
-  (docs/work/helm-gap-analysis.md): chart values in `strata-values.yaml`, secrets on stdin, no streamed dry-run
+  (docs/archive/helm-gap-analysis.md): chart values in `strata-values.yaml`, secrets on stdin, no streamed dry-run
   manifest, stage timeouts for Helm and Compose, release-name and namespace validation, `kube_context` and
   `docker_context`, registry charts and local chart dependencies pinned at build (ADR-0054), and Helm 4 flags by
   default (ADR-0055). A minor, not a major, as 2.3.0 set the precedent for breaking behaviour in 2.x: undeclared
@@ -345,7 +345,7 @@ Execution order (each its own small, checked phase per repo convention —
   `--check`); with `image_tag_policy` set, `deploy images` fails (exit 3) on a `deny` breach instead of only warning on
   a missing tag; `cve_allowed[].expires` now accepts an unquoted YAML date. **Known limit:** the policy judges the
   declared image of a Helm module, which strata does not write into the chart values, and cannot see an image only
-  the chart knows; Helm images are deferred (`docs/work/helm-image-delivery.md`). Full check suite green
+  the chart knows; Helm images are deferred (`docs/design/helm-image-delivery.md`). Full check suite green
   (`scripts/Check.ps1`): ruff, mypy, import-linter, pytest (3922 passed), smoke test, Sphinx. `uv sync --all-extras
   --all-groups --reinstall-package xyz-strata` refreshed the dev install (`strata version` -> `2.0.0rc3`). `uv build`
   produced `xyz_strata-2.0.0rc3-py3-none-any.whl`/`.tar.gz`; a fresh isolated venv confirmed `strata version` ->

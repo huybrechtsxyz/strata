@@ -1,7 +1,7 @@
 # Version Pin Overlay — Wiring the Remaining 3 of 4 Pin Categories
 
 - Status: implemented
-- Last updated: 2026-10-01
+- Last updated: 2026-11-12
 
 ## Overview
 
@@ -129,6 +129,34 @@ resolves it once, passes it to `build_workload_modules()` (new parameter,
 `version: VersionModel | None = None`) and uses it to build the overridden
 `remotes` dict before the provisioner loop starts.
 
+### Image pin shape
+
+An `images` pin replaces a module service's whole `image` at `build run`, so its value must be a whole image
+reference that pins something: `NAME:TAG`, `NAME@sha256:<hex>` or `NAME:TAG@sha256:<hex>`.
+`check_version_pins()` (`_check_image_pin()` in `controllers/version_pins.py`) checks each one with
+`image_pin_problem()` from `utils/sbom_utils.py`:
+
+| Finding           | Severity | Code                 | When                                                                                                    |
+| ----------------- | -------- | -------------------- | ------------------------------------------------------------------------------------------------------- |
+| Not an image reference | error | `image_pin_invalid` | `image_ref_problem()`: the name breaks Docker's rules (upper case, empty, a bad registry host), or the tag or digest breaks the rules an artifact's `image_tag` follows |
+| Pins nothing      | error    | `image_pin_invalid`  | no tag and no digest: `db: 16-alpine` (pulled as `docker.io/library/16-alpine`), or `db: postgres` (floats on `latest`) |
+| Another image     | warning  | `image_pin_renamed`  | the pin's image name differs from the `image` of every service with that name, compared as a runtime pulls them (`canonical_image_name()`: `postgres` is `docker.io/library/postgres`) |
+| Changes nothing   | warning  | `pin_not_applicable` | every service with that name declares no `image` (a Helm service without one, or a service with an `artifact`, which is pinned under `pins.artifacts`) |
+| Matches nothing   | warning  | `stale_pin`          | no module service has that name; the value is still checked                                            |
+
+- The error for a value with no tag suggests the fix with the service's own image name when there is one:
+  `write 'docker.io/library/postgres:16-alpine'`.
+- `strata version set NAME images TARGET VALUE` refuses a value that fails the error rules before it writes the file
+  (exit 2). `--available` stays free text: nothing applies it, and the shipped example holds a bare upstream tag
+  there.
+- `strata promote status` orders an `images` pin by its tag, and compares it only with siblings that name the same
+  image (`promotion_controller._pin_order()`).
+- An `artifacts` pin has its own shape check, the one `ArtifactSpecModel.image_tag` uses (`image_tag_problem()`:
+  `TAG`, `sha256:<hex>` or `TAG@sha256:<hex>`), reported as `artifact_tag_invalid`.
+
+A service's own `image` is not checked at load: a Helm module may declare it without a tag, and there it is only a
+declaration ([helm-image-delivery.md](helm-image-delivery.md)).
+
 ### Fix alongside this (small, unrelated to the design itself)
 
 `VersionService.resolve()`'s docstring `category` list — change `'tools'`
@@ -148,3 +176,6 @@ to `'artifacts'`.
 - `remotes`/`images`/`charts` overlays needed zero changes to `compose.py`/`helm.py` themselves - applied one layer up, before a module/remote ever reaches those integrations.
 - Not in scope here: the full `tenant_zone` plan-time policy check and `promotions`/other policy types - unrelated gaps raised in the same conversation.
 - A fifth category, `assets`, was added after this design landed (overlaying `AssetLocationModel.reference` for an asset that declares its own `location`). It follows the same rule — one overlay point, at the layer that already resolves it (`apply_asset_version_pin()` in `build_run()`) — and is described in [asset-management.md](asset-management.md); the `PIN_CATEGORIES` quoted above is the four-category state this doc was written against.
+- An `images` pin was at first only checked for a matching service name, and `version set images` wrote any non-empty string. A pin written as a bare tag (`db: 16-alpine`) became the image `16-alpine`, pulled from Docker Hub's `library/`, and nothing said so. The value is now checked as a whole reference with a tag or digest, as an `artifacts` pin already was.
+- A pin naming another image than the service's is a warning (`image_pin_renamed`), not an error: moving to a mirror or another image on purpose is legitimate, and the module's own `image` is the place to say so.
+- `promote status` compared pins as bare versions, so a whole-reference image pin was never marked `← behind`; found when the promotion tests, which pinned bare tags, failed the new shape check. It now orders an image pin by its tag.

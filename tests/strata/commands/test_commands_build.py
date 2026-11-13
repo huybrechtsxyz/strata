@@ -111,6 +111,7 @@ def _run(runner, *args):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_successful_build_exits_zero(runner, solution):
     result = _run(runner, "app", "--path", solution)
     assert result.exit_code == EXIT_SUCCESS, result.output
@@ -173,6 +174,7 @@ def test_default_build_path_is_always_cleaned(runner, solution):
     assert not stale.exists()
 
 
+@pytest.mark.slow
 def test_custom_build_path_is_not_cleaned_unless_requested(runner, solution, tmp_path):
     custom = tmp_path / "out"
     custom.mkdir()
@@ -184,6 +186,7 @@ def test_custom_build_path_is_not_cleaned_unless_requested(runner, solution, tmp
     assert (custom / "leftover.txt").read_text() == "still here"
 
 
+@pytest.mark.slow
 def test_custom_build_path_is_cleaned_when_clean_flag_given(runner, solution, tmp_path):
     custom = tmp_path / "out"
     custom.mkdir()
@@ -195,6 +198,7 @@ def test_custom_build_path_is_cleaned_when_clean_flag_given(runner, solution, tm
     assert not (custom / "leftover.txt").exists()
 
 
+@pytest.mark.slow
 def test_no_clean_flag_disables_cleaning_even_for_the_default_path(runner, solution):
     stale = solution / "build" / "app" / "stale.txt"
     stale.parent.mkdir(parents=True)
@@ -269,6 +273,7 @@ def test_pin_names_an_unknown_version_exits_two(runner, solution):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_json_reports_success(runner, solution):
     payload = json.loads(_run(runner, "app", "--path", solution, "--output", "json").output)
     assert payload["ok"] is True
@@ -279,6 +284,7 @@ def test_json_reports_success(runner, solution):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_without_resolve_an_integration_backed_secret_is_never_touched(runner, solution):
     _write(
         solution,
@@ -291,6 +297,7 @@ def test_without_resolve_an_integration_backed_secret_is_never_touched(runner, s
     assert result.exit_code == EXIT_SUCCESS, result.output
 
 
+@pytest.mark.slow
 def test_resolve_flag_reports_a_failed_integration_backed_secret(runner, solution):
     _write(
         solution,
@@ -309,6 +316,7 @@ def test_resolve_flag_reports_a_failed_integration_backed_secret(runner, solutio
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_env_file_supplies_an_environment_store_variable(runner, solution, monkeypatch):
     monkeypatch.delenv("BUILD_CLI_PROBE_VAR", raising=False)
     _write(
@@ -330,7 +338,7 @@ def test_env_file_supplies_an_environment_store_variable(runner, solution, monke
 
 
 # ---------------------------------------------------------------------------
-# --offline (docs/work/helm-registry-chart-checks.md)
+# --offline (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 

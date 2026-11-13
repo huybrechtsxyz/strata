@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Which artifacts some deployment uses, and a warning for the ones none does
-(docs/work/artifact-gap-analysis.md, design 8).
+(docs/archive/artifact-gap-analysis.md, design 8).
 
 "Uses" is exactly what `effective_images()` lists: a `store: artifact` variable a step receives, an enabled module
 service's `artifact`, or an `${artifact:}` token in a document the deployment reaches. An artifact that no
@@ -18,6 +18,7 @@ from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import resolve_deployment
 from strata.models.artifact_model import ArtifactModel
 from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import AnyDeploymentModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import StrataError
 
@@ -30,7 +31,11 @@ def used_artifacts(context: SolutionContext) -> set[str] | None:
     caller then reports nothing.
     """
     used: set[str] = set()
-    for name in sorted(context.controller.index.names_of(PlatformKind.DEPLOYMENT)):
+    index = context.controller.index
+    for name in sorted(index.names_of(PlatformKind.DEPLOYMENT)):
+        entry = index.get(PlatformKind.DEPLOYMENT, name)
+        if entry is not None and cast(AnyDeploymentModel, entry.model).spec.partial:
+            continue  # a base deploys nothing, and a template base would not resolve on its own
         try:
             deployment = resolve_deployment(context, name)
             if deployment.spec.partial or deployment.spec.workspace is None:
@@ -44,10 +49,13 @@ def used_artifacts(context: SolutionContext) -> set[str] | None:
 
 def unused_artifacts(context: SolutionContext) -> list[str]:
     """The artifacts no deployment uses, sorted; empty when that cannot be told (`used_artifacts()` is `None`)."""
+    artifacts = set(context.controller.index.names_of(PlatformKind.ARTIFACT))
+    if not artifacts:
+        return []  # nothing to report, so no deployment needs resolving
     used = used_artifacts(context)
     if used is None:
         return []
-    return sorted(set(context.controller.index.names_of(PlatformKind.ARTIFACT)) - used)
+    return sorted(artifacts - used)
 
 
 def check_unused_artifacts(context: SolutionContext) -> Diagnostics:

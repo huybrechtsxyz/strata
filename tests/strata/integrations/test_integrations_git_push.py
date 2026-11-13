@@ -135,6 +135,7 @@ def _git_available() -> bool:
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_real_push_round_trip(tmp_path: Path):
     """Real clone -> fetch -> reset -> add -> commit -> push against a real local
     bare repository, run twice to confirm the second push (fetch+reset against
@@ -169,6 +170,7 @@ def test_real_push_round_trip(tmp_path: Path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_real_push_is_a_noop_when_content_is_unchanged(tmp_path: Path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -187,6 +189,7 @@ def test_real_push_is_a_noop_when_content_is_unchanged(tmp_path: Path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_real_push_checkout_path_matches_layout(tmp_path: Path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -258,6 +261,7 @@ def test_prepare_git_credentials_ssh_key_missing_value_raises():
         prepare_git_credentials(auth, {})
 
 
+@pytest.mark.slow
 def test_prepare_git_credentials_ssh_key_with_passphrase_sets_ssh_askpass(tmp_path: Path):
     """Regression test for the gap found on code review (2026-10-02):
     `SSHKeyAuthenticationModel.passphrase` was modelled but never actually
@@ -311,15 +315,19 @@ def test_prepare_git_credentials_ssh_key_passphrase_missing_value_raises():
         prepare_git_credentials(auth, {"deploy-key-ref": "key-material"})
 
 
-def test_prepare_git_credentials_ssh_key_passphrase_missing_value_leaves_no_tempdir_behind():
+def test_prepare_git_credentials_ssh_key_passphrase_missing_value_leaves_no_tempdir_behind(tmp_path: Path, monkeypatch):
     """Regression test for a bug introduced by the passphrase fix itself,
     found on a follow-up review (2026-10-02): the passphrase check used to
     run *after* `tempfile.mkdtemp()`/writing the private key, so raising
     here would leak that tempdir (with the private key still in it)
     forever — the function never returns a `cleanup` callback for anyone
     to call when it raises. Every raise must happen before any filesystem
-    side effect."""
-    existing_tmp_dirs = {p for p in Path(tempfile.gettempdir()).iterdir() if p.name.startswith("strata-gitops-ssh-")}
+    side effect.
+
+    `mkdtemp` is pointed at this test's own empty directory: the shared
+    system temp directory would also see tempdirs that other tests create
+    and remove at the same moment under `pytest -n`."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
 
     auth = AuthenticationModel(
         method="ssh_key",
@@ -328,8 +336,8 @@ def test_prepare_git_credentials_ssh_key_passphrase_missing_value_leaves_no_temp
     with pytest.raises(IntegrationError):
         prepare_git_credentials(auth, {"deploy-key-ref": "key-material"})
 
-    new_tmp_dirs = {p for p in Path(tempfile.gettempdir()).iterdir() if p.name.startswith("strata-gitops-ssh-")}
-    assert new_tmp_dirs == existing_tmp_dirs, "a raise must never leave a new strata-gitops-ssh- tempdir behind"
+    leaked = [p.name for p in tmp_path.iterdir()]
+    assert leaked == [], "a raise must never leave a new strata-gitops-ssh- tempdir behind"
 
 
 def test_prepare_git_credentials_ssh_key_without_passphrase_sets_no_ssh_askpass():
@@ -342,6 +350,7 @@ def test_prepare_git_credentials_ssh_key_without_passphrase_sets_no_ssh_askpass(
     cleanup()
 
 
+@pytest.mark.slow
 def test_prepare_git_credentials_token_sets_askpass_and_cleans_up_after():
     auth = AuthenticationModel(method="token", token=TokenAuthenticationModel(token="pat-ref"))
     env, cleanup = prepare_git_credentials(auth, {"pat-ref": "ghp_supersecrettoken"})
@@ -382,6 +391,7 @@ def test_prepare_git_credentials_token_missing_value_raises():
         prepare_git_credentials(auth, {})
 
 
+@pytest.mark.slow
 def test_prepare_git_credentials_token_with_username_answers_each_prompt_correctly():
     """Regression test for the gap found on code review (2026-10-02):
     `TokenAuthenticationModel.username` was modelled but never actually
@@ -420,6 +430,7 @@ def test_prepare_git_credentials_token_with_username_answers_each_prompt_correct
     assert not script_path.exists()
 
 
+@pytest.mark.slow
 def test_prepare_git_credentials_token_without_username_falls_back_to_token_for_every_prompt():
     """No `username` configured (today's existing behaviour, unchanged) —
     every prompt, including a "Username" one, still gets the token."""

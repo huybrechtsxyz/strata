@@ -52,9 +52,9 @@ No cloud tags (ADR-0017): an Environment is a value source, not a
 provisioned resource.
 """
 
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
@@ -63,12 +63,34 @@ from strata.models.common_models import (
     PlatformVersion,
     validate_kind_matches,
 )
+from strata.models.reference_fields import References
 from strata.models.store_model import (
     FeatureStoreModel,
     SecretStoreModel,
     VariableStoreModel,
 )
+from strata.models.template_model import DocumentTemplateModel, ParamSetNames, check_name_rule
 from strata.utils.names import check_unique_names
+from strata.utils.param_tokens import holds_param_tokens
+
+_PARTIAL_DESCRIPTION = (
+    "When true this is a base for other environments (`extends`), not an environment of its own: no deployment or "
+    "tenant may list it in `environments`, and no `${value:}` token may read it."
+)
+_EXTENDS_DESCRIPTION = (
+    "Name of a base Environment whose spec is merged into this one when the solution loads. Child always wins: "
+    "`properties` and `custom` deep-merge per leaf key; a `variables`, `secrets` or `features` entry with the same "
+    "`key` replaces the base's whole entry, and new keys are appended. Circular chains are rejected."
+)
+_PARAMS_DESCRIPTION = (
+    "Parameter sets this environment reads, per role: `{customer: customer-acmep01}`, or a list per role merged in "
+    "order. Any document of the extends chain may name sets: per role they merge root first, leaf last, later "
+    "winning per leaf key. `${param:<role>.<key>}` in the spec of any document of the chain reads the merged values."
+)
+_NAME_RULE_DESCRIPTION = (
+    "The name every environment built on this one must have, with `${param:<role>.<key>}` tokens filled from that "
+    "environment's parameter sets (`deploy-${param:customer.code}-env`). Only `${param:}` tokens are allowed."
+)
 
 
 class EnvironmentSpecModel(PlatformBaseModel):
@@ -88,6 +110,10 @@ class EnvironmentSpecModel(PlatformBaseModel):
         "tokens.",
     )
 
+    partial: bool = Field(default=False, description=_PARTIAL_DESCRIPTION)
+    extends: Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)] | None = Field(
+        None, description=_EXTENDS_DESCRIPTION
+    )
     properties: dict[str, Any] | None = Field(
         None,
         description="Environment-wide properties, merged as a layer into the deployments that use "
@@ -137,6 +163,8 @@ class EnvironmentMetaModel(PlatformBaseModel):
     """Environment metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique environment name")
+    params: ParamSetNames | None = Field(None, description=_PARAMS_DESCRIPTION)
+    name_rule: str | None = Field(None, min_length=1, description=_NAME_RULE_DESCRIPTION)
     annotations: dict[str, Any] | None = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
@@ -144,6 +172,12 @@ class EnvironmentMetaModel(PlatformBaseModel):
         None, description="Optional labels (key-value pairs for classification/filtering)"
     )
     tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
+
+    @field_validator("name_rule")
+    @classmethod
+    def validate_name_rule_tokens(cls, value: str | None) -> str | None:
+        """Only well-formed `${param:}` tokens: a run-time token has no value when names are checked."""
+        return check_name_rule(value)
 
 
 class EnvironmentModel(PlatformBaseModel):
@@ -154,6 +188,10 @@ class EnvironmentModel(PlatformBaseModel):
     Design notes:
     Root model for an environment configuration file.
     """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "An environment cannot extend itself; longer extends cycles are rejected when the solution loads.",
+    )
 
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2,
@@ -175,3 +213,67 @@ class EnvironmentModel(PlatformBaseModel):
     def validate_kind(cls, v: PlatformKind) -> PlatformKind:
         """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
         return validate_kind_matches(v, PlatformKind.ENVIRONMENT)
+
+    @model_validator(mode="after")
+    def validate_not_self_extending(self) -> "EnvironmentModel":
+        """An environment cannot extend itself; longer cycles are rejected when the chain is resolved."""
+        if self.spec.extends and self.spec.extends == self.meta.name:
+            raise ValueError(f"Environment '{self.meta.name}' cannot extend itself.")
+        return self
+
+
+class EnvironmentTemplateSpecModel(PlatformBaseModel):
+    """The spec of an environment template, as written: only `partial` and `extends` are read before substitution.
+
+    Design notes:
+    Every other field is kept as written and validated per environment that resolves through it, once `${param:}`
+    is substituted (docs/design/parameter-sets.md, "Templates are validated per instance").
+    """
+
+    model_config = ConfigDict(extra="allow", validate_assignment=True, str_strip_whitespace=True)
+
+    partial: bool = Field(default=False, description=_PARTIAL_DESCRIPTION)
+    extends: Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)] | None = Field(
+        None, description=_EXTENDS_DESCRIPTION
+    )
+
+
+class EnvironmentTemplateModel(DocumentTemplateModel):
+    """An environment whose spec reads parameter sets (`${param:<role>.<key>}`): meta validated, spec as written.
+
+    Design notes:
+    Not a kind of its own and never exported as a schema: the loader picks it over `EnvironmentModel` when the spec
+    holds a `${param:}` token. Resolution (`controllers/document_chains.py`) replaces a non-partial one in the index
+    with the `EnvironmentModel` it resolves to.
+    """
+
+    apiVersion: PlatformVersion = Field(
+        default=PlatformVersion.v2, frozen=True, description="API version for environment configuration"
+    )
+    kind: PlatformKind = Field(
+        default=PlatformKind.ENVIRONMENT, frozen=True, description="Platform kind (always 'environment')"
+    )
+    meta: EnvironmentMetaModel = Field(description="Environment metadata (name, params, annotations, labels, tags)")
+    spec: EnvironmentTemplateSpecModel = Field(description="Environment specification, as written")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.ENVIRONMENT)
+
+    @model_validator(mode="after")
+    def validate_no_secret_from_a_parameter_set(self) -> "EnvironmentTemplateModel":
+        """A secret's `value` never reads a parameter set: a parameter set is plain text in git (rule 1)."""
+        secrets = getattr(self.spec, "secrets", None)
+        found = [
+            f"spec.secrets[{position}].value"
+            for position, item in enumerate(secrets if isinstance(secrets, list) else [])
+            if isinstance(item, dict) and holds_param_tokens(item.get("value"))
+        ]
+        if found:
+            raise ValueError(
+                f"{', '.join(found)} reads a parameter set, which is plain text in git and must not hold a secret. "
+                "Keep the secret in its store and write its name or reference in the value."
+            )
+        return self

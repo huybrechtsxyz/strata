@@ -111,6 +111,7 @@ def test_build_run_continues_on_a_warn_breach(tmp_path):
     assert (recorded.passed, len(recorded.violations)) == (True, 1)
 
 
+@pytest.mark.slow
 def test_build_run_passes_with_a_complete_lock_file(tmp_path):
     build_path = tmp_path / "build"
 

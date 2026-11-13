@@ -35,8 +35,9 @@ from typing import Any, cast
 from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
-from strata.controllers.artifact_tokens import artifact_token_values
-from strata.controllers.deployment_resolution import deployment_workspace
+from strata.controllers.artifact_tokens import artifact_token_values, helm_delivered_artifacts
+from strata.controllers.deployment_resolution import deployment_of, deployment_workspace
+from strata.controllers.document_chains import chain_params
 from strata.controllers.reachable_documents import documents_reached_by_deployment, reachable_environment_names
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
@@ -57,7 +58,7 @@ from strata.models.asset_model import AssetModel
 from strata.models.attributeconfig_model import AttributeConfigModel
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
-from strata.models.deployment_model import DeploymentModel
+from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel
 from strata.models.dns_model import DnsModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.integration_model import Capability, IntegrationModel
@@ -68,6 +69,7 @@ from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import RemoteFetch, RemoteType, SolutionModel
+from strata.models.template_model import DocumentTemplateModel
 from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.version_model import VersionModel
@@ -94,11 +96,11 @@ from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
 from strata.services.workspace_service import WorkspaceService, effective_assets, effective_providers
+from strata.utils.builtin_types import ProvisionerType
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import manifest_path
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 from strata.utils.report_template import check_report_template
-from strata.utils.value_tokens import referenced_artifact_keys, split_artifact_token_key
 
 log = get_logger(__name__)
 
@@ -139,6 +141,7 @@ def run_semantic_checks(
     resolved = resolved_deployments or {}
     diagnostics = Diagnostics()
     diagnostics.extend(_check_deployments(index, resolved, root, solution))
+    diagnostics.extend(_check_base_usage(index, resolved))
     diagnostics.extend(_check_tenants(index))
     diagnostics.extend(_check_providers(index))
     diagnostics.extend(_check_resources(index))
@@ -160,6 +163,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_helm_release_names(index))
     diagnostics.extend(_check_helm_artifact_delivery(index))
     diagnostics.extend(_check_integration_versions(index))
+    diagnostics.extend(_check_terraform_family_commands(index))
     diagnostics.extend(_check_integration_required_disabled(index))
     return diagnostics
 
@@ -177,8 +181,10 @@ def _check_deployments(
 ) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        raw = cast(DeploymentModel, entry.model)
-        deployment = resolved.get(entry.ref.name, raw)
+        raw = cast(AnyDeploymentModel, entry.model)
+        deployment = deployment_of(entry, resolved)
+        if deployment is None:
+            continue  # a template that did not resolve: checked through the deployments that resolve it
         workspace = deployment_workspace(index, deployment)
         if workspace is not None:
             service = DeploymentService.from_model(deployment)
@@ -275,7 +281,7 @@ def _pinnable_steps(index: DocumentIndex, workspace: WorkspaceModel) -> dict[str
 
 
 def _check_deployment_target_contexts(index: DocumentIndex, deployment: DeploymentModel) -> Diagnostics:
-    """A deployment that runs Helm or Compose names the context each deploys to (docs/work/compose-docker-context.md).
+    """A deployment that runs Helm or Compose names the context each deploys to (docs/design/deploy-command.md).
 
     Without it the step deploys to whatever the environment points at: a warning, since it worked that way before
     the fields existed. A partial base is not deployed, so only the deployments built from it are warned.
@@ -394,9 +400,9 @@ def _check_deployment_tenant_geography(index: DocumentIndex, deployment: Deploym
     tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
     if tenant_entry is None:
         return diagnostics  # reference existence already reports this
-    tenant = cast(TenantModel, tenant_entry.model)
-    if not tenant.spec.geographies:
-        return diagnostics
+    tenant = tenant_entry.model
+    if not isinstance(tenant, TenantModel) or not tenant.spec.geographies:
+        return diagnostics  # a partial tenant template: naming it is tenant_not_selectable
 
     workspace = deployment_workspace(index, deployment)
     if workspace is None:
@@ -690,16 +696,16 @@ def _check_version_workspace(index: DocumentIndex, resolved: dict[str, Deploymen
     diagnostics = Diagnostics()
     referrers_by_version: dict[str, list[IndexEntry]] = {}
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
-        if deployment.spec.version:
+        deployment = deployment_of(entry, resolved)
+        if deployment is not None and deployment.spec.version:
             referrers_by_version.setdefault(deployment.spec.version, []).append(entry)
 
     for entry in index.all_of(PlatformKind.VERSION):
         version = cast(VersionModel, entry.model)
         expected = version.spec.workspace
         for referrer_entry in referrers_by_version.get(entry.ref.name, []):
-            deployment = resolved.get(referrer_entry.ref.name, cast(DeploymentModel, referrer_entry.model))
-            if deployment.spec.workspace is None:
+            deployment = deployment_of(referrer_entry, resolved)
+            if deployment is None or deployment.spec.workspace is None:
                 continue
             if expected is None:
                 expected = deployment.spec.workspace
@@ -718,6 +724,58 @@ def _check_version_workspace(index: DocumentIndex, resolved: dict[str, Deploymen
 
 
 # ---------------------------------------------------------------------------
+# Deployment/Tenant -> a partial environment or tenant: a base is never used
+# (docs/design/parameter-sets.md, "Bases cannot be used")
+# ---------------------------------------------------------------------------
+
+
+def _is_partial_base(index: DocumentIndex, kind: PlatformKind, name: str) -> bool:
+    entry = index.get(kind, name)
+    return entry is not None and bool(getattr(getattr(entry.model, "spec", None), "partial", False))
+
+
+def _check_base_usage(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
+    """No deployment or tenant lists a `partial: true` environment, and no deployment names a partial tenant.
+
+    A partial environment or tenant exists only for `extends`. Checked where a list is in use: on each deployable
+    deployment, resolved (so a base's list counts), and on each tenant that is not itself partial (after its own
+    `extends`). A partial deployment or tenant is not checked itself, so a base that lists one is reported once per
+    document built on it.
+    """
+    diagnostics = Diagnostics()
+    listers: list[tuple[IndexEntry, Any]] = []
+    for entry in index.all_of(PlatformKind.DEPLOYMENT):
+        deployment = deployment_of(entry, resolved)
+        if deployment is None or deployment.spec.partial:
+            continue
+        listers.append((entry, deployment))
+        tenant = deployment.spec.tenant
+        if tenant and _is_partial_base(index, PlatformKind.TENANT, tenant):
+            diagnostics.error(
+                f"Deployment '{entry.ref.name}' names tenant '{tenant}', which is 'partial: true': a base for "
+                "other tenants' extends, not a tenant of its own. Name a tenant built on it.",
+                source=str(entry.source),
+                location="spec.tenant",
+                code="tenant_not_selectable",
+            )
+    for entry in index.all_of(PlatformKind.TENANT):
+        if isinstance(entry.model, TenantModel) and not entry.model.spec.partial:
+            listers.append((entry, entry.model))
+    for entry, document in listers:
+        for position, name in enumerate(document.spec.environments or []):
+            if _is_partial_base(index, PlatformKind.ENVIRONMENT, name):
+                diagnostics.error(
+                    f"{entry.ref.kind.value.capitalize()} '{entry.ref.name}' lists environment '{name}', which is "
+                    "'partial: true': a base for other environments' extends, not an environment of its own. "
+                    "List an environment built on it.",
+                    source=str(entry.source),
+                    location=f"spec.environments.{position}",
+                    code="environment_not_listable",
+                )
+    return diagnostics
+
+
+# ---------------------------------------------------------------------------
 # Tenant -> ProviderConfig: declared geographies are real
 # ---------------------------------------------------------------------------
 
@@ -728,7 +786,9 @@ def _check_tenants(index: DocumentIndex) -> Diagnostics:
         entry.ref.name: cast(ProviderConfigModel, entry.model) for entry in index.all_of(PlatformKind.PROVIDERCONFIG)
     }
     for entry in index.all_of(PlatformKind.TENANT):
-        tenant = cast(TenantModel, entry.model)
+        tenant = entry.model
+        if not isinstance(tenant, TenantModel):
+            continue  # a partial template: checked in the tenants that resolve through it
         service = TenantService.from_model(tenant)
         diagnostics.extend(
             service.validate_geographies_against_provider_configs(provider_configs), source=str(entry.source)
@@ -815,7 +875,12 @@ def _check_attributeconfig_document_view(
     diagnostics = Diagnostics()
     target = attributeconfig.spec.target
     selector = target.selector or {}
-    matches = [candidate for candidate in index.all_of(target.kind) if evaluate_selector(candidate.model, selector)]
+    # A template is checked in the documents that resolve through it: its blocks hold `${param:}` as written.
+    matches = [
+        candidate
+        for candidate in index.all_of(target.kind)
+        if not isinstance(candidate.model, DocumentTemplateModel) and evaluate_selector(candidate.model, selector)
+    ]
     if not matches:
         diagnostics.warning(
             f"attributeconfig '{entry.ref.name}': selector matched no '{target.kind.value}' document — "
@@ -867,14 +932,17 @@ def _check_attributeconfig_effective_view(
     the deployment so an `effective`-view finding is never mistaken for a
     `document`-view one on the same document.
     """
+    if attributeconfig.spec.target.block == "params":
+        return _check_attributeconfig_params_view(index, resolved, entry, attributeconfig, validator)
+
     diagnostics = Diagnostics()
     target = attributeconfig.spec.target
     selector = target.selector or {}
     matched_any = False
 
     for deployment_entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = resolved.get(deployment_entry.ref.name, cast(DeploymentModel, deployment_entry.model))
-        if deployment.spec.partial or deployment.spec.workspace is None:
+        deployment = deployment_of(deployment_entry, resolved)
+        if deployment is None or deployment.spec.partial or deployment.spec.workspace is None:
             continue
         if not evaluate_selector(deployment, selector):
             continue
@@ -913,6 +981,70 @@ def _check_attributeconfig_effective_view(
         diagnostics.warning(
             f"attributeconfig '{entry.ref.name}': selector matched no deployable '{target.kind.value}' document — "
             "this schema is not guarding anything.",
+            source=str(entry.source),
+            location="spec.target.selector",
+            code="attributeconfig_unused",
+        )
+    return diagnostics
+
+
+def _check_attributeconfig_params_view(
+    index: DocumentIndex,
+    resolved: dict[str, DeploymentModel],
+    entry: IndexEntry,
+    attributeconfig: AttributeConfigModel,
+    validator: Any,
+) -> Diagnostics:
+    """`view: effective, block: params` (docs/design/parameter-sets.md, "Constraints: attributeconfig").
+
+    Checks the parameter-set values each matching document receives, merged per role along its chain (root first,
+    leaf last), with the roles as top-level keys: "everything a base needs is there", which no single set can say.
+    A document is matched when it can be used: a deployable deployment (its selector evaluated on the resolved
+    deployment), or an environment or tenant that is not `partial: true` (resolved when the solution loaded). One
+    whose chain or sets do not resolve is skipped: that is reported elsewhere.
+    """
+    diagnostics = Diagnostics()
+    target = attributeconfig.spec.target
+    selector = target.selector or {}
+    matched_any = False
+
+    for candidate in index.all_of(target.kind):
+        if target.kind is PlatformKind.DEPLOYMENT:
+            document: Any = deployment_of(candidate, resolved)
+        else:
+            document = None if isinstance(candidate.model, DocumentTemplateModel) else candidate.model
+        if document is None or document.spec.partial or not evaluate_selector(document, selector):
+            continue
+        params = chain_params(candidate, index)
+        if params is None:
+            continue
+        matched_any = True
+        log.info("attributeconfig applied", document=str(candidate.ref), schema=str(entry.ref))
+        try:
+            errors = list(validator.iter_errors(params))
+        except Unresolvable as exc:
+            diagnostics.error(
+                f"attributeconfig '{entry.ref.name}': schema references an external resource, which is "
+                f"not allowed: {exc}",
+                source=str(candidate.source),
+                location="meta.params",
+                code=ATTRIBUTECONFIG_INVALID_CODE,
+            )
+            continue
+        for error in errors:
+            code, message, relative_location = translate_validation_error(error)
+            diagnostics.error(
+                f"merged parameter values of {target.kind.value} '{candidate.ref.name}' "
+                f"(attributeconfig '{entry.ref.name}'): {message}",
+                source=str(candidate.source),
+                location=f"meta.params.{relative_location}" if relative_location else "meta.params",
+                code=code,
+            )
+
+    if not matched_any:
+        diagnostics.warning(
+            f"attributeconfig '{entry.ref.name}': selector matched no {target.kind.value} that receives "
+            "parameter values (deployable, not partial) — this schema is not guarding anything.",
             source=str(entry.source),
             location="spec.target.selector",
             code="attributeconfig_unused",
@@ -1085,6 +1217,7 @@ def _check_workspaces(index: DocumentIndex) -> Diagnostics:
         diagnostics.extend(_check_workspace_key_value_store_supports_cas(index, workspace), source=str(entry.source))
         diagnostics.extend(_check_workspace_security_gates(index, workspace), source=str(entry.source))
         diagnostics.extend(_check_provisioner_integrations(index, workspace), source=str(entry.source))
+        diagnostics.extend(_check_provisioner_tool_types(index, workspace), source=str(entry.source))
         diagnostics.extend(_check_workspace_helm_releases(index, workspace), source=str(entry.source))
         if security is not None:
             diagnostics.extend(
@@ -1253,6 +1386,65 @@ def _check_provisioner_integrations(index: DocumentIndex, workspace: WorkspaceMo
     return diagnostics
 
 
+#: The Terraform-family tools (ADR-0060): one CLI contract, two types, two binaries. Only these are compared, since
+#: running one through the other's type is the one mismatch that works by accident.
+_TERRAFORM_FAMILY = {ProvisionerType.TERRAFORM.value: "terraform", ProvisionerType.OPENTOFU.value: "tofu"}
+
+
+def _check_provisioner_tool_types(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
+    """A Terraform or OpenTofu provisioner is bound to an integration of its own type (docs/design/opentofu.md).
+
+    The integration's type decides the class that runs, so `tool: opentofu` bound to a `type: terraform`
+    integration would run `TerraformIntegration`: its version check reads the wrong numbering, and the lock policy
+    and init advice would name the wrong tool. An unknown name is the generic reference walk's finding.
+    """
+    diagnostics = Diagnostics()
+    for position, provisioner in enumerate(workspace.spec.provisioners):
+        tool = str(provisioner.tool)
+        if provisioner.integration is None:
+            continue
+        entry = index.get(PlatformKind.INTEGRATION, provisioner.integration)
+        if entry is None:
+            continue
+        integration_type = cast(IntegrationModel, entry.model).spec.type
+        if tool == integration_type or not {tool, integration_type} & set(_TERRAFORM_FAMILY):
+            continue
+        diagnostics.error(
+            f"Workspace '{workspace.meta.name}': provisioner '{provisioner.name}' (tool: {tool}) names integration "
+            f"'{provisioner.integration}' of type '{integration_type}', so the step would run as "
+            f"'{integration_type}'. Bind an integration of type '{tool}', or set the provisioner's tool to "
+            f"'{integration_type}'.",
+            location=f"spec.provisioners.{position}.integration",
+            code="provisioner_integration_type_mismatch",
+        )
+    return diagnostics
+
+
+def _check_terraform_family_commands(index: DocumentIndex) -> Diagnostics:
+    """A `terraform` integration does not run `tofu`, nor an `opentofu` one `terraform` (ADR-0060).
+
+    `spec.command` stays for a renamed or wrapped binary of the same tool. Pointed at the other tool, the type's
+    version check, lock-file host and init advice are all the wrong tool's.
+    """
+    diagnostics = Diagnostics()
+    for entry in index.all_of(PlatformKind.INTEGRATION):
+        spec = cast(IntegrationModel, entry.model).spec
+        if spec.type not in _TERRAFORM_FAMILY or not spec.command:
+            continue
+        binary = Path(spec.command.strip().split()[0]).name.lower().removesuffix(".exe")
+        other = next((t for t, cmd in _TERRAFORM_FAMILY.items() if cmd == binary and t != spec.type), None)
+        if other is None:
+            continue
+        diagnostics.error(
+            f"Integration '{entry.ref.name}' (type: {spec.type}) runs '{spec.command}', which is {other}. "
+            f"Use type '{other}' and set the provisioners that bind it to tool: {other}.",
+            source=str(entry.source),
+            location="spec.command",
+            code="integration_command_other_tool",
+        )
+    return diagnostics
+
+
 def _check_integration_versions(index: DocumentIndex) -> Diagnostics:
     """`spec.version` must be checkable: only a `cli` transport has an installed version to read.
 
@@ -1368,7 +1560,7 @@ def _check_workspace_subnets(index: DocumentIndex, workspace: WorkspaceModel) ->
 
 def _check_artifacts(index: DocumentIndex) -> Diagnostics:
     """Each artifact's `spec.registry` agrees with its `spec.image_name` (`ArtifactService.validate_registry()`,
-    docs/work/artifact-gap-analysis.md, design 5). A warning cannot come from a model validator, so it runs here,
+    docs/archive/artifact-gap-analysis.md, design 5). A warning cannot come from a model validator, so it runs here,
     once per artifact document."""
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.ARTIFACT):
@@ -1406,7 +1598,9 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
         security = configuration.spec.security
 
     for entry in index.all_of(PlatformKind.ENVIRONMENT):
-        environment = cast(EnvironmentModel, entry.model)
+        environment = entry.model
+        if not isinstance(environment, EnvironmentModel):
+            continue  # a partial template: checked in the environments that resolve through it
         service = EnvironmentService.from_model(environment)
         diagnostics.extend(service.validate_artifact_references(artifact_names), source=str(entry.source))
         diagnostics.extend(service.validate_store_value_tokens(), source=str(entry.source))
@@ -1461,7 +1655,9 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
+        deployment = deployment_of(entry, resolved)
+        if deployment is None:
+            continue  # a template that did not resolve: its tokens are checked in the deployments that resolve it
         declared = _merged_declared_keys(index, deployment)
         # A partial base is judged once merged into a deployable deployment, where its tenant is known. A chain that
         # could not be merged is reported as such, and judging its unmerged document would add a false finding.
@@ -1499,7 +1695,9 @@ def _check_script_values(index: DocumentIndex, resolved: dict[str, DeploymentMod
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
+        deployment = deployment_of(entry, resolved)
+        if deployment is None:
+            continue
         declared = _merged_declared_keys(index, deployment)
         workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace or "")
         if declared is None or workspace_entry is None:
@@ -1944,7 +2142,7 @@ def _check_dns_records(index: DocumentIndex) -> Diagnostics:
 
 # ---------------------------------------------------------------------------
 # Helm module references -> the release name and Kubernetes namespace Helm
-# receives (docs/work/helm-release-names.md)
+# receives (docs/design/helm-chart-deployment.md)
 # ---------------------------------------------------------------------------
 
 
@@ -1968,20 +2166,16 @@ def _token_note(value: str) -> str:
     return " Value tokens are not resolved in this field." if "${" in value else ""
 
 
-def _referenced_artifact_names(node: object) -> set[str]:
-    """The artifact names of every ``${artifact:NAME.FIELD}`` token in `node`, whatever the field."""
-    return {split_artifact_token_key(key)[0] for key in referenced_artifact_keys(node)}
-
-
 def _check_helm_artifact_delivery(index: DocumentIndex) -> Diagnostics:
-    """A Helm module service that names an `artifact` delivers it to the chart (docs/work/artifact-gap-analysis.md,
+    """A Helm module service that names an `artifact` delivers it to the chart (docs/archive/artifact-gap-analysis.md,
     design 2).
 
     The Helm integration writes no image into a chart's values (`helm.py`'s `_render_values()`): a service's
     `artifact` resolves into its `image`, which `deploy images`, the SBOM and `image_tag_policy` read, but the chart
     decides which image runs. The artifact reaches the chart only through an `${artifact:NAME.FIELD}` token in the
-    module's `spec.configuration` or the service's own `configuration`, the two parts of the values written in the
-    chart's own keys. A token in the service's `environment` becomes an environment variable, so it does not count.
+    module's `spec.configuration` or a service's `configuration`, the parts of the values written in the chart's
+    own keys (`artifact_tokens.helm_delivered_artifacts()`, the rule `effective_images()` shares, design 11). A
+    token in a service's `environment` becomes an environment variable, so it does not count.
     A warning, once per module document: the artifact is still useful as a declaration, and a module may set the
     image some other way strata cannot see.
     """
@@ -1990,13 +2184,11 @@ def _check_helm_artifact_delivery(index: DocumentIndex) -> Diagnostics:
         module = cast(ModuleModel, entry.model)
         if module.spec.type != "helm":
             continue
-        module_delivers = _referenced_artifact_names(module.spec.configuration or {})
+        delivered = helm_delivered_artifacts(module)
         for position, service in enumerate(module.spec.services or []):
-            if service.artifact is None:
+            if service.artifact is None or str(service.artifact) in delivered:
                 continue
             artifact = str(service.artifact)
-            if artifact in module_delivers or artifact in _referenced_artifact_names(service.configuration or {}):
-                continue
             diagnostics.warning(
                 f"Module '{module.meta.name}' (type helm): service '{service.name}' names artifact '{artifact}', but "
                 "strata writes no image into a chart's values, so the chart decides which image runs; deploy images, "
