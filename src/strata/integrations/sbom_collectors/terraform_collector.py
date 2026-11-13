@@ -12,13 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import hcl2
-
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.sbom_collectors.base import CollectorResult, SbomCollector
 from strata.models.module_model import ModuleModel
 from strata.models.sbom_model import SbomComponentModel
 from strata.utils.diagnostics import Diagnostic, Severity
+from strata.utils.hcl import load_hcl_file
 from strata.utils.sbom_utils import (
     TERRAFORM_DEFAULT_REGISTRY,
     exact_version,
@@ -105,8 +104,7 @@ def read_provider_locks(root: Path, default_registry: str = TERRAFORM_DEFAULT_RE
 
 def _load_hcl(path: Path) -> dict[str, Any] | None:
     try:
-        with path.open("r", encoding="utf-8") as fh:
-            data = hcl2.load(fh)
+        data = load_hcl_file(path)
     except Exception:
         return None
     return data if isinstance(data, dict) else None
@@ -147,8 +145,7 @@ def _read_lock(lock_file: Path, diagnostics: list[Diagnostic]) -> dict[str, tupl
     if not lock_file.is_file():
         return {}
     try:
-        with lock_file.open("r", encoding="utf-8") as fh:
-            data = hcl2.load(fh)
+        data = load_hcl_file(lock_file)
     except Exception as exc:
         diagnostics.append(
             Diagnostic(
@@ -208,8 +205,7 @@ class TerraformCollector(SbomCollector):
 
         for tf_file in _terraform_files(build_path):
             try:
-                with tf_file.open("r", encoding="utf-8") as fh:
-                    data = hcl2.load(fh)
+                data = load_hcl_file(tf_file)
             except Exception as exc:
                 diagnostics.append(
                     Diagnostic(

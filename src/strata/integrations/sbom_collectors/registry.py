@@ -9,14 +9,15 @@ a lean `_KNOWN` dict of built-ins, lazily imported, plus discovery via
 Python's standard `importlib.metadata.entry_points()` so a third-party
 package registers a custom collector through its own `pyproject.toml`
 (`[project.entry-points."strata.sbom_collectors"]`) with zero changes to
-this repo.
+this repo. The installed entry points are read once per process
+(`strata.utils.plugins`).
 """
 
 from importlib import import_module
-from importlib.metadata import entry_points
 from typing import cast
 
 from strata.integrations.sbom_collectors.base import SbomCollector
+from strata.utils.plugins import installed_entry_points as entry_points
 
 #: Entry point group a third-party package registers a custom collector
 #: class under — e.g. `[project.entry-points."strata.sbom_collectors"]`.

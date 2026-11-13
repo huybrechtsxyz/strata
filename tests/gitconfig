@@ -1,0 +1,16 @@
+# The only git configuration the tests see: tests/conftest.py points GIT_CONFIG_GLOBAL here and sets
+# GIT_CONFIG_NOSYSTEM=1, so a developer's own settings (hooks, credential helpers, signing) never run during a
+# test, and a local run sees what a CI runner sees.
+[user]
+	name = strata-tests
+	email = strata-tests@example.invalid
+[init]
+	defaultBranch = main
+[core]
+	autocrlf = false
+	# Test folders under a long Windows temp path can pass 260 characters.
+	longpaths = true
+[commit]
+	gpgsign = false
+[tag]
+	gpgsign = false

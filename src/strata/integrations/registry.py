@@ -15,15 +15,18 @@ contamination (v1's own `IntegrationRegistry.reset()`), for a problem
 yet. Callers that want reuse across a batch keep their own short-lived cache
 (e.g. `value_controller.resolve_values()`), the same pattern `values get`
 already used before this registry existed.
+
+What is cached is the list of installed plugins (`strata.utils.plugins`): read
+once per process, because each read scans every installed package.
 """
 
 from importlib import import_module
-from importlib.metadata import entry_points
 from typing import cast
 
 from strata.integrations.base import Integration
 from strata.integrations.errors import IntegrationError
 from strata.models.integration_model import IntegrationModel
+from strata.utils.plugins import installed_entry_points as entry_points
 
 #: Entry point group a third-party package registers a custom integration
 #: class under (ADR-0021 D10) — e.g. `[project.entry-points."strata.integrations"]`.

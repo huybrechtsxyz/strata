@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """Suite-wide fixtures."""
 
+import os
+from pathlib import Path
+
 import pytest
 
 from strata.controllers import workload_controller
+
+# Every git a test starts, directly or through strata, reads only this file: no developer hooks (a pre-commit hook
+# that starts a shell costs every commit), credential helpers or signing, the same as on a CI runner.
+_GIT_ENVIRONMENT = {
+    "GIT_CONFIG_GLOBAL": (Path(__file__).parent / "gitconfig").as_posix(),
+    "GIT_CONFIG_NOSYSTEM": "1",
+}
+_saved_git_environment: dict[str, str | None] = {}
 
 # A test not marked `slow` that takes longer than this is listed at the end of a `-m "not slow"` run. It sits well
 # above the 0.2s the marks were chosen at, so timing noise on a busy machine does not list a test that is fine.
@@ -21,6 +32,17 @@ def pytest_configure(config):
         "slow: takes 0.2s or more, mostly by running real git, helm, terraform or scripts; "
         'skip with -m "not slow" (tests/conftest.py)',
     )
+    for name, value in _GIT_ENVIRONMENT.items():
+        _saved_git_environment[name] = os.environ.get(name)
+        os.environ[name] = value
+
+
+def pytest_unconfigure(config):
+    for name, value in _saved_git_environment.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
 
 
 def pytest_runtest_logreport(report):

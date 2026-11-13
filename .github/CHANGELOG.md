@@ -8,6 +8,13 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster `build run` and `deploy run`.** strata reads the installed plugins (integrations and SBOM collectors)
+  once per command instead of on every lookup, each read having scanned every installed Python package. A plugin
+  installed while a command runs is picked up by the next one. A Terraform file read more than once in a command
+  (for the SBOM, then for the declared outputs and variables) is parsed once.
+
 ## [2.6.0] - 2026-11-13
 
 Deployment documentation: `strata deploy output`, `strata deploy report` and `spec.documentation`, built on a

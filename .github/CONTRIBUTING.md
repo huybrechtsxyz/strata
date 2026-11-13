@@ -188,6 +188,9 @@ uv run pytest tests/ --cov=strata --cov-report=term-missing
 The default run and CI include the `slow` tests. Mark a new test `@pytest.mark.slow` when it takes 0.2s or more; a
 `-m "not slow"` run lists unmarked tests over 1s under "tests that could be marked slow".
 
+Tests run `git` with `tests/gitconfig` as their only configuration (`tests/conftest.py`): your own hooks, credential
+helpers and signing settings do not apply, the same as on a CI runner.
+
 ### Nox (all checks in one command)
 
 [`nox`](https://nox.thea.codes/) runs all tools in isolated environments, once per supported Python version (3.12,
