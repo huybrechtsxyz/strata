@@ -257,6 +257,7 @@ def test_only_a_real_version_is_reported(output, reported):
     assert readiness.installed_version is not None and readiness.reported_version == reported
 
 
+@pytest.mark.slow
 def test_flags_only_problems_can_be_warnings_and_others_cannot():
     readiness = replace(
         assess_integration(_versioned("3.13.2")(None)),

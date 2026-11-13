@@ -873,6 +873,7 @@ def test_docker_host_or_another_docker_context_is_a_conflict_without_asking_dock
 
 
 @pytest.mark.skipif(not shutil.which("docker"), reason="docker is not installed")
+@pytest.mark.slow
 def test_real_docker_resolves_contexts_the_way_the_pin_relies_on(tmp_path: Path):
     """`docker context inspect` fails for an unknown context, and DOCKER_HOST silently beats DOCKER_CONTEXT.
 

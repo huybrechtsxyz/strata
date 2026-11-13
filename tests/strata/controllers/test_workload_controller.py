@@ -1030,6 +1030,7 @@ def test_an_out_of_sync_lock_is_an_error(tmp_path: Path):
 
 @pytest.mark.chart_pulls
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+@pytest.mark.slow
 def test_real_helm_installs_from_the_dependencies_the_build_placed(tmp_path: Path):
     """A remote dependency served over local HTTP and a `file://` one; `helm template` then renders the build copy."""
     root = tmp_path / "sln"

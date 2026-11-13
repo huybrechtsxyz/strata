@@ -293,6 +293,7 @@ def test_a_failed_render_gets_an_info_line_with_helms_first_error(tmp_path, monk
     )
 
 
+@pytest.mark.slow
 def test_an_image_holding_a_token_is_left_out_with_an_info_line(tmp_path, monkeypatch):
     stdout = "kind: Pod\nspec:\n  containers:\n    - {name: api, image: 'acme/api:${artifact:api.image_tag}'}\n"
     monkeypatch.setattr(chart_image_collector, "helm", lambda: _FakeHelm(stdout))
@@ -312,6 +313,7 @@ def test_a_floating_rendered_image_is_flagged(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
+@pytest.mark.slow
 def test_a_real_local_chart_is_rendered_by_helm(tmp_path):
     folder = _chart(tmp_path, "apps/whoami")
     (folder / "values.yaml").write_text("tag: v1.10\n", encoding="utf-8")
@@ -329,6 +331,7 @@ def test_a_real_local_chart_is_rendered_by_helm(tmp_path):
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
+@pytest.mark.slow
 def test_a_real_local_chart_is_rendered_from_a_relative_build_path(tmp_path, monkeypatch):
     """`strata build run --build-path build`: Helm runs in the chart's folder, so the paths it gets are absolute."""
     folder = _chart(tmp_path / "build", "apps/whoami")
@@ -346,6 +349,7 @@ def test_a_real_local_chart_is_rendered_from_a_relative_build_path(tmp_path, mon
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
+@pytest.mark.slow
 def test_a_real_packaged_registry_chart_is_rendered_by_helm_with_strata_values(tmp_path):
     source = tmp_path / "src" / "immich"
     (source / "templates").mkdir(parents=True)

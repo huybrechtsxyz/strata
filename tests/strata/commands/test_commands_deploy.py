@@ -17,6 +17,9 @@ from strata.commands.cli import cli
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE, EXIT_VALIDATION
 from strata.utils.transport import CommandResult
 
+pytestmark = pytest.mark.slow
+
+
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
 meta:

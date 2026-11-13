@@ -25,6 +25,9 @@ from strata.integrations.terraform import TerraformIntegration
 from strata.utils.errors import UsageError
 from strata.utils.transport import CommandResult
 
+pytestmark = pytest.mark.slow
+
+
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
 meta:

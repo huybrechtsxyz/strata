@@ -199,6 +199,7 @@ def test_a_key_read_by_one_of_seven_deployments_is_not_unused(tmp_path):
     ]
 
 
+@pytest.mark.slow
 def test_a_whole_role_read_uses_every_key_and_keys_are_counted_per_role(tmp_path):
     base = BASE + "  custom:\n    hub: ${param:hub}\n"  # every key of the hub sets
     root = _solution(tmp_path, base=base)

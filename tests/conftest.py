@@ -5,9 +5,41 @@ import pytest
 
 from strata.controllers import workload_controller
 
+# A test not marked `slow` that takes longer than this is listed at the end of a `-m "not slow"` run. It sits well
+# above the 0.2s the marks were chosen at, so timing noise on a busy machine does not list a test that is fine.
+_UNMARKED_SLOW_SECONDS = 1.0
+
+# Setup + call + teardown seconds per test not marked `slow`. Under pytest-xdist the controller receives every
+# worker's reports, so this fills in the process that prints the summary.
+_unmarked_durations: dict[str, float] = {}
+
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "chart_pulls: let build run pull registry Helm charts (tests/conftest.py)")
+    config.addinivalue_line(
+        "markers",
+        "slow: takes 0.2s or more, mostly by running real git, helm, terraform or scripts; "
+        'skip with -m "not slow" (tests/conftest.py)',
+    )
+
+
+def pytest_runtest_logreport(report):
+    if "slow" not in report.keywords:
+        _unmarked_durations[report.nodeid] = _unmarked_durations.get(report.nodeid, 0.0) + report.duration
+
+
+def pytest_terminal_summary(terminalreporter, config):
+    """In a `-m "not slow"` run, lists the tests that took long enough to be marked `slow`."""
+    if "slow" not in (config.option.markexpr or ""):
+        return
+    unmarked = sorted(
+        ((d, nodeid) for nodeid, d in _unmarked_durations.items() if d >= _UNMARKED_SLOW_SECONDS),
+        reverse=True,
+    )
+    if unmarked:
+        terminalreporter.section("tests that could be marked slow")
+        for seconds, nodeid in unmarked:
+            terminalreporter.write_line(f"{seconds:6.2f}s {nodeid}")
 
 
 @pytest.fixture(autouse=True)

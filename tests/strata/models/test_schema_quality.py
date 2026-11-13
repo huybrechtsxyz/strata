@@ -139,6 +139,7 @@ def _integration_definition(name: str) -> dict[str, Any]:
     return render_schema(IntegrationModel)["$defs"][name]
 
 
+@pytest.mark.slow
 def test_integration_type_catalogue_matches_the_registry():
     description = _integration_definition("IntegrationSpecModel")["properties"]["type"]["description"]
     listed = {
@@ -166,6 +167,7 @@ def test_every_core_capability_is_explained_in_the_capabilities_description():
     ],
     ids=lambda v: getattr(v, "value", getattr(v, "__name__", v)),
 )
+@pytest.mark.slow
 def test_stores_that_resolve_through_an_integration_are_named_in_their_store_type_description(capability, store_type):
     resolved = {t for t in _KNOWN if capability in get_class(t).CAPABILITIES} & {m.value for m in store_type}
     assert resolved, f"no registered integration provides {capability.value} for {store_type.__name__}"

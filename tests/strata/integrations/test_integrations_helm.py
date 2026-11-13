@@ -410,6 +410,7 @@ def test_prepare_namespace_leaves_the_local_charts_own_values_yaml_alone(tmp_pat
 
 
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+@pytest.mark.slow
 def test_prepare_namespace_output_renders_with_the_charts_defaults_under_real_helm(tmp_path: Path):
     """What `deploy` passes (`-f VALUES_FILE`) overlays the chart's defaults instead of replacing them. Before,
     this chart failed with `nil pointer evaluating interface {}.repository`."""
@@ -1280,6 +1281,7 @@ _RELEASE_NAMES = [
 
 
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+@pytest.mark.slow
 def test_release_name_problem_agrees_with_real_helm(tmp_path: Path):
     """The rule strata validates with is Helm's own: every name is accepted or rejected by both alike."""
     (tmp_path / "templates").mkdir()
@@ -1331,6 +1333,7 @@ def test_release_identity_defaults_to_the_reference_and_namespace_names():
 
 
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+@pytest.mark.slow
 def test_check_namespace_against_real_helm_catches_a_template_error_the_overlay_can_fix(tmp_path: Path):
     """The overlay is what makes the chart renderable: the built values.yaml alone leaves `.Values.cfg` nil."""
     module = _module("real", configuration={"cfg": {"name": "x"}})
@@ -1581,6 +1584,7 @@ def test_deploy_namespace_a_registry_chart_without_a_verified_archive_is_an_erro
 
 
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+@pytest.mark.slow
 def test_credentialed_chart_pull_against_a_real_basic_auth_server_in_an_isolated_helm_config(tmp_path):
     """The whole chain with real helm: credentials, isolated config, `repo add`, pull; the user's config is untouched."""
     import base64

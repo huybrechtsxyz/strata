@@ -97,6 +97,7 @@ def test_environment_fallback_ok_is_zero(tmp_path, http, monkeypatch):
     assert TOKEN not in result.output
 
 
+@pytest.mark.slow
 def test_credentials_resolve_through_the_deployment(tmp_path, http, monkeypatch):
     monkeypatch.setenv("TEST_AIKIDO_TOKEN", TOKEN)
     _, calls = http
@@ -366,6 +367,7 @@ def test_list_does_not_warn_about_a_disabled_document_nothing_uses(tmp_path, htt
     assert {row["name"]: row["enabled"] for row in payload["data"]["integrations"]}["terraform"] is False
 
 
+@pytest.mark.slow
 def test_list_keeps_a_disabled_document_named_like_a_type_default_row(tmp_path, http, tools):
     root = _deployable(_solution(tmp_path))
     _write(
@@ -409,6 +411,7 @@ def test_list_with_a_deployment_shows_what_it_uses(tmp_path, http, tools):
     assert rows["aikido-env"]["used_for"] == []
 
 
+@pytest.mark.slow
 def test_list_fails_only_when_a_used_integration_is_not_ready(tmp_path, http, tools):
     tools["version"] = "1.5.0"
     root = _deployable(_solution(tmp_path))

@@ -492,6 +492,7 @@ def test_shipped_example_binds_the_asset_slot_per_customer_without_a_manifest_re
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+@pytest.mark.slow
 def test_shipped_example_merges_the_tenant_environment_before_the_deployments_own():
     """Tenant contoso names `contoso-env`, whose `CUSTOMER_CODE` reads the tenant's own name through `${value:}`."""
     from strata.controllers.value_controller import resolve_values
@@ -528,6 +529,7 @@ def terraform_on_path(monkeypatch):
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+@pytest.mark.slow
 def test_shipped_example_builds_offline_and_projects_the_default_asset(tmp_path, terraform_on_path):
     """The default deployment's asset comes from the local `infra` stand-in, so the example
     builds end to end with no network; the customer deployments need their own repositories."""
@@ -551,6 +553,7 @@ def test_shipped_example_builds_offline_and_projects_the_default_asset(tmp_path,
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+@pytest.mark.slow
 def test_shipped_example_takes_the_artifact_tag_from_the_version_pin_or_its_own_declaration():
     """`example-api` declares 1.0.0; the `prd` version document pins 1.4.2, and the policy accepts both sources."""
     from strata.controllers.effective_images import effective_images
@@ -568,6 +571,7 @@ def test_shipped_example_takes_the_artifact_tag_from_the_version_pin_or_its_own_
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+@pytest.mark.slow
 def test_shipped_example_shows_every_way_to_use_an_artifact():
     """docs/archive/artifact-gap-analysis.md, design 9: a `store: artifact` variable and an `${artifact:}` token for
     `example-api`, a Compose service's `artifact` for `portainer`; each pinned by `prd` and judged by the policy."""
@@ -628,6 +632,7 @@ def test_shipped_example_gives_every_deployment_its_own_state_key():
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+@pytest.mark.slow
 def test_shipped_example_passes_its_state_key_to_terraform_init(tmp_path):
     """The real `build run` then `deploy run` path over the example: `init` receives the generated key."""
     import strata.controllers.deploy_controller as deploy_module
@@ -668,6 +673,7 @@ def test_shipped_example_passes_its_state_key_to_terraform_init(tmp_path):
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+@pytest.mark.slow
 def test_shipped_example_flags_only_the_tenant_less_deployment_when_the_key_uses_the_tenant(tmp_path):
     """On a copy: a backend key that needs `${deployment:tenant}` is valid for the three deployments with a tenant
     and an error for `prd-acme-deployment`, which has none."""

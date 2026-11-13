@@ -42,6 +42,7 @@ def test_the_page_shows_every_file_of_its_layout():
             assert any(path.endswith(name) for path in files), name
 
 
+@pytest.mark.slow
 def test_the_solution_validates_strictly_with_nothing_unused(solution):
     context = open_solution(solution).require_valid()
     assert not context.diagnostics.warnings  # `strata validate --strict` passes

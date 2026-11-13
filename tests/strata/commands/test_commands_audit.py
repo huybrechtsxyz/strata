@@ -170,6 +170,7 @@ def test_multiple_audit_sinks_exits_two_naming_both(runner, tmp_path):
     assert "team-mirror" in result.output
 
 
+@pytest.mark.slow
 def test_unreachable_remote_exits_one(runner, tmp_path):
     root = tmp_path / "sln"
     remotes = (
@@ -188,6 +189,7 @@ def test_unreachable_remote_exits_one(runner, tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_console_output_lists_the_latest_record_per_deployment(runner, tmp_path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -204,6 +206,7 @@ def test_console_output_lists_the_latest_record_per_deployment(runner, tmp_path)
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_named_deployment_argument_filters_to_one(runner, tmp_path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -219,6 +222,7 @@ def test_named_deployment_argument_filters_to_one(runner, tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_named_deployment_with_no_records_is_not_an_error(runner, tmp_path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -231,6 +235,7 @@ def test_named_deployment_with_no_records_is_not_an_error(runner, tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_json_output_carries_the_deployments_list(runner, tmp_path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -254,6 +259,7 @@ def test_json_output_carries_the_deployments_list(runner, tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_json_output_on_an_empty_sink(runner, tmp_path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -289,6 +295,7 @@ def test_changes_invalid_status_choice_exits_two(runner, tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_changes_console_output_lists_every_record_not_just_the_latest(runner, tmp_path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -304,6 +311,7 @@ def test_changes_console_output_lists_every_record_not_just_the_latest(runner, t
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_changes_filters_combine_via_the_real_cli(runner, tmp_path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -335,6 +343,7 @@ def test_changes_filters_combine_via_the_real_cli(runner, tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_changes_json_output_carries_the_changes_list_oldest_to_newest(runner, tmp_path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -356,6 +365,7 @@ def test_changes_json_output_carries_the_changes_list_oldest_to_newest(runner, t
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_changes_no_match_is_not_an_error(runner, tmp_path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -381,6 +391,7 @@ def test_changes_no_sink_configured_message_is_not_status_specific(runner, tmp_p
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_changes_bare_date_until_includes_the_whole_day(runner, tmp_path):
     """Found during review: '--until 2026-10-04' parsed to that day's
     midnight, silently excluding a record later the same day despite the
@@ -414,6 +425,7 @@ def _sink_with_a_deploy_then_a_destroy(tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_status_console_shows_a_destroy_as_the_latest_action(runner, tmp_path):
     root = _sink_with_a_deploy_then_a_destroy(tmp_path)
 
@@ -426,6 +438,7 @@ def test_status_console_shows_a_destroy_as_the_latest_action(runner, tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_status_json_carries_the_action(runner, tmp_path):
     root = _sink_with_a_deploy_then_a_destroy(tmp_path)
 
@@ -436,6 +449,7 @@ def test_status_json_carries_the_action(runner, tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_changes_console_has_an_action_column(runner, tmp_path):
     root = _sink_with_a_deploy_then_a_destroy(tmp_path)
 
@@ -449,6 +463,7 @@ def test_changes_console_has_an_action_column(runner, tmp_path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_changes_json_carries_the_action_oldest_to_newest(runner, tmp_path):
     root = _sink_with_a_deploy_then_a_destroy(tmp_path)
 

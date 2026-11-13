@@ -175,6 +175,7 @@ def _rows(root: Path) -> dict:
     return {row.name: row for row in list_deployments(open_solution(root).controller.index)}
 
 
+@pytest.mark.slow
 def test_tenant_and_version_are_resolved_through_extends(tmp_path):
     rows = _rows(_matrix_solution(tmp_path))
     assert (rows["inherit"].tenant, rows["inherit"].version) == ("t2", "v-dev")

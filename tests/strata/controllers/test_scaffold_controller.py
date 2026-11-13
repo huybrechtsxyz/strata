@@ -26,6 +26,8 @@ from strata.utils.errors import UsageError
 from strata.utils.value_tokens import VALUE_TOKEN_KINDS
 from strata.utils.version import get_version
 
+pytestmark = pytest.mark.slow
+
 
 def test_init_creates_the_manifest(tmp_path):
     ScaffoldController(tmp_path).init("acme-platform")

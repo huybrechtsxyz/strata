@@ -237,6 +237,7 @@ def test_a_token_in_a_module_lists_the_artifact_with_the_module_as_its_use(tmp_p
     assert row.via == ("token:module/stack",)
 
 
+@pytest.mark.slow
 def test_a_token_in_the_workspace_or_an_environment_is_a_use(tmp_path):
     root = _solution(tmp_path, variable_artifacts=())
     _append(root, "workspace.yaml", "  custom:\n    api_image: ${artifact:catalog.image_name}\n")

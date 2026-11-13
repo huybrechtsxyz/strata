@@ -15,6 +15,9 @@ from strata.controllers.solution_context import open_solution
 from strata.utils.sbom_utils import image_to_purl
 from strata.utils.transport import CommandResult
 
+pytestmark = pytest.mark.slow
+
+
 _HEADER = "apiVersion: strata.huybrechts.xyz/v2\nkind: {kind}\nmeta:\n  name: {name}\nspec:\n"
 
 

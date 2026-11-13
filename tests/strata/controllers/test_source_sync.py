@@ -578,6 +578,7 @@ def _located_asset(
 
 
 @_NEEDS_GIT
+@pytest.mark.slow
 def test_asset_location_is_cloned_at_its_reference_under_the_asset_checkout_root(tmp_path: Path):
     url = _git_repo(tmp_path / "customer", {"v1": {"api/a.json": "one"}, "v2": {"api/b.json": "two"}})
     root = tmp_path / "sln"
@@ -591,6 +592,7 @@ def test_asset_location_is_cloned_at_its_reference_under_the_asset_checkout_root
 
 
 @_NEEDS_GIT
+@pytest.mark.slow
 def test_two_assets_with_their_own_repositories_get_their_own_files(tmp_path: Path):
     first = _git_repo(tmp_path / "c1", {"v1": {"api/one.json": "1"}})
     second = _git_repo(tmp_path / "c2", {"v1": {"api/two.json": "2"}})
@@ -605,6 +607,7 @@ def test_two_assets_with_their_own_repositories_get_their_own_files(tmp_path: Pa
 
 
 @_NEEDS_GIT
+@pytest.mark.slow
 def test_two_slots_bound_to_one_location_asset_share_one_checkout(tmp_path: Path):
     url = _git_repo(tmp_path / "customer", {"v1": {"api/a.json": "one"}})
     root = tmp_path / "sln"

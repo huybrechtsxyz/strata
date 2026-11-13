@@ -82,6 +82,7 @@ def _recorded(build_path: Path):
     return {r.policy_name: r for r in read_policy_results(build_path) or []}.get("provisioner_lock_policy")
 
 
+@pytest.mark.slow
 def test_build_run_fails_on_a_missing_lock_file_and_records_it(tmp_path):
     build_path = tmp_path / "build"
 
@@ -99,6 +100,7 @@ def test_build_run_fails_on_a_missing_lock_file_and_records_it(tmp_path):
     assert "tf_main" in recorded.violations[0]
 
 
+@pytest.mark.slow
 def test_build_run_continues_on_a_warn_breach(tmp_path):
     build_path = tmp_path / "build"
     root = _solution(tmp_path, policy="  provisioner_lock_policy:\n    enforcement: warn\n")
@@ -111,6 +113,7 @@ def test_build_run_continues_on_a_warn_breach(tmp_path):
     assert (recorded.passed, len(recorded.violations)) == (True, 1)
 
 
+@pytest.mark.slow
 def test_build_run_passes_with_a_complete_lock_file(tmp_path):
     build_path = tmp_path / "build"
 
@@ -135,6 +138,7 @@ def test_a_dry_run_does_not_judge_the_lock_file(tmp_path):
     assert "provisioner_lock_missing" not in _codes(diagnostics)
 
 
+@pytest.mark.slow
 def test_build_run_uses_the_ring_of_the_deployments_version_document(tmp_path):
     root = _solution(tmp_path, policy="  provisioner_lock_policy:\n    rings: [prd]\n")
     _write(root, "version.yaml", "version", "dev", "  promotion:\n    ring: dev\n    order: 1\n")
@@ -148,6 +152,7 @@ def test_build_run_uses_the_ring_of_the_deployments_version_document(tmp_path):
     assert "provisioner_lock_policy_not_applied" in [d.code for d in diagnostics.infos]
 
 
+@pytest.mark.slow
 def test_policy_check_judges_the_build_path_and_records_the_result(tmp_path):
     build_path = tmp_path / "build"
     root = _solution(tmp_path, policy="  provisioner_lock_policy:\n    enforcement: warn\n")

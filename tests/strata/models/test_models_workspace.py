@@ -157,6 +157,7 @@ def test_workspace_allows_two_slots_on_the_same_document():
     assert len(model.spec.providers) == 2
 
 
+@pytest.mark.slow
 def test_workspace_provider_json_schema_accepts_bare_string():
     """Exported editor schema must not flag the shorthand every existing workspace uses."""
     schema = WorkspaceModel.model_json_schema()
@@ -369,6 +370,7 @@ def test_workspace_step_selects_an_asset_by_slot_not_by_document_name():
         WorkspaceModel.model_validate(data)
 
 
+@pytest.mark.slow
 def test_workspace_asset_json_schema_accepts_bare_string():
     """Exported editor schema must not flag the shorthand every existing workspace uses."""
     schema = WorkspaceModel.model_json_schema()

@@ -111,6 +111,7 @@ def _run(runner, *args):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_successful_build_exits_zero(runner, solution):
     result = _run(runner, "app", "--path", solution)
     assert result.exit_code == EXIT_SUCCESS, result.output
@@ -139,6 +140,7 @@ def test_invalid_solution_exits_three(runner, solution):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_build_writes_rendered_artifacts_under_the_default_build_path(runner, solution):
     result = _run(runner, "app", "--path", solution)
     assert result.exit_code == EXIT_SUCCESS, result.output
@@ -147,6 +149,7 @@ def test_build_writes_rendered_artifacts_under_the_default_build_path(runner, so
     assert (materialised / "strata.auto.tfvars.json").exists()
 
 
+@pytest.mark.slow
 def test_build_path_option_overrides_the_default(runner, solution, tmp_path):
     custom = tmp_path / "out"
     result = _run(runner, "app", "--path", solution, "--build-path", custom)
@@ -160,6 +163,7 @@ def test_build_path_option_overrides_the_default(runner, solution, tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_default_build_path_is_always_cleaned(runner, solution):
     """The default path is exclusively this build's own directory - always
     safe to wipe, no flag needed."""
@@ -173,6 +177,7 @@ def test_default_build_path_is_always_cleaned(runner, solution):
     assert not stale.exists()
 
 
+@pytest.mark.slow
 def test_custom_build_path_is_not_cleaned_unless_requested(runner, solution, tmp_path):
     custom = tmp_path / "out"
     custom.mkdir()
@@ -184,6 +189,7 @@ def test_custom_build_path_is_not_cleaned_unless_requested(runner, solution, tmp
     assert (custom / "leftover.txt").read_text() == "still here"
 
 
+@pytest.mark.slow
 def test_custom_build_path_is_cleaned_when_clean_flag_given(runner, solution, tmp_path):
     custom = tmp_path / "out"
     custom.mkdir()
@@ -195,6 +201,7 @@ def test_custom_build_path_is_cleaned_when_clean_flag_given(runner, solution, tm
     assert not (custom / "leftover.txt").exists()
 
 
+@pytest.mark.slow
 def test_no_clean_flag_disables_cleaning_even_for_the_default_path(runner, solution):
     stale = solution / "build" / "app" / "stale.txt"
     stale.parent.mkdir(parents=True)
@@ -225,6 +232,7 @@ def test_dry_run_reports_planned_steps_in_console_output(runner, solution):
     assert "would render provisioner" in result.output
 
 
+@pytest.mark.slow
 def test_real_run_reports_steps_in_console_output_too(runner, solution):
     result = _run(runner, "app", "--path", solution)
 
@@ -242,6 +250,7 @@ def test_dry_run_still_exits_two_for_an_unknown_deployment(runner, solution):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_pin_overrides_spec_version_for_this_invocation_only(runner, solution):
     _write(
         solution,
@@ -269,6 +278,7 @@ def test_pin_names_an_unknown_version_exits_two(runner, solution):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_json_reports_success(runner, solution):
     payload = json.loads(_run(runner, "app", "--path", solution, "--output", "json").output)
     assert payload["ok"] is True
@@ -279,6 +289,7 @@ def test_json_reports_success(runner, solution):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_without_resolve_an_integration_backed_secret_is_never_touched(runner, solution):
     _write(
         solution,
@@ -291,6 +302,7 @@ def test_without_resolve_an_integration_backed_secret_is_never_touched(runner, s
     assert result.exit_code == EXIT_SUCCESS, result.output
 
 
+@pytest.mark.slow
 def test_resolve_flag_reports_a_failed_integration_backed_secret(runner, solution):
     _write(
         solution,
@@ -309,6 +321,7 @@ def test_resolve_flag_reports_a_failed_integration_backed_secret(runner, solutio
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_env_file_supplies_an_environment_store_variable(runner, solution, monkeypatch):
     monkeypatch.delenv("BUILD_CLI_PROBE_VAR", raising=False)
     _write(

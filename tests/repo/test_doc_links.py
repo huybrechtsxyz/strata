@@ -93,6 +93,7 @@ def _problems() -> tuple[list[str], list[str]]:
     return broken, into_work
 
 
+@pytest.mark.slow
 def test_every_link_between_docs_resolves():
     broken, _ = _problems()
     assert broken == [], "Links to a doc that does not exist; point each at the doc's current place:\n" + "\n".join(
@@ -100,6 +101,7 @@ def test_every_link_between_docs_resolves():
     )
 
 
+@pytest.mark.slow
 def test_only_a_work_doc_links_to_a_work_doc():
     _, into_work = _problems()
     assert into_work == [], "A finished doc links to a work doc, which will move; name it without a link:\n" + (

@@ -34,7 +34,10 @@ def _repo_config_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "config"
 
 
-pytestmark = pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+pytestmark = [
+    pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present"),
+    pytest.mark.slow,
+]
 
 
 def _code(i: int) -> str:

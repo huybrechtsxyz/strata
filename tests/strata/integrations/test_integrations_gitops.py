@@ -383,6 +383,7 @@ def _git_available() -> bool:
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_real_end_to_end_cycle(tmp_path: Path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -484,6 +485,7 @@ def test_plan_destroy_converts_integration_error_to_failed_result_not_a_crash(tm
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_real_plan_destroy_previews_the_removal_and_never_an_apply_diff(tmp_path: Path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)

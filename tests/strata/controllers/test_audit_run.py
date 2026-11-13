@@ -29,6 +29,9 @@ from strata.utils import layout
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
 
+pytestmark = pytest.mark.slow
+
+
 MANIFEST_TEMPLATE = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
 meta:

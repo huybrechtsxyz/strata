@@ -163,6 +163,7 @@ def _git_available() -> bool:
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_real_push_round_trip(tmp_path: Path):
     """Real clone -> fetch -> reset -> add -> commit -> push against a real local
     bare repository, run twice to confirm the second push (fetch+reset against
@@ -203,6 +204,7 @@ def test_real_push_round_trip(tmp_path: Path):
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
 def test_real_push_checkout_path_matches_layout(tmp_path: Path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)

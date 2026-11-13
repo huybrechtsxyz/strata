@@ -283,6 +283,7 @@ _EXAMPLE_CASES = [(kind, i) for kind, docs in EXAMPLES.items() for i in range(le
 
 
 @pytest.mark.parametrize(("kind", "index"), _EXAMPLE_CASES, ids=[f"{k.value}-{i}" for k, i in _EXAMPLE_CASES])
+@pytest.mark.slow
 def test_every_example_is_a_valid_document_of_its_own_kind(kind, index):
     document = EXAMPLES[kind][index]
     assert document["kind"] == kind.value
@@ -345,6 +346,7 @@ def test_the_editor_schema_still_rejects_what_validate_rejects(section, field, v
         jsonschema.validate(document, _deployment_schema())
 
 
+@pytest.mark.slow
 def test_a_token_needs_the_param_kind_and_a_key():
     for value in ("${var:tenant}", "${param:}"):
         document = copy.deepcopy(_TEMPLATE)

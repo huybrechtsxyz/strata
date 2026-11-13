@@ -22,6 +22,9 @@ from strata.integrations.security_findings import ImageLookup, ReleaseGateOutcom
 from strata.models.audit_manifest_model import ManifestPolicyResultModel
 from strata.utils.transport import CommandResult
 
+pytestmark = pytest.mark.slow
+
+
 TOKEN = "gate-token-value-1234567890"
 COMMIT = "a" * 40
 

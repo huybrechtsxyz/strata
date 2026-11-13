@@ -306,6 +306,7 @@ def test_help_documents_exit_codes(runner):
 
 
 @pytest.mark.skipif(not Path("config").exists(), reason="example config not present")
+@pytest.mark.slow
 def test_shipped_example_solution_validates(runner, tmp_path):
     """The example ships valid, and must stay that way."""
     root = tmp_path / "config"

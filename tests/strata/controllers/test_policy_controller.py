@@ -357,6 +357,7 @@ def test_check_commit_override_is_the_commit_judged(tmp_path, gate):
     assert gate.requests[0].commit == override
 
 
+@pytest.mark.slow
 def test_check_a_deny_breach_is_an_error_and_a_warn_breach_a_warning(tmp_path, gate):
     gate.outcome = ReleaseGateOutcome(passed=False, open_issues=1)
     denied, _ = check_policies(_context(_solution(tmp_path / "a", image=False)), "app", tmp_path)

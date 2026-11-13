@@ -720,6 +720,7 @@ def _all_infra_integration_types() -> list[type]:
     return found
 
 
+@pytest.mark.slow
 def test_every_infra_integration_declares_a_resolved_value_delivery_mechanism():
     """A new tool (e.g. a future BicepIntegration — ProvisionerType.BICEP
     already exists in builtin_types.py, anticipated in registry.py's own
@@ -774,6 +775,7 @@ def test_every_infra_integration_declares_a_resolved_value_delivery_mechanism():
         )
 
 
+@pytest.mark.slow
 def test_every_infra_integration_type_is_a_known_real_integration():
     """Names the integrations this guard currently covers explicitly, so
     adding a new one is visible in a diff here too, not just implicitly
@@ -891,6 +893,7 @@ def test_destroy_namespace_base_default_raises():
         _Bare().destroy_namespace(namespace, [], dry_run=False)
 
 
+@pytest.mark.slow
 def test_only_the_script_integration_cannot_destroy():
     from strata.integrations.registry import _KNOWN, get
 
@@ -902,6 +905,7 @@ def test_only_the_script_integration_cannot_destroy():
     assert cannot == {"script"}
 
 
+@pytest.mark.slow
 def test_every_registered_class_is_compliant():
     """The first real exercise of this checker (Phase 3 could only test it against
     fakes — `_KNOWN` didn't exist yet). Every class Phase 4 registers must comply."""

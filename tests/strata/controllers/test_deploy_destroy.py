@@ -28,6 +28,9 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
 from strata.utils.transport import CommandResult
 
+pytestmark = pytest.mark.slow
+
+
 MANIFEST = "apiVersion: strata.huybrechts.xyz/v2\nkind: solution\nmeta:\n  name: test-solution\nspec: {}\n"
 STORE_KEY = "strata/deployment-outputs/app"
 

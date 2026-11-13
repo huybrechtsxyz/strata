@@ -119,6 +119,7 @@ def test_write_sbom_with_no_namespaces_writes_an_empty_bom(tmp_path: Path):
     assert data.get("components", []) == []
 
 
+@pytest.mark.slow
 def test_write_sbom_raises_when_the_bom_fails_schema_validation(tmp_path: Path, monkeypatch):
     import strata.controllers.sbom_controller as sbom_controller_module
 
@@ -177,6 +178,7 @@ def test_without_a_deployment_the_workspace_is_the_subject(tmp_path: Path):
     assert _written(tmp_path)["metadata"]["component"]["name"] == "ws"
 
 
+@pytest.mark.slow
 def test_the_sbom_names_the_commit_that_was_built(tmp_path: Path):
     write_sbom(tmp_path / "a", _graph(), _index(), commit="a" * 40)
     write_sbom(tmp_path / "b", _graph(), _index())
@@ -188,6 +190,7 @@ def test_the_sbom_names_the_commit_that_was_built(tmp_path: Path):
     assert "strata:commit" not in properties(tmp_path / "b")
 
 
+@pytest.mark.slow
 def test_a_component_reference_is_its_purl_so_two_builds_agree(tmp_path: Path):
     first = _redis_build(tmp_path / "a")
     second = _redis_build(tmp_path / "b")

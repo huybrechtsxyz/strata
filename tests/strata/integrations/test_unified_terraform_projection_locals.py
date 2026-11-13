@@ -26,6 +26,9 @@ from strata.models.provider_model import ProviderMetaModel, ProviderModel, Provi
 from strata.models.provisioning_model import ProvisionerModel
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
 
+pytestmark = pytest.mark.slow
+
+
 OUTPUTS_TF = """
 output "api_token" {
   value     = local.strata.providers.kamatera.configuration.api_token

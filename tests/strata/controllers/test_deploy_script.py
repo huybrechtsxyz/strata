@@ -362,6 +362,7 @@ def real_python(monkeypatch):
     )
 
 
+@pytest.mark.slow
 def test_a_real_script_runs_with_resolved_arguments_and_values(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_REAL_SCRIPT)
     build_path = _built(tmp_path, root)
@@ -373,6 +374,7 @@ def test_a_real_script_runs_with_resolved_arguments_and_values(tmp_path: Path, r
     assert result == {"args": ["--environment", "westeurope"], "region": "westeurope", "phase": "apply"}
 
 
+@pytest.mark.slow
 def test_a_real_failing_script_reports_its_exit_code_and_stdout(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, region="boom")
     build_path = _built(tmp_path, root)
@@ -385,6 +387,7 @@ def test_a_real_failing_script_reports_its_exit_code_and_stdout(tmp_path: Path, 
     assert "it broke: boom" in message
 
 
+@pytest.mark.slow
 def test_a_real_script_that_overruns_its_timeout_is_reported_as_a_timeout(tmp_path: Path, real_python, monkeypatch):
     monkeypatch.setenv("STRATA_TIMEOUT_RUN_SCRIPT_APPLY", "1")
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, region="sleep")
@@ -401,6 +404,7 @@ def test_a_real_script_that_overruns_its_timeout_is_reported_as_a_timeout(tmp_pa
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_a_dry_run_runs_the_script_with_plan_args_in_the_plan_phase(tmp_path: Path, run):
     root = _script_solution(tmp_path, plan_args=["--action", "plan", "${var:REGION}"])
     build_path = _built(tmp_path, root)
@@ -416,6 +420,7 @@ def test_a_dry_run_runs_the_script_with_plan_args_in_the_plan_phase(tmp_path: Pa
     assert "STRATA_VALUES" in env
 
 
+@pytest.mark.slow
 def test_a_real_run_applies_without_running_plan_args(tmp_path: Path, run):
     root = _script_solution(tmp_path, plan_args=["--action", "plan"])
     build_path = _built(tmp_path, root)
@@ -493,6 +498,7 @@ def test_a_destroy_argument_that_needs_an_output_nothing_can_serve_stops_the_run
     assert run.calls == []
 
 
+@pytest.mark.slow
 def test_a_real_dry_run_runs_plan_args_in_the_plan_phase(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, plan_args=["--environment", "previewed"])
     build_path = _built(tmp_path, root)
@@ -505,6 +511,7 @@ def test_a_real_dry_run_runs_plan_args_in_the_plan_phase(tmp_path: Path, real_py
     assert result["args"] == ["--environment", "previewed"]
 
 
+@pytest.mark.slow
 def test_a_real_run_never_executes_plan_args(tmp_path: Path, real_python):
     """`boom` makes the script exit 3: if plan_args ran before the apply, this run would fail."""
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, plan_args=["--environment", "boom"])
@@ -516,6 +523,7 @@ def test_a_real_run_never_executes_plan_args(tmp_path: Path, real_python):
     assert json.loads((build_path / "scripts" / "result.json").read_text())["phase"] == "apply"
 
 
+@pytest.mark.slow
 def test_a_real_destroy_runs_destroy_args_in_the_destroy_phase(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_REAL_SCRIPT, destroy_args=["--environment", "${var:REGION}"])
     build_path = _built(tmp_path, root)
@@ -574,6 +582,7 @@ def test_without_a_list_the_script_still_receives_every_value(tmp_path: Path, ru
     assert set(_delivered_values(env)) == {"REGION", "API_TOKEN", "UNRELATED_DB_PASSWORD", "deployment:name"}
 
 
+@pytest.mark.slow
 def test_a_destroy_delivers_only_the_listed_values_too(tmp_path: Path, run):
     root = _script_solution(
         tmp_path, secret=True, unrelated_secret=True, destroy_args=["--action", "revoke"], values=["REGION"]
@@ -617,6 +626,7 @@ _KEYS_SCRIPT = (
 )
 
 
+@pytest.mark.slow
 def test_a_real_script_does_not_see_a_secret_it_did_not_list(tmp_path: Path, real_python):
     root = _script_solution(tmp_path, script=_KEYS_SCRIPT, secret=True, unrelated_secret=True, values=["API_TOKEN"])
     build_path = _built(tmp_path, root)
@@ -706,6 +716,7 @@ def _chained_solution(
     return root
 
 
+@pytest.mark.slow
 def test_a_real_script_output_reaches_the_step_that_depends_on_it(tmp_path: Path, real_python):
     args = ["--address", "${output:run_script.address}", "--token", "${output:run_script.token}"]
     root = _chained_solution(tmp_path, producer=_PRODUCER, consumer_args=args)
@@ -718,6 +729,7 @@ def test_a_real_script_output_reaches_the_step_that_depends_on_it(tmp_path: Path
     assert result == ["--address", "10.0.0.5", "--token", TOKEN_OUTPUT]
 
 
+@pytest.mark.slow
 def test_a_malformed_output_file_warns_and_does_not_fail_the_run(tmp_path: Path, real_python):
     root = _chained_solution(tmp_path, producer=_BAD_PRODUCER, consumer_args=["--region", "${var:REGION}"])
     build_path = _built(tmp_path, root)
@@ -731,6 +743,7 @@ def test_a_malformed_output_file_warns_and_does_not_fail_the_run(tmp_path: Path,
     assert (build_path / "scripts_next" / "result.json").exists()  # the next step still ran
 
 
+@pytest.mark.slow
 def test_a_step_needing_an_output_the_script_never_wrote_fails_naming_it(tmp_path: Path, real_python):
     root = _chained_solution(tmp_path, producer="pass\n", consumer_args=["${output:run_script.address}"])
     build_path = _built(tmp_path, root)
@@ -781,6 +794,7 @@ def _fake_output_store(monkeypatch) -> dict[str, tuple[bytes, str]]:
     return data
 
 
+@pytest.mark.slow
 def test_a_sensitive_script_output_is_never_recorded_to_the_output_store(tmp_path: Path, real_python, monkeypatch):
     data = _fake_output_store(monkeypatch)
     args = ["--address", "${output:run_script.address}", "--token", "${output:run_script.token}"]
@@ -799,6 +813,7 @@ def test_a_sensitive_script_output_is_never_recorded_to_the_output_store(tmp_pat
 _NOISY_CONSUMER = "import sys\nprint('using ' + ' '.join(sys.argv[1:]))\nsys.exit(3)\n"
 
 
+@pytest.mark.slow
 def test_a_sensitive_output_is_redacted_from_a_later_steps_failure(tmp_path: Path, real_python):
     """The consumer echoes the token it was given and fails: the error must not carry the real value."""
     root = _chained_solution(
@@ -834,6 +849,7 @@ def test_a_destroy_listing_an_output_in_values_stops_before_anything_runs(tmp_pa
     assert run.calls == []
 
 
+@pytest.mark.slow
 def test_a_preview_needing_an_output_nobody_recorded_says_a_preview_applies_nothing(tmp_path: Path, run):
     root = _chained_solution(tmp_path, producer=_PRODUCER, consumer_args=["--address", "${output:run_script.address}"])
     build_path = _built(tmp_path, root)
@@ -848,6 +864,7 @@ def test_a_preview_needing_an_output_nobody_recorded_says_a_preview_applies_noth
     assert run.of_script() == []
 
 
+@pytest.mark.slow
 def test_a_real_run_missing_an_output_does_not_blame_the_preview(tmp_path: Path, run):
     """The producer's (stubbed) run wrote no file, so the consumer's output is missing, and the run says so plainly."""
     root = _chained_solution(tmp_path, producer=_PRODUCER, consumer_args=["--address", "${output:run_script.address}"])
@@ -885,6 +902,7 @@ def test_a_preview_reads_the_output_an_earlier_real_run_recorded(tmp_path: Path,
     assert any(s.startswith("would run:") and "--address 10.0.0.5" in s for s in steps)
 
 
+@pytest.mark.slow
 def test_a_preview_also_checks_the_outputs_a_script_lists_in_values(tmp_path: Path, run):
     root = _chained_solution(
         tmp_path,
@@ -902,6 +920,7 @@ def test_a_preview_also_checks_the_outputs_a_script_lists_in_values(tmp_path: Pa
     assert "was not produced by it" in message  # caught before the script is asked to run, not by its failure
 
 
+@pytest.mark.slow
 def test_a_preview_checks_plan_args_but_a_real_run_does_not(tmp_path: Path, run):
     """Only the arguments of the phase that runs need their outputs: a real run never uses `plan_args`."""
     root = _chained_solution(
