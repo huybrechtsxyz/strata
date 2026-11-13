@@ -45,6 +45,9 @@ _URL_PATTERN = re.compile(r"^[a-z][a-z0-9+.-]*://", re.IGNORECASE)
 #: The stores merged by `key` across `extends` (`merge_environment_specs()`).
 _STORE_FIELDS = ("variables", "secrets", "features")
 
+#: Each store list and the field that names its entries: what `merge_environment_specs()` merges by.
+STORE_MERGE_KEYS = {field: "key" for field in _STORE_FIELDS}
+
 
 def _replace_by_key(base: list[dict[str, Any]], child: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Base entries first; a child entry with the same `key` replaces the base's whole entry, new keys append."""

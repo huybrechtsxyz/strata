@@ -71,8 +71,9 @@ Every document has `apiVersion`, `kind`, `meta.name` and `spec`. Documents refer
 | Containers, a Helm chart or Compose services | a `module` document, referenced from `namespace.spec.modules`; the namespace is listed in `workspace.spec.namespaces` |
 | A tool and what it runs against | `workspace.spec.provisioners` defines the tool, `workspace.spec.execution` binds it to targets and orders the steps |
 | Where, for whom and with which values to deploy | `deployment.spec.workspace`, `deployment.spec.environments`, `deployment.spec.tenant` |
-| Structure shared between deployments | a base with `deployment.spec.partial` set to true, used through `deployment.spec.extends` |
-| One base for many instances (spokes, customers) | a `parameterset` per instance, named per role in `meta.params` of the deployment, environment or tenant, read in its base with `${param:<role>.<key>}` |
+| Structure shared between deployments, environments or tenants | a base with `spec.partial` set to true, used through `spec.extends` (same fields on all three kinds) |
+| One base for many instances (spokes, customers) | a `parameterset` per instance, named per role in `meta.params` of the deployment, environment or tenant, read in its base with `${param:<role>.<key>}`; `meta.name_rule` keeps each name in line with its values |
+| Checking parameter sets | an `attributeconfig` with `kind: parameterset, block: values, view: document` (one set's shape), or `block: params, view: effective` on a deployment, environment or tenant (the merged values it receives, one key per role) |
 | Rebinding a provider or asset for one deployment | `deployment.spec.providers`, `deployment.spec.assets` |
 | Pinning an image, chart, remote ref, artifact tag or asset ref | `version.spec.pins`, selected by `deployment.spec.version` |
 | Refusing an image with no tag, a floating tag such as `latest`, or the wrong tag shape | `workspace.spec.image_tag_policy` |
@@ -109,6 +110,12 @@ so. Write `$${...}` for a literal.
 | `${deployment:KEY}` | The deployment being run: `name` is its `meta.name`, `tenant` its `spec.tenant` (an error when it has none). For example `key: ${deployment:name}.tfstate` in a Terraform backend. |
 | `${artifact:NAME.FIELD}` | An artifact's image as the deployment's version pins it: `image_name`, `image_tag` (an error when the artifact has no tag and no pin), `image_ref` (`name:tag`, `name@sha256:...` or `name:tag@sha256:...`), or one part of a `tag@sha256:...` value: `image_tag_name` or `image_digest`. For example `tag: "${artifact:immich.image_tag}"` in a Helm module's `configuration`. Resolved at deploy; a `store: artifact` variable gives the same values to Terraform as a variable. |
 
+One more token is filled in earlier, when the solution loads, not at build or deploy time:
+
+| Token | Resolves to |
+| --- | --- |
+| `${param:ROLE.KEY}` | A value of the parameter sets the document's `extends` chain names for `ROLE` in `meta.params`, merged root first, leaf last. Works in any field of a deployment's, environment's or tenant's `spec` except `extends` and `partial`, reference fields included. A token that is the whole value inserts the value with its type (a list, a map); inside a longer string it needs a single value. Never in `meta`, and never in a secret's `value`. |
+
 How values merge for a deployment:
 
 - `variables`, `secrets` and `features` merge by `key`: a later environment replaces the whole entry. An object
@@ -117,6 +124,14 @@ How values merge for a deployment:
 - The tenant's environments merge before the deployment's own.
 
 ## Known pitfalls
+
+- A `parameterset` holds plain values only: no `${...}` token, and never a secret (it is plain text in git). To
+  see what a document built from bases and parameter sets resolves to, and which file and set each value comes
+  from, run `strata render KIND NAME`; do not work it out by hand.
+- A `partial: true` environment or tenant is a base only: a deployment or tenant cannot list it in `environments`,
+  a deployment cannot name it in `tenant`, and `${value:}` cannot read it. List or name a document built on it.
+- In a YAML flow list or map (`[a, b]`, `{ k: v }`), quote a value holding a token: `['hub-${param:spoke.hub}-env']`.
+- `param_unused` findings are information, not errors: a parameter set may hold more than one document reads.
 
 - A key declared in both `properties` and `variables` anywhere in one deployment's merge chain is an error.
 - `${...}` anywhere in a document, descriptions included, is read as a strata value token. Write `$${...}` for a

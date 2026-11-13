@@ -50,6 +50,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   as written and the role, key and parameter set it read. `-o json` gives the same as data. Secret values are always
   masked. Runs nothing and needs no valid solution, like `deploy list`.
 
+- **The strata agent skill covers parameter sets**: the `${param:}` token, bases for environments and tenants,
+  `meta.name_rule`, the attributeconfig views and the pitfalls. Run `strata sln update` to refresh
+  `.claude/skills/strata/SKILL.md`.
+
 - **A full container image, `ghcr.io/huybrechtsxyz/strata:<version>-full`** (and `latest-full`): strata with
   OpenTofu, Helm 4, the Docker CLI with Compose, Trivy and Checkov, for a pipeline that runs Helm or Compose steps or the CVE and
   Checkov policies. The image you pull today is the slim variant: `strata:<version>` and `latest` are unchanged, and

@@ -75,8 +75,8 @@ def _value(value: Any) -> str:
 
 
 def _detail(origin: FieldOrigin) -> str:
-    if origin.written is None:
-        return ""
+    if origin.written is None or not origin.reads:
+        return ""  # nothing filled in, or a secret: its text and reads are never shown
     reads = ", ".join(
         f"{read.role}{'.' + read.key if read.key else ''} = {_value(read.value)} ({read.parameter_set})"
         for read in origin.reads

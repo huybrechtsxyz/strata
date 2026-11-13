@@ -1064,3 +1064,47 @@ Open questions:
     test_commands_render.py`, and the how-to test checks the origins its page shows. Docs: `strata render` in the
     how-to ("Check it") and `docs/config/parameterset.md` ("Seeing the result"), the CLI table in `docs/README.md`, the command table of the scaffolded agent skill;
     the how-to's "environments do not read parameter sets yet" corrected. CHANGELOG "Added".
+- 2026-11-13: Code review of the branch (phases 1-4); findings on the rendered view fixed:
+  - **A secret never reads a parameter set.** A `${param:}` in an environment's `secrets[].value` is now a load
+    error (`EnvironmentTemplateModel`), enforcing rule 1 instead of only stating it. The render masked the value but
+    printed the read (`spoke.db_password = hunter2`) and `-o json` carried it in `reads` and `params`. The render
+    also drops the reads of a secret field, as a second guard. The exported schema cannot say it: a secret's `value`
+    is typed `Any`.
+  - **`-o json` with a date value** no longer fails: `params`, each read's value and every layer are JSON-shaped
+    (`pydantic_core.to_jsonable_python`, as `model_dump(mode="json")`), so dates and enums also match between the
+    layers and the result.
+  - **An environment or tenant whose resolution failed** is no longer rendered as written: a document that needs
+    resolving (`document_chains.needs_resolving()`) but was not replaced exits 3 (`render_not_resolved`).
+  - **Defaults are never credited to a document.** Layers are dumped with only the fields their author wrote
+    (`exclude_unset`), and a deployment template's layer is validated and dumped as resolution shapes it, so a
+    schema default (a stage's `enabled`, `locking.strategy`) shows as `(default)`.
+  - **One table for named lists and one mask:** the render reads `LIST_MERGE_KEYS` (now public in
+    `deployment_service.py`) and `STORE_MERGE_KEYS` (`environment_service.py`) by field, and masks with `deploy
+    report`'s `********`.
+  - Open, noted for later: (1) ~~a deployment's tenant defaults are credited to the tenant as resolved, so a value the
+    tenant inherited through its own `extends` or parameter sets names the tenant, not its base; rendering the
+    tenant shows the real origin.~~ Fixed the same day, see below. (2) ~~Rendering one deployment resolves every deployment (as slow as `validate` on a
+    large solution), and an error reported once on a base (not per deployment) is left out of the explanation,
+    which then only says to run `strata validate`.~~ Fixed the same day, see below.
+- 2026-11-13: Review item (1) fixed: tenant defaults in a deployment's render name the tenant document that wrote
+  them. The tenant layer is no longer the resolved tenant as one block: its own chain is laid out as the tenant's
+  render lays it out (its base, its parameter sets), and only the paths that become deployment defaults are kept
+  (`spec.environments`, `spec.properties`, `spec.custom`, as `_merge_tenant_defaults()`). A value the tenant
+  inherited from `tenant_base` names `tenant_base` and its file; one filled in from the tenant's parameter set shows
+  the text as written and that set (the tenant's sets, not the deployment's). The deployment's chain still
+  overrides the tenant layer per field. `rendered_view.py` now builds a `_Writer` per normalized path from each
+  chain with that chain's own parameter sets, so two chains with different sets can feed one render. Test:
+  `test_tenant_defaults_name_the_tenant_document_that_wrote_them`.
+- 2026-11-13: Review item (2) fixed, and the agent skill brought up to date.
+  - `resolve_deployments(index, names=)` resolves only the named deployments: their chains and findings, and no
+    `param_unused` (a whole-solution finding). `strata render deployment` passes the one name, so it no longer
+    costs a full resolution, and every finding the resolver returns is about that deployment, so all of them are
+    shown when it does not resolve (before, a finding reported once on a base, with no `(for ...)`, was filtered
+    out). Test: `test_rendering_one_deployment_resolves_only_its_chain`.
+  - The scaffolded agent skill (`src/strata/templates/agent/strata/SKILL.md`) now covers parameter sets: the
+    `${param:}` token (load time, where it may appear, never in `meta` or a secret's value), `extends`/`partial` on
+    environments and tenants, `meta.name_rule`, both attributeconfig views, and four pitfalls (plain values and no
+    secrets in a set, `strata render` instead of working a chain out by hand, partial environments and tenants
+    cannot be used, quoting a token in a YAML flow list, `param_unused` is information). The kinds table is
+    generated, so it already listed `parameterset`.
+  - Phase 5 (consumer migration) is planned for after the release.

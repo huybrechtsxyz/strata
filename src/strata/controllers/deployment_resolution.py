@@ -58,7 +58,7 @@ the sets the chain names), so leaves that name the same sets, or none,
 still share their bases' work.
 """
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -267,12 +267,16 @@ def resolve_deployment_chains(index: DocumentIndex) -> tuple[dict[str, Deploymen
     return {name: deployment.model for name, deployment in resolved.items()}, diagnostics
 
 
-def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeployment], Diagnostics]:
+def resolve_deployments(
+    index: DocumentIndex, names: Collection[str] | None = None
+) -> tuple[dict[str, ResolvedDeployment], Diagnostics]:
     """Resolve every deployment's `extends` chain into a complete document.
 
     Args:
         index: The loaded `DocumentIndex`. Assumes Phase 1 already passed —
             same precondition as `run_semantic_checks`.
+        names: Resolve only these deployments (`strata render`): their chains and their findings, and no
+            `param_unused`, which is about the whole solution. `None` resolves every deployment.
 
     Returns:
         `(resolved, diagnostics)`. `resolved` maps a deployment's own name to
@@ -296,6 +300,8 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
 
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         name = entry.ref.name
+        if names is not None and name not in names:
+            continue
         deployment = cast(AnyDeploymentModel, entry.model)
 
         chain = chain_of(entry, index, chains, poisoned, diagnostics)
@@ -337,7 +343,8 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
 
         resolved[name] = ResolvedDeployment(model=merged_model, params=params, param_sets=param_sets, chain=chain)
 
-    diagnostics.extend(_unused_values(index, chains))
+    if names is None:
+        diagnostics.extend(_unused_values(index, chains))
     return resolved, diagnostics
 
 

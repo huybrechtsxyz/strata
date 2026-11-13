@@ -71,6 +71,7 @@ from strata.models.store_model import (
 )
 from strata.models.template_model import DocumentTemplateModel, ParamSetNames, check_name_rule
 from strata.utils.names import check_unique_names
+from strata.utils.param_tokens import holds_param_tokens
 
 _PARTIAL_DESCRIPTION = (
     "When true this is a base for other environments (`extends`), not an environment of its own: no deployment or "
@@ -260,3 +261,19 @@ class EnvironmentTemplateModel(DocumentTemplateModel):
     def validate_kind(cls, v: PlatformKind) -> PlatformKind:
         """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
         return validate_kind_matches(v, PlatformKind.ENVIRONMENT)
+
+    @model_validator(mode="after")
+    def validate_no_secret_from_a_parameter_set(self) -> "EnvironmentTemplateModel":
+        """A secret's `value` never reads a parameter set: a parameter set is plain text in git (rule 1)."""
+        secrets = getattr(self.spec, "secrets", None)
+        found = [
+            f"spec.secrets[{position}].value"
+            for position, item in enumerate(secrets if isinstance(secrets, list) else [])
+            if isinstance(item, dict) and holds_param_tokens(item.get("value"))
+        ]
+        if found:
+            raise ValueError(
+                f"{', '.join(found)} reads a parameter set, which is plain text in git and must not hold a secret. "
+                "Keep the secret in its store and write its name or reference in the value."
+            )
+        return self

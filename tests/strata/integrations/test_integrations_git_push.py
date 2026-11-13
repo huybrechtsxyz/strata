@@ -311,15 +311,21 @@ def test_prepare_git_credentials_ssh_key_passphrase_missing_value_raises():
         prepare_git_credentials(auth, {"deploy-key-ref": "key-material"})
 
 
-def test_prepare_git_credentials_ssh_key_passphrase_missing_value_leaves_no_tempdir_behind():
+def test_prepare_git_credentials_ssh_key_passphrase_missing_value_leaves_no_tempdir_behind(
+    tmp_path: Path, monkeypatch
+):
     """Regression test for a bug introduced by the passphrase fix itself,
     found on a follow-up review (2026-10-02): the passphrase check used to
     run *after* `tempfile.mkdtemp()`/writing the private key, so raising
     here would leak that tempdir (with the private key still in it)
     forever — the function never returns a `cleanup` callback for anyone
     to call when it raises. Every raise must happen before any filesystem
-    side effect."""
-    existing_tmp_dirs = {p for p in Path(tempfile.gettempdir()).iterdir() if p.name.startswith("strata-gitops-ssh-")}
+    side effect.
+
+    `mkdtemp` is pointed at this test's own empty directory: the shared
+    system temp directory would also see tempdirs that other tests create
+    and remove at the same moment under `pytest -n`."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
 
     auth = AuthenticationModel(
         method="ssh_key",
@@ -328,8 +334,8 @@ def test_prepare_git_credentials_ssh_key_passphrase_missing_value_leaves_no_temp
     with pytest.raises(IntegrationError):
         prepare_git_credentials(auth, {"deploy-key-ref": "key-material"})
 
-    new_tmp_dirs = {p for p in Path(tempfile.gettempdir()).iterdir() if p.name.startswith("strata-gitops-ssh-")}
-    assert new_tmp_dirs == existing_tmp_dirs, "a raise must never leave a new strata-gitops-ssh- tempdir behind"
+    leaked = [p.name for p in tmp_path.iterdir()]
+    assert leaked == [], "a raise must never leave a new strata-gitops-ssh- tempdir behind"
 
 
 def test_prepare_git_credentials_ssh_key_without_passphrase_sets_no_ssh_askpass():

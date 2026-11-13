@@ -43,7 +43,8 @@ The usual escape works: `$${TOKEN}` is the literal text `${TOKEN}`, as in any ot
 example a Helm chart's own substitution syntax).
 
 A parameter set is plain text in git, so it must not hold secrets. Keep `${secret:}` in the `spec`
-of the document that needs the secret.
+of the document that needs the secret. A `${param:}` token in an environment's
+`secrets[].value` is a load error, so a secret can never be filled in from a parameter set.
 
 ## Example
 

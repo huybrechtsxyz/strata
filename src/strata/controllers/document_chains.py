@@ -266,7 +266,7 @@ def resolve_environments_and_tenants(index: DocumentIndex) -> Diagnostics:
         poisoned: set[str] = set()
         for entry in index.all_of(kind):
             chain = chain_of(entry, index, cache, poisoned, diagnostics)
-            if chain is None or _is_partial(entry.as_written) or not _needs_resolving(entry.as_written, chain):
+            if chain is None or _is_partial(entry.as_written) or not needs_resolving(entry.as_written, chain):
                 continue
             model = _resolve(entry, chain, index, diagnostics)
             if model is not None:
@@ -280,7 +280,7 @@ def _is_partial(document: PlatformBaseModel) -> bool:
     return bool(getattr(getattr(document, "spec", None), "partial", False))
 
 
-def _needs_resolving(document: PlatformBaseModel, chain: tuple[str, ...]) -> bool:
+def needs_resolving(document: PlatformBaseModel, chain: tuple[str, ...]) -> bool:
     """Whether `document` differs from what it resolves to, or has a rule or parameter set to check."""
     meta = getattr(document, "meta", None)
     return (

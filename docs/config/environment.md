@@ -81,7 +81,9 @@ spec:
   `partial` may be extended and listed.
 - A base may read [parameter sets](parameterset.md): `deploy_code: ${param:customer.code}` in the
   base, `meta.params: { customer: customer-acmep01 }` in the child. A spec that holds `${param:}`
-  is validated once per environment built on it, after the values are filled in.
+  is validated once per environment built on it, after the values are filled in. A secret's
+  `value` never reads a parameter set: that is a load error, since a parameter set is plain text
+  in git.
 - A cycle (`a` extends `b` extends `a`) is `circular_extends`; a base that does not exist is an
   `unknown_reference` on `spec.extends`.
 

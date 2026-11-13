@@ -22,11 +22,16 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import ValidationError
+from pydantic_core import to_jsonable_python
+
+from strata.controllers.deployment_report_view import MASK
 from strata.controllers.deployment_resolution import resolve_deployments
 from strata.controllers.document_chains import (
     CircularExtendsError,
     ParamSets,
     chain_param_sets,
+    needs_resolving,
     require,
     resolve_chain,
     set_values,
@@ -34,19 +39,22 @@ from strata.controllers.document_chains import (
 )
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import DeploymentSpecModel, DeploymentTemplateModel
 from strata.models.template_model import DocumentTemplateModel
 from strata.models.tenant_model import TenantModel
+from strata.services.deployment_service import LIST_MERGE_KEYS
+from strata.services.environment_service import STORE_MERGE_KEYS
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.param_tokens import ParamOrigin, merge_param_values, substitute_params
 
 #: The kinds `render_document()` renders: those built with `extends` and parameter sets.
 RENDERABLE_KINDS = (PlatformKind.DEPLOYMENT, PlatformKind.ENVIRONMENT, PlatformKind.TENANT)
 
-#: The field that names an item of a list of named items, in the order they are tried.
-_IDENTITY_KEYS = ("step", "slot", "key")
+#: Each list of named items and the field that names its items: the lists the merges merge by name.
+_KEYED_LISTS: dict[str, str] = {**LIST_MERGE_KEYS, **STORE_MERGE_KEYS}
 
-#: What a masked secret value is rendered as.
-SECRET_MASK = "***"
+#: What a masked secret value is rendered as: the same mask as `deploy report`.
+SECRET_MASK = MASK
 
 
 @dataclass(frozen=True)
@@ -134,7 +142,7 @@ def render_document(index: DocumentIndex, kind: PlatformKind, name: str) -> tupl
     except CircularExtendsError:  # reported by `strata validate`
         chain = None
     param_sets = chain_param_sets(kind, chain, index) if chain is not None else None
-    model = _resolved_model(index, entry, diagnostics)
+    model = _resolved_model(index, entry, chain, diagnostics) if chain is not None else None
     if chain is None or param_sets is None or model is None:
         diagnostics.error(
             f"{kind.value.capitalize()} '{name}' does not resolve; run 'strata validate' for the reason.",
@@ -145,7 +153,10 @@ def render_document(index: DocumentIndex, kind: PlatformKind, name: str) -> tupl
 
     values = set_values(param_sets, index)
     params = merge_param_values(param_sets, values)
-    layers = _layers(index, kind, chain, param_sets, params, model)
+    writers: dict[str, _Writer] = {}
+    if kind is PlatformKind.DEPLOYMENT and model.spec.tenant:
+        writers.update(_tenant_default_writers(index, model.spec.tenant))
+    writers.update(_writers(_layers(index, kind, chain, param_sets, params), param_sets, values))
     spec = model.spec.model_dump(mode="json", exclude_none=True, exclude_unset=True)
     secret_paths = kind is PlatformKind.ENVIRONMENT
     rendered = RenderedDocument(
@@ -154,25 +165,28 @@ def render_document(index: DocumentIndex, kind: PlatformKind, name: str) -> tupl
         source=str(entry.source),
         chain=chain,
         param_sets=dict(param_sets),
-        params=params,
+        params=to_jsonable_python(params),
         spec=_mask_secrets(spec) if secret_paths else spec,
-        fields=tuple(_origins(spec, layers, param_sets, values, mask=secret_paths)),
+        fields=tuple(_origins(spec, writers, mask=secret_paths)),
     )
     return rendered, diagnostics
 
 
-def _resolved_model(index: DocumentIndex, entry: IndexEntry, diagnostics: Diagnostics) -> Any:
+def _resolved_model(index: DocumentIndex, entry: IndexEntry, chain: tuple[str, ...], diagnostics: Diagnostics) -> Any:
     """The model strata uses for `entry`: the resolved deployment, or the environment or tenant in the index."""
     if entry.ref.kind is PlatformKind.DEPLOYMENT:
-        resolved, found = resolve_deployments(index)
+        # Only this deployment's chain is resolved, so every finding is about it: one reported once on its base
+        # (a literal name the base writes) included.
+        resolved, found = resolve_deployments(index, names={entry.ref.name})
         if entry.ref.name in resolved:
             return resolved[entry.ref.name].model
-        mine = f"(for {entry.ref.name})"
-        for finding in found.errors:
-            if finding.message.endswith(mine) or finding.source == str(entry.source):
-                diagnostics.items.append(finding)
+        diagnostics.items.extend(found.errors)
         return None
-    return None if isinstance(entry.model, DocumentTemplateModel) else entry.model
+    if isinstance(entry.model, DocumentTemplateModel):
+        return None
+    if entry.written is None and needs_resolving(entry.model, chain):
+        return None  # resolution failed, so the index still holds the document as written (reported at load)
+    return entry.model
 
 
 def _layers(
@@ -181,43 +195,42 @@ def _layers(
     chain: tuple[str, ...],
     param_sets: ParamSets,
     params: dict[str, dict[str, Any]],
-    model: Any,
 ) -> list[_Layer]:
-    """The layers merged into the document, lowest precedence first, each substituted as resolution does."""
+    """The documents of `chain` (leaf first), root first, each substituted as resolution does."""
     layers: list[_Layer] = []
-    if kind is PlatformKind.DEPLOYMENT and model.spec.tenant:
-        tenant_entry = index.get(PlatformKind.TENANT, model.spec.tenant)
-        if tenant_entry is not None and isinstance(tenant_entry.model, TenantModel):
-            tenant = tenant_entry.model.spec  # tenant defaults (ADR-0024): the layer under the chain
-            defaults = {"environments": tenant.environments, "properties": tenant.properties, "custom": tenant.custom}
-            layers.append(
-                _Layer(
-                    PlatformKind.TENANT,
-                    tenant_entry.ref.name,
-                    str(tenant_entry.source),
-                    {key: value for key, value in defaults.items() if value},
-                    {},
-                )
-            )
     for holder in reversed(chain):
         holder_entry = require(index, kind, holder)
         written: Any = holder_entry.as_written
         origins: dict[str, ParamOrigin] = {}
-        own, _ = substitute_params(written.spec.model_dump(exclude_none=True), params, param_sets, "spec", origins)
-        layers.append(_Layer(kind, holder, str(holder_entry.source), own, origins))
+        own, _ = substitute_params(
+            written.spec.model_dump(exclude_none=True, exclude_unset=True), params, param_sets, "spec", origins
+        )
+        if isinstance(written, DeploymentTemplateModel):
+            own = _as_validated(own)
+        layers.append(_Layer(kind, holder, str(holder_entry.source), to_jsonable_python(own), origins))
     return layers
 
 
-def _identity(item: Any) -> tuple[str, Any] | None:
-    if isinstance(item, dict):
-        for key in _IDENTITY_KEYS:
-            if key in item:
-                return key, item[key]
+def _as_validated(spec: dict[str, Any]) -> dict[str, Any]:
+    """A deployment template's substituted spec, shaped as resolution shapes it before merging: validated, then
+    dumped with only the fields its author wrote, so a default is never credited to the template."""
+    try:
+        model = DeploymentSpecModel.model_validate(spec)
+    except ValidationError:
+        return spec  # the deployment resolved, so this does not happen; the raw spec is the next best match
+    return model.model_dump(exclude_none=True, exclude_unset=True)
+
+
+def _identity(field: str, item: Any) -> tuple[str, Any] | None:
+    """The name of `item` in the list `field`, when the merges merge that list by name."""
+    key = _KEYED_LISTS.get(field)
+    if key is not None and isinstance(item, dict) and key in item:
+        return key, item[key]
     return None
 
 
 def _text(value: Any) -> str:
-    return json.dumps(value, default=str, sort_keys=True)
+    return json.dumps(to_jsonable_python(value), sort_keys=True)
 
 
 def _leaves(node: Any, raw: str, normal: str) -> Iterator[tuple[str, str, Any]]:
@@ -230,8 +243,9 @@ def _leaves(node: Any, raw: str, normal: str) -> Iterator[tuple[str, str, Any]]:
         for key, child in node.items():
             yield from _leaves(child, f"{raw}.{key}", f"{normal}.{key}")
     elif isinstance(node, list) and node:
+        field_name = raw.rsplit(".", 1)[-1]
         for position, item in enumerate(node):
-            identity = _identity(item)
+            identity = _identity(field_name, item)
             if identity is not None:
                 segment = f"[{identity[0]}={_text(identity[1])}]"
             elif isinstance(item, (dict, list)):
@@ -243,40 +257,83 @@ def _leaves(node: Any, raw: str, normal: str) -> Iterator[tuple[str, str, Any]]:
         yield normal, raw, node
 
 
-def _origins(
-    spec: dict[str, Any],
-    layers: list[_Layer],
-    param_sets: ParamSets,
-    values: dict[str, dict[str, Any]],
-    *,
-    mask: bool,
-) -> Iterator[FieldOrigin]:
-    """Every leaf of `spec`, with the last layer that wrote it."""
-    written_by: dict[str, tuple[_Layer, ParamOrigin | None]] = {}
+@dataclass(frozen=True)
+class _Writer:
+    """The document that wrote a value, and for a filled-in value the text as written and what it read."""
+
+    kind: PlatformKind
+    name: str
+    source: str
+    written: str | None
+    reads: tuple[ValueRead, ...]
+
+
+def _writers(layers: list[_Layer], param_sets: ParamSets, values: dict[str, dict[str, Any]]) -> dict[str, _Writer]:
+    """Normalized path -> the last of `layers` (lowest precedence first) that wrote it.
+
+    `param_sets` and `values` are those of the chain the layers belong to: they name the set each read came from.
+    """
+    writers: dict[str, _Writer] = {}
     for layer in layers:
         for normal, raw, _ in _leaves(layer.spec, "spec", "spec"):
-            written_by[normal] = (layer, _origin_at(raw, layer.origins))
+            origin = _origin_at(raw, layer.origins)
+            reads = tuple(
+                ValueRead(
+                    read.role,
+                    read.key,
+                    to_jsonable_python(read.value),
+                    value_supplier(param_sets, values, read.role, read.key),
+                )
+                for read in (origin.reads if origin else ())
+            )
+            writers[normal] = _Writer(layer.kind, layer.name, layer.source, origin.text if origin else None, reads)
+    return writers
+
+
+#: The fields a tenant gives each of its deployments as defaults (ADR-0024, `_merge_tenant_defaults()`).
+_TENANT_DEFAULT_FIELDS = ("spec.environments", "spec.properties", "spec.custom")
+
+
+def _tenant_default_writers(index: DocumentIndex, tenant: str) -> dict[str, _Writer]:
+    """Who wrote each value a deployment receives from `tenant`'s defaults: the tenant's own chain, read as the
+    tenant's render reads it, so a value from the tenant's base or parameter sets names that document and set."""
+    entry = index.get(PlatformKind.TENANT, tenant)
+    if entry is None or not isinstance(entry.model, TenantModel):
+        return {}
+    try:
+        chain = resolve_chain(PlatformKind.TENANT, tenant, index, {}, set(), visiting=[])
+    except CircularExtendsError:
+        chain = None
+    param_sets = chain_param_sets(PlatformKind.TENANT, chain, index) if chain is not None else None
+    if chain is None or param_sets is None:
+        return {}  # the tenant resolved as written (reported at load): its values show as written by nobody
+    values = set_values(param_sets, index)
+    layers = _layers(index, PlatformKind.TENANT, chain, param_sets, merge_param_values(param_sets, values))
+    return {
+        normal: writer
+        for normal, writer in _writers(layers, param_sets, values).items()
+        if any(normal == field or normal.startswith((f"{field}.", f"{field}[")) for field in _TENANT_DEFAULT_FIELDS)
+    }
+
+
+def _origins(spec: dict[str, Any], writers: dict[str, _Writer], *, mask: bool) -> Iterator[FieldOrigin]:
+    """Every leaf of `spec`, with the document that wrote it."""
     for normal, raw, value in _leaves(spec, "spec", "spec"):
         secret = mask and _is_secret_value(raw)
-        found = written_by.get(normal)
-        if found is None and value in ({}, []):
+        writer = writers.get(normal)
+        if writer is None and value in ({}, []):
             continue  # an empty block a merge added (`custom: {}` from tenant defaults): no value to explain
-        if found is None:
+        if writer is None:
             yield FieldOrigin(raw, SECRET_MASK if secret else value, None, None, None)
             continue
-        layer, origin = found
-        reads = tuple(
-            ValueRead(read.role, read.key, read.value, value_supplier(param_sets, values, read.role, read.key))
-            for read in (origin.reads if origin else ())
-        )
         yield FieldOrigin(
             raw,
             SECRET_MASK if secret else value,
-            layer.kind.value,
-            layer.name,
-            layer.source,
-            (SECRET_MASK if secret else origin.text) if origin else None,
-            reads,
+            writer.kind.value,
+            writer.name,
+            writer.source,
+            (SECRET_MASK if secret and writer.written is not None else writer.written),
+            () if secret else writer.reads,  # a secret's reads are never shown
         )
 
 

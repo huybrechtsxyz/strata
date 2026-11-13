@@ -6,11 +6,14 @@ from a base, a named list item overridden by the leaf, plain list items appended
 inserting a list, a deployment's tenant defaults, and an environment's stores, with secrets always masked.
 """
 
+import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from strata.controllers.deployment_resolution import resolve_deployments
 from strata.controllers.rendered_view import SECRET_MASK, FieldOrigin, RenderedDocument, render_document
 from strata.controllers.solution_context import open_solution
 from strata.models.common_models import PlatformKind
@@ -203,3 +206,127 @@ def test_a_deployment_that_does_not_resolve(tmp_path):
     assert rendered is None
     codes = [finding.code for finding in diagnostics.errors]
     assert "param_missing" in codes and codes[-1] == "render_not_resolved"
+
+
+# ---------------------------------------------------------------------------
+# Review fixes
+# ---------------------------------------------------------------------------
+
+
+def test_tenant_defaults_name_the_tenant_document_that_wrote_them(tmp_path):
+    """A value a tenant inherited through its own `extends`, or filled in from its own parameter set, names that
+    document and set in the deployment's render, not the tenant the deployment selects."""
+    documents = [
+        *[doc for doc in DOCUMENTS if doc[:2] != ("tenant", "acme")],
+        ("parameterset", "tenant-acme", "  values: { crm: crm-42 }\n", ""),
+        (
+            "tenant",
+            "tenant_base",
+            "  partial: true\n  environments: [solution-env]\n"
+            "  properties: { owner: platform-team, crm: '${param:tenant.crm}' }\n",
+            "",
+        ),
+        (
+            "tenant",
+            "acme",
+            "  extends: tenant_base\n  display_name: Acme\n  properties: { tier: gold }\n",
+            "  params: { tenant: tenant-acme }\n",
+        ),
+    ]
+    fields = _by_path(_render(tmp_path, PlatformKind.DEPLOYMENT, "bootstrap-acme-001", documents))
+    owner = fields["spec.properties.owner"]
+    assert (owner.document_kind, owner.document) == ("tenant", "tenant_base")
+    assert owner.source is not None and owner.source.endswith("tenant-tenant_base.yaml")
+    crm = fields["spec.properties.crm"]
+    assert (crm.document, crm.written) == ("tenant_base", "${param:tenant.crm}")
+    assert _reads(crm) == [("tenant", "crm", "crm-42", "tenant-acme")]  # the tenant's set, not the deployment's
+    assert fields["spec.properties.tier"].document == "stack_base"  # the deployment still wins over the tenant
+    solution_env = next(origin for origin in fields.values() if origin.value == "solution-env")
+    assert solution_env.document == "stack_base"  # listed by both: the later layer, the deployment's base, wins
+
+
+def test_rendering_one_deployment_resolves_only_its_chain(tmp_path):
+    """Another deployment's problems are neither reported nor paid for, and every finding about this one is."""
+    documents = [
+        *DOCUMENTS,
+        ("deployment", "other", "  extends: bootstrap_base\n", "  params: { spoke: nope }\n"),  # an unknown set
+        ("deployment", "broken", "  extends: bootstrap_base\n", ""),  # no sets named: param_missing
+    ]
+    context = _open(tmp_path, documents)
+    index = context.controller.index
+    resolved, found = resolve_deployments(index, names={"bootstrap-acme-001"})
+    assert list(resolved) == ["bootstrap-acme-001"]
+    assert found.items == []  # no param_unused either: that is about the whole solution
+
+    rendered, diagnostics = render_document(index, PlatformKind.DEPLOYMENT, "broken")
+    assert rendered is None
+    messages = [finding.message for finding in diagnostics.errors]
+    assert messages[:-1] and all("(for broken)" in message for message in messages[:-1])
+    assert diagnostics.errors[-1].code == "render_not_resolved"
+
+
+def test_an_environment_that_did_not_resolve_is_not_rendered_as_written(tmp_path):
+    """A leaf with no token of its own stays as written in the index when its base's value is missing."""
+    documents = [
+        ("parameterset", "c1", "  values: { code: c1 }\n", ""),
+        ("environment", "base", "  partial: true\n  properties: { code: '${param:customer.nope}' }\n", ""),
+        ("environment", "leaf", "  extends: base\n  properties: { own: 1 }\n", "  params: { customer: c1 }\n"),
+    ]
+    context = _open(tmp_path, documents)
+    assert "param_missing" in [finding.code for finding in context.diagnostics.errors]
+    rendered, diagnostics = render_document(context.controller.index, PlatformKind.ENVIRONMENT, "leaf")
+    assert rendered is None
+    assert [finding.code for finding in diagnostics.errors] == ["render_not_resolved"]
+
+
+def test_a_default_is_never_credited_to_a_document(tmp_path):
+    documents = [
+        *DOCUMENTS[:-1],
+        (
+            "deployment",
+            "bootstrap-acme-001",
+            "  extends: bootstrap_base\n  stages:\n    - step: tf\n  locking: { strategy: '${param:spoke.lock}' }\n",
+            "  params: { hub: hub-hub01, spoke: spoke-acme-001 }\n",
+        ),
+    ]
+    documents = [
+        (
+            kind,
+            name,
+            spec.replace("customers: [acmep01, acmep02]", "customers: [acmep01, acmep02], lock: delegate"),
+            meta,
+        )
+        for kind, name, spec, meta in documents
+    ]
+    fields = _by_path(_render(tmp_path, PlatformKind.DEPLOYMENT, "bootstrap-acme-001", documents))
+    assert fields["spec.stages[0].step"].document == "bootstrap-acme-001"
+    assert fields["spec.stages[0].enabled"].document is None  # a schema default, written by nobody
+    assert fields["spec.locking.strategy"].written == "${param:spoke.lock}"
+    assert fields["spec.locking.enabled"].document is None
+
+
+def test_a_date_value_renders_as_json_text(tmp_path):
+    documents = [
+        ("parameterset", "c1", "  values: { go_live: 2026-12-31 }\n", ""),
+        ("environment", "base", "  partial: true\n  properties: { go_live: '${param:customer.go_live}' }\n", ""),
+        ("environment", "leaf", "  extends: base\n", "  params: { customer: c1 }\n"),
+    ]
+    rendered = _render(tmp_path, PlatformKind.ENVIRONMENT, "leaf", documents)
+    json.dumps(asdict(rendered))  # what `-o json` does: no TypeError on a date
+    assert rendered.params == {"customer": {"go_live": "2026-12-31"}}
+    assert _reads(_by_path(rendered)["spec.properties.go_live"]) == [("customer", "go_live", "2026-12-31", "c1")]
+
+
+def test_a_secret_never_reads_a_parameter_set(tmp_path):
+    documents = [
+        ("parameterset", "c1", "  values: { db: hunter2 }\n", ""),
+        (
+            "environment",
+            "leaf",
+            "  secrets:\n    - { key: db, store: constant, value: '${param:customer.db}' }\n",
+            "  params: { customer: c1 }\n",
+        ),
+    ]
+    context = _open(tmp_path, documents)
+    finding = next(f for f in context.diagnostics.errors if "spec.secrets[0].value reads a parameter set" in f.message)
+    assert finding.source is not None and finding.source.endswith("environment-leaf.yaml")
