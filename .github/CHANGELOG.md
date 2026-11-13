@@ -294,7 +294,7 @@ default, so the image policies judge the images they run.
 - **The container image** (`ghcr.io/huybrechtsxyz/strata`) now has `git` and `ssh`, which strata calls itself:
   a `build run` with a remote no longer fails in it, and `ssh_key` auth works. git trusts a checkout mounted with
   `docker run -v`, so the audit record and the image gate get the commit SHA instead of silently none. The user has a
-  home directory. The image installs the dependency versions in `uv.lock`, the ones CI tested, with a pinned `uv`.
+  home directory. The image is built with a pinned `uv`.
   Provisioner tools stay out of it; see the new full variant under "Added".
 - **An `sbom.json` that cannot be read no longer crashes a run.**
   - The image gate (`deploy run`, `policy findings`) follows `on_missing_data` when the file is locked or has no
