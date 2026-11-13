@@ -29,6 +29,10 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.value_paths import VALUE_PATH_MISSING, walk_value_path
 from strata.utils.value_tokens import extract_value_tokens, has_value_tokens
 
+#: Kinds whose `partial: true` documents are bases for `extends` only, never read
+#: (base-parameters-v2.md (work doc), "Bases cannot be used").
+_BASE_KINDS = frozenset({PlatformKind.ENVIRONMENT, PlatformKind.TENANT})
+
 
 def _iter_document_strings(value: Any, path: str = "") -> list[tuple[str, str]]:
     """Yield every `(dotted_path, string)` pair inside a document's dumped JSON.
@@ -176,7 +180,9 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
         # is a real, working reference shape (this design's own "Problem"
         # example) — only the source-side scan for where a token is *written*
         # is narrowed.
-        dumped = entry.model.model_dump(by_alias=True, mode="json")
+        # Scanned as written: a token an environment or tenant inherits through `extends` is its base's, and is
+        # reported once, there (base-parameters-v2.md (work doc), phase 2).
+        dumped = entry.as_written.model_dump(by_alias=True, mode="json")
         dumped.pop("meta", None)
         for location, text in _iter_document_strings(dumped):
             for token_kind, full_key in extract_value_tokens(text):
@@ -212,6 +218,16 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
                         source=str(entry.source),
                         location=location,
                         code="value_reference_unknown_document",
+                    )
+                    continue
+                if target_kind in _BASE_KINDS and getattr(getattr(target.model, "spec", None), "partial", False):
+                    diagnostics.error(
+                        f"'${{value:{full_key}}}' reads '{target_kind.value}/{name}', which is 'partial: true': a "
+                        f"base for other {target_kind.value}s' extends, whose values are only complete in a "
+                        f"{target_kind.value} built on it. Read that {target_kind.value} instead.",
+                        source=str(entry.source),
+                        location=location,
+                        code="value_reference_to_base",
                     )
                     continue
                 path_segments = segments[2:]

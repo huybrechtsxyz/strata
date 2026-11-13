@@ -155,6 +155,8 @@ def render_schema(model_cls: type[BaseModel]) -> dict[str, Any]:
 #: which this layer cannot import.
 _TEMPLATE_SPECS: dict[PlatformKind, tuple[str, frozenset[str]]] = {
     PlatformKind.DEPLOYMENT: ("DeploymentSpecModel", frozenset({"partial", "extends"})),
+    PlatformKind.ENVIRONMENT: ("EnvironmentSpecModel", frozenset({"partial", "extends"})),
+    PlatformKind.TENANT: ("TenantSpecModel", frozenset({"partial", "extends"})),
 }
 
 #: What a templated value may also be: a string holding a `${param:}` token (`hub-${param:spoke.hub}-env`), or one
@@ -162,7 +164,7 @@ _TEMPLATE_SPECS: dict[PlatformKind, tuple[str, frozenset[str]]] = {
 _PARAM_TOKEN_SCHEMA: dict[str, Any] = {
     "type": "string",
     "pattern": r"\$\{param:[A-Za-z0-9_.-]+\}",
-    "description": "Filled from the deployment's parameter sets when the solution loads (`${param:<role>.<key>}`).",
+    "description": "Filled from the document's parameter sets when the solution loads (`${param:<role>.<key>}`).",
 }
 
 #: Where the token schema sits in an exported schema, and the branch that points at it: defined once, not inlined

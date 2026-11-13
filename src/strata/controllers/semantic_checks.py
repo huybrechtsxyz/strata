@@ -37,6 +37,7 @@ from referencing.exceptions import Unresolvable
 
 from strata.controllers.artifact_tokens import artifact_token_values, helm_delivered_artifacts
 from strata.controllers.deployment_resolution import deployment_of, deployment_workspace
+from strata.controllers.document_chains import chain_params
 from strata.controllers.reachable_documents import documents_reached_by_deployment, reachable_environment_names
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
@@ -68,6 +69,7 @@ from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import RemoteFetch, RemoteType, SolutionModel
+from strata.models.template_model import DocumentTemplateModel
 from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.version_model import VersionModel
@@ -139,6 +141,7 @@ def run_semantic_checks(
     resolved = resolved_deployments or {}
     diagnostics = Diagnostics()
     diagnostics.extend(_check_deployments(index, resolved, root, solution))
+    diagnostics.extend(_check_base_usage(index, resolved))
     diagnostics.extend(_check_tenants(index))
     diagnostics.extend(_check_providers(index))
     diagnostics.extend(_check_resources(index))
@@ -397,9 +400,9 @@ def _check_deployment_tenant_geography(index: DocumentIndex, deployment: Deploym
     tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
     if tenant_entry is None:
         return diagnostics  # reference existence already reports this
-    tenant = cast(TenantModel, tenant_entry.model)
-    if not tenant.spec.geographies:
-        return diagnostics
+    tenant = tenant_entry.model
+    if not isinstance(tenant, TenantModel) or not tenant.spec.geographies:
+        return diagnostics  # a partial tenant template: naming it is tenant_not_selectable
 
     workspace = deployment_workspace(index, deployment)
     if workspace is None:
@@ -721,6 +724,58 @@ def _check_version_workspace(index: DocumentIndex, resolved: dict[str, Deploymen
 
 
 # ---------------------------------------------------------------------------
+# Deployment/Tenant -> a partial environment or tenant: a base is never used
+# (base-parameters-v2.md (work doc), "Bases cannot be used")
+# ---------------------------------------------------------------------------
+
+
+def _is_partial_base(index: DocumentIndex, kind: PlatformKind, name: str) -> bool:
+    entry = index.get(kind, name)
+    return entry is not None and bool(getattr(getattr(entry.model, "spec", None), "partial", False))
+
+
+def _check_base_usage(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
+    """No deployment or tenant lists a `partial: true` environment, and no deployment names a partial tenant.
+
+    A partial environment or tenant exists only for `extends`. Checked where a list is in use: on each deployable
+    deployment, resolved (so a base's list counts), and on each tenant that is not itself partial (after its own
+    `extends`). A partial deployment or tenant is not checked itself, so a base that lists one is reported once per
+    document built on it.
+    """
+    diagnostics = Diagnostics()
+    listers: list[tuple[IndexEntry, Any]] = []
+    for entry in index.all_of(PlatformKind.DEPLOYMENT):
+        deployment = deployment_of(entry, resolved)
+        if deployment is None or deployment.spec.partial:
+            continue
+        listers.append((entry, deployment))
+        tenant = deployment.spec.tenant
+        if tenant and _is_partial_base(index, PlatformKind.TENANT, tenant):
+            diagnostics.error(
+                f"Deployment '{entry.ref.name}' names tenant '{tenant}', which is 'partial: true': a base for "
+                "other tenants' extends, not a tenant of its own. Name a tenant built on it.",
+                source=str(entry.source),
+                location="spec.tenant",
+                code="tenant_not_selectable",
+            )
+    for entry in index.all_of(PlatformKind.TENANT):
+        if isinstance(entry.model, TenantModel) and not entry.model.spec.partial:
+            listers.append((entry, entry.model))
+    for entry, document in listers:
+        for position, name in enumerate(document.spec.environments or []):
+            if _is_partial_base(index, PlatformKind.ENVIRONMENT, name):
+                diagnostics.error(
+                    f"{entry.ref.kind.value.capitalize()} '{entry.ref.name}' lists environment '{name}', which is "
+                    "'partial: true': a base for other environments' extends, not an environment of its own. "
+                    "List an environment built on it.",
+                    source=str(entry.source),
+                    location=f"spec.environments.{position}",
+                    code="environment_not_listable",
+                )
+    return diagnostics
+
+
+# ---------------------------------------------------------------------------
 # Tenant -> ProviderConfig: declared geographies are real
 # ---------------------------------------------------------------------------
 
@@ -731,7 +786,9 @@ def _check_tenants(index: DocumentIndex) -> Diagnostics:
         entry.ref.name: cast(ProviderConfigModel, entry.model) for entry in index.all_of(PlatformKind.PROVIDERCONFIG)
     }
     for entry in index.all_of(PlatformKind.TENANT):
-        tenant = cast(TenantModel, entry.model)
+        tenant = entry.model
+        if not isinstance(tenant, TenantModel):
+            continue  # a partial template: checked in the tenants that resolve through it
         service = TenantService.from_model(tenant)
         diagnostics.extend(
             service.validate_geographies_against_provider_configs(provider_configs), source=str(entry.source)
@@ -818,7 +875,12 @@ def _check_attributeconfig_document_view(
     diagnostics = Diagnostics()
     target = attributeconfig.spec.target
     selector = target.selector or {}
-    matches = [candidate for candidate in index.all_of(target.kind) if evaluate_selector(candidate.model, selector)]
+    # A template is checked in the documents that resolve through it: its blocks hold `${param:}` as written.
+    matches = [
+        candidate
+        for candidate in index.all_of(target.kind)
+        if not isinstance(candidate.model, DocumentTemplateModel) and evaluate_selector(candidate.model, selector)
+    ]
     if not matches:
         diagnostics.warning(
             f"attributeconfig '{entry.ref.name}': selector matched no '{target.kind.value}' document — "
@@ -870,6 +932,9 @@ def _check_attributeconfig_effective_view(
     the deployment so an `effective`-view finding is never mistaken for a
     `document`-view one on the same document.
     """
+    if attributeconfig.spec.target.block == "params":
+        return _check_attributeconfig_params_view(index, resolved, entry, attributeconfig, validator)
+
     diagnostics = Diagnostics()
     target = attributeconfig.spec.target
     selector = target.selector or {}
@@ -916,6 +981,70 @@ def _check_attributeconfig_effective_view(
         diagnostics.warning(
             f"attributeconfig '{entry.ref.name}': selector matched no deployable '{target.kind.value}' document — "
             "this schema is not guarding anything.",
+            source=str(entry.source),
+            location="spec.target.selector",
+            code="attributeconfig_unused",
+        )
+    return diagnostics
+
+
+def _check_attributeconfig_params_view(
+    index: DocumentIndex,
+    resolved: dict[str, DeploymentModel],
+    entry: IndexEntry,
+    attributeconfig: AttributeConfigModel,
+    validator: Any,
+) -> Diagnostics:
+    """`view: effective, block: params` (`base-parameters-v2.md` (work doc), "Constraints: attributeconfig").
+
+    Checks the parameter-set values each matching document receives, merged per role along its chain (root first,
+    leaf last), with the roles as top-level keys: "everything a base needs is there", which no single set can say.
+    A document is matched when it can be used: a deployable deployment (its selector evaluated on the resolved
+    deployment), or an environment or tenant that is not `partial: true` (resolved when the solution loaded). One
+    whose chain or sets do not resolve is skipped: that is reported elsewhere.
+    """
+    diagnostics = Diagnostics()
+    target = attributeconfig.spec.target
+    selector = target.selector or {}
+    matched_any = False
+
+    for candidate in index.all_of(target.kind):
+        if target.kind is PlatformKind.DEPLOYMENT:
+            document: Any = deployment_of(candidate, resolved)
+        else:
+            document = None if isinstance(candidate.model, DocumentTemplateModel) else candidate.model
+        if document is None or document.spec.partial or not evaluate_selector(document, selector):
+            continue
+        params = chain_params(candidate, index)
+        if params is None:
+            continue
+        matched_any = True
+        log.info("attributeconfig applied", document=str(candidate.ref), schema=str(entry.ref))
+        try:
+            errors = list(validator.iter_errors(params))
+        except Unresolvable as exc:
+            diagnostics.error(
+                f"attributeconfig '{entry.ref.name}': schema references an external resource, which is "
+                f"not allowed: {exc}",
+                source=str(candidate.source),
+                location="meta.params",
+                code=ATTRIBUTECONFIG_INVALID_CODE,
+            )
+            continue
+        for error in errors:
+            code, message, relative_location = translate_validation_error(error)
+            diagnostics.error(
+                f"merged parameter values of {target.kind.value} '{candidate.ref.name}' "
+                f"(attributeconfig '{entry.ref.name}'): {message}",
+                source=str(candidate.source),
+                location=f"meta.params.{relative_location}" if relative_location else "meta.params",
+                code=code,
+            )
+
+    if not matched_any:
+        diagnostics.warning(
+            f"attributeconfig '{entry.ref.name}': selector matched no {target.kind.value} that receives "
+            "parameter values (deployable, not partial) — this schema is not guarding anything.",
             source=str(entry.source),
             location="spec.target.selector",
             code="attributeconfig_unused",
@@ -1469,7 +1598,9 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
         security = configuration.spec.security
 
     for entry in index.all_of(PlatformKind.ENVIRONMENT):
-        environment = cast(EnvironmentModel, entry.model)
+        environment = entry.model
+        if not isinstance(environment, EnvironmentModel):
+            continue  # a partial template: checked in the environments that resolve through it
         service = EnvironmentService.from_model(environment)
         diagnostics.extend(service.validate_artifact_references(artifact_names), source=str(entry.source))
         diagnostics.extend(service.validate_store_value_tokens(), source=str(entry.source))

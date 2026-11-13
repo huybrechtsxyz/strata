@@ -8,7 +8,7 @@ from typing import Any
 from strata.models.common_models import PlatformBaseModel
 from strata.models.configuration_model import ConfigurationSecurityModel
 from strata.models.deployment_model import DeploymentModel
-from strata.models.environment_model import EnvironmentModel
+from strata.models.environment_model import EnvironmentModel, EnvironmentTemplateModel
 from strata.models.store_model import (
     FeatureStoreModel,
     SecretStoreModel,
@@ -41,6 +41,40 @@ _UNSUPPORTED_STORE_VALUE_TOKEN_KINDS = frozenset({"var", "secret", "feature", "o
 
 #: A value that is a URL rather than a name (`validate_secret_store_values()`).
 _URL_PATTERN = re.compile(r"^[a-z][a-z0-9+.-]*://", re.IGNORECASE)
+
+#: The stores merged by `key` across `extends` (`merge_environment_specs()`).
+_STORE_FIELDS = ("variables", "secrets", "features")
+
+
+def _replace_by_key(base: list[dict[str, Any]], child: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Base entries first; a child entry with the same `key` replaces the base's whole entry, new keys append."""
+    merged: dict[Any, dict[str, Any]] = {}
+    for item in [*base, *child]:
+        identity = item.get("key")
+        merged[identity if identity is not None else object()] = dict(item)
+    return list(merged.values())
+
+
+def merge_environment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
+    """Merge a base environment's spec into a child's, on dumped dicts (`base-parameters-v2.md` (work doc)).
+
+    - `properties`, `custom`: deep-merged per leaf key, child wins.
+    - `variables`, `secrets`, `features`: by `key`. A child entry replaces the base's **whole** entry, so a variable
+      moved from `store: constant` to a Key Vault store keeps no stale `value`; new keys are appended. The same
+      rule `merge_environment_models()` applies to a deployment's list of environments.
+    - `partial`, `extends`: consumed and stripped from the result.
+
+    Neither input is mutated.
+    """
+    merged: dict[str, Any] = deep_merge(base, child)
+    for field in _STORE_FIELDS:
+        base_items = base.get(field) or []
+        child_items = child.get(field) or []
+        if base_items or child_items:
+            merged[field] = _replace_by_key(base_items, child_items)
+    merged.pop("partial", None)
+    merged.pop("extends", None)
+    return merged
 
 
 class EnvironmentService(BaseService[EnvironmentModel]):
@@ -487,6 +521,18 @@ def _iter_strings(value: Any, path: str = "") -> list[tuple[str, str]]:
         for position, child in enumerate(value):
             found.extend(_iter_strings(child, f"{path}[{position}]"))
     return found
+
+
+class EnvironmentTemplateService(BaseService[EnvironmentTemplateModel]):
+    """Loads an environment whose spec holds `${param:}`: meta validated, spec kept as written.
+
+    The loader picks it over `EnvironmentService` for such a document (`solution_controller.py`); resolution
+    validates the spec per environment that resolves through it, once the values are substituted.
+    """
+
+    def _get_model_class(self) -> type[EnvironmentTemplateModel]:
+        """Return the EnvironmentTemplateModel class for validation."""
+        return EnvironmentTemplateModel
 
 
 def merge_environment_models(

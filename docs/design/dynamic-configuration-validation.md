@@ -1,7 +1,7 @@
 # Dynamic Configuration Validation (`attributeconfig`) — Design
 
 - Status: current
-- Last updated: 2026-10-23 (composite)
+- Last updated: 2026-11-13 (parameter sets: `values`, `params`)
 
 ## Overview
 
@@ -39,7 +39,8 @@ meta:
 spec:
   target:
     kind: <PlatformKind>              # e.g. environment, resource
-    block: properties | custom | configuration | variables | features | composite  # composite: view: effective only
+    block: properties | custom | configuration | variables | features | composite | values | params
+                                      # composite, params: view: effective only; values: parameterset only
     view: document | effective        # required, no default — see "Evaluation semantics"
     selector:                         # optional; omitted = every document of this kind
       <field.path>: <required-value>  # equality only, no wildcards/regex
@@ -55,7 +56,10 @@ name (`resource.spec.configuration`), and `variables`/`features` on `environment
 `list[VariableStoreModel | FeatureStoreModel] | None`, not a `dict[str, Any]` blob like the other three,
 so they are reshaped into the same `{key: value}` shape before evaluation (`reshape_block_value()`,
 "Evaluation semantics" below). `composite` is not a field at all: it is the four merged blocks of a deployment
-side by side, for rules that span blocks (`view: effective` only, "Evaluation semantics" below). `secrets` is
+side by side, for rules that span blocks (`view: effective` only, "Evaluation semantics" below). `values` is a
+parameter set's own `spec.values` (`view: document`), and `params` is not a field either: it is the merged
+parameter-set values a deployment, environment or tenant receives (`view: effective`, "Parameter sets" under
+"Evaluation semantics"). `secrets` is
 excluded **permanently, as a security boundary, not merely
 unaddressed scope**: a failing schema's `ValidationError.message` can echo the offending value back in
 `strata validate`'s plain-text output, and a `store: constant` secret's `value` *is* the literal secret —
@@ -75,7 +79,8 @@ configuration, custom)`) — before this check existed, such a pair passed
 load-time validation and then silently evaluated every document of that
 kind against `{}` forever, with no diagnostic ever pointing at the actual
 mistake (the `attributeconfig` document's own `target.block`). This table only governs `view:
-document` — `view: effective` always targets `kind: deployment` regardless of which block, including
+document` — `view: effective` targets `kind: deployment` regardless of which block (except `params`, also valid
+for `environment` and `tenant`), including
 `variables`/`features`, which `DeploymentSpecModel` has no field for at all (only `EnvironmentSpecModel`
 does); its own validity rule (below) is independent of this table.
 
@@ -148,6 +153,15 @@ completely unchecked until someone remembered to opt in.
   confused with a `document`-view finding on the same deployment document.
   Which layer actually set the offending value is not tracked (`deep_merge`
   keeps no provenance) — a known gap, not a bug.
+- **Parameter sets: `block: values` and `block: params`** (2026-11-13, `base-parameters-v2.md` (work doc),
+  phase 3). Values are layered, so they are checked in two places. `kind: parameterset, block: values, view:
+  document` is an ordinary document view of one set. `block: params, view: effective` is valid for `kind:
+  deployment`, `environment` and `tenant`, the three kinds that name sets: the schema sees the values the
+  document's `${param:}` tokens read, merged per role along its `extends` chain (root first, leaf last), with the
+  roles as top-level keys (`document_chains.chain_params()`). A deployment is matched when it is deployable, its
+  selector evaluated on the resolved deployment; an environment or tenant when it is not `partial: true`. A
+  document that names no set receives `{}`. Findings sit at `meta.params.<role>.<key>` on that document. A
+  selector path walks into a map by key, so `meta.labels.role: spoke` selects sets by their optional label.
 - **`block: composite` (cross-block conditional rules).** Only valid with `view: effective` (and therefore
   `kind: deployment`); `view: document` is rejected with `block 'composite' requires view: effective` — that
   check is defined before the `(kind, block)` check, because Pydantic stops at the first failing after-validator

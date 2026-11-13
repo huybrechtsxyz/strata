@@ -27,6 +27,23 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     `tenant: ${param:spoke.tenant}`. Run `strata sln update` to refresh the schemas.
   - `docs/how-to/parameterised-deployment-bases.md` walks through a full example.
 
+- **`extends`, `partial` and parameter sets on environments and tenants.** An environment or tenant can build on a
+  `partial: true` base with `spec.extends`, name parameter sets in `meta.params`, read them with `${param:}`, and
+  require a name with `meta.name_rule`, as a deployment can. Both are merged when the solution loads, so every reader
+  (value assembly, `strata values`, tenant defaults, `${value:}`, attributeconfig) sees the merged document.
+  - Environments merge `properties` and `custom` per leaf key; a `variables`, `secrets` or `features` entry with the
+    same `key` replaces the base's whole entry. Tenants replace `geographies` (never join them), append
+    `environments` after the base's, and merge `properties`, `custom` and `configuration` per leaf key.
+  - A base is never used: listing a partial environment is `environment_not_listable`, naming a partial tenant is
+    `tenant_not_selectable`, and reading either with `${value:}` is `value_reference_to_base`.
+  - A tenant's `display_name` is now required only when the tenant is neither `partial` nor built with `extends`.
+  - The exported environment and tenant schemas accept `${param:}` tokens; run `strata sln update` to refresh them.
+
+- **attributeconfig checks parameter sets.** `kind: parameterset, block: values, view: document` checks the shape of
+  each set; `block: params, view: effective` checks the values a deployment, environment or tenant receives once its
+  sets are merged, with one top-level key per role (`required: [spoke, hub]`). A selector path now walks into a map,
+  so `meta.labels.role: spoke` selects sets by label.
+
 - **A full container image, `ghcr.io/huybrechtsxyz/strata:<version>-full`** (and `latest-full`): strata with
   OpenTofu, Helm 4, the Docker CLI with Compose, Trivy and Checkov, for a pipeline that runs Helm or Compose steps or the CVE and
   Checkov policies. The image you pull today is the slim variant: `strata:<version>` and `latest` are unchanged, and

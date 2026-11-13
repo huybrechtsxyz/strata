@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from strata.controllers.deployment_resolution import resolve_deployment_chains
+from strata.controllers.document_chains import resolve_environments_and_tenants
 from strata.controllers.promotion_controller import validate_promotions
 from strata.controllers.references import validate_references
 from strata.controllers.semantic_checks import run_semantic_checks
@@ -157,4 +158,8 @@ def open_solution(path: Path) -> SolutionContext:
         )
 
     controller = SolutionController(root)
-    return SolutionContext(controller=controller, diagnostics=controller.load())
+    diagnostics = controller.load()
+    # Environments and tenants are resolved through `extends` and `${param:}` before anything reads them, and
+    # replace their documents in the index (`document_chains.py`); a problem there is a load finding.
+    diagnostics.extend(resolve_environments_and_tenants(controller.index))
+    return SolutionContext(controller=controller, diagnostics=diagnostics)

@@ -354,7 +354,35 @@ def test_a_token_needs_the_param_kind_and_a_key():
 
 
 def test_only_kinds_that_can_be_templates_take_param_tokens():
-    environment = {"kind": "environment", "meta": {"name": "prd"}, "spec": {"variables": [{"key": "${param:x}"}]}}
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(environment, export_schema(_model_of(PlatformKind.ENVIRONMENT), PlatformKind.ENVIRONMENT))
-    assert "${param:" not in str(export_schema(_model_of(PlatformKind.ENVIRONMENT), PlatformKind.ENVIRONMENT))
+    for kind in (PlatformKind.WORKSPACE, PlatformKind.PARAMETERSET):
+        assert "ParamToken" not in str(export_schema(_model_of(kind), kind))
+
+
+def test_the_editor_schema_accepts_environment_and_tenant_templates():
+    environment = {
+        "kind": "environment",
+        "meta": {"name": "deploy_env_base", "params": {"customer": "customer-defaults"}},
+        "spec": {
+            "partial": True,
+            "properties": {"deploy_code": "${param:customer.code}"},
+            "features": [{"key": "enable_apim", "store": "constant", "value": "${param:customer.apim}"}],
+        },
+    }
+    tenant = {
+        "kind": "tenant",
+        "meta": {"name": "customer_tenant_base"},
+        "spec": {"partial": True, "display_name": "${param:tenant.display_name}", "geographies": "${param:tenant.geo}"},
+    }
+    jsonschema.validate(environment, export_schema(_model_of(PlatformKind.ENVIRONMENT), PlatformKind.ENVIRONMENT))
+    jsonschema.validate(tenant, export_schema(_model_of(PlatformKind.TENANT), PlatformKind.TENANT))
+
+
+@pytest.mark.parametrize("kind", [PlatformKind.ENVIRONMENT, PlatformKind.TENANT])
+def test_extends_and_partial_take_no_token_in_environments_and_tenants(kind):
+    schema = export_schema(_model_of(kind), kind)
+    for field, value in (("extends", "base-${param:x.y}"), ("partial", "${param:x.y}")):
+        document = {"kind": kind.value, "meta": {"name": "leaf"}, "spec": {"display_name": "x", field: value}}
+        if kind is PlatformKind.ENVIRONMENT:
+            del document["spec"]["display_name"]
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(document, schema)

@@ -23,6 +23,7 @@ from strata.models.integration_model import IntegrationSpecModel
 from strata.models.module_model import ModuleSpecModel
 from strata.models.namespace_model import NamespaceSpecModel
 from strata.models.network_model import NetworkSpecModel
+from strata.models.parameterset_model import ParameterSetSpecModel
 from strata.models.provider_config_model import ProviderConfigSpecModel
 from strata.models.provider_model import ProviderSpecModel
 from strata.models.resource_model import ResourceSpecModel
@@ -47,6 +48,7 @@ _SPEC_MODEL_BY_KIND = {
     PlatformKind.MODULE: ModuleSpecModel,
     PlatformKind.NAMESPACE: NamespaceSpecModel,
     PlatformKind.NETWORK: NetworkSpecModel,
+    PlatformKind.PARAMETERSET: ParameterSetSpecModel,
     PlatformKind.PROVIDER: ProviderSpecModel,
     PlatformKind.PROVIDERCONFIG: ProviderConfigSpecModel,
     PlatformKind.RESOURCE: ResourceSpecModel,
@@ -56,7 +58,7 @@ _SPEC_MODEL_BY_KIND = {
     PlatformKind.WORKSPACE: WorkspaceSpecModel,
 }
 
-_BLOCK_NAMES = ("properties", "custom", "configuration", "variables", "features")
+_BLOCK_NAMES = ("properties", "custom", "configuration", "variables", "features", "values")
 
 
 def _minimal_attributeconfig() -> dict:
@@ -208,6 +210,30 @@ def test_attributeconfig_composite_document_view_gets_the_dedicated_message(kind
     with pytest.raises(ValidationError, match="block 'composite' requires view: effective") as excinfo:
         AttributeConfigModel.model_validate(data)
     assert "does not exist on kind" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("kind", ["deployment", "environment", "tenant"])
+def test_attributeconfig_accepts_the_effective_params_view(kind):
+    """`block: params`: the merged parameter-set values, for every kind that names parameter sets."""
+    data = _minimal_attributeconfig()
+    data["spec"]["target"] = {"kind": kind, "block": "params", "view": "effective"}
+    assert AttributeConfigModel.model_validate(data).spec.target.block == "params"
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        {"kind": "deployment", "block": "params", "view": "document"},  # no document has a params block
+        {"kind": "workspace", "block": "params", "view": "effective"},  # a workspace names no parameter sets
+        {"kind": "parameterset", "block": "values", "view": "effective"},  # a set's values are its own
+        {"kind": "deployment", "block": "values", "view": "document"},  # only a parameter set has values
+    ],
+)
+def test_attributeconfig_rejects_params_and_values_where_they_do_not_exist(target):
+    data = _minimal_attributeconfig()
+    data["spec"]["target"] = target
+    with pytest.raises(ValidationError):
+        AttributeConfigModel.model_validate(data)
 
 
 def test_attributeconfig_rejects_composite_for_non_deployment_kind():

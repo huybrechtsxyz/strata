@@ -793,17 +793,17 @@ Phases. Each step is shippable on its own; tests are listed with the step that n
         a full dummy solution: a hub and two spokes, a customer project, the parameter sets, the bases and the leaves,
         file by file, and where each file lives. It shows one layout that works; strata does not prescribe one.
         CHANGELOG "Added". Done 2026-11-13, see the changelog.
-- [ ] **Phase 2, one chain resolver for three kinds.** Lift the walk out of `deployment_resolution.py`. Add
+- [x] **Phase 2, one chain resolver for three kinds.** Lift the walk out of `deployment_resolution.py`. Add
       `extends`, `partial` and `meta.params` to `environment` and `tenant` with the merge tables above. Resolve in
       the order parameter sets, environments, tenants, deployments. Decide first between replacing resolved
       environments and tenants in the index (a replace operation on `DocumentIndex`, and findings that need the
       origin map to name the right file) and a resolved map per kind. Reject bases wherever a document can be
       listed, selected or read by `${value:}`. Tests: the merge tables row by row; `geographies` replaced, not
       joined; `environment_not_listable`, `tenant_not_selectable`, `value_reference_to_base`; a store change on a
-      variable keeps no stale `value`. Docs and CHANGELOG.
-- [ ] **Phase 3, attributeconfig.** `kind: parameterset, block: values` (document view) and `block: params` (effective
+      variable keeps no stale `value`. Docs and CHANGELOG. Done 2026-11-13, see the changelog.
+- [x] **Phase 3, attributeconfig.** `kind: parameterset, block: values` (document view) and `block: params` (effective
       view of deployments, from the merged values phase 1 returns), then the effective view for environments and
-      tenants. Tests: both examples in "Constraints". Docs and CHANGELOG.
+      tenants. Tests: both examples in "Constraints". Docs and CHANGELOG. Done 2026-11-13, see the changelog.
 - [ ] **Phase 4, a rendered view.** The full origin map (`merge_deployment_specs()` tracking the document behind
       every merged field). Print the resolved document of a leaf (likely an option on an existing command), with
       which document and which parameter set each value comes from. Tests: the origins of a two-base chain with two
@@ -976,3 +976,62 @@ Open questions:
     (ADR-0058), nothing is silently wrong. The one flaw was `param_unused` counting only `${param:}` reads, so a key
     read through `${value:}` was reported unused: `_value_token_reads()` now counts those reads too, and a set read
     only that way is not reported as named by nothing. `docs/config/parameterset.md` says when to use which.
+- 2026-11-13: Phase 2 built: one chain resolver for deployments, environments and tenants.
+  - **Decision: resolved environments and tenants replace their documents in the index**, not a resolved map per
+    kind. They are read in about fifteen places (value assembly, `strata values`, token checks, geography checks,
+    tenant defaults, `${value:}`, attributeconfig, reachability); replacing them needed no change in those readers, beyond skipping a template base where one iterates every document.
+    `DocumentIndex.replace()` is the replace operation, used only by the resolver. The cost named above is real:
+    a finding about a merged environment or tenant names the leaf's file. Origins on such findings wait for the
+    full origin map (phase 4).
+  - **When:** `resolve_environments_and_tenants()` (`controllers/document_chains.py`) runs in `open_solution()`
+    right after loading, so nothing reads an environment or tenant before it is resolved. Its findings (a cycle,
+    `param_missing`, a merged spec the model rejects, `name_rule_mismatch`) are load findings, like a document that
+    fails its schema, so the cross-document checks do not run on top of them. A missing base is left to the
+    reference walk (`unknown_reference` on `spec.extends`). Every chain is resolved against the documents as
+    written before any is replaced.
+  - **Departure: the document as written is kept** on the entry (`IndexEntry.written`, read through `as_written`),
+    against "The raw document is not kept beside the resolved one" in "Origin map". The chain walks need it: once a
+    leaf is replaced, its `extends` and its own `${param:}` reads are gone from `model`, and `param_unused` and a
+    chain through a non-partial environment must still see them. `${value:}` tokens are also scanned as written,
+    so a token a base holds is reported once, on the base.
+  - **Shared code.** `document_chains.py` holds the chain walk (cycles, missing ancestors, poisoning), the
+    parameter sets of a chain, the values and the `name_rule` check, lifted out of `deployment_resolution.py`,
+    which now uses them. `models/template_model.py` holds `ParamSetNames` (the `meta.params` type), the
+    `name_rule` check and `DocumentTemplateModel`, the base of the three template models. The merge tables are
+    `merge_environment_specs()` and `merge_tenant_specs()` in the services.
+  - **Models.** `extends`, `partial`, `meta.params` and `meta.name_rule` on both kinds; `EnvironmentTemplateModel`
+    and `TenantTemplateModel` in `TEMPLATE_SERVICE_BY_KIND`. A tenant's `display_name` is required unless the
+    tenant is `partial` or has `extends` (as a deployment's `workspace`), so the merged result is where it is
+    checked. Rule 10 (`name_rule`) applies to environments and tenants as written ("on any document in a chain").
+  - **Bases cannot be used:** `environment_not_listable` (a deployable deployment, resolved, or a non-partial
+    tenant listing a partial environment), `tenant_not_selectable`, `value_reference_to_base`. A partial deployment
+    or tenant is not checked itself, so a base listing a base is reported once per document built on it. Checks that
+    iterate every environment or tenant, and attributeconfig's document view, skip a template; a non-template
+    partial base is still checked as the valid document it is.
+  - `param_unused` counts reads in environment and tenant chains. The exported environment and tenant schemas
+    accept `${param:}` (`_TEMPLATE_SPECS`).
+  - Tests: `tests/strata/controllers/test_environment_tenant_chains.py` (the merge tables row by row, `geographies`
+    replaced, a store change keeping no stale field, templates for both kinds, the three base codes, a cycle,
+    `param_missing`, `name_rule`, `param_unused`, a deployment reading inherited variables and tenant defaults);
+    schema-export cases for both kinds. Docs: `docs/config/environment.md` and `docs/config/tenant.md` ("Bases"),
+    `docs/config/parameterset.md`; CHANGELOG "Added".
+- 2026-11-13: Phase 3 built: attributeconfig on parameter sets, both views of "Constraints".
+  - `block` gains `values` and `params`. `BLOCKS_BY_KIND` gains `parameterset: {values}`, so `kind: parameterset,
+    block: values, view: document` is an ordinary document view (no new code path); the test that pins the table
+    against the spec models now covers `ParameterSetSpecModel`.
+  - `block: params, view: effective` is valid for deployment, environment and tenant at once (the plan had
+    environments and tenants as a later step; with phase 2 they resolve like deployments, so there was nothing to
+    wait for). The schema sees `document_chains.chain_params()`: the chain's sets merged per role, the roles as
+    top-level keys, computed from the chain as written, so no new plumbing through the resolver. Matched: a
+    deployable deployment (selector on the resolved deployment) or a non-partial environment or tenant. Findings at
+    `meta.params.<role>.<key>`, with a message naming the document and the attributeconfig; a schema matching
+    nothing is `attributeconfig_unused`, as for the other views.
+  - A document that names no set receives `{}`, so a `required` schema fails for it: the selector narrows a schema
+    to the documents that use the base (`spec.workspace: bootstrap` in the example).
+  - Selectors walk into a map by key (`attributeconfig_evaluator._leaves()`), which the example's
+    `meta.labels.role: spoke` needs; before, a path through `meta.labels` or `spec.properties` matched nothing.
+  - Tests: `tests/strata/controllers/test_attributeconfig_params.py` (both examples: a bad set, a missing role
+    value, a leaf's set overriding a base default, environments and tenants resolved, an unused schema, the label
+    selector); model cases for the valid and invalid `(kind, block, view)` combinations. Docs:
+    `docs/config/attributeconfig.md` ("Parameter sets: two views"), `docs/config/parameterset.md`,
+    `docs/design/dynamic-configuration-validation.md`; CHANGELOG "Added".

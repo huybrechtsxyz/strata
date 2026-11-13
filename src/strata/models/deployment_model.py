@@ -58,8 +58,8 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.reference_fields import References
+from strata.models.template_model import DocumentTemplateModel, ParamSetNames, check_name_rule
 from strata.utils.names import check_unique_names
-from strata.utils.value_tokens import find_malformed_value_tokens, find_non_param_tokens
 
 
 class DeploymentHealthCheckModel(PlatformBaseModel):
@@ -549,14 +549,7 @@ class DeploymentMetaModel(PlatformBaseModel):
     """Deployment metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique deployment name")
-    params: (
-        dict[
-            PlatformName,
-            Annotated[PlatformName, References(PlatformKind.PARAMETERSET)]
-            | list[Annotated[PlatformName, References(PlatformKind.PARAMETERSET)]],
-        ]
-        | None
-    ) = Field(
+    params: ParamSetNames | None = Field(
         None,
         description="Parameter sets this deployment reads, per role: `{spoke: spoke-acme-001}`, or a list per "
         "role merged in order (`{hub: [hub-defaults, hub-hub02]}`). Any document of the extends chain may name "
@@ -584,14 +577,7 @@ class DeploymentMetaModel(PlatformBaseModel):
     @classmethod
     def validate_name_rule_tokens(cls, value: str | None) -> str | None:
         """Only well-formed `${param:}` tokens: a run-time token (`${var:x}`) has no value when names are checked."""
-        if value is None:
-            return value
-        bad = find_non_param_tokens(value)
-        if bad:
-            raise ValueError(
-                f"name_rule may only hold ${{param:ROLE.KEY}} tokens, but has {', '.join(repr(b) for b in bad)}"
-            )
-        return value
+        return check_name_rule(value)
 
 
 class DeploymentModel(PlatformBaseModel):
@@ -638,17 +624,6 @@ class DeploymentModel(PlatformBaseModel):
         return self
 
 
-def _strings(node: Any, path: str) -> list[tuple[str, str]]:
-    """Every `(path, string)` under `node`, values only, paths as `spec.layers.segments.hub`."""
-    if isinstance(node, str):
-        return [(path, node)]
-    if isinstance(node, dict):
-        return [found for key, child in node.items() for found in _strings(child, f"{path}.{key}")]
-    if isinstance(node, list):
-        return [found for position, child in enumerate(node) for found in _strings(child, f"{path}[{position}]")]
-    return []
-
-
 class DeploymentTemplateSpecModel(PlatformBaseModel):
     """The spec of a deployment template, as written: only `partial` and `extends` are read before substitution.
 
@@ -669,7 +644,7 @@ class DeploymentTemplateSpecModel(PlatformBaseModel):
     )
 
 
-class DeploymentTemplateModel(PlatformBaseModel):
+class DeploymentTemplateModel(DocumentTemplateModel):
     """A deployment whose spec reads parameter sets (`${param:<role>.<key>}`): loaded with its meta validated and
     its spec as written, and validated as a deployment once per deployable deployment whose chain it is in, after
     the values are substituted.
@@ -695,23 +670,6 @@ class DeploymentTemplateModel(PlatformBaseModel):
     def validate_kind(cls, v: PlatformKind) -> PlatformKind:
         """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
         return validate_kind_matches(v, PlatformKind.DEPLOYMENT)
-
-    @model_validator(mode="after")
-    def validate_template(self) -> "DeploymentTemplateModel":
-        """No self-`extends`, and every `${...}` token in the spec well formed, `${param:}` included."""
-        if self.spec.extends and self.spec.extends == self.meta.name:
-            raise ValueError(f"Deployment '{self.meta.name}' cannot extend itself.")
-        malformed = [
-            f"{path}: {candidate!r}"
-            for path, text in _strings(self.spec.model_dump(exclude_none=True), "spec")
-            for candidate in find_malformed_value_tokens(text, param_tokens=True)
-        ]
-        if malformed:
-            raise ValueError(
-                f"Malformed token(s) {'; '.join(malformed)}. Expected '${{param:ROLE.KEY}}' or a run-time token "
-                "such as '${var:KEY}'; escape a literal as '$${...}'."
-            )
-        return self
 
 
 #: A deployment as the index holds it: validated, or a template validated per instance.

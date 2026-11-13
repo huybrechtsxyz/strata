@@ -64,6 +64,16 @@ from typing import Any, cast
 
 from pydantic import ValidationError
 
+from strata.controllers.document_chains import (
+    CircularExtendsError,
+    ParamSets,
+    chain_of,
+    chain_param_sets,
+    check_name_rules,
+    require,
+    resolve_chain,
+    set_values,
+)
 from strata.controllers.references import unresolved_references
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.logging.config import get_logger
@@ -94,19 +104,8 @@ from strata.utils.value_tokens import extract_value_tokens
 
 log = get_logger(__name__)
 
-
-class _CircularExtendsError(Exception):
-    """Internal signal only — carries the cycle so the top-level caller can
-    report it against the deployment whose `extends` closes the loop.
-    """
-
-    def __init__(self, cycle: list[str]) -> None:
-        super().__init__(f"circular extends chain: {' -> '.join(cycle)}")
-        self.cycle = cycle
-
-
-#: Role -> the parameter sets a chain names for it, root first: the merge order, and the merged-spec cache key.
-ParamSets = dict[str, tuple[str, ...]]
+#: The kinds whose documents may name parameter sets, each read through its own `extends` chain.
+_PARAM_KINDS = (PlatformKind.DEPLOYMENT, PlatformKind.ENVIRONMENT, PlatformKind.TENANT)
 
 
 @dataclass(frozen=True)
@@ -299,36 +298,18 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
         name = entry.ref.name
         deployment = cast(AnyDeploymentModel, entry.model)
 
-        try:
-            chain = _resolve_chain(name, index, chains, poisoned, visiting=[])
-        except _CircularExtendsError as exc:
-            diagnostics.error(str(exc), source=str(entry.source), location="spec.extends", code="circular_extends")
-            continue
-
+        chain = chain_of(entry, index, chains, poisoned, diagnostics)
         if chain is None:
-            if name in poisoned:
-                # Part of a cycle first detected while resolving a *different*
-                # deployment's chain; that occurrence already reported the
-                # cycle itself, with the full path. This one just also fails.
-                diagnostics.error(
-                    f"Deployment '{name}': extends chain could not be resolved — "
-                    "part of a circular extends chain reported elsewhere",
-                    source=str(entry.source),
-                    location="spec.extends",
-                    code="circular_extends",
-                )
-            # Otherwise: an ancestor is simply missing from the index —
-            # validate_references already reports that against spec.extends.
-            continue
+            continue  # a cycle (reported) or a missing ancestor (validate_references reports it on spec.extends)
 
         if deployment.spec.partial:
             log.debug("deployment base has no consumers", name=name, source=str(entry.source))
             continue
 
-        param_sets = _param_sets(chain, index)
+        param_sets = chain_param_sets(PlatformKind.DEPLOYMENT, chain, index)
         if param_sets is None:
             continue  # names a parameter set that does not exist: validate_references reports it on meta.params
-        params = merge_param_values(param_sets, _set_values(param_sets, index))
+        params = merge_param_values(param_sets, set_values(param_sets, index))
         merged = _merged_spec(chain, param_sets, params, index, specs)
         for holder, source, problem in merged.findings + merged.problems:
             if not problem.per_leaf:
@@ -352,74 +333,12 @@ def resolve_deployments(index: DocumentIndex) -> tuple[dict[str, ResolvedDeploym
             diagnostics.extend(diagnostics_from_validation_error(exc), source=str(entry.source))
             continue
 
-        diagnostics.extend(_check_name_rules(index, entry, chain, params, param_sets))
+        diagnostics.extend(check_name_rules(index, entry, chain, params, param_sets))
 
         resolved[name] = ResolvedDeployment(model=merged_model, params=params, param_sets=param_sets, chain=chain)
 
     diagnostics.extend(_unused_values(index, chains))
     return resolved, diagnostics
-
-
-def _check_name_rules(
-    index: DocumentIndex,
-    entry: IndexEntry,
-    chain: tuple[str, ...],
-    params: dict[str, dict[str, Any]],
-    param_sets: ParamSets,
-) -> Diagnostics:
-    """Rule 10: the deployable `entry` has exactly the name each `meta.name_rule` of its chain gives once filled in.
-
-    The leaf's own rule counts too. A mismatch is reported on the leaf, which is what gets renamed; a rule whose
-    `${param:}` cannot be filled is `param_missing` on the document that holds the rule.
-    """
-    diagnostics = Diagnostics()
-    name = entry.ref.name
-    for holder in reversed(chain):
-        holder_entry = _require(index, PlatformKind.DEPLOYMENT, holder)
-        rule = cast(AnyDeploymentModel, holder_entry.model).meta.name_rule
-        if rule is None:
-            continue
-        expected, problems = substitute_params(rule, params, param_sets, "meta.name_rule")
-        for problem in problems:
-            diagnostics.error(
-                f"{holder} {problem.location}: {problem.message} (for {name})",
-                source=str(holder_entry.source),
-                location=problem.location,
-                code=problem.code,
-            )
-        if problems or expected == name:
-            continue
-        rule_of = "its own name_rule" if holder == name else f"the name_rule of '{holder}'"
-        diagnostics.error(
-            f"Deployment '{name}' must be named '{expected}' by {rule_of} ('{rule}'). Rename the deployment, or fix "
-            "the values in its parameter sets.",
-            source=str(entry.source),
-            location="meta.name",
-            code="name_rule_mismatch",
-        )
-    return diagnostics
-
-
-def _param_sets(chain: tuple[str, ...], index: DocumentIndex) -> ParamSets | None:
-    """Role -> the parameter sets `chain` (leaf first) names, root first; `None` if one does not exist."""
-    sets: dict[str, list[str]] = {}
-    for name in reversed(chain):
-        model = cast(AnyDeploymentModel, _require(index, PlatformKind.DEPLOYMENT, name).model)
-        for role, named in (model.meta.params or {}).items():
-            names = [named] if isinstance(named, str) else list(named)
-            if any(index.get(PlatformKind.PARAMETERSET, set_name) is None for set_name in names):
-                return None
-            sets.setdefault(role, []).extend(names)
-    return {role: tuple(names) for role, names in sets.items()}
-
-
-def _set_values(param_sets: ParamSets, index: DocumentIndex) -> dict[str, dict[str, Any]]:
-    """Parameter set name -> its `spec.values`, for every set `param_sets` names."""
-    return {
-        name: cast(ParameterSetModel, _require(index, PlatformKind.PARAMETERSET, name).model).spec.values
-        for names in param_sets.values()
-        for name in names
-    }
 
 
 def _merged_spec(
@@ -439,7 +358,7 @@ def _merged_spec(
     if key in cache:
         return cache[key]
 
-    entry = _require(index, PlatformKind.DEPLOYMENT, name)
+    entry = require(index, PlatformKind.DEPLOYMENT, name)
     document = cast(AnyDeploymentModel, entry.model)
     origins: dict[str, ParamOrigin] = {}
     own, own_problems = substitute_params(
@@ -447,7 +366,7 @@ def _merged_spec(
     )
     own_findings: list[ParamProblem] = []
     if isinstance(document, DeploymentTemplateModel) and not own_problems:
-        describe = _OriginText(origins, param_sets, _set_values(param_sets, index))
+        describe = _OriginText(origins, param_sets, set_values(param_sets, index))
         own, own_problems, own_findings = _validate_substituted(own, index, describe)
     source = str(entry.source)
     problems = tuple((name, source, problem) for problem in own_problems)
@@ -555,35 +474,35 @@ def _validate_substituted(
 def _unused_values(index: DocumentIndex, chains: Mapping[str, tuple[str, ...] | None]) -> Diagnostics:
     """Rule 12: an `info` finding (`param_unused`) per top-level key of a parameter set that no document reads.
 
-    A key is read when a document of some chain holds `${param:<role>.<key>...}` (in its spec or `meta.name_rule`)
-    and that chain names the set under `<role>`; `${param:<role>}` alone reads every key. A
-    `${value:parameterset.<name>.spec.values.<key>...}` token in any document reads `<key>` of that set too
-    (`_value_token_reads()`). A set nothing names or reads gets one finding of its own. Info, not a warning:
-    `validate --strict` fails on warnings, and a values file holding more than one deployment reads is normal (a
-    spoke's set serves seven deployments).
-    """
-    reads_of: dict[str, set[tuple[str, tuple[str, ...]]]] = {}
+    A key is read when a document of some chain (of a deployment, an environment or a tenant) holds
+    `${param:<role>.<key>...}` (in its spec or `meta.name_rule`) and that chain names the set under `<role>`;
+    `${param:<role>}` alone reads every key. A `${value:parameterset.<name>.spec.values.<key>...}` token in any
+    document reads `<key>` of that set too (`_value_token_reads()`). A set nothing names or reads gets one finding
+    of its own. Info, not a warning: `validate --strict` fails on warnings, and a values file holding more than one
+    deployment reads is normal (a spoke's set serves seven deployments).
 
-    def reads(name: str) -> set[tuple[str, tuple[str, ...]]]:
-        if name not in reads_of:
-            document = cast(AnyDeploymentModel, _require(index, PlatformKind.DEPLOYMENT, name).model)
-            reads_of[name] = param_reads_in(document.spec.model_dump(exclude_none=True)) | param_reads_in(
+    `chains` are the deployment chains; environment and tenant chains are walked here, as written.
+    """
+    reads_of: dict[tuple[PlatformKind, str], set[tuple[str, tuple[str, ...]]]] = {}
+
+    def reads(kind: PlatformKind, name: str) -> set[tuple[str, tuple[str, ...]]]:
+        if (kind, name) not in reads_of:
+            document: Any = require(index, kind, name).as_written
+            reads_of[(kind, name)] = param_reads_in(document.spec.model_dump(exclude_none=True)) | param_reads_in(
                 document.meta.name_rule or ""
             )
-        return reads_of[name]
+        return reads_of[(kind, name)]
 
     named: set[str] = set()
     read_whole: set[str] = set()
     read_keys: dict[str, set[str]] = {}
-    for chain in chains.values():
-        if chain is None:
-            continue
-        sets = _param_sets(chain, index)
+    for kind, chain in _all_chains(index, chains):
+        sets = chain_param_sets(kind, chain, index)
         if sets is None:
             continue
         for names in sets.values():
             named.update(names)
-        for role, path in set().union(*(reads(name) for name in chain)):
+        for role, path in set().union(*(reads(kind, name) for name in chain)):
             for set_name in sets.get(role, ()):
                 if path:
                     read_keys.setdefault(set_name, set()).add(path[0])
@@ -600,7 +519,7 @@ def _unused_values(index: DocumentIndex, chains: Mapping[str, tuple[str, ...] | 
         name = entry.ref.name
         if name not in named:
             diagnostics.info(
-                f"Parameter set '{name}' is named in no deployment's meta.params and read by no "
+                f"Parameter set '{name}' is named in no document's meta.params and read by no "
                 "${value:parameterset...} token, so none of its values is read.",
                 source=str(entry.source),
                 location="meta.name",
@@ -620,6 +539,23 @@ def _unused_values(index: DocumentIndex, chains: Mapping[str, tuple[str, ...] | 
                     code="param_unused",
                 )
     return diagnostics
+
+
+def _all_chains(
+    index: DocumentIndex, deployment_chains: Mapping[str, tuple[str, ...] | None]
+) -> list[tuple[PlatformKind, tuple[str, ...]]]:
+    """Every resolvable chain of a kind that names parameter sets: the deployments' as given, the others walked."""
+    found = [(PlatformKind.DEPLOYMENT, chain) for chain in deployment_chains.values() if chain is not None]
+    for kind in _PARAM_KINDS[1:]:
+        cache: dict[str, tuple[str, ...] | None] = {}
+        for entry in index.all_of(kind):
+            try:
+                chain = resolve_chain(kind, entry.ref.name, index, cache, set(), visiting=[])
+            except CircularExtendsError:
+                continue  # reported when the solution loaded
+            if chain is not None:
+                found.append((kind, chain))
+    return found
 
 
 def _value_token_reads(index: DocumentIndex) -> tuple[set[str], dict[str, set[str]]]:
@@ -694,74 +630,12 @@ def _merge_tenant_defaults(spec_dict: dict[str, Any], index: DocumentIndex) -> d
     tenant_entry = index.get(PlatformKind.TENANT, tenant_name)
     if tenant_entry is None:
         return spec_dict
-    tenant = cast(TenantModel, tenant_entry.model)
+    tenant = tenant_entry.model
+    if not isinstance(tenant, TenantModel):
+        return spec_dict  # a tenant template that did not resolve: reported when the solution loaded
     tenant_base = {
         "environments": tenant.spec.environments or [],
         "properties": tenant.spec.properties or {},
         "custom": tenant.spec.custom or {},
     }
     return merge_deployment_specs(tenant_base, spec_dict)
-
-
-def _require(index: DocumentIndex, kind: PlatformKind, name: str) -> IndexEntry:
-    """The entry for a document already known to exist (a resolved chain link or a checked parameter set)."""
-    entry = index.get(kind, name)
-    assert entry is not None, f"{kind.value}/{name} vanished from the index"
-    return entry
-
-
-def _resolve_chain(
-    name: str,
-    index: DocumentIndex,
-    cache: dict[str, tuple[str, ...] | None],
-    poisoned: set[str],
-    visiting: list[str],
-) -> tuple[str, ...] | None:
-    """Return deployment `name` and its bases, leaf first, recursively (pass one).
-
-    Memoised per name: a base shared by several leaves (a diamond) is
-    walked once, not once per descendant.
-
-    Returns:
-        `None` for two distinct reasons, distinguished via `poisoned`: the
-        chain is missing an ancestor entirely (not poisoned — already
-        reported elsewhere), or an ancestor is part of a cycle (poisoned —
-        the caller reports its own pointer).
-
-    Raises:
-        _CircularExtendsError: Only from the exact call that closes the loop, so
-            its message names the real cycle.
-    """
-    if name in cache:
-        return cache[name]
-
-    if name in visiting:
-        poisoned.add(name)
-        raise _CircularExtendsError([*visiting, name])
-
-    entry = index.get(PlatformKind.DEPLOYMENT, name)
-    if entry is None:
-        return None  # missing ancestor — not a cycle, not cached: nothing to memoise
-
-    deployment = entry.model
-    assert isinstance(deployment, (DeploymentModel, DeploymentTemplateModel))
-
-    if not deployment.spec.extends:
-        cache[name] = (name,)
-        return cache[name]
-
-    try:
-        base_chain = _resolve_chain(deployment.spec.extends, index, cache, poisoned, [*visiting, name])
-    except _CircularExtendsError:
-        poisoned.add(name)
-        cache[name] = None
-        raise
-
-    if base_chain is None:
-        if deployment.spec.extends in poisoned:
-            poisoned.add(name)
-        cache[name] = None
-        return None
-
-    cache[name] = (name, *base_chain)
-    return cache[name]
