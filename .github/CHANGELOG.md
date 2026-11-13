@@ -8,13 +8,25 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-11-13
+
+The container image builds again; for 2.6.0 the build failed.
+
 ### Changed
 
-- **Faster `build run` and `deploy run`.** strata reads the installed plugins (integrations and SBOM collectors)
-  once per command instead of on every lookup, each read having scanned every installed Python package. A plugin
-  installed while a command runs is picked up by the next one. A Terraform file read more than once in a command
-  (for the SBOM, then for the declared outputs and variables) is parsed once. `sln init` and `sln update` render
-  each kind's schema once.
+- **The container image runs Python 3.14** (was 3.13), the newest version CI tests strata on. Its tools are updated:
+  uv 0.13.8, the Docker CLI 29.9.2, Trivy 0.76.2 and Checkov 3.4.3.
+- **Faster `build run` and `deploy run`** (already in 2.6.0, missing from its notes). strata reads the installed
+  plugins (integrations and SBOM collectors) once per command instead of on every lookup, each read having scanned
+  every installed Python package. A plugin installed while a command runs is picked up by the next one. A Terraform
+  file read more than once in a command (for the SBOM, then for the declared outputs and variables) is parsed once.
+  `sln init` and `sln update` render each kind's schema once.
+
+### Fixed
+
+- **The container image build failed** (`"/uv.lock": not found`). The build copied `uv.lock`, which is not
+  committed, and synced `--locked`. It now resolves `pyproject.toml` as CI's test job does, with a pinned uv, until
+  a lock resolved against public PyPI is committed.
 
 ## [2.6.0] - 2026-11-13
 
@@ -648,7 +660,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.6.1...HEAD
+[2.6.1]: https://github.com/huybrechtsxyz/strata/compare/v2.6.0...v2.6.1
 [2.6.0]: https://github.com/huybrechtsxyz/strata/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/huybrechtsxyz/strata/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/huybrechtsxyz/strata/compare/v2.3.3...v2.4.0
