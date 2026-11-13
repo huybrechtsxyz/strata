@@ -87,7 +87,8 @@ This is `config/versions/prd.yaml`, the working example in this repository.
   `version new --from` or offered as a pin to add by `version update`: a pin must have a non-empty
   value. An artifact with a blank `image_tag` is the exception for `version update`: with no pin it
   has no tag at all, so it is reported as needing a version (`pin_needed`), though still never seeded.
-  An artifact no deployment uses is not offered at all; `version update` names it once (`artifact_unused`).
+  An artifact no document references is not offered at all; `version update` names it once
+  (`artifact_unused`). One that is referenced but not deployed yet (staged) is offered as usual.
   A pin it already has is not stale and stays.
 - `strata version update NAME` lists the pins you could add (each target with no pin yet, seeded with
   its current value) and the pins to remove (stale ones). It never edits the file and exits 0, since

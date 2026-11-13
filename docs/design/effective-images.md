@@ -104,7 +104,8 @@ or deploy logs each pin once, however many readers ask for the rows, and `strata
 - The audit manifest's `artifacts.images` and `deploy report`'s `images[]`.
 - `image_tag_policy`, at `build run`, `deploy run`, `strata policy check` and `deploy images`
   ([image-tag-policy.md](image-tag-policy.md)).
-- `artifact_usage.check_unused_artifacts()`: `artifact_unused` for an artifact no deployment's rows list.
+- `artifact_usage.check_unused_artifacts()`: `artifact_unused` for an artifact no deployment's rows list: a
+  warning when no document names it either, information when one does (staged before its first deployment).
 
 ### `strata deploy images`
 
