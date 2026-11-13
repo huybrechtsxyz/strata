@@ -200,6 +200,13 @@ Deployment 'bootstrap-acme' must be named 'bootstrap-acme-001' by the name_rule 
 - A `${param:}` in a document of another kind (a workspace, a module, ...) is not substituted, and
   the token check reports it as a `malformed_value_token`
 
+## Seeing the result
+
+`strata render deployment|environment|tenant NAME` shows a document as strata uses it, field by
+field: the document that wrote each value, and for a value filled in from a parameter set, the
+text as written and the role, key and set it read. `-o json` gives the same as data. Secret values
+are always masked. A `partial: true` base is not rendered; render a document built on it.
+
 ## Notes
 
 - Where parameter sets live is up to the solution: strata finds documents by `kind` and

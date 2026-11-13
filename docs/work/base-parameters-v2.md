@@ -804,10 +804,10 @@ Phases. Each step is shippable on its own; tests are listed with the step that n
 - [x] **Phase 3, attributeconfig.** `kind: parameterset, block: values` (document view) and `block: params` (effective
       view of deployments, from the merged values phase 1 returns), then the effective view for environments and
       tenants. Tests: both examples in "Constraints". Docs and CHANGELOG. Done 2026-11-13, see the changelog.
-- [ ] **Phase 4, a rendered view.** The full origin map (`merge_deployment_specs()` tracking the document behind
+- [x] **Phase 4, a rendered view.** The full origin map (`merge_deployment_specs()` tracking the document behind
       every merged field). Print the resolved document of a leaf (likely an option on an existing command), with
       which document and which parameter set each value comes from. Tests: the origins of a two-base chain with two
-      sets. Docs and CHANGELOG.
+      sets. Docs and CHANGELOG. Done 2026-11-13, see the changelog.
 - [ ] **Phase 5, consumer migration.** Spoke stacks first (bootstrap, spoke, ingress, subscription), then customer
       projects, then rings, then tenants (dropping the empty tenant environments). Use C (a generator) until then.
       `provider` is not worth templating.
@@ -1035,3 +1035,32 @@ Open questions:
     selector); model cases for the valid and invalid `(kind, block, view)` combinations. Docs:
     `docs/config/attributeconfig.md` ("Parameter sets: two views"), `docs/config/parameterset.md`,
     `docs/design/dynamic-configuration-validation.md`; CHANGELOG "Added".
+- 2026-11-13: Phase 4 built: the rendered view.
+  - **A new command, not an option: `strata render KIND NAME`** for deployment, environment and tenant. No existing
+    command fits all three kinds: `deploy list` is deployments only and one row each, `path get` is about files,
+    `graph` about references. Like `deploy list` it runs nothing and does not call `require_valid()`. Console: the
+    chain, the parameter sets per role, then one line per field (value, the document that wrote it, and for a filled-in
+    value the text as written with each read and its set). `-o json`: the same, plus `params` and `spec`. Exit 3 for
+    a name that does not exist, a `partial: true` base (render one built on it) or a document that does not resolve
+    (its own resolution findings are shown).
+  - **Departure: the origin map is computed beside the merge, not inside `merge_deployment_specs()`.**
+    `controllers/rendered_view.py` substitutes each layer as resolution does (a deployment's tenant defaults, then
+    its chain root first; an environment's or tenant's chain), walks every layer and the result into leaf paths, and
+    gives each leaf of the result the last layer that wrote it. Paths are normalized so the merge rules need no
+    tracking of their own: an item of a named list by its name (`stages[step=...]`, `providers[slot=...]`,
+    `variables[key=...]`), a plain list item by its value, so an appended `environments` item and a leaf's
+    override of a provider slot both find their writer. The three merge functions stay unchanged. A leaf no layer
+    wrote is a schema default (`(default)`); an empty block a merge added is left out.
+  - Substitution origins come from `substitute_params(origins=)` per layer, as in 1e; a whole-value token that
+    inserted a list or map gives its origin to every leaf below it. The supplying set of each read is
+    `document_chains.value_supplier()`, now shared with the per-template findings of 1e.
+  - **Secrets are always masked** (`***`), empty or not, in `spec` and in the text as written: every `value` under an
+    environment's `spec.secrets`.
+  - Not done: findings on a merged environment or tenant still name the leaf's file (phase 2); the origin map could
+    point them at the base that wrote the field, a small follow-up now that the map exists.
+  - Tests: `tests/strata/controllers/test_rendered_view.py` (the two-base chain with two sets; a named item the leaf
+    overrides; plain list items from two bases; a whole-value list; tenant defaults as the bottom layer; an
+    environment's stores with secrets masked; a tenant; nothing to render), `tests/strata/commands/
+    test_commands_render.py`, and the how-to test checks the origins its page shows. Docs: `strata render` in the
+    how-to ("Check it") and `docs/config/parameterset.md` ("Seeing the result"), the CLI table in `docs/README.md`, the command table of the scaffolded agent skill;
+    the how-to's "environments do not read parameter sets yet" corrected. CHANGELOG "Added".

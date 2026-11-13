@@ -40,6 +40,7 @@ from strata.services.environment_service import merge_environment_specs
 from strata.services.tenant_service import merge_tenant_specs
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.param_tokens import merge_param_values, substitute_params
+from strata.utils.value_paths import VALUE_PATH_MISSING, walk_value_path
 
 #: Role -> the parameter sets a chain names for it, root first: the merge order, and the merged-spec cache key.
 ParamSets = dict[str, tuple[str, ...]]
@@ -175,6 +176,19 @@ def set_values(param_sets: ParamSets, index: DocumentIndex) -> dict[str, dict[st
             assert isinstance(model, ParameterSetModel)
             values[name] = model.spec.values
     return values
+
+
+def value_supplier(param_sets: ParamSets, values: dict[str, dict[str, Any]], role: str, key: str) -> str:
+    """The parameter set the merged value of `role.key` comes from: the last set of the role that holds it.
+
+    For `${param:role}` alone (no key), or a key no set holds, every set of the role, comma-separated.
+    """
+    names = param_sets.get(role, ())
+    if not key:
+        return ", ".join(names)
+    path = key.split(".")
+    found = [name for name in names if walk_value_path(values[name], path) is not VALUE_PATH_MISSING]
+    return found[-1] if found else ", ".join(names)
 
 
 def chain_params(entry: IndexEntry, index: DocumentIndex) -> dict[str, dict[str, Any]] | None:

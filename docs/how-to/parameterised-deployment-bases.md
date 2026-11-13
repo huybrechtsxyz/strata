@@ -315,8 +315,9 @@ spec:
 Every leaf behind `hub02` names `hub: hub-hub02`. A set never names the sets it builds on, and
 nothing is implied by the folder: one name per leaf is the price of every value being explicit.
 
-Each hub still has its own environment. Environments do not read parameter sets yet, so they are
-written per hub:
+Each hub still has its own environment. An environment can also be built on a base that reads
+parameter sets ([environment](../config/environment.md#bases-extends-and-partial)); with one
+variable per hub, writing each out is shorter:
 
 ```yaml
 # hubs/hub01/environment.yaml
@@ -362,6 +363,30 @@ spec:
     subscription_id: 00000000-0000-0000-0000-000000000002
     state_account: sttfstateinitech001
 ```
+
+To see where each value comes from, render the deployment. Every field names the document that
+wrote it; a value filled in from a parameter set shows the text as written and the set it read:
+
+```
+strata render deployment spoke-initech-001
+```
+
+```text
+  deployment spoke-initech-001
+  chain: spoke-initech-001 <- spoke_deployment_base
+  parameter sets: hub: hub-defaults, hub-hub02; spoke: spoke-initech-001
+
+  FIELD                          VALUE                FROM                   FILLED IN FROM
+  spec.workspace                 spoke                spoke_deployment_base
+  spec.environments[1]           hub-hub02-env        spoke_deployment_base  'hub-${param:hub.name}-env': hub.name = hub02 (hub-hub02)
+  spec.tenant                    initech              spoke_deployment_base  '${param:spoke.tenant}': spoke.tenant = initech (spoke-initech-001)
+  spec.properties.region         westus2              spoke_deployment_base  '${param:hub.region}': hub.region = westus2 (hub-hub02)
+  spec.properties.state_account  sttfstateinitech001  spoke_deployment_base  'sttfstate${param:spoke.code}${param:spoke.seq}': spoke.code = initech (spoke-initech-001), spoke.seq = 001 (spoke-initech-001)
+  ...
+```
+
+`strata render` also takes `environment` and `tenant`, and `-o json` for the full origin of
+every field. Secret values are always masked.
 
 A deployment built on a base runs like any other: `strata build run spoke-initech-001`. A base
 does not run on its own.

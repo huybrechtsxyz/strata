@@ -44,6 +44,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   sets are merged, with one top-level key per role (`required: [spoke, hub]`). A selector path now walks into a map,
   so `meta.labels.role: spoke` selects sets by label.
 
+- **`strata render KIND NAME`: where each value comes from.** Shows a deployment, environment or tenant as strata
+  uses it (its `extends` chain merged, its parameter sets filled in, a deployment's tenant defaults folded in), one
+  line per field, with the document that wrote each value and, for a value filled in from a parameter set, the text
+  as written and the role, key and parameter set it read. `-o json` gives the same as data. Secret values are always
+  masked. Runs nothing and needs no valid solution, like `deploy list`.
+
 - **A full container image, `ghcr.io/huybrechtsxyz/strata:<version>-full`** (and `latest-full`): strata with
   OpenTofu, Helm 4, the Docker CLI with Compose, Trivy and Checkov, for a pipeline that runs Helm or Compose steps or the CVE and
   Checkov policies. The image you pull today is the slim variant: `strata:<version>` and `latest` are unchanged, and

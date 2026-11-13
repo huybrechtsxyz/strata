@@ -73,6 +73,7 @@ from strata.controllers.document_chains import (
     require,
     resolve_chain,
     set_values,
+    value_supplier,
 )
 from strata.controllers.references import unresolved_references
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
@@ -99,7 +100,6 @@ from strata.utils.param_tokens import (
     param_reads_in,
     substitute_params,
 )
-from strata.utils.value_paths import VALUE_PATH_MISSING, walk_value_path
 from strata.utils.value_tokens import extract_value_tokens
 
 log = get_logger(__name__)
@@ -405,12 +405,7 @@ class _OriginText:
 
     def supplier(self, role: str, key: str) -> str:
         """The parameter set the value of `role.key` comes from: the last one of the role that holds it."""
-        names = self.param_sets.get(role, ())
-        if not key:
-            return ", ".join(names)
-        path = key.split(".")
-        found = [name for name in names if walk_value_path(self.set_values[name], path) is not VALUE_PATH_MISSING]
-        return found[-1] if found else ", ".join(names)
+        return value_supplier(self.param_sets, self.set_values, role, key)
 
     def of(self, location: str) -> str | None:
         """`from 'hub-${param:spoke.hub}-env': spoke.hub = 'hub9' (spoke-acme-001)`, or `None` if nothing was

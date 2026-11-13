@@ -11,7 +11,9 @@ from pathlib import Path
 import pytest
 
 from strata.controllers.deployment_resolution import resolve_deployments
+from strata.controllers.rendered_view import render_document
 from strata.controllers.solution_context import open_solution
+from strata.models.common_models import PlatformKind
 
 HOWTO = Path(__file__).resolve().parents[2] / "docs" / "how-to" / "parameterised-deployment-bases.md"
 _BLOCK = re.compile(r"^```yaml\n# (?P<path>\S+\.yaml)\n(?P<body>.*?)^```$", re.M | re.S)
@@ -44,6 +46,20 @@ def test_the_solution_validates_strictly_with_nothing_unused(solution):
     context = open_solution(solution).require_valid()
     assert not context.diagnostics.warnings  # `strata validate --strict` passes
     assert [f for f in context.diagnostics.infos if f.code == "param_unused"] == []
+
+
+def test_the_rendered_origins_are_as_the_page_shows(solution):
+    context = open_solution(solution)
+    rendered, _ = render_document(context.controller.index, PlatformKind.DEPLOYMENT, "spoke-initech-001")
+    assert rendered is not None
+    region = next(origin for origin in rendered.fields if origin.path == "spec.properties.region")
+    assert (region.value, region.document, region.written) == (
+        "westus2",
+        "spoke_deployment_base",
+        "${param:hub.region}",
+    )
+    assert [(read.role, read.key, read.parameter_set) for read in region.reads] == [("hub", "region", "hub-hub02")]
+    assert rendered.param_sets == {"hub": ("hub-defaults", "hub-hub02"), "spoke": ("spoke-initech-001",)}
 
 
 def test_each_deployment_resolves_to_its_own_values(solution):

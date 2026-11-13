@@ -30,6 +30,7 @@ from strata.commands.integration_command import integration_command
 from strata.commands.path_command import path_command
 from strata.commands.policy_command import policy_command
 from strata.commands.promote_command import promote_command
+from strata.commands.render_command import render_command
 from strata.commands.sln_command import sln_command
 from strata.commands.validate_command import validate_command
 from strata.commands.values_command import values_command
@@ -45,6 +46,7 @@ def cli() -> None:
 
 cli.add_command(validate_command)
 cli.add_command(graph_command)
+cli.add_command(render_command)
 cli.add_command(values_command)
 cli.add_command(build_command)
 cli.add_command(deploy_command)
