@@ -10,7 +10,13 @@ from click.testing import CliRunner
 
 from strata.commands.cli import cli
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_VALIDATION
-from strata.controllers.artifact_usage import check_unused_artifacts, unused_artifacts, used_artifacts
+from strata.controllers.artifact_usage import (
+    check_unused_artifacts,
+    referenced_artifacts,
+    unreferenced_artifacts,
+    unused_artifacts,
+    used_artifacts,
+)
 from strata.controllers.solution_context import open_solution
 from strata.controllers.version_controller import reconcile_version
 
@@ -215,6 +221,80 @@ def test_an_existing_pin_on_an_unused_artifact_is_not_stale(tmp_path):
     )
 
     assert not any(r.name == "orphan" for r in rows)
+
+
+# ---------------------------------------------------------------------------
+# A staged artifact: referenced, but no deployment reaches it yet (information, not a warning)
+# ---------------------------------------------------------------------------
+
+
+def _staged(tmp_path: Path) -> Path:
+    """`_solution()` plus a product not deployed yet: artifact `datahub` read by a `store: artifact` variable in an
+    environment no deployment lists, and artifact `auth` pinned in version `prd` only."""
+    root = _solution(tmp_path)
+    _write(root, "artifacts/datahub.yaml", "artifact", "datahub", "  image_name: src/datahub\n  image_tag: '1.0.0'\n")
+    _write(root, "artifacts/auth.yaml", "artifact", "auth", "  image_name: src/auth\n")
+    _write(
+        root,
+        "stacks/datahub.yaml",
+        "environment",
+        "datahub",
+        "  variables:\n    - key: datahub_image_name\n      store: artifact\n      value: datahub\n"
+        "      field: image_name\n",
+    )
+    _write(root, "version.yaml", "version", "prd", "  pins:\n    artifacts:\n      auth: '0.1.0'\n")
+    return root
+
+
+def test_every_kind_of_reference_counts_whether_or_not_a_deployment_reaches_it(tmp_path):
+    root = _staged(tmp_path)
+    _write(root, "notes.yaml", "environment", "notes", "  properties:\n    image: ${artifact:orphan.image_ref}\n")
+
+    referenced = referenced_artifacts(_context(root).controller.index)
+
+    assert referenced == {
+        "web": ["service:stack/web"],
+        "datahub": ["variable:datahub_image_name"],
+        "auth": ["pin:prd"],
+        "orphan": ["token:environment/notes"],
+    }
+
+
+def test_a_staged_artifact_is_information_and_a_leftover_still_a_warning(tmp_path):
+    context = _context(_staged(tmp_path))
+
+    assert unused_artifacts(context) == ["auth", "datahub", "orphan"]
+    assert unreferenced_artifacts(context) == ["orphan"]
+    findings = {Path(d.source).stem: (d.code, d.severity.value) for d in check_unused_artifacts(context).items}
+    assert findings == {
+        "auth": ("artifact_unused", "info"),
+        "datahub": ("artifact_unused", "info"),
+        "orphan": ("artifact_unused", "warning"),
+    }
+    staged = next(d for d in check_unused_artifacts(context).items if d.source.endswith("datahub.yaml"))
+    assert "variable:datahub_image_name" in staged.message
+    assert "no deployment reaches it yet" in staged.message
+
+
+def test_validate_strict_passes_with_only_staged_artifacts(tmp_path):
+    """The issue: artifacts staged before their first deployment failed `--strict` (2.6.0 to 2.6.2)."""
+    root = _staged(tmp_path)
+    (root / "artifacts" / "orphan.yaml").unlink()
+
+    result = _validate(root, "--strict")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    severities = {d["severity"] for d in json.loads(result.output)["diagnostics"] if d["code"] == "artifact_unused"}
+    assert severities == {"info"}
+
+
+def test_version_update_offers_a_staged_artifact_and_leaves_a_leftover_out(tmp_path):
+    result = CliRunner().invoke(cli, ["version", "update", "prd", "--path", str(_staged(tmp_path)), "-o", "json"])
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    offered = {(c["name"], c["action"]) for c in json.loads(result.output)["data"]["candidates"]}
+    assert ("datahub", "add") in offered
+    assert not any(name == "orphan" for name, _ in offered)
 
 
 @pytest.mark.parametrize("output", ["console", "json"])

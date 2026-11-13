@@ -153,10 +153,12 @@ def reconcile_version(
     `--from` cloning follows. The one exception is an artifact with no
     `image_tag`: it is reported as `needs_value`, with no seed.
 
-    An artifact in `unused_artifacts` (no deployment uses it,
-    `artifact_usage.unused_artifacts()`) is offered neither as `add` nor as
-    `needs_value`: pinning what nothing deploys changes nothing. A pin it
-    already has is not stale, since the artifact exists, and is left alone.
+    An artifact in `unused_artifacts` (no document references it,
+    `artifact_usage.unreferenced_artifacts()`) is offered neither as `add`
+    nor as `needs_value`: pinning a leftover changes nothing. An artifact
+    that is referenced but not deployed yet is offered, so a staged image
+    can be pinned before its first deployment. A pin it already has is not
+    stale, since the artifact exists, and is left alone.
     """
     inventory = _inventory(index, solution)
     declared: dict[str, set[str]] = {category: set() for category in PIN_CATEGORIES}

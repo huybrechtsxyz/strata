@@ -8,6 +8,20 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.6.3] - 2026-11-13
+
+`validate --strict` passes again on solutions that stage an artifact before its first deployment.
+
+### Fixed
+
+- **`artifact_unused` no longer fails `validate --strict` for an artifact staged before its first deployment.**
+  Since 2.6.0 it warned on every artifact no deployment uses, including one a document already names: a
+  `store: artifact` variable in an environment no deployment lists yet, a `${artifact:}` token, a module service or
+  a version document's `pins.artifacts`. Such an artifact is now information, and the message names the references.
+  An artifact nothing names at all, a leftover or a typo, is still a warning.
+- `strata version update` offers a pin for a staged artifact, so its version can be prepared before the first
+  deployment. It still leaves out an artifact nothing references.
+
 ## [2.6.2] - 2026-11-13
 
 `validate --strict` passes again on solutions whose artifacts name a registry a consumer prefixes.
@@ -675,7 +689,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.6.2...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.6.3...HEAD
+[2.6.3]: https://github.com/huybrechtsxyz/strata/compare/v2.6.2...v2.6.3
 [2.6.2]: https://github.com/huybrechtsxyz/strata/compare/v2.6.1...v2.6.2
 [2.6.1]: https://github.com/huybrechtsxyz/strata/compare/v2.6.0...v2.6.1
 [2.6.0]: https://github.com/huybrechtsxyz/strata/compare/v2.5.0...v2.6.0

@@ -26,7 +26,7 @@ import click
 from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
-from strata.controllers.artifact_usage import unused_artifacts
+from strata.controllers.artifact_usage import unreferenced_artifacts
 from strata.controllers.path_controller import get_path
 from strata.controllers.solution_context import open_solution
 from strata.controllers.version_controller import ReconcileRow, reconcile_version, scaffold_version, set_version_pin
@@ -151,7 +151,8 @@ def version_update(name: str, start_path: Path | None, check: bool, output: str,
         if entry is None:
             raise UsageError(f"No version document named '{name}' is indexed.")
 
-        unused = unused_artifacts(context) if context.ok else []
+        # A staged artifact (referenced, no deployment yet) is offered, so its pin can be prepared.
+        unused = unreferenced_artifacts(context) if context.ok else []
         rows = reconcile_version(
             context.controller.index, solution, cast(VersionModel, entry.model), unused_artifacts=unused
         )
@@ -163,7 +164,7 @@ def version_update(name: str, start_path: Path | None, check: bool, output: str,
         findings = _candidate_findings(rows, source=str(entry.source), check=check)
         if unused:
             findings.info(
-                f"Not offered, no deployment uses {'it' if len(unused) == 1 else 'them'}: artifact "
+                f"Not offered, no document references {'it' if len(unused) == 1 else 'them'}: artifact "
                 f"{', '.join(repr(name) for name in unused)}. `strata validate` reports it as artifact_unused.",
                 source=str(entry.source),
                 code="artifact_unused",
