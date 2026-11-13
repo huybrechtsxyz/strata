@@ -279,6 +279,22 @@ def test_strict_passes_with_a_path_remote_beside_the_solution(runner, tmp_path):
     assert payload["diagnostics"] == []
 
 
+def test_strict_does_not_fail_on_a_registry_a_consumer_prefixes(runner, solution):
+    """A host-less image_name with a documentation-only `registry` (a Terraform root imports the path into its own
+    ACR) is information, so it cannot fail `--strict` (2.6.0 and 2.6.1 warned and failed it)."""
+    (solution / "artifact.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: datahub-api\nspec:\n"
+        "  image_name: src/omp.datahub.api\n  registry: cdn-feeds.example.com/int-docker-test\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(cli, ["validate", str(solution), "--strict", "--output", "json"])
+
+    findings = [d for d in json.loads(result.output)["diagnostics"] if d["code"] == "artifact_registry_mismatch"]
+    assert [d["severity"] for d in findings] == ["info"]
+    assert "cdn-feeds.example.com/int-docker-test/src/omp.datahub.api" in findings[0]["message"]
+
+
 # ---------------------------------------------------------------------------
 # Surface
 # ---------------------------------------------------------------------------
