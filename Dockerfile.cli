@@ -14,7 +14,7 @@
 # updates `FROM` lines only, keeps the pin current.
 FROM ghcr.io/astral-sh/uv:0.13.8 AS uv
 # The Docker CLI and its Compose plugin (static binaries, copied into the full image).
-FROM docker:28.3.2-cli AS docker-cli
+FROM docker:29.9.2-cli AS docker-cli
 # Trivy, an exact version: a poisoned v0.69.4 was published through several channels in March 2026.
 FROM aquasec/trivy:0.76.2 AS trivy
 # OpenTofu: its minimal image exists to copy the `tofu` binary from.
