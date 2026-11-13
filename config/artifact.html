@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Artifact (kind: artifact) &mdash; strata 2.6.2 documentation</title>
+  <title>Artifact (kind: artifact) &mdash; strata 2.6.3 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=3db9c557"></script>
+      <script src="../_static/documentation_options.js?v=99c1414e"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -291,7 +291,15 @@ token in a document it reaches, or an execution step that gets every variable (T
 <code class="docutils literal notranslate"><span class="pre">strata.variables</span></code> and <code class="docutils literal notranslate"><span class="pre">TF_VAR_&lt;key&gt;</span></code>; a script without <code class="docutils literal notranslate"><span class="pre">script.values</span></code>; an <code class="docutils literal notranslate"><span class="pre">output.template</span></code> that reads it).
 A variable nothing receives does not make <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">images</span></code> or <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> list the artifact.</p>
 <p>An artifact that no deployment uses in any of these ways is reported by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>
-(<code class="docutils literal notranslate"><span class="pre">artifact_unused</span></code>, a warning; <code class="docutils literal notranslate"><span class="pre">--strict</span></code> fails on it), and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">update</span></code> does not offer a pin for it.</p>
+(<code class="docutils literal notranslate"><span class="pre">artifact_unused</span></code>):</p>
+<ul class="simple">
+<li><p>a <strong>warning</strong> (<code class="docutils literal notranslate"><span class="pre">--strict</span></code> fails on it) when no document names it at all: no <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code> variable,
+no module service <code class="docutils literal notranslate"><span class="pre">artifact</span></code>, no <code class="docutils literal notranslate"><span class="pre">${artifact:}</span></code> token and no <code class="docutils literal notranslate"><span class="pre">pins.artifacts</span></code> entry. That is a leftover or a
+mistyped name, and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">update</span></code> does not offer a pin for it;</p></li>
+<li><p><strong>information</strong> when a document names it but no deployment reaches that document yet: an image staged before
+its first deployment, for example a <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code> variable in an environment no deployment lists yet.
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">update</span></code> offers its pin as usual.</p></li>
+</ul>
 <p>Every way of reaching an artifact counts as using it: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">images</span></code> lists the artifact with each use in
 <code class="docutils literal notranslate"><span class="pre">via</span></code> (<code class="docutils literal notranslate"><span class="pre">variable:KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">service:MODULE/SERVICE</span></code>, or <code class="docutils literal notranslate"><span class="pre">token:KIND/NAME</span></code> for the document holding an
 <code class="docutils literal notranslate"><span class="pre">${artifact:}</span></code> token), and so the SBOM, the image gates and <code class="docutils literal notranslate"><span class="pre">image_tag_policy</span></code> judge it.</p>

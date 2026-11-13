@@ -123,7 +123,14 @@ token in a document it reaches, or an execution step that gets every variable (T
 A variable nothing receives does not make `deploy images` or `image_tag_policy` list the artifact.
 
 An artifact that no deployment uses in any of these ways is reported by `strata validate`
-(`artifact_unused`, a warning; `--strict` fails on it), and `strata version update` does not offer a pin for it.
+(`artifact_unused`):
+
+- a **warning** (`--strict` fails on it) when no document names it at all: no `store: artifact` variable,
+  no module service `artifact`, no `${artifact:}` token and no `pins.artifacts` entry. That is a leftover or a
+  mistyped name, and `strata version update` does not offer a pin for it;
+- **information** when a document names it but no deployment reaches that document yet: an image staged before
+  its first deployment, for example a `store: artifact` variable in an environment no deployment lists yet.
+  `strata version update` offers its pin as usual.
 
 Every way of reaching an artifact counts as using it: `strata deploy images` lists the artifact with each use in
 `via` (`variable:KEY`, `service:MODULE/SERVICE`, or `token:KIND/NAME` for the document holding an
