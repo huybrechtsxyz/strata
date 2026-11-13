@@ -492,7 +492,6 @@ def test_shipped_example_binds_the_asset_slot_per_customer_without_a_manifest_re
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
-@pytest.mark.slow
 def test_shipped_example_merges_the_tenant_environment_before_the_deployments_own():
     """Tenant contoso names `contoso-env`, whose `CUSTOMER_CODE` reads the tenant's own name through `${value:}`."""
     from strata.controllers.value_controller import resolve_values
@@ -553,7 +552,6 @@ def test_shipped_example_builds_offline_and_projects_the_default_asset(tmp_path,
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
-@pytest.mark.slow
 def test_shipped_example_takes_the_artifact_tag_from_the_version_pin_or_its_own_declaration():
     """`example-api` declares 1.0.0; the `prd` version document pins 1.4.2, and the policy accepts both sources."""
     from strata.controllers.effective_images import effective_images
@@ -571,7 +569,6 @@ def test_shipped_example_takes_the_artifact_tag_from_the_version_pin_or_its_own_
 
 
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
-@pytest.mark.slow
 def test_shipped_example_shows_every_way_to_use_an_artifact():
     """docs/archive/artifact-gap-analysis.md, design 9: a `store: artifact` variable and an `${artifact:}` token for
     `example-api`, a Compose service's `artifact` for `portainer`; each pinned by `prd` and judged by the policy."""

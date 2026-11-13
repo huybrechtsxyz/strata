@@ -176,6 +176,7 @@ def test_a_tool_missing_from_path_keeps_the_preflight_message():
     ("installed", "codes"),
     [("1.9.2", []), ("1.5.0", ["integration_version_mismatch"]), (None, ["integration_version_mismatch"])],
 )
+@pytest.mark.slow
 def test_the_installed_version_is_read_once_and_compared(installed, codes):
     readiness = assess_integration(_cli(installed)(_document(version="~> 1.7")))
     assert _codes(readiness) == codes

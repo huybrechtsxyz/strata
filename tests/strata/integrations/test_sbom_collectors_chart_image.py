@@ -293,7 +293,6 @@ def test_a_failed_render_gets_an_info_line_with_helms_first_error(tmp_path, monk
     )
 
 
-@pytest.mark.slow
 def test_an_image_holding_a_token_is_left_out_with_an_info_line(tmp_path, monkeypatch):
     stdout = "kind: Pod\nspec:\n  containers:\n    - {name: api, image: 'acme/api:${artifact:api.image_tag}'}\n"
     monkeypatch.setattr(chart_image_collector, "helm", lambda: _FakeHelm(stdout))

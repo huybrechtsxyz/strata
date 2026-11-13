@@ -284,6 +284,7 @@ _EXAMPLE_CASES = [(kind, i) for kind, docs in EXAMPLES.items() for i in range(le
 
 
 @pytest.mark.parametrize(("kind", "index"), _EXAMPLE_CASES, ids=[f"{k.value}-{i}" for k, i in _EXAMPLE_CASES])
+@pytest.mark.slow
 def test_every_example_is_a_valid_document_of_its_own_kind(kind, index):
     document = EXAMPLES[kind][index]
     assert document["kind"] == kind.value
@@ -371,6 +372,7 @@ def _deployment_schema() -> dict[str, Any]:
     return export_schema(_model_of(PlatformKind.DEPLOYMENT), PlatformKind.DEPLOYMENT)
 
 
+@pytest.mark.slow
 def test_the_editor_schema_accepts_a_deployment_template():
     jsonschema.validate(_TEMPLATE, _deployment_schema())
 
@@ -385,6 +387,7 @@ def test_the_editor_schema_accepts_a_deployment_template():
         ("spec", "tenant", "Not A Name"),  # a plain value is still checked as before
     ],
 )
+@pytest.mark.slow
 def test_the_editor_schema_still_rejects_what_validate_rejects(section, field, value):
     document = copy.deepcopy(_TEMPLATE)
     document[section][field] = value
@@ -426,6 +429,7 @@ def test_the_editor_schema_accepts_environment_and_tenant_templates():
 
 
 @pytest.mark.parametrize("kind", [PlatformKind.ENVIRONMENT, PlatformKind.TENANT])
+@pytest.mark.slow
 def test_extends_and_partial_take_no_token_in_environments_and_tenants(kind):
     schema = export_schema(_model_of(kind), kind)
     for field, value in (("extends", "base-${param:x.y}"), ("partial", "${param:x.y}")):

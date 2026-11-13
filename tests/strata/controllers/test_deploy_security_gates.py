@@ -22,9 +22,6 @@ from strata.integrations.security_findings import ImageLookup, ReleaseGateOutcom
 from strata.models.audit_manifest_model import ManifestPolicyResultModel
 from strata.utils.transport import CommandResult
 
-pytestmark = pytest.mark.slow
-
-
 TOKEN = "gate-token-value-1234567890"
 COMMIT = "a" * 40
 
@@ -160,6 +157,7 @@ def test_a_denied_gate_stops_the_deploy_before_any_step(tmp_path, gate, terrafor
     assert gate.bound == [{"GATE_TOKEN": TOKEN}]
 
 
+@pytest.mark.slow
 def test_a_passed_gate_lets_the_deploy_run_and_is_recorded(tmp_path, gate, terraform):
     root, build_path = _built(tmp_path)
     build_entry = ManifestPolicyResultModel(
@@ -178,6 +176,7 @@ def test_a_passed_gate_lets_the_deploy_run_and_is_recorded(tmp_path, gate, terra
     ]
 
 
+@pytest.mark.slow
 def test_a_warn_breach_deploys_and_is_recorded_with_its_violation(tmp_path, gate, terraform):
     gate.outcome = ReleaseGateOutcome(passed=False, reference="22")
     root, build_path = _built(tmp_path, enforcement="warn")

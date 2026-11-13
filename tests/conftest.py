@@ -17,7 +17,7 @@ _GIT_ENVIRONMENT = {
 _saved_git_environment: dict[str, str | None] = {}
 
 # A test not marked `slow` that takes longer than this is listed at the end of a `-m "not slow"` run. It sits well
-# above the 0.2s the marks were chosen at, so timing noise on a busy machine does not list a test that is fine.
+# above the 0.1s the marks were chosen at, so timing noise on a busy machine does not list a test that is fine.
 _UNMARKED_SLOW_SECONDS = 1.0
 
 # Setup + call + teardown seconds per test not marked `slow`. Under pytest-xdist the controller receives every
@@ -29,7 +29,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "chart_pulls: let build run pull registry Helm charts (tests/conftest.py)")
     config.addinivalue_line(
         "markers",
-        "slow: takes 0.2s or more, mostly by running real git, helm, terraform or scripts; "
+        "slow: takes 0.1s or more, mostly by running real git, helm, terraform or scripts; "
         'skip with -m "not slow" (tests/conftest.py)',
     )
     for name, value in _GIT_ENVIRONMENT.items():

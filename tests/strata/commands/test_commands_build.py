@@ -140,7 +140,6 @@ def test_invalid_solution_exits_three(runner, solution):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
 def test_build_writes_rendered_artifacts_under_the_default_build_path(runner, solution):
     result = _run(runner, "app", "--path", solution)
     assert result.exit_code == EXIT_SUCCESS, result.output
@@ -149,7 +148,6 @@ def test_build_writes_rendered_artifacts_under_the_default_build_path(runner, so
     assert (materialised / "strata.auto.tfvars.json").exists()
 
 
-@pytest.mark.slow
 def test_build_path_option_overrides_the_default(runner, solution, tmp_path):
     custom = tmp_path / "out"
     result = _run(runner, "app", "--path", solution, "--build-path", custom)
@@ -163,7 +161,6 @@ def test_build_path_option_overrides_the_default(runner, solution, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
 def test_default_build_path_is_always_cleaned(runner, solution):
     """The default path is exclusively this build's own directory - always
     safe to wipe, no flag needed."""
@@ -232,7 +229,6 @@ def test_dry_run_reports_planned_steps_in_console_output(runner, solution):
     assert "would render provisioner" in result.output
 
 
-@pytest.mark.slow
 def test_real_run_reports_steps_in_console_output_too(runner, solution):
     result = _run(runner, "app", "--path", solution)
 
@@ -250,7 +246,6 @@ def test_dry_run_still_exits_two_for_an_unknown_deployment(runner, solution):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
 def test_pin_overrides_spec_version_for_this_invocation_only(runner, solution):
     _write(
         solution,

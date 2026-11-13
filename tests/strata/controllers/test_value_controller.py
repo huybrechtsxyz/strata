@@ -640,7 +640,6 @@ def test_artifact_token_values_follow_a_pin_override(tmp_path):
 
 
 @pytest.mark.parametrize("field", ["image_name", "image_tag", "image_ref", "image_tag_name", "image_digest"])
-@pytest.mark.slow
 def test_artifact_token_values_agree_with_a_store_artifact_variable(tmp_path, field):
     pins = {"api_container": f"2.0.0@{_DIGEST}"}
     context, deployment = _tag_context(tmp_path, image_tag="1.0.0", pins=pins, version=True)

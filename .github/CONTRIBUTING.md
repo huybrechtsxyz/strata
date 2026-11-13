@@ -185,7 +185,7 @@ uv run pytest tests/ --no-cov -q -n auto --dist loadfile
 uv run pytest tests/ --cov=strata --cov-report=term-missing
 ```
 
-The default run and CI include the `slow` tests. Mark a new test `@pytest.mark.slow` when it takes 0.2s or more; a
+The default run and CI include the `slow` tests. Mark a new test `@pytest.mark.slow` when it takes 0.1s or more; a
 `-m "not slow"` run lists unmarked tests over 1s under "tests that could be marked slow".
 
 Tests run `git` with `tests/gitconfig` as their only configuration (`tests/conftest.py`): your own hooks, credential

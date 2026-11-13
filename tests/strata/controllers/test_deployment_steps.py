@@ -197,7 +197,6 @@ def test_a_scope_cycle_is_listed_unorderable_with_a_warning(tmp_path):
 # --- resolution --------------------------------------------------------------------------------------------------
 
 
-@pytest.mark.slow
 def test_a_workspace_inherited_through_extends_is_used(tmp_path):
     deployments = (
         "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: base\nspec:\n"
@@ -215,7 +214,6 @@ def test_a_workspace_inherited_through_extends_is_used(tmp_path):
     assert deployment_steps(context, "base").partial is True
 
 
-@pytest.mark.slow
 def test_an_unknown_deployment_is_a_usage_error(tmp_path):
     with pytest.raises(UsageError, match="No deployment named 'ghost'"):
         deployment_steps(_context(_solution(tmp_path)), "ghost")

@@ -2297,6 +2297,7 @@ def test_kube_context_problem_rejects_an_environment_that_points_helm_elsewhere(
 
 
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm is not installed")
+@pytest.mark.slow
 def test_real_helm_refuses_a_kube_context_its_kubeconfig_does_not_define(tmp_path: Path):
     """The pin relies on Helm reading HELM_KUBECONTEXT and failing, before any cluster call, on an unknown context."""
     environ = {

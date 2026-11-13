@@ -45,6 +45,7 @@ def test_init_creates_the_scaffolded_files(tmp_path):
     assert "huybrechts-xyz.xyz-strata" in (tmp_path / ".vscode" / "extensions.json").read_text(encoding="utf-8")
 
 
+@pytest.mark.slow
 def test_init_is_idempotent_and_never_overwrites_the_manifest(tmp_path):
     ScaffoldController(tmp_path).init("acme-platform")
     manifest = tmp_path / "strata.yaml"
@@ -63,6 +64,7 @@ def test_update_requires_an_existing_manifest(tmp_path):
         ScaffoldController(tmp_path).update()
 
 
+@pytest.mark.slow
 def test_vscode_is_user_owned_like_github(tmp_path):
     """.vscode/ follows the same rule as .github/ — written once, never refreshed."""
     ScaffoldController(tmp_path).init("acme-platform")
@@ -77,6 +79,7 @@ def test_vscode_is_user_owned_like_github(tmp_path):
     assert extensions.read_text(encoding="utf-8") == customized
 
 
+@pytest.mark.slow
 def test_update_after_init_is_a_no_op_when_nothing_upstream_changed(tmp_path):
     ScaffoldController(tmp_path).init("acme-platform")
     readme = tmp_path / ".strata" / "README.md"
@@ -93,6 +96,7 @@ def test_update_after_init_is_a_no_op_when_nothing_upstream_changed(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_worked_example_update_refreshes_strata_but_preserves_github_customization(tmp_path):
     ScaffoldController(tmp_path).init("acme-platform")
 
@@ -201,6 +205,7 @@ def test_skill_explains_every_value_token_kind(tmp_path):
         assert f"| `${{{token_kind}:" in text, f"the skill's value-token table lacks {token_kind}"
 
 
+@pytest.mark.slow
 def test_update_rewrites_the_strata_skill_while_the_marker_is_present(tmp_path):
     ScaffoldController(tmp_path).init("acme-platform")
     skill = tmp_path / AGENT_SKILL_PATH
@@ -214,6 +219,7 @@ def test_update_rewrites_the_strata_skill_while_the_marker_is_present(tmp_path):
     assert f"Updated: {AGENT_SKILL_PATH}" in controller.messages
 
 
+@pytest.mark.slow
 def test_update_keeps_a_strata_skill_whose_marker_was_removed(tmp_path):
     ScaffoldController(tmp_path).init("acme-platform")
     skill = tmp_path / AGENT_SKILL_PATH
@@ -227,6 +233,7 @@ def test_update_keeps_a_strata_skill_whose_marker_was_removed(tmp_path):
     assert any(m.startswith(f"Kept: {AGENT_SKILL_PATH}") for m in controller.messages)
 
 
+@pytest.mark.slow
 def test_project_gotchas_skill_is_team_owned(tmp_path):
     ScaffoldController(tmp_path).init("acme-platform")
     gotchas = tmp_path / ".claude" / "skills" / "project-gotchas" / "SKILL.md"
@@ -286,6 +293,7 @@ def test_no_exported_schema_carries_a_title(tmp_path):
         assert not found, f"{schema_file.name} has titles: {found[:3]}"
 
 
+@pytest.mark.slow
 def test_update_regenerates_schemas_even_if_hand_edited(tmp_path):
     """schemas/ is package-owned — unlike .vscode/.github, it's always refreshed."""
     ScaffoldController(tmp_path).init("acme-platform")
@@ -310,8 +318,8 @@ def _repo_config_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "config"
 
 
-@pytest.mark.slow
 @pytest.mark.skipif(not _repo_config_dir().exists(), reason="example config not present")
+@pytest.mark.slow
 def test_shipped_example_validates_against_its_exported_schemas(tmp_path):
     """The editor schema must accept every document the example ships, shorthand forms included
     (provider slots, version pins) — a bare-string shorthand invisible to the schema is flagged

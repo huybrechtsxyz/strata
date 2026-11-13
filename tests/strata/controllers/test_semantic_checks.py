@@ -255,7 +255,6 @@ def test_base_solution_passes_every_check(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
 def test_stage_naming_unknown_step_is_caught(tmp_path):
     root = _base_solution(tmp_path)
     path = root / "deployment.yaml"
@@ -1617,7 +1616,6 @@ def test_workspace_custom_token_not_declared_is_caught(tmp_path):
     assert any("GHOST_WORKSPACE_VAR" in m for m in context.diagnostics.messages())
 
 
-@pytest.mark.slow
 def test_tenant_configuration_token_not_declared_is_caught(tmp_path):
     root = _base_solution(tmp_path)
     path = root / "tenant.yaml"
@@ -1825,7 +1823,6 @@ spec:
     assert any("consul" in m and "allowed_key_value_stores" in m for m in context.diagnostics.messages())
 
 
-@pytest.mark.slow
 def test_workspace_output_store_integration_wins_over_a_mismatched_output_store(tmp_path):
     """Both fields set, disagreeing types: `output_store_integration`'s own
     document type is what actually runs at deploy time (`resolve_
@@ -3812,7 +3809,6 @@ _AKS_OFF = "    - key: enable_aks\n      store: constant\n      value: false\n"
 _CLUSTER_ID_BLANK = '    - key: aks_cluster_id\n      store: constant\n      value: ""\n'
 
 
-@pytest.mark.slow
 def test_attributeconfig_composite_fails_when_inherited_feature_on_and_variable_blank(tmp_path):
     """The real `enable_aks` case: the base turns the feature on (as a YAML boolean), the cluster id is blank."""
     root = _base_solution(tmp_path)
@@ -4919,7 +4915,6 @@ def test_a_deployment_with_helm_and_compose_steps_needs_both_contexts(tmp_path):
 
 
 @pytest.mark.parametrize("field", ["kube_context", "docker_context"])
-@pytest.mark.slow
 def test_a_value_token_in_a_context_field_is_a_schema_error(tmp_path, field):
     root = _base_solution(tmp_path)
     path = root / "deployment.yaml"
@@ -5102,7 +5097,6 @@ def test_a_token_for_another_artifact_does_not_deliver_this_one(tmp_path):
     assert len(_delivery_findings(context)) == 1
 
 
-@pytest.mark.slow
 def test_a_compose_service_artifact_is_delivered_by_strata(tmp_path):
     """Compose writes the service's image into the compose file, so there is nothing to warn about."""
     context = _resolve(_helm_artifact_solution(tmp_path, module_type="compose"))

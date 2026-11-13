@@ -553,7 +553,6 @@ def _asset_solution(tmp_path: Path) -> Path:
     return root
 
 
-@pytest.mark.slow
 def test_build_run_materialises_an_asset_before_the_step_loop(tmp_path: Path):
     root = _asset_solution(tmp_path)
     build_path = tmp_path / "build"
@@ -654,7 +653,6 @@ def _asset_slot_solution(tmp_path: Path) -> Path:
     return root
 
 
-@pytest.mark.slow
 def test_build_run_materialises_a_slot_under_the_slot_name_not_the_document_name(tmp_path: Path):
     root = _asset_slot_solution(tmp_path)
     build_path = tmp_path / "build"
@@ -1073,7 +1071,6 @@ def test_build_run_dry_run_reports_dependency_materialisation(tmp_path: Path):
     assert not build_path.exists()
 
 
-@pytest.mark.slow
 def test_build_run_never_resolves_integration_for_a_dependency_only_provisioner(tmp_path: Path, monkeypatch):
     root = _terraform_solution_with_dependency(tmp_path)
     build_path = tmp_path / "build"
@@ -1875,7 +1872,6 @@ def test_build_run_fails_on_an_unrated_checkov_finding(tmp_path: Path, monkeypat
     assert [d.code for d in diagnostics.errors] == ["checkov_policy_violation"]
 
 
-@pytest.mark.slow
 def test_build_run_writes_policy_results_when_checkov_policy_breaches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _patch_checkov_scanner(monkeypatch, _checkov_result("CRITICAL"))
     root = _minimal_solution(
@@ -1911,7 +1907,6 @@ def test_build_run_snapshots_checkov_config_file_and_passes_it_to_the_scan(
     assert scanner.config_files == [snapshot]
 
 
-@pytest.mark.slow
 def test_build_run_records_a_warn_enforcement_checkov_breach_as_passed_with_violations(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -1930,7 +1925,6 @@ def test_build_run_records_a_warn_enforcement_checkov_breach_as_passed_with_viol
     assert len(results[0]["violations"]) >= 1
 
 
-@pytest.mark.slow
 def test_build_run_writes_no_policy_results_file_when_checkov_policy_unset(tmp_path: Path):
     root = _minimal_solution(tmp_path)
 
@@ -2244,7 +2238,6 @@ def _solution_with_values(tmp_path: Path, *, extra_environment_spec: str = "") -
     return root
 
 
-@pytest.mark.slow
 def test_build_run_writes_resolved_yaml_with_constant_and_secret_split(tmp_path: Path):
     root = _solution_with_values(
         tmp_path,
@@ -2292,7 +2285,6 @@ def test_build_run_dry_run_does_not_write_resolved_yaml(tmp_path: Path):
     assert not build_path.exists()
 
 
-@pytest.mark.slow
 def test_build_run_without_resolve_never_attempts_integration_backed_values(tmp_path: Path):
     """Without `--resolve`, an integration-backed secret is never touched at
     all — no diagnostics finding, not even an attempt."""
@@ -2412,7 +2404,6 @@ def test_build_run_promotion_section_omits_wave_when_unset(tmp_path: Path):
     assert "wave" not in manifest["promotion"]
 
 
-@pytest.mark.slow
 def test_build_run_omits_promotion_section_for_an_untagged_version(tmp_path: Path):
     """Worked example A: a Version document with no `spec.promotion` at all
     — no section written, not a null/empty one."""

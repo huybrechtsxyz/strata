@@ -28,9 +28,6 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
 from strata.utils.transport import CommandResult
 
-pytestmark = pytest.mark.slow
-
-
 MANIFEST = "apiVersion: strata.huybrechts.xyz/v2\nkind: solution\nmeta:\n  name: test-solution\nspec: {}\n"
 STORE_KEY = "strata/deployment-outputs/app"
 
@@ -398,6 +395,7 @@ def test_destroy_repeated_stages_destroy_in_reverse_order(tmp_path: Path, tools)
     ]
 
 
+@pytest.mark.slow
 def test_destroy_does_not_evaluate_the_image_tag_policy(tmp_path: Path, tools, monkeypatch):
     root = _tf_two(tmp_path, workspace_extra="  image_tag_policy: {}\n")
     build_path = _built(tmp_path, root)
@@ -417,6 +415,7 @@ def test_destroy_does_not_evaluate_the_image_tag_policy(tmp_path: Path, tools, m
     assert evaluated == ["evaluated"]  # the same solution does evaluate it on a deploy
 
 
+@pytest.mark.slow
 def test_destroy_does_not_evaluate_the_security_gates(tmp_path: Path, tools, monkeypatch):
     root = _tf_two(
         tmp_path,
@@ -617,6 +616,7 @@ def test_a_referenced_output_with_no_record_is_unavailable(tmp_path: Path, tools
     assert tools.terraform() == []
 
 
+@pytest.mark.slow
 def test_a_referenced_output_missing_from_its_record_is_unavailable(tmp_path: Path, tools, monkeypatch):
     backend = _register_output_store(monkeypatch)
     _seed(backend, {"apply_infra": {"something_else": "x"}})
@@ -705,6 +705,7 @@ def test_a_smoke_test_covers_a_container_step_without_calling_its_tool(tmp_path:
     assert tools.of("helm") == []
 
 
+@pytest.mark.slow
 def test_a_smoke_test_still_refuses_a_step_that_cannot_destroy(tmp_path: Path, tools):
     root = _with_a_script_step(tmp_path)
     build_path = _built(tmp_path, root)
@@ -900,6 +901,7 @@ def _release(build_path: Path) -> str:
     return str(meta.get("releaseName") or "auth")
 
 
+@pytest.mark.slow
 def test_a_helm_step_is_uninstalled_before_the_infrastructure_it_runs_on(tmp_path: Path, tools):
     root = _helm_solution(tmp_path)
     build_path = _built(tmp_path, root)
@@ -938,6 +940,7 @@ def test_a_helm_dry_run_lists_the_resources_and_never_the_secret_data(tmp_path: 
     assert "c3VwZXJzZWNyZXQ=" not in shown
 
 
+@pytest.mark.slow
 def test_a_compose_stack_is_removed_by_name(tmp_path: Path, tools):
     root = _compose_solution(tmp_path)
     build_path = _built(tmp_path, root)
@@ -948,6 +951,7 @@ def test_a_compose_stack_is_removed_by_name(tmp_path: Path, tools):
     assert [c.args for c in tools.of("docker")] == [["docker", "stack", "rm", "--detach=false", "apps"]]
 
 
+@pytest.mark.slow
 def test_a_failing_helm_uninstall_stops_the_run(tmp_path: Path, tools):
     root = _helm_solution(tmp_path)
     build_path = _built(tmp_path, root)
@@ -1022,6 +1026,7 @@ def test_a_gitops_preview_is_shown_without_follow(tmp_path: Path, tools, monkeyp
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
+@pytest.mark.slow
 def test_a_gitops_step_goes_from_build_to_deploy_to_destroy_against_a_real_repo(tmp_path: Path):
     bare_repo = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
@@ -1085,6 +1090,7 @@ def test_a_dry_run_clears_nothing(tmp_path: Path, tools, monkeypatch):
     assert set(_record(backend)) == {"apply_infra", "apply_apps"}
 
 
+@pytest.mark.slow
 def test_a_failure_to_clear_the_record_is_a_warning_not_a_failed_destroy(tmp_path: Path, tools, monkeypatch):
     backend = _register_output_store(monkeypatch)
     _seed(backend, {"apply_infra": {"vm_ip": "10.0.0.5"}, "apply_apps": {"k": "v"}})
@@ -1121,6 +1127,7 @@ def test_a_failure_to_clear_the_record_is_a_warning_not_a_failed_destroy(tmp_pat
         ),
     ],
 )
+@pytest.mark.slow
 def test_a_real_terraform_destroy_removes_what_deploy_run_created(tmp_path: Path, tool: str, binary: str):
     root = _solution(
         tmp_path,
@@ -1164,6 +1171,7 @@ def _pinned_to_a_kube_context(root: Path, tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("HELM_KUBEAPISERVER", raising=False)
 
 
+@pytest.mark.slow
 def test_a_helm_uninstall_runs_against_the_deployments_kube_context(tmp_path: Path, tools, monkeypatch):
     root = _helm_solution(tmp_path)
     _pinned_to_a_kube_context(root, tmp_path, monkeypatch)
@@ -1176,6 +1184,7 @@ def test_a_helm_uninstall_runs_against_the_deployments_kube_context(tmp_path: Pa
     assert uninstall.env is not None and uninstall.env["HELM_KUBECONTEXT"] == "forge-prd"
 
 
+@pytest.mark.slow
 def test_a_helm_destroy_preview_runs_against_the_deployments_kube_context(tmp_path: Path, tools, monkeypatch):
     root = _helm_solution(tmp_path)
     _pinned_to_a_kube_context(root, tmp_path, monkeypatch)

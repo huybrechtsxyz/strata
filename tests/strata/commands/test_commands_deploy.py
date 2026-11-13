@@ -17,9 +17,6 @@ from strata.commands.cli import cli
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE, EXIT_VALIDATION
 from strata.utils.transport import CommandResult
 
-pytestmark = pytest.mark.slow
-
-
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
 kind: solution
 meta:
@@ -142,6 +139,7 @@ def _deploy(runner, *args):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_successful_deploy_exits_zero(runner, solution, _stub_terraform):
     _build(runner, solution)
     result = _deploy(runner, "app", "--path", solution, "--force")
@@ -165,6 +163,7 @@ def test_invalid_solution_exits_three(runner, solution, _stub_terraform):
     assert result.exit_code == EXIT_VALIDATION
 
 
+@pytest.mark.slow
 def test_step_failure_exits_three(runner, solution, monkeypatch):
     _build(runner, solution)
 
@@ -187,6 +186,7 @@ def test_step_failure_exits_three(runner, solution, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_build_path_option_overrides_the_default(runner, solution, tmp_path, _stub_terraform):
     custom = tmp_path / "out"
     result = runner.invoke(cli, ["build", "run", "app", "--path", str(solution), "--build-path", str(custom)])
@@ -239,6 +239,7 @@ def _stub_terraform_streaming(monkeypatch):
     monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
 
+@pytest.mark.slow
 def test_follow_streams_tool_prefixed_lines_on_console_output(runner, solution, _stub_terraform_streaming):
     _build(runner, solution)
     result = _deploy(runner, "app", "--path", solution, "--force", "--follow")
@@ -246,6 +247,7 @@ def test_follow_streams_tool_prefixed_lines_on_console_output(runner, solution, 
     assert "terraform │" in result.output
 
 
+@pytest.mark.slow
 def test_follow_reroutes_to_stderr_with_json_output(runner, solution, _stub_terraform_streaming):
     """Previously `--follow` was silently inert under `--output json` (no
     warning, lines dropped entirely) — now it reroutes every line to
@@ -265,6 +267,7 @@ def test_follow_ndjson_requires_output_json(runner, solution, _stub_terraform_st
     assert result.exit_code == EXIT_USAGE, result.output
 
 
+@pytest.mark.slow
 def test_follow_ndjson_streams_line_and_progress_events_to_stdout(runner, solution, _stub_terraform_streaming):
     """`--follow ndjson` (requires `--output json`) streams one JSON event
     per subprocess line and per progress message to stdout, ending with
@@ -289,6 +292,7 @@ def test_follow_ndjson_streams_line_and_progress_events_to_stdout(runner, soluti
     assert "event" not in final
 
 
+@pytest.mark.slow
 def test_follow_ndjson_does_not_escape_non_ascii_text(runner, solution, monkeypatch):
     """`json.dumps(..., ensure_ascii=False)` must match `format_json()`'s
     own policy — a non-ASCII subprocess line should appear literally in
@@ -311,6 +315,7 @@ def test_follow_ndjson_does_not_escape_non_ascii_text(runner, solution, monkeypa
     assert "\\u" not in result.stdout
 
 
+@pytest.mark.slow
 def test_stage_option_restricts_execution(runner, solution, _stub_terraform):
     _build(runner, solution)
     result = _deploy(runner, "app", "--path", solution, "--force", "--stage", "apply_infra")
@@ -338,6 +343,7 @@ def test_stage_and_scope_options_are_repeatable(runner, solution, monkeypatch):
     assert seen["scopes"] == ("infra",)
 
 
+@pytest.mark.slow
 def test_stage_option_rejects_unknown_stage(runner, solution, _stub_terraform):
     _build(runner, solution)
     result = _deploy(runner, "app", "--path", solution, "--force", "--stage", "ghost-stage")
@@ -358,6 +364,7 @@ def test_force_flag_is_accepted_and_currently_inert(runner, solution, _stub_terr
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_pin_is_accepted_and_overrides_spec_version(runner, solution, _stub_terraform):
     _write(
         solution,
@@ -373,6 +380,7 @@ def test_pin_is_accepted_and_overrides_spec_version(runner, solution, _stub_terr
     assert (solution / "deployment.yaml").read_text(encoding="utf-8") == before
 
 
+@pytest.mark.slow
 def test_pin_names_an_unknown_version_exits_two(runner, solution, _stub_terraform):
     _build(runner, solution)
     result = _deploy(runner, "app", "--path", solution, "--force", "--pin", "ghost")
@@ -413,6 +421,7 @@ def test_output_max_age_rejects_a_non_positive_value(runner, solution, _stub_ter
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_change_reference_flags_populate_the_manifest(runner, solution, _stub_terraform):
     from strata.utils import layout
 
@@ -446,6 +455,7 @@ def test_partial_change_reference_flags_exit_two_before_deploy_runs(runner, solu
     assert _stub_terraform == []  # deploy_run() must never have been called
 
 
+@pytest.mark.slow
 def test_change_approval_flags_populate_the_manifest(runner, solution, _stub_terraform):
     from strata.utils import layout
 
@@ -543,6 +553,7 @@ def test_deploy_check_unknown_deployment_exits_two(runner, solution, _stub_terra
     assert result.exit_code == EXIT_USAGE
 
 
+@pytest.mark.slow
 def test_deploy_check_step_failure_exits_three(runner, solution, monkeypatch):
     _build(runner, solution)
 
@@ -589,6 +600,7 @@ def test_deploy_validate_hidden_alias_behaves_identically_to_check(runner, solut
     assert commands == ["init", "validate"]
 
 
+@pytest.mark.slow
 def test_deploy_setup_gracefully_skips_container_capable_step(runner, tmp_path, _stub_terraform):
     root = tmp_path / "sln"
     _write(root, "strata.yaml", MANIFEST)
@@ -640,6 +652,7 @@ def test_deploy_setup_gracefully_skips_container_capable_step(runner, tmp_path, 
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_deploy_apply_missing_plan_file_exits_three_not_a_traceback(runner, solution, _stub_terraform):
     _build(runner, solution)
     result = runner.invoke(cli, ["deploy", "apply", "app", "--path", str(solution)])
@@ -649,6 +662,7 @@ def test_deploy_apply_missing_plan_file_exits_three_not_a_traceback(runner, solu
     assert commands == ["init"]
 
 
+@pytest.mark.slow
 def test_deploy_apply_applies_an_existing_saved_plan(runner, solution, tmp_path, _stub_terraform):
     _build(runner, solution)
     (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
@@ -659,6 +673,7 @@ def test_deploy_apply_applies_an_existing_saved_plan(runner, solution, tmp_path,
     assert commands == ["init", "apply", "output"]
 
 
+@pytest.mark.slow
 def test_deploy_apply_force_flag_is_accepted_and_currently_inert(runner, solution, _stub_terraform):
     _build(runner, solution)
     (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
@@ -669,6 +684,7 @@ def test_deploy_apply_force_flag_is_accepted_and_currently_inert(runner, solutio
     assert "-auto-approve" not in apply_call
 
 
+@pytest.mark.slow
 def test_deploy_apply_forwards_stage_and_scope(runner, solution, _stub_terraform):
     _build(runner, solution)
     (solution / "build" / "app" / "infra" / "apply_infra.tfplan").write_text("fake plan", encoding="utf-8")
@@ -679,6 +695,7 @@ def test_deploy_apply_forwards_stage_and_scope(runner, solution, _stub_terraform
     assert result.exit_code == EXIT_SUCCESS, result.output
 
 
+@pytest.mark.slow
 def test_deploy_apply_change_reference_flags_populate_the_manifest(runner, solution, _stub_terraform):
     from strata.utils import layout
 
@@ -731,6 +748,7 @@ def test_deploy_plan_calls_init_validate_plan_but_not_apply(runner, solution, _s
     assert commands == ["init", "validate", "plan"]
 
 
+@pytest.mark.slow
 def test_deploy_plan_saves_a_tfplan_file(runner, solution, _stub_terraform):
     _build(runner, solution)
     result = runner.invoke(cli, ["deploy", "plan", "app", "--path", str(solution)])
@@ -739,6 +757,7 @@ def test_deploy_plan_saves_a_tfplan_file(runner, solution, _stub_terraform):
     assert "-out" in plan_call and "apply_infra.tfplan" in plan_call
 
 
+@pytest.mark.slow
 def test_deploy_plan_streams_console_output_by_default_without_follow(runner, solution, _stub_terraform_streaming):
     """Unlike every other deploy subcommand, `deploy plan` streams the
     diff to the console WITHOUT needing `--follow` — its own `--follow`
@@ -750,6 +769,7 @@ def test_deploy_plan_streams_console_output_by_default_without_follow(runner, so
     assert "terraform │" in result.output
 
 
+@pytest.mark.slow
 def test_deploy_plan_explicit_follow_ndjson_still_overrides_the_console_default(
     runner, solution, _stub_terraform_streaming
 ):
@@ -761,6 +781,7 @@ def test_deploy_plan_explicit_follow_ndjson_still_overrides_the_console_default(
     assert '"event": "line"' in result.output
 
 
+@pytest.mark.slow
 def test_deploy_plan_output_json_reroutes_the_default_console_stream_to_stderr(
     runner, solution, _stub_terraform_streaming
 ):
@@ -781,6 +802,7 @@ def test_deploy_plan_unknown_deployment_exits_two(runner, solution, _stub_terraf
     assert result.exit_code == EXIT_USAGE
 
 
+@pytest.mark.slow
 def test_deploy_plan_plan_failure_exits_three(runner, solution, monkeypatch):
     _build(runner, solution)
 
@@ -832,6 +854,7 @@ def test_deploy_destroy_rejects_more_than_one_mode(runner, solution, _stub_terra
     assert _stub_terraform == []
 
 
+@pytest.mark.slow
 def test_deploy_destroy_force_runs_init_then_destroy_with_auto_approve(runner, solution, _stub_terraform):
     _build(runner, solution)
     result = _destroy(runner, solution, "--force")
@@ -867,6 +890,7 @@ def test_deploy_destroy_dry_run_streams_the_preview_without_follow(runner, solut
     assert "terraform │" in result.output
 
 
+@pytest.mark.slow
 def test_deploy_destroy_force_does_not_stream_without_follow(runner, solution, _stub_terraform_streaming):
     _build(runner, solution)
     result = _destroy(runner, solution, "--force")
@@ -899,6 +923,7 @@ def test_deploy_destroy_follow_ndjson_streams_events(runner, solution, _stub_ter
     assert events[-1]["command"] == "deploy destroy"
 
 
+@pytest.mark.slow
 def test_deploy_destroy_failure_exits_three(runner, solution, monkeypatch):
     _build(runner, solution)
 
@@ -949,6 +974,7 @@ def test_deploy_destroy_that_selects_no_step_exits_three(runner, solution, _stub
     assert _stub_terraform == []
 
 
+@pytest.mark.slow
 def test_deploy_destroy_real_run_writes_a_destroy_audit_manifest_with_the_change_reference(
     runner, solution, _stub_terraform
 ):
@@ -1004,6 +1030,7 @@ def test_deploy_destroy_smoke_test_that_selects_no_step_exits_three(runner, solu
     assert result.exit_code == EXIT_VALIDATION, result.output
 
 
+@pytest.mark.slow
 def test_deploy_destroy_failed_real_run_is_still_audited(runner, solution, monkeypatch):
     _build(runner, solution)
 

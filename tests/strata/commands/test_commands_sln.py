@@ -32,7 +32,6 @@ def test_init_exits_zero_and_creates_the_manifest(runner, tmp_path):
     assert (tmp_path / "strata.yaml").is_file()
 
 
-@pytest.mark.slow
 def test_init_creates_the_scaffolded_files(runner, tmp_path):
     _init(runner, tmp_path)
     assert (tmp_path / ".strata" / "README.md").is_file()
@@ -95,7 +94,6 @@ def test_update_after_init_exits_zero_and_preserves_a_github_customization(runne
     assert pr_template.read_text(encoding="utf-8") == customized
 
 
-@pytest.mark.slow
 def test_init_output_reports_created_files(runner, tmp_path):
     result = _init(runner, tmp_path)
     assert "strata.yaml" in result.output

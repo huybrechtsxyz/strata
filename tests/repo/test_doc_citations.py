@@ -41,6 +41,7 @@ def _tracked_files() -> list[Path]:
     return [REPO_ROOT / name for name in listed if name.endswith(_SUFFIXES) and (REPO_ROOT / name).is_file()]
 
 
+@pytest.mark.slow
 def test_every_cited_doc_exists():
     docs = REPO_ROOT / "docs"
     by_name: dict[str, list[str]] = {}

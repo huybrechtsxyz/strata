@@ -356,7 +356,6 @@ def test_what_terraform_init_left_in_dot_terraform_is_not_read(tmp_path: Path):
     assert read_provider_locks(tmp_path).declared == {"registry.terraform.io/hashicorp/azurerm"}
 
 
-@pytest.mark.slow
 def test_an_unparseable_lock_file_warns_and_falls_back_to_the_constraint(tmp_path: Path):
     (tmp_path / "main.tf").write_text(_AZURERM, encoding="utf-8")
     (tmp_path / ".terraform.lock.hcl").write_text("provider [[[", encoding="utf-8")
@@ -461,7 +460,6 @@ def test_collect_warns_on_an_unparseable_tf_file(tmp_path: Path):
     assert "failed to parse" in result.diagnostics[0].message
 
 
-@pytest.mark.slow
 def test_collect_deduplicates_providers_first_occurrence_wins(tmp_path: Path):
     (tmp_path / "a.tf").write_text(
         'terraform {\n  required_providers {\n    azurerm = {\n      source  = "hashicorp/azurerm"\n'

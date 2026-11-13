@@ -404,7 +404,6 @@ def test_a_real_script_that_overruns_its_timeout_is_reported_as_a_timeout(tmp_pa
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
 def test_a_dry_run_runs_the_script_with_plan_args_in_the_plan_phase(tmp_path: Path, run):
     root = _script_solution(tmp_path, plan_args=["--action", "plan", "${var:REGION}"])
     build_path = _built(tmp_path, root)
@@ -420,7 +419,6 @@ def test_a_dry_run_runs_the_script_with_plan_args_in_the_plan_phase(tmp_path: Pa
     assert "STRATA_VALUES" in env
 
 
-@pytest.mark.slow
 def test_a_real_run_applies_without_running_plan_args(tmp_path: Path, run):
     root = _script_solution(tmp_path, plan_args=["--action", "plan"])
     build_path = _built(tmp_path, root)
@@ -582,7 +580,6 @@ def test_without_a_list_the_script_still_receives_every_value(tmp_path: Path, ru
     assert set(_delivered_values(env)) == {"REGION", "API_TOKEN", "UNRELATED_DB_PASSWORD", "deployment:name"}
 
 
-@pytest.mark.slow
 def test_a_destroy_delivers_only_the_listed_values_too(tmp_path: Path, run):
     root = _script_solution(
         tmp_path, secret=True, unrelated_secret=True, destroy_args=["--action", "revoke"], values=["REGION"]
@@ -849,7 +846,6 @@ def test_a_destroy_listing_an_output_in_values_stops_before_anything_runs(tmp_pa
     assert run.calls == []
 
 
-@pytest.mark.slow
 def test_a_preview_needing_an_output_nobody_recorded_says_a_preview_applies_nothing(tmp_path: Path, run):
     root = _chained_solution(tmp_path, producer=_PRODUCER, consumer_args=["--address", "${output:run_script.address}"])
     build_path = _built(tmp_path, root)
@@ -864,7 +860,6 @@ def test_a_preview_needing_an_output_nobody_recorded_says_a_preview_applies_noth
     assert run.of_script() == []
 
 
-@pytest.mark.slow
 def test_a_real_run_missing_an_output_does_not_blame_the_preview(tmp_path: Path, run):
     """The producer's (stubbed) run wrote no file, so the consumer's output is missing, and the run says so plainly."""
     root = _chained_solution(tmp_path, producer=_PRODUCER, consumer_args=["--address", "${output:run_script.address}"])
@@ -902,7 +897,6 @@ def test_a_preview_reads_the_output_an_earlier_real_run_recorded(tmp_path: Path,
     assert any(s.startswith("would run:") and "--address 10.0.0.5" in s for s in steps)
 
 
-@pytest.mark.slow
 def test_a_preview_also_checks_the_outputs_a_script_lists_in_values(tmp_path: Path, run):
     root = _chained_solution(
         tmp_path,
@@ -920,7 +914,6 @@ def test_a_preview_also_checks_the_outputs_a_script_lists_in_values(tmp_path: Pa
     assert "was not produced by it" in message  # caught before the script is asked to run, not by its failure
 
 
-@pytest.mark.slow
 def test_a_preview_checks_plan_args_but_a_real_run_does_not(tmp_path: Path, run):
     """Only the arguments of the phase that runs need their outputs: a real run never uses `plan_args`."""
     root = _chained_solution(
