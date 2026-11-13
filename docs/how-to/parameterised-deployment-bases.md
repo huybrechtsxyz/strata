@@ -316,8 +316,8 @@ Every leaf behind `hub02` names `hub: hub-hub02`. A set never names the sets it 
 nothing is implied by the folder: one name per leaf is the price of every value being explicit.
 
 Each hub still has its own environment. An environment can also be built on a base that reads
-parameter sets ([environment](../config/environment.md#bases-extends-and-partial)); with one
-variable per hub, writing each out is shorter:
+parameter sets ([How To: tenant and environment bases](environment-and-tenant-bases.md)); with
+one variable per hub, writing each out is shorter:
 
 ```yaml
 # hubs/hub01/environment.yaml

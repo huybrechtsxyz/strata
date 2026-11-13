@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""attributeconfig on parameter sets (`base-parameters-v2.md` (work doc), phase 3, "Constraints: attributeconfig").
+"""attributeconfig on parameter sets (docs/design/parameter-sets.md, "Constraints: attributeconfig").
 
 Two views, both needed because values are layered: `kind: parameterset, block: values, view: document` checks the
 shape of what one set holds; `block: params, view: effective` checks what a deployment, environment or tenant

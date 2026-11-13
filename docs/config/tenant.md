@@ -27,8 +27,9 @@ directory (e.g. `customers/contoso.yaml`).
 
 ## Bases: `extends` and `partial`
 
-Tenants that share their defaults can share one base. The child is merged over the base when the
-solution loads, before deployments merge the tenant's defaults in:
+Tenants that share their defaults can share one base (a worked example:
+[How To: tenant and environment bases](../how-to/environment-and-tenant-bases.md)). The child is
+merged over the base when the solution loads, before deployments merge the tenant's defaults in:
 
 | Field                                   | Merge with `extends`                                                            |
 | --------------------------------------- | ------------------------------------------------------------------------------- |

@@ -725,7 +725,7 @@ def _check_version_workspace(index: DocumentIndex, resolved: dict[str, Deploymen
 
 # ---------------------------------------------------------------------------
 # Deployment/Tenant -> a partial environment or tenant: a base is never used
-# (base-parameters-v2.md (work doc), "Bases cannot be used")
+# (docs/design/parameter-sets.md, "Bases cannot be used")
 # ---------------------------------------------------------------------------
 
 
@@ -995,7 +995,7 @@ def _check_attributeconfig_params_view(
     attributeconfig: AttributeConfigModel,
     validator: Any,
 ) -> Diagnostics:
-    """`view: effective, block: params` (`base-parameters-v2.md` (work doc), "Constraints: attributeconfig").
+    """`view: effective, block: params` (docs/design/parameter-sets.md, "Constraints: attributeconfig").
 
     Checks the parameter-set values each matching document receives, merged per role along its chain (root first,
     leaf last), with the roles as top-level keys: "everything a base needs is there", which no single set can say.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for ParameterSetModel (`base-parameters-v2.md` (work doc), plan step 1a)."""
+"""Tests for ParameterSetModel (docs/design/parameter-sets.md)."""
 
 import pytest
 from pydantic import ValidationError

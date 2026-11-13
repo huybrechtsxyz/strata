@@ -150,7 +150,7 @@ def render_schema(model_cls: type[BaseModel]) -> dict[str, Any]:
     return schema
 
 
-#: Kinds whose spec may be a template (`base-parameters-v2.md` (work doc), ADR-0061): the spec model's `$defs` name,
+#: Kinds whose spec may be a template (docs/design/parameter-sets.md, ADR-0061): the spec model's `$defs` name,
 #: and the spec fields that are never templated (rule 5). Mirrors `TEMPLATE_SERVICE_BY_KIND` in the controller layer,
 #: which this layer cannot import.
 _TEMPLATE_SPECS: dict[PlatformKind, tuple[str, frozenset[str]]] = {

@@ -245,7 +245,7 @@ class TenantTemplateSpecModel(PlatformBaseModel):
 
     Design notes:
     Every other field is kept as written and validated per tenant that resolves through it, once `${param:}` is
-    substituted (`base-parameters-v2.md` (work doc), "Templates are validated per instance").
+    substituted (docs/design/parameter-sets.md, "Templates are validated per instance").
     """
 
     model_config = ConfigDict(extra="allow", validate_assignment=True, str_strip_whitespace=True)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parameter sets in deployment chains (`base-parameters-v2.md` (work doc), step 1b).
+"""Parameter sets in deployment chains (docs/design/parameter-sets.md, "Resolution").
 
 `meta.params` names parameter sets per role on any document of an `extends` chain; the resolver merges them per
 role, root first, and substitutes `${param:}` in every document's spec before the specs merge.

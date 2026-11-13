@@ -629,7 +629,7 @@ class DeploymentTemplateSpecModel(PlatformBaseModel):
 
     Design notes:
     Every other field is kept as written (`extra="allow"`) and validated per instance, once `${param:}` is
-    substituted from the chain of each deployable deployment (`base-parameters-v2.md` (work doc), "Templates are
+    substituted from the chain of each deployable deployment (docs/design/parameter-sets.md, "Templates are
     validated per instance"). `extends` and `partial` stay typed: the chain must be known before any value is
     (rule 5), and `extends` is a reference the reference walk checks like any other.
     """

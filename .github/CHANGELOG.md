@@ -38,6 +38,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     `tenant_not_selectable`, and reading either with `${value:}` is `value_reference_to_base`.
   - A tenant's `display_name` is now required only when the tenant is neither `partial` nor built with `extends`.
   - The exported environment and tenant schemas accept `${param:}` tokens; run `strata sln update` to refresh them.
+  - `docs/how-to/environment-and-tenant-bases.md` walks through a full example.
 
 - **attributeconfig checks parameter sets.** `kind: parameterset, block: values, view: document` checks the shape of
   each set; `block: params, view: effective` checks the values a deployment, environment or tenant receives once its

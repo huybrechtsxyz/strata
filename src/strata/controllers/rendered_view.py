@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The rendered view: a resolved document, and where each of its values comes from.
 
-`base-parameters-v2.md` (work doc), phase 4. A deployment, environment or tenant built with `extends` and parameter
+docs/design/parameter-sets.md, "Rendered view". A deployment, environment or tenant built with `extends` and parameter
 sets is spread over several files. `render_document()` returns the document strata actually uses, with an origin
 for every value: the document that wrote it, its file, and for a value filled in from a parameter set, the text as
 written and each `${param:}` read (role, key, value, and the set that supplied it).

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load-time `${param:ROLE.PATH}` substitution (`base-parameters-v2.md` (work doc), rules 3, 4, 6, 7, 8).
+"""Load-time `${param:ROLE.PATH}` substitution (docs/design/parameter-sets.md, "Rules" 3, 4, 6, 7, 8).
 
 A deployment names parameter sets per role in `meta.params`; every document of its `extends` chain may. The
 resolver (`controllers/deployment_resolution.py`) collects them root first, merges each role's sets with
@@ -32,7 +32,7 @@ _SUBSTITUTE_PATTERN = re.compile(r"\$\$\{[^}]*\}|" + PARAM_TOKEN_PATTERN.pattern
 def holds_param_tokens(node: Any) -> bool:
     """Whether any string value under `node` holds a well-formed `${param:}` token (an escaped one does not count).
 
-    What makes a document a template (`base-parameters-v2.md` (work doc), "Templates are validated per instance").
+    What makes a document a template (docs/design/parameter-sets.md, "Templates are validated per instance").
     Map keys are never substituted, so they do not count either.
     """
     if isinstance(node, dict):

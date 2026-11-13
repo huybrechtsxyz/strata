@@ -55,7 +55,7 @@ VALUE_TOKEN_PATTERN = re.compile(
     r"\$\{(?P<kind>var|secret|feature|output|value|deployment|artifact):(?P<key>[A-Za-z0-9_.-]+)\}"
 )
 
-#: ``${param:ROLE.PATH}`` (`base-parameters-v2.md` (work doc)): a *load-time* token, substituted from the
+#: ``${param:ROLE.PATH}`` (docs/design/parameter-sets.md): a *load-time* token, substituted from the
 #: parameter sets a deployment's chain names when the chain is resolved (`utils/param_tokens.py`). Deliberately
 #: not one of `VALUE_TOKEN_KINDS`: those resolve at run time, and no `${param:}` may ever reach run time.
 #: Syntax checks accept it only where a caller says it may appear (`find_malformed_value_tokens(param_tokens=)`).

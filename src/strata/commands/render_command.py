@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """`strata render KIND NAME` - a resolved deployment, environment or tenant, and where each value comes from.
 
-`base-parameters-v2.md` (work doc), phase 4. A document built with `extends` and parameter sets is spread over
+docs/design/parameter-sets.md, "Rendered view". A document built with `extends` and parameter sets is spread over
 several files; this prints the one strata uses, field by field, with the document that wrote each value and, for a
 value filled in from a parameter set, the text as written and the set and key it read. Like `deploy list`, it runs
 nothing and does not call `require_valid()`: rendering is how you find out why a document is what it is. Secrets

@@ -11,7 +11,7 @@ from strata.utils.dict_merge import deep_merge
 
 
 def merge_tenant_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
-    """Merge a base tenant's spec into a child's, on dumped dicts (`base-parameters-v2.md` (work doc)).
+    """Merge a base tenant's spec into a child's, on dumped dicts (docs/design/parameter-sets.md).
 
     - `display_name`, `onboarded`: the child's when it sets one.
     - `geographies`: **replaced** by the child's list when it sets one, never joined: it is a data-residency limit,

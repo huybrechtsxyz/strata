@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `${param:}` merge and substitution (`base-parameters-v2.md` (work doc), rules 3, 4, 6, 7, 8)."""
+"""Tests for `${param:}` merge and substitution (docs/design/parameter-sets.md, "Rules" 3, 4, 6, 7, 8)."""
 
 from datetime import date
 

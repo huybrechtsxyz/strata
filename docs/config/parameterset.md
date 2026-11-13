@@ -13,7 +13,10 @@ in one place, so the documents that use them can share one base.
 > `${param:}` token in the same fields, so the YAML editor does not underline one.
 
 For a full, worked solution (two hubs, two spokes, a customer project), see
-[How To: Write one deployment base for many spokes](../how-to/parameterised-deployment-bases.md).
+[How To: Write one deployment base for many spokes](../how-to/parameterised-deployment-bases.md);
+for tenants and environments,
+[How To: Give every customer a tenant and an environment from shared bases](../how-to/environment-and-tenant-bases.md).
+How it works inside: [the design](../design/parameter-sets.md).
 The decision is [ADR-0061](../decisions/0061-parameter-sets-and-load-time-param-token.md).
 
 ## Schema

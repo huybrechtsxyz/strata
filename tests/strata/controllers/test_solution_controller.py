@@ -133,7 +133,7 @@ spec:
 
 
 def test_load_indexes_parameterset_document(tmp_path):
-    """A `kind: parameterset` document (`base-parameters-v2.md` (work doc), step 1a) loads like any other kind."""
+    """A `kind: parameterset` document (docs/design/parameter-sets.md) loads like any other kind."""
     root = _solution(tmp_path)
     (root / "spoke.yaml").write_text(PARAMETERSET_DOC, encoding="utf-8")
 

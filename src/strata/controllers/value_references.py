@@ -30,7 +30,7 @@ from strata.utils.value_paths import VALUE_PATH_MISSING, walk_value_path
 from strata.utils.value_tokens import extract_value_tokens, has_value_tokens
 
 #: Kinds whose `partial: true` documents are bases for `extends` only, never read
-#: (base-parameters-v2.md (work doc), "Bases cannot be used").
+#: (docs/design/parameter-sets.md, "Bases cannot be used").
 _BASE_KINDS = frozenset({PlatformKind.ENVIRONMENT, PlatformKind.TENANT})
 
 
@@ -181,7 +181,7 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
         # example) — only the source-side scan for where a token is *written*
         # is narrowed.
         # Scanned as written: a token an environment or tenant inherits through `extends` is its base's, and is
-        # reported once, there (base-parameters-v2.md (work doc), phase 2).
+        # reported once, there (docs/design/parameter-sets.md, "Resolution").
         dumped = entry.as_written.model_dump(by_alias=True, mode="json")
         dumped.pop("meta", None)
         for location, text in _iter_document_strings(dumped):

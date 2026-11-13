@@ -1,6 +1,6 @@
 # Parameterised bases (`input`, `params`, `${param:}`) - Work
 
-- Status: abandoned (superseded by [base-parameters-v2.md](base-parameters-v2.md): values files instead of typed
+- Status: abandoned (superseded by [parameter sets](../design/parameter-sets.md): values files instead of typed
   inputs on the base)
 - Last updated: 2026-11-12
 

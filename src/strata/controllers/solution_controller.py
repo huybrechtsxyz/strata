@@ -105,7 +105,7 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
 
 #: The kinds whose spec may read parameter sets, and the service that loads such a document as a template: meta
 #: validated, spec as written, validated per instance once the resolver substitutes `${param:}`
-#: (`base-parameters-v2.md` (work doc), "Templates are validated per instance").
+#: (docs/design/parameter-sets.md, "Templates are validated per instance").
 TEMPLATE_SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.DEPLOYMENT: DeploymentTemplateService,
     PlatformKind.ENVIRONMENT: EnvironmentTemplateService,

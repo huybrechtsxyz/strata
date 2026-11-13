@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`extends`, `partial` and `meta.params` on environments and tenants (`base-parameters-v2.md` (work doc), phase 2).
+"""`extends`, `partial` and `meta.params` on environments and tenants (docs/design/parameter-sets.md, "Resolution").
 
 Environments and tenants are resolved when the solution loads, and the resolved document replaces the one in the
 index, so every reader sees the merged document. The merge tables row by row, templates filled from parameter

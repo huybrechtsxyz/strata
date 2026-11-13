@@ -153,8 +153,8 @@ completely unchecked until someone remembered to opt in.
   confused with a `document`-view finding on the same deployment document.
   Which layer actually set the offending value is not tracked (`deep_merge`
   keeps no provenance) — a known gap, not a bug.
-- **Parameter sets: `block: values` and `block: params`** (2026-11-13, `base-parameters-v2.md` (work doc),
-  phase 3). Values are layered, so they are checked in two places. `kind: parameterset, block: values, view:
+- **Parameter sets: `block: values` and `block: params`** ([parameter-sets.md](parameter-sets.md),
+  "Constraints: attributeconfig"). Values are layered, so they are checked in two places. `kind: parameterset, block: values, view:
   document` is an ordinary document view of one set. `block: params, view: effective` is valid for `kind:
   deployment`, `environment` and `tenant`, the three kinds that name sets: the schema sees the values the
   document's `${param:}` tokens read, merged per role along its `extends` chain (root first, leaf last), with the

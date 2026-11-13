@@ -59,7 +59,7 @@ def _replace_by_key(base: list[dict[str, Any]], child: list[dict[str, Any]]) -> 
 
 
 def merge_environment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
-    """Merge a base environment's spec into a child's, on dumped dicts (`base-parameters-v2.md` (work doc)).
+    """Merge a base environment's spec into a child's, on dumped dicts (docs/design/parameter-sets.md).
 
     - `properties`, `custom`: deep-merged per leaf key, child wins.
     - `variables`, `secrets`, `features`: by `key`. A child entry replaces the base's **whole** entry, so a variable

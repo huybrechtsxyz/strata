@@ -71,7 +71,7 @@ _EFFECTIVE_VIEW_BLOCKS: frozenset[str] = frozenset(
     {"properties", "custom", "variables", "features", "composite", "params"}
 )
 
-#: `block: params` (`base-parameters-v2.md` (work doc), "Constraints: attributeconfig"): the merged parameter-set
+#: `block: params` (docs/design/parameter-sets.md, "Constraints: attributeconfig"): the merged parameter-set
 #: values a document receives, per role. Every kind that names parameter sets has them, so the effective view of
 #: `params` is valid for all three; the other effective blocks stay deployment-only.
 _EFFECTIVE_PARAMS_KINDS: frozenset[PlatformKind] = frozenset(

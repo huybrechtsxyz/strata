@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The dotted walk `${value:}` and `${param:}` share: one segment per step through dumped YAML/JSON data.
 
-Moved out of `controllers/value_references.py` when `${param:}` (`base-parameters-v2.md` (work doc)) needed
+Moved out of `controllers/value_references.py` when `${param:}` (docs/design/parameter-sets.md) needed
 the same walk: pure data logic, so it lives in `strata.utils` (ADR-0003 layering) where both can reach it.
 """
 

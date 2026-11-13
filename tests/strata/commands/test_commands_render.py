@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `strata render` (`base-parameters-v2.md` (work doc), phase 4)."""
+"""Tests for `strata render` (docs/design/parameter-sets.md, "Rendered view")."""
 
 import json
 

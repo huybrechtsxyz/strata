@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""What every kind that reads parameter sets shares (`base-parameters-v2.md` (work doc)).
+"""What every kind that reads parameter sets shares (docs/design/parameter-sets.md).
 
 A deployment, an environment and a tenant may name parameter sets per role in `meta.params`, require a name with
 `meta.name_rule`, and read the values with `${param:<role>.<key>}` in their `spec`. A document whose spec holds such

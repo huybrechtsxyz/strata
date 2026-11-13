@@ -47,7 +47,7 @@ call site per consumer: every current and planned reader of this
 function's output wants the same fully-resolved deployment, and a second
 call site is one more place to forget to call it.
 
-**Parameter sets (`base-parameters-v2.md` (work doc), step 1b) make it two
+**Parameter sets (docs/design/parameter-sets.md, "Resolution") make it two
 passes.** The values come from the whole chain, leaf included, and apply
 to every base, so a base's merged spec is no longer one per name. Pass one
 walks up and collects the chain (cycles and missing ancestors, keyed by
@@ -434,7 +434,7 @@ def _validate_substituted(
     its references checked.
 
     What the loader and the reference walk do for every other deployment, done per instance
-    (`base-parameters-v2.md` (work doc), "Templates are validated per instance"): the dump normalises the spec, so it
+    (docs/design/parameter-sets.md, "Templates are validated per instance"): the dump normalises the spec, so it
     merges like any other. Each finding is located in the template and says which values made the field what it
     is. A reference the template writes without a token is not per leaf: it is the same for every deployment.
 

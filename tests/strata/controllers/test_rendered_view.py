@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The rendered view (`base-parameters-v2.md` (work doc), phase 4): a resolved document and the origin of each value.
+"""The rendered view (docs/design/parameter-sets.md, "Rendered view"): a resolved document and the origin of each value.
 
 The plan's test is "the origins of a two-base chain with two sets"; around it, each way a value can arrive: a scalar
 from a base, a named list item overridden by the leaf, plain list items appended by two bases, a whole-value token

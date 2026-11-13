@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`extends` chains for deployments, environments and tenants (`base-parameters-v2.md` (work doc), phase 2).
+"""`extends` chains for deployments, environments and tenants (docs/design/parameter-sets.md, "Resolution").
 
 The chain walk (cycles, missing ancestors, poisoning), the parameter sets a chain names, and the `meta.name_rule`
 check are the same for the three kinds; only the merge of two specs differs. This module holds the shared part.

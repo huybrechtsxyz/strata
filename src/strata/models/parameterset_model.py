@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Pydantic model for parameter set validation (`base-parameters-v2.md` (work doc), plan step 1a).
+"""Pydantic model for parameter set validation (docs/design/parameter-sets.md).
 
 A parameter set is one named set of plain values: the instance data of a spoke, a hub or a customer.
 A deployment, environment or tenant names it under a role in `meta.params`, and a base reads it with
-`${param:role.key}`. Those two parts come in later steps; this model is only the document itself.
+`${param:role.key}`; this model is only the document itself.
 
 Values are plain: no `${...}` token anywhere in `spec.values`, in a key or in a value. A parameter set
 then depends on nothing and can be loaded first, and a value can never smuggle a `${secret:}` into a
@@ -96,8 +96,7 @@ class ParameterSetModel(PlatformBaseModel):
     with `${param:<role>.<key>}`, so one base serves many instances.
 
     Design notes:
-    Root model for a parameter set document (`base-parameters-v2.md` (work doc)). Step 1a: the kind only;
-    nothing reads it yet.
+    Root model for a parameter set document (docs/design/parameter-sets.md).
     """
 
     apiVersion: PlatformVersion = Field(

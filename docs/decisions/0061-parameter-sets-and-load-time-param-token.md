@@ -5,8 +5,8 @@
 - Related: [ADR-0015](0015-solution-manifest-and-document-discovery.md) (identity references, which parameter sets
   use), [ADR-0024](0024-tenant-defaults-merge.md) (tenant defaults, folded in after substitution),
   [docs/design/value-token-resolution.md](../design/value-token-resolution.md) (the run-time tokens `${param:}` sits
-  beside), `base-parameters-v2.md` (work doc) (design and phases), `base-parameters.md` (work doc) (version 1, typed
-  inputs on the base)
+  beside), [docs/design/parameter-sets.md](../design/parameter-sets.md) (the design),
+  [docs/archive/base-parameters.md](../archive/base-parameters.md) (version 1, typed inputs on the base)
 
 ## Context and Problem Statement
 
@@ -19,7 +19,7 @@ A base needs to say where a per-instance value goes, and each instance needs one
 
 ## Considered Options
 
-- **Typed inputs on the base** (`base-parameters.md` (work doc), version 1): a base declares its inputs with types;
+- **Typed inputs on the base** ([version 1](../archive/base-parameters.md)): a base declares its inputs with types;
   a leaf binds them in `extends`. Strong checks, but every base declares every input, and two bases sharing values
   declare them twice.
 - **Use the layer segments as the parameters**: segments are a path convention, not a values store; they cannot

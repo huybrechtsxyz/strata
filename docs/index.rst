@@ -21,6 +21,7 @@ strata-v2
    how-to/composite-variable-fragments
    how-to/deploy-run-streaming
    how-to/deployment-handover
+   how-to/environment-and-tenant-bases
    how-to/generate-per-instance-terraform-blocks
    how-to/migrate-v1-workspace-topology-provisioning
    how-to/parameterised-deployment-bases

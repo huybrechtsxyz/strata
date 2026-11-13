@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deployment templates (`base-parameters-v2.md` (work doc), step 1c).
+"""Deployment templates (docs/design/parameter-sets.md, "Templates are validated per instance").
 
 A deployment whose spec holds `${param:}` loads as a template: meta validated, spec as written. It is validated
 per deployable deployment once the resolver substitutes the values, so `${param:}` works in typed and reference

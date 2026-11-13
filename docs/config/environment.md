@@ -42,8 +42,9 @@ of that machinery is ported.
 
 ## Bases: `extends` and `partial`
 
-Environments that differ in a few values can share one base. The child is merged over the base
-when the solution loads:
+Environments that differ in a few values can share one base (a worked example:
+[How To: tenant and environment bases](../how-to/environment-and-tenant-bases.md)). The child is
+merged over the base when the solution loads:
 
 | Field                              | Merge with `extends`                                                         |
 | ---------------------------------- | ---------------------------------------------------------------------------- |
