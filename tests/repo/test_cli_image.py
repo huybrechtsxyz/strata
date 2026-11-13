@@ -119,6 +119,22 @@ def test_every_image_input_is_pinned():
         assert re.search(r":v?\d+\.\d+(\.\d+)?", image), f"{line}: pin a version"
 
 
+def test_the_python_base_image_is_a_version_ci_tests():
+    """Every `FROM python:` stage runs a Python in CI's test matrix, so the image never ships an untested one.
+
+    Dependabot ignores Python minor versions for this reason (`.github/dependabot.yml`); it once proposed 3.15.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci-build.yml").read_text(encoding="utf-8")
+    matrix = re.search(r"python-version:\s*\[([^\]]+)\]", workflow)
+    assert matrix, "ci-build.yml: no python-version matrix"
+    tested = set(re.findall(r'"(\d+\.\d+)"', matrix.group(1)))
+    bases = [line for line in _instructions() if re.match(r"FROM\s+python:", line, re.IGNORECASE)]
+    assert bases
+    for line in bases:
+        version = re.match(r"FROM\s+python:(\d+\.\d+)", line, re.IGNORECASE)
+        assert version and version.group(1) in tested, f"{line}: not in CI's matrix {sorted(tested)}"
+
+
 def test_the_build_does_not_need_an_uncommitted_lockfile():
     """`uv.lock` is git-ignored, so the CI checkout has none: the build must not copy it or sync `--locked`.
 
