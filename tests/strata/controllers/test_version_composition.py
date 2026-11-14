@@ -14,12 +14,14 @@ import yaml
 from click.testing import CliRunner
 
 from strata.commands.cli import cli
+from strata.controllers import pinnable_targets as pinnable_targets_module
 from strata.controllers.build_controller import build_run, write_effective_version
-from strata.controllers.pinnable_targets import pinnable_targets
+from strata.controllers.deployment_resolution import resolve_deployment_chains
+from strata.controllers.pinnable_targets import TargetCache, pinnable_targets
 from strata.controllers.promotion_controller import apply_promotion, build_promotion_view, build_status_rows
 from strata.controllers.solution_context import SolutionContext, open_solution
 from strata.controllers.value_controller import resolve_deployment, resolve_version
-from strata.controllers.version_composition import compose_versions
+from strata.controllers.version_composition import VersionMatrix, compose_versions
 from strata.models.version_model import ComposedVersionModel, pin_owner, version_names
 from strata.utils.errors import UsageError
 
@@ -669,6 +671,54 @@ def test_a_template_deployment_can_read_its_version_list_from_a_parameter_set(tm
     assert context.ok, context.diagnostics.messages()
     assert resolve_deployment(context, "datahub-prd").spec.version == ["prd-core", "prd-datahub"]
     assert _codes(context) == []
+
+
+# ---------------------------------------------------------------------------
+# Cost: shared documents scanned once, each deployment walked once per run (finding 9)
+# ---------------------------------------------------------------------------
+
+
+def _more_datahub_deployments(root: Path, count: int) -> None:
+    for i in range(count):
+        _deployment(root, f"datahub-prd-{i}", "  extends: base-prd\n  workspace: datahub\n  version: prd-datahub\n")
+
+
+def test_a_shared_document_is_scanned_once_however_many_deployments_reach_it(tmp_path: Path):
+    """Only each deployment's own document is scanned per deployment; the workspace, namespace, module, provider and
+    environment they share are scanned once (`TargetCache`)."""
+    few, many = tmp_path / "few", tmp_path / "many"
+    few.mkdir()
+    many.mkdir()
+    counts = []
+    for base, extra in ((few, 0), (many, 20)):
+        root = _solution(base)
+        _more_datahub_deployments(root, extra)
+        context = _resolve(root)
+        cache = TargetCache()
+        VersionMatrix.build(context.controller.index, resolve_deployment_chains(context.controller.index)[0], cache)
+        counts.append(cache.computed)
+
+    assert counts[1] - counts[0] == 20  # one more scan per added deployment: its own document, nothing shared
+
+
+def test_validate_walks_each_deployment_once_with_a_rollout(tmp_path: Path, monkeypatch):
+    """With rings, the matrix checks and the promotion checks share one `VersionMatrix`: one walk per deployment."""
+    root = _rollout(tmp_path)
+    context = open_solution(root)
+    assert context.ok, context.diagnostics.messages()
+    # Counted inside `pinnable_targets()` itself, so a caller importing it directly cannot slip past.
+    calls: list[str] = []
+    original = pinnable_targets_module.documents_reached_by_deployment
+
+    def counting(index, deployment, source, *, enabled_only=False):
+        calls.append(deployment.meta.name)
+        return original(index, deployment, source, enabled_only=enabled_only)
+
+    monkeypatch.setattr(pinnable_targets_module, "documents_reached_by_deployment", counting)
+
+    context.resolve()
+
+    assert sorted(calls) == ["datahub-prd", "datahub-qas", "staging-prd", "staging-qas"]
 
 
 # ---------------------------------------------------------------------------

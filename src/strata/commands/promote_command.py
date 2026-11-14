@@ -55,6 +55,7 @@ from strata.controllers.promotion_controller import (
     rollout_workspaces,
 )
 from strata.controllers.solution_context import open_solution
+from strata.controllers.version_composition import VersionMatrix
 from strata.utils.diagnostics import Diagnostics
 
 _PATH_HELP = "Where to start looking for the solution. Defaults to the current directory."
@@ -111,10 +112,12 @@ def promote_status(
         resolved_deployments, resolution_diagnostics = resolve_deployment_chains(index)
         diagnostics = Diagnostics()
         diagnostics.extend(resolution_diagnostics)
-        workspaces = [workspace] if workspace else rollout_workspaces(index, resolved_deployments)
+        # One version picture for every workspace shown, not one per workspace.
+        matrix = VersionMatrix.build(index, resolved_deployments)
+        workspaces = [workspace] if workspace else rollout_workspaces(index, resolved_deployments, matrix)
         rows: list[tuple[str, PromotionStatusRow]] = []
         for name in workspaces:
-            view, promotion_diagnostics = build_promotion_view(name, index, resolved_deployments)
+            view, promotion_diagnostics = build_promotion_view(name, index, resolved_deployments, matrix)
             diagnostics.extend(promotion_diagnostics)
             rows.extend((name, row) for row in build_status_rows(view) if not rings or row.ring in rings)
         if workspace is None:

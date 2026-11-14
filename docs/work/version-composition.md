@@ -599,6 +599,26 @@ like any other deployment.
 | `deploy run` compares the document name                      | compares pin values with the build's `version.yaml`                                                   |
 | `promote status/apply` over the documents' `spec.workspace`  | built from the deployments' matrices, owner column, shared keys skipped unless `--shared`             |
 
+### Cost
+
+What each deployment uses (`pinnable_targets()`) is the expensive part: it walks every document the deployment
+reaches and scans its strings. Composing the listed documents is cheap. Two rules keep it linear and small:
+
+- **A shared document is scanned once per run (`TargetCache`).** The deployments of a workspace reach the same
+  workspace, namespaces, modules and providers; only the deployment itself, its tenant and its environments differ.
+  Each document's contribution is cached by `(kind, name)` for one run (the index does not change during it); the
+  deployment document is never cached, since a `--pin` run resolves it differently.
+- **Each deployment is walked once per run (`VersionMatrix`).** `SolutionContext.resolve()` builds one
+  `VersionMatrix` (every deployable deployment's composed version, composition findings, own documents, used
+  targets and ring slot) and hands it to the matrix checks and the promotion checks. `promote status` builds one
+  for every workspace it shows; a function called without one builds its own.
+
+Measured on the per-customer scale solution (300 deployments, `tests/strata/controllers/test_scale_per_customer.py`'s
+generator): `context.resolve()` 4.56s to 3.37s; `pinnable_targets()` 1.30s to 0.16s; compositions 908 to 608.
+Guarded without wall-clock timings by two counting tests in `test_version_composition.py`: twenty more deployments
+of one workspace cost twenty more document scans (their own), and with a rollout `resolve()` walks each deployment
+exactly once.
+
 ### Alternatives considered
 
 - **`spec.workspaces: [a, b]` on the version document.** One file per ring, a shared pin written once.
@@ -875,3 +895,6 @@ one on `main` without a release in between.
   its checks, `version new --workspace` and `deploy list`'s single `version` are removed. A document that still
   declares the field fails to load with the fix in the message. Promotion reads only deployable
   deployments; `path list version --workspace` follows the deployments.
+- 2026-11-14: Review fixes and cost (code review finding 9): `TargetCache` scans each shared document once per
+  run, and `VersionMatrix` (replacing the internal `_Listed` and `deployments_with_versions()`) computes each
+  deployment once and is shared by the matrix and promotion checks. See "Cost".

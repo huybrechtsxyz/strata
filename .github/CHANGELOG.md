@@ -57,6 +57,8 @@ Several products in one ring can share pins without copying them: a deployment l
   version document edited after the build is caught even when its name is the same (`build_version_mismatch`).
 - `strata version update NAME` offers only the targets the deployments listing NAME use, and none another of
   their documents already pins.
+- `strata validate` works out what each deployment uses once per run, scanning each shared document once: about a
+  quarter faster on a solution with 300 deployments.
 
 ### Removed
 

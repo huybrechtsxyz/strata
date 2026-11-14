@@ -28,6 +28,7 @@ from strata.controllers.promotion_controller import validate_promotions
 from strata.controllers.references import validate_references
 from strata.controllers.semantic_checks import run_semantic_checks
 from strata.controllers.solution_controller import SolutionController, find_solution_root
+from strata.controllers.version_composition import VersionMatrix
 from strata.controllers.version_pins import check_version_pins
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError, ValidationError
@@ -114,13 +115,20 @@ class SolutionContext:
         found.extend(validate_references(self.controller.index, self.controller.solution))
         resolved_deployments, resolution_diagnostics = resolve_deployment_chains(self.controller.index)
         found.extend(resolution_diagnostics)
+        # One version picture per deployment for the whole pass: the matrix checks and the promotion checks share it,
+        # so each deployment is composed and walked once (docs/work/version-composition.md, "Cost").
+        version_matrix = VersionMatrix.build(self.controller.index, resolved_deployments)
         found.extend(
             run_semantic_checks(
-                self.controller.index, resolved_deployments, self.controller.solution, self.controller.root
+                self.controller.index,
+                resolved_deployments,
+                self.controller.solution,
+                self.controller.root,
+                version_matrix=version_matrix,
             )
         )
         found.extend(check_version_pins(self.controller.index, self.controller.solution))
-        found.extend(validate_promotions(self.controller.index, resolved_deployments))
+        found.extend(validate_promotions(self.controller.index, resolved_deployments, version_matrix))
         self.diagnostics.extend(found)
         return found
 

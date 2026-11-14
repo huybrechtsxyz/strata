@@ -37,20 +37,59 @@ from strata.utils.value_tokens import referenced_artifact_keys, split_artifact_t
 PinTarget = tuple[str, str]
 
 
-def pinnable_targets(index: DocumentIndex, deployment: DeploymentModel) -> set[PinTarget]:
-    """Every `(category, target)` a version pin could take effect on for `deployment` (the resolved model)."""
+class TargetCache:
+    """What each document contributes to `pinnable_targets()`, computed once per document for one pass.
+
+    The deployments of a workspace reach the same workspace, namespaces, modules and providers; only the deployment
+    itself, its tenant and its environments differ. Scanning a shared document once instead of once per deployment
+    is most of `strata validate`'s cost for this at size (300 deployments: about 1.3s uncached). Keyed by
+    `(kind, name)`, so it is valid only while the index does not change: one validation run or one command. Pass
+    the same cache to every call of that run; a caller with one deployment passes none.
+    """
+
+    def __init__(self) -> None:
+        self._documents: dict[tuple[str, str], frozenset[PinTarget]] = {}
+        self.computed = 0
+        """How many documents were actually scanned (a test counts it)."""
+
+    def document_targets(self, kind: PlatformKind, name: str, model: Any) -> frozenset[PinTarget]:
+        """The targets one reached document contributes; a deployment document is never cached (it is the one
+        document that differs per deployment, and a `--pin` run resolves it differently)."""
+        key = (kind.value, name)
+        if kind is not PlatformKind.DEPLOYMENT and key in self._documents:
+            return self._documents[key]
+        found = frozenset(_document_targets(kind, model))
+        self.computed += 1
+        if kind is not PlatformKind.DEPLOYMENT:
+            self._documents[key] = found
+        return found
+
+
+def _document_targets(kind: PlatformKind, model: Any) -> set[PinTarget]:
+    """The targets one document names: remotes, `${artifact:}` tokens, `store: artifact` variables, and for a module
+    its chart and services."""
+    dumped = model.model_dump(by_alias=True, mode="json")
+    dumped.pop("meta", None)
+    targets = {("remotes", name) for name in _remote_names(dumped)}
+    targets |= {("artifacts", split_artifact_token_key(key)[0]) for key in referenced_artifact_keys(dumped)}
+    targets |= {("artifacts", name) for name in _artifact_variables(dumped)}
+    if kind is PlatformKind.MODULE:
+        targets |= _module_targets(cast(ModuleModel, model))
+    return targets
+
+
+def pinnable_targets(
+    index: DocumentIndex, deployment: DeploymentModel, cache: TargetCache | None = None
+) -> set[PinTarget]:
+    """Every `(category, target)` a version pin could take effect on for `deployment` (the resolved model). Pass one
+    `TargetCache` to every call of a run over many deployments."""
+    cache = cache if cache is not None else TargetCache()
     targets: set[PinTarget] = set()
     entry = index.get(PlatformKind.DEPLOYMENT, deployment.meta.name)
     source = entry.source if entry is not None else Path()
     reached = documents_reached_by_deployment(index, deployment, source, enabled_only=True)
     for document in reached:
-        dumped = document.model.model_dump(by_alias=True, mode="json")
-        dumped.pop("meta", None)
-        targets |= {("remotes", name) for name in _remote_names(dumped)}
-        targets |= {("artifacts", split_artifact_token_key(key)[0]) for key in referenced_artifact_keys(dumped)}
-        targets |= {("artifacts", name) for name in _artifact_variables(dumped)}
-        if document.kind is PlatformKind.MODULE:
-            targets |= _module_targets(cast(ModuleModel, document.model))
+        targets |= cache.document_targets(document.kind, document.name, document.model)
 
     workspace_entry = (
         index.get(PlatformKind.WORKSPACE, deployment.spec.workspace) if deployment.spec.workspace else None

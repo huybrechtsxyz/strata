@@ -42,7 +42,7 @@ from strata.controllers.document_reachability import check_unreferenced_document
 from strata.controllers.reachable_documents import documents_reached_by_deployment, reachable_environment_names
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
-from strata.controllers.version_composition import check_version_composition
+from strata.controllers.version_composition import VersionMatrix, check_version_composition
 from strata.integrations.base import Integration
 from strata.integrations.capabilities import ImageFindingsIntegration, KeyValueStoreIntegration, ReleaseGateIntegration
 from strata.integrations.errors import IntegrationError
@@ -111,6 +111,7 @@ def run_semantic_checks(
     resolved_deployments: dict[str, DeploymentModel] | None = None,
     solution: SolutionModel | None = None,
     root: Path | None = None,
+    version_matrix: VersionMatrix | None = None,
 ) -> Diagnostics:
     """Run every cross-document semantic check over an already-loaded index.
 
@@ -135,6 +136,8 @@ def run_semantic_checks(
             `pattern` is written against. `None` (the default) skips both
             checks entirely — same "nothing to check against" rule every
             other Configuration-backed check here already uses.
+        version_matrix: Every deployable deployment's composed versions and used targets, built once by
+            `SolutionContext.resolve()` and shared with the promotion checks; built here when not given.
 
     Returns:
         Every finding, from all thirteen checks combined.
@@ -159,7 +162,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_path_remote_pushes(index, solution))
     diagnostics.extend(_check_value_references(index))
     diagnostics.extend(_check_paths(index, root))
-    diagnostics.extend(check_version_composition(index, resolved))
+    diagnostics.extend(check_version_composition(index, resolved, version_matrix))
     diagnostics.extend(check_unreferenced_documents(index, resolved))
     diagnostics.extend(check_unused_bases(index))
     diagnostics.extend(_check_dns_records(index))

@@ -20,8 +20,8 @@ composed version never hides which document a pin came from (V14).
 from dataclasses import dataclass
 from typing import Any, cast
 
-from strata.controllers.deployment_resolution import deployment_of
-from strata.controllers.pinnable_targets import pinnable_targets
+from strata.controllers.deployment_resolution import deployment_of, first_tagged_version
+from strata.controllers.pinnable_targets import TargetCache, pinnable_targets
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel, version_name_list
@@ -41,6 +41,8 @@ from strata.utils.diagnostics import Diagnostics
 
 __all__ = [
     "ComposedVersionModel",
+    "DeploymentPins",
+    "VersionMatrix",
     "compose_versions",
     "deployment_version",
     "pin_key",
@@ -171,13 +173,19 @@ def listing_deployments(index: DocumentIndex, resolved: dict[str, DeploymentMode
     return found
 
 
-def version_scope(index: DocumentIndex, resolved: dict[str, DeploymentModel], name: str) -> set[tuple[str, str]] | None:
+def version_scope(
+    index: DocumentIndex,
+    resolved: dict[str, DeploymentModel],
+    name: str,
+    matrix: "VersionMatrix | None" = None,
+) -> set[tuple[str, str]] | None:
     """What version document `name` could still usefully pin (V13): the targets the deployable deployments listing it
     use, minus those another of their listed documents already pins. `None` when no deployable deployment lists it:
     then every target in the solution is a candidate, as before composition."""
     scope: set[tuple[str, str]] = set()
     listed = False
-    for item in deployments_with_versions(index, resolved):
+    matrix = matrix if matrix is not None else VersionMatrix.build(index, resolved)
+    for item in matrix.listed:
         names = item.deployment.spec.version_names()
         if name not in names:
             continue
@@ -192,35 +200,70 @@ def version_scope(index: DocumentIndex, resolved: dict[str, DeploymentModel], na
 
 
 @dataclass(frozen=True)
-class _Listed:
-    """One deployable deployment that lists version documents, as `check_version_composition()` sees it."""
+class DeploymentPins:
+    """One deployable deployment's version picture, computed once per run (`VersionMatrix`).
+
+    `version` is its listed documents composed and `findings` what composing them found (`version_pin_conflict`,
+    `version_ring_conflict`), located at the deployment's file. `own` are the documents it lists itself, `targets`
+    what it uses (`pinnable_targets()`; empty when it lists no version document), and `slot` the first tagged
+    document it lists: the ring it is in (`first_tagged_version()`).
+    """
 
     entry: IndexEntry
     deployment: DeploymentModel
     version: VersionModel | None
-    own: set[str]
-    targets: set[tuple[str, str]]
+    findings: Diagnostics
+    own: frozenset[str]
+    targets: frozenset[tuple[str, str]]
+    slot: IndexEntry | None
 
 
-def deployments_with_versions(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> list[_Listed]:
-    """Every deployable deployment (no partial base, a workspace) with at least one listed version document."""
-    found: list[_Listed] = []
-    for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = deployment_of(entry, resolved)
-        if deployment is None or deployment.spec.partial or deployment.spec.workspace is None:
-            continue
-        if not deployment.spec.version_names():
-            continue
-        found.append(
-            _Listed(
-                entry=entry,
-                deployment=deployment,
-                version=deployment_version(index, deployment),
-                own=_own_names(entry),
-                targets=pinnable_targets(index, deployment),
+@dataclass(frozen=True)
+class VersionMatrix:
+    """Every deployable deployment's `DeploymentPins`, built once per validation run or command.
+
+    `strata validate` builds one in `SolutionContext.resolve()` and hands it to the matrix checks
+    (`check_version_composition()`) and the promotion checks (`validate_promotions()`), so each deployment is
+    composed and walked once, and every walk shares one `TargetCache`. A caller that passes none gets one built for
+    it. Valid only while the index does not change.
+    """
+
+    deployments: tuple[DeploymentPins, ...]
+
+    @classmethod
+    def build(
+        cls, index: DocumentIndex, resolved: dict[str, DeploymentModel], cache: TargetCache | None = None
+    ) -> "VersionMatrix":
+        """Every deployable deployment (no partial base, a workspace), resolved through `extends`."""
+        cache = cache if cache is not None else TargetCache()
+        found: list[DeploymentPins] = []
+        for entry in index.all_of(PlatformKind.DEPLOYMENT):
+            deployment = deployment_of(entry, resolved)
+            if deployment is None or deployment.spec.partial or deployment.spec.workspace is None:
+                continue
+            names = deployment.spec.version_names()
+            version, findings = compose_versions(index, names, label=deployment.meta.name, source=str(entry.source))
+            found.append(
+                DeploymentPins(
+                    entry=entry,
+                    deployment=deployment,
+                    version=version,
+                    findings=findings,
+                    own=frozenset(_own_names(entry)),
+                    targets=frozenset(pinnable_targets(index, deployment, cache)) if names else frozenset(),
+                    slot=first_tagged_version(index, names),
+                )
             )
-        )
-    return found
+        return cls(tuple(found))
+
+    @property
+    def listed(self) -> list[DeploymentPins]:
+        """The deployments that list at least one version document."""
+        return [item for item in self.deployments if item.deployment.spec.version_names()]
+
+    def of(self, name: str) -> DeploymentPins | None:
+        """The deployment named `name`, or `None` when it is not deployable."""
+        return next((item for item in self.deployments if item.deployment.meta.name == name), None)
 
 
 def _own_names(entry: IndexEntry) -> set[str]:
@@ -236,7 +279,9 @@ def _written_version(entry: IndexEntry) -> Any:
     return getattr(cast(AnyDeploymentModel, entry.model).spec, "version", None)
 
 
-def check_version_composition(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
+def check_version_composition(
+    index: DocumentIndex, resolved: dict[str, DeploymentModel], matrix: VersionMatrix | None = None
+) -> Diagnostics:
     """The pin matrix checks of `strata validate` (docs/work/version-composition.md V1, V3, V5, V9, V12).
 
     Per deployable deployment: two listed documents pinning one target (`version_pin_conflict`), tagged documents
@@ -260,13 +305,11 @@ def check_version_composition(index: DocumentIndex, resolved: dict[str, Deployme
                     hint=f"Remove the second '{name}' from the list.",
                 )
 
-    listed = deployments_with_versions(index, resolved)
+    matrix = matrix if matrix is not None else VersionMatrix.build(index, resolved)
+    listed = matrix.listed
     used_anywhere = {target for item in listed for target in item.targets}
     for item in listed:
-        _, found = compose_versions(
-            index, item.deployment.spec.version_names(), label=item.deployment.meta.name, source=str(item.entry.source)
-        )
-        diagnostics.extend(found)
+        diagnostics.extend(item.findings)
         diagnostics.extend(_unused_documents(index, item, used_anywhere))
     diagnostics.extend(_unused_pins(index, listed))
     diagnostics.extend(_ring_none(listed))
@@ -311,7 +354,7 @@ def _listed_names(entry: IndexEntry, resolved: dict[str, DeploymentModel]) -> li
     return version_name_list(written if isinstance(written, (str, list)) else None)
 
 
-def _unused_documents(index: DocumentIndex, item: _Listed, used_anywhere: set[tuple[str, str]]) -> Diagnostics:
+def _unused_documents(index: DocumentIndex, item: DeploymentPins, used_anywhere: set[tuple[str, str]]) -> Diagnostics:
     """`version_document_unused`: a document the deployment lists itself whose pins it uses none of, while other
     deployments do: another product's document. A document whose pins no deployment uses is not this mistake (its
     targets are gone, `stale_pin`, or not used yet, `version_pin_unused`)."""
@@ -335,7 +378,7 @@ def _unused_documents(index: DocumentIndex, item: _Listed, used_anywhere: set[tu
     return diagnostics
 
 
-def _unused_pins(index: DocumentIndex, listed: list[_Listed]) -> Diagnostics:
+def _unused_pins(index: DocumentIndex, listed: list[DeploymentPins]) -> Diagnostics:
     """`version_pin_unused`: a pin of a listed document that none of the deployments listing it uses."""
     diagnostics = Diagnostics()
     used: dict[str, set[tuple[str, str]]] = {}
@@ -360,14 +403,14 @@ def _unused_pins(index: DocumentIndex, listed: list[_Listed]) -> Diagnostics:
     return diagnostics
 
 
-def _ring(item: _Listed) -> tuple[str, int | None, str | None] | None:
+def _ring(item: DeploymentPins) -> tuple[str, int | None, str | None] | None:
     promotion = item.version.spec.promotion if item.version is not None else None
     if promotion is None or promotion.ring is None:
         return None
     return promotion.ring, promotion.order, promotion.wave
 
 
-def _ring_none(listed: list[_Listed]) -> Diagnostics:
+def _ring_none(listed: list[DeploymentPins]) -> Diagnostics:
     """`version_ring_none` (V9): a deployment in no ring while others of its workspace are in a rollout."""
     diagnostics = Diagnostics()
     in_rollout = {item.deployment.spec.workspace for item in listed if _ring(item) is not None}
@@ -385,7 +428,7 @@ def _ring_none(listed: list[_Listed]) -> Diagnostics:
     return diagnostics
 
 
-def _ring_drift(index: DocumentIndex, listed: list[_Listed]) -> Diagnostics:
+def _ring_drift(index: DocumentIndex, listed: list[DeploymentPins]) -> Diagnostics:
     """`version_ring_drift` (V12): in one ring, a key owned by untagged (shared) documents at different values."""
     diagnostics = Diagnostics()
     seen: dict[tuple[str, int | None, str], dict[str, set[str]]] = {}

@@ -31,10 +31,9 @@ from pydantic import BaseModel
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
-from strata.controllers.deployment_resolution import deployment_of, first_tagged_version, resolve_deployment_chains
-from strata.controllers.pinnable_targets import pinnable_targets
+from strata.controllers.deployment_resolution import deployment_of, resolve_deployment_chains
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
-from strata.controllers.version_composition import compose_versions
+from strata.controllers.version_composition import DeploymentPins, VersionMatrix
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.version_model import VersionModel, pin_key, pin_owner
@@ -93,46 +92,28 @@ class _Slot:
     """A tagged document as a slot of one workspace, and that workspace's deployments listing it."""
 
     entry: IndexEntry
-    deployments: list[DeploymentModel] = field(default_factory=list)
+    deployments: list[DeploymentPins] = field(default_factory=list)
 
 
-def _deployable(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> list[DeploymentModel]:
-    """Every deployable deployment: no partial base, a workspace, resolved through `extends`."""
-    found: list[DeploymentModel] = []
-    for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = deployment_of(entry, resolved)
-        if deployment is not None and not deployment.spec.partial and deployment.spec.workspace:
-            found.append(deployment)
-    return found
-
-
-def _tagged_document(index: DocumentIndex, deployment: DeploymentModel) -> IndexEntry | None:
-    """The first tagged version document `deployment` lists: the slot it is in (V9)."""
-    return first_tagged_version(index, deployment.spec.version_names())
-
-
-def _listing_workspaces(deployments: list[DeploymentModel]) -> dict[str, set[str]]:
-    """Version document name -> the workspaces of the deployments listing it."""
+def _listing_workspaces(matrix: VersionMatrix) -> dict[str, set[str]]:
+    """Version document name -> the workspaces of the deployable deployments listing it."""
     users: dict[str, set[str]] = defaultdict(set)
-    for deployment in deployments:
-        for name in deployment.spec.version_names():
-            users[name].add(str(deployment.spec.workspace))
+    for item in matrix.deployments:
+        for name in item.deployment.spec.version_names():
+            users[name].add(str(item.deployment.spec.workspace))
     return users
 
 
-def _slots(index: DocumentIndex, workspace: str, deployments: list[DeploymentModel]) -> list[_Slot]:
+def _slots(workspace: str, matrix: VersionMatrix) -> list[_Slot]:
     """The tagged documents `workspace`'s deployments are in, each with those deployments."""
     slots: dict[str, _Slot] = {}
-    for deployment in deployments:
-        if deployment.spec.workspace != workspace:
-            continue
-        entry = _tagged_document(index, deployment)
-        if entry is not None:
-            slots.setdefault(entry.ref.name, _Slot(entry)).deployments.append(deployment)
+    for item in matrix.deployments:
+        if item.deployment.spec.workspace == workspace and item.slot is not None:
+            slots.setdefault(item.slot.ref.name, _Slot(item.slot)).deployments.append(item)
     return list(slots.values())
 
 
-def _slot_pins(index: DocumentIndex, workspace: str, slot: _Slot, users: dict[str, set[str]]) -> list[PromotionPinView]:
+def _slot_pins(workspace: str, slot: _Slot, users: dict[str, set[str]]) -> list[PromotionPinView]:
     """What the slot's deployments run with, one row per (pin, value, owner).
 
     Every pin of the slot's own tagged document is shown: it is this product's document, so a deployment listing only
@@ -140,11 +121,10 @@ def _slot_pins(index: DocumentIndex, workspace: str, slot: _Slot, users: dict[st
     shown only where the deployment uses its target, so a shared document's pins for other products stay out.
     """
     rows: dict[tuple[str, str, str, str], PromotionPinView] = {}
-    for deployment in slot.deployments:
-        composed, _ = compose_versions(index, deployment.spec.version_names(), label=deployment.meta.name)
+    for item in slot.deployments:
+        composed, targets, deployment = item.version, item.targets, item.deployment
         if composed is None:
             continue
-        targets = pinnable_targets(index, deployment)
         for category, target, pin in composed.spec.pins.iter_pins():
             owner = pin_owner(composed, category, target)
             if owner != slot.entry.ref.name and (category, target) not in targets:
@@ -167,6 +147,7 @@ def build_promotion_view(
     workspace: str,
     index: DocumentIndex,
     resolved: dict[str, DeploymentModel] | None = None,
+    matrix: VersionMatrix | None = None,
 ) -> tuple[PromotionView, Diagnostics]:
     """Group `workspace`'s rollout slots, and validate them.
 
@@ -175,6 +156,8 @@ def build_promotion_view(
         index: The loaded `DocumentIndex`.
         resolved: `Deployment` documents with `extends` already folded in (`resolve_deployment_chains()`'s own
             return value); resolved here when not given.
+        matrix: Every deployable deployment's version picture (`VersionMatrix`), so a run over several
+            workspaces composes and walks each deployment once; built here when not given.
 
     Returns:
         The grouped view (sorted by `order`, each ring's `waves` sorted by wave name), and every finding — the view
@@ -184,9 +167,10 @@ def build_promotion_view(
     diagnostics = Diagnostics()
     if resolved is None:
         resolved, _ = resolve_deployment_chains(index)
-    deployments = _deployable(index, resolved)
-    users = _listing_workspaces(deployments)
-    slots = _slots(index, workspace, deployments)
+    if matrix is None:
+        matrix = VersionMatrix.build(index, resolved)
+    users = _listing_workspaces(matrix)
+    slots = _slots(workspace, matrix)
     tagged = [slot.entry for slot in slots]
 
     # Check 1: ring <-> order must biject across the workspace.
@@ -245,8 +229,8 @@ def build_promotion_view(
                 PromotionWaveView(
                     wave=wave,
                     version=version,
-                    deployments=sorted(deployment.meta.name for deployment in slot.deployments),
-                    pins=_slot_pins(index, workspace, slot, users),
+                    deployments=sorted(item.deployment.meta.name for item in slot.deployments),
+                    pins=_slot_pins(workspace, slot, users),
                 )
             )
 
@@ -293,19 +277,23 @@ def _orphan(entry: IndexEntry) -> Diagnostics:
     return diagnostics
 
 
-def rollout_workspaces(index: DocumentIndex, resolved: dict[str, DeploymentModel] | None = None) -> list[str]:
+def rollout_workspaces(
+    index: DocumentIndex,
+    resolved: dict[str, DeploymentModel] | None = None,
+    matrix: VersionMatrix | None = None,
+) -> list[str]:
     """Every workspace in a rollout: those whose deployable deployments list a tagged document. `promote status`
     without a workspace shows each of them."""
-    if resolved is None:
-        resolved, _ = resolve_deployment_chains(index)
-    workspaces: set[str] = set()
-    for deployment in _deployable(index, resolved):
-        if _tagged_document(index, deployment) is not None:
-            workspaces.add(str(deployment.spec.workspace))
-    return sorted(workspaces)
+    if matrix is None:
+        if resolved is None:
+            resolved, _ = resolve_deployment_chains(index)
+        matrix = VersionMatrix.build(index, resolved)
+    return sorted({str(item.deployment.spec.workspace) for item in matrix.deployments if item.slot is not None})
 
 
-def validate_promotions(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
+def validate_promotions(
+    index: DocumentIndex, resolved: dict[str, DeploymentModel], matrix: VersionMatrix | None = None
+) -> Diagnostics:
     """Run the promotion checks for every workspace in a rollout, and warn on every tagged document no deployment (a
     partial base included) lists (`promotion_orphan_ring`): it belongs to no workspace's view."""
     diagnostics = Diagnostics()
@@ -315,8 +303,9 @@ def validate_promotions(index: DocumentIndex, resolved: dict[str, DeploymentMode
         if promotion is not None and promotion.ring is not None and entry.ref.name not in listed:
             diagnostics.extend(_orphan(entry))
 
-    for workspace in rollout_workspaces(index, resolved):
-        _, found = build_promotion_view(workspace, index, resolved)
+    matrix = matrix if matrix is not None else VersionMatrix.build(index, resolved)
+    for workspace in rollout_workspaces(index, resolved, matrix):
+        _, found = build_promotion_view(workspace, index, resolved, matrix)
         diagnostics.extend(found)
     return diagnostics
 
