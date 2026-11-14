@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Version (kind: version) &mdash; strata 2.6.3 documentation</title>
+  <title>Version (kind: version) &mdash; strata 2.7.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=99c1414e"></script>
+      <script src="../_static/documentation_options.js?v=dfec817d"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -67,6 +67,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/share-version-pins-across-workspaces.html">How To: Share version pins between products in one ring</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
@@ -91,6 +92,11 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#several-documents-per-deployment">Several documents per deployment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#no-spec-workspace">No <code class="docutils literal notranslate"><span class="pre">spec.workspace</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#findings">Findings</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
@@ -203,6 +209,134 @@ asset using a manifest remote is pinned under <code class="docutils literal notr
 </div>
 <p>This is <code class="docutils literal notranslate"><span class="pre">config/versions/prd.yaml</span></code>, the working example in this repository.</p>
 </section>
+<section id="several-documents-per-deployment">
+<h2>Several documents per deployment<a class="headerlink" href="#several-documents-per-deployment" title="Link to this heading"></a></h2>
+<p>A <a class="reference internal" href="deployment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">deployment</span></code></span></a>’s <code class="docutils literal notranslate"><span class="pre">spec.version</span></code> names one version document or a list of them, and the pins of
+every listed document apply together. That lets several products in one ring share what they have in common
+without copying it: a shared document holds the common pins, and each product keeps its own.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># versions/prd-core.yaml - the shared part, listed by every product's prd deployment</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">pins</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">remotes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> iac</span><span class="p">:</span><span class="w"> </span><span class="nv">v2.1.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nn">---</span>
+<span class="c1"># versions/prd-datahub.yaml - one product's pins; its tag says which ring it is</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotion</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> ring</span><span class="p">:</span><span class="w"> </span><span class="nv">prd</span><span class="p p-Indicator">,</span><span class="nt"> order</span><span class="p">:</span><span class="w"> </span><span class="nv">3</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">pins</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">artifacts</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> datahub-api</span><span class="p">:</span><span class="w"> </span><span class="nv">1.4.0</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="nn">---</span>
+<span class="c1"># deployments/base-prd.yaml - through extends, version lists append (base first)</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prd-core</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prd</span><span class="p p-Indicator">]</span>
+<span class="nn">---</span>
+<span class="c1"># deployments/datahub-prd.yaml - effective: [prd-core, prd-datahub]</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">base-prd</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datahub</span>
+<span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">prd-datahub</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>Every pin has <strong>one owning document per deployment</strong>. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks each deployment’s listed documents
+together; the findings are listed under <a class="reference internal" href="#findings">Findings</a>. How it works, and why it is built this way:
+<span class="xref myst">version composition</span>.</p>
+<ul class="simple">
+<li><p>Which targets a deployment uses: its workspace’s enabled module services (<code class="docutils literal notranslate"><span class="pre">images</span></code>), chart modules (<code class="docutils literal notranslate"><span class="pre">charts</span></code>),
+every remote a reached document names, every artifact a service, <code class="docutils literal notranslate"><span class="pre">${artifact:}</span></code> token or <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code>
+variable names, and every asset its execution steps select.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--pin</span> <span class="pre">NAME</span></code> on <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code>, <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>, <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">images</span></code>, <code class="docutils literal notranslate"><span class="pre">policy</span></code> and <code class="docutils literal notranslate"><span class="pre">integration</span></code> is repeatable, and what
+it names replaces the deployment’s whole list for that run. Leaving out a document that pins something the
+deployment uses is a warning (<code class="docutils literal notranslate"><span class="pre">version_pin_dropped</span></code>): that target falls back to its own declared value.</p></li>
+<li><p>Pin logging names the document each pin came from. <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> writes the build’s own <code class="docutils literal notranslate"><span class="pre">version.yaml</span></code> (an
+ordinary version document with only the pins it used) next to <code class="docutils literal notranslate"><span class="pre">resolved.yaml</span></code>, whose <code class="docutils literal notranslate"><span class="pre">version</span></code> lists the
+documents, <code class="docutils literal notranslate"><span class="pre">pinned_by</span></code> says <code class="docutils literal notranslate"><span class="pre">spec.version</span></code> or <code class="docutils literal notranslate"><span class="pre">--pin</span></code>, and <code class="docutils literal notranslate"><span class="pre">pin_sources</span></code> names each pin’s document. <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>
+compares a Helm build’s chart and artifact pins with <code class="docutils literal notranslate"><span class="pre">version.yaml</span></code> by value (<code class="docutils literal notranslate"><span class="pre">build_version_mismatch</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span> <span class="pre">WORKSPACE</span></code> reads the workspace’s deployments: its rows are the pins they run, with the
+owning document (marked <code class="docutils literal notranslate"><span class="pre">shared</span></code> when deployments of another workspace list it too). <code class="docutils literal notranslate"><span class="pre">promote</span> <span class="pre">apply</span></code> writes each
+pin into its owner, and skips a shared document unless <code class="docutils literal notranslate"><span class="pre">--shared</span></code> is given, and a document only some of the
+ring’s deployments list (a customer’s own). Without a workspace, <code class="docutils literal notranslate"><span class="pre">promote</span> <span class="pre">status</span> <span class="pre">--ring</span> <span class="pre">prd</span></code> shows what the whole
+ring runs, every workspace in one table with a workspace column.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">show</span> <span class="pre">NAME</span></code> lists a document’s pins and the deployments that list it.</p></li>
+</ul>
+<section id="no-spec-workspace">
+<span id="no-specworkspace"></span><h3>No <code class="docutils literal notranslate"><span class="pre">spec.workspace</span></code><a class="headerlink" href="#no-spec-workspace" title="Link to this heading"></a></h3>
+<p>A version document names no workspace: the deployments that list it decide where it applies, so one document can
+be shared by deployments of several workspaces. <code class="docutils literal notranslate"><span class="pre">spec.workspace</span></code> was removed in strata 2.7: a document that still
+declares it fails to load, with a message saying to delete the line. (ADR-0063, ADR-0064, ADR-0065.)</p>
+</section>
+</section>
+<section id="findings">
+<h2>Findings<a class="headerlink" href="#findings" title="Link to this heading"></a></h2>
+<p>What strata reports about version documents and the deployments that list them. Every finding below carries a
+<code class="docutils literal notranslate"><span class="pre">hint</span></code>: the console prints it under the finding (<code class="docutils literal notranslate"><span class="pre">hint:</span> <span class="pre">...</span></code>), and JSON output has it as <code class="docutils literal notranslate"><span class="pre">diagnostics[].hint</span></code>.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Code</p></th>
+<th class="head"><p>Severity</p></th>
+<th class="head"><p>When</p></th>
+<th class="head"><p>What to do</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">version_pin_conflict</span></code></p></td>
+<td><p>error</p></td>
+<td><p>two documents one deployment lists pin the same target, even with equal values</p></td>
+<td><p>remove the pin from one; a pin several products share belongs in a shared document they all list</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">version_ring_conflict</span></code></p></td>
+<td><p>error</p></td>
+<td><p>two documents one deployment lists are tagged for different rings</p></td>
+<td><p>tag only the ring’s product document; leave shared documents untagged</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">build_version_mismatch</span></code></p></td>
+<td><p>error</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> of a Helm build whose chart or artifact pins differ from the build’s <code class="docutils literal notranslate"><span class="pre">version.yaml</span></code></p></td>
+<td><p>rebuild with the same versions, or deploy what the build holds</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">version_document_unused</span></code></p></td>
+<td><p>warning</p></td>
+<td><p>a document the deployment lists itself pins nothing it uses, while other deployments do</p></td>
+<td><p>list this workspace’s document instead (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">show</span></code> says who uses which)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">version_listed_twice</span></code></p></td>
+<td><p>warning</p></td>
+<td><p>one written list names a document twice (repeating a document the base lists is fine)</p></td>
+<td><p>remove the repeat</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">version_ring_drift</span></code></p></td>
+<td><p>warning</p></td>
+<td><p>deployments of one ring run a shared (untagged) document’s pin at different values</p></td>
+<td><p>list one shared document in every deployment of the ring</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">version_pin_dropped</span></code></p></td>
+<td><p>warning</p></td>
+<td><p>a <code class="docutils literal notranslate"><span class="pre">--pin</span></code> list leaves out a document that pins something the deployment uses</p></td>
+<td><p>add that document to <code class="docutils literal notranslate"><span class="pre">--pin</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">version_pin_unused</span></code></p></td>
+<td><p>information</p></td>
+<td><p>a pin none of the deployments listing the document uses</p></td>
+<td><p>nothing for a pin staged ahead of its use; otherwise remove it</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">version_ring_none</span></code></p></td>
+<td><p>information</p></td>
+<td><p>a deployment in no ring while others of its workspace are in a rollout</p></td>
+<td><p>list the ring’s tagged document too, or leave it out on purpose</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">version_document_unlisted</span></code></p></td>
+<td><p>information</p></td>
+<td><p>an untagged document no deployment lists (a tagged one is <code class="docutils literal notranslate"><span class="pre">promotion_orphan_ring</span></code>)</p></td>
+<td><p>nothing if CI uses it through <code class="docutils literal notranslate"><span class="pre">--pin</span></code>; otherwise list it in a deployment, or delete it</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">stale_pin</span></code></p></td>
+<td><p>warning</p></td>
+<td><p>a pin names no module service, chart module, remote, artifact or asset</p></td>
+<td><p>remove it (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">update</span></code> proposes this)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
 <ul class="simple">
@@ -217,7 +351,7 @@ image), or when the service declares no <code class="docutils literal notranslat
 <code class="docutils literal notranslate"><span class="pre">artifact</span></code> is pinned under <code class="docutils literal notranslate"><span class="pre">artifacts</span></code>). <code class="docutils literal notranslate"><span class="pre">images</span></code>, <code class="docutils literal notranslate"><span class="pre">charts</span></code>, <code class="docutils literal notranslate"><span class="pre">remotes</span></code> and
 <code class="docutils literal notranslate"><span class="pre">assets</span></code> pins are applied by <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code>; <code class="docutils literal notranslate"><span class="pre">artifacts</span></code> pins are applied wherever the artifact is
 resolved (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">artifact</span></code>, build and deploy). <code class="docutils literal notranslate"><span class="pre">--pin</span> <span class="pre">NAME</span></code> on <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code>/<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>
-overrides a deployment’s <code class="docutils literal notranslate"><span class="pre">spec.version</span></code> for that run only.</p></li>
+overrides a deployment’s <code class="docutils literal notranslate"><span class="pre">spec.version</span></code> for that run only (repeat it for several documents).</p></li>
 <li><p>A target with no current value of its own (a module service with no <code class="docutils literal notranslate"><span class="pre">image</span></code>) is never seeded by
 <code class="docutils literal notranslate"><span class="pre">version</span> <span class="pre">new</span> <span class="pre">--from</span></code> or offered as a pin to add by <code class="docutils literal notranslate"><span class="pre">version</span> <span class="pre">update</span></code>: a pin must have a non-empty
 value. An artifact with a blank <code class="docutils literal notranslate"><span class="pre">image_tag</span></code> is the exception for <code class="docutils literal notranslate"><span class="pre">version</span> <span class="pre">update</span></code>: with no pin it
@@ -228,7 +362,9 @@ A pin it already has is not stale and stays.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">version</span> <span class="pre">update</span> <span class="pre">NAME</span></code> lists the pins you could add (each target with no pin yet, seeded with
 its current value) and the pins to remove (stale ones). It never edits the file and exits 0, since
 a target with no pin is normal. Add <code class="docutils literal notranslate"><span class="pre">--check</span></code> to exit 3 when anything is left to add or remove, for a
-CI gate. An artifact with no tag and no pin is a warning even without <code class="docutils literal notranslate"><span class="pre">--check</span></code>, and an error with it.</p></li>
+CI gate. An artifact with no tag and no pin is a warning even without <code class="docutils literal notranslate"><span class="pre">--check</span></code>, and an error with it.
+When deployments list NAME, only the targets they use are offered, and none another of their listed documents
+already pins; a document no deployment lists yet is compared with the whole solution.</p></li>
 </ul>
 </section>
 </section>

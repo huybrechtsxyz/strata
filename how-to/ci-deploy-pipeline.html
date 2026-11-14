@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>How To: Run strata in a CI pipeline &mdash; strata 2.6.3 documentation</title>
+  <title>How To: Run strata in a CI pipeline &mdash; strata 2.7.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=99c1414e"></script>
+      <script src="../_static/documentation_options.js?v=dfec817d"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -79,6 +79,7 @@
 <li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="share-version-pins-across-workspaces.html">How To: Share version pins between products in one ring</a></li>
 <li class="toctree-l1"><a class="reference internal" href="structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
@@ -154,7 +155,7 @@ export lines change.</p>
 <p><code class="docutils literal notranslate"><span class="pre">D</span></code> is the <code class="docutils literal notranslate"><span class="pre">meta.name</span></code> of a <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code> document. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">list</span></code> lists them; a
 deployment marked <code class="docutils literal notranslate"><span class="pre">(partial)</span></code> is a base that others extend and cannot be deployed. To build a CI matrix, ask for
 the deployable ones of one workspace and ring: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">list</span> <span class="pre">--workspace</span> <span class="pre">W</span> <span class="pre">--ring</span> <span class="pre">R</span> <span class="pre">--deployable</span> <span class="pre">-o</span> <span class="pre">json</span></code>
-returns <code class="docutils literal notranslate"><span class="pre">data.deployments[]</span></code> (<code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">tenant</span></code>, <code class="docutils literal notranslate"><span class="pre">version</span></code>, <code class="docutils literal notranslate"><span class="pre">ring</span></code>, <code class="docutils literal notranslate"><span class="pre">order</span></code>, …). A filter that names nothing
+returns <code class="docutils literal notranslate"><span class="pre">data.deployments[]</span></code> (<code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">tenant</span></code>, <code class="docutils literal notranslate"><span class="pre">versions</span></code>, <code class="docutils literal notranslate"><span class="pre">ring</span></code>, <code class="docutils literal notranslate"><span class="pre">order</span></code>, …). A filter that names nothing
 exits 2 instead of returning an empty list.</p>
 <section id="the-four-steps">
 <span id="1-the-four-steps"></span><h2>1. The four steps<a class="headerlink" href="#the-four-steps" title="Link to this heading"></a></h2>
