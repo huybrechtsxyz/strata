@@ -1,6 +1,6 @@
 /**
  * integrationsViewProvider.ts - the Integrations tree view
- * (docs/work/vscode-integrations-policies-views.md V3).
+ * (docs/design/vscode-integrations-policies-views.md V3).
  *
  * One row per `strata integration list` row, scoped to the selected
  * deployment when there is one. Children are the row's problems and the

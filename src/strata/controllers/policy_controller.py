@@ -46,6 +46,7 @@ from strata.controllers.value_controller import resolve_deployment_workspace
 from strata.models.audit_manifest_model import ManifestPolicyResultModel
 from strata.models.checkov_model import CheckovPolicyModel
 from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import VersionPins
 from strata.models.image_tag_policy_model import ImageTagPolicyModel
 from strata.models.integration_model import IntegrationModel
 from strata.models.provisioner_lock_policy_model import ProvisionerLockPolicyModel
@@ -74,7 +75,7 @@ class _CheckRequest:
     deployment_name: str
     workspace: WorkspaceModel
     build_path: Path
-    version_pin: str | None
+    version_pin: VersionPins
     commit_override: str | None
     on_step: Callable[[str], None] | None
 
@@ -92,7 +93,7 @@ class _FindingsRequest:
     build_path: Path
     severity: str | None
     integration: str | None
-    version_pin: str | None
+    version_pin: VersionPins
     on_step: Callable[[str], None] | None
 
 
@@ -235,6 +236,8 @@ _POLICIES: tuple[_PolicyRow, ...] = (
     _PolicyRow("image_tag_policy", "build", check=_image_tag_check, findings=None),
     _PolicyRow("provisioner_lock_policy", "build", check=_provisioner_lock_check, findings=None),
 )
+from strata.models.deployment_model import VersionPins
+
 _ROWS = {row.name: row for row in _POLICIES}
 
 
@@ -252,7 +255,7 @@ class PolicyInfo:
 
 
 def list_policies(
-    context: SolutionContext, deployment_name: str, build_path: Path, *, version_pin: str | None = None
+    context: SolutionContext, deployment_name: str, build_path: Path, *, version_pin: VersionPins = None
 ) -> list[PolicyInfo]:
     """Every policy the deployment's workspace configures, with its last recorded result. No network."""
     _, workspace = resolve_deployment_workspace(context, deployment_name, version_pin=version_pin)
@@ -279,7 +282,7 @@ def check_policies(
     build_path: Path,
     *,
     policies: Sequence[str] = (),
-    version_pin: str | None = None,
+    version_pin: VersionPins = None,
     commit_override: str | None = None,
     on_step: Callable[[str], None] | None = None,
 ) -> tuple[Diagnostics, list[str]]:
@@ -326,7 +329,7 @@ def policy_findings(
     *,
     severity: str | None = None,
     integration: str | None = None,
-    version_pin: str | None = None,
+    version_pin: VersionPins = None,
     on_step: Callable[[str], None] | None = None,
 ) -> PolicyFindingsReport:
     """Itemised findings for `policy_name`, read-only (image gate per SBOM image; CVE per finding).

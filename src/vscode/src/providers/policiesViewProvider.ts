@@ -1,6 +1,6 @@
 /**
  * policiesViewProvider.ts - the Policies tree view
- * (docs/work/vscode-integrations-policies-views.md V4, V5).
+ * (docs/design/vscode-integrations-policies-views.md V4, V5).
  *
  * One row per `strata policy list D` row for the selected deployment. The
  * icon is the last recorded result. "Check" runs `strata policy check`;

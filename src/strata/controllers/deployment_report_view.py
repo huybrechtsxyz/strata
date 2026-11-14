@@ -16,6 +16,7 @@ from strata.controllers.deployment_output_view import StepOutputs, open_output_s
 from strata.controllers.deployment_report_store import StepReport
 from strata.controllers.effective_images import effective_images
 from strata.controllers.solution_context import SolutionContext
+from strata.models.deployment_model import VersionPins
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 
@@ -92,7 +93,7 @@ def deployment_report(
     deployment_name: str,
     steps: list[str] | None = None,
     *,
-    version_pin: str | None = None,
+    version_pin: VersionPins = None,
 ) -> DeploymentReport:
     """Gather the handover data for `deployment_name`, for every execution step or only `steps`. `version_pin` is
     the `--pin` the deploy ran with, so the images are the ones it deployed.

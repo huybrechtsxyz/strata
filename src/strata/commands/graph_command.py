@@ -21,8 +21,11 @@ import click
 from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
+from strata.controllers.deployment_resolution import resolve_deployment_chains
+from strata.controllers.document_reachability import cleanup_candidates
 from strata.controllers.graph_controller import GraphEdge, build_reference_graph
 from strata.controllers.solution_context import open_solution
+from strata.controllers.solution_controller import IndexEntry
 from strata.utils.layout import display_path
 
 
@@ -32,15 +35,26 @@ from strata.utils.layout import display_path
     type=click.Path(file_okay=False, path_type=Path),
     required=False,
 )
+@click.option(
+    "--unreferenced",
+    is_flag=True,
+    default=False,
+    help="List the cleanup candidates instead: documents no deployment reaches, and partial bases nothing extends "
+    "(what 'strata validate' reports as document_unreferenced and base_unused).",
+)
 @output_option
 @quiet_option
 @verbose_option
-def graph_command(path: Path | None, output: str, quiet: bool, verbose: bool) -> None:
+def graph_command(path: Path | None, unreferenced: bool, output: str, quiet: bool, verbose: bool) -> None:
     """Show every cross-document reference in the solution.
 
     Walks up from PATH (default: the current directory) to find the solution
     root, then lists every reference each document declares — which document
     it points at, and whether that target actually exists.
+
+    With --unreferenced, lists the documents nothing uses instead, for a
+    cleanup pass: those no deployable deployment reaches through a reference
+    or a ${value:} token, and partial bases nothing extends.
 
     \b
     Exit codes:
@@ -59,6 +73,30 @@ def graph_command(path: Path | None, output: str, quiet: bool, verbose: bool) ->
             root=context.root,
         )
 
+        if unreferenced:
+            # Reachability follows deployments through `extends`, so their chains are resolved; nothing else of
+            # the validation pass is needed, so a problem elsewhere does not hide the list.
+            resolved, _ = resolve_deployment_chains(context.controller.index)
+            candidates = cleanup_candidates(context.controller.index, resolved)
+            run.step(f"found {len(candidates)} unreferenced document(s) across {document_count} document(s)")
+            if output == "console":
+                _print_candidates(candidates, context.root)
+            run.report(context.diagnostics, root=context.root, document_count=document_count)
+            if isinstance(run.reporter, JsonReporter):
+                run.reporter.data = {
+                    "unreferenced": [
+                        {
+                            "kind": entry.ref.kind.value,
+                            "name": entry.ref.name,
+                            "path": str(entry.source),
+                            "reason": reason,
+                        }
+                        for entry, reason in candidates
+                    ]
+                }
+            run.ok = True
+            return
+
         # Phase 1 (schema) only — a graph of *what resolves to what* needs no
         # cross-document resolution pass of its own; `resolved` below is
         # computed directly against the index.
@@ -72,6 +110,23 @@ def graph_command(path: Path | None, output: str, quiet: bool, verbose: bool) ->
         if isinstance(run.reporter, JsonReporter):
             run.reporter.data = {"edges": [asdict(edge) for edge in edges]}
         run.ok = True
+
+
+_REASONS = {
+    "unreferenced": "reached by no deployment",
+    "base_unused": "partial base nothing extends",
+}
+
+
+def _print_candidates(candidates: list[tuple[IndexEntry, str]], root: Path) -> None:
+    """One line per cleanup candidate: kind/name, why, and the file."""
+    if not candidates:
+        click.echo("  (every document is used)")
+        return
+    for entry, reason in candidates:
+        click.echo(
+            f"  {entry.ref.kind.value}/{entry.ref.name}  {_REASONS[reason]}  ({display_path(str(entry.source), root)})"
+        )
 
 
 def _print_graph(edges: list[GraphEdge], root: Path) -> None:

@@ -44,6 +44,7 @@ class/instance split as `WorkspaceResourceModel.resource` and
 `ModuleReferenceModel.module`.
 """
 
+from collections.abc import Sequence
 from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
@@ -60,6 +61,26 @@ from strata.models.common_models import (
 from strata.models.reference_fields import References
 from strata.models.template_model import DocumentTemplateModel, ParamSetNames, check_name_rule
 from strata.utils.names import check_unique_names
+
+#: `Deployment.spec.version`: one Version document, or a list of them whose pins apply together
+#: (docs/work/version-composition.md V1). The `ParamSetNames` pattern: each name is a reference.
+VersionNames = (
+    Annotated[PlatformName, References(PlatformKind.VERSION)]
+    | list[Annotated[PlatformName, References(PlatformKind.VERSION)]]
+)
+
+
+#: `--pin` as the controllers take it: one version document, several (`--pin a --pin b`), or `None` when the flag
+#: was not given and the deployment's own `spec.version` applies.
+VersionPins = str | Sequence[str] | None
+
+
+def version_name_list(value: str | Sequence[str] | None) -> list[str]:
+    """`Deployment.spec.version` (or a `--pin` set) as a list in written order, duplicates removed: `None` is `[]`."""
+    if value is None:
+        return []
+    names = [value] if isinstance(value, str) else list(value)
+    return list(dict.fromkeys(name for name in names if name))
 
 
 class DeploymentHealthCheckModel(PlatformBaseModel):
@@ -421,11 +442,14 @@ class DeploymentSpecModel(PlatformBaseModel):
         "Design notes: Names of additional Configuration documents that apply to this "
         "deployment",
     )
-    version: Annotated[PlatformName, References(PlatformKind.VERSION)] | None = Field(
+    version: VersionNames | None = Field(
         None,
-        description="Name of the Version document supplying pins for this deployment. When a pinned target "
-        "(image, chart, remote ref, tool) is declared elsewhere, the pin wins. Omit to use each document's "
-        "own declared versions.",
+        description="The Version document, or list of Version documents, supplying pins for this deployment. "
+        "The pins of every listed document apply together; two listed documents pinning the same target is "
+        "an error (`version_pin_conflict`), so a shared document (`prd-core`) and a product document "
+        "(`prd-datahub`) each own their own pins. Through `extends` the lists append, base first. When a "
+        "pinned target (image, chart, remote ref, artifact tag, asset ref) is declared elsewhere, the pin "
+        "wins. Omit to use each document's own declared versions.",
     )
     layers: DeploymentLayersModel | None = Field(
         None,
@@ -482,6 +506,10 @@ class DeploymentSpecModel(PlatformBaseModel):
         "as one JSON-encoded `TF_VAR_custom` env var for the whole merged dict — not "
         "split into a separate env var per key.",
     )
+
+    def version_names(self) -> list[str]:
+        """The Version documents this deployment lists, in written order, each once."""
+        return version_name_list(self.version)
 
     @field_validator("kube_context", "docker_context")
     @classmethod

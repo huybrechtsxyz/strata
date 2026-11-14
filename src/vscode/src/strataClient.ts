@@ -34,6 +34,8 @@ export interface Diagnostic {
     source?: string;
     location?: string;
     code?: string;
+    /** What to do about it, when strata knows (docs/work/diagnostic-guidance.md). */
+    hint?: string;
 }
 
 export interface Summary {
@@ -74,7 +76,8 @@ export interface DeploymentRow {
     workspace: string | null;
     extends: string | null;
     tenant: string | null;
-    version: string | null;
+    /** Every version document the deployment lists, through `extends` (docs/work/version-composition.md V16). */
+    versions: string[];
     ring: string | null;
     order: number | null;
     wave: string | null;

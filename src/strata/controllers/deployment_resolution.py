@@ -84,10 +84,11 @@ from strata.models.deployment_model import (
     DeploymentModel,
     DeploymentSpecModel,
     DeploymentTemplateModel,
+    version_name_list,
 )
 from strata.models.parameterset_model import ParameterSetModel
 from strata.models.tenant_model import TenantModel
-from strata.models.version_model import VersionModel
+from strata.models.version_model import VersionModel, VersionPromotionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import diagnostics_from_validation_error
 from strata.services.deployment_service import merge_deployment_specs
@@ -143,16 +144,17 @@ class _MergedSpec:
 class DeploymentSummary:
     """One `strata deploy list` row.
 
-    `workspace`, `tenant`, `version` and `environments` are as resolved through `extends`; `extends` is the
-    declared parent. `ring`, `order` and `wave` are the version document's `spec.promotion`, `None` when the
-    deployment has no version or the document is not tagged.
+    `workspace`, `tenant`, `versions` and `environments` are as resolved through `extends`; `extends` is the
+    declared parent. `versions` lists every version document the deployment uses (docs/work/version-composition.md
+    V16). `ring`, `order` and `wave` are the `spec.promotion` of its tagged version documents (V9), `None` when
+    none is tagged.
     """
 
     name: str
     workspace: str | None
     extends: str | None
     tenant: str | None
-    version: str | None
+    versions: tuple[str, ...]
     ring: str | None
     order: int | None
     wave: str | None
@@ -197,7 +199,7 @@ def list_deployments(
     ring: str | None = None,
     deployable: bool = False,
 ) -> list[DeploymentSummary]:
-    """Every deployment document, partial bases included and marked (docs/work/vscode-integrations-policies-views.md V1).
+    """Every deployment document, partial bases included and marked (docs/design/vscode-integrations-policies-views.md V1).
 
     The filters compare against the resolved values and combine with AND; `deployable` drops partial bases.
 
@@ -212,15 +214,15 @@ def list_deployments(
         deployment = deployment_of(entry, resolved)
         # A template that did not resolve (a template base) is listed as written, `${param:}` tokens and all.
         spec = deployment.spec.model_dump() if deployment is not None else raw.spec.model_dump()
-        version_name = spec.get("version")
-        version_entry = index.get(PlatformKind.VERSION, version_name) if isinstance(version_name, str) else None
-        promotion = cast(VersionModel, version_entry.model).spec.promotion if version_entry is not None else None
+        written = spec.get("version")
+        versions = tuple(version_name_list(written if isinstance(written, (str, list)) else None))
+        promotion = _tagged_promotion(index, versions)
         row = DeploymentSummary(
             name=entry.ref.name,
             workspace=_text(spec.get("workspace")),
             extends=raw.spec.extends,
             tenant=_text(spec.get("tenant")),
-            version=_text(version_name),
+            versions=versions,
             ring=promotion.ring if promotion is not None else None,
             order=promotion.order if promotion is not None else None,
             wave=promotion.wave if promotion is not None else None,
@@ -230,11 +232,24 @@ def list_deployments(
         )
         if deployable and row.partial:
             continue
-        wanted = ((workspace, row.workspace), (tenant, row.tenant), (version, row.version), (ring, row.ring))
+        wanted = ((workspace, row.workspace), (tenant, row.tenant), (ring, row.ring))
         if any(want is not None and want != got for want, got in wanted):
+            continue
+        if version is not None and version not in row.versions:
             continue
         rows.append(row)
     return rows
+
+
+def _tagged_promotion(index: DocumentIndex, names: tuple[str, ...]) -> VersionPromotionModel | None:
+    """The ring of a deployment listing `names`: the first tagged document's `spec.promotion` (V9; disagreeing tags
+    are `version_ring_conflict` in `strata validate`)."""
+    for name in names:
+        entry = index.get(PlatformKind.VERSION, name)
+        promotion = cast(VersionModel, entry.model).spec.promotion if entry is not None else None
+        if promotion is not None and promotion.ring is not None:
+            return promotion
+    return None
 
 
 def _text(value: Any) -> str | None:

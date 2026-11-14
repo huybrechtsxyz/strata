@@ -34,6 +34,13 @@ def _merge_keyed_list(base: list[dict[str, Any]], child: list[dict[str, Any]], k
     return [by_key[identity] for identity in order]
 
 
+def _as_list(value: Any) -> list[Any]:
+    """A spec value that may be one item or a list, as a list: `None` (or an empty value) is `[]`."""
+    if value is None or value == "":
+        return []
+    return list(value) if isinstance(value, list) else [value]
+
+
 def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
     """Merge a base deployment spec into a child's. Child always wins.
 
@@ -57,6 +64,10 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
       environments already use for variables/secrets/features.
     - **`environments`** — base list first, then the child's. Later entries
       win at value-resolution time, so the child still takes precedence.
+    - **`version`** — base list first, then the child's, each document once
+      (docs/work/version-composition.md V2): a shared `prd-core` in a base
+      plus the product's own `prd-datahub` gives both. A single name on
+      either side counts as a one-element list.
     - **Other lists** — replaced wholesale by the child's.
     - **`partial`/`extends`** — consumed and stripped from the result.
 
@@ -79,6 +90,14 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
     child_envs = child.get("environments") or []
     if base_envs or child_envs:
         merged["environments"] = [*base_envs, *[e for e in child_envs if e not in base_envs]]
+
+    # docs/work/version-composition.md V2: version lists append base-first, a repeat dropped silently. A single
+    # name on either side counts as a one-element list; one name in the result stays a plain name.
+    base_versions = _as_list(base.get("version"))
+    child_versions = _as_list(child.get("version"))
+    if base_versions or child_versions:
+        versions = list(dict.fromkeys([*base_versions, *child_versions]))
+        merged["version"] = versions[0] if len(versions) == 1 else versions
 
     for field in _EXTENDS_CONTROL_FIELDS:
         merged.pop(field, None)

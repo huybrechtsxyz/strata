@@ -58,6 +58,8 @@ _COMMIT_ENV_VARS = (
     "BITBUCKET_COMMIT",
     "GIT_COMMIT",
 )
+from strata.models.deployment_model import VersionPins
+
 _COMMIT_LENGTH = 40
 _GIT_TIMEOUT = 10
 _MAX_LISTED_ISSUES = 5
@@ -111,7 +113,7 @@ def evaluate_security_gates(
     build_path: Path,
     *,
     resolved: ValueResolution | None,
-    version_pin: str | None = None,
+    version_pin: VersionPins = None,
     commit_override: str | None = None,
     only: Gate | None = None,
     on_step: Callable[[str], None] | None = None,
@@ -204,7 +206,7 @@ def bind_resolved_credentials(
     resolved: ValueResolution | None,
     deployment_name: str,
     *,
-    version_pin: str | None = None,
+    version_pin: VersionPins = None,
     on_secret: Callable[[str], None] | None = None,
 ) -> Diagnostics:
     """Resolve the keys `spec.authentication` references and hand them to the integration (design D2).
@@ -322,7 +324,7 @@ def _release_gate(
     deployment_name: str,
     policy: ReleaseGatePolicyModel,
     resolved: ValueResolution | None,
-    version_pin: str | None,
+    version_pin: VersionPins,
     commit_override: str | None,
     on_step: Callable[[str], None] | None,
     on_secret: Callable[[str], None] | None,
@@ -463,7 +465,7 @@ def _image_gate(
     policy: ImageGatePolicyModel,
     build_path: Path,
     resolved: ValueResolution | None,
-    version_pin: str | None,
+    version_pin: VersionPins,
     on_step: Callable[[str], None] | None,
     on_secret: Callable[[str], None] | None,
 ) -> Diagnostics:
@@ -581,7 +583,7 @@ def list_image_findings(
     integration_name: str,
     max_severity: str,
     *,
-    version_pin: str | None = None,
+    version_pin: VersionPins = None,
     on_step: Callable[[str], None] | None = None,
 ) -> ImageFindingsReport:
     """Every SBOM image's open issues at or above `max_severity`, read-only (design D7).

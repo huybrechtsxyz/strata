@@ -38,9 +38,11 @@ from referencing.exceptions import Unresolvable
 from strata.controllers.artifact_tokens import artifact_token_values, helm_delivered_artifacts
 from strata.controllers.deployment_resolution import deployment_of, deployment_workspace
 from strata.controllers.document_chains import chain_params
+from strata.controllers.document_reachability import check_unreferenced_documents, check_unused_bases
 from strata.controllers.reachable_documents import documents_reached_by_deployment, reachable_environment_names
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
+from strata.controllers.version_composition import check_version_composition
 from strata.integrations.base import Integration
 from strata.integrations.capabilities import ImageFindingsIntegration, KeyValueStoreIntegration, ReleaseGateIntegration
 from strata.integrations.errors import IntegrationError
@@ -72,7 +74,6 @@ from strata.models.solution_model import RemoteFetch, RemoteType, SolutionModel
 from strata.models.template_model import DocumentTemplateModel
 from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
-from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.artifact_service import ArtifactService
 from strata.services.attributeconfig_evaluator import (
@@ -158,7 +159,9 @@ def run_semantic_checks(
     diagnostics.extend(_check_path_remote_pushes(index, solution))
     diagnostics.extend(_check_value_references(index))
     diagnostics.extend(_check_paths(index, root))
-    diagnostics.extend(_check_version_workspace(index, resolved))
+    diagnostics.extend(check_version_composition(index, resolved))
+    diagnostics.extend(check_unreferenced_documents(index, resolved))
+    diagnostics.extend(check_unused_bases(index))
     diagnostics.extend(_check_dns_records(index))
     diagnostics.extend(_check_helm_release_names(index))
     diagnostics.extend(_check_helm_artifact_delivery(index))
@@ -663,64 +666,6 @@ def _check_deployment_provider_bindings(
         uses_extends=uses_extends,
         on_rebound=type_mismatch,
     )
-
-
-# ---------------------------------------------------------------------------
-# Deployment <-> Version: workspace exclusivity (docs/work/version-lifecycle.md
-# Phase 1, docs/work/promotion.md's blast-radius anchor)
-# ---------------------------------------------------------------------------
-
-
-def _check_version_workspace(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
-    """Every `Deployment` referencing a `Version` document (via `spec.version`)
-    must agree on which `Workspace` that document applies to.
-
-    `Version.spec.workspace` is a *conditionally* meaningful cross-document
-    constraint, not a plain existence reference — like `VariableStoreModel.
-    value` and `DeploymentLayersModel.segments` before it, it needs a
-    dedicated check rather than a `References()` annotation (ADR-0015's own
-    "conditional reference" carve-out).
-
-    A declared `spec.workspace` on the `Version` document is authoritative:
-    any referencing deployment naming a different workspace is an error.
-    When `spec.workspace` is unset, the first referencing deployment (in
-    index order) establishes the expectation for every other one — this
-    never mutates the `Version` document itself, it is validation only, the
-    same restraint `_check_deployment_layers()` applies to `segments`.
-
-    A `Version` document with no referrers, or referrers with no
-    `spec.workspace` of their own, produces no finding — nothing to check
-    against, same "skip rather than guess" rule every other
-    conditionally-meaningful check here already follows.
-    """
-    diagnostics = Diagnostics()
-    referrers_by_version: dict[str, list[IndexEntry]] = {}
-    for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = deployment_of(entry, resolved)
-        if deployment is not None and deployment.spec.version:
-            referrers_by_version.setdefault(deployment.spec.version, []).append(entry)
-
-    for entry in index.all_of(PlatformKind.VERSION):
-        version = cast(VersionModel, entry.model)
-        expected = version.spec.workspace
-        for referrer_entry in referrers_by_version.get(entry.ref.name, []):
-            deployment = deployment_of(referrer_entry, resolved)
-            if deployment is None or deployment.spec.workspace is None:
-                continue
-            if expected is None:
-                expected = deployment.spec.workspace
-                continue
-            if deployment.spec.workspace != expected:
-                diagnostics.error(
-                    f"Deployment '{deployment.meta.name}' references Version '{entry.ref.name}' with "
-                    f"workspace '{deployment.spec.workspace}', but workspace '{expected}' was already "
-                    "established for this Version document (either declared on it directly, or by "
-                    "another referencing deployment).",
-                    source=str(referrer_entry.source),
-                    location="spec.workspace",
-                    code="version_workspace_mismatch",
-                )
-    return diagnostics
 
 
 # ---------------------------------------------------------------------------

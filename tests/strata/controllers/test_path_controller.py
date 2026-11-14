@@ -106,12 +106,17 @@ def test_list_paths_on_a_kind_with_no_documents_is_empty(tmp_path):
     assert list_paths(context.controller.index, PlatformKind.DNS) == []
 
 
-def test_list_paths_workspace_filter_matches_declared_field(tmp_path):
+def test_list_paths_workspace_filter_on_versions_uses_the_listing_deployments(tmp_path):
+    """A version document names no workspace (ADR-0065): the filter keeps what that workspace's deployments list,
+    through `extends` too."""
     root = _solution(tmp_path)
-    (root / "version-prd.yaml").write_text(
-        VERSION.format(name="prd", workspace_line="  workspace: main\n"), encoding="utf-8"
-    )
+    (root / "version-prd.yaml").write_text(VERSION.format(name="prd", workspace_line=""), encoding="utf-8")
     (root / "version-other.yaml").write_text(VERSION.format(name="other", workspace_line=""), encoding="utf-8")
+    (root / "base.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: base\nspec:\n"
+        "  partial: true\n  workspace: main\n  version: prd\n",
+        encoding="utf-8",
+    )
     context = open_solution(root)
 
     results = list_paths(context.controller.index, PlatformKind.VERSION, workspace="main")

@@ -32,7 +32,11 @@ import jinja2
 import yaml
 
 from strata.controllers.artifact_tokens import artifact_token_values
-from strata.controllers.build_controller import build_resolved_workspace_graph, ordered_by_depends_on
+from strata.controllers.build_controller import (
+    EFFECTIVE_VERSION_FILE,
+    build_resolved_workspace_graph,
+    ordered_by_depends_on,
+)
 from strata.controllers.deployment_output_store import (
     DeploymentOutputStore,
     OutputRecordNotFoundError,
@@ -61,6 +65,7 @@ from strata.controllers.value_controller import (
     resolve_values,
     secret_records,
 )
+from strata.controllers.version_composition import deployment_version
 from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError, RegistryAuthError
@@ -80,11 +85,12 @@ from strata.integrations.terraform_projection import (
 )
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
-from strata.models.deployment_model import DeploymentSpecModel, DeploymentStageModel
+from strata.models.deployment_model import DeploymentSpecModel, DeploymentStageModel, VersionPins, version_name_list
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
+from strata.models.version_model import VersionModel, pin_key, pin_owner, version_names
 from strata.models.workspace_model import (
     TopologySpecModel,
     WorkspaceResourceModel,
@@ -826,18 +832,27 @@ def _chart_registry_credentials(
     return credentials
 
 
-def check_build_version(build_path: Path, version: str | None, *, pinned_by_flag: bool) -> Diagnostics:
-    """An error when the deploy's version differs from the build's and the build holds Helm modules
+#: The pin categories a Helm module's build applies: the chart version, and its `${artifact:}` values.
+_HELM_BUILD_CATEGORIES = ("charts", "artifacts")
+
+
+def check_build_version(build_path: Path, version: VersionModel | None, *, pinned_by_flag: bool) -> Diagnostics:
+    """An error when the deploy's pins differ from the build's and the build holds Helm modules
     (`build_version_mismatch`, docs/design/helm-chart-deployment.md, "Version pins at deploy").
 
     A Helm module's chart version and its `${artifact:}` values are written into the build (`meta.yaml`,
-    `strata-values.yaml`), and the deploy installs what is there: a different `--pin` would reach the other steps
-    but not the charts, while the run and its audit record name the deploy's version. Nothing to judge when the build
-    records no version (made before `resolved.yaml` carried one) or has no Helm module.
+    `strata-values.yaml`), and the deploy installs what is there: a different `--pin`, or a version document edited
+    after the build, would reach the other steps but not the charts, while the run and its audit record name the
+    deploy's version.
+
+    A build with `version.yaml` (docs/work/version-composition.md V8) is judged by value: every `charts` and
+    `artifacts` pin of the build against the deploy's, so an edit to a listed document between build and deploy is
+    caught even when the list of documents is the same. An older build is judged by the documents' names, as before.
+    Nothing to judge when the build records no version or has no Helm module.
 
     Args:
         build_path: The build being deployed.
-        version: The deploy's version: `--pin` when given, else the deployment's `spec.version`.
+        version: The deploy's version: the `--pin` documents when given, else the deployment's, composed.
         pinned_by_flag: Whether `version` came from `--pin`, for the message.
     """
     diagnostics = Diagnostics()
@@ -847,17 +862,48 @@ def check_build_version(build_path: Path, version: str | None, *, pinned_by_flag
         return diagnostics
     if not isinstance(resolved, dict) or "version" not in resolved:
         return diagnostics
-    built = resolved["version"]
-    if built == version:
-        return diagnostics
     helm_modules = sorted(path.parent.relative_to(build_path).as_posix() for path in build_path.glob("*/*/meta.yaml"))
     if not helm_modules:
         return diagnostics
-
     shown = ", ".join(helm_modules[:5]) + (f" and {len(helm_modules) - 5} more" if len(helm_modules) > 5 else "")
-    deploy_side = f"--pin {version}" if pinned_by_flag else (f"version '{version}'" if version else "no version")
-    build_side = f"version '{built}'" if built else "no version"
-    rebuild = f"strata build run --pin {version}" if version else "strata build run without --pin"
+    names = version_names(version)
+    deploy_side = (
+        " ".join(f"--pin {name}" for name in names)
+        if pinned_by_flag
+        else (f"version {', '.join(repr(name) for name in names)}" if names else "no version")
+    )
+    rebuild = (
+        "strata build run " + " ".join(f"--pin {name}" for name in names) if names else "strata build run without --pin"
+    )
+
+    built_pins = _built_pins(build_path)
+    if built_pins is not None:
+        deployed: dict[str, tuple[str, str]] = {}
+        if version is not None:
+            deployed = {
+                pin_key(category, target): (pin.version, pin_owner(version, category, target))
+                for category, target, pin in version.spec.pins.iter_pins()
+                if category in _HELM_BUILD_CATEGORIES
+            }
+        for key in sorted(set(built_pins) | set(deployed)):
+            built_value = built_pins.get(key)
+            deployed_value, owner = deployed.get(key, (None, None))
+            if built_value == deployed_value:
+                continue
+            now = f"'{deployed_value}' now ({owner})" if deployed_value is not None else "not pinned now"
+            then = f"'{built_value}' in the build" if built_value is not None else "not pinned in the build"
+            diagnostics.error(
+                f"{key} is {now} but {then}. A Helm module's pins are applied by the build, so its chart would still "
+                f"install the build's versions ({shown}).",
+                code="build_version_mismatch",
+                hint=f"Rebuild ({rebuild}), or deploy what the build holds.",
+            )
+        return diagnostics
+
+    built = version_name_list(resolved["version"])
+    if built == names:
+        return diagnostics
+    build_side = f"version {', '.join(repr(name) for name in built)}" if built else "no version"
     diagnostics.error(
         f"This deploy uses {deploy_side}, but the build was made with {build_side}. A Helm module's pins are applied "
         f"by the build, so its chart would still install the build's versions ({shown}). Rebuild with the same "
@@ -865,6 +911,21 @@ def check_build_version(build_path: Path, version: str | None, *, pinned_by_flag
         code="build_version_mismatch",
     )
     return diagnostics
+
+
+def _built_pins(build_path: Path) -> dict[str, str] | None:
+    """The `charts` and `artifacts` pins of the build's `version.yaml` (`category/target -> value`), or `None` for a
+    build without one (made before 2.8) or one that does not parse."""
+    try:
+        data = yaml.safe_load((build_path / EFFECTIVE_VERSION_FILE).read_text(encoding="utf-8"))
+        built = VersionModel.model_validate(data)
+    except (OSError, yaml.YAMLError, ValueError):
+        return None
+    return {
+        pin_key(category, target): pin.version
+        for category, target, pin in built.spec.pins.iter_pins()
+        if category in _HELM_BUILD_CATEGORIES
+    }
 
 
 def deploy_run(
@@ -881,7 +942,7 @@ def deploy_run(
     scopes: Sequence[str] = (),
     on_step: Callable[[str], None] | None = None,
     on_line: Callable[[str, str, str], None] | None = None,
-    pin: str | None = None,
+    pin: VersionPins = None,
     output_max_age: int | None = None,
     destroy: bool = False,
     on_tool: Callable[[str, IntegrationReadiness], None] | None = None,
@@ -1055,7 +1116,11 @@ def deploy_run(
 
     # A Helm module's pins were applied by the build; a deploy cannot change them. Offline, so it runs first.
     if not destroy:
-        diagnostics.extend(check_build_version(build_path, deployment.spec.version, pinned_by_flag=pin is not None))
+        diagnostics.extend(
+            check_build_version(
+                build_path, deployment_version(context.controller.index, deployment), pinned_by_flag=pin is not None
+            )
+        )
         if not diagnostics.ok:
             return diagnostics
 

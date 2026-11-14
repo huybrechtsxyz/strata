@@ -18,6 +18,7 @@ from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.integrations.sbom_collectors.base import CollectorResult, SbomCollector
 from strata.models.module_model import ModuleModel
 from strata.models.sbom_model import SbomComponentModel
+from strata.models.version_model import pin_owner
 from strata.utils.diagnostics import Diagnostic, Severity
 from strata.utils.sbom_utils import helm_chart_to_purl
 
@@ -74,7 +75,7 @@ class HelmCollector(SbomCollector):
             seen.add(key)
             properties: dict[str, str] = {}
             if graph.version is not None and module.meta.name in chart_pins:
-                properties["strata:pinned-by"] = graph.version.meta.name
+                properties["strata:pinned-by"] = pin_owner(graph.version, "charts", module.meta.name)
             hashes: dict[str, str] = {}
             if meta is not None and pinned:
                 if source.chart_version is not None and source.chart_version != version:

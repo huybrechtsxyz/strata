@@ -48,6 +48,14 @@ spec:
 """
 
 
+ENVIRONMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec: {}
+"""
+
+
 def _write(root: Path, relative: str, content: str) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -59,17 +67,17 @@ def _base(tmp_path: Path) -> Path:
     _write(root, "strata.yaml", MANIFEST)
     _write(root, "provider.yaml", PROVIDER)
     _write(root, "workspace.yaml", WORKSPACE)
+    _write(root, "environment.yaml", ENVIRONMENT)
     return root
 
 
-def _version(name: str, *, workspace: str = "api", promotion: str | None = None, pins: str = "  pins: {}\n") -> str:
+def _version(name: str, *, promotion: str | None = None, pins: str = "  pins: {}\n") -> str:
     promotion_yaml = f"  promotion:\n{promotion}\n" if promotion else ""
     return f"""apiVersion: strata.huybrechts.xyz/v2
 kind: version
 meta:
   name: {name}
 spec:
-  workspace: {workspace}
 {promotion_yaml}{pins}"""
 
 
@@ -79,8 +87,8 @@ kind: deployment
 meta:
   name: {name}
 spec:
-  partial: true
   workspace: {workspace}
+  environments: [prd]
   version: {version}
 """
 
@@ -278,8 +286,7 @@ def test_orphan_ring_with_no_referencing_deployment_is_a_warning(tmp_path):
 
     context = _resolve(root)
     assert context.ok  # a warning alone must not fail validate
-    warning = context.diagnostics.warnings[0]
-    assert warning.code == "promotion_orphan_ring"
+    [warning] = [d for d in context.diagnostics.warnings if d.code == "promotion_orphan_ring"]
     assert "api-prd" in warning.message
 
 

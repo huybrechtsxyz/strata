@@ -34,11 +34,8 @@ spec:
       # artifacts/portainer.yaml: the portainer Compose service (modules/portainer.yaml).
       # Shorthand — nothing is being held back.
       portainer: 2.39.3-alpine
-    remotes:
-      # Overrides `reference` for the 'infra' remote declared in strata.yaml.
-      # Only valid because that remote is `fetch: strata` — a `fetch: external`
-      # remote is placed by CI before strata runs, so pinning it cannot work.
-      infra: v1.0.0
+    # The 'infra' remote is pinned once, in the shared versions/platform.yaml,
+    # which the deployments list next to this document.
     assets:
       # Overrides `location.reference` of an asset that declares its own `location`
       # (assets/contoso-api.yaml) — move one customer without touching their asset

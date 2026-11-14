@@ -16,6 +16,10 @@ spec:
       provider: azure-main
   namespaces:
     - hearth
+  # DNS zones this workspace manages (dns/example.yaml). Without a reference from a workspace, a resource or a
+  # step, a zone document is reached by no deployment and `strata validate` reports it (`document_unreferenced`).
+  dns_zones:
+    - example-dns
   assets:
     # A named slot with a default Asset document. The step below selects the slot, and
     # IaC code reads it as `local.strata_assets.api`. A deployment rebinds it to another

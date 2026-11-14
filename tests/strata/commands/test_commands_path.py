@@ -157,11 +157,15 @@ def test_list_json_output_carries_every_result(runner, solution):
     ]
 
 
-def test_list_workspace_filter_matches_versions_declaring_it(runner, solution):
-    (solution / "version-prd.yaml").write_text(
-        VERSION.format(name="prd", workspace_line="  workspace: main\n"), encoding="utf-8"
-    )
+def test_list_workspace_filter_matches_versions_the_workspaces_deployments_list(runner, solution):
+    """A version document names no workspace (ADR-0065): `--workspace main` lists what main's deployments list."""
+    (solution / "version-prd.yaml").write_text(VERSION.format(name="prd", workspace_line=""), encoding="utf-8")
     (solution / "version-other.yaml").write_text(VERSION.format(name="other", workspace_line=""), encoding="utf-8")
+    (solution / "base.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: base\nspec:\n"
+        "  partial: true\n  workspace: main\n  version: prd\n",
+        encoding="utf-8",
+    )
 
     result = _list(runner, "version", "--path", solution, "--workspace", "main")
     assert result.exit_code == EXIT_SUCCESS

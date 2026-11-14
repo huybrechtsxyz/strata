@@ -57,7 +57,7 @@ async function updateSolution(client: StrataClient, output: vscode.OutputChannel
 
 /**
  * Run one CLI call behind a progress notification, write its diagnostics to
- * the output channel and report the outcome (docs/work/vscode-integrations-policies-views.md V6).
+ * the output channel and report the outcome (docs/design/vscode-integrations-policies-views.md V6).
  */
 async function runReported<T>(
     output: vscode.OutputChannel,

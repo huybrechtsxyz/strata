@@ -636,8 +636,9 @@ rule).
   ref): that customer needs a document of its own holding every platform pin again. Revisit when more
   than about five customers need that. The natural shape then is `Version.extends` (a base plus
   key-by-key overrides, mirroring how deployments merge via `extends`), not a list-valued `version`.
-  Now designed in [version-composition.md](version-composition.md), as `include` plus explicit
-  `overrides` rather than `extends`: one parent cannot compose several products.
+  Now designed in [version-composition.md](version-composition.md), after all as a list-valued
+  `Deployment.spec.version` whose documents may not pin the same key twice: one parent cannot compose
+  several products, and the deployment is where pins take effect.
 - **Q7 — Promotion per customer.** Does each customer promote independently through rings
   (then V3's slot model needs a customer dimension), or do customers ride the platform's
   rollout with only their API ref varying?

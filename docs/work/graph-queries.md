@@ -42,8 +42,8 @@ Verified against the source on 2026-10-30.
      links a deployment to an artifact)
    - `kind: version` pins, keyed by module service, module, remote, artifact or asset name
    - `${value:kind.name.path}` tokens in any string field
-   - `Version.spec.workspace` is a plain reference, but the check that every referrer agrees on it is
-     not visible as a relationship
+   - `Version.spec.workspace` was a plain reference whose "every referrer agrees" check was not visible as
+     a relationship; the field was removed in 2.7 (ADR-0065)
 2. **Same-document references have no edge.** Step `depends_on`, a step's `provisioner`, and a
    provisioner's `depends_on` name things inside one document. Whether the graph should go below
    document granularity is open.
@@ -121,8 +121,8 @@ Nothing is built. Proposed decisions:
 
 ### Open questions
 
-- Is `Version.spec.workspace` (a plain reference) enough, or should the "every referrer agrees" rule
-  also appear as an edge?
+- ~~Is `Version.spec.workspace` (a plain reference) enough, or should the "every referrer agrees" rule
+  also appear as an edge?~~ Moot: the field was removed in 2.7 (ADR-0065).
 - Do same-document references (step `depends_on`) belong in the graph? It means nodes below document
   level, with ids like `workspace/main#step/plan`.
 - `--depth` on a graph that crosses `extends`: follow the raw edge, or the resolved one?

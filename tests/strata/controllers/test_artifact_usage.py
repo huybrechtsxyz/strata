@@ -167,7 +167,7 @@ def test_validate_reports_the_unused_artifact(tmp_path):
     result = _validate(_solution(tmp_path))
 
     assert result.exit_code == EXIT_SUCCESS, result.output
-    codes = [d["code"] for d in json.loads(result.output)["diagnostics"]]
+    codes = [d["code"] for d in json.loads(result.output)["diagnostics"] if d["code"] != "version_document_unlisted"]
     assert codes == ["artifact_unused"]
 
 

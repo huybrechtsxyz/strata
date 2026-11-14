@@ -48,6 +48,7 @@ from strata.controllers.integration_resolution import (
     resolve_integration,
     resolve_output_store_integration,
 )
+from strata.controllers.pinnable_targets import pinnable_targets
 from strata.controllers.policy_results import checkov_policy_result as build_checkov_policy_result
 from strata.controllers.policy_results import cve_policy_result as build_cve_policy_result
 from strata.controllers.policy_results import image_tag_policy_result as build_image_tag_policy_result
@@ -74,12 +75,14 @@ from strata.controllers.step_secrets import container_secret_keys, secret_uses, 
 from strata.controllers.value_controller import (
     build_value_references,
     reachable_environments,
+    resolve_deployment,
     resolve_deployment_workspace,
     resolve_tenant,
     resolve_values,
     resolve_version,
     secret_records,
 )
+from strata.controllers.version_composition import pin_dropped_findings
 from strata.controllers.version_pins import log_pin_applied
 from strata.controllers.workload_controller import build_workload_modules, resolve_namespace_modules
 from strata.integrations.errors import IntegrationError
@@ -92,8 +95,8 @@ from strata.integrations.resolved_context import (
 )
 from strata.integrations.terraform_projection import build_strata_payload
 from strata.models.asset_model import AssetModel
-from strata.models.common_models import PlatformKind
-from strata.models.deployment_model import DeploymentModel
+from strata.models.common_models import PlatformKind, PlatformVersion
+from strata.models.deployment_model import DeploymentModel, VersionPins
 from strata.models.dns_model import DnsModel
 from strata.models.firewall_model import FirewallModel
 from strata.models.integration_model import Capability
@@ -105,7 +108,7 @@ from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepM
 from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import SolutionRemoteModel
 from strata.models.tenant_model import TenantModel
-from strata.models.version_model import VersionModel
+from strata.models.version_model import VersionModel, VersionPinModel, pin_key, pin_owner, version_names
 from strata.models.workspace_model import WorkspaceModel, effective_resources_and_namespaces
 from strata.services.environment_service import (
     merge_environment_models,
@@ -152,7 +155,7 @@ def apply_remote_version_pins(
             continue
         if overlaid is None:
             overlaid = dict(remotes)
-        log_pin_applied("remotes", name, remote.reference, pin.version, version.meta.name)
+        log_pin_applied("remotes", name, remote.reference, pin.version, pin_owner(version, "remotes", name))
         overlaid[name] = remote.model_copy(update={"reference": pin.version})
     return overlaid if overlaid is not None else remotes
 
@@ -171,7 +174,9 @@ def apply_asset_version_pin(asset: AssetModel, version: VersionModel | None) -> 
     pin = VersionService.from_model(version).resolve("assets", asset.meta.name)
     if pin is None:
         return asset
-    log_pin_applied("assets", asset.meta.name, location.reference, pin.version, version.meta.name)
+    log_pin_applied(
+        "assets", asset.meta.name, location.reference, pin.version, pin_owner(version, "assets", asset.meta.name)
+    )
     pinned_location = location.model_copy(update={"reference": pin.version})
     return asset.model_copy(update={"spec": asset.spec.model_copy(update={"location": pinned_location})})
 
@@ -314,19 +319,25 @@ def _dump_promotion(graph: ResolvedWorkspaceGraph) -> dict[str, Any] | None:
     if promotion is None or promotion.ring is None:
         return None
 
-    workspace = graph.deployment.spec.workspace if graph.deployment is not None else version.spec.workspace
+    names = version_names(version)
     entry: dict[str, Any] = {
-        "workspace": workspace,
+        "workspace": graph.deployment.spec.workspace if graph.deployment is not None else None,
         "ring": promotion.ring,
         "order": promotion.order,
-        "version": version.meta.name,
+        "version": names[0] if len(names) == 1 else names,
     }
     if promotion.wave is not None:
         entry["wave"] = promotion.wave
     return entry
 
 
-def write_resolved_manifest(build_path: Path, graph: ResolvedWorkspaceGraph) -> Path:
+def write_resolved_manifest(
+    build_path: Path,
+    graph: ResolvedWorkspaceGraph,
+    *,
+    pinned_by: str = "spec.version",
+    targets: set[tuple[str, str]] | None = None,
+) -> Path:
     """Write `build_path/resolved.yaml` (docs/design/build-time-value-categories.md,
     Q8) — plain YAML, deliberately not `*.auto.tfvars.json`: Terraform never
     auto-loads it, so no `.tf` module needs a matching `variable {}` block
@@ -344,24 +355,75 @@ def write_resolved_manifest(build_path: Path, graph: ResolvedWorkspaceGraph) -> 
     with a ring — omitted entirely, not written as `null`/`{}`, for the
     common untagged case (Worked Example A).
 
-    `version` is the version document the build applied (`--pin`, else the deployment's `spec.version`), or `null`
-    without one. `deploy run` compares it with its own, because a Helm module's pins are applied here and not again
-    at deploy (`build_version_mismatch`, docs/design/helm-chart-deployment.md).
+    `version` is the version document the build applied (`--pin`, else the deployment's `spec.version`), the list of
+    them when the deployment lists several (docs/work/version-composition.md V8), or `null` without one. `deploy run`
+    compares the build with its own, because a Helm module's pins are applied here and not again at deploy
+    (`build_version_mismatch`, docs/design/helm-chart-deployment.md). With a version, `pinned_by` says where the
+    documents came from (`spec.version` or `--pin`), and `pin_sources` names the document each pin in
+    `version.yaml` (`write_effective_version()`) came from.
     """
-    manifest = {
-        "version": graph.version.meta.name if graph.version is not None else None,
+    names = version_names(graph.version)
+    manifest: dict[str, Any] = {
+        "version": (names[0] if len(names) == 1 else names) if names else None,
         "variables": _dump_refs(graph.variable_refs),
         "features": _dump_refs(graph.feature_refs),
         "secrets": _dump_refs(graph.secret_refs),
         "properties": graph.properties,
         "custom": graph.custom,
     }
+    if graph.version is not None:
+        manifest["pinned_by"] = pinned_by
+        manifest["pin_sources"] = {
+            pin_key(category, target): pin_owner(graph.version, category, target)
+            for category, target, _pin in _used_pins(graph.version, targets)
+        }
     promotion = _dump_promotion(graph)
     if promotion is not None:
         manifest["promotion"] = promotion
     build_path.mkdir(parents=True, exist_ok=True)
     path = build_path / "resolved.yaml"
     path.write_text(yaml.safe_dump(manifest, sort_keys=True), encoding="utf-8")
+    return path
+
+
+#: The build's own version file (docs/work/version-composition.md V8), next to `resolved.yaml`.
+EFFECTIVE_VERSION_FILE = "version.yaml"
+
+
+def _used_pins(version: VersionModel, targets: set[tuple[str, str]] | None) -> list[tuple[str, str, VersionPinModel]]:
+    """The pins of `version` on a target the deployment uses (`pinnable_targets()`); all of them without `targets`."""
+    return [
+        (category, target, pin)
+        for category, target, pin in version.spec.pins.iter_pins()
+        if targets is None or (category, target) in targets
+    ]
+
+
+def write_effective_version(
+    build_path: Path, deployment_name: str, version: VersionModel | None, targets: set[tuple[str, str]] | None
+) -> Path | None:
+    """Write `build_path/version.yaml`: the pins this build applied, as an ordinary `kind: version` document.
+
+    Only pins on a target the deployment uses (`targets`), with `status`/`reason`/`reviewed` as written in the
+    owning document, and nothing else: no `promotion` (a copy in a solution would claim a ring slot) and no
+    provenance (that is `resolved.yaml`'s `pin_sources`). It loads with `VersionModel`, so two builds diff as two
+    files and a pipeline can read it. Nothing is written without a version.
+    """
+    if version is None:
+        return None
+    pins: dict[str, dict[str, Any]] = {}
+    for category, target, pin in _used_pins(version, targets):
+        pins.setdefault(category, {})[target] = pin.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
+    document = {
+        "apiVersion": PlatformVersion.v2.value,
+        "kind": PlatformKind.VERSION.value,
+        "meta": {"name": deployment_name},
+        "spec": {"pins": pins},
+    }
+    VersionModel.model_validate(document)
+    build_path.mkdir(parents=True, exist_ok=True)
+    path = build_path / EFFECTIVE_VERSION_FILE
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
     return path
 
 
@@ -544,7 +606,7 @@ def build_run(
     on_step: Callable[[str], None] | None = None,
     resolve: bool = False,
     env_files: list[Path] | None = None,
-    pin: str | None = None,
+    pin: VersionPins = None,
     offline: bool = False,
 ) -> Diagnostics:
     """Render `deployment_name`'s workspace provisioners into `build_path`.
@@ -683,11 +745,20 @@ def build_run(
         version=version,
         images=images,
     )
+    pin_targets = pinnable_targets(index, deployment)
+    if pin is not None:
+        own = resolve_version(context, resolve_deployment(context, deployment_name))
+        diagnostics.extend(pin_dropped_findings(own, version, pin_targets))
     if dry_run:
         _step(f"would write {build_path / 'resolved.yaml'}")
     else:
-        manifest_path = write_resolved_manifest(build_path, graph)
+        manifest_path = write_resolved_manifest(
+            build_path, graph, pinned_by="--pin" if pin is not None else "spec.version", targets=pin_targets
+        )
         _step(f"wrote {manifest_path}")
+        version_path = write_effective_version(build_path, deployment_name, version, pin_targets)
+        if version_path is not None:
+            _step(f"wrote {version_path}")
     remotes: dict[str, SolutionRemoteModel] = (
         {remote.name: remote for remote in (context.controller.solution.spec.remotes or [])}
         if context.controller.solution is not None

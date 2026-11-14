@@ -8,6 +8,70 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-11-14
+
+Several products in one ring can share pins without copying them: a deployment lists several version documents.
+
+### Added
+
+- **`Deployment.spec.version` takes a list of version documents** whose pins apply together, for example a shared
+  `prd-core` and a product's own `prd-datahub`. Through `extends` the lists append, base first. Each pin has one
+  owning document per deployment: two listed documents pinning the same target is an error
+  (`version_pin_conflict`), even with equal values. A single name works as before.
+- `strata validate` checks each deployment's documents together: `version_ring_conflict` (documents tagged for
+  different rings), `version_document_unused` (a listed document whose pins the deployment uses none of, while
+  other deployments do), `version_listed_twice`, `version_ring_drift` (a shared document's pin at two values in
+  one ring), and the information findings `version_pin_unused` and `version_ring_none`.
+- **`--pin` is repeatable** on `build run`, `deploy run`/`plan`/`setup`/`check`/`apply`/`destroy`, `deploy images`,
+  `policy` and `integration`, and what it names replaces the deployment's whole list for the run. Leaving out a
+  document that pins something the deployment uses is a warning (`version_pin_dropped`).
+- `build run` writes `version.yaml`, an ordinary version document with the pins the build used, and
+  `resolved.yaml` gains `pinned_by` and `pin_sources` (the document each pin came from); its `version` is a list
+  when the deployment lists several documents. Pin logging, `deploy images` and the SBOM name the document each
+  pin came from.
+- `strata version show NAME`: a version document's pins and the deployments that list it.
+- `strata promote status` has an `owner` column (`shared` when deployments of another workspace list the
+  document), and `promote apply --shared` also promotes pins of a shared document. Without a workspace,
+  `promote status --ring prd` shows what the whole ring runs, every workspace in one table.
+- An untagged version document no deployment lists is information (`version_document_unlisted`).
+- **`strata validate` reports documents no deployment reaches**, as information (`document_unreferenced`, with a
+  hint): a workspace, provider, resource, DNS zone, network, firewall, namespace, module, tenant, environment or
+  asset that no deployable deployment reaches through any reference or `${value:}` token. Usually a leftover or a
+  misspelled name elsewhere. Partial bases, kinds bound by type and kinds with their own check are left out.
+- A `partial: true` deployment, environment or tenant that nothing `extends` is information (`base_unused`).
+- `strata graph --unreferenced` lists both, one line per document with the reason and the file, for a cleanup pass.
+- `strata deploy list` rows have `versions`; `--version` matches any listed document.
+- **Findings can say what to do**: a `hint` shown under the finding on the console, as `diagnostics[].hint` in
+  JSON, and in the VS Code problem. Every new version finding has one, as does `cve_policy_missing_data`, and
+  `docs/config/version.md` lists each version code with what to do.
+
+### Changed
+
+- `promote status` and `promote apply` read a workspace's rollout from its deployments: the tagged document a
+  deployment lists gives its ring, and its rows are the pins the deployment runs. `promote apply` writes each pin
+  into the document that owns it, skips a shared document unless `--shared` is given, never writes a customer's
+  own document, and lists what it skipped.
+- `deploy run` compares a Helm build's chart and artifact pins with the build's `version.yaml` by value, so a
+  version document edited after the build is caught even when its name is the same (`build_version_mismatch`).
+- `strata version update NAME` offers only the targets the deployments listing NAME use, and none another of
+  their documents already pins.
+
+### Removed
+
+**Breaking, in a minor release (ADR-0065):** delete these before upgrading.
+
+- **`Version.spec.workspace`.** A version document names no workspace: the deployments that list it decide where
+  it applies, so one document can be shared by deployments of several workspaces. A document that still declares
+  it fails to load, with a message saying to delete the `workspace:` line. `version_workspace_mismatch` is gone
+  with it.
+- **`strata version new --workspace`.**
+- **`version` in `strata deploy list` rows** (`data.deployments[].version`): read `versions`, the list.
+
+### Fixed
+
+- **One version document can be shared by deployments of several workspaces.** The first deployment referencing a
+  document no longer fixes its workspace, so the second no longer fails with `version_workspace_mismatch`.
+
 ## [2.6.3] - 2026-11-13
 
 `validate --strict` passes again on solutions that stage an artifact before its first deployment.
@@ -689,7 +753,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.6.3...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/huybrechtsxyz/strata/compare/v2.6.3...v2.7.0
 [2.6.3]: https://github.com/huybrechtsxyz/strata/compare/v2.6.2...v2.6.3
 [2.6.2]: https://github.com/huybrechtsxyz/strata/compare/v2.6.1...v2.6.2
 [2.6.1]: https://github.com/huybrechtsxyz/strata/compare/v2.6.0...v2.6.1

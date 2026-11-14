@@ -84,9 +84,8 @@ def path_get(kind: str, name: str, start_path: Path | None, output: str, quiet: 
 @click.option(
     "--workspace",
     default=None,
-    help="Restrict to documents whose spec.workspace matches. Only meaningful for kinds "
-    "that declare that field (today: deployment, version) — any other kind returns "
-    "nothing rather than erroring.",
+    help="Restrict to documents whose spec.workspace matches (deployment), or, for version, to the "
+    "documents that workspace's deployments list. Any other kind returns nothing rather than erroring.",
 )
 @click.option("--path", "start_path", type=click.Path(file_okay=False, path_type=Path), default=None, help=_PATH_HELP)
 @output_option

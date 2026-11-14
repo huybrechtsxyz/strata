@@ -111,7 +111,7 @@ export class DiagnosticsProvider implements vscode.Disposable {
     }
 
     private async _toDiagnostic(
-        item: { severity: string; message: string; location?: string; code?: string },
+        item: { severity: string; message: string; location?: string; code?: string; hint?: string },
         uriString: string,
     ): Promise<vscode.Diagnostic> {
         const severity =
@@ -131,7 +131,9 @@ export class DiagnosticsProvider implements vscode.Disposable {
             }
         }
 
-        const diagnostic = new vscode.Diagnostic(range, item.message, severity);
+        // The hint (what to do) reads as part of the same problem in the Problems panel and the hover.
+        const message = item.hint ? `${item.message}\nHint: ${item.hint}` : item.message;
+        const diagnostic = new vscode.Diagnostic(range, message, severity);
         diagnostic.source = SOURCE;
         if (item.code) diagnostic.code = item.code;
         return diagnostic;

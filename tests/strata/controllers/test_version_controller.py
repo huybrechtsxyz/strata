@@ -100,9 +100,8 @@ def _solution(tmp_path: Path, *, extra: dict[str, str] | None = None) -> Path:
     return root
 
 
-def _version_doc(*, workspace: str | None = None, pins: str = "  pins: {}\n") -> str:
-    workspace_line = f"  workspace: {workspace}\n" if workspace else ""
-    return f"apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n{workspace_line}{pins}"
+def _version_doc(*, pins: str = "  pins: {}\n") -> str:
+    return f"apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n{pins}"
 
 
 # ---------------------------------------------------------------------------
@@ -228,15 +227,13 @@ def test_scaffold_creates_a_minimal_document(tmp_path):
     root = _solution(tmp_path)
     context = open_solution(root)
 
-    destination = scaffold_version(
-        root, context.controller.index, context.controller.solution, "dev", workspace="main", from_name=None
-    )
+    destination = scaffold_version(root, context.controller.index, context.controller.solution, "dev", from_name=None)
 
     assert destination == root / "versions" / "dev.yaml"
     data = yaml.safe_load(destination.read_text(encoding="utf-8"))
     assert data["kind"] == "version"
     assert data["meta"]["name"] == "dev"
-    assert data["spec"]["workspace"] == "main"
+    assert "workspace" not in data["spec"]  # removed (ADR-0065)
     assert data["spec"]["pins"] == {}
     # Round-trips through the real model.
     VersionModel.model_validate(data)
@@ -247,19 +244,7 @@ def test_scaffold_rejects_a_colliding_name(tmp_path):
     context = open_solution(root)
 
     with pytest.raises(UsageError, match="already exists"):
-        scaffold_version(
-            root, context.controller.index, context.controller.solution, "prd", workspace="main", from_name=None
-        )
-
-
-def test_scaffold_rejects_an_unknown_workspace(tmp_path):
-    root = _solution(tmp_path)
-    context = open_solution(root)
-
-    with pytest.raises(UsageError, match="unknown workspace"):
-        scaffold_version(
-            root, context.controller.index, context.controller.solution, "dev", workspace="ghost", from_name=None
-        )
+        scaffold_version(root, context.controller.index, context.controller.solution, "prd", from_name=None)
 
 
 def test_scaffold_rejects_an_unknown_from_name(tmp_path):
@@ -267,9 +252,7 @@ def test_scaffold_rejects_an_unknown_from_name(tmp_path):
     context = open_solution(root)
 
     with pytest.raises(UsageError, match="unknown version document"):
-        scaffold_version(
-            root, context.controller.index, context.controller.solution, "dev", workspace="main", from_name="ghost"
-        )
+        scaffold_version(root, context.controller.index, context.controller.solution, "dev", from_name="ghost")
 
 
 def test_scaffold_rejects_a_name_that_would_not_be_schema_valid(tmp_path):
@@ -284,7 +267,6 @@ def test_scaffold_rejects_a_name_that_would_not_be_schema_valid(tmp_path):
             context.controller.index,
             context.controller.solution,
             "Invalid Name",
-            workspace="main",
             from_name=None,
         )
 
@@ -293,12 +275,10 @@ def test_scaffold_rejects_a_name_that_would_not_be_schema_valid(tmp_path):
 
 def test_scaffold_from_clones_keys_seeded_with_current_values_not_source_values(tmp_path):
     pins = "  pins:\n    images:\n      web: some-stale-pinned-tag\n"
-    root = _solution(tmp_path, extra={"version.yaml": _version_doc(workspace="main", pins=pins)})
+    root = _solution(tmp_path, extra={"version.yaml": _version_doc(pins=pins)})
     context = open_solution(root)
 
-    destination = scaffold_version(
-        root, context.controller.index, context.controller.solution, "dev", workspace="main", from_name="prd"
-    )
+    destination = scaffold_version(root, context.controller.index, context.controller.solution, "dev", from_name="prd")
 
     data = yaml.safe_load(destination.read_text(encoding="utf-8"))
     # Seeded with 'web's REAL current image, not the source document's stale pin.
@@ -307,12 +287,10 @@ def test_scaffold_from_clones_keys_seeded_with_current_values_not_source_values(
 
 def test_scaffold_from_drops_keys_with_no_current_value_to_seed(tmp_path):
     pins = "  pins:\n    images:\n      sidecar: anything\n"
-    root = _solution(tmp_path, extra={"version.yaml": _version_doc(workspace="main", pins=pins)})
+    root = _solution(tmp_path, extra={"version.yaml": _version_doc(pins=pins)})
     context = open_solution(root)
 
-    destination = scaffold_version(
-        root, context.controller.index, context.controller.solution, "dev", workspace="main", from_name="prd"
-    )
+    destination = scaffold_version(root, context.controller.index, context.controller.solution, "dev", from_name="prd")
 
     data = yaml.safe_load(destination.read_text(encoding="utf-8"))
     assert "sidecar" not in data["spec"]["pins"].get("images", {})
@@ -329,13 +307,11 @@ def test_scaffold_from_drops_an_artifact_pin_whose_artifact_has_a_blank_tag(tmp_
     pins = "  pins:\n    artifacts:\n      api_container: '2.0.0'\n"
     root = _solution(
         tmp_path,
-        extra={"artifact.yaml": artifact_yaml, "version.yaml": _version_doc(workspace="main", pins=pins)},
+        extra={"artifact.yaml": artifact_yaml, "version.yaml": _version_doc(pins=pins)},
     )
     context = open_solution(root)
 
-    destination = scaffold_version(
-        root, context.controller.index, context.controller.solution, "dev", workspace="main", from_name="prd"
-    )
+    destination = scaffold_version(root, context.controller.index, context.controller.solution, "dev", from_name="prd")
 
     data = yaml.safe_load(destination.read_text(encoding="utf-8"))
     assert "api_container" not in data["spec"]["pins"].get("artifacts", {})
@@ -358,7 +334,7 @@ def test_reconcile_does_not_report_a_pin_on_a_blank_tag_artifact_as_stale(tmp_pa
         tmp_path,
         extra={
             "artifact.yaml": BLANK_TAG_ARTIFACTS["omitted"],
-            "version.yaml": _version_doc(workspace="main", pins=pins),
+            "version.yaml": _version_doc(pins=pins),
         },
     )
     context = open_solution(root)
@@ -375,9 +351,7 @@ def test_scaffold_produces_a_real_file_discoverable_via_path_get(tmp_path):
     root = _solution(tmp_path)
     context = open_solution(root)
 
-    scaffold_version(
-        root, context.controller.index, context.controller.solution, "dev", workspace="main", from_name=None
-    )
+    scaffold_version(root, context.controller.index, context.controller.solution, "dev", from_name=None)
 
     result = get_path(context.controller.index, PlatformKind.VERSION, "dev")
     # Freshly created — not indexed by this already-loaded context, but the

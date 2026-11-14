@@ -14,7 +14,7 @@ strata validate  ->  strata build run D  ->  strata policy check D  ->  strata d
 `D` is the `meta.name` of a `kind: deployment` document. `strata deploy list` lists them; a
 deployment marked `(partial)` is a base that others extend and cannot be deployed. To build a CI matrix, ask for
 the deployable ones of one workspace and ring: `strata deploy list --workspace W --ring R --deployable -o json`
-returns `data.deployments[]` (`name`, `tenant`, `version`, `ring`, `order`, ...). A filter that names nothing
+returns `data.deployments[]` (`name`, `tenant`, `versions`, `ring`, `order`, ...). A filter that names nothing
 exits 2 instead of returning an empty list.
 
 ## 1. The four steps

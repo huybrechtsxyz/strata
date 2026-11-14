@@ -330,7 +330,7 @@ def test_list_without_a_deployment_shows_every_document(tmp_path, http, tools):
 
 
 def test_list_type_default_rows_have_no_source(tmp_path, http, tools):
-    """docs/work/vscode-integrations-policies-views.md V1: only a declared document has a file."""
+    """docs/design/vscode-integrations-policies-views.md V1: only a declared document has a file."""
     root = _solution(tmp_path)
     (root / "terraform.yaml").unlink()
     _write(

@@ -64,7 +64,7 @@ from strata.models.deployment_model import DeploymentModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
-from strata.models.version_model import VersionModel
+from strata.models.version_model import VersionModel, pin_owner
 from strata.services.version_service import VersionService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
@@ -127,7 +127,11 @@ def apply_version_pins(module: ModuleModel, version: VersionModel | None, *, log
         if chart_pin is not None:
             if log:
                 log_pin_applied(
-                    "charts", module.meta.name, module.spec.source.chart_version, chart_pin.version, version.meta.name
+                    "charts",
+                    module.meta.name,
+                    module.spec.source.chart_version,
+                    chart_pin.version,
+                    pin_owner(version, "charts", module.meta.name),
                 )
             spec_updates["source"] = module.spec.source.model_copy(update={"chart_version": chart_pin.version})
 
@@ -139,7 +143,9 @@ def apply_version_pins(module: ModuleModel, version: VersionModel | None, *, log
         image_pin = version_service.resolve("images", service.name)
         if image_pin is not None:
             if log:
-                log_pin_applied("images", service.name, service.image, image_pin.version, version.meta.name)
+                log_pin_applied(
+                    "images", service.name, service.image, image_pin.version, pin_owner(version, "images", service.name)
+                )
             service_overrides[service.name] = service.model_copy(update={"image": image_pin.version})
 
     if service_overrides:

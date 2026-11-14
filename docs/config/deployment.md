@@ -17,13 +17,19 @@ with what runtime behavior*. `strata build run`/`strata deploy run` both take a 
 - `spec.workspace` — the [`workspace`](workspace.md) document this deployment instantiates
 - `spec.environments[]` — [`environment`](environment.md) documents, merged left-to-right (later wins)
 - `spec.tenant` — optional [`tenant`](tenant.md) reference; its defaults merge in first
+- `spec.version` — optional: the [`version`](version.md) document, or list of documents, whose pins this
+  deployment runs with. The listed documents' pins apply together and each target may be pinned by only one of
+  them (`version_pin_conflict`), so a shared document and a product document each own their own pins — see
+  [Several documents per deployment](version.md#several-documents-per-deployment). `--pin NAME` (repeatable)
+  replaces the list for one run
 - `spec.kube_context` — the context in the caller's kubeconfig that this deployment's Helm steps deploy to — see
   "Choosing the target" below
 - `spec.docker_context` — the Docker context that this deployment's Compose steps deploy to — see "Choosing the
   target" below
 - `spec.extends` — another deployment document (typically `partial: true`) whose spec is merged
   in before this one's (child wins; nested blocks deep-merge; stages merge by step name and
-  `providers` and `assets` by slot; `environments` lists append base-first; other lists are replaced)
+  `providers` and `assets` by slot; `environments` and `version` lists append base-first, each entry once; other
+  lists are replaced)
 - `spec.partial` — `true` marks a base deployment as not independently deployable (a leaf picks it
   up via `extends`)
 - `spec.providers[]` — rebind [`workspace`](workspace.md) provider slots for this deployment, each

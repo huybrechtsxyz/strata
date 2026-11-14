@@ -75,6 +75,15 @@ def test_finding_line_omits_absent_parts():
     assert format_diagnostic(item, colour=False).strip() == "warning  something odd"
 
 
+def test_a_hint_is_shown_under_the_finding_aligned_with_its_text():
+    """docs/work/diagnostic-guidance.md: what to do, on its own line under what is wrong."""
+    item = Diagnostic(severity=Severity.WARNING, message="something odd", code="odd", hint="Do this.")
+    first, second = format_diagnostic(item, colour=False).split("\n")
+    assert first.strip() == "warning  something odd [odd]"
+    assert second.strip() == "hint: Do this."
+    assert second.index("hint") == first.index("something")
+
+
 def test_severity_labels_are_aligned():
     """Messages line up so a long report stays scannable."""
     error = format_diagnostic(Diagnostic(severity=Severity.ERROR, message="m"), colour=False)

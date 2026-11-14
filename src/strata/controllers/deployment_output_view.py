@@ -24,7 +24,7 @@ from strata.controllers.deployment_report_store import DeploymentReportStore, St
 from strata.controllers.integration_resolution import resolve_output_store_integration
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import resolve_deployment_workspace
-from strata.models.deployment_model import DeploymentModel
+from strata.models.deployment_model import DeploymentModel, VersionPins
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError, ValidationError
@@ -135,7 +135,7 @@ def deployment_outputs(context: SolutionContext, deployment_name: str, address: 
 
 
 def open_output_stores(
-    context: SolutionContext, deployment_name: str, *, version_pin: str | None = None
+    context: SolutionContext, deployment_name: str, *, version_pin: VersionPins = None
 ) -> OutputStores:
     """Resolve `deployment_name` (with `version_pin`, as `deploy run --pin` does) and open its output and report
     stores.

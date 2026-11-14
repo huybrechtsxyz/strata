@@ -16,7 +16,7 @@ import click
 
 from strata.commands.exit_codes import EXIT_FAILURE
 from strata.commands.json_output import JsonReporter
-from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
+from strata.commands.options import output_option, pin_callback, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.integration_readiness import (
     IntegrationReadiness,
@@ -31,6 +31,7 @@ from strata.controllers.value_controller import resolve_deployment
 from strata.integrations.capabilities import ConnectionCheckIntegration, CredentialedIntegration
 from strata.integrations.errors import IntegrationCredentialError, IntegrationError
 from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import VersionPins
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 
@@ -51,9 +52,10 @@ def integration_command() -> None:
 )
 @click.option(
     "--pin",
-    default=None,
+    multiple=True,
+    callback=pin_callback,
     metavar="VERSION",
-    help="With --deployment: resolve it with this kind: version document, as 'deploy run --pin' does.",
+    help="With --deployment: resolve it with these kind: version documents (repeatable), as 'deploy run --pin' does.",
 )
 @click.option(
     "--path",
@@ -67,7 +69,7 @@ def integration_command() -> None:
 def check_command(
     name: str,
     deployment: str | None,
-    pin: str | None,
+    pin: VersionPins,
     path: Path | None,
     output: str,
     quiet: bool,
@@ -147,9 +149,10 @@ def check_command(
 )
 @click.option(
     "--pin",
-    default=None,
+    multiple=True,
+    callback=pin_callback,
     metavar="VERSION",
-    help="With --deployment: resolve it with this kind: version document, as 'deploy run --pin' does.",
+    help="With --deployment: resolve it with these kind: version documents (repeatable), as 'deploy run --pin' does.",
 )
 @click.option(
     "--path",
@@ -161,7 +164,7 @@ def check_command(
 @quiet_option
 @verbose_option
 def list_command(
-    deployment: str | None, pin: str | None, path: Path | None, output: str, quiet: bool, verbose: bool
+    deployment: str | None, pin: VersionPins, path: Path | None, output: str, quiet: bool, verbose: bool
 ) -> None:
     """List every Integration with its local readiness; with --deployment, what that deployment uses.
 
@@ -267,7 +270,7 @@ def _check_connection(
     context: SolutionContext,
     integration: ConnectionCheckIntegration,
     deployment: str | None,
-    pin: str | None,
+    pin: VersionPins,
     diagnostics: Diagnostics,
 ) -> tuple[list[str], int | None]:
     """Run the connection check; failures become diagnostics (R6). Returns the lines and an exit code override.
