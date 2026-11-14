@@ -84,7 +84,7 @@ ndjson, `ndjson-output.md`'s own scope): it's about the *content* of a
 
 ## Decided (2026-11-14)
 
-Built with the version composition work ([version-composition.md](version-composition.md)), whose new findings
+Built with the version composition work ([version-composition.md](../design/version-composition.md)), whose new findings
 were the first to need it:
 
 1. **Shape: a `hint: str | None` field on `Diagnostic`** (option A), passed through `Diagnostics.add()` and its

@@ -76,7 +76,7 @@ export interface DeploymentRow {
     workspace: string | null;
     extends: string | null;
     tenant: string | null;
-    /** Every version document the deployment lists, through `extends` (docs/work/version-composition.md V16). */
+    /** Every version document the deployment lists, through `extends` (docs/design/version-composition.md V16). */
     versions: string[];
     ring: string | null;
     order: number | null;

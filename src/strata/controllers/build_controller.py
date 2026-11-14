@@ -356,7 +356,7 @@ def write_resolved_manifest(
     common untagged case (Worked Example A).
 
     `version` is the version document the build applied (`--pin`, else the deployment's `spec.version`), the list of
-    them when the deployment lists several (docs/work/version-composition.md V8), or `null` without one. `deploy run`
+    them when the deployment lists several (docs/design/version-composition.md V8), or `null` without one. `deploy run`
     compares the build with its own, because a Helm module's pins are applied here and not again at deploy
     (`build_version_mismatch`, docs/design/helm-chart-deployment.md). With a version, `pinned_by` says where the
     documents came from (`spec.version` or `--pin`), and `pin_sources` names the document each pin in
@@ -386,7 +386,7 @@ def write_resolved_manifest(
     return path
 
 
-#: The build's own version file (docs/work/version-composition.md V8), next to `resolved.yaml`.
+#: The build's own version file (docs/design/version-composition.md V8), next to `resolved.yaml`.
 EFFECTIVE_VERSION_FILE = "version.yaml"
 
 

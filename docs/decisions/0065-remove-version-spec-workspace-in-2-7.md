@@ -4,7 +4,7 @@
 - Date: 2026-11-14
 - Related: [ADR-0064](0064-deprecate-version-spec-workspace.md) (the deprecation this replaces the timing of),
   [ADR-0063](0063-a-deployment-lists-several-version-documents.md) (a deployment lists several version documents),
-  `version-composition.md` (work doc, Phase 8)
+  [version-composition.md](../design/version-composition.md) (the design)
 
 ## Context and Problem Statement
 

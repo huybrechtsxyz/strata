@@ -7,7 +7,7 @@
 
 A document no deployment reaches is a leftover, a mistyped name somewhere else, or staged ahead of its first use.
 Until now nothing said so: a module whose namespace reference was misspelled simply never deployed. Raised as open
-question 5 of [version-composition.md](version-composition.md), which already reports the version-specific case
+question 5 of [version-composition.md](../design/version-composition.md), which already reports the version-specific case
 (`version_document_unlisted`).
 
 ## Current Design / Progress

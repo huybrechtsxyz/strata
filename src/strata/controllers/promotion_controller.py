@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Building and validating the promotion view (docs/work/promotion.md, rebuilt on the deployments' pin matrices in
-docs/work/version-composition.md V9-V11).
+docs/design/version-composition.md V9-V11).
 
 `kind: promotion` was deliberately never built (see promotion.md's "No new kind" section) — ring/order/wave live
 as metadata on `Version` documents (`VersionPromotionModel`) instead of a dedicated, user-authored kind a human has

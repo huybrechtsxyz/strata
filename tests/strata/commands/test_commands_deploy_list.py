@@ -50,7 +50,7 @@ def test_list_resolves_extends_and_marks_partials(tmp_path):
 
 
 def test_a_deployment_listing_several_version_documents(tmp_path):
-    """docs/work/version-composition.md V16: `versions` holds the list (base first), `version` only a single name,
+    """docs/design/version-composition.md V16: `versions` holds the list (base first), `version` only a single name,
     the ring comes from the tagged document, and `--version` matches any listed document."""
     root = _solution(tmp_path)
     _write(root, "core.yaml", "version", "prd-core", "  pins: {}\n")

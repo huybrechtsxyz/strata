@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """What a deployment can be pinned on: the `category/target` keys a version pin for it would take effect on
-(docs/work/version-composition.md V5).
+(docs/design/version-composition.md V5).
 
 One answer for every question "what does this deployment need": the coverage checks in `strata validate`
 (`version_document_unused`, `version_pin_unused`), the pins the build writes to `version.yaml`, `promote apply` and

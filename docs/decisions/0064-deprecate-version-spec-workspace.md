@@ -3,7 +3,7 @@
 - Status: superseded — see ADR-0065 (the field is removed in 2.7, not after a deprecation until 3.0)
 - Date: 2026-11-14
 - Related: [ADR-0063](0063-a-deployment-lists-several-version-documents.md) (a deployment lists several version
-  documents), [ADR-0019](0019-version-pinning.md) (`kind: version`), `version-composition.md` (work doc)
+  documents), [ADR-0019](0019-version-pinning.md) (`kind: version`), [version-composition.md](../design/version-composition.md) (the design)
 
 ## Context and Problem Statement
 

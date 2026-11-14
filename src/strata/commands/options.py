@@ -37,7 +37,7 @@ DEFAULT_OUTPUT = "console"
 
 
 def pin_callback(_ctx: click.Context, _param: click.Parameter, value: tuple[str, ...]) -> tuple[str, ...] | None:
-    """`--pin`, repeatable (docs/work/version-composition.md V7): the version documents for this run, or `None`
+    """`--pin`, repeatable (docs/design/version-composition.md V7): the version documents for this run, or `None`
     when the flag was not given, so `pin is not None` still means "the flag chose the versions"."""
     return tuple(value) if value else None
 

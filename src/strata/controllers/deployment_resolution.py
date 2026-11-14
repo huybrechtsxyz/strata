@@ -145,7 +145,7 @@ class DeploymentSummary:
     """One `strata deploy list` row.
 
     `workspace`, `tenant`, `versions` and `environments` are as resolved through `extends`; `extends` is the
-    declared parent. `versions` lists every version document the deployment uses (docs/work/version-composition.md
+    declared parent. `versions` lists every version document the deployment uses (docs/design/version-composition.md
     V16). `ring`, `order` and `wave` are the `spec.promotion` of its tagged version documents (V9), `None` when
     none is tagged.
     """
@@ -243,7 +243,7 @@ def list_deployments(
 
 def first_tagged_version(index: DocumentIndex, names: Sequence[str]) -> IndexEntry | None:
     """The first version document of `names` tagged with a ring: the slot a deployment listing `names` is in
-    (docs/work/version-composition.md V9; disagreeing tags are `version_ring_conflict` in `strata validate`). The one
+    (docs/design/version-composition.md V9; disagreeing tags are `version_ring_conflict` in `strata validate`). The one
     rule `deploy list` and the promotion view share."""
     for name in names:
         entry = index.get(PlatformKind.VERSION, name)

@@ -73,7 +73,7 @@ def version_new(
     """Scaffold a new kind: version document named NAME, in versions/NAME.yaml.
 
     It names no workspace: list it in the `spec.version` of the deployments that should use it (one name or a list,
-    docs/work/version-composition.md). With --from, it starts with that document's pin keys, each seeded with its
+    docs/design/version-composition.md). With --from, it starts with that document's pin keys, each seeded with its
     target's current value.
 
     \b
@@ -234,7 +234,7 @@ def _print_rows(rows: list[ReconcileRow]) -> None:
 def version_show(name: str, start_path: Path | None, output: str, quiet: bool, verbose: bool) -> None:
     """Show the kind: version document named NAME: its pins, and the deployments that list it.
 
-    A version document names no workspace (docs/work/version-composition.md): the deployments listing it in
+    A version document names no workspace (docs/design/version-composition.md): the deployments listing it in
     `spec.version` decide where it applies, directly or through `extends` (a partial base included), so they are
     what this shows.
 

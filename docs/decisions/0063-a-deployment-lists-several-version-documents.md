@@ -4,7 +4,7 @@
 - Date: 2026-11-14
 - Related: [ADR-0019](0019-version-pinning.md) (`kind: version`, pins with `reason`, logged application),
   [ADR-0064](0064-deprecate-version-spec-workspace.md) (the version document's workspace, which this makes
-  unnecessary), `version-composition.md` (work doc: the design, the checks and the phases)
+  unnecessary), [version-composition.md](../design/version-composition.md) (the design)
 
 ## Context and Problem Statement
 

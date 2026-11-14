@@ -2863,7 +2863,7 @@ def test_a_version_document_listed_by_a_deployment_validates(tmp_path):
 
 
 def test_a_version_document_is_shared_by_two_workspaces(tmp_path):
-    """docs/work/version-composition.md V4: deployments of two workspaces may list one version document. Before 2.7
+    """docs/design/version-composition.md V4: deployments of two workspaces may list one version document. Before 2.7
     the first deployment fixed the document's workspace and the second was `version_workspace_mismatch`."""
     root = _base_solution(tmp_path)
     _write_version(root)

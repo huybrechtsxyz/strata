@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A deployment's version documents, composed into one set of pins (docs/work/version-composition.md V1-V9).
+"""A deployment's version documents, composed into one set of pins (docs/design/version-composition.md V1-V9).
 
 `Deployment.spec.version` names one `kind: version` document or a list of them. Their pins apply together: the
 effective pins are the union, and every `category/target` has exactly one owning document. Two listed documents
@@ -282,7 +282,7 @@ def _written_version(entry: IndexEntry) -> Any:
 def check_version_composition(
     index: DocumentIndex, resolved: dict[str, DeploymentModel], matrix: VersionMatrix | None = None
 ) -> Diagnostics:
-    """The pin matrix checks of `strata validate` (docs/work/version-composition.md V1, V3, V5, V9, V12).
+    """The pin matrix checks of `strata validate` (docs/design/version-composition.md V1, V3, V5, V9, V12).
 
     Per deployable deployment: two listed documents pinning one target (`version_pin_conflict`), tagged documents
     for different rings (`version_ring_conflict`), a name listed twice in one written list (`version_listed_twice`),

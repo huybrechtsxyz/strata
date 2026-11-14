@@ -101,7 +101,8 @@ spec:
 ```
 
 Every pin has **one owning document per deployment**. `strata validate` checks each deployment's listed documents
-together; the findings are listed under [Findings](#findings).
+together; the findings are listed under [Findings](#findings). How it works, and why it is built this way:
+[version composition](../design/version-composition.md).
 
 - Which targets a deployment uses: its workspace's enabled module services (`images`), chart modules (`charts`),
   every remote a reached document names, every artifact a service, `${artifact:}` token or `store: artifact`

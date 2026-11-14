@@ -5571,7 +5571,7 @@ def test_deploy_run_takes_the_pin_the_helm_build_was_made_with(tmp_path: Path, _
 
 @pytest.mark.slow
 def test_deploy_run_catches_a_version_document_edited_after_the_helm_build(tmp_path: Path, _capture):
-    """docs/work/version-composition.md V8: same `--pin`, but the artifact pin the chart's values got at build time
+    """docs/design/version-composition.md V8: same `--pin`, but the artifact pin the chart's values got at build time
     changed since; compared by value against the build's `version.yaml`."""
     root = _helm_solution(tmp_path)
     _write_artifact(root, image_tag="1.0.0", pin="2.0.0")
@@ -5666,7 +5666,7 @@ def _write_built_version(build_path: Path, **charts: str) -> None:
 
 
 def test_check_build_version_compares_values_with_the_builds_version_file(tmp_path: Path):
-    """docs/work/version-composition.md V8: same document name, but its chart pin was edited after the build."""
+    """docs/design/version-composition.md V8: same document name, but its chart pin was edited after the build."""
     build_path = _build(tmp_path, "version: prd\n")
     _write_built_version(build_path, auth="1.0.0")
 

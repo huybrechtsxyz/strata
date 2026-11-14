@@ -146,7 +146,7 @@ def reconcile_version(
 ) -> list[ReconcileRow]:
     """Compare `version.spec.pins` against the solution's real inventory.
 
-    `scope` (docs/work/version-composition.md V13) limits the `add`/`needs_value` candidates to the targets the
+    `scope` (docs/design/version-composition.md V13) limits the `add`/`needs_value` candidates to the targets the
     deployments listing this document use and that none of their other listed documents pins
     (`version_composition.version_scope()`); `None` offers every target in the solution, as for a document no
     deployment lists yet. `remove` candidates are always the pins whose target no longer exists.
@@ -199,7 +199,7 @@ def scaffold_version(
     from_name: str | None,
 ) -> Path:
     """Create `versions/<name>.yaml` — a new, minimal `kind: version` document. It declares no `spec.workspace`
-    (deprecated, docs/work/version-composition.md V4): the deployments that list it decide where it applies.
+    (deprecated, docs/design/version-composition.md V4): the deployments that list it decide where it applies.
 
     `--from` (`from_name`) clones an existing version document's pin *keys*
     only: each cloned key is reseeded with its target's CURRENT real

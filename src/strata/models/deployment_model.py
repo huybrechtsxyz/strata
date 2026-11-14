@@ -63,7 +63,7 @@ from strata.models.template_model import DocumentTemplateModel, ParamSetNames, c
 from strata.utils.names import check_unique_names
 
 #: `Deployment.spec.version`: one Version document, or a list of them whose pins apply together
-#: (docs/work/version-composition.md V1). The `ParamSetNames` pattern: each name is a reference.
+#: (docs/design/version-composition.md V1). The `ParamSetNames` pattern: each name is a reference.
 VersionNames = (
     Annotated[PlatformName, References(PlatformKind.VERSION)]
     | list[Annotated[PlatformName, References(PlatformKind.VERSION)]]

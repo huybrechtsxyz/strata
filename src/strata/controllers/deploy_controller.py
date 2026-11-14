@@ -852,7 +852,7 @@ def check_build_version(
     after the build, would reach the other steps but not the charts, while the run and its audit record name the
     deploy's version.
 
-    A build with `version.yaml` (docs/work/version-composition.md V8) is judged by value: every `charts` and
+    A build with `version.yaml` (docs/design/version-composition.md V8) is judged by value: every `charts` and
     `artifacts` pin of the build against the deploy's, so an edit to a listed document between build and deploy is
     caught even when the list of documents is the same. An older build is judged by the documents' names, as before.
     Nothing to judge when the build records no version or has no Helm module.

@@ -121,7 +121,7 @@ resurrected by this revision):
 ### `Version.spec.workspace` — the exclusivity anchor, unchanged
 
 > Removed in 2.7 (ADR-0065): the deployments that list a version document decide where it applies, and promotion
-> groups by them ([version-composition.md](version-composition.md) V4, V10). Kept below as the original reasoning.
+> groups by them ([version-composition.md](../design/version-composition.md) V4, V10). Kept below as the original reasoning.
 
 A `Version` document was otherwise just `{meta.name, spec.pins}` — it
 never said which workspace it was *for*. The only way to know was to grep
@@ -149,7 +149,7 @@ ever needs to span multiple workspaces, `spec.workspace` on `Version`
 would become a list too — the link-back validation logic doesn't change
 shape, just checks membership in a list instead of equality.
 
-Superseded by [version-composition.md](version-composition.md) V4 and V10: `Version.spec.workspace` is
+Superseded by [version-composition.md](../design/version-composition.md) V4 and V10: `Version.spec.workspace` is
 removed (in 2.7, ADR-0065), a deployment names several version documents, and promotion
 is computed from the deployments' pin matrices and workspaces.
 

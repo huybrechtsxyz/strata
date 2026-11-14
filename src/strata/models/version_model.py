@@ -393,7 +393,7 @@ class VersionModel(PlatformBaseModel):
 
 
 class ComposedVersionModel(VersionModel):
-    """The union of several version documents' pins, for one deployment (docs/work/version-composition.md V6).
+    """The union of several version documents' pins, for one deployment (docs/design/version-composition.md V6).
 
     Not a document: never loaded from or written to the solution. Built by `version_composition.compose_versions()`.
     `meta.name` is the deployment's name; the owner of each pin and the composed documents are kept beside the

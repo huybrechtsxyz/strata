@@ -148,7 +148,7 @@ def resolve_deployment(
         version_pin: `--pin` (docs/work/version-lifecycle.md Phase 5) — when
             given, overrides the resolved deployment's `spec.version` to this
             name, or to this list of names when the flag was repeated
-            (docs/work/version-composition.md V7: the list replaces the
+            (docs/design/version-composition.md V7: the list replaces the
             deployment's whole list), for the returned model only, never
             written to disk. Documents in it that pin the same target stop
             the run (`version_pin_conflict`), as they fail validation in a

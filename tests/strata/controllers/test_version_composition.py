@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for version composition: a deployment lists several version documents (docs/work/version-composition.md).
+"""Tests for version composition: a deployment lists several version documents (docs/design/version-composition.md).
 
 The fixture is the design's Lifecycle: two products, DataHub and Staging, each in its own workspace, sharing a
 `redis` image pinned once in an untagged `prd-core`, and each with its own tagged product document. The

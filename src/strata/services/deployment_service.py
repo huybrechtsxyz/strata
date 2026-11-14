@@ -65,7 +65,7 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
     - **`environments`** — base list first, then the child's. Later entries
       win at value-resolution time, so the child still takes precedence.
     - **`version`** — base list first, then the child's, each document once
-      (docs/work/version-composition.md V2): a shared `prd-core` in a base
+      (docs/design/version-composition.md V2): a shared `prd-core` in a base
       plus the product's own `prd-datahub` gives both. A single name on
       either side counts as a one-element list.
     - **Other lists** — replaced wholesale by the child's.
@@ -91,7 +91,7 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
     if base_envs or child_envs:
         merged["environments"] = [*base_envs, *[e for e in child_envs if e not in base_envs]]
 
-    # docs/work/version-composition.md V2: version lists append base-first, a repeat dropped silently. A single
+    # docs/design/version-composition.md V2: version lists append base-first, a repeat dropped silently. A single
     # name on either side counts as a one-element list; one name in the result stays a plain name.
     base_versions = _as_list(base.get("version"))
     child_versions = _as_list(child.get("version"))
