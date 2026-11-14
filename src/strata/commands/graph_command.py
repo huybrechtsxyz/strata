@@ -21,11 +21,13 @@ import click
 from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
+from strata.controllers.artifact_usage import unreferenced_artifacts
 from strata.controllers.deployment_resolution import resolve_deployment_chains
 from strata.controllers.document_reachability import cleanup_candidates
 from strata.controllers.graph_controller import GraphEdge, build_reference_graph
 from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import IndexEntry
+from strata.models.common_models import PlatformKind
 from strata.utils.layout import display_path
 
 
@@ -39,8 +41,9 @@ from strata.utils.layout import display_path
     "--unreferenced",
     is_flag=True,
     default=False,
-    help="List the cleanup candidates instead: documents no deployment reaches, and partial bases nothing extends "
-    "(what 'strata validate' reports as document_unreferenced and base_unused).",
+    help="List the cleanup candidates instead: documents no deployment reaches, partial bases nothing extends, "
+    "version documents no deployment lists, and artifacts no document names (what 'strata validate' reports as "
+    "document_unreferenced, base_unused, version_document_unlisted/promotion_orphan_ring and artifact_unused).",
 )
 @output_option
 @quiet_option
@@ -54,7 +57,9 @@ def graph_command(path: Path | None, unreferenced: bool, output: str, quiet: boo
 
     With --unreferenced, lists the documents nothing uses instead, for a
     cleanup pass: those no deployable deployment reaches through a reference
-    or a ${value:} token, and partial bases nothing extends.
+    or a ${value:} token, partial bases nothing extends, version documents no
+    deployment lists, and artifacts no document names (a staged artifact,
+    named but not deployed yet, is left out).
 
     \b
     Exit codes:
@@ -78,6 +83,13 @@ def graph_command(path: Path | None, unreferenced: bool, output: str, quiet: boo
             # the validation pass is needed, so a problem elsewhere does not hide the list.
             resolved, _ = resolve_deployment_chains(context.controller.index)
             candidates = cleanup_candidates(context.controller.index, resolved)
+            # Artifacts nothing names (`artifact_unused` as a warning): their usage is read through the deployments'
+            # effective images, which needs a solution that loaded cleanly. A staged artifact is left out.
+            for name in unreferenced_artifacts(context) if context.ok else []:
+                artifact = context.controller.index.get(PlatformKind.ARTIFACT, name)
+                if artifact is not None:
+                    candidates.append((artifact, "artifact_unreferenced"))
+            candidates.sort(key=lambda item: (item[0].ref.kind.value, item[0].ref.name))
             run.step(f"found {len(candidates)} unreferenced document(s) across {document_count} document(s)")
             if output == "console":
                 _print_candidates(candidates, context.root)
@@ -115,6 +127,8 @@ def graph_command(path: Path | None, unreferenced: bool, output: str, quiet: boo
 _REASONS = {
     "unreferenced": "reached by no deployment",
     "base_unused": "partial base nothing extends",
+    "version_unlisted": "listed by no deployment (fine if CI uses it through --pin)",
+    "artifact_unreferenced": "named by no document",
 }
 
 

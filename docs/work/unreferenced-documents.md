@@ -46,11 +46,22 @@ a base extended by another base counts as extended.
 
 ### Listing them: `strata graph --unreferenced`
 
-The same two sets as a list for a cleanup pass, one line per document with the reason (`reached by no deployment`,
-`partial base nothing extends`) and the file; JSON `data.unreferenced[]` has `kind`, `name`, `path` and `reason`
-(`unreferenced`, `base_unused`). One function, `cleanup_candidates()`, feeds it and the two findings share the
-functions it calls, so the command and `strata validate` cannot disagree. Like the rest of `strata graph` it does
-not require a valid solution: it resolves deployment chains only.
+Every cleanup candidate as one list, one line per document with the reason and the file; JSON
+`data.unreferenced[]` has `kind`, `name`, `path` and `reason`:
+
+| `reason`                | Console                                                     | The `strata validate` finding                         |
+| ----------------------- | ----------------------------------------------------------- | ----------------------------------------------------- |
+| `unreferenced`          | reached by no deployment                                    | `document_unreferenced`                               |
+| `base_unused`           | partial base nothing extends                                | `base_unused`                                         |
+| `version_unlisted`      | listed by no deployment (fine if CI uses it through --pin)  | `version_document_unlisted`, `promotion_orphan_ring`  |
+| `artifact_unreferenced` | named by no document                                        | `artifact_unused` (the warning; a staged artifact is left out) |
+
+`cleanup_candidates()` feeds the first three from the index, sharing the functions the findings use
+(`unreferenced_documents()`, `unused_bases()`, `version_composition.unlisted_versions()`), so the command and
+`strata validate` cannot disagree. Artifacts need the solution context (their use is read through the deployments'
+effective images), so the command adds them with `artifact_usage.unreferenced_artifacts()`, and only when the
+solution loaded cleanly. Otherwise, like the rest of `strata graph`, it does not require a valid solution: it
+resolves deployment chains only.
 
 ### Example
 
@@ -70,12 +81,13 @@ The repository's `config/` example had one: `dns/example.yaml` (`example-dns`) w
    by path) is reported. The hint says so; an opt-out (an annotation such as `strata.unreferenced: ok`) is open.
 3. ~~**Partial bases.**~~ Built: `base_unused`.
 4. ~~**`strata graph --unreferenced`.**~~ Built.
-5. **More in the cleanup list.** `version_document_unlisted` and `artifact_unused` are cleanup candidates too, but
-   each has its own rules (CI may use a version document only through `--pin`; an artifact can be staged). Add them
-   to `--unreferenced` with their own reasons if a cleanup pass misses them.
+5. ~~**More in the cleanup list.**~~ Built: unlisted version documents (`version_unlisted`) and artifacts no
+   document names (`artifact_unreferenced`). A staged artifact stays out: it is named, just not deployed yet.
 
 ## Changelog
 
+- 2026-11-14: `strata graph --unreferenced` also lists version documents no deployment lists and artifacts no
+  document names (open question 5).
 - 2026-11-14: `base_unused` (partial bases nothing extends) and `strata graph --unreferenced` built; the
   `config/` example's `example-dns` wired into its workspace.
 

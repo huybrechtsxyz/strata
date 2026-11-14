@@ -172,20 +172,38 @@ def _graph_unreferenced(root: Path, *args: str):
     return CliRunner().invoke(cli, ["graph", str(root), "--unreferenced", *args])
 
 
-def test_graph_unreferenced_lists_both_kinds_of_cleanup_candidate_in_json(tmp_path: Path):
+def test_graph_unreferenced_lists_every_kind_of_cleanup_candidate_in_json(tmp_path: Path):
     root = _solution(tmp_path)
     _write(root, "spare.yaml", "module", "spare", "  type: compose\n  source:\n    source_path: spare\n")
     _write(root, "env-base.yaml", "environment", "env-base", "  partial: true\n")
+    _write(root, "version.yaml", "version", "old-prd", "  promotion:\n    ring: prd\n    order: 3\n  pins: {}\n")
+    _write(root, "artifact.yaml", "artifact", "leftover", "  image_name: acme/leftover\n  image_tag: '1.0'\n")
 
     result = _graph_unreferenced(root, "-o", "json")
 
     assert result.exit_code == EXIT_SUCCESS, result.output
     rows = json.loads(result.output)["data"]["unreferenced"]
     assert [(row["kind"], row["name"], row["reason"]) for row in rows] == [
+        ("artifact", "leftover", "artifact_unreferenced"),
         ("environment", "env-base", "base_unused"),
         ("module", "spare", "unreferenced"),
+        ("version", "old-prd", "version_unlisted"),
     ]
-    assert rows[1]["path"].endswith("spare.yaml")
+    assert rows[2]["path"].endswith("spare.yaml")
+
+
+def test_graph_unreferenced_leaves_out_a_staged_artifact_and_a_listed_version(tmp_path: Path):
+    """An artifact a document names but no deployment uses yet is staged, not a leftover; a version document a
+    deployment lists is in use."""
+    root = _solution(tmp_path)
+    _write(root, "artifact.yaml", "artifact", "next-api", "  image_name: acme/next\n  image_tag: '1.0'\n")
+    _write(root, "version.yaml", "version", "prd", "  pins:\n    artifacts:\n      next-api: '2.0'\n")
+    _write(root, "app.yaml", "deployment", "app", "  workspace: main\n  version: prd\n  environments:\n    - prd\n")
+
+    result = _graph_unreferenced(root, "-o", "json")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert json.loads(result.output)["data"]["unreferenced"] == []
 
 
 def test_graph_unreferenced_console_says_why_and_where(tmp_path: Path):

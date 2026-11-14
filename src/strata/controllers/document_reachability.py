@@ -31,6 +31,7 @@ from strata.controllers.deployment_resolution import deployment_of
 from strata.controllers.graph_controller import build_reference_graph
 from strata.controllers.references import references_in
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
+from strata.controllers.version_composition import unlisted_versions
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel
 from strata.models.reference_fields import extract_references
@@ -182,10 +183,13 @@ def unreferenced_documents(index: DocumentIndex, resolved: dict[str, DeploymentM
 
 
 def cleanup_candidates(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> list[tuple[IndexEntry, str]]:
-    """`(entry, reason)` for every document `strata graph --unreferenced` lists: `unreferenced` (no deployment
-    reaches it) or `base_unused` (a partial base nothing extends). The same sets `strata validate` reports."""
+    """`(entry, reason)` for every document `strata graph --unreferenced` lists from the index alone:
+    `unreferenced` (no deployment reaches it), `base_unused` (a partial base nothing extends) and `version_unlisted`
+    (a version document no deployment lists; CI may still use it through `--pin`). The same sets `strata validate`
+    reports. Unused artifacts need the solution context and are added by the command (`artifact_unreferenced`)."""
     found = [(entry, "unreferenced") for entry in unreferenced_documents(index, resolved)]
     found += [(entry, "base_unused") for entry in unused_bases(index)]
+    found += [(entry, "version_unlisted") for entry in unlisted_versions(index, resolved)]
     return sorted(found, key=lambda item: (item[0].ref.kind.value, item[0].ref.name))
 
 

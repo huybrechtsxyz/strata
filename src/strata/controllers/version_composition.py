@@ -314,10 +314,9 @@ def _unlisted_documents(index: DocumentIndex, resolved: dict[str, DeploymentMode
     Information: CI may use it only through `--pin`, which strata cannot see. A tagged one is
     `promotion_orphan_ring` already."""
     diagnostics = Diagnostics()
-    listed = {name for entry in index.all_of(PlatformKind.DEPLOYMENT) for name in _listed_names(entry, resolved)}
-    for entry in index.all_of(PlatformKind.VERSION):
+    for entry in unlisted_versions(index, resolved):
         version = cast(VersionModel, entry.model)
-        if entry.ref.name in listed or (version.spec.promotion is not None and version.spec.promotion.ring):
+        if version.spec.promotion is not None and version.spec.promotion.ring:
             continue
         diagnostics.info(
             f"Version '{entry.ref.name}' is listed by no deployment.",
@@ -328,6 +327,14 @@ def _unlisted_documents(index: DocumentIndex, resolved: dict[str, DeploymentMode
             "spec.version, or delete it.",
         )
     return diagnostics
+
+
+def unlisted_versions(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> list[IndexEntry]:
+    """Every version document no deployment (a partial base included) lists, tagged or not: what `strata validate`
+    reports as `version_document_unlisted` (untagged) and `promotion_orphan_ring` (tagged), and what `strata graph
+    --unreferenced` lists."""
+    listed = {name for entry in index.all_of(PlatformKind.DEPLOYMENT) for name in _listed_names(entry, resolved)}
+    return [entry for entry in index.all_of(PlatformKind.VERSION) if entry.ref.name not in listed]
 
 
 def _listed_names(entry: IndexEntry, resolved: dict[str, DeploymentModel]) -> list[str]:

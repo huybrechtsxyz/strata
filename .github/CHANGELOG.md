@@ -39,7 +39,9 @@ Several products in one ring can share pins without copying them: a deployment l
   asset that no deployable deployment reaches through any reference or `${value:}` token. Usually a leftover or a
   misspelled name elsewhere. Partial bases, kinds bound by type and kinds with their own check are left out.
 - A `partial: true` deployment, environment or tenant that nothing `extends` is information (`base_unused`).
-- `strata graph --unreferenced` lists both, one line per document with the reason and the file, for a cleanup pass.
+- `strata graph --unreferenced` lists every cleanup candidate, one line per document with the reason and the file:
+  documents no deployment reaches, partial bases nothing extends, version documents no deployment lists, and
+  artifacts no document names.
 - `strata deploy list` rows have `versions`; `--version` matches any listed document.
 - **Findings can say what to do**: a `hint` shown under the finding on the console, as `diagnostics[].hint` in
   JSON, and in the VS Code problem. Every new version finding has one, as does `cve_policy_missing_data`, and
