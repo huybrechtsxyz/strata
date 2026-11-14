@@ -58,7 +58,7 @@ the sets the chain names), so leaves that name the same sets, or none,
 still share their bases' work.
 """
 
-from collections.abc import Collection, Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -241,15 +241,22 @@ def list_deployments(
     return rows
 
 
-def _tagged_promotion(index: DocumentIndex, names: tuple[str, ...]) -> VersionPromotionModel | None:
-    """The ring of a deployment listing `names`: the first tagged document's `spec.promotion` (V9; disagreeing tags
-    are `version_ring_conflict` in `strata validate`)."""
+def first_tagged_version(index: DocumentIndex, names: Sequence[str]) -> IndexEntry | None:
+    """The first version document of `names` tagged with a ring: the slot a deployment listing `names` is in
+    (docs/work/version-composition.md V9; disagreeing tags are `version_ring_conflict` in `strata validate`). The one
+    rule `deploy list` and the promotion view share."""
     for name in names:
         entry = index.get(PlatformKind.VERSION, name)
         promotion = cast(VersionModel, entry.model).spec.promotion if entry is not None else None
-        if promotion is not None and promotion.ring is not None:
-            return promotion
+        if entry is not None and promotion is not None and promotion.ring is not None:
+            return entry
     return None
+
+
+def _tagged_promotion(index: DocumentIndex, names: tuple[str, ...]) -> VersionPromotionModel | None:
+    """The ring of a deployment listing `names` (`first_tagged_version()`), or `None`."""
+    entry = first_tagged_version(index, names)
+    return cast(VersionModel, entry.model).spec.promotion if entry is not None else None
 
 
 def _text(value: Any) -> str | None:

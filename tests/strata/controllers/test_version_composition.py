@@ -14,12 +14,12 @@ import yaml
 from click.testing import CliRunner
 
 from strata.commands.cli import cli
-from strata.controllers.build_controller import build_run
+from strata.controllers.build_controller import build_run, write_effective_version
 from strata.controllers.pinnable_targets import pinnable_targets
 from strata.controllers.promotion_controller import apply_promotion, build_promotion_view, build_status_rows
 from strata.controllers.solution_context import SolutionContext, open_solution
 from strata.controllers.value_controller import resolve_deployment, resolve_version
-from strata.controllers.version_composition import compose_versions, effective_version
+from strata.controllers.version_composition import compose_versions
 from strata.models.version_model import ComposedVersionModel, pin_owner, version_names
 from strata.utils.errors import UsageError
 
@@ -150,17 +150,6 @@ def test_one_listed_document_is_returned_unchanged(tmp_path: Path):
 
     assert version is not None and not isinstance(version, ComposedVersionModel)
     assert version.meta.name == "prd-core"
-    assert found.items == []
-
-
-def test_effective_version_reports_the_names_found_and_who_chose_them(tmp_path: Path):
-    context = _resolve(_solution(tmp_path))
-
-    effective, found = effective_version(context.controller.index, resolve_deployment(context, "staging-prd"))
-
-    assert effective.names == ["prd-core", "prd-staging"]
-    assert effective.pinned_by == "spec.version"
-    assert effective.owners == {"images/redis": "prd-core", "images/staging-api": "prd-staging"}
     assert found.items == []
 
 
@@ -328,6 +317,44 @@ def test_a_shared_key_at_two_values_in_one_ring_is_drift(tmp_path: Path):
     assert "'redis:6' (prd-core-old); 'redis:7.2' (prd-core)" in warning.message
 
 
+def test_a_shared_document_with_only_an_order_still_counts_for_drift(tmp_path: Path):
+    """Tagged means a ring (V9): `promotion: {order: 1}` without a ring does not make a shared document a product one."""
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "versions/prd-core-old.yaml",
+        "version",
+        "prd-core-old",
+        "  promotion:\n    order: 1\n  pins:\n    images:\n      redis: redis:6\n",
+    )
+    _deployment(
+        root, "staging-prd", "  workspace: staging\n  version: [prd-core-old, prd-staging]\n  environments: [prd]\n"
+    )
+
+    assert "version_ring_drift" in _codes(_resolve(root))
+
+
+def test_version_show_with_an_order_but_no_ring(tmp_path: Path):
+    """`order` may be set without `ring`; the console line must not assume both."""
+    root = _solution(tmp_path)
+    _write(root, "versions/odd.yaml", "version", "odd", "  promotion:\n    order: 3\n  pins: {}\n")
+
+    result = CliRunner().invoke(cli, ["version", "show", "odd", "--path", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "odd  (ring -, order 3)" in result.output
+
+
+def test_a_build_without_a_version_removes_an_earlier_version_file(tmp_path: Path):
+    """A build with `clean=False` must not leave a stale `version.yaml` for `deploy run` to judge against."""
+    build_path = tmp_path / "build"
+    build_path.mkdir()
+    (build_path / "version.yaml").write_text("stale\n", encoding="utf-8")
+
+    assert write_effective_version(build_path, "app", None, None) is None
+    assert not (build_path / "version.yaml").exists()
+
+
 def test_a_customer_document_differing_from_its_product_document_is_not_drift(tmp_path: Path):
     """V12: only untagged (shared) owners are judged; a customer document is the point of R6."""
     root = _solution(tmp_path)
@@ -445,7 +472,9 @@ def test_promote_apply_never_writes_a_customers_own_document(tmp_path: Path):
     assert _pins(root, "prd-fabrikam")["images"]["datahub-api"] == "acme/datahub:1.4.2"
 
 
-def test_promote_apply_stops_when_the_source_deployments_disagree(tmp_path: Path):
+def test_promote_apply_reports_a_key_the_source_runs_only_from_customers_own_documents(tmp_path: Path):
+    """Two qas deployments run datahub-api from their own documents at different values: there is no one value to
+    promote, so the key is skipped and reported, and the rest of the promotion still goes ahead."""
     root = _rollout(tmp_path)
     _version(root, "qas-datahub", {}, ring="qas")
     _version(root, "qas-a", {"images": {"datahub-api": "acme/datahub:1.5.0"}})
@@ -454,8 +483,31 @@ def test_promote_apply_stops_when_the_source_deployments_disagree(tmp_path: Path
     _deployment(root, "datahub-qas-2", "  extends: base-qas\n  workspace: datahub\n  version: [qas-datahub, qas-b]\n")
     context = _resolve(root)
 
-    with pytest.raises(UsageError, match="do not agree on what to promote"):
-        apply_promotion("datahub", "prd", context.controller.index)
+    result = apply_promotion("datahub", "prd", context.controller.index, shared=True)
+
+    assert ("images/datahub-api", "prd-datahub", "source own documents") in result.skipped
+    assert ("images", "redis", "redis:8.0", "prd-core") in result.written
+    assert _pins(root, "prd-datahub")["images"]["datahub-api"] == "acme/datahub:1.4.0"
+
+
+def test_promote_apply_writes_every_owner_of_a_key_not_only_the_first(tmp_path: Path):
+    """Two prd deployments get datahub-api from two customers' own documents: both are reported, none dropped."""
+    root = _rollout(tmp_path)
+    _version(root, "prd-datahub", {}, ring="prd")
+    _version(root, "prd-cust-1", {"images": {"datahub-api": "acme/datahub:1.4.1"}})
+    _version(root, "prd-cust-2", {"images": {"datahub-api": "acme/datahub:1.4.2"}})
+    _deployment(
+        root, "datahub-prd", "  extends: base-prd\n  workspace: datahub\n  version: [prd-datahub, prd-cust-1]\n"
+    )
+    _deployment(
+        root, "datahub-prd-2", "  extends: base-prd\n  workspace: datahub\n  version: [prd-datahub, prd-cust-2]\n"
+    )
+    context = _resolve(root)
+
+    result = apply_promotion("datahub", "prd", context.controller.index)
+
+    owners = {owner for target, owner, reason in result.skipped if target == "images/datahub-api"}
+    assert owners == {"prd-cust-1", "prd-cust-2"}
 
 
 # ---------------------------------------------------------------------------

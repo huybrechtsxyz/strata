@@ -39,6 +39,7 @@ from strata.integrations.security_findings import (
 from strata.models.audit_manifest_model import ManifestPolicyResultModel
 from strata.models.common_models import PlatformKind
 from strata.models.configuration_model import ConfigurationModel
+from strata.models.deployment_model import VersionPins
 from strata.models.integration_model import IntegrationModel
 from strata.models.sbom_model import CveAllowedEntryModel
 from strata.models.security_gate_model import ImageGatePolicyModel, ReleaseGatePolicyModel
@@ -58,7 +59,6 @@ _COMMIT_ENV_VARS = (
     "BITBUCKET_COMMIT",
     "GIT_COMMIT",
 )
-from strata.models.deployment_model import VersionPins
 
 _COMMIT_LENGTH = 40
 _GIT_TIMEOUT = 10

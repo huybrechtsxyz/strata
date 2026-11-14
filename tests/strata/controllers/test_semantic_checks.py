@@ -282,7 +282,7 @@ def test_tenant_geography_not_declared_by_any_provider_is_caught(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Deployment -> Tenant/Workspace/Provider: static geography cross-check
-# (docs/work/tenant-zone-policy.md's "static tier")
+# (the removed tenant-zone-policy work doc's "static tier")
 # ---------------------------------------------------------------------------
 
 
@@ -629,7 +629,7 @@ def test_provider_and_asset_findings_stay_separate(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Manifest remote -> Integration (docs/work/remotes-at-scale.md C4)
+# Manifest remote -> Integration (docs/design/asset-management.md C4)
 # ---------------------------------------------------------------------------
 
 
@@ -696,7 +696,7 @@ def test_remote_integration_without_the_sources_capability_is_an_error(tmp_path)
 
 
 # ---------------------------------------------------------------------------
-# Asset location -> Integration (docs/work/remotes-at-scale.md C3)
+# Asset location -> Integration (docs/design/asset-management.md C3)
 # ---------------------------------------------------------------------------
 
 

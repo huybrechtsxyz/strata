@@ -216,6 +216,20 @@ def test_graph_unreferenced_console_says_why_and_where(tmp_path: Path):
     assert "module/spare  reached by no deployment  (spare.yaml)" in result.output
 
 
+def test_graph_unreferenced_says_when_it_could_not_judge_artifacts(tmp_path: Path):
+    """With a load error, artifacts cannot be judged: an empty artifact part must not read as "none unused"."""
+    root = _solution(tmp_path)
+    _write(root, "artifact.yaml", "artifact", "leftover", "  image_name: acme/leftover\n")
+    _write(root, "broken.yaml", "module", "broken", "  type: not-a-type\n")
+
+    result = _graph_unreferenced(root, "-o", "json")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    envelope = json.loads(result.output)
+    assert "graph_artifacts_skipped" in [d["code"] for d in envelope["diagnostics"]]
+    assert all(row["kind"] != "artifact" for row in envelope["data"]["unreferenced"])
+
+
 def test_graph_unreferenced_with_nothing_to_clean_up(tmp_path: Path):
     result = _graph_unreferenced(_solution(tmp_path))
 

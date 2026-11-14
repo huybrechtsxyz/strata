@@ -18,7 +18,7 @@ down when a ring runs several products that share something:
   product roots come from, a shared image, the core modules) is pinned once per product document.
   Nothing says those copies agree, so one ring can silently run two versions of the shared part.
 - **A customer that differs from its ring on a platform pin** needs a document repeating every
-  platform pin ([remotes-at-scale.md](remotes-at-scale.md) Q6).
+  platform pin (remotes-at-scale.md Q6).
 
 This doc designs **version composition at the deployment**: a deployment names one or more version
 documents, and the pins it runs with are their union. `strata validate` builds, per deployment, a matrix
@@ -42,9 +42,11 @@ the same release (ADR-0065). This section is the design as built.
 Where the code is:
 
 - `controllers/version_composition.py`: `compose_versions()` (the union and `version_pin_conflict`),
-  `effective_version()`, `deployment_version()`, `pin_dropped_findings()`, `version_scope()`,
-  `listing_deployments()` and the matrix checks `check_version_composition()`, run from
+  `deployment_version()`, `pin_dropped_findings()`, `version_scope()`, `listing_deployments()`,
+  `unlisted_versions()` and the matrix checks `check_version_composition()`, run from
   `run_semantic_checks()`.
+- `controllers/deployment_resolution.py`: `first_tagged_version()`, the one "which ring is this deployment in"
+  rule `deploy list` and the promotion view share.
 - `controllers/pinnable_targets.py`: `pinnable_targets()` (V5).
 - `models/version_model.py`: `ComposedVersionModel`, `pin_owner()`, `version_names()`; in the models layer so
   the SBOM collectors (integrations) can name a pin's owner too.
@@ -174,9 +176,10 @@ spec:
     already. A document with no pins yet (a new ring) is exempt: it contributes nothing and cannot be
     wrong.
   Pin targets that do not exist at all stay an error, as today (`check_version_pins()`).
-- **V6 - One resolver, every consumer.** `effective_version(index, deployment, pins=None) ->
-  EffectiveVersion` returns a merged `VersionModel` (whose `spec.pins` is the matrix), the ordered list
-  of document names, and a map `category/target -> owning document`, plus its `Diagnostics` (V3). The
+- **V6 - One resolver, every consumer.** `compose_versions(index, names, label=...)` returns a merged
+  `VersionModel` (whose `spec.pins` is the matrix) that remembers the ordered document names
+  (`version_names()`) and each pin's owner (`pin_owner()`, `pin_owners()`), plus its `Diagnostics` (V3);
+  `deployment_version(index, deployment)` is the same for a resolved deployment, findings dropped. The
   merged model's `meta.name` is the deployment's name and `spec.promotion` is the ring the listed
   documents agree on (V9); the workspace is the deployment's own. Most consumers already go through
   one function, `value_controller.resolve_version()` (audit, build, effective images, image tag policy,

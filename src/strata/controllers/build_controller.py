@@ -407,9 +407,11 @@ def write_effective_version(
     Only pins on a target the deployment uses (`targets`), with `status`/`reason`/`reviewed` as written in the
     owning document, and nothing else: no `promotion` (a copy in a solution would claim a ring slot) and no
     provenance (that is `resolved.yaml`'s `pin_sources`). It loads with `VersionModel`, so two builds diff as two
-    files and a pipeline can read it. Nothing is written without a version.
+    files and a pipeline can read it. Without a version nothing is written, and a `version.yaml` an earlier build
+    left behind (a build with `clean=False`) is removed: `deploy run` would otherwise judge the deploy against it.
     """
     if version is None:
+        (build_path / EFFECTIVE_VERSION_FILE).unlink(missing_ok=True)
         return None
     pins: dict[str, dict[str, Any]] = {}
     for category, target, pin in _used_pins(version, targets):

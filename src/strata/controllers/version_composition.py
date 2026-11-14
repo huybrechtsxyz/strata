@@ -17,8 +17,8 @@ Consumers that log a pin or report where it came from call `pin_owner()` instead
 composed version never hides which document a pin came from (V14).
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from dataclasses import dataclass
+from typing import Any, cast
 
 from strata.controllers.deployment_resolution import deployment_of
 from strata.controllers.pinnable_targets import pinnable_targets
@@ -41,36 +41,13 @@ from strata.utils.diagnostics import Diagnostics
 
 __all__ = [
     "ComposedVersionModel",
-    "EffectiveVersion",
-    "PinnedBy",
     "compose_versions",
     "deployment_version",
-    "effective_version",
     "pin_key",
     "pin_owner",
     "pin_owners",
     "version_names",
 ]
-
-PinnedBy = Literal["spec.version", "--pin"]
-
-
-@dataclass(frozen=True)
-class EffectiveVersion:
-    """What a deployment runs with: the composed pins and where they came from.
-
-    `names` are the listed documents found in the index, in written order; `pinned_by` says whether they came from
-    the deployment (`spec.version`) or replaced it for one run (`--pin`).
-    """
-
-    model: VersionModel | None
-    names: list[str] = field(default_factory=list)
-    pinned_by: PinnedBy = "spec.version"
-
-    @property
-    def owners(self) -> dict[str, str]:
-        """`category/target -> owning document` for every effective pin."""
-        return pin_owners(self.model)
 
 
 def _promotion(
@@ -153,17 +130,6 @@ def compose_versions(
     composed._owners = owners
     composed._names = [document.meta.name for document in documents]
     return composed, diagnostics
-
-
-def effective_version(
-    index: DocumentIndex, deployment: DeploymentModel, *, pinned_by: PinnedBy = "spec.version"
-) -> tuple[EffectiveVersion, Diagnostics]:
-    """The pins `deployment` runs with: its `spec.version` documents composed (V6). `deployment` is the resolved
-    model, already carrying a `--pin` list in `spec.version` when one was given (`pinned_by="--pin"`)."""
-    names = deployment.spec.version_names()
-    model, diagnostics = compose_versions(index, names, label=deployment.meta.name)
-    found = [name for name in names if index.get(PlatformKind.VERSION, name) is not None]
-    return EffectiveVersion(model=model, names=found, pinned_by=pinned_by), diagnostics
 
 
 def pin_dropped_findings(
@@ -430,7 +396,9 @@ def _ring_drift(index: DocumentIndex, listed: list[_Listed]) -> Diagnostics:
         for category, target, pin in item.version.spec.pins.iter_pins():
             owner = pin_owner(item.version, category, target)
             owner_entry = index.get(PlatformKind.VERSION, owner)
-            if owner_entry is None or cast(VersionModel, owner_entry.model).spec.promotion is not None:
+            owner_promotion = cast(VersionModel, owner_entry.model).spec.promotion if owner_entry is not None else None
+            # Tagged means a ring, as everywhere else (V9): a shared document with only an `order` is still shared.
+            if owner_entry is None or (owner_promotion is not None and owner_promotion.ring is not None):
                 continue
             values = seen.setdefault((ring[0], ring[1], pin_key(category, target)), {})
             values.setdefault(pin.version, set()).add(owner)

@@ -85,7 +85,7 @@ def resolve_remote(
             and for a remote with a `path`.
         credentials: Asked for `auth`/`resolved_values` only when a clone is actually about to run, so an
             existing checkout, `fetch: external`, `type: local` and a `None` remote never resolve
-            anything (docs/work/remotes-at-scale.md C2). Mutually exclusive with `auth`/`resolved_values`.
+            anything (docs/design/asset-management.md C2). Mutually exclusive with `auth`/`resolved_values`.
 
     Returns:
         An existing directory. Never a path that might not exist yet — every

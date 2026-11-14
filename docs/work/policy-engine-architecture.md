@@ -12,7 +12,7 @@
 [gap_fit_v1.md](gap_fit_v1.md) gap #7 flags `policies` as "still fully
 open" — v2 has no `PolicyModel`, no policy engine, and no equivalent of any
 of v1's built-in policy types. Several concern-specific docs
-([tenant-zone-policy.md](tenant-zone-policy.md), `path-conventions.md`)
+(tenant-zone-policy.md, `path-conventions.md`)
 already address individual policy types directly, each following the
 established "model the one real check, don't port the generic engine"
 precedent. This doc is the umbrella catalog those feed into — it exists to
@@ -84,7 +84,7 @@ policy need," not a guess from the catalog doc's prose summary.
 
 **Tally: 6 of 19** need nothing beyond strata's own resolved document
 values (bucket A). **2 of 19** need a real Terraform plan (bucket B) — this
-is exactly the "full plan-time tier" [tenant-zone-policy.md](tenant-zone-policy.md)
+is exactly the "full plan-time tier" tenant-zone-policy.md
 already sizes for `tenant_zone` specifically. **9 of 19** (bucket C) need an
 entirely separate external integration regardless of how complete strata's
 own graph/plan data ever gets. The remaining 2 (`script`, `opa`) are
@@ -138,7 +138,7 @@ of the SBOM, and nothing for any bucket-A/B policy type either).
 
 ## Related work docs (concern-specific, each tracked independently)
 
-- [tenant-zone-policy.md](tenant-zone-policy.md) — `tenant_zone` (bucket B).
+- tenant-zone-policy.md — `tenant_zone` (bucket B).
   Static config-time tier implemented; full plan-time tier sized, not built.
 - `docs/design/path-conventions.md` — `path_convention` (bucket A). Resolved.
 - [sbom-generation.md](../design/sbom-generation.md) — the SBOM half of bucket C
@@ -256,7 +256,7 @@ once at least one real policy type exists to compare against).
   not shrink the real work (data production, not evaluation, is bucket C's
   actual cost), with two concrete non-collapsible exceptions (`checkov`'s
   existing rule library, `ai_review`'s non-deterministic LLM judgment).
-  Cross-linked from [tenant-zone-policy.md](tenant-zone-policy.md).
+  Cross-linked from tenant-zone-policy.md.
 - 2026-10-07: Resolved Open Question 1, per direct request to look at the
   next open item in [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
   own `## Remaining Work` checklist (which pointed back here). Checked

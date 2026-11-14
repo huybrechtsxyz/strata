@@ -28,6 +28,7 @@ from strata.controllers.graph_controller import GraphEdge, build_reference_graph
 from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import IndexEntry
 from strata.models.common_models import PlatformKind
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import display_path
 
 
@@ -80,20 +81,32 @@ def graph_command(path: Path | None, unreferenced: bool, output: str, quiet: boo
 
         if unreferenced:
             # Reachability follows deployments through `extends`, so their chains are resolved; nothing else of
-            # the validation pass is needed, so a problem elsewhere does not hide the list.
+            # the validation pass is needed, so a problem elsewhere does not hide the document list (artifacts
+            # aside, below).
             resolved, _ = resolve_deployment_chains(context.controller.index)
             candidates = cleanup_candidates(context.controller.index, resolved)
             # Artifacts nothing names (`artifact_unused` as a warning): their usage is read through the deployments'
-            # effective images, which needs a solution that loaded cleanly. A staged artifact is left out.
-            for name in unreferenced_artifacts(context) if context.ok else []:
-                artifact = context.controller.index.get(PlatformKind.ARTIFACT, name)
-                if artifact is not None:
-                    candidates.append((artifact, "artifact_unreferenced"))
+            # effective images, which needs a solution that loaded cleanly. A staged artifact is left out. When they
+            # cannot be judged, say so: an empty artifact part must not read as "no unused artifact".
+            findings = Diagnostics()
+            findings.extend(context.diagnostics)
+            if context.ok:
+                for name in unreferenced_artifacts(context):
+                    artifact = context.controller.index.get(PlatformKind.ARTIFACT, name)
+                    if artifact is not None:
+                        candidates.append((artifact, "artifact_unreferenced"))
+            elif context.controller.index.names_of(PlatformKind.ARTIFACT):
+                findings.info(
+                    "Artifacts are not listed: whether a deployment uses one is read through its effective images, "
+                    "which needs a solution that loads without errors.",
+                    code="graph_artifacts_skipped",
+                    hint="Fix the errors above, then run 'strata graph --unreferenced' again.",
+                )
             candidates.sort(key=lambda item: (item[0].ref.kind.value, item[0].ref.name))
             run.step(f"found {len(candidates)} unreferenced document(s) across {document_count} document(s)")
             if output == "console":
                 _print_candidates(candidates, context.root)
-            run.report(context.diagnostics, root=context.root, document_count=document_count)
+            run.report(findings, root=context.root, document_count=document_count)
             if isinstance(run.reporter, JsonReporter):
                 run.reporter.data = {
                     "unreferenced": [

@@ -5684,6 +5684,21 @@ def test_check_build_version_by_value_passes_when_the_values_agree(tmp_path: Pat
     assert check_build_version(build_path, _version("prd-rc", auth="1.0.0"), pinned_by_flag=True).items == []
 
 
+def test_check_build_version_ignores_a_pin_on_a_target_the_deployment_does_not_use(tmp_path: Path):
+    """A shared document pins `charts/other` for another product; the build left it out of `version.yaml`."""
+    build_path = _build(tmp_path, "version: [prd-core, prd-auth]\n")
+    _write_built_version(build_path, auth="1.0.0")
+
+    found = check_build_version(
+        build_path,
+        _version("datahub-prd", auth="1.0.0", other="9.9.9"),
+        pinned_by_flag=False,
+        targets={("charts", "auth")},
+    )
+
+    assert found.items == []
+
+
 def test_check_build_version_by_value_names_a_pin_the_deploy_dropped(tmp_path: Path):
     build_path = _build(tmp_path, "version: prd\n")
     _write_built_version(build_path, auth="1.0.0")

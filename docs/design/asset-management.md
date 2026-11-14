@@ -387,7 +387,7 @@ Per-customer credentials are per-integration: a shared identity is one integrati
 named by many assets; a distinct identity is one small integration document each. Templating
 the key references per customer is not built, pending evidence it is needed. See
 [integrations/git.md](../integrations/git.md) for the user-facing guide and
-`remotes-at-scale.md` (work doc) for how it was designed.
+`remotes-at-scale.md` (removed work doc; its open items are GitHub issues) for how it was designed.
 
 ### Validation
 
@@ -445,7 +445,7 @@ deployment, against the assets its workspace steps select.
   `effective_*()`, the merge-key table, the shorthand schema helper, the validation shape.
 - `workspace-overrides.md` (work doc) — why rebinding lives on the
   deployment, and the rule shared by every category.
-- `remotes-at-scale.md` (work doc) — the 300-customer premise behind
+- `remotes-at-scale.md` (removed work doc; its open items are GitHub issues) — the 300-customer premise behind
   `location`.
 - [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md) —
   `ProvisioningStepModel.targets`, the precedent `ProvisioningStepModel

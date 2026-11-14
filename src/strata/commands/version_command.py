@@ -263,7 +263,8 @@ def version_show(name: str, start_path: Path | None, output: str, quiet: bool, v
         run.step(f"found {len(pins)} pin(s), listed by {len(deployments)} deployment(s)")
 
         if output == "console":
-            ring = f"  (ring {promotion['ring']}, order {promotion['order']})" if promotion else ""
+            # `order` may be set without `ring` (only `ring` requires `order`), so read each part on its own.
+            ring = f"  (ring {promotion.get('ring', '-')}, order {promotion.get('order', '-')})" if promotion else ""
             click.echo(f"\n  {name}{ring}  {entry.source.relative_to(context.root).as_posix()}\n")
             if not pins:
                 click.echo("  (no pins)")

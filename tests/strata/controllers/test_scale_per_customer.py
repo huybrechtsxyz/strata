@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-customer scale (docs/work/remotes-at-scale.md, C6): ~300 customers, each one asset, one tenant and one
+"""Per-customer scale (docs/design/asset-management.md, C6): ~300 customers, each one asset, one tenant and one
 deployment, plus one version document pinning every customer.
 
 Built on a copy of the example solution under `config/`. Absolute timings depend on the machine and on how

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`source_sync` clone sites ask the credential resolver, lazily (docs/work/remotes-at-scale.md C2)."""
+"""`source_sync` clone sites ask the credential resolver, lazily (docs/design/asset-management.md C2)."""
 
 from pathlib import Path
 

@@ -16,7 +16,7 @@ on-disk artifacts (Terraform `.tfvars.json`, Helm `values.yaml`, Compose
 [ADR-0022](../decisions/0022-strata-build-run.md) (orchestration) and
 [ADR-0023](../decisions/0023-build-output-rendering.md) (what gets
 rendered). Like [validate-command.md](../design/validate-command.md) and
-[integration-layer.md](integration-layer.md), `src/strata/commands/build_command.py`
+integration-layer.md, `src/strata/commands/build_command.py`
 now exists and is registered in `cli.py` as `strata build run DEPLOYMENT` —
 thin glue over `strata/controllers/build_controller.py` (the orchestrator
 itself), matching `validate_command.py`/`values_command.py`'s shape exactly:
@@ -117,7 +117,7 @@ convention:
 
 - [ADR-0022](../decisions/0022-strata-build-run.md) — orchestration design (D1-D7)
 - [ADR-0023](../decisions/0023-build-output-rendering.md) — rendering design (D1-D5, Implementation Plan phases)
-- [ADR-0021](../decisions/0021-integration-layer.md) / [integration-layer.md](integration-layer.md) — the `Integration`/`InfraIntegration` classes this command will call
+- [ADR-0021](../decisions/0021-integration-layer.md) / integration-layer.md — the `Integration`/`InfraIntegration` classes this command will call
 - [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md) — why `sync_source()` copies verbatim and never rewrites a materialised source
 - [build-time-value-categories.md](../design/build-time-value-categories.md) — design in progress for the `features`/`variables`/`properties`/`custom` gap in `default_output()` table above
 - [remotes.md](remotes.md) — `sync_source()`'s own prerequisite (remote-to-filesystem-path resolution, done for `local`/`git`)
@@ -238,7 +238,7 @@ scoped v2 design (proposed, not yet implemented).
    byte-for-byte copies is now a recorded decision, not an open gap.
 5. **Build lifecycle hooks and `phase: build` policies — real, but not a
    `build run` gap; split and re-homed to
-   [lifecycle.md](lifecycle.md).** Both halves verified in v1:
+   lifecycle.md.** Both halves verified in v1:
    `run_build_command.py` fires `build_run_before`/`build_validate`/
    `build_generate`/`build_run_after` via
    `LifecycleController.execute_configuration_phase()`, and
@@ -252,7 +252,7 @@ scoped v2 design (proposed, not yet implemented).
      `ConfigurationSpecModel` doesn't even have a `lifecycle` field, which
      is exactly where v1's build hooks come from. Adding a call in
      `build_run()` would have nothing to read and no executor to call.
-     Tracked in [lifecycle.md](lifecycle.md), blocked on schema-parity
+     Tracked in lifecycle.md, blocked on schema-parity
      Issue 5 (hierarchy precedence).
    - **Policies are already a recorded decision.**
      [ADR-0020](../decisions/0020-v1-consumer-feature-priority.md) lists
@@ -435,7 +435,7 @@ is a missed conversion, but neither has been revisited:
   references outside `models/`), and v2's `ConfigurationSpecModel` lacks the
   `lifecycle` field v1's build hooks actually read from — so there is
   nothing for `build_run()` to call and nothing to call it with. Re-homed to
-  a new [lifecycle.md](lifecycle.md), which records v2's inert schema (seven
+  a new lifecycle.md, which records v2's inert schema (seven
   kinds), v1's real `LifecycleController` mechanism, a correction to
   ADR-0021 D11's characterisation of v1's interpreter dispatch, and nine
   open questions gating implementation — gated in turn on schema-parity

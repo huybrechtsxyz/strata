@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
-from strata.controllers.deployment_resolution import deployment_of, resolve_deployment_chains
+from strata.controllers.deployment_resolution import deployment_of, first_tagged_version, resolve_deployment_chains
 from strata.controllers.pinnable_targets import pinnable_targets
 from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.version_composition import compose_versions
@@ -108,12 +108,7 @@ def _deployable(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> l
 
 def _tagged_document(index: DocumentIndex, deployment: DeploymentModel) -> IndexEntry | None:
     """The first tagged version document `deployment` lists: the slot it is in (V9)."""
-    for name in deployment.spec.version_names():
-        entry = index.get(PlatformKind.VERSION, name)
-        promotion = cast(VersionModel, entry.model).spec.promotion if entry is not None else None
-        if entry is not None and promotion is not None and promotion.ring is not None:
-            return entry
-    return None
+    return first_tagged_version(index, deployment.spec.version_names())
 
 
 def _listing_workspaces(deployments: list[DeploymentModel]) -> dict[str, set[str]]:
@@ -510,19 +505,21 @@ def _select_source_wave(ring_view: PromotionRingView, target_wave: str | None) -
     return match
 
 
-def _source_values(source: PromotionWaveView, ring: str) -> dict[tuple[str, str], str]:
-    """`(category, target) -> value` the source wave runs; deployments that disagree on a value stop `apply`."""
+def _is_own_document(pin: PromotionPinView, wave: PromotionWaveView) -> bool:
+    """A pin owned by a document only some of the wave's deployments list: a customer's own document, which moves on
+    its own cadence (R5), never promoted from or into."""
+    everyone = set(wave.deployments)
+    return bool(everyone) and pin.owner != wave.version.meta.name and set(pin.deployments) != everyone
+
+
+def _source_values(source: PromotionWaveView) -> dict[tuple[str, str], set[str]]:
+    """`(category, target) -> values` the source wave's deployments run in common: rows of a customer's own document
+    are left out, since what one customer runs is not what the ring promotes."""
     values: dict[tuple[str, str], set[str]] = defaultdict(set)
     for pin in source.pins:
-        values[(pin.category, pin.target)].add(pin.value)
-    disagreeing = {key: found for key, found in values.items() if len(found) > 1}
-    if disagreeing:
-        shown = "; ".join(f"{pin_key(*key)}: {sorted(found)}" for key, found in sorted(disagreeing.items()))
-        raise UsageError(
-            f"The deployments of ring '{ring}' do not agree on what to promote ({shown}) — align them first, or "
-            "promote from one wave with --wave."
-        )
-    return {key: next(iter(found)) for key, found in values.items()}
+        if not _is_own_document(pin, source):
+            values[(pin.category, pin.target)].add(pin.value)
+    return values
 
 
 def _write_copied_pins(path: Path, common_keys: list[tuple[str, str, str]]) -> None:
@@ -599,27 +596,45 @@ def apply_promotion(
         )
     source_ring = next(r for r in view.rings if r.order == preceding_orders[0])
     source_wave = _select_source_wave(source_ring, target_wave.wave)
-    source_values = _source_values(source_wave, source_ring.ring)
+    source_values = _source_values(source_wave)
 
-    everyone = set(target_wave.deployments)
     by_owner: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
     written: list[tuple[str, str, str, str]] = []
     skipped: list[tuple[str, str, str]] = []
-    seen: set[tuple[str, str]] = set()
+    disagreeing: dict[tuple[str, str], set[str]] = {}
+    seen: set[tuple[str, str, str]] = set()
+    source_any = {(pin.category, pin.target) for pin in source_wave.pins}
     for pin in target_wave.pins:
         key = (pin.category, pin.target)
-        if key not in source_values or key in seen:
+        # One decision per (key, owner): two rows of one owner differ only in value or in who runs them.
+        if (*key, pin.owner) in seen:
             continue
-        seen.add(key)
-        value = source_values[key]
+        seen.add((*key, pin.owner))
+        if key not in source_values:
+            if key in source_any:
+                # The source ring runs it only from customers' own documents: no one value to promote.
+                skipped.append((pin_key(*key), pin.owner, "source own documents"))
+            continue
         if pin.shared and not shared:
             skipped.append((pin_key(*key), pin.owner, "shared"))
             continue
-        if everyone and pin.owner != target_wave.version.meta.name and set(pin.deployments) != everyone:
+        if _is_own_document(pin, target_wave):
             skipped.append((pin_key(*key), pin.owner, "own document"))
             continue
+        values = source_values[key]
+        if len(values) > 1:
+            disagreeing[key] = values
+            continue
+        value = next(iter(values))
         by_owner[pin.owner].append((pin.category, pin.target, value))
         written.append((pin.category, pin.target, value, pin.owner))
+    if disagreeing:
+        # Only for what would be written: a key the target skips anyway does not block the rest.
+        shown = "; ".join(f"{pin_key(*key)}: {sorted(found)}" for key, found in sorted(disagreeing.items()))
+        raise UsageError(
+            f"The deployments of ring '{source_ring.ring}' do not agree on what to promote ({shown}) — align them "
+            "first, or promote from one wave with --wave."
+        )
     for key in sorted(set(source_values) - {(pin.category, pin.target) for pin in target_wave.pins}):
         skipped.append((pin_key(*key), "", "not pinned"))
 

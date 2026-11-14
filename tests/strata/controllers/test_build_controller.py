@@ -2556,7 +2556,7 @@ def test_build_run_dry_run_reports_output_template_would_validate(tmp_path: Path
 # for that reason, not a reachable path via a valid solution.
 
 # ---------------------------------------------------------------------------
-# build_run() + clone credentials (docs/work/remotes-at-scale.md C2)
+# build_run() + clone credentials (docs/design/asset-management.md C2)
 # ---------------------------------------------------------------------------
 
 _GIT_TOKEN = "ghp_buildtimetoken123"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `RemoteCredentialResolver` (docs/work/remotes-at-scale.md, C5)."""
+"""Tests for `RemoteCredentialResolver` (docs/design/asset-management.md, C5)."""
 
 from pathlib import Path
 

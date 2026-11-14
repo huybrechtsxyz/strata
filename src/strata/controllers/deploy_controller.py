@@ -50,6 +50,7 @@ from strata.controllers.integration_resolution import (
     resolve_integration,
     resolve_output_store_integration,
 )
+from strata.controllers.pinnable_targets import pinnable_targets
 from strata.controllers.policy_results import append_policy_result, image_tag_policy_result
 from strata.controllers.security_gate_controller import evaluate_security_gates
 from strata.controllers.solution_context import SolutionContext
@@ -836,7 +837,13 @@ def _chart_registry_credentials(
 _HELM_BUILD_CATEGORIES = ("charts", "artifacts")
 
 
-def check_build_version(build_path: Path, version: VersionModel | None, *, pinned_by_flag: bool) -> Diagnostics:
+def check_build_version(
+    build_path: Path,
+    version: VersionModel | None,
+    *,
+    pinned_by_flag: bool,
+    targets: set[tuple[str, str]] | None = None,
+) -> Diagnostics:
     """An error when the deploy's pins differ from the build's and the build holds Helm modules
     (`build_version_mismatch`, docs/design/helm-chart-deployment.md, "Version pins at deploy").
 
@@ -854,6 +861,8 @@ def check_build_version(build_path: Path, version: VersionModel | None, *, pinne
         build_path: The build being deployed.
         version: The deploy's version: the `--pin` documents when given, else the deployment's, composed.
         pinned_by_flag: Whether `version` came from `--pin`, for the message.
+        targets: What the deployment uses (`pinnable_targets()`), the same set the build wrote `version.yaml` for;
+            `None` compares every pin.
     """
     diagnostics = Diagnostics()
     try:
@@ -878,12 +887,14 @@ def check_build_version(build_path: Path, version: VersionModel | None, *, pinne
 
     built_pins = _built_pins(build_path)
     if built_pins is not None:
+        # Only pins on a target the deployment uses: the build wrote no others to `version.yaml`, so a shared
+        # document's pin for another product would otherwise read as "not pinned in the build".
         deployed: dict[str, tuple[str, str]] = {}
         if version is not None:
             deployed = {
                 pin_key(category, target): (pin.version, pin_owner(version, category, target))
                 for category, target, pin in version.spec.pins.iter_pins()
-                if category in _HELM_BUILD_CATEGORIES
+                if category in _HELM_BUILD_CATEGORIES and (targets is None or (category, target) in targets)
             }
         for key in sorted(set(built_pins) | set(deployed)):
             built_value = built_pins.get(key)
@@ -1118,7 +1129,10 @@ def deploy_run(
     if not destroy:
         diagnostics.extend(
             check_build_version(
-                build_path, deployment_version(context.controller.index, deployment), pinned_by_flag=pin is not None
+                build_path,
+                deployment_version(context.controller.index, deployment),
+                pinned_by_flag=pin is not None,
+                targets=pinnable_targets(context.controller.index, deployment),
             )
         )
         if not diagnostics.ok:

@@ -376,7 +376,7 @@ def _check_deployment_layers(
 
 def _check_deployment_tenant_geography(index: DocumentIndex, deployment: DeploymentModel) -> Diagnostics:
     """Cross-check a deployment's provider region(s) against its tenant's allowed
-    geographies (docs/work/tenant-zone-policy.md's "static tier" — the
+    geographies (the removed tenant-zone-policy work doc's "static tier" — the
     cheap, config-time equivalent of v1's real, plan-time `tenant_zone` policy).
 
     Fully automatic — no config field anywhere turns this on or off; it
@@ -1759,7 +1759,7 @@ def _check_remotes(index: DocumentIndex, solution: SolutionModel | None) -> Diag
 
 # ---------------------------------------------------------------------------
 # Asset location -> Integration: credentials for cloning an asset's own repository
-# (docs/work/remotes-at-scale.md C3).
+# (docs/design/asset-management.md C3).
 # ---------------------------------------------------------------------------
 
 

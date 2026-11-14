@@ -366,7 +366,7 @@ durable, reviewable record.
     without the generic phase/enforcement-dispatching policy framework
     around it); `promotions.yaml` declares a `progressions.standard` ring
     sequence but no active `strategies` entry. `policies` now has its own
-    catalog doc — [docs/work/tenant-zone-policy.md](tenant-zone-policy.md)
+    catalog doc — the removed tenant-zone-policy work doc
     (2026-09-30) — scoped to `tenant_zone` (the one real, active-by-
     declaration remaining type), not the full 18-type documented catalog;
     catalog only so far, no v2 design decisions made yet. That doc also

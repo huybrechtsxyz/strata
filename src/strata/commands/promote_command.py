@@ -267,6 +267,7 @@ def _print_apply_result(result: ApplyResult, root: Path) -> None:
         "shared": "is shared by other workspaces; use --shared",
         "own document": "is a document only some deployments list (a customer's own); promote it by hand",
         "not pinned": "is not pinned in the target ring; add it with 'strata version set'",
+        "source own documents": "comes only from customers' own documents in the source ring; no one value to promote",
     }
     for target, owner, reason in result.skipped:
         where = f" ({owner})" if owner else ""

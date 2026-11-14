@@ -236,7 +236,6 @@ _POLICIES: tuple[_PolicyRow, ...] = (
     _PolicyRow("image_tag_policy", "build", check=_image_tag_check, findings=None),
     _PolicyRow("provisioner_lock_policy", "build", check=_provisioner_lock_check, findings=None),
 )
-from strata.models.deployment_model import VersionPins
 
 _ROWS = {row.name: row for row in _POLICIES}
 

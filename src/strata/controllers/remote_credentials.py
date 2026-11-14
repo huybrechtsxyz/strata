@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Credentials for fetching a remote at build time (docs/work/remotes-at-scale.md, C5).
+"""Credentials for fetching a remote at build time (docs/design/asset-management.md, C5).
 
 `resolve_remote()` can already authenticate a git clone from an `AuthenticationModel` plus the
 values its key references resolve to, but a build has no resolved values (`build run` renders
