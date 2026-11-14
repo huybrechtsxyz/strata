@@ -1,6 +1,6 @@
 /**
  * deploymentSelector.ts - the deployment the Integrations and Policies views
- * are scoped to (docs/work/vscode-integrations-policies-views.md V2).
+ * are scoped to (docs/design/vscode-integrations-policies-views.md V2).
  *
  * One status bar item plus the `Strata: Select Deployment` quick pick of
  * every non-partial deployment from `strata deploy list`. The choice is

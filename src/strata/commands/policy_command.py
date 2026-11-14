@@ -13,7 +13,7 @@ from typing import Any, TypeVar, cast
 import click
 
 from strata.commands.json_output import JsonReporter
-from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
+from strata.commands.options import output_option, pin_callback, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import CommandRun, command_run
 from strata.controllers.checkov_controller import CheckovFindingsReport
 from strata.controllers.policy_controller import PolicyInfo, check_policies, list_policies, policy_findings
@@ -22,6 +22,7 @@ from strata.controllers.security_gate_controller import ImageFindingsReport
 from strata.controllers.solution_context import SolutionContext, open_solution
 from strata.integrations.security_findings import SecurityIssue
 from strata.models.audit_manifest_model import ManifestPolicyResultModel
+from strata.models.deployment_model import VersionPins
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import build_dir
 
@@ -40,9 +41,10 @@ def _shared_options(f: _F) -> _F:
     f = cast(_F, verbose_option(quiet_option(output_option(f))))
     f = click.option(
         "--pin",
-        default=None,
+        multiple=True,
+        callback=pin_callback,
         metavar="VERSION",
-        help="Resolve the deployment (and credentials) with this kind: version document, as 'deploy run --pin' does.",
+        help="Resolve the deployment (and credentials) with these kind: version documents (repeatable), as 'deploy run --pin' does.",
     )(f)
     f = click.option(
         "--build-path",
@@ -79,7 +81,7 @@ def list_command(
     deployment: str,
     path: Path | None,
     build_path: Path | None,
-    pin: str | None,
+    pin: VersionPins,
     output: str,
     quiet: bool,
     verbose: bool,
@@ -171,7 +173,7 @@ def check_command(
     commit: str | None,
     path: Path | None,
     build_path: Path | None,
-    pin: str | None,
+    pin: VersionPins,
     output: str,
     quiet: bool,
     verbose: bool,
@@ -235,7 +237,7 @@ def findings_command(
     integration: str | None,
     path: Path | None,
     build_path: Path | None,
-    pin: str | None,
+    pin: VersionPins,
     output: str,
     quiet: bool,
     verbose: bool,

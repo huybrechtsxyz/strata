@@ -142,8 +142,14 @@ def reconcile_version(
     version: VersionModel,
     *,
     unused_artifacts: Collection[str] = (),
+    scope: set[tuple[str, str]] | None = None,
 ) -> list[ReconcileRow]:
     """Compare `version.spec.pins` against the solution's real inventory.
+
+    `scope` (docs/design/version-composition.md V13) limits the `add`/`needs_value` candidates to the targets the
+    deployments listing this document use and that none of their other listed documents pins
+    (`version_composition.version_scope()`); `None` offers every target in the solution, as for a document no
+    deployment lists yet. `remove` candidates are always the pins whose target no longer exists.
 
     Read-only: never mutates `version` or any file. Returns every add/remove
     candidate, sorted by category (declaration order) then name. A real
@@ -173,6 +179,8 @@ def reconcile_version(
         for name in sorted(real_targets.keys() - declared[category]):
             if category == "artifacts" and name in unused_artifacts:
                 continue
+            if scope is not None and (category, name) not in scope:
+                continue
             seed_value = real_targets[name]
             if seed_value is not None:
                 rows.append(ReconcileRow(category=category, name=name, action="add", seed_value=seed_value))
@@ -188,10 +196,10 @@ def scaffold_version(
     solution: SolutionModel | None,
     name: str,
     *,
-    workspace: str,
     from_name: str | None,
 ) -> Path:
-    """Create `versions/<name>.yaml` — a new, minimal `kind: version` document.
+    """Create `versions/<name>.yaml` — a new, minimal `kind: version` document. It declares no `spec.workspace`
+    (deprecated, docs/design/version-composition.md V4): the deployments that list it decide where it applies.
 
     `--from` (`from_name`) clones an existing version document's pin *keys*
     only: each cloned key is reseeded with its target's CURRENT real
@@ -203,8 +211,7 @@ def scaffold_version(
 
     Raises:
         UsageError: `name` already names an indexed version document or an
-            on-disk file at the target path; `workspace` names no indexed
-            Workspace document; `from_name` names no indexed version
+            on-disk file at the target path; `from_name` names no indexed version
             document; or `name` would not produce a schema-valid `kind:
             version` document (e.g. doesn't match `PlatformName`'s
             pattern) — caught before writing, not left for the next
@@ -212,8 +219,6 @@ def scaffold_version(
     """
     if index.get(PlatformKind.VERSION, name) is not None:
         raise UsageError(f"A version document named '{name}' already exists.")
-    if index.get(PlatformKind.WORKSPACE, workspace) is None:
-        raise UsageError(f"--workspace names an unknown workspace: '{workspace}'.")
 
     destination = root / "versions" / f"{name}.yaml"
     if destination.exists():
@@ -235,7 +240,7 @@ def scaffold_version(
         "apiVersion": PlatformVersion.v2.value,
         "kind": PlatformKind.VERSION.value,
         "meta": {"name": name},
-        "spec": {"workspace": workspace, "pins": pins},
+        "spec": {"pins": pins},
     }
     try:
         VersionModel.model_validate(document)

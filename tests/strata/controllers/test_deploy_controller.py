@@ -22,6 +22,7 @@ from strata.integrations.base import ReadinessProblem
 from strata.integrations.helm import HelmIntegration, _repo_alias
 from strata.integrations.resolved_context import ValueResolution
 from strata.integrations.terraform import TerraformIntegration
+from strata.models.version_model import VersionModel
 from strata.utils.errors import UsageError
 from strata.utils.transport import CommandResult
 
@@ -5568,6 +5569,37 @@ def test_deploy_run_takes_the_pin_the_helm_build_was_made_with(tmp_path: Path, _
     assert diagnostics.ok, diagnostics.messages()
 
 
+@pytest.mark.slow
+def test_deploy_run_catches_a_version_document_edited_after_the_helm_build(tmp_path: Path, _capture):
+    """docs/design/version-composition.md V8: same `--pin`, but the artifact pin the chart's values got at build time
+    changed since; compared by value against the build's `version.yaml`."""
+    root = _helm_solution(tmp_path)
+    _write_artifact(root, image_tag="1.0.0", pin="2.0.0")
+    module = root / "module.yaml"
+    module.write_text(
+        module.read_text(encoding="utf-8").replace(
+            "  services:\n    - name: server\n",
+            "  services:\n    - name: server\n      artifact: api\n"
+            "  configuration:\n    image:\n"
+            '      repository: "${artifact:api.image_name}"\n      tag: "${artifact:api.image_tag}"\n',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path, pin="prd")
+    built = yaml.safe_load((build_path / "version.yaml").read_text(encoding="utf-8"))
+    assert built["spec"]["pins"]["artifacts"] == {"api": {"version": "2.0.0"}}
+    _write_artifact(root, image_tag="1.0.0", pin="2.1.0")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
+
+    [error] = diagnostics.errors
+    assert error.code == "build_version_mismatch"
+    assert error.message.startswith("artifacts/api is '2.1.0' now (prd) but '2.0.0' in the build.")
+    assert _capture == [], "nothing runs before the check"
+
+
 def test_a_destroy_is_not_held_to_the_builds_version(tmp_path: Path, _capture):
     """Uninstalling a release does not depend on the versions it was installed with."""
     root = _helm_solution_with_version(tmp_path)
@@ -5604,14 +5636,74 @@ def _build(tmp_path: Path, resolved: str | None, *, helm: bool = True) -> Path:
 )
 @pytest.mark.slow
 def test_check_build_version_has_nothing_to_report(tmp_path: Path, resolved, helm, version):
-    assert check_build_version(_build(tmp_path, resolved, helm=helm), version, pinned_by_flag=True).items == []
+    assert (
+        check_build_version(_build(tmp_path, resolved, helm=helm), _version(version), pinned_by_flag=True).items == []
+    )
+
+
+def _version(name: str | None, **pins: str) -> VersionModel | None:
+    """A version document named `name` with `charts` pins, or `None`."""
+    if name is None:
+        return None
+    return VersionModel.model_validate({"meta": {"name": name}, "spec": {"pins": {"charts": pins} if pins else {}}})
 
 
 def test_check_build_version_names_a_changed_spec_version(tmp_path: Path):
     """Without `--pin`, the deployment's own `spec.version` changed since the build."""
     build_path = _build(tmp_path, "version: prd-1\n")
 
-    [error] = check_build_version(build_path, "prd-2", pinned_by_flag=False).errors
+    [error] = check_build_version(build_path, _version("prd-2"), pinned_by_flag=False).errors
 
     assert error.message.startswith("This deploy uses version 'prd-2', but the build was made with version 'prd-1'.")
     assert "strata build run --pin prd-2" in error.message
+
+
+def _write_built_version(build_path: Path, **charts: str) -> None:
+    (build_path / "version.yaml").write_text(
+        yaml.safe_dump({"kind": "version", "meta": {"name": "auth-prd"}, "spec": {"pins": {"charts": charts}}}),
+        encoding="utf-8",
+    )
+
+
+def test_check_build_version_compares_values_with_the_builds_version_file(tmp_path: Path):
+    """docs/design/version-composition.md V8: same document name, but its chart pin was edited after the build."""
+    build_path = _build(tmp_path, "version: prd\n")
+    _write_built_version(build_path, auth="1.0.0")
+
+    [error] = check_build_version(build_path, _version("prd", auth="1.1.0"), pinned_by_flag=False).errors
+
+    assert error.code == "build_version_mismatch"
+    assert error.message.startswith("charts/auth is '1.1.0' now (prd) but '1.0.0' in the build.")
+
+
+def test_check_build_version_by_value_passes_when_the_values_agree(tmp_path: Path):
+    """A different list of documents is fine when the pins the build applied are the same values."""
+    build_path = _build(tmp_path, "version: [prd-core, prd-auth]\n")
+    _write_built_version(build_path, auth="1.0.0")
+
+    assert check_build_version(build_path, _version("prd-rc", auth="1.0.0"), pinned_by_flag=True).items == []
+
+
+def test_check_build_version_ignores_a_pin_on_a_target_the_deployment_does_not_use(tmp_path: Path):
+    """A shared document pins `charts/other` for another product; the build left it out of `version.yaml`."""
+    build_path = _build(tmp_path, "version: [prd-core, prd-auth]\n")
+    _write_built_version(build_path, auth="1.0.0")
+
+    found = check_build_version(
+        build_path,
+        _version("datahub-prd", auth="1.0.0", other="9.9.9"),
+        pinned_by_flag=False,
+        targets={("charts", "auth")},
+    )
+
+    assert found.items == []
+
+
+def test_check_build_version_by_value_names_a_pin_the_deploy_dropped(tmp_path: Path):
+    build_path = _build(tmp_path, "version: prd\n")
+    _write_built_version(build_path, auth="1.0.0")
+
+    [error] = check_build_version(build_path, _version("other"), pinned_by_flag=True).errors
+
+    assert "charts/auth is not pinned now but '1.0.0' in the build." in error.message
+    assert error.hint == "Rebuild (strata build run --pin other), or deploy what the build holds."

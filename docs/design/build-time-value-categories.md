@@ -425,7 +425,7 @@ reads `graph.version.spec.promotion` directly from it, no separate lookup.
 - [ADR-0024](../decisions/) — tenant-defaults merge (`merge_deployment_specs()`), the only `properties`/`custom` merge that exists today.
 - `build-command.md` (work doc) — tracks the original gap and the `OutputProfileModel` dependency.
 - [provisioning-injection-model.md](../archive/provisioning-injection-model.md) — Context lifetime, build-time vs. deploy-time split.
-- `lifecycle.md` (work doc) — sibling, NOT the same design: same source data, translated to script env vars instead of tfvars JSON.
+- `lifecycle.md` (removed work doc; its open items are GitHub issues) — sibling, NOT the same design: same source data, translated to script env vars instead of tfvars JSON.
 - [deployment-tier-resource-sizing.md](deployment-tier-resource-sizing.md) —
   **decided (ADR-0034)**: per-deployment SKU/deploy-tier selection stays a
   plain, opaque `properties` value (e.g. `deploy_tier`) flowing through

@@ -12,13 +12,14 @@ from pathlib import Path
 import click
 
 from strata.commands.json_output import JsonReporter
-from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
+from strata.commands.options import output_option, pin_callback, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.effective_images import effective_images, unknown_image_modules
 from strata.controllers.image_tag_policy import check_image_tag_policy, unknown_module_message
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import resolve_deployment_workspace
 from strata.integrations.resolved_context import EffectiveImage, UnknownImageModule
+from strata.models.deployment_model import VersionPins, version_name_list
 from strata.utils.diagnostics import Diagnostics
 
 
@@ -33,16 +34,17 @@ from strata.utils.diagnostics import Diagnostics
 )
 @click.option(
     "--pin",
-    default=None,
+    multiple=True,
+    callback=pin_callback,
     metavar="VERSION",
-    help="Override spec.version with this kind: version document for this invocation only. "
+    help="Override spec.version with these kind: version documents (repeatable; what is passed replaces the deployment's whole list) for this invocation only. "
     "Pass the same value to 'build run --pin' and 'deploy run --pin'.",
 )
 @output_option
 @quiet_option
 @verbose_option
 def deploy_images_command(
-    deployment: str, start_path: Path | None, pin: str | None, output: str, quiet: bool, verbose: bool
+    deployment: str, start_path: Path | None, pin: VersionPins, output: str, quiet: bool, verbose: bool
 ) -> None:
     """List the container images DEPLOYMENT will run, with the tag after any version pin.
 
@@ -107,10 +109,19 @@ def deploy_images_command(
             run.reporter.data = {
                 "deployment": deployment,
                 "version": resolved.spec.version,
-                "pin": pin,
+                "versions": resolved.spec.version_names(),
+                "pin": _pin_value(pin),
                 "images": [asdict(row) for row in rows],
                 "unknown_image_modules": [asdict(module) for module in unknown],
             }
+
+
+def _pin_value(pin: VersionPins) -> str | list[str] | None:
+    """`data.pin`: the one `--pin` as a name, several as a list, `None` without the flag."""
+    names = version_name_list(pin)
+    if not names:
+        return None
+    return names[0] if len(names) == 1 else names
 
 
 def _source(row: EffectiveImage) -> str:

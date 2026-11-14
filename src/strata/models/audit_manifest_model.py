@@ -230,7 +230,7 @@ class ManifestPolicyResultModel(PlatformBaseModel):
 
 
 # Commented out, not deleted: no real producer populates this today (confirmed — zero
-# references outside this model/docs). docs/work/output-store-lock-audit.md plans to
+# references outside this model/docs). the removed output-store-lock-audit work doc plans to
 # reactivate this as the audit record for the DeploymentOutputStore's own CAS-retry
 # writes, not just a Terraform backend lock — uncomment (and restore the `lock` field
 # on DeploymentManifestModel below) then.

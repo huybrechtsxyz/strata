@@ -42,7 +42,9 @@ Three v1 fields are deliberately NOT ported:
   reconsidered: once `spec.workspace` existed to group every version
   document by product, a dedicated kind's only job was a `promote status`
   table equally derivable by tagging `Version` documents directly. See
-  `VersionPromotionModel` below. Not a resurrection of the original
+  `VersionPromotionModel` below. (`spec.workspace` itself was removed in
+  2.7, ADR-0065: the deployments listing a document now say which
+  workspaces use it, and promotion groups by them.) Not a resurrection of the original
   `spec.ring` this bullet dropped — that duplicated `meta.name` as a bare
   top-level field; `spec.promotion.ring` is one tag among three
   (`ring`/`order`/`wave`), grouped in its own optional sub-model.
@@ -70,7 +72,7 @@ from datetime import date
 from enum import Enum
 from typing import Annotated, Any, ClassVar
 
-from pydantic import ConfigDict, Field, StringConstraints, model_validator
+from pydantic import ConfigDict, Field, PrivateAttr, StringConstraints, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
@@ -80,7 +82,6 @@ from strata.models.common_models import (
     scalar_shorthand_schema,
     validate_kind_matches,
 )
-from strata.models.reference_fields import References
 
 #: Pin categories, in the order they are reported. Each maps to exactly one
 #: field elsewhere in the schema — see `VersionPinsModel`.
@@ -320,22 +321,26 @@ class VersionPromotionModel(PlatformBaseModel):
 
 
 class VersionSpecModel(PlatformBaseModel):
-    """Specification for a version document."""
+    """Specification for a version document. It names no workspace: the deployments that list it in `spec.version`
+    decide where it applies.
 
-    workspace: Annotated[PlatformName, References(PlatformKind.WORKSPACE)] | None = Field(
-        None,
-        description="Name of the Workspace this version document applies to, which limits the "
-        "effect of editing it to deployments of that workspace. Every deployment that "
-        "references this document must use that workspace. When unset, the first "
-        "referencing deployment establishes it; a declared value is authoritative and "
-        "a mismatch is an error.\n\n"
-        "Design notes: Name of the Workspace document this version document applies "
-        "to. Bounds the blast radius of editing this file to deployments running that "
-        "one workspace. Phase 2 validation checks every Deployment referencing this "
-        "document (via 'spec.version') agrees on the workspace: the first real "
-        "reference establishes it when unset here, a declared value is authoritative, "
-        "and a mismatch is an error.",
-    )
+    Design notes:
+    `spec.workspace` was removed in 2.7 (ADR-0064, ADR-0065); a document that still has it fails to load with a
+    message that says so.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_removed_workspace(cls, value: Any) -> Any:
+        """`spec.workspace` was removed (ADR-0065): say so and how to fix it, instead of pydantic's generic
+        "extra inputs are not permitted"."""
+        if isinstance(value, dict) and "workspace" in value:
+            raise ValueError(
+                "'spec.workspace' was removed in strata 2.7: a version document no longer names a workspace, the "
+                "deployments that list it in 'spec.version' decide where it applies. Delete the 'workspace:' line."
+            )
+        return value
+
     promotion: VersionPromotionModel | None = Field(
         None,
         description="Optional rollout tags (`ring`, `order`, `wave`). Omit for a product with no "
@@ -385,3 +390,46 @@ class VersionModel(PlatformBaseModel):
         """Reject a document declaring a different kind (ADR-0016)."""
         validate_kind_matches(self.kind, PlatformKind.VERSION)
         return self
+
+
+class ComposedVersionModel(VersionModel):
+    """The union of several version documents' pins, for one deployment (docs/design/version-composition.md V6).
+
+    Not a document: never loaded from or written to the solution. Built by `version_composition.compose_versions()`.
+    `meta.name` is the deployment's name; the owner of each pin and the composed documents are kept beside the
+    model, read through `pin_owner()` and `version_names()`.
+    """
+
+    _owners: dict[str, str] = PrivateAttr(default_factory=dict)
+    _names: list[str] = PrivateAttr(default_factory=list)
+
+
+def pin_key(category: str, name: str) -> str:
+    """The matrix key of a pin: `category/target` (`remotes/iac`)."""
+    return f"{category}/{name}"
+
+
+def pin_owner(version: VersionModel, category: str, name: str) -> str:
+    """The version document a pin of `version` came from: its owner in a composed version, else its `meta.name`."""
+    if isinstance(version, ComposedVersionModel):
+        return version._owners.get(pin_key(category, name), version.meta.name)
+    return version.meta.name
+
+
+def version_names(version: VersionModel | None) -> list[str]:
+    """The version documents `version` stands for: the composed ones, its own name, or none."""
+    if version is None:
+        return []
+    if isinstance(version, ComposedVersionModel):
+        return list(version._names)
+    return [version.meta.name]
+
+
+def pin_owners(version: VersionModel | None) -> dict[str, str]:
+    """`category/target -> owning document` for every pin of `version`."""
+    if version is None:
+        return {}
+    return {
+        pin_key(category, name): pin_owner(version, category, name)
+        for category, name, _pin in version.spec.pins.iter_pins()
+    }

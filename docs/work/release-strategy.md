@@ -407,7 +407,7 @@ Execution order (each its own small, checked phase per repo convention —
   Verification venv removed after. The commit and the `v2.0.0-alpha26` tag are left to the maintainer.
 - 2026-10-20: **Built alpha25** — bumped `VERSION.txt` to `2.0.0-Alpha25` (normalizes to `2.0.0a25`;
   confirmed via `packaging.version.Version` first; the file has no trailing newline, as before), cut after
-  the per-customer repositories work ([remotes-at-scale.md](remotes-at-scale.md)): asset `location`
+  the per-customer repositories work (remotes-at-scale.md): asset `location`
   credentials for every build-time clone with the new `strata validate` checks, a 300-customer scale test
   that found and fixed a quadratic `DocumentIndex.names_of()`, loading with libyaml's safe loader (about 2x
   faster `open_solution`), and the selective-promotion design (not built). Beta not considered in this bump.

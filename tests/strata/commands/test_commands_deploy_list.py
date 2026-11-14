@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `strata deploy list` (docs/work/vscode-integrations-policies-views.md V1)."""
+"""Tests for `strata deploy list` (docs/design/vscode-integrations-policies-views.md V1)."""
 
 import json
 from pathlib import Path
@@ -49,6 +49,24 @@ def test_list_resolves_extends_and_marks_partials(tmp_path):
     assert Path(rows["app"].source).name == "app.yaml"
 
 
+def test_a_deployment_listing_several_version_documents(tmp_path):
+    """docs/design/version-composition.md V16: `versions` holds the list (base first), `version` only a single name,
+    the ring comes from the tagged document, and `--version` matches any listed document."""
+    root = _solution(tmp_path)
+    _write(root, "core.yaml", "version", "prd-core", "  pins: {}\n")
+    _write(root, "app-v.yaml", "version", "prd-app", "  promotion:\n    ring: prd\n    order: 3\n  pins: {}\n")
+    _write(root, "base.yaml", "deployment", "base", "  partial: true\n  workspace: main\n  version: prd-core\n")
+    _write(root, "app.yaml", "deployment", "app", "  extends: base\n  version: prd-app\n  environments:\n    - prd\n")
+    index = open_solution(root).controller.index
+
+    rows = {row.name: row for row in list_deployments(index)}
+
+    assert (rows["app"].versions, rows["app"].ring) == (("prd-core", "prd-app"), "prd")
+    assert rows["base"].versions == ("prd-core",)
+    assert [row.name for row in list_deployments(index, version="prd-app")] == ["app"]
+    assert [row.name for row in list_deployments(index, version="prd-core")] == ["app", "base"]
+
+
 def test_list_json_shape(tmp_path):
     result = _invoke("--path", str(_solution(tmp_path)), "--output", "json")
     assert result.exit_code == EXIT_SUCCESS, result.output
@@ -59,7 +77,7 @@ def test_list_json_shape(tmp_path):
         "workspace",
         "extends",
         "tenant",
-        "version",
+        "versions",
         "ring",
         "order",
         "wave",
@@ -69,7 +87,7 @@ def test_list_json_shape(tmp_path):
     }
     assert rows[0]["environments"] == ["prd"]
     assert rows[0]["extends"] == "base"
-    assert (rows[0]["tenant"], rows[0]["version"], rows[0]["ring"]) == (None, None, None)
+    assert (rows[0]["tenant"], rows[0]["versions"], rows[0]["ring"]) == (None, [], None)
 
 
 def test_list_console_marks_partials(tmp_path):
@@ -117,15 +135,15 @@ def _matrix_solution(tmp_path: Path) -> Path:
     root = _solution(tmp_path)
     for name in ("t1", "t2"):
         _write(root, f"tenant-{name}.yaml", "tenant", name, _TENANT.format(name=name))
-    _write(root, "v-dev.yaml", "version", "v-dev", "  workspace: main\n  promotion:\n    ring: dev\n    order: 1\n")
+    _write(root, "v-dev.yaml", "version", "v-dev", "  promotion:\n    ring: dev\n    order: 1\n")
     _write(
         root,
         "v-prd.yaml",
         "version",
         "v-prd",
-        "  workspace: main\n  promotion:\n    ring: prd\n    order: 2\n    wave: canary\n",
+        "  promotion:\n    ring: prd\n    order: 2\n    wave: canary\n",
     )
-    _write(root, "v-plain.yaml", "version", "v-plain", "  workspace: main\n")
+    _write(root, "v-plain.yaml", "version", "v-plain", "  pins: {}\n")
     _write(
         root,
         "dev-t1.yaml",
@@ -178,7 +196,7 @@ def _rows(root: Path) -> dict:
 @pytest.mark.slow
 def test_tenant_and_version_are_resolved_through_extends(tmp_path):
     rows = _rows(_matrix_solution(tmp_path))
-    assert (rows["inherit"].tenant, rows["inherit"].version) == ("t2", "v-dev")
+    assert (rows["inherit"].tenant, rows["inherit"].versions) == ("t2", ("v-dev",))
     assert rows["inherit"].extends == "tenant-base"
     assert rows["base"].extends is None
 
@@ -195,8 +213,8 @@ def test_an_untagged_or_missing_version_has_no_ring(tmp_path):
         root, "ghost.yaml", "deployment", "ghost", "  extends: base\n  environments:\n    - prd\n  version: nowhere\n"
     )
     rows = _rows(root)
-    assert (rows["plain"].version, rows["plain"].ring, rows["plain"].order) == ("v-plain", None, None)
-    assert (rows["ghost"].version, rows["ghost"].ring) == ("nowhere", None)
+    assert (rows["plain"].versions, rows["plain"].ring, rows["plain"].order) == (("v-plain",), None, None)
+    assert (rows["ghost"].versions, rows["ghost"].ring) == (("nowhere",), None)
 
 
 def test_console_shows_tenant_version_and_ring(tmp_path):

@@ -13,8 +13,9 @@ spec:
 
   tenant: contoso
 
-  # Takes the pins in versions/prd.yaml, including `pins.assets` for contoso-api.
-  version: prd
+  # Takes the pins in versions/platform.yaml and versions/prd.yaml, including
+  # `pins.assets` for contoso-api.
+  version: [platform, prd]
 
   # Rebinds the workspace's `api` asset slot (workspaces/main.yaml). IaC code
   # still reads `local.strata_assets.api`; only the bound document changes.

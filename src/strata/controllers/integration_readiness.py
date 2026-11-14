@@ -27,6 +27,7 @@ from strata.integrations.errors import IntegrationError
 from strata.integrations.registry import IntegrationNotFoundError, known_types
 from strata.integrations.registry import get as get_integration
 from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import VersionPins
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel
 from strata.services.environment_service import merge_environment_models
@@ -267,7 +268,7 @@ def integration_preflight(
 
 
 def list_integrations(
-    context: SolutionContext, deployment_name: str | None = None, *, version_pin: str | None = None
+    context: SolutionContext, deployment_name: str | None = None, *, version_pin: VersionPins = None
 ) -> list[IntegrationUse]:
     """Every declared integration, plus (with a deployment) every one it binds, with what it is used for.
 
@@ -296,7 +297,7 @@ def list_integrations(
 _Binding = tuple[tuple[str, str | None], Callable[[], IntegrationReadiness], str]
 
 
-def _deployment_bindings(context: SolutionContext, deployment_name: str, version_pin: str | None) -> list[_Binding]:
+def _deployment_bindings(context: SolutionContext, deployment_name: str, version_pin: VersionPins) -> list[_Binding]:
     """What `deploy run` binds for this deployment (D16), each with a lazy assessment."""
     index = context.controller.index
     deployment, workspace = resolve_deployment_workspace(context, deployment_name, version_pin=version_pin)

@@ -81,6 +81,9 @@ def _resolve(root: Path):
     context = open_solution(root)
     assert context.ok, context.diagnostics.messages()
     context.resolve()
+    # These solutions have a version document no deployment lists, which is information of its own
+    # (version_document_unlisted, tested in test_version_composition.py); this file is about pin targets.
+    context.diagnostics.items[:] = [d for d in context.diagnostics.items if d.code != "version_document_unlisted"]
     return context
 
 

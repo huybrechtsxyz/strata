@@ -282,7 +282,7 @@ def test_tenant_geography_not_declared_by_any_provider_is_caught(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Deployment -> Tenant/Workspace/Provider: static geography cross-check
-# (docs/work/tenant-zone-policy.md's "static tier")
+# (the removed tenant-zone-policy work doc's "static tier")
 # ---------------------------------------------------------------------------
 
 
@@ -629,7 +629,7 @@ def test_provider_and_asset_findings_stay_separate(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Manifest remote -> Integration (docs/work/remotes-at-scale.md C4)
+# Manifest remote -> Integration (docs/design/asset-management.md C4)
 # ---------------------------------------------------------------------------
 
 
@@ -696,7 +696,7 @@ def test_remote_integration_without_the_sources_capability_is_an_error(tmp_path)
 
 
 # ---------------------------------------------------------------------------
-# Asset location -> Integration (docs/work/remotes-at-scale.md C3)
+# Asset location -> Integration (docs/design/asset-management.md C3)
 # ---------------------------------------------------------------------------
 
 
@@ -2830,13 +2830,11 @@ def test_value_reference_with_no_value_tokens_anywhere_is_a_no_op(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Deployment <-> Version: workspace exclusivity (docs/work/version-lifecycle.md
-# Phase 1)
+# Deployment <-> Version: a version document names no workspace (ADR-0064, ADR-0065)
 # ---------------------------------------------------------------------------
 
 
-def _write_version(root: Path, *, name: str = "prd", workspace: str | None = None) -> None:
-    workspace_line = f"  workspace: {workspace}\n" if workspace is not None else ""
+def _write_version(root: Path, *, name: str = "prd", extra: str = "") -> None:
     _write(
         root,
         "version.yaml",
@@ -2845,7 +2843,7 @@ kind: version
 meta:
   name: {name}
 spec:
-{workspace_line}  pins: {{}}
+{extra}  pins: {{}}
 """,
     )
 
@@ -2855,31 +2853,7 @@ def _point_deployment_at_version(root: Path, version_name: str = "prd") -> None:
     path.write_text(path.read_text(encoding="utf-8") + f"  version: {version_name}\n", encoding="utf-8")
 
 
-def test_version_with_declared_workspace_matching_deployment_passes(tmp_path):
-    root = _base_solution(tmp_path)
-    _write_version(root, workspace="main")
-    _point_deployment_at_version(root)
-
-    context = _resolve(root)
-    assert context.ok, context.diagnostics.messages()
-
-
-def test_version_with_declared_workspace_mismatching_deployment_is_caught(tmp_path):
-    root = _base_solution(tmp_path)
-    _write_version(root, workspace="other")
-    _point_deployment_at_version(root)
-
-    context = _resolve(root)
-    assert not context.ok
-    messages = context.diagnostics.messages()
-    assert any(d.code == "version_workspace_mismatch" for d in context.diagnostics.errors)
-    assert any("'main'" in m and "'other'" in m for m in messages)
-
-
-def test_version_with_no_declared_workspace_is_established_by_first_referencing_deployment(tmp_path):
-    """Unset `spec.workspace` + one referencing deployment: nothing to
-    conflict with yet, so this passes cleanly — the deployment's workspace
-    becomes the expectation, not a declared value needing a match."""
+def test_a_version_document_listed_by_a_deployment_validates(tmp_path):
     root = _base_solution(tmp_path)
     _write_version(root)
     _point_deployment_at_version(root)
@@ -2888,10 +2862,9 @@ def test_version_with_no_declared_workspace_is_established_by_first_referencing_
     assert context.ok, context.diagnostics.messages()
 
 
-def test_version_with_no_declared_workspace_catches_a_second_deployment_disagreeing(tmp_path):
-    """Two deployments referencing the same unset-workspace Version document,
-    naming two different workspaces — the second one disagrees with
-    whichever workspace the first one established."""
+def test_a_version_document_is_shared_by_two_workspaces(tmp_path):
+    """docs/design/version-composition.md V4: deployments of two workspaces may list one version document. Before 2.7
+    the first deployment fixed the document's workspace and the second was `version_workspace_mismatch`."""
     root = _base_solution(tmp_path)
     _write_version(root)
     _point_deployment_at_version(root)
@@ -2925,56 +2898,21 @@ spec:
     )
 
     context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert not any(d.code and d.code.startswith("version_workspace") for d in context.diagnostics.items)
+
+
+def test_a_version_document_declaring_a_workspace_fails_to_load_and_says_why(tmp_path):
+    """ADR-0065: `spec.workspace` was removed; the load error names the removal and the fix, not just "extra input"."""
+    root = _base_solution(tmp_path)
+    _write_version(root, extra="  workspace: main\n")
+
+    context = open_solution(root)
+
     assert not context.ok
-    assert any(d.code == "version_workspace_mismatch" for d in context.diagnostics.errors)
-
-
-def test_version_with_no_referencing_deployment_is_a_no_op(tmp_path):
-    """A Version document nothing references has nothing to check against."""
-    root = _base_solution(tmp_path)
-    _write_version(root, workspace="main")
-
-    context = _resolve(root)
-    assert context.ok, context.diagnostics.messages()
-
-
-def test_deployment_with_no_workspace_skips_the_version_check(tmp_path):
-    """A partial (reusable-base) deployment referencing a Version document
-    but naming no workspace of its own has nothing to compare — skip,
-    don't guess (same 'partial: true' shape `_partial_layers_deployment()`
-    already uses for an analogous reason)."""
-    root = _base_solution(tmp_path)
-    _write(
-        root,
-        "workspace2.yaml",
-        """apiVersion: strata.huybrechts.xyz/v2
-kind: workspace
-meta:
-  name: secondary
-spec:
-  providers: [azure-main]
-  provisioners:
-    - name: tf
-      tool: terraform
-      source: {source_path: terraform/secondary}
-""",
-    )
-    _write_version(root, workspace="secondary")
-    _write(
-        root,
-        "deployment-base.yaml",
-        """apiVersion: strata.huybrechts.xyz/v2
-kind: deployment
-meta:
-  name: reusable-base
-spec:
-  partial: true
-  version: prd
-""",
-    )
-
-    context = _resolve(root)
-    assert context.ok, context.diagnostics.messages()
+    [message] = [m for m in context.diagnostics.messages() if "version.yaml" in m]
+    assert "'spec.workspace' was removed in strata 2.7" in message
+    assert "Delete the 'workspace:' line" in message
 
 
 # ---------------------------------------------------------------------------

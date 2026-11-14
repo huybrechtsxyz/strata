@@ -149,7 +149,7 @@ and `prd-north-deployment` extending it. `strata build run` renders `strata.prov
   `(kind, meta.name)`, never a file.
 - [ADR-0024](../decisions/0024-tenant-defaults-merge.md) — the deployment merge axes (`extends`,
   tenant defaults) this builds on.
-- `tenant-zone-policy.md` (work doc) — the geography check that now evaluates
+- `tenant-zone-policy.md` (removed work doc; its open items are GitHub issues) — the geography check that now evaluates
   the bound provider.
 - [asset-management.md](asset-management.md) — the same slot-and-rebind rule for assets; its
   `_check_slot_bindings()` now holds the validation rules both share, with the provider type check

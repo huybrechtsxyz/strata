@@ -86,7 +86,7 @@ from strata.models.audit_model import EVENT_DEFAULTS, AuditGitSinkTargetModel, A
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind, PlatformVersion
 from strata.models.configuration_model import ConfigurationModel
-from strata.models.deployment_model import DeploymentModel
+from strata.models.deployment_model import DeploymentModel, VersionPins
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
@@ -117,7 +117,7 @@ def finalize_and_distribute_deploy_audit(
     run_diagnostics: Diagnostics,
     dry_run: bool = False,
     action: Literal["deploy", "destroy"] = "deploy",
-    pin: str | None = None,
+    pin: VersionPins = None,
     change_system: str | None = None,
     change_id: str | None = None,
     change_reason: str | None = None,
@@ -350,7 +350,7 @@ def _write_handover(
     path: Path,
     diagnostics: Diagnostics,
     *,
-    pin: str | None = None,
+    pin: VersionPins = None,
 ) -> Path | None:
     """Render `spec.documentation`'s handover document into `path`, with this run's own audit entry, and return
     `path`; `None` with a warning when it cannot be rendered. Never fails the run: the deploy has succeeded, and

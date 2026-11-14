@@ -52,8 +52,10 @@ from strata.controllers.promotion_controller import (
     apply_promotion,
     build_promotion_view,
     build_status_rows,
+    rollout_workspaces,
 )
 from strata.controllers.solution_context import open_solution
+from strata.controllers.version_composition import VersionMatrix
 from strata.utils.diagnostics import Diagnostics
 
 _PATH_HELP = "Where to start looking for the solution. Defaults to the current directory."
@@ -65,18 +67,30 @@ def promote_command() -> None:
 
 
 @promote_command.command("status")
-@click.argument("workspace")
+@click.argument("workspace", required=False, default=None)
+@click.option(
+    "--ring",
+    "rings",
+    multiple=True,
+    metavar="RING",
+    help="Only these rings (repeatable). Without WORKSPACE, every workspace in a rollout is shown, so "
+    "'--ring prd' answers what the whole prd ring runs.",
+)
 @click.option("--path", "start_path", type=click.Path(file_okay=False, path_type=Path), default=None, help=_PATH_HELP)
 @output_option
 @quiet_option
 @verbose_option
-def promote_status(workspace: str, start_path: Path | None, output: str, quiet: bool, verbose: bool) -> None:
+def promote_status(
+    workspace: str | None, rings: tuple[str, ...], start_path: Path | None, output: str, quiet: bool, verbose: bool
+) -> None:
     """Show where WORKSPACE's rollout stands — one row per pin, per wave, per ring.
 
-    Finds every `kind: version` document declaring `spec.workspace ==
-    WORKSPACE` and a `spec.promotion.ring`, groups them by `(ring, order)`,
-    and lists each one's pins. A workspace with no tagged documents at all
-    (the common, single-app case) prints an empty table, not an error.
+    Without WORKSPACE, every workspace in a rollout, with a workspace column; with --ring, only those rings.
+
+    Reads WORKSPACE's deployments: the tagged version document each lists says its ring, order and wave, and its
+    rows are the pins the deployments run with, all their listed documents together, each with the document that
+    owns it (OWNER; "shared" when deployments of another workspace list that document too). A workspace with no
+    tagged documents at all (the common, single-app case) prints an empty table, not an error.
 
     \b
     Exit codes:
@@ -88,26 +102,42 @@ def promote_status(workspace: str, start_path: Path | None, output: str, quiet: 
     with command_run("promote status", output=output, quiet=quiet, verbose=verbose) as run:
         context = open_solution(resolve_work_path(start_path))
         solution = context.controller.solution
-        run.describe(solution=solution.meta.name if solution else "(unnamed)", root=context.root, workspace=workspace)
+        run.describe(
+            solution=solution.meta.name if solution else "(unnamed)",
+            root=context.root,
+            workspace=workspace or "(every workspace in a rollout)",
+        )
 
-        resolved_deployments, resolution_diagnostics = resolve_deployment_chains(context.controller.index)
-        view, promotion_diagnostics = build_promotion_view(workspace, context.controller.index, resolved_deployments)
-        rows = build_status_rows(view)
-        run.step(f"found {len(rows)} row(s) across {len(view.rings)} ring(s)")
-
-        if output == "console":
-            _print_rows(rows)
-
+        index = context.controller.index
+        resolved_deployments, resolution_diagnostics = resolve_deployment_chains(index)
         diagnostics = Diagnostics()
         diagnostics.extend(resolution_diagnostics)
-        diagnostics.extend(promotion_diagnostics)
+        # One version picture for every workspace shown, not one per workspace.
+        matrix = VersionMatrix.build(index, resolved_deployments)
+        workspaces = [workspace] if workspace else rollout_workspaces(index, resolved_deployments, matrix)
+        rows: list[tuple[str, PromotionStatusRow]] = []
+        for name in workspaces:
+            view, promotion_diagnostics = build_promotion_view(name, index, resolved_deployments, matrix)
+            diagnostics.extend(promotion_diagnostics)
+            rows.extend((name, row) for row in build_status_rows(view) if not rings or row.ring in rings)
+        if workspace is None:
+            rows.sort(key=lambda item: (item[1].order, item[0]))
+        run.step(f"found {len(rows)} row(s) across {len(workspaces)} workspace(s)")
+
+        if output == "console":
+            _print_rows([row for _, row in rows], workspaces=None if workspace else [name for name, _ in rows])
+
         run.report(diagnostics, root=context.root)
         if isinstance(run.reporter, JsonReporter):
-            run.reporter.data = {"workspace": workspace, "rows": [asdict(row) for row in rows]}
+            run.reporter.data = {
+                "workspace": workspace,
+                "rings": list(rings),
+                "rows": [asdict(row) if workspace else {"workspace": name, **asdict(row)} for name, row in rows],
+            }
         run.ok = True
 
 
-def _print_rows(rows: list[PromotionStatusRow]) -> None:
+def _print_rows(rows: list[PromotionStatusRow], *, workspaces: list[str] | None = None) -> None:
     """Render the flat table: ring/order/wave/target/version/status, plus a
     '<- behind' marker. A 'target' column beyond the doc's illustrative
     5-column example is deliberate — a real document pins several targets
@@ -122,8 +152,8 @@ def _print_rows(rows: list[PromotionStatusRow]) -> None:
     def _cell(value: str | None) -> str:
         return value if value is not None else "-"
 
-    headers = ("ring", "order", "wave", "target", "version", "status")
-    table = [
+    headers: tuple[str, ...] = ("ring", "order", "wave", "target", "version", "status", "owner")
+    table: list[tuple[str, ...]] = [
         (
             row.ring,
             str(row.order),
@@ -131,9 +161,14 @@ def _print_rows(rows: list[PromotionStatusRow]) -> None:
             _cell(row.target if row.category is None else f"{row.category}/{row.target}"),
             _cell(row.value),
             _cell(row.status),
+            _cell(row.owner) + (" (shared)" if row.shared else ""),
         )
         for row in rows
     ]
+    if workspaces is not None:
+        # Several workspaces in one table: say whose row it is, after the ring.
+        headers = (*headers[:2], "workspace", *headers[2:])
+        table = [(*cells[:2], name, *cells[2:]) for cells, name in zip(table, workspaces, strict=True)]
     widths = [max(len(headers[i]), *(len(r[i]) for r in table)) for i in range(len(headers))]
 
     click.echo("  " + "  ".join(h.ljust(w) for h, w in zip(headers, widths, strict=True)))
@@ -146,21 +181,35 @@ def _print_rows(rows: list[PromotionStatusRow]) -> None:
 @click.argument("workspace")
 @click.argument("ring")
 @click.option("--wave", default=None, help="Which wave to promote, required when RING has more than one.")
+@click.option(
+    "--shared",
+    is_flag=True,
+    default=False,
+    help="Also write pins owned by a version document that deployments of other workspaces list too (a shared "
+    "core document): promoting them moves those workspaces as well.",
+)
 @click.option("--path", "start_path", type=click.Path(file_okay=False, path_type=Path), default=None, help=_PATH_HELP)
 @output_option
 @quiet_option
 @verbose_option
 def promote_apply(
-    workspace: str, ring: str, wave: str | None, start_path: Path | None, output: str, quiet: bool, verbose: bool
+    workspace: str,
+    ring: str,
+    wave: str | None,
+    shared: bool,
+    start_path: Path | None,
+    output: str,
+    quiet: bool,
+    verbose: bool,
 ) -> None:
-    """Copy every common pin key from RING's preceding order into RING, in WORKSPACE.
+    """Promote WORKSPACE into RING: copy the pins its deployments in RING's preceding order run.
 
-    A mechanical copy-forward, not a judgment call: finds the `kind: version`
-    document(s) at RING's order and at the preceding order in the same
-    workspace, then copies every pin key **both** documents already declare
-    (never creating a new key as a side effect) — resetting `status` to
-    `current` and `reviewed` to today on each copied pin. Zero common keys
-    is a real, reported outcome, not an error.
+    A mechanical copy-forward, not a judgment call: every pin WORKSPACE's deployments in RING run that the
+    preceding ring's deployments also run gets the preceding value, written into the version document that owns
+    it in RING — resetting `status` to `current` and `reviewed` to today. Never creates a new key. Skipped, and
+    listed: a pin owned by a document other workspaces list too (unless --shared), and a pin owned by a document
+    only some of RING's deployments list (a customer's own document). Zero pins copied is a real, reported
+    outcome, not an error.
 
     \b
     Exit codes:
@@ -181,7 +230,7 @@ def promote_apply(
             wave=wave,
         )
 
-        result = apply_promotion(workspace, ring, context.controller.index, wave=wave)
+        result = apply_promotion(workspace, ring, context.controller.index, wave=wave, shared=shared)
         run.step(f"copied {len(result.copied)} pin(s) from '{result.source_version}' into '{result.target_version}'")
 
         if output == "console":
@@ -198,6 +247,8 @@ def promote_apply(
                 "target_version": result.target_version,
                 "path": str(result.path),
                 "copied": [{"category": c, "target": n, "value": v} for c, n, v in result.copied],
+                "written": [{"category": c, "target": n, "value": v, "owner": o} for c, n, v, o in result.written],
+                "skipped": [{"target": t, "owner": o or None, "reason": r} for t, o, r in result.skipped],
             }
         run.ok = True
 
@@ -212,9 +263,18 @@ def _print_apply_result(result: ApplyResult, root: Path) -> None:
     )
     if not result.copied:
         click.echo("  (no common pin keys between source and target \u2014 nothing copied)")
-        return
-    for category, target, value in result.copied:
-        click.echo(f"  +  {category}.{target} = {value}  (status: current)")
+    for category, target, value, owner in result.written:
+        into = f"  into {owner}" if owner != result.target_version else ""
+        click.echo(f"  +  {category}.{target} = {value}  (status: current){into}")
+    reasons = {
+        "shared": "is shared by other workspaces; use --shared",
+        "own document": "is a document only some deployments list (a customer's own); promote it by hand",
+        "not pinned": "is not pinned in the target ring; add it with 'strata version set'",
+        "source own documents": "comes only from customers' own documents in the source ring; no one value to promote",
+    }
+    for target, owner, reason in result.skipped:
+        where = f" ({owner})" if owner else ""
+        click.echo(f"  -  {target}{where} not promoted: {reasons.get(reason, reason)}")
 
 
 @promote_command.command("view")

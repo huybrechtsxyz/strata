@@ -43,6 +43,17 @@ def test_diagnostic_to_dict_omits_absent_fields():
     assert item.to_dict() == {"severity": "warning", "message": "Pin matched nothing"}
 
 
+def test_diagnostic_to_dict_carries_a_hint_when_there_is_one():
+    item = Diagnostic(severity=Severity.WARNING, message="m", code="c", hint="Do this.")
+    assert item.to_dict() == {"severity": "warning", "message": "m", "code": "c", "hint": "Do this."}
+
+
+def test_diagnostics_add_passes_the_hint_on():
+    diagnostics = Diagnostics()
+    diagnostics.error("m", code="c", hint="Do this.")
+    assert diagnostics.errors[0].hint == "Do this."
+
+
 def test_diagnostic_to_dict_is_json_serialisable():
     """The machine-readable path must actually serialise."""
     item = Diagnostic(

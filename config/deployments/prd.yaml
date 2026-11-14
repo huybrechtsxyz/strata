@@ -17,9 +17,11 @@ spec:
 
   tenant: contoso
 
-  # Pins for this rollout. Where a pinned target is declared elsewhere
-  # (module image, chart version, remote ref, tool version), the pin wins.
-  version: prd
+  # Pins for this rollout: the shared platform document plus this ring's own.
+  # Their pins apply together, each target pinned by one of them. Where a
+  # pinned target is declared elsewhere (module image, chart version, remote
+  # ref), the pin wins.
+  version: [platform, prd]
 
   # Overrides the base's stage parameters for this step, field-by-field —
   # the base's timeouts.apply survives.

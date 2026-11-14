@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Credentials for fetching a remote at build time (docs/work/remotes-at-scale.md, C5).
+"""Credentials for fetching a remote at build time (docs/design/asset-management.md, C5).
 
 `resolve_remote()` can already authenticate a git clone from an `AuthenticationModel` plus the
 values its key references resolve to, but a build has no resolved values (`build run` renders
@@ -37,6 +37,7 @@ from strata.integrations.git_push import FETCH_METHODS, credential_keys
 from strata.integrations.helm import REGISTRY_AUTH_METHODS, RegistryCredentials, credentials_from_authentication
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import VersionPins
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils.errors import SystemError
@@ -76,7 +77,7 @@ class RemoteCredentialResolver:
     """
 
     def __init__(
-        self, context: SolutionContext, deployment_name: str, *, allow_stores: bool, pin: str | None = None
+        self, context: SolutionContext, deployment_name: str, *, allow_stores: bool, pin: VersionPins = None
     ) -> None:
         self._context = context
         self._deployment_name = deployment_name

@@ -120,6 +120,9 @@ resurrected by this revision):
 
 ### `Version.spec.workspace` — the exclusivity anchor, unchanged
 
+> Removed in 2.7 (ADR-0065): the deployments that list a version document decide where it applies, and promotion
+> groups by them ([version-composition.md](../design/version-composition.md) V4, V10). Kept below as the original reasoning.
+
 A `Version` document was otherwise just `{meta.name, spec.pins}` — it
 never said which workspace it was *for*. The only way to know was to grep
 every `Deployment` that happened to reference it; an accidental
@@ -146,8 +149,9 @@ ever needs to span multiple workspaces, `spec.workspace` on `Version`
 would become a list too — the link-back validation logic doesn't change
 shape, just checks membership in a list instead of equality.
 
-Superseded by [version-composition.md](version-composition.md) C8: `spec.workspace` stays single,
-and a version document that includes others covers the union of their workspaces.
+Superseded by [version-composition.md](../design/version-composition.md) V4 and V10: `Version.spec.workspace` is
+removed (in 2.7, ADR-0065), a deployment names several version documents, and promotion
+is computed from the deployments' pin matrices and workspaces.
 
 ### `strata promote status <workspace>` — ship visibility before enforcement
 
@@ -230,7 +234,7 @@ Still genuinely open:
 
 ### Selective promotion — a pin on its own cadence (`--pin`)
 
-**The need (decided 2026-10-20, [remotes-at-scale.md](remotes-at-scale.md) Q7): a customer must be
+**The need (decided 2026-10-20, remotes-at-scale.md Q7): a customer must be
 able to move through rings on its own cadence**, not only ride the ring's. With per-customer
 `pins.assets.<customer>-api` keys in one shared version document per ring there is no customer
 dimension to add to the model: the customer is already the pin key. What is missing is a way to
@@ -1038,7 +1042,7 @@ doc's own Phase 1 can start.
 - [ ] `docs/config/version.md` and the `promote` help text; examples above.
 - [ ] Extend `test_scale_per_customer.py`: three ring documents, promote one customer of 300 and assert
   only that pin changed and the call stays well under a second.
-- [ ] Close Q7 in [remotes-at-scale.md](remotes-at-scale.md); record "Shipped as" entries here.
+- [ ] Close Q7 in remotes-at-scale.md; record "Shipped as" entries here.
 
 ## Related Decisions
 
@@ -1281,7 +1285,7 @@ doc's own Phase 1 can start.
   intended CI use case, not an accident to guard against). 2 new tests.
   Full check suite clean, 2161 tests.
 - 2026-10-20: Designed selective promotion (Phases 7-10) for customers that must move through
-  rings on their own cadence ([remotes-at-scale.md](remotes-at-scale.md) Q7). Checked first against
+  rings on their own cadence (remotes-at-scale.md Q7). Checked first against
   the shipped code with 250 per-customer pins in three ring documents: `promote apply` is all-or-nothing
   per ring (251 keys copied, 250 rewritten with `reviewed: today`, 240 of them unchanged) and
   `promote status` printed 753 rows. Decided: no customer dimension in the model; a repeatable

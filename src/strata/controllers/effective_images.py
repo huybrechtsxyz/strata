@@ -54,7 +54,7 @@ from strata.models.deployment_model import DeploymentModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.store_model import VariableStoreType
-from strata.models.version_model import VersionModel
+from strata.models.version_model import VersionModel, pin_owner
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
@@ -140,7 +140,9 @@ def effective_images(
                         tag_source="pin" if pinned else ("declared" if tag or digest else "none"),
                         module=module_name,
                         via=(use,),
-                        pin_version=version.meta.name if pinned and version is not None else None,
+                        pin_version=(
+                            pin_owner(version, "images", service.name) if pinned and version is not None else None
+                        ),
                         pin_flag=pinned and pinned_by_flag,
                         delivered=delivery is None,
                         delivery=delivery,

@@ -13,6 +13,7 @@ inside that command — one mechanism, not two, even inside strata.
 
 from dataclasses import dataclass
 
+from strata.controllers.deployment_resolution import deployment_of, resolve_deployment_chains
 from strata.controllers.solution_controller import DocumentIndex
 from strata.models.common_models import PlatformKind
 
@@ -51,16 +52,32 @@ def list_paths(index: DocumentIndex, kind: PlatformKind, *, workspace: str | Non
 
     `workspace`, when given, restricts the result to documents whose own
     `spec.workspace` matches — meaningful only for kinds whose spec model
-    actually declares that field (today: `deployment`, `version`). A kind
-    with no such field simply has nothing that can ever match a non-`None`
-    filter, so it comes back empty rather than raising — the same "skip
-    rather than guess a policy that was never declared" rule
-    `_check_workspace_topology_components()` already applies elsewhere.
+    actually declares that field (today: `deployment`). For `version`, which
+    names no workspace (ADR-0065), it means the documents the deployments of
+    that workspace list, through `extends` included. Any other kind has
+    nothing that can ever match a non-`None` filter, so it comes back empty
+    rather than raising — the same "skip rather than guess a policy that was
+    never declared" rule `_check_workspace_topology_components()` already
+    applies elsewhere.
     """
     entries = index.all_of(kind)
-    if workspace is not None:
+    if workspace is not None and kind is PlatformKind.VERSION:
+        listed = _versions_listed_by(index, workspace)
+        entries = [entry for entry in entries if entry.ref.name in listed]
+    elif workspace is not None:
         entries = [entry for entry in entries if _document_workspace(entry.model) == workspace]
     return [PathResult(kind=kind.value, name=entry.ref.name, path=str(entry.source), exists=True) for entry in entries]
+
+
+def _versions_listed_by(index: DocumentIndex, workspace: str) -> set[str]:
+    """The version documents the deployments of `workspace` list, each resolved through `extends`."""
+    resolved, _ = resolve_deployment_chains(index)
+    names: set[str] = set()
+    for entry in index.all_of(PlatformKind.DEPLOYMENT):
+        deployment = deployment_of(entry, resolved)
+        if deployment is not None and deployment.spec.workspace == workspace:
+            names.update(deployment.spec.version_names())
+    return names
 
 
 def _document_workspace(model: object) -> str | None:

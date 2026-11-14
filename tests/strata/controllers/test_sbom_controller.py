@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from strata.controllers.sbom_controller import evaluate_cve_policy, write_sbom
+from strata.controllers.sbom_controller import _report_missing_data, evaluate_cve_policy, write_sbom
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
@@ -25,6 +25,7 @@ from strata.models.sbom_model import (
     CveMaxSeverityPolicyModel,
 )
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
+from strata.utils.diagnostics import Diagnostics
 
 
 def _module(name: str, *, services: list[ModuleServiceModel] | None = None) -> ModuleModel:
@@ -970,3 +971,14 @@ def test_write_sbom_reports_a_declared_image_the_rendered_chart_does_not_run(tmp
     data = json.loads((tmp_path / "sbom.json").read_text(encoding="utf-8"))
     server = next(c for c in data["components"] if c["name"] == "server")
     assert {"name": "strata:image-delivery", "value": "helm module: not in the rendered chart"} in server["properties"]
+
+
+@pytest.mark.parametrize(("mode", "severity"), [("block", "error"), ("warn", "warning")])
+def test_a_missing_cve_scan_says_what_to_do(mode, severity):
+    """docs/work/diagnostic-guidance.md: the fix the docstring always knew now reaches the user as a hint."""
+    diagnostics = Diagnostics()
+    _report_missing_data(diagnostics, mode, "no scanner on PATH")
+
+    [finding] = diagnostics.items
+    assert (finding.severity.value, finding.code) == (severity, "cve_policy_missing_data")
+    assert finding.hint is not None and "install trivy or grype" in finding.hint

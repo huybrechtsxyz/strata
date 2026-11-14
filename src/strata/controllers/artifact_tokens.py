@@ -14,6 +14,7 @@ from typing import Literal, cast
 
 from strata.controllers.reachable_documents import documents_reached_by_deployment
 from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.version_composition import deployment_version, pin_owner
 from strata.controllers.version_pins import log_pin_applied
 from strata.models.artifact_model import ArtifactModel
 from strata.models.common_models import PlatformKind
@@ -39,11 +40,8 @@ class ArtifactTag:
 
 
 def _deployment_version(index: DocumentIndex, deployment: DeploymentModel) -> VersionModel | None:
-    """The version document `deployment.spec.version` names, or `None` (unset, or not in the index)."""
-    if not deployment.spec.version:
-        return None
-    entry = index.get(PlatformKind.VERSION, deployment.spec.version)
-    return cast(VersionModel, entry.model) if entry is not None else None
+    """The version `deployment.spec.version` names, its documents composed, or `None` (unset, or not in the index)."""
+    return deployment_version(index, deployment)
 
 
 def _tag(artifact_name: str, artifact: ArtifactModel, version: VersionModel | None, *, log: bool) -> ArtifactTag:
@@ -51,9 +49,10 @@ def _tag(artifact_name: str, artifact: ArtifactModel, version: VersionModel | No
     if version is not None:
         pin = VersionService.from_model(version).resolve("artifacts", artifact_name)
         if pin is not None:
+            owner = pin_owner(version, "artifacts", artifact_name)
             if log:
-                log_pin_applied("artifacts", artifact_name, declared, pin.version, version.meta.name)
-            return ArtifactTag(pin.version, "pin", version.meta.name)
+                log_pin_applied("artifacts", artifact_name, declared, pin.version, owner)
+            return ArtifactTag(pin.version, "pin", owner)
     return ArtifactTag(declared, "declared" if declared else "none")
 
 

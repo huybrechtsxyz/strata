@@ -52,6 +52,7 @@ from strata.models.sbom_model import (
     SbomReferenceModel,
 )
 from strata.models.solution_model import SolutionRemoteModel
+from strata.models.version_model import version_names
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
@@ -349,7 +350,7 @@ def _build_cyclonedx_json(
     subject_kind = "deployment" if graph.deployment is not None else "workspace"
     subject_properties = [Property(name="strata:workspace", value=graph.workspace.meta.name)]
     if graph.version is not None:
-        subject_properties.append(Property(name="strata:version", value=graph.version.meta.name))
+        subject_properties.append(Property(name="strata:version", value=",".join(version_names(graph.version))))
     if commit:
         subject_properties.append(Property(name="strata:commit", value=commit))
     root = Component(
@@ -588,6 +589,16 @@ def _report_missing_data(diagnostics: Diagnostics, on_missing_data: str, reason:
     """
     message = f"cve_policy: cannot evaluate — {reason}."
     if on_missing_data == "block":
-        diagnostics.error(message, code="cve_policy_missing_data")
+        diagnostics.error(
+            message,
+            code="cve_policy_missing_data",
+            hint="Make a scan possible (install trivy or grype, and let the build write sbom.json); to let the run "
+            "continue without one, set the policy's on_missing_data to 'warn'.",
+        )
     elif on_missing_data == "warn":
-        diagnostics.warning(message, code="cve_policy_missing_data")
+        diagnostics.warning(
+            message,
+            code="cve_policy_missing_data",
+            hint="Make a scan possible (install trivy or grype, and let the build write sbom.json); keep "
+            "on_missing_data at 'block' where a run must never pass unscanned.",
+        )

@@ -30,7 +30,7 @@ Two concrete needs hit the same gap:
 - **Assets** — one APIM workspace, ~300 customers, each needing its own asset (API definitions)
   bound to the same step slot. **Done** — see
   [asset-management.md](../design/asset-management.md); the location half is Option 3b in
-  [remotes-at-scale.md](remotes-at-scale.md).
+  remotes-at-scale.md.
 
 This doc keeps the **scope decisions and the shared rule** that apply to every category; each
 category graduates to its own design doc once built.
@@ -146,7 +146,7 @@ inconsistent with the list shape on the workspace side.
   decoupling; removed v1's per-stage provider/topology binding.
 - [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md) — identity is
   `(kind, meta.name)`, never a file; why a rebind needs a stable slot name.
-- [remotes-at-scale.md](remotes-at-scale.md) — the asset slot-binding need (Option 3b, S1) that
+- remotes-at-scale.md — the asset slot-binding need (Option 3b, S1) that
   became asset slots plus `location`: [asset-management.md](../design/asset-management.md).
 - v1 ADR-0036 (`strata/docs/decisions/0036-workspace-provider-environment-overrides.md`, the v1
   repo) — the original provider-override design.

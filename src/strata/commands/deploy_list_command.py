@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """`strata deploy list` - every deployment, as `build run` and `deploy run` would resolve it.
 
-docs/work/vscode-integrations-policies-views.md V1: `strata path list deployment` lists the files,
+docs/design/vscode-integrations-policies-views.md V1: `strata path list deployment` lists the files,
 but cannot mark a partial base or show a workspace inherited through `extends`. Phase 1 (schema)
 only, like `path` and `graph`: listing is useful even when another document has a problem. Unlike
 every other `deploy` subcommand it runs nothing and does not call `require_valid()`.
@@ -111,7 +111,7 @@ def _print_rows(rows: list[DeploymentSummary], *, filtered: bool) -> None:
             row.name + (" (partial)" if row.partial else ""),
             row.workspace or "-",
             row.tenant or "-",
-            row.version or "-",
+            ", ".join(row.versions) or "-",
             row.ring or "-",
             ", ".join(row.environments) or "-",
         )

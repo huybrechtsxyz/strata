@@ -15,10 +15,11 @@ from pathlib import Path
 
 import click
 
-from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
+from strata.commands.options import output_option, pin_callback, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.build_controller import build_run
 from strata.controllers.solution_context import open_solution
+from strata.models.deployment_model import VersionPins
 from strata.utils.layout import build_dir
 
 
@@ -85,9 +86,10 @@ def build_command() -> None:
 )
 @click.option(
     "--pin",
-    default=None,
+    multiple=True,
+    callback=pin_callback,
     metavar="VERSION",
-    help="Override spec.version with this kind: version document for this invocation only "
+    help="Override spec.version with these kind: version documents (repeatable; what is passed replaces the deployment's whole list) for this invocation only "
     "(ADR-0019) — zero persisted mutation, the deployment document on disk is never touched. "
     "The primary place to pin: images/charts/remotes pins only take effect at build time.",
 )
@@ -103,7 +105,7 @@ def build_run_command(
     resolve: bool,
     offline: bool,
     env_files: tuple[Path, ...],
-    pin: str | None,
+    pin: VersionPins,
     output: str,
     quiet: bool,
     verbose: bool,

@@ -31,13 +31,14 @@ from strata.commands.deploy_list_command import deploy_list_command
 from strata.commands.deploy_output_command import deploy_output_command
 from strata.commands.deploy_report_command import deploy_report_command
 from strata.commands.deploy_steps_command import deploy_steps_command
-from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
+from strata.commands.options import output_option, pin_callback, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.deploy_controller import deploy_run
 from strata.controllers.integration_readiness import IntegrationReadiness
 from strata.controllers.solution_context import open_solution
 from strata.models.audit_manifest_model import ManifestProviderModel
+from strata.models.deployment_model import VersionPins
 from strata.utils.errors import UsageError
 from strata.utils.layout import build_dir
 
@@ -93,9 +94,10 @@ def _shared_deploy_options(follow_default: str | None = None) -> Callable[[_F], 
         )(f)
         f = click.option(
             "--pin",
-            default=None,
+            multiple=True,
+            callback=pin_callback,
             metavar="VERSION",
-            help="Override spec.version with this kind: version document for this invocation only "
+            help="Override spec.version with these kind: version documents (repeatable; what is passed replaces the deployment's whole list) for this invocation only "
             "(ADR-0019) — zero persisted mutation, the deployment document on disk is never touched. "
             "Covers the artifacts pin category (the one that resolves live, at deploy time); pass the "
             "same value to 'build run --pin' too so a deploy matches the build it is executing. A build "
@@ -367,9 +369,10 @@ def _validate_change_reference_flags(
 )
 @click.option(
     "--pin",
-    default=None,
+    multiple=True,
+    callback=pin_callback,
     metavar="VERSION",
-    help="Override spec.version with this kind: version document for this invocation only "
+    help="Override spec.version with these kind: version documents (repeatable; what is passed replaces the deployment's whole list) for this invocation only "
     "(ADR-0019) — zero persisted mutation, the deployment document on disk is never touched. "
     "Covers the artifacts pin category (the one that resolves live, at deploy time); pass the "
     "same value to 'build run --pin' too so a deploy matches the build it is executing. A build "
@@ -399,7 +402,7 @@ def deploy_run_command(
     follow: str | None,
     stage: tuple[str, ...],
     scope: tuple[str, ...],
-    pin: str | None,
+    pin: VersionPins,
     output_max_age: int | None,
     change_system: str | None,
     change_id: str | None,
@@ -528,7 +531,7 @@ def _run_partial_deploy(
     follow: str | None,
     stage: tuple[str, ...],
     scope: tuple[str, ...],
-    pin: str | None,
+    pin: VersionPins,
     output_max_age: int | None,
     output: str,
     quiet: bool,
@@ -594,7 +597,7 @@ def deploy_setup_command(
     follow: str | None,
     stage: tuple[str, ...],
     scope: tuple[str, ...],
-    pin: str | None,
+    pin: VersionPins,
     output_max_age: int | None,
     output: str,
     quiet: bool,
@@ -643,7 +646,7 @@ def deploy_check_command(
     follow: str | None,
     stage: tuple[str, ...],
     scope: tuple[str, ...],
-    pin: str | None,
+    pin: VersionPins,
     output_max_age: int | None,
     output: str,
     quiet: bool,
@@ -722,7 +725,7 @@ def deploy_apply_command(
     follow: str | None,
     stage: tuple[str, ...],
     scope: tuple[str, ...],
-    pin: str | None,
+    pin: VersionPins,
     output_max_age: int | None,
     change_system: str | None,
     change_id: str | None,
@@ -870,7 +873,7 @@ def deploy_destroy_command(
     follow: str | None,
     stage: tuple[str, ...],
     scope: tuple[str, ...],
-    pin: str | None,
+    pin: VersionPins,
     output_max_age: int | None,
     change_system: str | None,
     change_id: str | None,
@@ -1002,7 +1005,7 @@ def deploy_plan_command(
     follow: str | None,
     stage: tuple[str, ...],
     scope: tuple[str, ...],
-    pin: str | None,
+    pin: VersionPins,
     output_max_age: int | None,
     output: str,
     quiet: bool,

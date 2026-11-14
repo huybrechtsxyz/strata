@@ -27,8 +27,10 @@ from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.artifact_usage import unreferenced_artifacts
+from strata.controllers.deployment_resolution import resolve_deployment_chains
 from strata.controllers.path_controller import get_path
 from strata.controllers.solution_context import open_solution
+from strata.controllers.version_composition import listing_deployments, version_scope
 from strata.controllers.version_controller import ReconcileRow, reconcile_version, scaffold_version, set_version_pin
 from strata.models.common_models import PlatformKind
 from strata.models.version_model import PIN_CATEGORIES, VersionModel
@@ -49,7 +51,6 @@ def version_command(ctx: click.Context) -> None:
 
 @version_command.command("new")
 @click.argument("name")
-@click.option("--workspace", required=True, help="Name of the Workspace document this version document applies to.")
 @click.option(
     "--from",
     "from_name",
@@ -63,37 +64,31 @@ def version_command(ctx: click.Context) -> None:
 @verbose_option
 def version_new(
     name: str,
-    workspace: str,
     from_name: str | None,
     start_path: Path | None,
     output: str,
     quiet: bool,
     verbose: bool,
 ) -> None:
-    """Scaffold a new kind: version document named NAME.
+    """Scaffold a new kind: version document named NAME, in versions/NAME.yaml.
+
+    It names no workspace: list it in the `spec.version` of the deployments that should use it (one name or a list,
+    docs/design/version-composition.md). With --from, it starts with that document's pin keys, each seeded with its
+    target's current value.
 
     \b
     Exit codes:
       0  created
-      2  bad arguments (NAME already exists, --workspace/--from name an
-         unknown document), or not inside a solution
+      2  bad arguments (NAME already exists, --from names an unknown
+         document), or not inside a solution
       1  system failure
     """
     with command_run("version new", output=output, quiet=quiet, verbose=verbose) as run:
         context = open_solution(resolve_work_path(start_path))
         solution = context.controller.solution
-        run.describe(
-            solution=solution.meta.name if solution else "(unnamed)", root=context.root, name=name, workspace=workspace
-        )
+        run.describe(solution=solution.meta.name if solution else "(unnamed)", root=context.root, name=name)
 
-        destination = scaffold_version(
-            context.root,
-            context.controller.index,
-            solution,
-            name,
-            workspace=workspace,
-            from_name=from_name,
-        )
+        destination = scaffold_version(context.root, context.controller.index, solution, name, from_name=from_name)
         run.step(f"created {destination.relative_to(context.root)}")
 
         if output == "console":
@@ -101,7 +96,7 @@ def version_new(
 
         run.report(Diagnostics(), root=context.root)
         if isinstance(run.reporter, JsonReporter):
-            run.reporter.data = {"name": name, "workspace": workspace, "path": str(destination)}
+            run.reporter.data = {"name": name, "path": str(destination)}
         run.ok = True
 
 
@@ -126,6 +121,11 @@ def version_update(name: str, start_path: Path | None, check: bool, output: str,
     real target with no pin yet is a candidate to add (seeded with its
     current value, never invented); a pin naming a target that no longer
     exists is a candidate to remove. The operator reviews and edits by hand.
+
+    When deployments list NAME, only the targets they use are offered, and not
+    one another of their listed documents already pins (a shared core document's
+    pins are not offered again for a product document). A document no deployment
+    lists yet is compared with the whole solution.
 
     Candidates are findings: a stale pin is a warning (as in `strata validate`), a
     target with no pin yet is informational, and an artifact with no `image_tag` and no
@@ -153,8 +153,13 @@ def version_update(name: str, start_path: Path | None, check: bool, output: str,
 
         # A staged artifact (referenced, no deployment yet) is offered, so its pin can be prepared.
         unused = unreferenced_artifacts(context) if context.ok else []
+        resolved, _ = resolve_deployment_chains(context.controller.index)
         rows = reconcile_version(
-            context.controller.index, solution, cast(VersionModel, entry.model), unused_artifacts=unused
+            context.controller.index,
+            solution,
+            cast(VersionModel, entry.model),
+            unused_artifacts=unused,
+            scope=version_scope(context.controller.index, resolved, name),
         )
         run.step(f"found {len(rows)} candidate(s)")
 
@@ -218,6 +223,66 @@ def _print_rows(rows: list[ReconcileRow]) -> None:
             click.echo(f"  ?  {row.category}.{row.name}  (no image_tag and no pin \u2014 needs a version)")
         else:
             click.echo(f"  -  {row.category}.{row.name}  (stale \u2014 target no longer exists)")
+
+
+@version_command.command("show")
+@click.argument("name")
+@click.option("--path", "start_path", type=click.Path(file_okay=False, path_type=Path), default=None, help=_PATH_HELP)
+@output_option
+@quiet_option
+@verbose_option
+def version_show(name: str, start_path: Path | None, output: str, quiet: bool, verbose: bool) -> None:
+    """Show the kind: version document named NAME: its pins, and the deployments that list it.
+
+    A version document names no workspace (docs/design/version-composition.md): the deployments listing it in
+    `spec.version` decide where it applies, directly or through `extends` (a partial base included), so they are
+    what this shows.
+
+    \b
+    Exit codes:
+      0  shown
+      2  NAME is not an indexed version document, or not inside a solution
+      1  system failure
+    """
+    with command_run("version show", output=output, quiet=quiet, verbose=verbose) as run:
+        context = open_solution(resolve_work_path(start_path))
+        solution = context.controller.solution
+        run.describe(solution=solution.meta.name if solution else "(unnamed)", root=context.root, name=name)
+
+        entry = context.controller.index.get(PlatformKind.VERSION, name)
+        if entry is None:
+            raise UsageError(f"No version document named '{name}' is indexed.")
+        version = cast(VersionModel, entry.model)
+        resolved, _ = resolve_deployment_chains(context.controller.index)
+        deployments = listing_deployments(context.controller.index, resolved, name)
+        pins = [
+            {"category": category, "target": target, "version": pin.version, "status": pin.status.value}
+            for category, target, pin in version.spec.pins.iter_pins()
+        ]
+        promotion = version.spec.promotion.model_dump(exclude_none=True) if version.spec.promotion else None
+        run.step(f"found {len(pins)} pin(s), listed by {len(deployments)} deployment(s)")
+
+        if output == "console":
+            # `order` may be set without `ring` (only `ring` requires `order`), so read each part on its own.
+            ring = f"  (ring {promotion.get('ring', '-')}, order {promotion.get('order', '-')})" if promotion else ""
+            click.echo(f"\n  {name}{ring}  {entry.source.relative_to(context.root).as_posix()}\n")
+            if not pins:
+                click.echo("  (no pins)")
+            for pin_row in pins:
+                status = "" if pin_row["status"] == "current" else f"  ({pin_row['status']})"
+                click.echo(f"  {pin_row['category']}/{pin_row['target']} = {pin_row['version']}{status}")
+            click.echo("\n  listed by: " + (", ".join(deployments) if deployments else "(no deployment)") + "\n")
+
+        run.report(Diagnostics(), root=context.root)
+        if isinstance(run.reporter, JsonReporter):
+            run.reporter.data = {
+                "name": name,
+                "path": str(entry.source),
+                "promotion": promotion,
+                "pins": pins,
+                "deployments": deployments,
+            }
+        run.ok = True
 
 
 @version_command.command("set")

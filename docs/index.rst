@@ -28,6 +28,7 @@ strata-v2
    how-to/sbom-generation
    how-to/script-provisioner
    how-to/security-gates
+   how-to/share-version-pins-across-workspaces
    how-to/structured-properties-with-attributeconfig
 
 .. toctree::

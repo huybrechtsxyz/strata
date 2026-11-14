@@ -65,6 +65,11 @@ class Diagnostic:
     code: str | None = None
     """Stable machine-readable classifier, e.g. pydantic's `missing`."""
 
+    hint: str | None = None
+    """What to do about it, when that is known: one short imperative sentence, separate from the `message` that
+    says what is wrong (docs/work/diagnostic-guidance.md, design question 1). Rendered under the finding on the
+    console and as `hint` in JSON. Optional: most findings carry their fix in the message today."""
+
     def __str__(self) -> str:
         """Render as `source: location: message [code]`, omitting empty parts."""
         parts = [part for part in (self.source, self.location) if part]
@@ -75,7 +80,7 @@ class Diagnostic:
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable mapping, omitting absent fields."""
         result: dict[str, Any] = {"severity": self.severity.value, "message": self.message}
-        for name in ("source", "location", "code"):
+        for name in ("source", "location", "code", "hint"):
             value = getattr(self, name)
             if value is not None:
                 result[name] = value
@@ -103,9 +108,12 @@ class Diagnostics:
         source: str | None = None,
         location: str | None = None,
         code: str | None = None,
+        hint: str | None = None,
     ) -> None:
         """Record one finding."""
-        self.items.append(Diagnostic(severity=severity, message=message, source=source, location=location, code=code))
+        self.items.append(
+            Diagnostic(severity=severity, message=message, source=source, location=location, code=code, hint=hint)
+        )
 
     def error(self, message: str, **kwargs: Any) -> None:
         """Record an error — the run must fail."""

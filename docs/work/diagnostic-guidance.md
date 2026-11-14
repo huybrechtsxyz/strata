@@ -1,7 +1,7 @@
 # Diagnostic Guidance — Corrective Hints for Errors/Warnings (Gap)
 
-- Status: draft — gap identified and evidenced, not designed
-- Last updated: 2026-10-07
+- Status: in-progress — the `hint` field is built (questions 1, 2 decided); retrofitting existing findings is open
+- Last updated: 2026-11-14
 - Related: [ndjson-output.md](../archive/ndjson-output.md) (where this was
   first surfaced, as an unrelated tangent while reviewing that doc's own
   "Shipped design" section — NDJSON is purely a streaming/transport
@@ -82,12 +82,36 @@ ndjson, `ndjson-output.md`'s own scope): it's about the *content* of a
    checking before investing in a design, not assumed just because the
    gap is real.
 
+## Decided (2026-11-14)
+
+Built with the version composition work ([version-composition.md](../design/version-composition.md)), whose new findings
+were the first to need it:
+
+1. **Shape: a `hint: str | None` field on `Diagnostic`** (option A), passed through `Diagnostics.add()` and its
+   `error`/`warning`/`info` helpers. The "what" (`message`) and the "what to do" (`hint`) travel as one finding, so
+   no renderer has to pair two list entries.
+2. **Rendering.** It does not affect `.ok` or the severity. Console: a second line under the finding, aligned with
+   its text, dimmed (`hint: ...`). JSON: `diagnostics[].hint`, omitted when absent like every other optional
+   field. VS Code: appended to the problem's message (`Hint: ...`).
+3. **Where the text lives: at the call site**, for now. The hint often names the document or the flag to change,
+   which only the call site knows. A lookup keyed by `code` stays possible for hints that never vary.
+4. **Scope: opportunistic.** Every `version_*` finding and the by-value `build_version_mismatch` carry a hint, and
+   `docs/config/version.md` "Findings" lists each code with what to do. Existing findings keep their fix in the
+   message until they are touched; `cve_policy`'s missing-data gate is the next obvious one.
+5. **Evidence:** the 2.6.3 report of `version_workspace_mismatch` from config-repo — a user who hit a finding and had
+   to ask what to change.
+
+A hint is one short imperative sentence. A finding whose message used to end in "... do X" now ends at what is
+wrong, with "Do X" in the hint.
+
 ## Not yet decided / explicitly out of scope
 
-Nothing designed or built yet — this is a pure gap-flagging doc, written
-immediately after the gap was found, before any design work started.
+- Retrofitting hints to existing findings, and whether `strata validate` should list hint-less codes.
 
 ## Changelog
+
+- 2026-11-14: Questions 1-5 answered and the `hint` field built (console, JSON, VS Code), first used by the
+  version composition findings. See "Decided".
 
 - 2026-10-07: Created — gap surfaced while reviewing
   [ndjson-output.md](../archive/ndjson-output.md)'s own "Shipped design"

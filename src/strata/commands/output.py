@@ -157,7 +157,12 @@ def format_diagnostic(item: Diagnostic, *, colour: bool) -> str:
     )
     parts = [part for part in (item.location, item.message) if part]
     line = f"  {label}  {': '.join(parts)}"
-    return f"{line} [{item.code}]" if item.code else line
+    line = f"{line} [{item.code}]" if item.code else line
+    if item.hint:
+        # Under the finding, aligned with its text: the fix reads as part of the same finding.
+        indent = " " * (2 + _LABEL_WIDTH + 2)
+        line += "\n" + indent + _styled(f"hint: {item.hint}", "bright_black", enabled=colour)
+    return line
 
 
 def format_console(

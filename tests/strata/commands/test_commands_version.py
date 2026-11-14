@@ -94,42 +94,37 @@ def _set(runner, *args):
 
 
 def test_new_creates_a_minimal_document(runner, solution):
-    result = _new(runner, "dev", "--workspace", "main", "--path", solution)
+    result = _new(runner, "dev", "--path", solution)
     assert result.exit_code == EXIT_SUCCESS
 
     destination = solution / "versions" / "dev.yaml"
     assert destination.is_file()
     data = yaml.safe_load(destination.read_text(encoding="utf-8"))
     assert data["meta"]["name"] == "dev"
-    assert data["spec"]["workspace"] == "main"
+    assert "workspace" not in data["spec"]
 
 
 def test_new_rejects_a_colliding_name(runner, solution):
     (solution / "versions").mkdir()
     (solution / "versions" / "prd.yaml").write_text(VERSION, encoding="utf-8")
 
-    result = _new(runner, "prd", "--workspace", "main", "--path", solution)
+    result = _new(runner, "prd", "--path", solution)
     assert result.exit_code == EXIT_USAGE
     assert "already exists" in result.output
 
 
-def test_new_rejects_an_unknown_workspace(runner, solution):
-    result = _new(runner, "dev", "--workspace", "ghost", "--path", solution)
-    assert result.exit_code == EXIT_USAGE
-
-
 def test_new_outside_a_solution_exits_usage_failure(runner, tmp_path):
-    result = _new(runner, "dev", "--workspace", "main", "--path", tmp_path)
+    result = _new(runner, "dev", "--path", tmp_path)
     assert result.exit_code == EXIT_USAGE
 
 
 def test_new_json_output_reports_the_created_path(runner, solution):
-    result = _new(runner, "dev", "--workspace", "main", "--path", solution, "--output", "json")
+    result = _new(runner, "dev", "--path", solution, "--output", "json")
     assert result.exit_code == EXIT_SUCCESS
     envelope = json.loads(result.output)
     assert envelope["ok"] is True
     assert envelope["data"]["name"] == "dev"
-    assert envelope["data"]["workspace"] == "main"
+    assert "workspace" not in envelope["data"]
     assert Path(envelope["data"]["path"]) == (solution / "versions" / "dev.yaml").resolve()
 
 
@@ -141,7 +136,7 @@ def test_new_from_seeds_pins_with_current_values(runner, solution):
         encoding="utf-8",
     )
 
-    result = _new(runner, "dev", "--workspace", "main", "--from", "prd", "--path", solution)
+    result = _new(runner, "dev", "--from", "prd", "--path", solution)
     assert result.exit_code == EXIT_SUCCESS
 
     data = yaml.safe_load((solution / "versions" / "dev.yaml").read_text(encoding="utf-8"))

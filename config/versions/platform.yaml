@@ -1,0 +1,18 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: version
+meta:
+  name: platform
+  annotations:
+    description: "Pins shared by every product of the production ring"
+spec:
+  # A shared document: no `promotion` tag (it does not decide a ring) and no
+  # `workspace` (the deployments that list it decide where it applies). Every
+  # deployment lists it next to its own document, `version: [platform, prd]`;
+  # each pin has one owning document, so `prd` must not pin `infra` too
+  # (version_pin_conflict). docs/config/version.md, "Several documents per deployment".
+  pins:
+    remotes:
+      # Overrides `reference` for the 'infra' remote declared in strata.yaml.
+      # Only valid because that remote is `fetch: strata` — a `fetch: external`
+      # remote is placed by CI before strata runs, so pinning it cannot work.
+      infra: v1.0.0

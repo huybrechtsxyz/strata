@@ -803,7 +803,7 @@ def _located_asset_solution(tmp_path: Path) -> Path:
         root,
         "version-ring.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: ring\nspec:\n"
-        "  workspace: main\n  pins:\n    assets:\n      contoso-api: v2\n",
+        "  pins:\n    assets:\n      contoso-api: v2\n",
     )
     return root
 
@@ -846,9 +846,7 @@ def _located_asset_model(reference: str = "v1", *, with_location: bool = True) -
 
 def _ring_version(pins: str) -> VersionModel:
     return VersionModel.model_validate(
-        yaml.safe_load(
-            f"apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: ring\nspec:\n  workspace: main\n{pins}"
-        )
+        yaml.safe_load(f"apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: ring\nspec:\n{pins}")
     )
 
 
@@ -2373,7 +2371,7 @@ def test_build_run_writes_promotion_section_for_a_tagged_version(tmp_path: Path)
     root = _terraform_solution_with_version(
         tmp_path,
         "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
-        "  workspace: main\n  promotion:\n    ring: prd\n    order: 3\n    wave: canary\n  pins: {}\n",
+        "  promotion:\n    ring: prd\n    order: 3\n    wave: canary\n  pins: {}\n",
     )
     build_path = tmp_path / "build"
 
@@ -2393,7 +2391,7 @@ def test_build_run_promotion_section_omits_wave_when_unset(tmp_path: Path):
     root = _terraform_solution_with_version(
         tmp_path,
         "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
-        "  workspace: main\n  promotion:\n    ring: dev\n    order: 1\n  pins: {}\n",
+        "  promotion:\n    ring: dev\n    order: 1\n  pins: {}\n",
     )
     build_path = tmp_path / "build"
 
@@ -2558,7 +2556,7 @@ def test_build_run_dry_run_reports_output_template_would_validate(tmp_path: Path
 # for that reason, not a reachable path via a valid solution.
 
 # ---------------------------------------------------------------------------
-# build_run() + clone credentials (docs/work/remotes-at-scale.md C2)
+# build_run() + clone credentials (docs/design/asset-management.md C2)
 # ---------------------------------------------------------------------------
 
 _GIT_TOKEN = "ghp_buildtimetoken123"

@@ -519,7 +519,6 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
             "kind": "version",
             "meta": {"name": "prd"},
             "spec": {
-                "workspace": "main",
                 "promotion": {"ring": "prd", "order": 3},
                 "pins": {
                     "images": {

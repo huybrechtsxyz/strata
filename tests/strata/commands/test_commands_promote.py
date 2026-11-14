@@ -46,6 +46,14 @@ def runner():
     return CliRunner()
 
 
+ENVIRONMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec: {}
+"""
+
+
 def _write(root, relative: str, content: str) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,17 +66,17 @@ def solution(tmp_path):
     _write(root, "strata.yaml", MANIFEST)
     _write(root, "provider.yaml", PROVIDER)
     _write(root, "workspace.yaml", WORKSPACE)
+    _write(root, "environment.yaml", ENVIRONMENT)
     return root
 
 
-def _version(name: str, *, workspace: str = "api", promotion: str | None = None, pins: str = "  pins: {}\n") -> str:
+def _version(name: str, *, promotion: str | None = None, pins: str = "  pins: {}\n") -> str:
     promotion_yaml = f"  promotion:\n{promotion}\n" if promotion else ""
     return f"""apiVersion: strata.huybrechts.xyz/v2
 kind: version
 meta:
   name: {name}
 spec:
-  workspace: {workspace}
 {promotion_yaml}{pins}"""
 
 
@@ -78,8 +86,8 @@ kind: deployment
 meta:
   name: {name}
 spec:
-  partial: true
   workspace: {workspace}
+  environments: [prd]
   version: {version}
 """
 
@@ -193,6 +201,8 @@ def test_multi_ring_json_output_carries_every_row(runner, solution):
         "value": "acme/api:1.0.0",
         "status": "current",
         "behind": True,
+        "owner": "api-prd",
+        "shared": False,
     }
 
     canary_row = next(r for r in rows if r["value"] == "acme/api:1.1.0")

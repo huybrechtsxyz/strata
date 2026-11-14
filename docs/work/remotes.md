@@ -88,7 +88,7 @@ now fills this in for `local` and `git` remotes.
     agent/credential helper); a private repo with nothing configured fails with
     git's own error message. A remote's `integration` supplies a token or SSH key
     instead, resolved lazily only when a clone runs — see
-    [remotes-at-scale.md](remotes-at-scale.md) and
+    remotes-at-scale.md and
     [integrations/git.md](../integrations/git.md).
   - `type: oci`/`helm` → a clear `RemoteResolutionError` naming what's
     missing, not a silent no-op or a crash.
@@ -190,6 +190,6 @@ not a scheduled phase; update it as each numbered item above lands.
   GHE remotes) already avoids strata-managed credentials entirely via
   `fetch: external`, so there is no real consumer for this yet.
 - 2026-10-20: Item 4 built after all, for the per-customer asset case
-  ([remotes-at-scale.md](remotes-at-scale.md)): no ABC, a per-build
+  (remotes-at-scale.md): no ABC, a per-build
   `RemoteCredentialResolver` that reads the integration's `authentication`.
   `fetch: external` remains the choice when CI already has the repository.

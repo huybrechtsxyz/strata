@@ -32,6 +32,7 @@ from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.value_references import resolve_document_value_references
+from strata.controllers.version_composition import compose_versions, deployment_version
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.integrations.registry import IntegrationNotFoundError
@@ -39,7 +40,7 @@ from strata.integrations.registry import get as get_integration
 from strata.integrations.resolved_context import ValueReference, ValueResolution
 from strata.models.artifact_model import ArtifactModel
 from strata.models.common_models import PlatformKind
-from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel
+from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel, VersionPins, version_name_list
 from strata.models.environment_model import EnvironmentModel
 from strata.models.store_model import (
     FeatureStoreModel,
@@ -131,7 +132,7 @@ class _Resolvers:
 
 
 def resolve_deployment(
-    context: SolutionContext, deployment_name: str, *, version_pin: str | None = None
+    context: SolutionContext, deployment_name: str, *, version_pin: VersionPins = None
 ) -> DeploymentModel:
     """Find `deployment_name` and fold in its `extends`/tenant-defaults chain.
 
@@ -146,7 +147,12 @@ def resolve_deployment(
         deployment_name: `meta.name` of the deployment to resolve.
         version_pin: `--pin` (docs/work/version-lifecycle.md Phase 5) — when
             given, overrides the resolved deployment's `spec.version` to this
-            name for the returned model only, never written to disk. The
+            name, or to this list of names when the flag was repeated
+            (docs/design/version-composition.md V7: the list replaces the
+            deployment's whole list), for the returned model only, never
+            written to disk. Documents in it that pin the same target stop
+            the run (`version_pin_conflict`), as they fail validation in a
+            written list. The
             one place this override happens: every real consumer
             (`resolve_version()`, `resolve_artifact_field()`, the build-time
             images/charts/remotes overlays) reads `spec.version` off the
@@ -176,15 +182,21 @@ def resolve_deployment(
     deployment = found
 
     if version_pin is not None:
-        if index.get(PlatformKind.VERSION, version_pin) is None:
-            raise UsageError(f"--pin names an unknown version document: '{version_pin}'.")
-        deployment = deployment.model_copy(update={"spec": deployment.spec.model_copy(update={"version": version_pin})})
+        names = version_name_list(version_pin)
+        for name in names:
+            if index.get(PlatformKind.VERSION, name) is None:
+                raise UsageError(f"--pin names an unknown version document: '{name}'.")
+        _, conflicts = compose_versions(index, names, label=deployment_name)
+        if conflicts.errors:
+            raise UsageError("--pin: " + "; ".join(d.message for d in conflicts.errors))
+        pinned: str | list[str] = names[0] if len(names) == 1 else names
+        deployment = deployment.model_copy(update={"spec": deployment.spec.model_copy(update={"version": pinned})})
 
     return deployment
 
 
 def resolve_deployment_workspace(
-    context: SolutionContext, deployment_name: str, *, version_pin: str | None = None
+    context: SolutionContext, deployment_name: str, *, version_pin: VersionPins = None
 ) -> tuple[DeploymentModel, WorkspaceModel]:
     """`resolve_deployment()` plus the workspace it names; shared by `build run`, `deploy run` and `policy`.
 
@@ -235,12 +247,7 @@ def resolve_version(context: SolutionContext, deployment: DeploymentModel) -> Ve
     above — `validate_references` is the layer that reports a bad
     `spec.version`, not this function.
     """
-    if not deployment.spec.version:
-        return None
-    entry = context.controller.index.get(PlatformKind.VERSION, deployment.spec.version)
-    if entry is None:
-        return None
-    return cast(VersionModel, entry.model)
+    return deployment_version(context.controller.index, deployment)
 
 
 def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactModel | None:
@@ -422,7 +429,7 @@ def build_value_references(
 
 
 def resolve_values(
-    context: SolutionContext, deployment_name: str, keys: list[str], *, version_pin: str | None = None
+    context: SolutionContext, deployment_name: str, keys: list[str], *, version_pin: VersionPins = None
 ) -> ValueResolution:
     """Resolve `keys` against `deployment_name`'s merged environment(s).
 

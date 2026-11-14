@@ -28,7 +28,7 @@ Exit codes: 0 success, 1 system failure, 2 usage error, 3 validation failure (th
 | Command | Use |
 | --- | --- |
 | `strata validate [PATH]` | Validate every document in the solution. |
-| `strata graph [PATH]` | Every cross-document reference, resolved or not. |
+| `strata graph [PATH]` | Every cross-document reference, resolved or not; `--unreferenced` lists documents nothing uses (cleanup candidates). |
 | `strata path get KIND NAME` / `strata path list KIND` | Find a document's real file. |
 | `strata deploy list` | Every deployment with its workspace, tenant, version document, ring and environments (through `extends`); partial bases are marked. Filter with `--workspace`, `--tenant`, `--version`, `--ring`, `--deployable`. |
 | `strata render KIND NAME` | A deployment, environment or tenant as resolved (`extends` merged, parameter sets filled in, a deployment's tenant defaults folded in), one line per field with the document that wrote it and, for a value from a parameter set, the text as written and the set and key it read. Secrets masked. Exit 3 for a partial base or a document that does not resolve. |
@@ -42,7 +42,7 @@ Exit codes: 0 success, 1 system failure, 2 usage error, 3 validation failure (th
 | `strata values list / resolve / status DEPLOYMENT` | Inspect variables, secrets and features without revealing values. |
 | `strata values get DEPLOYMENT KEY...` | Full values, secrets included. Not for inspection. |
 | `strata values set / rotate / generate / mask` | Write or generate secret values. |
-| `strata version new / set / update NAME` | Manage `kind: version` pin documents. |
+| `strata version new / set / update / show NAME` | Manage `kind: version` pin documents; `show` lists a document's pins and the deployments that list it. |
 | `strata promote status / view / apply WORKSPACE` | Ring/order/wave rollout of version documents. |
 | `strata audit status / changes [DEPLOYMENT]` | Read back the deployment audit trail. |
 | `strata policy list / check / findings DEPLOYMENT` | List the workspace's policies, evaluate them now (`cve_policy`, `checkov_policy`, `image_tag_policy`, the deploy gates), or list a policy's findings (`cve_policy`, `checkov_policy`, `image_gate_policy`). |
@@ -75,7 +75,7 @@ Every document has `apiVersion`, `kind`, `meta.name` and `spec`. Documents refer
 | One base for many instances (spokes, customers) | a `parameterset` per instance, named per role in `meta.params` of the deployment, environment or tenant, read in its base with `${param:<role>.<key>}`; `meta.name_rule` keeps each name in line with its values |
 | Checking parameter sets | an `attributeconfig` with `kind: parameterset, block: values, view: document` (one set's shape), or `block: params, view: effective` on a deployment, environment or tenant (the merged values it receives, one key per role) |
 | Rebinding a provider or asset for one deployment | `deployment.spec.providers`, `deployment.spec.assets` |
-| Pinning an image, chart, remote ref, artifact tag or asset ref | `version.spec.pins`, selected by `deployment.spec.version` |
+| Pinning an image, chart, remote ref, artifact tag or asset ref | `version.spec.pins`, selected by `deployment.spec.version` (one document or a list: a shared core plus a product document, each pin owned by one) |
 | Refusing an image with no tag, a floating tag such as `latest`, or the wrong tag shape | `workspace.spec.image_tag_policy` |
 | Credentials or a connection to a tool or service | an `integration` document, named from a provisioner, a remote, a store, an audit sink or a gate policy |
 | A git, OCI or Helm source | `solution.spec.remotes` in `strata.yaml`, used as `@<name>/<path>` |
