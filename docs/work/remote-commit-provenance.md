@@ -28,281 +28,45 @@ commit it was at, and write to it, but never clones or resets it.
 
 ## Current Design / Progress
 
-Phases 1 to 4 are built, which completes Part A:
-- `checkout_state()`;
-- the build record: `resolved.yaml` has `solution` and `remotes`;
-- the audit copy: the deploy's manifest takes its commits from that record;
-- `spec.audit.require_remote_commits`: with it on, `deploy run` fails on a gap in the record.
+**Part A is built and documented.** The finished design is
+[remote-commit-provenance.md](../design/remote-commit-provenance.md) (design doc), and the user reference is "Which
+commits were deployed" in [configuration.md](../config/configuration.md). In short:
 
-G1 to G4 are closed. G5 stays out of scope (R4). Phase 5 wrote the user-facing docs and the CHANGELOG, so Part A
-is ready to release. Parts B and C (Phases 6 to 8) are not started.
+- `build run` records the commit of the solution, and of each git remote it took files from, in `resolved.yaml`;
+- the deploy's audit manifest copies that record;
+- `spec.audit.require_remote_commits` makes a gap in the record fail the deploy.
 
-The "What exists today" list below describes the state before this work. Since Phase 3 it applies only to the deploy
-of a build made without the record:
+**Part B's strata side is built (Phase 6).** An audit sink may write to a path remote: strata commits in the
+pipeline's checkout and pushes with its credentials. `git.action` (`push | commit | none`) stops earlier. Phase 7,
+turning platform-config's `inventory` sink on, is next and lives in that repository.
 
-- **Path mode.** `audit_run._collect_artifacts_bom()` ([audit_run.py](../../src/strata/controllers/audit_run.py))
-  records each remote the workspace's provisioners and modules name as `ManifestRepositoryModel(url, ref, commit)`.
-  For a `path` remote, `_checkout_commit()` fills `commit` with `git rev-parse HEAD` of the checkout. It requires
-  `.git` in the folder itself. When it cannot read a commit, it warns (`audit_remote_commit_unavailable`) and
-  leaves `commit` empty.
-- **Every other remote** gets `commit: null`. This includes a `fetch: external` remote in ref mode (Q2 of
-  `remote-external-path.md`) and a clone strata fetched itself at a branch `reference`.
-- **The build** copies each source into its output (`source_sync.sync_source()`), and the deploy runs from that
-  output. `resolved.yaml` recorded no remotes. The SBOM records the solution's own commit (`built_commit_sha()`) and
-  nothing for remotes.
-- **Pushing (Part B).** A path remote can't be pushed to.
-  - `validate` reports `path_remote_not_pushable` for an audit sink or GitOps step that names one.
-  - `audit_push.push_audit_files()` refuses it at run time too.
-  - An audit push always works in its own clone (`layout.audit_push_checkout_path()`), which it fetches and resets
-    before every write.
-  - platform-config's `inventory` sink is therefore commented out. The documented workaround is a second remote with
-    `reference: main` and an `integration`, which needs strata to clone from the git server in CI. It can't do that
-    today.
+Before Phase 6, a path remote could not be pushed to. `validate` refused an audit sink or a GitOps step that named
+one, and platform-config's `inventory` sink was commented out. The documented workaround was a second remote with
+`reference: main` and an `integration`, which needs strata to clone from the git server in CI. A GitOps step is
+still refused (B4).
+
+**Part C is built (Phase 8).** `spec.discovery.remotes` lists path remotes whose checkouts are scanned for
+documents, and the build records each one's commit. Loading only the checkouts that are present (C2, "later") is not
+built: every listed remote must be checked out (D9).
+
+Before Phase 8:
 - **Documents (Part C).** Discovery reads only the solution root, minus `spec.discovery.exclude`. Remotes supply
   sources (Terraform, charts, asset files), never documents.
 
-### The gaps
-
-| #   | Gap                                                                                                                                                                                                                                                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| G1  | **Read at the wrong time.** The commit is read when the deploy runs, from the checkout on disk. The deploy runs from the build output. When build and deploy are separate jobs, or the checkout moved after the build, the manifest names a tree the deploy never used. |
-| G2  | **Uncommitted changes are invisible.** `HEAD` names a commit, not the files on disk. A build from a modified checkout records a SHA whose tree does not match what was deployed.                                                                         |
-| G3  | **Only path mode is recorded.** A branch `reference`, whether strata fetched it or a pipeline did, records no commit, so "which commit of `main`?" has no answer.                                                                                         |
-| G4  | **A missing commit is a warning only.** A team that needs the record cannot make its absence fail the run.                                                                                                                                              |
-| G5  | **The commit may exist nowhere else.** A local commit that was never pushed is recorded as if it could be looked up.                                                                                                                                   |
-
 ## Part A - Provenance
 
-### R1 - The build records what it took
+Built. See the design doc. It closed these gaps:
 
-`build run` records each git remote it resolved, at the moment it resolves it, in a new `remotes` key of
-`resolved.yaml`:
+| #   | Gap                                                                                       | Closed by                                       |
+| --- | ----------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| G1  | The commit was read at deploy, from a checkout the deploy never used.                     | The build records it; the manifest copies it.   |
+| G2  | Uncommitted changes were invisible.                                                       | `dirty`, and the option.                        |
+| G3  | Only path mode was recorded.                                                              | Every git remote is recorded.                   |
+| G4  | A missing commit was a warning only.                                                      | `require_remote_commits`.                       |
+| G5  | The commit may exist nowhere else.                                                        | Not closed: out of scope (Q3).                  |
 
-```yaml
-solution:                     # the repository holding strata.yaml (D13)
-  commit: 5d0e7a9c31...
-  dirty: false
-remotes:
-  infra:
-    url: https://git.example.com/org/infra.git
-    ref: null                 # path mode: the pipeline owns the ref
-    commit: 3f9c2e1d4b...     # full SHA, or null when it could not be read
-    dirty: false              # true when files the build took had uncommitted changes
-  shared-modules:
-    url: https://github.com/org/modules.git
-    ref: v1.8.0               # after version pins
-    commit: 8a71b0c55e...
-    dirty: false
-```
-
-- **Where.** Every source read goes through `source_sync._resolve()` (the one `resolve_remote()` call for build
-  sources). A recorder passed beside `credentials` records the remote's name and checkout there. So assets,
-  module files and provisioner sources all count, with no second list of "used remotes" to keep in step.
-- **Which remotes.** All `type: git` remotes: path mode, ref mode `fetch: external`, and ref mode `fetch: strata`
-  (the clone under `.strata/remotes/<name>/<ref>`). A `type: local` remote is a folder of the solution, so the
-  solution's commit covers it (see "The solution itself" below). `helm` and `oci` chart remotes are left out: the
-  manifest already records each chart's name and version.
-- **The solution itself (D13).** `resolved.yaml` also records the solution repository under `solution`:
-  - `commit` comes from `built_commit_sha()`, the same value the SBOM records: a commit variable from the CI system
-    first, otherwise `git rev-parse HEAD`.
-  - `dirty` is `git status --porcelain` over the solution root. The build output and `.strata/` are excluded, as
-    discovery excludes them. This covers the documents and every `type: local` remote.
-- **How.** A helper `checkout_state(checkout, paths) -> CheckoutState(commit, dirty)` replaces `_checkout_commit()`.
-  It keeps the rule that `.git` must be in the folder itself.
-  - `commit` is `git rev-parse HEAD`.
-  - `dirty` is `git status --porcelain -- <paths>`, limited to the `source_path`s the build took from that remote.
-    Untracked files count, because the copy takes them. Ignored files do not (D11).
-  - A folder that is not a git checkout gives `commit: null`, `dirty: null`, and the existing warning.
-- **The SHA is the identity; `ref` stays as written.** Two builds of `main` on different days now differ in
-  `commit` and diff as such.
-
-#### `checkout_state()` (Phase 1)
-
-[checkout_state.py](../../src/strata/controllers/checkout_state.py):
-
-```python
-@dataclass(frozen=True)
-class CheckoutState:
-    commit: str | None          # full SHA of HEAD
-    dirty: bool | None          # None: not asked for, or could not be read
-    problem: str | None = None  # why commit or dirty is None when it was asked for
-
-def checkout_state(checkout: Path, paths: Sequence[str] | None = None, *, exclude: Sequence[str] = ()) -> CheckoutState
-```
-
-- `.git` must be in `checkout` itself, as a folder or as a file (a worktree or a submodule). Otherwise the result is
-  `CheckoutState(None, None, "'<checkout>' is not a git checkout")`. Without this rule `git` would walk up and
-  report the enclosing repository.
-- `commit` is `git rev-parse HEAD`. A failure, such as a repository with no commit yet or one `git` refuses as
-  unsafe, gives `commit: None`, `dirty: None`, and `git`'s message in `problem`.
-- `paths=None` skips the dirty check, so `dirty` is `None`. Since Phase 3 the only such caller is the deploy of an
-  older build, which only wants the commit.
-- `paths` given: `git --no-optional-locks status --porcelain -- <paths> :(exclude)<exclude>...`, with `.` when
-  `paths` is empty.
-  - `--no-optional-locks` keeps `status` from rewriting the index of a checkout that someone else owns.
-  - Untracked files are listed and count. Ignored files are not listed (D11).
-  - Paths are git pathspecs, so a glob in an asset's `source_path` matches as `git` matches it, where `*` also
-    crosses `/`. At worst it reports changes a little too broadly.
-- The function never raises and never writes. Warnings are the caller's job, because only the caller knows the
-  remote's name and what the record is for.
-
-#### The build record (Phase 2)
-
-[source_record.py](../../src/strata/controllers/source_record.py) holds `SourceRecord`, one per `build run`. It is
-passed as `record=` beside `credentials=` wherever a source is resolved. Its default is `None`, which records
-nothing, so every other caller is unchanged.
-
-- **Two calls.**
-  - `_resolve_repo()` calls `record.resolved(key, remote, checkout)` for a `type: git` remote. The key is the remote's
-    name, or `asset:<name>` for an asset's own `spec.location`. The `:` cannot occur in a remote name, so the two
-    never collide.
-  - Each place that copies calls `record.took(checkout, path, glob=...)`:
-
-    | Copy                          | `path`                                                 |
-    | ----------------------------- | ------------------------------------------------------ |
-    | `sync_source()`               | `source_path`                                          |
-    | `sync_module_source()`        | `source_path`                                          |
-    | `sync_asset()`                | the filled `source_path`, `glob=True` for a pattern    |
-    | a Helm `file://` dependency   | the dependency's folder in the chart's repository      |
-    | `snapshot_checkov_configs()`  | `config_file`, when it was copied                      |
-
-    A checkout that no `resolved()` call registered is ignored. That is the solution root and every `type: local`
-    remote, which the `solution` record covers.
-- **Pathspecs.** A literal path is passed as `:(literal)<path>` and a pattern as `:(glob)<pattern>`. `:(glob)` matches
-  `*` within one segment and `**` across segments, as `pathlib.glob()` does when the asset is copied. This replaces
-  the "`*` crosses `/`" caveat of Phase 1.
-- **When.** The record is read once, at the end of the build, after the policy gates (the Checkov snapshot is the
-  last copy). `checkout_state()` runs once per remote, with every path taken from it. A remote that was resolved but
-  gave nothing is not recorded.
-- **`resolved.yaml`.** `write_resolved_manifest()` gains `provenance=`. The build writes the file early, as today,
-  and again at the end with `solution` and `remotes`. `remotes` is written even when it is empty (`{}`), so Phase 3
-  can tell a new build without remotes from an older build.
-- **`solution`.**
-  - `commit` is `built_commit_sha()`, the value the SBOM already records.
-  - `dirty` is `checkout_state(root, ["."], exclude=[".strata", <build path>], enclosing=True)`. The build path is
-    excluded only when it is under the root.
-  - `enclosing=True` lets the solution root be a folder inside its repository. `strata.yaml` need not sit at the top
-    of the repository.
-- **Warnings** (R3's default column), each with a `hint`:
-  - `audit_remote_commit_unavailable` when a remote's commit could not be read;
-  - `remote_checkout_dirty` when the taken paths of a remote, or the solution's files, have uncommitted changes.
-
-  A solution outside git records `commit: null` and `dirty: null` **without** a warning, as the SBOM does today. It
-  is the normal case for an example or a test, and every build would otherwise warn. Phase 4's
-  `require_remote_commits` makes it an error. This narrows R3's first row for the solution.
-
-  Since Phase 3 the deploy no longer repeats these warnings for a build that has the record.
-- **Dry run.** Nothing is copied, so nothing is recorded or written.
-
-### R2 - The audit manifest copies the build's record
-
-`audit_run` takes `repositories` from `resolved.yaml`'s `remotes` and no longer reads any checkout. This closes G1:
-the manifest names the tree that went into the build output, and therefore the tree that was deployed.
-
-- `ManifestRepositoryModel` gains `dirty: bool | None`. The field is optional and added at the end, so older manifests
-  still load.
-- The manifest's `commit_sha` comes from `resolved.yaml`'s `solution.commit` instead of being read at deploy. A new
-  `commit_dirty: bool | None` sits beside it. An older build without `solution` keeps today's deploy-time read.
-- **A build made by an older strata** has no `remotes` key in `resolved.yaml`. The audit then falls back to today's
-  behaviour, so a deploy of an old build keeps its current record.
-
-There is no deploy-time comparison with the checkout. The deploy does not read the checkout, so comparing against it
-would check something the deploy never uses.
-
-#### The audit copy (Phase 3)
-
-`finalize_and_distribute_deploy_audit()` reads the build's `resolved.yaml` once, with `read_build_record()` (in
-`source_record.py`, beside the writer).
-
-- **A record** has both `solution` and `remotes`, which `build run` always writes together. Anything else counts as
-  an older build:
-  - a missing key;
-  - a value of the wrong type;
-  - a `remotes` entry that `ManifestRepositoryModel` rejects.
-
-  Reading the record never fails the audit. `_platform_reference()` already reports a missing `resolved.yaml`.
-- **`commit_sha` and `commit_dirty`** come from `solution`. They are not read again at deploy, even when a CI
-  variable is set then, because the record holds what was built. An older build keeps `built_commit_sha()` at deploy
-  time and has no `commit_dirty`.
-- **`repositories`** is today's list, with the record merged in:
-
-  | Remote                                                     | Entry                                                    |
-  | ---------------------------------------------------------- | -------------------------------------------------------- |
-  | The workspace names it, and the record has it              | The record's `{url, ref, commit, dirty}`                 |
-  | The workspace names it, and the build took nothing from it | `{url, ref}` as today, with no commit and no warning     |
-  | Only the record has it                                     | The record's entry, keyed as the record keys it          |
-
-  - **Named but not taken.** A chart-based module's `remote` is one example. Dropping it would remove an entry today's
-    manifest lists. There is no tree to record, because no file came from it.
-  - **Only in the record.** Examples are an asset's `spec.location` (`asset:<name>`), a Checkov config's remote, and a
-    module remote the build took files from.
-  - Entries are sorted by key. The order used to follow a set's iteration order.
-- **No checkout is read** for a build that has the record. So the deploy gives no `audit_remote_commit_unavailable`
-  warning; the build gave it already.
-- **An older build** keeps the old path exactly: `_checkout_commit()` at deploy time, with its warning.
-
-### R3 - An option to require the record
-
-`spec.audit.require_remote_commits` (on `AuditConfigModel`, so it sits beside the sinks it serves), default `false`
-(D12). The rows below apply to the solution repository as well as to each remote.
-
-| Situation                                    | Build (either setting)                    | Deploy, default    | Deploy, `require_remote_commits: true`          |
-| -------------------------------------------- | ----------------------------------------- | ------------------ | ----------------------------------------------- |
-| Commit could not be read                     | warning `audit_remote_commit_unavailable` | nothing            | error, same code                                |
-| Files taken had uncommitted changes          | warning `remote_checkout_dirty`           | nothing            | error, same code                                |
-| `dirty` could not be read                    | warning `remote_checkout_dirty`           | nothing            | error `remote_checkout_dirty`: unknown counts as dirty |
-| Build without the record (older)             | -                                         | today's behaviour  | error `build_remote_provenance_missing`         |
-
-The build always records and warns, and only `deploy run` fails (D14). `spec.audit` is in the configuration, so
-the option applies on a developer's machine too. An error at build would block the normal loop of editing and then
-building, while building is harmless and deploying is what the audit is about.
-
-- **When the deploy checks.** It checks before it changes anything, in the deploy's preflight next to the other
-  checks on the build output. It never checks in `finalize_and_distribute_deploy_audit()`, which runs after the deploy
-  has happened.
-- **What it reads.** It reads the same `read_build_record()` as Phase 3. Nothing is read from the checkouts.
-- **The solution.** A solution that was not in git was recorded with `commit: null`, so with the option on it fails
-  the deploy like a remote would. This is the R3 narrowing that Phase 2 deferred.
-
-Each finding gets a `hint` ([diagnostic-guidance.md](diagnostic-guidance.md)), for example "Commit the change, build
-again from a clean checkout, then deploy that build."
-
-#### The deploy check (Phase 4)
-
-- **The field.** `AuditConfigModel.require_remote_commits: bool = False`. It has no cross-field rule, so there is no
-  `schema_rules` line. The schema export picks the field up from the model, and nothing is committed by hand.
-- **`check_build_record(build_path) -> Diagnostics`**, in `source_record.py`, returns one error per gap:
-  - no record: `build_remote_provenance_missing`, with the path of `resolved.yaml`;
-  - for the solution, then each remote by key:
-    - no commit: `audit_remote_commit_unavailable`;
-    - otherwise, `dirty` that is not `false`: `remote_checkout_dirty`, which says whether the change was seen or
-      could not be checked.
-
-  The labels are the build's: "The solution repository", "Remote 'x'", "Asset 'x' (spec.location)".
-- **Where.** `deploy_run()` runs the check right after `check_build_version()`, before the image tag policy, the
-  value resolution and any tool. The option is read from the one configuration (`_require_remote_commits(index)`). It
-  counts as off without exactly one configuration, as the other configuration-wide checks do. A destroy is not
-  checked, because it installs nothing from the build. A dry run and a smoke test are checked, so they show the
-  failure early.
-- **The hint** does not name a folder, because the record holds no checkout path. The build's warning names it.
-
-
-### R4 - Not in scope: "is the commit pushed?" (G5)
-
-`git branch -r --contains <sha>` answers this only when the checkout has remote-tracking refs. A pipeline's shallow,
-detached checkout usually has none, so the check would fail for the common case. `git ls-remote` would need the
-network and the remote's credentials, which a path remote never has. G5 stays a known limit and is named in the
-docs (Q3).
-
-### What closes which gap
-
-| Gap | Closed by                                            |
-| --- | ---------------------------------------------------- |
-| G1  | R1 + R2                                              |
-| G2  | R1 (`dirty`) + R3                                    |
-| G3  | R1 (every git remote)                                |
-| G4  | R3                                                   |
-| G5  | Not closed (R4)                                      |
+Parts B and C build on the record. An audit commit to a path remote moves its `HEAD` after the build has recorded
+it (B3), and documents read from a remote are recorded the same way (C1).
 
 ## Part B - Committing to a path remote
 
@@ -317,9 +81,12 @@ An audit sink's `git.remote` may name a path remote. Strata then works in that c
 
 - It never clones, fetches over a reset, or resets. Other people's files in the checkout are not touched.
 - It writes the audit files under `sink.path` as today.
-- It stages and commits only the files it wrote: `git add -- <files>` and `git commit -- <files>`. Anything else
-  that is modified in the tree stays uncommitted.
-- The commit identity is the same as today (`_configure_identity()`, set locally in that checkout).
+- It stages and commits only the files it wrote: `git add -- <files>` and `git commit --only -- <files>`, as
+  `:(literal)` pathspecs. Anything else that is modified, staged or untracked in the tree stays as it was.
+- The commit identity is the deploying actor, as before, but it is passed per command
+  (`git -c user.name=... -c user.email=...`). It is not written to the checkout's config, which belongs to the
+  pipeline. The ref-mode clone keeps `_configure_identity()`.
+- The folder must be a git checkout itself (`checkout_state()`). Otherwise nothing is written and the sink fails.
 
 ```yaml
 # config/configuration.yaml
@@ -340,16 +107,28 @@ audit:
 
 | `action`         | What strata does                                                                                                                                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `push` (default) | Writes, commits, then runs `git push origin HEAD:<branch>` with the checkout's own credentials: the pipeline's, for example Azure DevOps `persistCredentials: true` on the `checkout:` step. When the push is rejected because the branch moved, it runs `git fetch origin <branch>` and `git rebase --autostash origin/<branch>`, then retries, three times in all. |
-| `commit`         | Writes and commits, then stops. A later pipeline step pushes. The manifest records the sink as "committed, not pushed".                                                                                                           |
-| `none`           | Writes the files into the checkout and leaves them uncommitted. A later pipeline step commits and pushes. The manifest records the sink as "written, not committed".                                                              |
+| `push` (default) | Writes, commits, then runs `git push origin HEAD:<branch>` with the checkout's own credentials: the pipeline's, for example Azure DevOps `persistCredentials: true` on the `checkout:` step. When the push is rejected because the branch moved, it runs `git fetch origin <branch>` and `git rebase --autostash FETCH_HEAD`, then retries, three times in all. |
+| `commit`         | Writes and commits, then stops. A later pipeline step pushes. The deploy reports `audit_sink_not_pushed` (information).                                                                                                            |
+| `none`           | Writes the files into the checkout and leaves them uncommitted. A later pipeline step commits and pushes. The deploy reports `audit_sink_not_pushed` (information).                                                               |
 
 `push` is the default because a sink that does not reach the server is not durable, and durability is the point of
 a sink. The other two are for a pipeline that wants to own the commit or the push.
 
+The manifest cannot record "committed, not pushed": it is one of the files being written, so it is complete before
+the sink runs. So the deploy reports the state as information instead.
+
 `commit` and `none` are only valid on a path remote. A ref-mode sink writes into strata's own clone under
-`.strata/audit-push/`, which no later step reads, so anything short of a push would be lost. Naming either of them
-there is a schema error.
+`.strata/audit-push/`, which no later step reads, so anything short of a push would be lost. That cannot be a schema
+error, because the sink is in the configuration and the remote is in `strata.yaml`. So `validate` reports it
+(`audit_sink_action_needs_path_remote`, with a hint), and `push_audit_files()` refuses it before running any `git`.
+
+- **Which push failures retry.** Only a rejected push retries: one whose stderr says `rejected`, `non-fast-forward`
+  or `fetch first`. An authentication or network failure fails at once.
+- **A rebase that conflicts** is aborted (`git rebase --abort`), so the checkout is left with no rebase in progress.
+- **`FETCH_HEAD`, not `origin/<branch>`.** A pipeline's single-branch or shallow clone may not update the
+  remote-tracking ref. The rebase works on a shallow (`--depth 1`) checkout too. A test covers it.
+- **`--autostash`** restores the pipeline's other changes after the rebase, but a staged change comes back
+  unstaged. The user docs say so.
 
 - A pipeline checkout is usually a detached `HEAD`. Committing there is fine, because the push names the branch
   (`HEAD:<branch>`). So `branch` stays required.
@@ -367,12 +146,14 @@ there is a schema error.
 - Part A records `inventory`'s commit at build time. The audit commit comes later, at deploy, and moves `HEAD`. The
   manifest still names the tree that was read, which is the point of Part A.
 - The audit commit must not change what a build reads. `validate` warns (`audit_sink_overlaps_source`) when a
-  sink's `path` is inside a `source_path` that a source or asset takes from the same remote.
+  sink's `path` overlaps a `source_path` that a provisioner, module or asset takes from the same remote. Overlap
+  means one path is inside the other, compared by segments, so `records` and `recordsets` do not overlap. A
+  pattern counts from its fixed folders, and `.` overlaps everything.
 
 ### B4 - GitOps
 
 A GitOps step pushing to a path remote is the same mechanism. It stays refused (`path_remote_not_pushable`) until
-there is a real case (Q7). `validate` then reports that error only for GitOps.
+there is a real case (Q7). Since Phase 6, `validate` reports that error only for GitOps.
 
 ## Part C - Documents in other repositories
 
@@ -540,79 +321,12 @@ starts.
 Branch `feature/remote-commit-provenance`. Test-first. Each phase ends with `ruff check --fix`, `ruff format`,
 `mypy src`, `lint-imports` and `pytest -q`, all green.
 
-- [x] **Phase 1 - `checkout_state()`.** It moves out of `audit_run.py` into a controller module of its own.
-  Real-`git` tests, skipped when `git` is not on `PATH`, cover:
-  - a clean checkout;
-  - a modified tracked file inside and outside the scoped paths;
-  - an untracked file;
-  - an ignored file, which is not dirty;
-  - not a git checkout;
-  - a plain folder inside a git repository, which must not report the parent's commit.
-- [x] **Phase 2 - Build records.** Add the recorder in `source_sync`, the `remotes` key in `write_resolved_manifest()`,
-  and the `remote_checkout_dirty` warning. Tests cover:
-  - path mode, external ref mode and a strata clone, each recorded;
-  - `local` and chart remotes, not recorded;
-  - a version pin, whose ref shows after the pin;
-  - a remote used by two sources, recorded once with both paths in the dirty check;
-  - `solution`: its commit from a CI variable and from `git`, an edited document (dirty), and an edit under the
-    build output (not dirty).
-
-  Steps, test-first:
-  1. `checkout_state(enclosing=True)`.
-  2. `SourceRecord` unit tests: keys, pathspecs, one `checkout_state()` per remote, the warnings.
-  3. `record=` threaded through `source_sync`, `materialise_provisioner_sources()`, `build_workload_modules()`,
-     `_place_chart_dependencies()` and `snapshot_checkov_configs()`.
-  4. `write_resolved_manifest(provenance=)` and the end-of-build write in `build_run()`.
-  5. Real-`git` `build_run()` tests for the cases above.
-- [x] **Phase 3 - Audit copies.** `_collect_artifacts_bom()` reads `resolved.yaml`, and `ManifestRepositoryModel`
-  gains `dirty`. Tests cover:
-  - the manifest equals the build's record after the checkout moves;
-  - `commit_sha` and `commit_dirty` come from the build's `solution` record;
-  - an older `resolved.yaml` falls back;
-  - the manifest schema still loads an old manifest.
-
-  Steps, test-first:
-  1. `ManifestRepositoryModel.dirty` and `DeploymentManifestModel.commit_dirty`, both optional.
-  2. Tests in `test_audit_run.py`. The four path-remote tests now take a provisioner source from the remote, because
-     the chart-based module they used copies nothing.
-  3. `_build_record()` (moved to `source_record.read_build_record()` in Phase 4); `_collect_artifacts_bom(recorded=)`;
-     `commit_sha` and `commit_dirty` taken from the record.
-- [x] **Phase 4 - `require_remote_commits`.** Add the schema field, the `schema_rules` text and the exported JSON
-  schema. With the option on, the deploy's preflight errors on the record (D14), including a build without the
-  record, and each error has a hint. Builds are unchanged. Tests cover each row of the R3 table, plus a build that
-  still succeeds with the option on.
-
-  Steps, test-first:
-  1. The field on `AuditConfigModel`. No `schema_rules` line is needed: it is a plain flag.
-  2. Move the reader to `source_record.read_build_record()`, so that `deploy_controller` does not import
-     `audit_run`.
-  3. `check_build_record()` and its unit tests, one per row.
-  4. Wire it into `deploy_run()` after `check_build_version()`. Real `deploy_run()` tests cover:
-     - a clean build deploys;
-     - an uncommitted edit builds with a warning, then fails the deploy before any tool runs;
-     - the same edit deploys with the option off;
-     - an older build;
-     - a solution outside git.
-- [x] **Phase 5 - Docs.** Update:
-  - the audit config page and the remotes config page;
-  - `remote-external-path.md` (close its Q2, linking here);
-  - the agent skill, if the schema field shows there;
-  - CHANGELOG `[Unreleased]` as a minor release: optional fields only, plus a new warning.
-
-  Done:
-  - `config/configuration.md`: `spec.audit` in the schema list. It had no entry at all before. A new section,
-    "Which commits were deployed", covers the record, the manifest copy, the warnings, the option and its three
-    errors, and the limit that a commit may never have been pushed.
-  - `config/solution.md`: the path-remote paragraph points there.
-  - `how-to/ci-deploy-pipeline.md`: a note in "Plan in one job, apply in another".
-  - The agent skill (`templates/agent/strata/SKILL.md`): a row in "where things live", and a pitfall for
-    `remote_checkout_dirty`.
-  - `remote-external-path.md`: Q2 closed.
-  - CHANGELOG `[Unreleased]`: Added and Changed. It is a minor release: new optional fields, a new warning, an
-    option that is off by default, and a manifest that now copies the build's record.
-- [ ] **Phase 6 - Part B, commit to a path remote.**
-  - Add `action` (`none | commit | push`, default `push`) to the git sink target. `none` and `commit` are a schema
-    error on a ref-mode remote.
+- [x] **Phases 1 to 5 - Part A.** `checkout_state()`, the build record, the audit copy, `require_remote_commits`, and the docs.
+  Built and documented; see the design doc and the Changelog below.
+- [x] **Phase 6 - Part B, commit to a path remote.**
+  - Add `action` (`none | commit | push`, default `push`) to the git sink target. `none` and `commit` on a ref-mode
+    remote are a `validate` error (`audit_sink_action_needs_path_remote`) and a run-time refusal. They cannot be a
+    schema error, because the remote is in another document.
   - In `audit_push`, add a path-remote branch that writes in place, commits only the files written, and pushes with
     rebase and retry.
   - Narrow `path_remote_not_pushable` to GitOps, and add the `audit_sink_overlaps_source` warning.
@@ -624,17 +338,79 @@ Branch `feature/remote-commit-provenance`. Test-first. Each phase ends with `ruf
     - unrelated changes in the checkout, which stay uncommitted;
     - a detached `HEAD`;
     - a push failure with `required` on and off.
+
+  Done, test-first:
+  - `test_audit_push_path_remote.py` has 12 tests against a bare repository and a pipeline-style detached clone:
+    - `push`, `commit` and `none`;
+    - only the written files are committed, with modified, staged and untracked files left alone;
+    - a moved branch, also with a shallow clone;
+    - a rebase conflict, aborted;
+    - a push that keeps failing;
+    - nothing to commit;
+    - the checkout's config is left unchanged;
+    - a folder that is not a checkout;
+    - `commit` and `none` on a ref-mode remote, refused before any `git` runs.
+  - `test_audit_run.py` has 3 end-to-end deploy-audit tests: a pushed sink, `commit` with its information finding,
+    and a required sink whose push fails.
+  - `test_semantic_checks.py` covers GitOps still refused, a sink allowed, `action` on each remote kind, and overlap
+    cases: inside, `.`, a pattern, a sibling with a shared prefix, another remote.
+  - `test_models_audit.py` covers the field.
+  - The docs:
+    - `configuration.md` has a new section, "Audit files in a repository your pipeline checked out";
+    - `solution.md` and the agent skill drop "a path remote cannot be pushed to by an audit sink";
+    - CHANGELOG `[Unreleased]` has entries.
+  - `required` on and off reuses the existing `audit_sink_push_failed` path. It is tested with a real failing push
+    (required on) and with the existing mocked tests (both).
 - [ ] **Phase 7 - platform-config.** A separate repository and PR. Turn the `inventory` sink on with the path remote, and set
   `persistCredentials: true` on the inventory checkout.
-- [ ] **Phase 8 - Part C, document remotes.** Covers:
+- [x] **Phase 8 - Part C, document remotes.** Covers:
   - `discovery.remotes` and C1's rules;
   - a missing listed checkout, which fails naming the remote and its path (D9);
   - discovery over several roots, with the existing duplicate error;
   - document remotes in Part A's record;
   - the VS Code check (C4).
 
+  Done, test-first (`test_document_remotes.py`, 20 tests, the build-record ones against real `git`):
+  - **Schema.** `SolutionDiscoveryModel.remotes`. `SolutionSpecModel` rejects a name that is not a declared `git`
+    remote with a `path`, and a name listed twice (rule 1).
+  - **Discovery.**
+    - `SolutionController` walks the solution root and then each listed checkout. One `DocumentIndex` means one
+      namespace and the existing `duplicate_document` error (rules 2 and 8).
+    - `exclude` applies relative to each root (rule 3). A checkout inside the solution root is skipped by the root's
+      walk and scanned once, as its own root.
+    - `controller.document_remotes` maps each scanned name to its checkout.
+  - **Errors**, each naming the remote, with a hint:
+    - `document_remote_missing` (rule 5, D9);
+    - `document_remote_has_manifest`: a `strata.yaml` at the checkout's top (rule 3). A nested one deeper is a
+      boundary, as in the solution;
+    - `document_remote_overlaps`: a checkout holding the solution root (`path: .` or `..`), or overlapping another
+      listed checkout, whose documents would load twice.
+  - **The record** (rule 6). `build_run()` registers each document remote in `SourceRecord`, with `took(checkout,
+    ".")`. So `resolved.yaml`, the audit manifest and `require_remote_commits` cover it. The solution's dirty check
+    already excludes registered checkouts under the root.
+  - **Writes** (rule 7) needed no change: `promote apply` and `version update` write to `IndexEntry.source`, which
+    is wherever the document was found.
+  - **Found while building it.** Three places assumed every document sits under the solution root, and would raise
+    `ValueError` on a zone document: both path-convention checks in `semantic_checks`, and `strata version show`.
+    Path conventions now judge only documents under the solution root, which is documented. `version show` uses
+    `layout.display_path()`. A regression test fails without the fix.
+  - **C4, VS Code.**
+    - The extension runs `strata validate` from the first workspace folder, and resolves each finding's `source`
+      with `path.resolve(root, source)`. An absolute path from a zone checkout therefore lands on the right file.
+      No change needed.
+    - Schema association does need the user to act. The scaffolded `.vscode/settings.json` maps
+      `.strata/schemas/strata.json` for the solution's folder only, so a zone folder in a multi-root workspace gets
+      no schema. `solution.md` shows a `yaml.schemas` entry in the `.code-workspace` file. Whether the YAML extension
+      resolves that relative path as shown is not verified (a follow-up).
+  - **Docs:**
+    - `solution.md` has a schema line and a new section, "Documents in other repositories";
+    - `configuration.md`'s record section mentions document remotes;
+    - the agent skill has a new row;
+    - CHANGELOG `[Unreleased]` has an entry.
+
 ## Related Decisions
 
+- [remote-commit-provenance.md](../design/remote-commit-provenance.md) (design doc): Part A, finished.
 - `remote-external-path.md` (work doc): path mode, and the commit lookup this replaces.
 - `audit-trail.md` (work doc): the audit manifest.
 - [ADR-0019](../decisions/0019-version-pinning.md): remote pins, which decide the `ref` recorded here.
@@ -711,3 +487,21 @@ Branch `feature/remote-commit-provenance`. Test-first. Each phase ends with `ruf
   - CHANGELOG `[Unreleased]` has entries.
 
   `configuration.md` had no entry for `spec.audit` at all, so it got one.
+- 2026-11-18: Part A graduated to `docs/design/remote-commit-provenance.md`. Its sections here were collapsed to a
+  summary and a gap table, and Phases 1 to 5 to one line.
+- 2026-11-18: Phase 6 built, tests first: an audit sink on a path remote. Changes to the design:
+  - the commit identity is passed per command, not written to the pipeline checkout's config;
+  - only a rejected push retries;
+  - the rebase uses `FETCH_HEAD`;
+  - `commit` and `none` on a ref-mode remote are a `validate` error, not a schema error;
+  - "not pushed" is information at deploy, not a manifest field (the manifest is one of the files written).
+  - The `## Notes` heading of `configuration.md` had gone missing in the Part A commit, so it was restored.
+- 2026-11-18: Phase 8 built, tests first: document remotes (`spec.discovery.remotes`). Changes to the design:
+  - a checkout inside the solution root is allowed, and scanned once;
+  - `path: .` or `..`, and nested listed checkouts, are errors (`document_remote_overlaps`);
+  - a `strata.yaml` deeper inside a checkout is a boundary, not an error;
+  - path conventions skip documents outside the solution root;
+  - the dirty check takes the whole checkout and ignores discovery's `exclude`.
+
+  Three `relative_to(root)` calls that would have raised on a zone document were fixed. The VS Code extension needs
+  no change; schema association needs a `.code-workspace` setting, which is documented but not verified.

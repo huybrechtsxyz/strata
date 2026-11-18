@@ -33,7 +33,7 @@ Deliberately not ported from v1's real `models/audit_config_model.py`:
   deferred alongside the `integration` arm's dispatch itself.
 """
 
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import Field, model_validator
 
@@ -74,7 +74,9 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
     branch: str = Field(
         min_length=1,
         description="Mutable branch this sink pushes to — distinct from the remote's own (read-pinned) "
-        "`reference`, refreshed (fetch + reset) immediately before every push.",
+        "`reference`. With a `reference` remote, strata's own clone is refreshed (fetch + reset) immediately "
+        "before every push; with a `path` remote, the pipeline's checkout is never reset, and the push names "
+        "this branch (`HEAD:<branch>`), so a detached checkout works.",
     )
     path: str = Field(
         min_length=1,
@@ -82,6 +84,16 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
         "Design notes: Root prefix under the repository. The shared per-execution "
         "relative path (see docs/work/audit-trail.md's 'Path resolution') is "
         "appended under this.",
+    )
+    action: Literal["none", "commit", "push"] = Field(
+        default="push",
+        description="How far strata goes with the audit files: `push` (default) writes, commits and pushes; "
+        "`commit` writes and commits, and a later pipeline step pushes; `none` only writes the files, and a later "
+        "step commits and pushes. `commit` and `none` need a remote with a `path` (a checkout the pipeline made "
+        "and reads afterwards); with a `reference`, strata writes into its own clone, which nothing else reads.\n\n"
+        "Design notes: docs/work/remote-commit-provenance.md, Part B. With a path remote strata writes in that "
+        "checkout, commits only the files it wrote, never resets, and pushes with the checkout's own credentials, "
+        "rebasing and retrying when the branch moved.",
     )
 
 

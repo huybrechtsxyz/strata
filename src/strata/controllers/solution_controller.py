@@ -70,6 +70,7 @@ from strata.utils.layout import (
     MANIFEST_FILENAME,
     YAML_SUFFIXES,
     manifest_path,
+    path_remote_location,
 )
 from strata.utils.param_tokens import holds_param_tokens
 
@@ -228,6 +229,11 @@ def _parse_documents(text: str) -> list[Any]:
         return list(yaml.load_all(text, Loader=yaml.SafeLoader))
 
 
+def _nested(first: Path, second: Path) -> bool:
+    """Whether one folder is the other or inside it."""
+    return first.is_relative_to(second) or second.is_relative_to(first)
+
+
 def _is_strata_document(raw: object) -> bool:
     """True when `raw` is a mapping carrying a strata `apiVersion`."""
     if not isinstance(raw, dict):
@@ -244,26 +250,28 @@ class SolutionController:
         self.solution: SolutionModel | None = None
         self.index = DocumentIndex()
         self.diagnostics = Diagnostics()
+        #: `spec.discovery.remotes` that were scanned, by name: each checkout's resolved location.
+        self.document_remotes: dict[str, Path] = {}
 
     @property
-    def _exclude_patterns(self) -> tuple[str, ...]:
-        """User-declared exclude globs from the manifest, if any."""
+    def exclude_patterns(self) -> tuple[str, ...]:
+        """User-declared exclude globs from the manifest, if any. Each root applies them relative to itself."""
         if self.solution is None or self.solution.spec.discovery is None:
             return ()
         return tuple(self.solution.spec.discovery.exclude or ())
 
-    def _is_excluded(self, path: Path) -> bool:
+    def _is_excluded(self, path: Path, root: Path) -> bool:
         """True when `path` matches a user-declared exclude pattern.
 
-        Matching is fnmatch-style against the solution-relative POSIX path.
-        Note fnmatch's `*` also spans `/`, so both `templates` (the directory
-        itself) and `templates/**` (its contents) behave as expected.
+        Matching is fnmatch-style against the POSIX path relative to `root`: the solution root, or a document
+        remote's checkout. Note fnmatch's `*` also spans `/`, so both `templates` (the directory itself) and
+        `templates/**` (its contents) behave as expected.
         """
-        patterns = self._exclude_patterns
+        patterns = self.exclude_patterns
         if not patterns:
             return False
         try:
-            relative = path.resolve().relative_to(self.root).as_posix()
+            relative = path.resolve().relative_to(root).as_posix()
         except ValueError:  # outside the root — should not happen, but be safe
             return False
         return any(fnmatch(relative, pattern) for pattern in patterns)
@@ -282,12 +290,81 @@ class SolutionController:
         """
         self.diagnostics = Diagnostics()
         self.index = DocumentIndex()
+        self.document_remotes = {}
 
         self._load_manifest()
-        for path in self._walk():
-            self._load_file(path)
+        self.document_remotes = self._document_remotes()
+        skip = frozenset(self.document_remotes.values())
+        for root in (self.root, *self.document_remotes.values()):
+            for path in self._walk(root, skip):
+                self._load_file(path)
 
         return self.diagnostics
+
+    def _document_remotes(self) -> dict[str, Path]:
+        """The checkouts `spec.discovery.remotes` names, each one checked (docs/work/remote-commit-provenance.md, C1).
+
+        One that cannot be scanned is an error naming the remote and the folder: missing (D9: every listed remote
+        must be checked out), holding its own `strata.yaml` (one solution, one manifest), or overlapping the solution
+        root or another listed checkout (its documents would load twice). A checkout inside the solution root is
+        fine: the root's own walk skips it.
+        """
+        if self.solution is None or self.solution.spec.discovery is None:
+            return {}
+        remotes = {remote.name: remote for remote in (self.solution.spec.remotes or [])}
+        source = str(manifest_path(self.root))
+        found: dict[str, Path] = {}
+        for position, name in enumerate(self.solution.spec.discovery.remotes or []):
+            remote = remotes[name]  # SolutionSpecModel guarantees a declared git remote with a path
+            assert remote.path is not None
+            location = path_remote_location(self.root, remote.path)
+            finding = self._document_remote_problem(name, remote.url, location, found)
+            if finding is not None:
+                code, problem, hint = finding
+                self.diagnostics.error(
+                    f"Document remote '{name}' {problem}.",
+                    source=source,
+                    location=f"spec.discovery.remotes.{position}",
+                    code=code,
+                    hint=hint,
+                )
+                continue
+            found[name] = location
+        return found
+
+    def _document_remote_problem(
+        self, name: str, url: str, location: Path, found: dict[str, Path]
+    ) -> tuple[str, str, str] | None:
+        """`(code, problem, hint)` when the checkout at `location` cannot be scanned, else `None`."""
+        overlap_hint = (
+            "Give each document remote a checkout of its own that holds neither the solution nor another one."
+        )
+        if self.root.is_relative_to(location):
+            return (
+                "document_remote_overlaps",
+                f"at '{location}' holds the solution root, so its documents would load twice",
+                overlap_hint,
+            )
+        others = [other for other, path in found.items() if _nested(location, path)]
+        if others:
+            return (
+                "document_remote_overlaps",
+                f"at '{location}' overlaps document remote '{others[0]}', so documents would load twice",
+                overlap_hint,
+            )
+        if not location.is_dir():
+            return (
+                "document_remote_missing",
+                f"is not checked out: '{location}' does not exist",
+                f"Check out {url} at '{location}' (the remote's 'path'), or remove '{name}' from spec.discovery.remotes.",
+            )
+        if manifest_path(location).is_file():
+            return (
+                "document_remote_has_manifest",
+                f"holds its own {MANIFEST_FILENAME} at '{location}': it is a solution, not a document remote",
+                f"Remove '{location / MANIFEST_FILENAME}', or remove '{name}' from spec.discovery.remotes.",
+            )
+        return None
 
     def _load_manifest(self) -> None:
         """Validate `strata.yaml` itself. Its own kind is not indexed."""
@@ -307,15 +384,16 @@ class SolutionController:
             return
         self.solution = service.model
 
-    def _walk(self) -> Iterator[Path]:
-        """Yield every candidate YAML file under the root.
+    def _walk(self, root: Path, skip: AbstractSet[Path] = frozenset()) -> Iterator[Path]:
+        """Yield every candidate YAML file under `root`: the solution root or a document remote's checkout.
 
         Skips built-in ignored directories and anything matching a
-        user-declared `spec.discovery.exclude` pattern, and does not descend
-        into a directory holding its own `strata.yaml` — that is a different
-        solution.
+        user-declared `spec.discovery.exclude` pattern (relative to `root`),
+        does not descend into a directory holding its own `strata.yaml` — that
+        is a different solution — and does not descend into `skip`: document
+        remote checkouts, which are walked as roots of their own.
         """
-        stack = [self.root]
+        stack = [root]
         while stack:
             current = stack.pop()
             try:
@@ -332,11 +410,13 @@ class SolutionController:
                         continue
                     if manifest_path(child).is_file():
                         continue  # nested solution — boundary
-                    if self._is_excluded(child):
+                    if self._is_excluded(child, root):
                         continue
+                    if skip and child.resolve() in skip:
+                        continue  # a document remote's checkout, walked as its own root
                     stack.append(child)
                 elif child.suffix in YAML_SUFFIXES and child.name != MANIFEST_FILENAME:
-                    if self._is_excluded(child):
+                    if self._is_excluded(child, root):
                         continue
                     yield child
 

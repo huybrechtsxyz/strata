@@ -359,6 +359,8 @@ def _check_deployment_layers(
     if not layers.segments:
         return diagnostics  # nothing declared yet to cross-check
 
+    if not entry.source.resolve().is_relative_to(root.resolve()):
+        return diagnostics  # a document remote's document: path conventions describe the solution root only
     relative = entry.source.resolve().relative_to(root.resolve()).as_posix()
     match = match_directory(relative, convention.pattern)
     if match is None:
@@ -1827,47 +1829,103 @@ def _check_remote_integrations(index: DocumentIndex, solution: SolutionModel | N
 
 
 def _check_path_remote_pushes(index: DocumentIndex, solution: SolutionModel | None) -> Diagnostics:
-    """A remote with a `path` is never pushed to: GitOps and audit sinks need a `reference`.
+    """Pushes and path remotes.
 
-    Both push from their own checkout of the remote's URL (`layout.gitops_push_checkout_path()`,
-    `.audit_push_checkout_path()`), which a path remote, read where a pipeline put it, never has. Caught
-    here so the mistake is a `validate` error rather than a failed push mid-deploy
-    (docs/work/remote-external-path.md).
+    - A GitOps step never pushes to a path remote (`path_remote_not_pushable`). It pushes from its own checkout
+      (`layout.gitops_push_checkout_path()`), which a path remote, read where a pipeline put it, never has
+      (docs/work/remote-external-path.md).
+    - An audit sink may write to a path remote: strata writes in the pipeline's checkout
+      (docs/work/remote-commit-provenance.md, Part B). Its `action: commit | none` needs one
+      (`audit_sink_action_needs_path_remote`): with a `reference`, strata's own clone is read by nothing else,
+      so anything short of a push is lost.
+    - A sink writing where the build reads from the same remote warns (`audit_sink_overlaps_source`).
+
+    Caught here so the mistake is a `validate` finding rather than a failed or lost push mid-deploy.
     """
     diagnostics = Diagnostics()
-    path_remotes = {remote.name for remote in (solution.spec.remotes or []) if remote.path} if solution else set()
-    if not path_remotes:
-        return diagnostics
-
-    def report(remote: str, user: str, source: str, location: str) -> None:
-        diagnostics.error(
-            f"{user} pushes to remote '{remote}', which has a 'path': strata only reads a path remote. "
-            "Give the remote a 'reference' (the branch) instead.",
-            source=source,
-            location=location,
-            code="path_remote_not_pushable",
-        )
+    remotes = {remote.name: remote for remote in (solution.spec.remotes or [])} if solution else {}
+    path_remotes = {name for name, remote in remotes.items() if remote.path}
 
     for entry in index.all_of(PlatformKind.WORKSPACE):
         for position, provisioner in enumerate(cast(WorkspaceModel, entry.model).spec.provisioners):
             if provisioner.gitops is not None and provisioner.gitops.remote in path_remotes:
-                report(
-                    provisioner.gitops.remote,
-                    f"GitOps provisioner '{provisioner.name}'",
-                    str(entry.source),
-                    f"spec.provisioners.{position}.gitops.remote",
+                diagnostics.error(
+                    f"GitOps provisioner '{provisioner.name}' pushes to remote '{provisioner.gitops.remote}', which "
+                    "has a 'path': strata only reads a path remote. Give the remote a 'reference' (the branch) "
+                    "instead.",
+                    source=str(entry.source),
+                    location=f"spec.provisioners.{position}.gitops.remote",
+                    code="path_remote_not_pushable",
                 )
+
+    sources = _remote_source_paths(index)
     for entry in index.all_of(PlatformKind.CONFIGURATION):
         audit = cast(ConfigurationModel, entry.model).spec.audit
         for position, sink in enumerate((audit.sinks or []) if audit else []):
-            if sink.git is not None and sink.git.remote in path_remotes:
-                report(
-                    sink.git.remote,
-                    f"Audit sink '{sink.name}'",
-                    str(entry.source),
-                    f"spec.audit.sinks.{position}.git.remote",
+            if sink.git is None or sink.git.remote not in remotes:
+                continue
+            location = f"spec.audit.sinks.{position}.git"
+            if sink.git.action != "push" and sink.git.remote not in path_remotes:
+                diagnostics.error(
+                    f"Audit sink '{sink.name}' has action '{sink.git.action}', but remote '{sink.git.remote}' has a "
+                    "'reference': strata writes into its own clone, which nothing else reads, so only a push keeps "
+                    "the audit files.",
+                    source=str(entry.source),
+                    location=f"{location}.action",
+                    code="audit_sink_action_needs_path_remote",
+                    hint="Use 'action: push', or give the remote a 'path' to the checkout your pipeline makes and "
+                    "commits from.",
                 )
+            for user, source_path in sources.get(sink.git.remote, []):
+                if _paths_overlap(sink.git.path, source_path):
+                    diagnostics.warning(
+                        f"Audit sink '{sink.name}' writes under '{sink.git.path}' of remote '{sink.git.remote}', "
+                        f"where {user} takes '{source_path}' from: the audit files would become part of the next "
+                        "build.",
+                        source=str(entry.source),
+                        location=f"{location}.path",
+                        code="audit_sink_overlaps_source",
+                        hint="Give the sink a 'path' outside every 'source_path' taken from that remote.",
+                    )
     return diagnostics
+
+
+def _remote_source_paths(index: DocumentIndex) -> dict[str, list[tuple[str, str]]]:
+    """`{remote: [(who, source_path)]}` for every provisioner, module and asset that takes files from a remote."""
+    found: dict[str, list[tuple[str, str]]] = {}
+
+    def add(remote: str | None, source_path: str | None, user: str) -> None:
+        if remote is not None and source_path is not None:
+            found.setdefault(remote, []).append((user, source_path))
+
+    for entry in index.all_of(PlatformKind.WORKSPACE):
+        for provisioner in cast(WorkspaceModel, entry.model).spec.provisioners:
+            if provisioner.source is not None:
+                add(provisioner.source.remote, provisioner.source.source_path, f"provisioner '{provisioner.name}'")
+    for entry in index.all_of(PlatformKind.MODULE):
+        module = cast(ModuleModel, entry.model)
+        add(module.spec.source.remote, module.spec.source.source_path, f"module '{module.meta.name}'")
+    for entry in index.all_of(PlatformKind.ASSET):
+        asset = cast(AssetModel, entry.model)
+        add(asset.spec.remote, asset.spec.source_path, f"asset '{asset.meta.name}'")
+    return found
+
+
+def _paths_overlap(first: str, second: str) -> bool:
+    """Whether one repository path is inside the other. A pattern counts from its fixed folders (`a/*.yaml` is `a`)."""
+
+    def fixed(path: str) -> list[str]:
+        parts: list[str] = []
+        for part in path.replace("\\", "/").split("/"):
+            if any(char in part for char in "*?[{"):
+                break
+            if part not in ("", "."):
+                parts.append(part)
+        return parts
+
+    a, b = fixed(first), fixed(second)
+    shorter = min(len(a), len(b))
+    return a[:shorter] == b[:shorter]
 
 
 def _check_asset_locations(index: DocumentIndex) -> Diagnostics:
@@ -1969,6 +2027,8 @@ def _check_paths(index: DocumentIndex, root: Path | None) -> Diagnostics:
 
     resolved_root = root.resolve()
     for entry in index.all():
+        if not entry.source.resolve().is_relative_to(resolved_root):
+            continue  # a document remote's document (spec.discovery.remotes): conventions describe the root only
         relative = entry.source.resolve().relative_to(resolved_root).as_posix()
         in_scope_conventions = [c for c in configuration.spec.paths if in_scope(relative, c.scope)]
         if not in_scope_conventions:

@@ -39,7 +39,10 @@ remotes:
 - **Which remotes.** Every `type: git` remote the build took at least one file from:
   - path mode;
   - ref mode with `fetch: external`;
-  - ref mode with `fetch: strata`, the clone under `.strata/remotes/<name>/<ref>`.
+  - ref mode with `fetch: strata`, the clone under `.strata/remotes/<name>/<ref>`;
+  - a document remote (`spec.discovery.remotes`). `build_run()` registers it, and its whole checkout counts as
+    taken (`took(checkout, ".")`), so any uncommitted change there makes it dirty. Discovery's `exclude` is not
+    applied to that check: at worst it reports a little more than was read.
 
   A remote that was resolved but gave no file is left out. A `type: local` remote is a folder of the solution, so
   `solution` covers it. `helm` and `oci` chart remotes are left out, because the manifest records each chart's name

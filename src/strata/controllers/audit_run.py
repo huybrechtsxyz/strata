@@ -443,6 +443,9 @@ def _dispatch_sink(
         resolved_values=git_sink_values,
     )
     if result.success:
+        if sink.git.action != "push":
+            # A path remote's `commit` or `none`: a later pipeline step pushes (remote-commit-provenance.md, Part B).
+            diagnostics.info(f"sink '{sink.name}': {result.detail}", code="audit_sink_not_pushed")
         return
     _record_sink_failure(
         sink, f"sink '{sink.name}': audit push failed — {result.detail}", "audit_sink_push_failed", diagnostics

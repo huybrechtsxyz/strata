@@ -784,6 +784,11 @@ def build_run(
     credentials = RemoteCredentialResolver(context, deployment_name, allow_stores=resolve, pin=pin)
     # What each copy below takes from which git remote, for `resolved.yaml` (docs/work/remote-commit-provenance.md).
     record = SourceRecord()
+    # Documents read from `spec.discovery.remotes` configured this build too (Part C, C1 rule 6): the whole checkout
+    # counts as taken, so any uncommitted change there makes the record dirty.
+    for name, checkout in context.controller.document_remotes.items():
+        record.resolved(name, remotes[name], checkout)
+        record.took(checkout, ".")
 
     # Assets (docs/design/asset-management.md Phases 3-4) — every asset slot
     # actually selected by this build's execution steps, statically

@@ -36,6 +36,7 @@ from strata.models.common_models import PlatformKind
 from strata.models.version_model import PIN_CATEGORIES, VersionModel
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
+from strata.utils.layout import display_path
 from strata.utils.version import get_version
 
 _PATH_HELP = "Where to start looking for the solution. Defaults to the current directory."
@@ -265,7 +266,8 @@ def version_show(name: str, start_path: Path | None, output: str, quiet: bool, v
         if output == "console":
             # `order` may be set without `ring` (only `ring` requires `order`), so read each part on its own.
             ring = f"  (ring {promotion.get('ring', '-')}, order {promotion.get('order', '-')})" if promotion else ""
-            click.echo(f"\n  {name}{ring}  {entry.source.relative_to(context.root).as_posix()}\n")
+            # A document remote's document is outside the root (spec.discovery.remotes): shown in full.
+            click.echo(f"\n  {name}{ring}  {display_path(str(entry.source), context.root)}\n")
             if not pins:
                 click.echo("  (no pins)")
             for pin_row in pins:

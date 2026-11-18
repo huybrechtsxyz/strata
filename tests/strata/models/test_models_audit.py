@@ -64,6 +64,18 @@ def test_sink_required_defaults_false():
     assert sink.required is False
 
 
+def test_git_sink_action_defaults_to_push_and_takes_commit_or_none():
+    assert AuditSinkModel.model_validate(_git_sink()).git.action == "push"
+    for action in ("commit", "none", "push"):
+        data = _git_sink()
+        data["git"]["action"] = action
+        assert AuditSinkModel.model_validate(data).git.action == action
+    data = _git_sink()
+    data["git"]["action"] = "stage"
+    with pytest.raises(ValidationError):
+        AuditSinkModel.model_validate(data)
+
+
 def test_sink_rejects_unknown_event_type():
     data = _git_sink()
     data["events"] = ["deployment.completed", "policy.violated"]

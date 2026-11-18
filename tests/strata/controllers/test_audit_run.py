@@ -746,6 +746,77 @@ def test_configured_git_sink_pushes_to_real_bare_repo(tmp_path: Path, _terraform
     assert list((verify_dir / "audit").rglob("_metrics.json"))
 
 
+def _path_remote_sink_solution(tmp_path: Path, *, required: bool, action: str = "push") -> tuple[Path, Path, Path]:
+    """A solution whose audit sink writes to `repos/config`, a pipeline's clone of a bare repository.
+
+    docs/work/remote-commit-provenance.md, Part B. Returns `(root, bare, checkout)`.
+    """
+    bare = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(bare)], check=True, capture_output=True)
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "clone", str(bare), str(seed)], check=True, capture_output=True)
+    _git(seed, "commit", "--allow-empty", "-m", "seed")
+    _git(seed, "push", "origin", "HEAD:main")
+
+    root = _solution_root(tmp_path)
+    _write(
+        root,
+        "strata.yaml",
+        MANIFEST_TEMPLATE.format(
+            remotes="  remotes:\n    - name: config-repo\n      type: git\n"
+            "      url: https://git.example.com/config.git\n      path: repos/config"
+        ),
+    )
+    _add_configuration(
+        root,
+        f"  audit:\n    sinks:\n      - name: config-repo\n        required: {'true' if required else 'false'}\n"
+        "        git:\n          remote: config-repo\n          branch: main\n          path: audit\n"
+        f"          action: {action}\n        events: [deployment.completed]\n",
+    )
+    checkout = root / "repos" / "config"
+    subprocess.run(["git", "clone", str(bare), str(checkout)], check=True, capture_output=True)
+    _git(checkout, "checkout", "--detach")
+    return root, bare, checkout
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_a_git_sink_on_a_path_remote_pushes_from_the_pipeline_checkout(tmp_path: Path, _terraform_stub):
+    root, bare, checkout = _path_remote_sink_solution(tmp_path, required=True)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    verify = tmp_path / "verify"
+    subprocess.run(["git", "clone", str(bare), str(verify)], check=True, capture_output=True)
+    assert len(list((verify / "audit").rglob("_manifest.json"))) == 1
+    assert not layout.audit_push_checkout_path(root, "config-repo", "main").exists()  # no clone of its own
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_a_git_sink_on_a_path_remote_that_stops_before_the_push_says_so(tmp_path: Path, _terraform_stub):
+    root, _, checkout = _path_remote_sink_solution(tmp_path, required=True, action="commit")
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok, diagnostics.messages()
+    [info] = [d for d in diagnostics.infos if d.code == "audit_sink_not_pushed"]
+    assert "not pushed (action: commit)" in info.message
+    assert _git(checkout, "log", "-1", "--format=%s").startswith("audit: ")
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_a_required_git_sink_on_a_path_remote_fails_the_run_when_the_push_fails(tmp_path: Path, _terraform_stub):
+    root, _, checkout = _path_remote_sink_solution(tmp_path, required=True)
+    _git(checkout, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    diagnostics = _finalize(root, build_path)
+
+    assert [e.code for e in diagnostics.errors] == ["audit_sink_push_failed"]
+
+
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
 def test_push_failure_warns_when_not_required(tmp_path: Path, _terraform_stub, monkeypatch):
     root = _solution_root(tmp_path, remote_url="https://example.invalid/does-not-exist.git")

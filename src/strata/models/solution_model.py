@@ -41,7 +41,7 @@ but the loader's index must be keyed `(remote, kind, name)` with
 """
 
 from enum import Enum
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -52,6 +52,7 @@ from strata.models.common_models import (
     PlatformVersion,
     validate_kind_matches,
 )
+from strata.models.reference_fields import RemoteReference
 from strata.utils.names import check_unique_names
 from strata.utils.path_safety import (
     validate_no_path_traversal,
@@ -386,6 +387,17 @@ class SolutionDiscoveryModel(PlatformBaseModel):
         "Added to the loader's built-in ignores, never replacing them. Note: these are fnmatch-style globs, "
         "not full gitignore syntax \u2014 there is no negation ('!') and no leading-slash anchoring.",
     )
+    remotes: list[Annotated[PlatformName, RemoteReference()]] | None = Field(
+        None,
+        description="Remotes whose checkouts are scanned for documents too, as extra roots beside the solution "
+        "root: for example one repository per hub zone. Each must be a `git` remote with a `path` (a checkout "
+        "a pipeline or developer made), and must be checked out, or every command fails. Documents found there "
+        "join the solution's one namespace, and paths inside them stay relative to the solution root. `exclude` "
+        "applies inside each root, relative to that root. The build records each one's commit in "
+        "`resolved.yaml` like any other remote.\n\n"
+        "Design notes: docs/work/remote-commit-provenance.md, Part C. Named here, not as a flag on the remote: a "
+        "remote says where a repository is, discovery says what is scanned.",
+    )
 
 
 class SolutionSpecModel(PlatformBaseModel):
@@ -393,6 +405,7 @@ class SolutionSpecModel(PlatformBaseModel):
 
     schema_rules: ClassVar[tuple[str, ...]] = (
         "Remote names must be unique, because the name is how `@<name>/...` references are resolved.",
+        "Each name in `discovery.remotes` must be a declared `git` remote with a `path`, listed once.",
     )
 
     configuration: str = Field(
@@ -421,6 +434,25 @@ class SolutionSpecModel(PlatformBaseModel):
         """Remote names must be unique — they are the '@<name>' resolution key."""
         if self.remotes:
             check_unique_names([r.name for r in self.remotes], "remote names in solution")
+        return self
+
+    @model_validator(mode="after")
+    def validate_document_remotes(self) -> "SolutionSpecModel":
+        """`discovery.remotes` names path remotes only: a ref-mode remote would need a clone before anything loads."""
+        listed = (self.discovery.remotes or []) if self.discovery is not None else []
+        if not listed:
+            return self
+        check_unique_names(listed, "spec.discovery.remotes")
+        declared = {remote.name: remote for remote in (self.remotes or [])}
+        for name in listed:
+            remote = declared.get(name)
+            if remote is None:
+                raise ValueError(f"spec.discovery.remotes: '{name}' is not a remote declared in spec.remotes.")
+            if remote.type != RemoteType.GIT or remote.path is None:
+                raise ValueError(
+                    f"spec.discovery.remotes: remote '{name}' must be a 'git' remote with a 'path' (a checkout "
+                    "that is already on disk), because documents are read before anything is cloned."
+                )
         return self
 
 

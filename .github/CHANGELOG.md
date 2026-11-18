@@ -8,7 +8,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
-The audit record names the commits that were built, not the checkouts as they are at deploy time.
+The audit record names the commits that were built, not the checkouts as they are at deploy time. An audit sink can
+commit to the repository a pipeline checked out, and a solution can read documents from other repositories.
 
 ### Added
 
@@ -31,6 +32,26 @@ The audit record names the commits that were built, not the checkouts as they ar
   [Which commits were deployed](../docs/config/configuration.md#which-commits-were-deployed).
 - The audit manifest has `commit_dirty`, and each `artifacts.repositories` entry has `dirty`. Both are optional,
   so older manifests still load.
+- **A git audit sink can write to a `path` remote**, the checkout a pipeline already made. Strata:
+  - writes there and never clones, resets or switches branch;
+  - commits only the files it wrote, so other changes in the checkout stay as they were;
+  - pushes with the checkout's own credentials (`HEAD:<branch>`, so a detached checkout works);
+  - when the branch moved, rebases and retries.
+
+  The new `git.action` stops earlier: `commit`, or `none` (write only), for a pipeline that pushes itself. Both
+  need a `path` remote (`audit_sink_action_needs_path_remote`). See
+  [Audit files in a repository your pipeline checked out](../docs/config/configuration.md#audit-files-in-a-repository-your-pipeline-checked-out).
+- `strata validate` warns when an audit sink writes inside a `source_path` the build takes from the same remote
+  (`audit_sink_overlaps_source`).
+- **Documents in other repositories: `spec.discovery.remotes`.** It lists `path` remotes whose checkouts are
+  scanned for documents beside the solution root, for example one repository per hub zone.
+  - Their documents join the solution's one namespace, so `validate` and the cross-zone views see every zone.
+  - Paths inside documents stay relative to the solution root, and `exclude` applies inside each root.
+  - `build run` records each checkout's commit.
+  - Every listed remote must be checked out. New errors: `document_remote_missing`,
+    `document_remote_has_manifest` and `document_remote_overlaps`.
+
+  See [Documents in other repositories](../docs/config/solution.md#documents-in-other-repositories).
 
 ### Changed
 

@@ -11,7 +11,8 @@ logging, cost/drift tracking are not ported (only added when a v2 feature actual
 - `spec.additional_topologies` — allow topology types not listed in `spec.topologies` (default `false`)
 - `spec.audit` — the deployment audit trail, all optional:
   - `event_overrides` — switch event types on or off;
-  - `sinks[]` — send the audit record to a git repository or an integration;
+  - `sinks[]` — send the audit record to a git repository or an integration. A git sink names a `remote`, the
+    `branch` to push to, a folder `path`, and an `action` (`push`, the default; `commit`; `none`; see below);
   - `require_remote_commits` — fail `deploy run` when the build does not record a clean commit for every
     repository it took files from (default `false`; see below)
 
@@ -33,8 +34,9 @@ spec:
 ## Which commits were deployed
 
 `build run` writes two keys in `build/<deployment>/resolved.yaml`. The solution's own commit sits under `solution`.
-Every git remote the build copied files from sits under `remotes`. An asset's own `spec.location` is listed as
-`asset:<name>`.
+Every git remote the build copied files from sits under `remotes`, and so does every document remote
+(`spec.discovery.remotes` in [solution.md](solution.md#documents-in-other-repositories)). An asset's own
+`spec.location` is listed as `asset:<name>`.
 
 ```yaml
 solution: {commit: 5d0e7a9c31..., dirty: false}
@@ -75,6 +77,68 @@ spec:
 A build still only warns, so building an uncommitted edit on a workstation keeps working. Rebuild from a clean,
 committed checkout to deploy. A destroy is not checked. A recorded commit may never have been pushed. Strata does not
 check that, because a pipeline's checkout usually has no remote branches to compare with.
+
+## Audit files in a repository your pipeline checked out
+
+A git audit sink usually names a remote with a `reference`. Strata then keeps its own clone under
+`.strata/audit-push/`, fetches and resets it before each write, and pushes with the remote's `integration`.
+
+When the pipeline has already checked the repository out, name a remote with a `path` instead
+(see [solution.md](solution.md#a-repository-your-pipeline-checked-out)). Strata then writes in that checkout:
+
+```yaml
+# strata.yaml
+remotes:
+  - name: inventory
+    type: git
+    url: https://dev.azure.com/org/project/_git/inventory
+    path: repos/inventory          # the pipeline's checkout
+
+# configuration.yaml
+spec:
+  audit:
+    sinks:
+      - name: inventory
+        required: true
+        git:
+          remote: inventory
+          branch: main             # the branch pushed to
+          path: deploys
+          action: push             # the default
+```
+
+- **What strata does in the checkout.** It never clones, resets or switches branch in it. It writes the audit
+  files under `path` and commits only those files. Other changes in the checkout stay as they were: modified,
+  staged or untracked. The commit author is the deploying actor. Strata passes it per command and does not
+  change the checkout's git config.
+- **Pushing.** The push runs `git push origin HEAD:<branch>`, so a detached checkout works. It uses the
+  checkout's own credentials. In Azure DevOps that means `persistCredentials: true` on the `checkout:` step. When
+  the branch moved since the checkout, strata fetches it, rebases the audit commit onto it and pushes again, three
+  times in all.
+  - `--autostash` keeps the checkout's other changes, but a staged change comes back unstaged.
+  - A rebase that conflicts is aborted. Each deploy writes its own folder, so a conflict means two deploys wrote the
+    same audit path.
+- **`action`** says how far strata goes. Each step includes the ones before it:
+
+  | `action`         | Strata                     | Then                                      |
+  | ---------------- | -------------------------- | ----------------------------------------- |
+  | `push` (default) | writes, commits and pushes | -                                         |
+  | `commit`         | writes and commits         | a later pipeline step pushes              |
+  | `none`           | writes the files only      | a later pipeline step commits and pushes  |
+
+  With `commit` or `none` the deploy reports `audit_sink_not_pushed` as information. Both need a remote with a
+  `path`. With a `reference`, strata writes into its own clone, which nothing else reads, so `strata validate`
+  reports `audit_sink_action_needs_path_remote`.
+- **`required`** keeps its meaning. With `required: true`, a failed write, commit or push fails the deploy
+  (`audit_sink_push_failed`). Without it, the failure is a warning.
+- **Reading and writing the same repository.** The build records the checkout's commit before the deploy commits
+  the audit files, so the record still names what was built. But a sink `path` inside a `source_path` the build
+  takes from the same remote would put audit files into the next build. `strata validate` warns
+  (`audit_sink_overlaps_source`).
+
+A GitOps provisioner still cannot push to a `path` remote (`path_remote_not_pushable`).
+
+## Notes
 
 - `providers`/`topologies` are plain document names (ADR-0015), resolved by discovery — not
   embedded registry entries. Each provider/topology type gets its own `ProviderConfig`/

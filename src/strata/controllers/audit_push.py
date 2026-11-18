@@ -58,13 +58,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from strata.controllers.checkout_state import checkout_state
 from strata.controllers.git_checkout import ensure_synced_checkout
 from strata.integrations.git_push import credential_env
 from strata.models.audit_model import AuditGitSinkTargetModel
 from strata.models.auth_models import AuthenticationModel
 from strata.models.solution_model import RemoteType, SolutionModel
 from strata.utils import layout
-from strata.utils.transport import run_command
+from strata.utils.transport import CommandResult, run_command
 
 _GIT_TIMEOUT = 300
 
@@ -114,8 +115,15 @@ def push_audit_files(
             False, f"remote '{remote.name}' has type '{remote.type.value}', but an audit push needs 'git'"
         )
     if remote.path is not None:
+        # A checkout the pipeline made: written in place, never cloned or reset, its own credentials.
+        return _write_in_checkout(
+            layout.path_remote_location(root, remote.path), sink, files, relative_path, actor, remote.name
+        )
+    if sink.action != "push":
         return PushResult(
-            False, f"remote '{remote.name}' has a 'path', which strata only reads; an audit push needs a 'reference'"
+            False,
+            f"action '{sink.action}' needs a remote with a 'path': remote '{remote.name}' has a 'reference', so "
+            "strata writes into its own clone, which nothing else reads, and only a push keeps the files",
         )
 
     checkout_path = layout.audit_push_checkout_path(root, remote.name, sink.branch)
@@ -157,6 +165,88 @@ def push_audit_files(
             return PushResult(False, f"'git push' failed: {push_result.stderr.strip()}")
 
     return PushResult(True)
+
+
+#: Pushes in all for a path-remote sink: the first, and a retry after each rebase onto a branch that moved.
+_PUSH_ATTEMPTS = 3
+#: `git push` stderr that means "the branch moved", which a rebase fixes; any other failure is final.
+_REJECTED_MARKERS = ("rejected", "non-fast-forward", "fetch first")
+
+
+def _write_in_checkout(
+    checkout: Path,
+    sink: AuditGitSinkTargetModel,
+    files: dict[str, Path],
+    relative_path: Path,
+    actor: str,
+    remote_name: str,
+) -> PushResult:
+    """Write `files` into a path remote's checkout, then go as far as `sink.action` says.
+
+    docs/work/remote-commit-provenance.md, Part B. The checkout is the pipeline's, so strata:
+
+    - never clones, resets or checks out a branch, and works with a detached `HEAD` (the push names the branch);
+    - commits only the files it wrote (`git commit -- <files>`); anything else modified, staged or untracked in
+      the tree stays as it was;
+    - passes the commit identity per command (`git -c user.name=...`) instead of writing it to the checkout's
+      config;
+    - pushes with the checkout's own credentials (for example Azure DevOps `persistCredentials: true`). A path
+      remote has no `integration`.
+
+    When the push is rejected because the branch moved, it fetches the branch and rebases onto it
+    (`--autostash`, so other changes in the tree survive), then pushes again, `_PUSH_ATTEMPTS` times in all. A
+    rebase that conflicts is aborted. Each deploy writes under its own path, so a conflict means two deploys wrote
+    the same audit path.
+    """
+    state = checkout_state(checkout)
+    if state.commit is None:
+        return PushResult(False, f"remote '{remote_name}': {state.problem}, so the audit files cannot be written there")
+
+    dest_dir = checkout / sink.path / relative_path
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for filename, source_path in files.items():
+        (dest_dir / filename).write_bytes(source_path.read_bytes())
+        written.append((dest_dir / filename).relative_to(checkout).as_posix())
+    if sink.action == "none":
+        return PushResult(True, f"written to '{dest_dir}', not committed (action: none)")
+
+    identity = ["-c", f"user.name={actor}", "-c", f"user.email={actor}@strata-audit.local"]
+    pathspecs = [f":(literal){path}" for path in written]
+
+    def git(*args: str) -> CommandResult:
+        return run_command(["git", *identity, *args], cwd=checkout, timeout=_GIT_TIMEOUT)
+
+    added = git("add", "--", *pathspecs)
+    if not added.is_successful:
+        return PushResult(False, f"'git add' failed: {added.stderr.strip()}")
+    if not git("status", "--porcelain", "--", *pathspecs).stdout.strip():
+        return PushResult(True, "nothing to commit — files already match the checkout's last commit")
+    committed = git("commit", "-m", f"audit: {relative_path.as_posix()}", "--only", "--", *pathspecs)
+    if not committed.is_successful:
+        return PushResult(False, f"'git commit' failed: {committed.stderr.strip()}")
+    if sink.action == "commit":
+        return PushResult(True, f"committed in '{checkout}', not pushed (action: commit)")
+
+    for attempt in range(1, _PUSH_ATTEMPTS + 1):
+        pushed = git("push", "origin", f"HEAD:{sink.branch}")
+        if pushed.is_successful:
+            return PushResult(True)
+        rejected = any(marker in pushed.stderr for marker in _REJECTED_MARKERS)
+        if not rejected or attempt == _PUSH_ATTEMPTS:
+            return PushResult(False, f"'git push' failed after {attempt} attempt(s): {pushed.stderr.strip()}")
+        fetched = git("fetch", "origin", sink.branch)
+        if not fetched.is_successful:
+            return PushResult(False, f"'git fetch origin {sink.branch}' failed: {fetched.stderr.strip()}")
+        rebased = git("rebase", "--autostash", "FETCH_HEAD")
+        if not rebased.is_successful:
+            git("rebase", "--abort")
+            return PushResult(
+                False,
+                f"'git rebase' onto the moved branch '{sink.branch}' failed, and was aborted: "
+                f"{(rebased.stderr or rebased.stdout).strip()}",
+            )
+    return PushResult(False, "'git push' failed")  # not reached: the loop returns on its last attempt
 
 
 def _configure_identity(checkout_path: Path, actor: str, *, env: Mapping[str, str] | None = None) -> PushResult:
