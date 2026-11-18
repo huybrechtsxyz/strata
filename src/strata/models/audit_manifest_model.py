@@ -121,6 +121,11 @@ class ManifestRepositoryModel(PlatformBaseModel):
     url: str | None = Field(default=None, description="Git remote URL")
     ref: str | None = Field(default=None, description="Requested git ref (tag, branch, or commit)")
     commit: str | None = Field(default=None, description="Resolved full commit SHA")
+    dirty: bool | None = Field(
+        default=None,
+        description="Whether the files the build took from this repository had uncommitted changes, as the build "
+        "recorded it in resolved.yaml; left out when unknown",
+    )
 
 
 class ManifestImageModel(PlatformBaseModel):
@@ -272,7 +277,14 @@ class DeploymentManifestModel(PlatformBaseModel):
     # Actor + git context — actor kept distinct from commit_author (who wrote the code
     # is not who ran the deploy)
     deployed_by: str | None = Field(default=None, description="Resolved actor identity")
-    commit_sha: str | None = Field(default=None, description="Git commit SHA at deploy time")
+    commit_sha: str | None = Field(
+        default=None,
+        description="Git commit SHA of the solution: the build's record in resolved.yaml, else read at deploy time",
+    )
+    commit_dirty: bool | None = Field(
+        default=None,
+        description="Whether the solution had uncommitted changes when it was built; left out when unknown",
+    )
     commit_message: str | None = Field(default=None, description="Git commit message")
     commit_author: str | None = Field(default=None, description="Git commit author")
 

@@ -172,6 +172,14 @@ class AuditConfigModel(PlatformBaseModel):
         "false}. Keys must already be in the closed event-type set.",
     )
     sinks: list[AuditSinkModel] | None = Field(default=None, description="Configured audit event destinations")
+    require_remote_commits: bool = Field(
+        default=False,
+        description="Fail `deploy run` when the build does not record a clean commit for the solution and for every "
+        "git remote it took files from. The build records each commit in `resolved.yaml`, and warns, whatever "
+        "this says; only the deploy fails, so building an uncommitted edit still works. A build made by a strata "
+        "without the record fails too.\n\n"
+        "Design notes: docs/work/remote-commit-provenance.md, R3 and D14.",
+    )
 
     @model_validator(mode="after")
     def validate_known_event_types(self) -> "AuditConfigModel":

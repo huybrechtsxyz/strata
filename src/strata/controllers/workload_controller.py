@@ -32,6 +32,7 @@ from strata.controllers.remote_credentials import (
 )
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.source_record import SourceRecord
 from strata.controllers.source_sync import describe_source, sync_module_source
 from strata.controllers.value_controller import resolve_artifact_field
 from strata.controllers.version_pins import log_pin_applied
@@ -222,6 +223,7 @@ def build_workload_modules(
     on_step: Callable[[str], None] | None = None,
     credentials: RemoteCredentialResolver | None = None,
     offline: bool = False,
+    record: SourceRecord | None = None,
 ) -> Diagnostics:
     """Render every module `namespace` declares (ADR-0022 D6).
 
@@ -285,6 +287,8 @@ def build_workload_modules(
         credentials: Resolves `remote.integration`'s credentials when a module's source needs a clone or its
             registry chart a pull; `None` (default) uses ambient git credentials and Helm's own login only.
         offline: Pull no registry chart; one that is not cached is left unpinned (ADR-0054).
+        record: Records what each module source and `file://` dependency takes from a git remote, for
+            `resolved.yaml` (docs/work/remote-commit-provenance.md); `None` records nothing.
 
     Returns:
         Warnings (a `configuration` key a Helm chart does not declare, a registry chart left unpinned) and
@@ -325,7 +329,9 @@ def build_workload_modules(
                 f"for namespace '{namespace.meta.name}'"
             )
         else:
-            copied = sync_module_source(root, module_dir, module.spec.source, remotes, credentials=credentials)
+            copied = sync_module_source(
+                root, module_dir, module.spec.source, remotes, credentials=credentials, record=record
+            )
             _step(f"materialised module '{reference.name}' for namespace '{namespace.meta.name}' at {module_dir}")
 
         label = f"Namespace '{namespace.meta.name}', module '{reference.name}'"
@@ -346,6 +352,7 @@ def build_workload_modules(
                 credentials=credentials,
                 diagnostics=diagnostics,
                 on_step=_step,
+                source_record=record,
             )
             if dependency_records and not unpinned_dependencies and diagnostics.ok:
                 _check_dependency_list(index, module_dir, label=label, location=reference.name, diagnostics=diagnostics)
@@ -561,6 +568,7 @@ def _place_chart_dependencies(
     diagnostics: Diagnostics,
     on_step: Callable[[str], None],
     depth: int = 0,
+    source_record: SourceRecord | None = None,
 ) -> tuple[list[DependencyRecord], list[str]]:
     """Fill the build copy `chart_dir`'s `charts/` with its dependencies (docs/design/helm-chart-deployment.md).
 
@@ -615,6 +623,8 @@ def _place_chart_dependencies(
                 continue
             placed = chart_dir / "charts" / dependency.name
             shutil.copytree(target, placed, dirs_exist_ok=True)
+            if source_record is not None:
+                source_record.took(repo_root, target.relative_to(repo_root.resolve()).as_posix())
             version = read_chart_yaml(target / "Chart.yaml").get("version")
             records.append(
                 DependencyRecord(dependency.name, str(version or ""), "file", repository=dependency.repository)
@@ -634,6 +644,7 @@ def _place_chart_dependencies(
                 diagnostics=diagnostics,
                 on_step=on_step,
                 depth=depth + 1,
+                source_record=source_record,
             )
             records.extend(nested)
             missing.extend(nested_missing)

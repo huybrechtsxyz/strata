@@ -262,6 +262,10 @@ Things to know:
 - A step that reads another step's output with `${output:...}` may show "(known after apply)" in the
   plan. Apply dependent steps in dependency order.
 - `deploy apply` records the audit trail like `deploy run`, including the `--change-*` flags.
+- The build output carries the commits it was built from (`resolved.yaml`'s `solution` and `remotes`), and the audit
+  manifest copies them. The plan and apply jobs may check out a later commit without changing what the manifest
+  records. With `spec.audit.require_remote_commits: true`, `plan` and `apply` refuse a build made from uncommitted
+  files. See [Which commits were deployed](../config/configuration.md#which-commits-were-deployed).
 - `deploy apply` only works for tools that save a plan. A `script` or ArgoCD/Flux step is refused before anything
   runs; use `deploy run` for those, or leave them out with `--stage` / `--scope`.
 - A `script` step runs in a preview (`--dry-run`, `deploy plan`) only when its provisioner sets `plan_args`;

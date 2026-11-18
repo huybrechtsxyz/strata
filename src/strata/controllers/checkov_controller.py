@@ -44,6 +44,7 @@ from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.remote_credentials import RemoteCredentialResolver
 from strata.controllers.remote_resolution import RemoteResolutionError
 from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.source_record import SourceRecord
 from strata.controllers.source_sync import SourceSyncError, source_repo_root
 from strata.controllers.workload_controller import resolve_module
 from strata.integrations.checkov import CheckovIntegration
@@ -277,6 +278,7 @@ def snapshot_checkov_configs(
     namespaces: dict[str, NamespaceModel] | None = None,
     index: DocumentIndex | None = None,
     credentials: RemoteCredentialResolver | None = None,
+    record: SourceRecord | None = None,
 ) -> None:
     """Copy `checkov_policy.config_file` from each scanned target's source repository into the build output.
 
@@ -284,6 +286,7 @@ def snapshot_checkov_configs(
     check`/`findings` read the same file from the build output and never resolve a remote
     themselves. A repository without the file gets no snapshot; the gate then reports that
     target through `on_missing_data`. Stale snapshots from an earlier build are removed first.
+    `record` records each copied file for `resolved.yaml` (docs/work/remote-commit-provenance.md).
     """
     shutil.rmtree(build_path / CHECKOV_CONFIG_DIR, ignore_errors=True)
     policy = workspace.spec.checkov_policy
@@ -295,7 +298,7 @@ def snapshot_checkov_configs(
             continue
         try:
             repo_root = (
-                source_repo_root(root, target.source, remotes, credentials=credentials)
+                source_repo_root(root, target.source, remotes, credentials=credentials, record=record)
                 if target.source is not None
                 else root
             )
@@ -305,6 +308,8 @@ def snapshot_checkov_configs(
         if origin.is_file():
             target.config.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(origin, target.config)
+            if record is not None:
+                record.took(repo_root, policy.config_file)
 
 
 def _with_config(policy: CheckovPolicyModel, targets: list[_Target]) -> list[_Target]:

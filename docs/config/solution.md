@@ -81,8 +81,10 @@ strata where that checkout is:
   - **Absolute**: used as it is. It only helps where every machine has the same layout.
 
   A path that does not exist fails `build run` with an error naming the remote and the folder it
-  looked in. When the folder is a git checkout, the deploy's audit manifest records its commit under
-  `artifacts.repositories.<name>.commit`.
+  looked in. `build run` records the checkout's commit in `resolved.yaml`, and whether the files it
+  took had uncommitted changes. The deploy's audit manifest copies both under
+  `artifacts.repositories.<name>`. The folder must be a git checkout itself, not a plain folder
+  inside another repository. See [Which commits were deployed](configuration.md#which-commits-were-deployed).
 - **`reference` with `fetch: external`**. Strata expects the checkout at
   `.strata/remotes/<name>/<reference>`, so the pipeline must repeat the ref and place or link its
   checkout there.

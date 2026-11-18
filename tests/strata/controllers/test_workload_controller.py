@@ -962,6 +962,45 @@ def test_a_file_dependency_is_copied_without_helm(tmp_path: Path):
     ]
 
 
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
+def test_a_file_dependency_from_a_remote_is_part_of_the_build_record(tmp_path: Path):
+    """docs/work/remote-commit-provenance.md Phase 2: a changed `file://` dependency makes the remote dirty."""
+    from strata.controllers.source_record import SourceRecord
+    from strata.models.solution_model import SolutionRemoteModel
+
+    repo = tmp_path / "charts-repo"
+    _write(
+        repo / "charts" / "app" / "Chart.yaml",
+        "apiVersion: v2\nname: app\nversion: 1.0.0\ndependencies:\n"
+        "  - name: common\n    version: 0.1.0\n    repository: file://../common\n",
+    )
+    _write(repo / "charts" / "common" / "Chart.yaml", "apiVersion: v2\nname: common\nversion: 0.1.0\n")
+    _write(repo / "docs" / "README.md", "# r\n")
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for args in (["init", "-b", "main"], ["add", "-A"], ["commit", "-m", "first"]):
+        subprocess.run([*git, *args], cwd=repo, check=True, capture_output=True)
+    _write(repo / "charts" / "common" / "values.yaml", "changed: true\n")
+    remote = SolutionRemoteModel.model_validate(
+        {"name": "charts", "type": "git", "url": "https://git.example.com/charts.git", "path": "../charts-repo"}
+    )
+    record = SourceRecord()
+
+    diagnostics = build_workload_modules(
+        _index(_helm_module_with_configuration({}, source=SourceModel(remote="charts", source_path="charts/app"))),
+        tmp_path / "sln",
+        remotes={"charts": remote},
+        namespace=_namespace(ModuleReferenceModel(name="app", module="app")),
+        resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build",
+        record=record,
+    )
+
+    assert diagnostics.items == []
+    (tmp_path / "sln").mkdir(exist_ok=True)
+    provenance = record.provenance(tmp_path / "sln", tmp_path / "build", None, Diagnostics())
+    assert provenance["remotes"]["charts"]["dirty"] is True
+
+
 def test_a_file_dependency_may_not_leave_the_repository(tmp_path: Path):
     _write(tmp_path / "outside" / "Chart.yaml", "apiVersion: v2\nname: outside\nversion: 0.1.0\n")
 

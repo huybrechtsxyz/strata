@@ -80,6 +80,13 @@ def test_config_is_fully_optional():
     config = AuditConfigModel.model_validate({})
     assert config.event_overrides is None
     assert config.sinks is None
+    assert config.require_remote_commits is False
+
+
+def test_config_accepts_require_remote_commits():
+    assert AuditConfigModel.model_validate({"require_remote_commits": True}).require_remote_commits is True
+    with pytest.raises(ValidationError):
+        AuditConfigModel.model_validate({"require_remote_commits": "sometimes"})
 
 
 def test_config_rejects_unknown_event_override_key():

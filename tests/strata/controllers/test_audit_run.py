@@ -14,11 +14,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+import yaml
 
 from strata.controllers import audit_run as audit_run_module
 from strata.controllers.audit_push import PushResult
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.build_controller import build_run
+from strata.controllers.deploy_controller import deploy_run
 from strata.controllers.policy_results import write_policy_results
 from strata.controllers.solution_context import open_solution
 from strata.integrations.capabilities import AuditSinkIntegration
@@ -1128,45 +1130,105 @@ def test_a_destroy_pushes_nothing_to_a_git_sink_that_lists_only_completed(tmp_pa
 
 
 # ---------------------------------------------------------------------------
-# A path remote records the commit that was actually checked out
-# (docs/work/remote-external-path.md)
+# A git remote's commit, and the solution's: copied from the build's record in resolved.yaml
+# (docs/work/remote-commit-provenance.md, R2); read at deploy only for an older build without one
 # ---------------------------------------------------------------------------
 
+_GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+_COMMIT_VARS = (
+    "STRATA_COMMIT_SHA",
+    "GITHUB_SHA",
+    "BUILD_SOURCEVERSION",
+    "CI_COMMIT_SHA",
+    "BITBUCKET_COMMIT",
+    "GIT_COMMIT",
+)
 
-def _with_path_remote(root: Path) -> None:
-    """Turn `_solution_with_workload()`'s remote into one a pipeline checked out at `repos/infra`."""
+
+@pytest.fixture
+def _no_ci_commit(monkeypatch):
+    for name in _COMMIT_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    return subprocess.run([*_GIT, *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _commit_all(repo: Path, message: str = "commit") -> str:
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "--allow-empty", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _init_repository(path: Path) -> str:
+    path.mkdir(parents=True, exist_ok=True)
+    _git(path, "init", "-b", "main")
+    return _commit_all(path, "first")
+
+
+def _with_path_remote(root: Path, location: str = "repos/infra", *, take_source: bool = True) -> Path:
+    """Turn `_solution_with_workload()`'s remote into one a pipeline checked out at `location`.
+
+    With `take_source`, the provisioner's `infra` folder comes from that checkout, so the build takes files from it.
+    Without, only the chart-based module names it, and the build copies nothing from it. Returns the checkout.
+    """
     manifest = root / "strata.yaml"
     manifest.write_text(
-        manifest.read_text(encoding="utf-8").replace("reference: main", "path: repos/infra"), encoding="utf-8"
+        manifest.read_text(encoding="utf-8").replace("reference: main", f"path: {location}"), encoding="utf-8"
     )
-    (root / "repos" / "infra").mkdir(parents=True)
+    checkout = (root / location).resolve()
+    checkout.mkdir(parents=True, exist_ok=True)
+    if take_source:
+        workspace = root / "workspace.yaml"
+        workspace.write_text(
+            workspace.read_text(encoding="utf-8").replace(
+                "      source:\n        source_path: infra\n",
+                "      source:\n        remote: infra-remote\n        source_path: infra\n",
+            ),
+            encoding="utf-8",
+        )
+        _write(checkout, "infra/main.tf", "# from the remote\n")
+    return checkout
+
+
+def _build(root: Path, tmp_path: Path) -> tuple[Path, Diagnostics]:
+    build_path = tmp_path / "build"
+    return build_path, build_run(_context(root), "app", build_path)
 
 
 def _commit_warnings(diagnostics: Diagnostics) -> list:
     return [d for d in diagnostics.warnings if d.code == "audit_remote_commit_unavailable"]
 
 
+def _manifest(root: Path) -> dict:
+    return json.loads(next(layout.audit_dir(root).rglob("_manifest.json")).read_text())
+
+
 def _manifest_repository(root: Path) -> dict:
-    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
-    return json.loads(manifest_path.read_text())["artifacts"]["repositories"]["infra-remote"]
+    return _manifest(root)["artifacts"]["repositories"]["infra-remote"]
+
+
+def _as_an_older_build(build_path: Path) -> None:
+    """Remove the record, as in a `resolved.yaml` written before it existed."""
+    resolved_path = build_path / "resolved.yaml"
+    resolved = yaml.safe_load(resolved_path.read_text(encoding="utf-8"))
+    assert "remotes" in resolved and "solution" in resolved
+    del resolved["remotes"], resolved["solution"]
+    resolved_path.write_text(yaml.safe_dump(resolved, sort_keys=True), encoding="utf-8")
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
 def test_manifest_records_the_commit_of_a_path_remote(tmp_path: Path, _terraform_stub):
     root = _solution_with_workload(tmp_path)
-    _with_path_remote(root)
-    checkout = root / "repos" / "infra"
-    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
-    subprocess.run([*git, "init", "-b", "main", str(checkout)], check=True, capture_output=True)
-    subprocess.run([*git, "commit", "--allow-empty", "-m", "first"], cwd=checkout, check=True, capture_output=True)
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=checkout, check=True, capture_output=True, text=True
-    ).stdout.strip()
+    head = _init_repository(_with_path_remote(root))
+    build_path, _ = _build(root, tmp_path)
 
-    diagnostics = _finalize(root, _run_deploy_and_build(root, tmp_path))
+    diagnostics = _finalize(root, build_path)
 
     repository = _manifest_repository(root)
     assert repository["commit"] == head
+    assert repository["dirty"] is False
     assert _commit_warnings(diagnostics) == []
     assert "ref" not in repository  # the pipeline owns the ref; the manifest does not invent one
     assert repository["url"] == "https://example.com/org/infra.git"
@@ -1174,52 +1236,233 @@ def test_manifest_records_the_commit_of_a_path_remote(tmp_path: Path, _terraform
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
 def test_manifest_records_the_commit_of_a_path_remote_beside_the_solution(tmp_path: Path, _terraform_stub):
-    """`path: ../infra` is resolved from the solution root, the same way `build run` finds it."""
+    """`path: ../infra-sibling` is resolved from the solution root, the same way `build run` finds it."""
     root = _solution_with_workload(tmp_path)
-    manifest = root / "strata.yaml"
-    manifest.write_text(
-        manifest.read_text(encoding="utf-8").replace("reference: main", "path: ../infra-sibling"), encoding="utf-8"
-    )
-    checkout = tmp_path / "infra-sibling"
-    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
-    subprocess.run([*git, "init", "-b", "main", str(checkout)], check=True, capture_output=True)
-    subprocess.run([*git, "commit", "--allow-empty", "-m", "first"], cwd=checkout, check=True, capture_output=True)
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=checkout, check=True, capture_output=True, text=True
-    ).stdout.strip()
+    head = _init_repository(_with_path_remote(root, "../infra-sibling"))
+    build_path, _ = _build(root, tmp_path)
 
-    _finalize(root, _run_deploy_and_build(root, tmp_path))
+    _finalize(root, build_path)
 
     assert _manifest_repository(root)["commit"] == head
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_the_manifest_keeps_the_built_commit_after_the_checkout_moves(tmp_path: Path, _terraform_stub):
+    """G1: build and deploy as separate jobs, the checkout moved in between. The deploy ran the build output."""
+    root = _solution_with_workload(tmp_path)
+    checkout = _with_path_remote(root)
+    built = _init_repository(checkout)
+    build_path, _ = _build(root, tmp_path)
+    _write(checkout, "infra/main.tf", "# a later change\n")
+    moved = _commit_all(checkout, "later")
+
+    _finalize(root, build_path)
+
+    assert _manifest_repository(root)["commit"] == built != moved
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_the_manifest_records_that_a_remote_was_built_with_uncommitted_changes(tmp_path: Path, _terraform_stub):
+    root = _solution_with_workload(tmp_path)
+    checkout = _with_path_remote(root)
+    _init_repository(checkout)
+    _write(checkout, "infra/main.tf", "# edited, not committed\n")
+    build_path, _ = _build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    assert _manifest_repository(root)["dirty"] is True
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_a_remote_the_build_took_nothing_from_is_listed_without_a_commit(tmp_path: Path, _terraform_stub):
+    """Only the chart-based module names it: the build copied no file from it, so there is no tree to record."""
+    root = _solution_with_workload(tmp_path)
+    _init_repository(_with_path_remote(root, take_source=False))
+    build_path, _ = _build(root, tmp_path)
+
+    diagnostics = _finalize(root, build_path)
+
+    assert _manifest_repository(root) == {"url": "https://example.com/org/infra.git"}
+    assert _commit_warnings(diagnostics) == []
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
 def test_a_path_remote_inside_the_solutions_own_git_tree_records_no_commit(tmp_path: Path, _terraform_stub):
     """A plain folder inside the solution's repository has no commit of its own: `git rev-parse` would walk up and
-    report the solution's, so the checkout must hold its own `.git`."""
+    report the solution's, so the checkout must hold its own `.git`. The build warns; the deploy does not repeat it."""
     root = _solution_with_workload(tmp_path)
     _with_path_remote(root)
-    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
-    subprocess.run([*git, "init", "-b", "main", str(root)], check=True, capture_output=True)
-    subprocess.run([*git, "commit", "--allow-empty", "-m", "solution"], cwd=root, check=True, capture_output=True)
+    _init_repository(root)
+    build_path, build_diagnostics = _build(root, tmp_path)
 
-    diagnostics = _finalize(root, _run_deploy_and_build(root, tmp_path))
+    diagnostics = _finalize(root, build_path)
 
     assert "commit" not in _manifest_repository(root)
-    assert len(_commit_warnings(diagnostics)) == 1
+    assert len(_commit_warnings(build_diagnostics)) == 1
+    assert _commit_warnings(diagnostics) == []
 
 
 def test_a_path_remote_that_is_not_a_git_checkout_records_no_commit(tmp_path: Path, _terraform_stub):
     """A plain copy has no commit of its own."""
     root = _solution_with_workload(tmp_path)
     _with_path_remote(root)
+    build_path, build_diagnostics = _build(root, tmp_path)
 
-    diagnostics = _finalize(root, _run_deploy_and_build(root, tmp_path))
+    diagnostics = _finalize(root, build_path)
 
     assert "commit" not in _manifest_repository(root)
-    [warning] = _commit_warnings(diagnostics)
+    [warning] = _commit_warnings(build_diagnostics)
     assert "infra-remote" in warning.message
     assert "not a git checkout" in warning.message
+    assert _commit_warnings(diagnostics) == []
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_the_solution_commit_is_the_one_the_build_recorded(tmp_path: Path, _terraform_stub, _no_ci_commit):
+    root = _solution_with_workload(tmp_path)
+    built = _init_repository(root)
+    build_path, _ = _build(root, tmp_path)
+    _write(root, "notes.md", "# a later change\n")
+    moved = _commit_all(root, "later")
+
+    _finalize(root, build_path)
+
+    manifest = _manifest(root)
+    assert manifest["commit_sha"] == built != moved
+    assert manifest["commit_dirty"] is False
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_the_manifest_records_that_the_solution_was_built_with_uncommitted_changes(
+    tmp_path: Path, _terraform_stub, _no_ci_commit
+):
+    root = _solution_with_workload(tmp_path)
+    _init_repository(root)
+    _write(root, "environment.yaml", (root / "environment.yaml").read_text(encoding="utf-8") + "# edited\n")
+    build_path, _ = _build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    assert _manifest(root)["commit_dirty"] is True
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_an_older_build_without_the_record_is_read_at_deploy(tmp_path: Path, _terraform_stub, _no_ci_commit):
+    """R2's fallback: a deploy of a build made before the record keeps today's deploy-time read."""
+    root = _solution_with_workload(tmp_path)
+    checkout = _with_path_remote(root, "../infra-sibling")
+    _init_repository(checkout)
+    _init_repository(root)
+    build_path, _ = _build(root, tmp_path)
+    _as_an_older_build(build_path)
+    _write(checkout, "infra/main.tf", "# a later change\n")
+    remote_now = _commit_all(checkout, "later")
+    _write(root, "notes.md", "# a later change\n")
+    solution_now = _commit_all(root, "later")
+
+    _finalize(root, build_path)
+
+    manifest = _manifest(root)
+    assert manifest["artifacts"]["repositories"]["infra-remote"] == {
+        "url": "https://example.com/org/infra.git",
+        "commit": remote_now,
+    }
+    assert manifest["commit_sha"] == solution_now
+    assert "commit_dirty" not in manifest
+
+
+def test_an_older_build_with_a_path_remote_that_is_not_a_checkout_warns_at_deploy(tmp_path: Path, _terraform_stub):
+    root = _solution_with_workload(tmp_path)
+    _with_path_remote(root)
+    build_path, _ = _build(root, tmp_path)
+    _as_an_older_build(build_path)
+
+    diagnostics = _finalize(root, build_path)
+
+    assert "commit" not in _manifest_repository(root)
+    assert len(_commit_warnings(diagnostics)) == 1
+
+
+# ---------------------------------------------------------------------------
+# spec.audit.require_remote_commits: the build warns, only the deploy fails
+# (docs/work/remote-commit-provenance.md, R3 and D14)
+# ---------------------------------------------------------------------------
+
+
+def _requiring_commits(tmp_path: Path, *, required: bool = True) -> Path:
+    """`_solution_root()` (Terraform only, so `deploy_run()` gets past readiness), in git, with the option set."""
+    root = _solution_root(tmp_path)
+    _add_configuration(root, f"  audit:\n    require_remote_commits: {'true' if required else 'false'}\n")
+    _init_repository(root)
+    return root
+
+
+def _error_codes(diagnostics: Diagnostics) -> list:
+    return [d.code for d in diagnostics.errors]
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_a_clean_build_deploys_with_the_option_on(tmp_path: Path, _terraform_stub, _no_ci_commit):
+    root = _requiring_commits(tmp_path)
+    build_path, build_diagnostics = _build(root, tmp_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert {d.code for d in build_diagnostics.warnings}.isdisjoint(
+        {"remote_checkout_dirty", "audit_remote_commit_unavailable"}
+    )
+    assert diagnostics.ok, diagnostics.messages()
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_an_uncommitted_edit_builds_but_does_not_deploy_with_the_option_on(
+    tmp_path: Path, _terraform_stub, _no_ci_commit, monkeypatch
+):
+    root = _requiring_commits(tmp_path)
+    _write(root, "infra/main.tf", "# edited, not committed\n")
+    build_path, build_diagnostics = _build(root, tmp_path)
+    ran: list = []
+    monkeypatch.setattr("strata.integrations.base.run_command", lambda *a, **k: ran.append(a))
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert build_diagnostics.ok
+    assert "remote_checkout_dirty" in [d.code for d in build_diagnostics.warnings]
+    assert _error_codes(diagnostics) == ["remote_checkout_dirty"]
+    assert diagnostics.errors[0].hint is not None
+    assert ran == []  # failed before any tool ran
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_an_uncommitted_edit_deploys_with_the_option_off(tmp_path: Path, _terraform_stub, _no_ci_commit):
+    root = _requiring_commits(tmp_path, required=False)
+    _write(root, "infra/main.tf", "# edited, not committed\n")
+    build_path, _ = _build(root, tmp_path)
+
+    assert deploy_run(_context(root), "app", build_path, force=True).ok
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_an_older_build_does_not_deploy_with_the_option_on(tmp_path: Path, _terraform_stub, _no_ci_commit):
+    root = _requiring_commits(tmp_path)
+    build_path, _ = _build(root, tmp_path)
+    _as_an_older_build(build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert _error_codes(diagnostics) == ["build_remote_provenance_missing"]
+
+
+def test_a_solution_outside_git_does_not_deploy_with_the_option_on(tmp_path: Path, _terraform_stub, _no_ci_commit):
+    root = _solution_root(tmp_path)
+    _add_configuration(root, "  audit:\n    require_remote_commits: true\n")
+    build_path, build_diagnostics = _build(root, tmp_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert build_diagnostics.ok
+    assert _error_codes(diagnostics) == ["audit_remote_commit_unavailable"]
 
 
 def test_manifest_marks_an_image_strata_does_not_deliver(tmp_path: Path, _terraform_stub):

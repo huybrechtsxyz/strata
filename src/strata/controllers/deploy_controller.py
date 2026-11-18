@@ -55,6 +55,7 @@ from strata.controllers.policy_results import append_policy_result, image_tag_po
 from strata.controllers.security_gate_controller import evaluate_security_gates
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.source_record import check_build_record
 from strata.controllers.source_sync import SourceSyncError, resolved_asset_info
 from strata.controllers.step_secrets import container_secret_keys, secret_uses, step_secret_keys
 from strata.controllers.step_selection import select_steps
@@ -86,6 +87,7 @@ from strata.integrations.terraform_projection import (
 )
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
+from strata.models.configuration_model import ConfigurationModel
 from strata.models.deployment_model import DeploymentSpecModel, DeploymentStageModel, VersionPins, version_name_list
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.namespace_model import NamespaceModel
@@ -939,6 +941,15 @@ def _built_pins(build_path: Path) -> dict[str, str] | None:
     }
 
 
+def _require_remote_commits(index: DocumentIndex) -> bool:
+    """`spec.audit.require_remote_commits` of the solution's one configuration; `False` without exactly one."""
+    configurations = index.all_of(PlatformKind.CONFIGURATION)
+    if len(configurations) != 1:
+        return False
+    audit = cast(ConfigurationModel, configurations[0].model).spec.audit
+    return audit is not None and audit.require_remote_commits
+
+
 def deploy_run(
     context: SolutionContext,
     deployment_name: str,
@@ -1135,6 +1146,13 @@ def deploy_run(
                 targets=pinnable_targets(context.controller.index, deployment),
             )
         )
+        if not diagnostics.ok:
+            return diagnostics
+
+    # spec.audit.require_remote_commits (docs/work/remote-commit-provenance.md, D14): the build only warns, so the
+    # deploy fails here, offline and before anything changes, when the build's record has a gap.
+    if not destroy and _require_remote_commits(index):
+        diagnostics.extend(check_build_record(build_path))
         if not diagnostics.ok:
             return diagnostics
 

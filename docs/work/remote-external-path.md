@@ -101,6 +101,7 @@ nothing to verify. The guarantee moves to **recording what was actually used**:
 
 - `audit_run._collect_artifacts_bom()` resolves each used remote's directory and fills
   `ManifestRepositoryModel.commit` with `git rev-parse HEAD` of that directory. In path mode `ref` is `None`.
+  (Superseded: the build now records the commit, see Q2. This lookup is the fallback for an older build.)
 - Done for **path mode only** at first. For ref mode with `fetch: external` the same lookup is cheap and would make the
   manifest honest there too, but it changes existing manifests, so it is a separate decision (Q2).
 - If the directory is not a git work tree (a copy, or `git` missing), `commit` stays `None` and a warning is logged.
@@ -152,8 +153,10 @@ clones the repository there. The value is the same in both places only when both
   Azure DevOps and developers already share (sibling folders). A `validate` warning for a path outside the solution
   shipped in 2.3.1 and was removed in 2.3.2 (see the Changelog). The environment override is still open for a layout
   where no single value works, with no evidence for it yet.
-- **Q2 - Record the commit for ref-mode `fetch: external` remotes too?** Recommend: yes, in a follow-up, after path
-  mode proves the lookup.
+- **Q2 - Record the commit for ref-mode `fetch: external` remotes too?** Closed 2026-11-17: yes, and for every git
+  remote. [remote-commit-provenance.md](remote-commit-provenance.md) (Part A) records each commit at build time in
+  `resolved.yaml`, and the audit manifest copies it. The deploy-time lookup described above now runs only for a
+  build made before the record existed.
 - **Q3 - Should a ref-mode external checkout be checked against its `reference`?** Not part of this change (D4).
   A warning when `HEAD` is not at the declared ref would be cheap, but a branch ref in a detached CI checkout makes
   "equal" ambiguous.
@@ -198,6 +201,10 @@ Out of scope: verifying ref-mode checkouts (Q3); an environment override for the
   `.git` in the folder itself, so a plain folder inside the solution's own repository does not report the
   solution's commit; audit pushes refuse a path remote at run time too, not only in `validate`. Branch: built on
   `feature/script-provisioner`'s working tree, not a branch of its own.
+- 2026-11-17: Q2 closed. `remote-commit-provenance.md` Part A is built: every git remote's commit is recorded at
+  build time, and the deploy-time lookup is only the fallback for an older build.
+- 2026-11-17: Q2 moved to `remote-commit-provenance.md`. Reason: the commit is read at deploy, but the deploy runs
+  from the build output, so the record can name a tree that was never built.
 - 2026-11-05: Q1 decided and built as a patch (2.3.1) on `fix/path-remote-outside-solution`: `path` may use `..` or be
   absolute, resolved from the solution root by one helper (`layout.path_remote_location()`) that the resolver and the
   audit manifest both call; the schema no longer rejects them, and `strata validate` warns

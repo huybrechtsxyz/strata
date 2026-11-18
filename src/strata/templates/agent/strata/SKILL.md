@@ -77,6 +77,7 @@ Every document has `apiVersion`, `kind`, `meta.name` and `spec`. Documents refer
 | Rebinding a provider or asset for one deployment | `deployment.spec.providers`, `deployment.spec.assets` |
 | Pinning an image, chart, remote ref, artifact tag or asset ref | `version.spec.pins`, selected by `deployment.spec.version` (one document or a list: a shared core plus a product document, each pin owned by one) |
 | Refusing an image with no tag, a floating tag such as `latest`, or the wrong tag shape | `workspace.spec.image_tag_policy` |
+| Refusing to deploy a build made from uncommitted or unknown sources | `configuration.spec.audit.require_remote_commits` (the build records each commit in `resolved.yaml`; only the deploy fails) |
 | Credentials or a connection to a tool or service | an `integration` document, named from a provisioner, a remote, a store, an audit sink or a gate policy |
 | A git, OCI or Helm source | `solution.spec.remotes` in `strata.yaml`, used as `@<name>/<path>` |
 | A container image strata does not deploy itself | an `artifact` document |
@@ -153,6 +154,9 @@ How values merge for a deployment:
   solution root (`..` allowed, so `../iac` is a checkout beside the solution) or absolute. A `path` remote cannot
   be pinned or pushed to (GitOps, audit sinks).
 - A version pin on a `type: local` remote is accepted but changes nothing.
+- A `remote_checkout_dirty` warning from `build run` means files the build took had uncommitted changes. With
+  `spec.audit.require_remote_commits` on, the deploy of that build fails: commit, then build again. Do not edit
+  `resolved.yaml` by hand.
 - An `attributeconfig` must set `target.view` (`document` or `effective`); there is no default.
 
 Project-specific lessons belong in the `project-gotchas` skill, not here: this file is rewritten on every

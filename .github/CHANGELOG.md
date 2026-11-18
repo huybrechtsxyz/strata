@@ -8,6 +8,41 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+The audit record names the commits that were built, not the checkouts as they are at deploy time.
+
+### Added
+
+- **`build run` records which commits it took its files from** in `resolved.yaml`.
+  - `solution: {commit, dirty}` is the solution repository.
+  - `remotes: {name: {url, ref, commit, dirty}}` covers every git remote the build copied files from: `path`
+    remotes, `fetch: external` checkouts and strata's own clones. An asset's `spec.location` is listed as
+    `asset:<name>`.
+  - `dirty` is `true` when the files taken had uncommitted changes. Only the copied paths are checked, and
+    files git ignores do not count.
+- New warning `remote_checkout_dirty` at build time, with a hint. `audit_remote_commit_unavailable` (a remote's
+  commit could not be read) is now reported by the build too.
+- **`spec.audit.require_remote_commits`** (Configuration, default `false`). With it on, `deploy run`, `plan` and
+  `apply` stop before anything changes when the build's record has a gap:
+  - `audit_remote_commit_unavailable`: no commit, for example a plain copy or a solution outside git;
+  - `remote_checkout_dirty`: uncommitted changes, or changes that could not be checked;
+  - `build_remote_provenance_missing`: a build made by an older strata.
+
+  A build still only warns, so building an uncommitted edit keeps working. See
+  [Which commits were deployed](../docs/config/configuration.md#which-commits-were-deployed).
+- The audit manifest has `commit_dirty`, and each `artifacts.repositories` entry has `dirty`. Both are optional,
+  so older manifests still load.
+
+### Changed
+
+- **The audit manifest copies the build's record.**
+  - `commit_sha` and `artifacts.repositories` describe what was built, even when the deploy runs in a later job or
+    the checkout moved.
+  - The deploy no longer reads a checkout, and no longer repeats the build's warning.
+  - A remote the workspace names but the build copied nothing from, such as a chart-based module's remote, is
+    listed without a commit.
+  - A build made before this release is read at deploy time, as before.
+- `artifacts.repositories` in the audit manifest is sorted by name.
+
 ## [2.7.0] - 2026-11-14
 
 Several products in one ring can share pins without copying them: a deployment lists several version documents.
