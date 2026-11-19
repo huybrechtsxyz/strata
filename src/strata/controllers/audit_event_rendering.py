@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render the audit CloudEvents+ECS envelope on demand — never written to disk
-(docs/work/audit-trail.md's "The audit files — ... the Event is rendered,
-not written").
+(docs/design/audit-trail.md's "The audit
+files").
 
-Phase 2 of that doc's Layer 2 Implementation Plan. Lives in `controllers/`
+Lives in `controllers/`
 (not `utils/`) because it depends on concrete model types
 (`DeploymentManifestModel`/`DeploymentMetricsModel`), and `utils/` must
 never depend on `models/` (ADR-0003) — same placement reasoning as

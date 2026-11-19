@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Audit trail configuration models — `spec.audit` (docs/work/audit-trail.md).
+"""Audit trail configuration models — `spec.audit` (docs/design/audit-trail.md).
 
-Phase 1 of that doc's Layer 2 Implementation Plan: the config surface only —
+The config surface only —
 `AuditConfigModel`/`AuditSinkModel`/`AuditGitSinkTargetModel`. The written
 artifacts themselves (the deployment manifest, metrics record) are separate
 models (Phase 2), not config.
@@ -13,16 +13,15 @@ Deliberately not ported from v1's real `models/audit_config_model.py`:
   `REMOTES_DIRNAME`), and the per-execution directory shape is derived from
   a deployment's own `layers.segments` when declared, never a Jinja2
   template field. `journal` has no evidenced v2 consumer and is deferred
-  entirely. See the design doc's "Streamlining the configuration surface".
+  entirely. See the design doc's "Configuration".
 - No `deployments.ndjson` durable append series — real usage shows ~90% of
   deploys run in ephemeral CI, so a local-only append series never
   accumulates where it would matter; dropped rather than built and unused.
-  See "A third file".
+  See "Not covered".
 - `AuditPolicyModel`'s `Union[bool, AuditEventPolicyModel]` object wrapper is
   not ported — its extra fields were v1's own "reserved, not read by any
   producer yet". Flattened to `event_overrides: dict[str, bool] | None`
-  directly on `AuditConfigModel`. See "Event admission — a closed set gate,
-  not a policy framework".
+  directly on `AuditConfigModel`. See "Events".
 - The closed event-type set is scoped to what v2 actually produces
   (`deployment.completed`/`destroyed`/`measured`), not v1's full 20-type
   list spanning workitem/lock/drift/cost/secret producers v2 doesn't have.
@@ -62,8 +61,7 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
 
     Distinct from `SourceModel.remote`'s read-oriented usage: `branch` is a
     mutable tip refreshed before every write, not a pinned `reference`. See
-    the design doc's "Durable push destination — why SolutionRemoteModel
-    can't be reused as-is".
+    the design doc's "The git sink".
     """
 
     remote: Annotated[PlatformName, RemoteReference()] = Field(
@@ -82,7 +80,7 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
         min_length=1,
         description="Folder inside the repository under which each run's audit files are written.\n\n"
         "Design notes: Root prefix under the repository. The shared per-execution "
-        "relative path (see docs/work/audit-trail.md's 'Path resolution') is "
+        "relative path (see docs/design/audit-trail.md's 'Path resolution') is "
         "appended under this.",
     )
     action: Literal["none", "commit", "push"] = Field(
@@ -104,7 +102,7 @@ class AuditSinkModel(PlatformBaseModel):
 
     Design notes:
     A configured audit event destination — exactly one of two structurally
-    different arms (docs/work/audit-trail.md's "The endpoints").
+    different arms (docs/design/audit-trail.md's "Sinks").
     """
 
     schema_rules: ClassVar[tuple[str, ...]] = (
@@ -121,8 +119,8 @@ class AuditSinkModel(PlatformBaseModel):
         "fails the run (exit code 3).\n\n"
         "Design notes: Same name/default as Integration.required. False (default): a "
         "dispatch failure warns but never fails the run. True: a dispatch failure "
-        "escalates to a hard failure (deploy run exit code 3). See 'Dispatch failure — "
-        "a required flag, not a binary silent-vs-fail choice'.",
+        "escalates to a hard failure (deploy run exit code 3). See docs/design/audit-trail.md, "
+        "'When delivery fails'.",
     )
     events: list[str] | None = Field(
         default=None, description="Event filter — None means every gate-admitted event type"
@@ -167,7 +165,7 @@ class AuditConfigModel(PlatformBaseModel):
 
     Design notes:
     `spec.audit` — fully optional; every field either derives a default or is dropped
-    (docs/work/audit-trail.md's "Streamlining the configuration surface").
+    (docs/design/audit-trail.md's "Configuration").
     """
 
     schema_rules: ClassVar[tuple[str, ...]] = (

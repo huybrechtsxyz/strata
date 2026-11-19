@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for resolve_actor() — docs/work/audit-trail.md's "Actor/identity".
-
-Phase 3 of that doc's Layer 2 Implementation Plan.
-"""
+"""Tests for resolve_actor() — docs/design/audit-trail.md's "Actor"."""
 
 from strata.utils.actor import resolve_actor
 

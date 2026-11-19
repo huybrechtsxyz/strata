@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The deployment manifest — `_manifest.json` (docs/work/audit-trail.md's "The audit files").
+"""The deployment manifest — `_manifest.json` (docs/design/audit-trail.md's "The audit files").
 
-Phase 2 of that doc's Layer 2 Implementation Plan. This is a **written
+This is a **written
 artifact**, not a discoverable `(kind, meta.name)` document — `.strata/`
 (where it lives, via `layout.audit_dir()`) is permanently excluded from
 solution discovery (`layout.DEFAULT_IGNORED_DIRS`), so this model carries
@@ -43,7 +43,7 @@ class ChangeReferenceModel(PlatformBaseModel):
     (`DeploymentManifestModel`, who *ran* the deploy) and `supplied_by`
     (who *typed* this reference — usually the same actor, auto-derived
     from `resolve_actor()`) both already existed; `approved_by`/
-    `approved_at` close the real gap docs/work/audit-trail.md's
+    `approved_at` close the real gap docs/design/audit-trail.md's
     compliance analysis flagged for Q3 ("who approved") — self-attestation
     by the executor is not independent authorization under ISO 27001
     A.12.1.2. **Honesty limit, stated directly rather than implied:**

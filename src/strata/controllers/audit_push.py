@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Push audit files to a durable git destination — the `git` sink arm's
-transport (docs/work/audit-trail.md's "Durable push destination"/"The
-endpoints").
+transport (docs/design/audit-trail.md's "The
+git sink").
 
-Phase 4 of that doc's Layer 2 Implementation Plan. A new, push-specific
+A new, push-specific
 resolution — deliberately NOT reusing `resolve_remote()`
 (`controllers/remote_resolution.py`):
 

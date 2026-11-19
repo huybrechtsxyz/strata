@@ -214,7 +214,7 @@ def _change_reference_options(f: _F) -> _F:
     makes a real infrastructure change and so needs an audit trail entry
     (`run`/`apply` — never `setup`/`check`/`plan`, which are
     non-mutating). Factored into one decorator because these feed
-    `ChangeReferenceModel` (docs/work/audit-trail.md) — a
+    `ChangeReferenceModel` (docs/design/audit-trail.md) — a
     compliance-relevant field set where two independently-maintained
     copies of the same 8 options drifting apart (a typo'd help string, a
     missing metavar) is a worse outcome than for purely ergonomic options,
@@ -273,7 +273,7 @@ def _change_reference_options(f: _F) -> _F:
         metavar="TEXT",
         help="Change/ticket tracker, e.g. 'jira', 'azure_devops', 'servicenow', or an internal name. "
         "Required together with --change-id/--change-reason, or omit all three — docs/design/"
-        "audit-trail.md's ChangeReferenceModel.",
+        "audit-trail.md, 'Change reference'.",
     )(f)
     return f
 
@@ -491,8 +491,8 @@ def deploy_run_command(
             on_tool=on_tool,
         )
 
-        # Audit trail — finalize + write locally + distribute (docs/work/
-        # audit-trail.md's Layer 2). Never affects which deploy stages ran or
+        # Audit trail — finalize + write locally + distribute (docs/design/
+        # audit-trail.md). Never affects which deploy stages ran or
         # their recorded outcome; a required sink's push failure can still
         # fail this command's own exit code, merged in below. `smoke_test`
         # is zero-contact, same as `dry_run` — both must no-op the manifest/
@@ -803,8 +803,8 @@ def deploy_apply_command(
             on_tool=on_tool,
         )
 
-        # Audit trail — same as `deploy run` (docs/work/audit-trail.md's
-        # Layer 2): `apply` makes a real infrastructure change, exactly
+        # Audit trail — same as `deploy run` (docs/design/audit-trail.md):
+        # `apply` makes a real infrastructure change, exactly
         # like `run`'s own apply tail, so a pipeline split into
         # plan/apply stages must not silently lose audit coverage relative
         # to a monolithic `deploy run`. Never a dry run here — `dry_run`

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for `audit_run.finalize_and_distribute_deploy_audit()` (docs/work/
+"""Tests for `audit_run.finalize_and_distribute_deploy_audit()` (docs/design/
 audit-trail.md's "Write once locally, then distribute").
 
-Phase 5 of that doc's Layer 2 Implementation Plan — the final phase. Real
+Real
 solution fixtures (same shape as `test_deploy_controller.py`'s own), a real
 local bare git repository for the `git` sink dispatch tests, and mocked
 `terraform`/`run_command` so no real binaries are needed.
@@ -250,8 +250,7 @@ def test_manifest_includes_sbom_reference_when_present(tmp_path: Path, _terrafor
 def test_finalize_and_distribute_deploy_audit_includes_policy_results_in_the_manifest(
     tmp_path: Path, _terraform_stub, monkeypatch
 ):
-    """docs/work/audit-trail.md's `ManifestPolicyResultModel` population
-    design — a `build run`'s own `policy_results.json` sidecar (written
+    """docs/design/audit-trail.md's "Policy results" — a `build run`'s own `policy_results.json` sidecar (written
     because `cve_policy` is configured and breaches) ends up folded into
     the `deploy run`-produced `_manifest.json`."""
     import strata.controllers.sbom_controller as sbom_controller_module
@@ -540,7 +539,7 @@ def test_manifest_artifacts_bom_absent_when_workspace_reaches_nothing(tmp_path: 
 
 
 # ---------------------------------------------------------------------------
-# change_reference (docs/work/audit-trail.md's ChangeReferenceModel CLI wiring)
+# change_reference (docs/design/audit-trail.md, "Change reference")
 # ---------------------------------------------------------------------------
 
 

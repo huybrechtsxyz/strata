@@ -350,7 +350,7 @@ durable, reviewable record.
     cross-check, `Tenant` reference existence).
   - `policies`/`promotions` — still fully open, unstarted. `audit` —
     **RESOLVED 2026-09-30** (Layers 1+2 only — see
-    [docs/work/audit-trail.md](audit-trail.md)). `strata sln init`/
+    [docs/design/audit-trail.md](../design/audit-trail.md)). `strata sln init`/
     `update` scaffold the real PR/issue templates (Layer 1), and `deploy
     run` now writes a durable `_manifest.json`/`_metrics.json` per
     execution with optional `git`-sink distribution (Layer 2's full

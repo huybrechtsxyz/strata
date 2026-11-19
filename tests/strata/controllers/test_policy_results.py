@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Tests for `policy_results.py` (docs/work/audit-trail.md's
-`ManifestPolicyResultModel` population design) — `write_policy_results()`
+"""Tests for `policy_results.py` (docs/design/audit-trail.md's
+"Policy results") — `write_policy_results()`
 and `read_policy_results()` in isolation from `build_run()`/
 `finalize_and_distribute_deploy_audit()`."""
 

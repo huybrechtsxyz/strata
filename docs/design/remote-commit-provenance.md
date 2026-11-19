@@ -304,7 +304,7 @@ spec:
 - [gitops-integration.md](gitops-integration.md) - the GitOps integration, including its own clone for a `reference`
   remote.
 - [remotes.md](remotes.md) - remotes, path mode, and how `resolve_remote()` finds a checkout.
-- `audit-trail.md` (work doc) - the audit manifest and its sinks.
+- [audit-trail.md](audit-trail.md) - the audit manifest and its sinks.
 
 ## History
 

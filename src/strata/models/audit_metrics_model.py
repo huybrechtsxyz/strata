@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""The deployment metrics record — `_metrics.json` (docs/work/audit-trail.md's
-"A third file — `_metrics.json`, adapting v1's never-built ADR-0064").
+"""The deployment metrics record — `_metrics.json` (docs/design/audit-trail.md's
+"The audit files").
 
-Phase 2 of that doc's Layer 2 Implementation Plan. Same non-discoverable,
+Same non-discoverable,
 written-artifact status as `audit_manifest_model.py` — no `apiVersion`/
 `kind`/`meta` envelope.
 

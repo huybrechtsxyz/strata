@@ -6,7 +6,7 @@ Two rules over every relative Markdown link in a Markdown file of the repository
 
 - It resolves: a doc moved between `docs/work/`, `docs/design/` and `docs/archive/` leaves no link behind.
 - Only a work doc links to a work doc. A work doc graduates to `docs/design/`, moves to `docs/archive/` or is deleted,
-  so a finished doc names a work doc without a link: `` `audit-trail.md` (work doc) ``.
+  so a finished doc names a work doc without a link: `` `promotion.md` (work doc) ``.
 
 Fenced code blocks and inline code spans are not links.
 """
@@ -112,7 +112,7 @@ def test_only_a_work_doc_links_to_a_work_doc():
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("See [audit](../work/audit-trail.md#layers).", [(1, "../work/audit-trail.md")]),
+        ("See [promotion](../work/promotion.md#layers).", [(1, "../work/promotion.md")]),
         ("one\n[x](x.md) and [y](./y.md)", [(2, "x.md"), (2, "./y.md")]),
         ("`[x](../design/x.md)` is an example", []),
         ("```\n[x](x.md)\n```\n[y](y.md)", [(4, "y.md")]),

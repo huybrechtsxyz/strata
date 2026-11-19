@@ -1710,7 +1710,7 @@ def test_build_run_dry_run_does_not_write_an_sbom(tmp_path: Path):
 
 # ---------------------------------------------------------------------------
 # build_run() writes policy_results.json for build-phase policies
-# (docs/work/audit-trail.md's ManifestPolicyResultModel population design)
+# (docs/design/audit-trail.md, "Policy results")
 # ---------------------------------------------------------------------------
 
 

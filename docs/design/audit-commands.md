@@ -6,7 +6,7 @@
 
 ## Overview
 
-This is Layer 3 of the work doc `audit-trail.md`'s four-layer model — the
+This is Layer 3 of [audit-trail.md](audit-trail.md)'s four-layer model — the
 one piece that doc's own MoSCoW records as genuinely missing: a way to read
 back what Layer 2 already writes and Layer 4 already pushes out, so a human
 or an auditor can ask "what deployed, and when" without knowing the on-disk
@@ -199,7 +199,7 @@ audit changes` instead):
   solution. Reading audit records ('strata audit status'/'strata audit
   changes') requires a configured 'git' audit sink, and none exists —
   add one under spec.audit.sinks in your Configuration document. See
-  docs/work/audit-trail.md and docs/design/audit-commands.md."*
+  docs/design/audit-trail.md and docs/design/audit-commands.md."*
 - More than one: *"Multiple git audit sinks are configured
   ('compliance-archive', 'team-mirror') — reading more than one is not
   supported yet. See docs/design/audit-commands.md."* — names the
@@ -212,7 +212,7 @@ audit changes` instead):
 $ strata audit status
 error: No audit git sink is configured for this solution. Reading audit records ('strata audit
 status'/'strata audit changes') requires a configured 'git' audit sink, and none exists — add one
-under spec.audit.sinks in your Configuration document. See docs/work/audit-trail.md and
+under spec.audit.sinks in your Configuration document. See docs/design/audit-trail.md and
 docs/design/audit-commands.md.
 $ echo $?
 2
@@ -658,7 +658,7 @@ accurate.
 ## Related Decisions
 
 No new ADR — this extends the existing Layer 2/4 design in
-`audit-trail.md` (work doc) (itself grounded in ADR-0003's layering and
+[audit-trail.md](audit-trail.md) (itself grounded in ADR-0003's layering and
 ADR-0015's identity-not-paths/`.strata/` discovery exclusion) rather than
 introducing a new architectural decision. Reuses
 [audit-sink-dispatch.md](audit-sink-dispatch.md)'s existing sink model

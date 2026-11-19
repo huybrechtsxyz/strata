@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Tests for the audit trail config models — `spec.audit` (docs/work/audit-trail.md).
+"""Tests for the audit trail config models — `spec.audit` (docs/design/audit-trail.md).
 
-Phase 1 of that doc's Layer 2 Implementation Plan: config models only. The
+Config models only. The
 written artifacts (manifest, metrics) are Phase 2, not covered here.
 """
 

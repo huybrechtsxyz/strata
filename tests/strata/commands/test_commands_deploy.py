@@ -417,7 +417,7 @@ def test_output_max_age_rejects_a_non_positive_value(runner, solution, _stub_ter
 
 
 # ---------------------------------------------------------------------------
-# --change-* (docs/work/audit-trail.md's ChangeReferenceModel CLI wiring)
+# --change-* (docs/design/audit-trail.md, "Change reference")
 # ---------------------------------------------------------------------------
 
 

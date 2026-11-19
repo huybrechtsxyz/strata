@@ -13,7 +13,7 @@ or `integrations`/`remotes` (already their own standalone kind/the solution
 manifest, respectively). `spec.paths` is narrower than v1's own version —
 see docs/design/path-conventions.md for what's deliberately not ported
 (the generic `validate:` sub-block, the full policy engine). `spec.audit`
-is narrower still — see docs/work/audit-trail.md's "v2 Design Notes" for
+is narrower still — see docs/design/audit-trail.md's "Not covered" for
 what's deliberately not ported (the CLI-invocation journal, a durable local
 append series, the full v1 event-type vocabulary).
 

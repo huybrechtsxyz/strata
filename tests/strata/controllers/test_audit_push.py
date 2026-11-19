@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for `audit_push.push_audit_files` (docs/work/audit-trail.md's
-"Durable push destination"/"The endpoints").
+"""Tests for `audit_push.push_audit_files` (docs/design/audit-trail.md's
+"The git sink").
 
-Phase 4 of that doc's Layer 2 Implementation Plan. Most tests mock
+Most tests mock
 `run_command` (matching `test_remote_resolution.py`'s own established
 style); one true end-to-end test drives a real local bare git repository,
 confirming the whole clone/fetch/reset/add/commit/push chain actually

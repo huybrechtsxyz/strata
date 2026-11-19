@@ -1062,8 +1062,8 @@ def build_run(
         # accumulator) so `policy_results.cve_policy_result()` can build a
         # ManifestPolicyResultModel from exactly this policy's own
         # findings, not build_run()'s full, mixed accumulation
-        # (docs/work/audit-trail.md's "DeploymentManifestModel.
-        # policy_results population" design).
+        # (docs/design/audit-trail.md's "Policy
+        # results").
         cve_diagnostics = evaluate_cve_policy(build_path, graph.workspace, index)
         diagnostics.extend(cve_diagnostics)
         cve_policy_result = build_cve_policy_result(graph.workspace, cve_diagnostics)

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Finalize and distribute a deploy run's audit trail — the end-of-run
-sequencing (docs/work/audit-trail.md's "Write once locally, then
+sequencing (docs/design/audit-trail.md's "Write once locally, then
 distribute").
 
-Phase 5 of that doc's Layer 2 Implementation Plan — the final phase,
-gluing Phases 1-4 into `deploy run`'s actual command flow. Deliberately a
+Glues the audit trail into `deploy run`'s command flow. Deliberately a
 NEW module, not a change to `deploy_controller.py::deploy_run()` itself:
 that function's existing fail-fast, single-return-diagnostics shape is
 complex, heavily tested, and load-bearing — this wraps its *result*
@@ -554,8 +553,8 @@ def _dispatch_integration_sink(
 def _record_sink_failure(sink: AuditSinkModel, message: str, code: str, diagnostics: Diagnostics) -> None:
     """One place deciding warn-vs-fail, so both sink arms can never drift apart.
 
-    `required` is the whole decision (docs/work/audit-trail.md's "Dispatch
-    failure — a `required` flag, not a binary silent-vs-fail choice").
+    `required` is the whole decision (docs/design/audit-trail.md's "When
+    delivery fails").
     """
     if sink.required:
         diagnostics.error(message, code=code)
