@@ -16,7 +16,7 @@ shape, not just the docs:
 - `artifacts.platform` is a **reference** (`hash` + `path`), never an embed —
   v1's `ManifestPlatformModel.content: dict | None` (the full embedded
   `platform.json`) is dropped. Keeps every satellite artifact
-  (platform/sbom/outputs) the same shape: a hash the manifest vouches for,
+  (platform, sbom) the same shape: a hash the manifest vouches for,
   a path a reader follows.
 - No persisted `_event.json` — `render_manifest_event()`/
   `render_metrics_event()` (`controllers/audit_event_rendering.py`) compute
@@ -90,22 +90,15 @@ class ChangeReferenceModel(PlatformBaseModel):
         return self
 
 
-class ManifestPullRequestModel(PlatformBaseModel):
-    """PR evidence, extracted by a future `gh`-based enrichment step (Layer 1's
-    unbuilt half) — modeled now so the manifest shape is stable ahead of it.
-    """
+class ManifestPipelineModel(PlatformBaseModel):
+    """The CI run that did the deploy (`strata.utils.ci_run`). Its log holds the full output."""
 
-    number: int = Field(description="PR number")
-    title: str | None = Field(default=None, description="PR title at extraction time")
-    url: str | None = Field(default=None, description="Link to the PR")
-    author: str | None = Field(default=None, description="PR author")
-    merged_by: str | None = Field(default=None, description="Who merged the PR")
-    merged_at: str | None = Field(default=None, description="ISO-8601 merge timestamp")
-    labels: list[str] | None = Field(default=None, description="PR labels at extraction time")
-    files_changed: int | None = Field(default=None, description="Number of files changed in the PR")
-    approvers: list[str] | None = Field(
-        default=None, description="Reviewers who approved — modeled but not populated by the current extraction"
-    )
+    system: Literal["azure_devops", "github_actions"] = Field(description="Which CI system ran the deploy")
+    run_id: str = Field(description="The run's id: Build.BuildId or GITHUB_RUN_ID")
+    run_number: str | None = Field(default=None, description="The run's display number: Build.BuildNumber")
+    pipeline: str | None = Field(default=None, description="Pipeline or workflow name")
+    branch: str | None = Field(default=None, description="The branch or ref the run was queued for")
+    url: str | None = Field(default=None, description="Link to the run")
 
 
 class ManifestPlatformReferenceModel(PlatformBaseModel):
@@ -260,7 +253,10 @@ class DeploymentManifestModel(PlatformBaseModel):
     deployment: PlatformName = Field(description="Deployment document name")
     workspace: PlatformName = Field(description="Workspace document name")
     environment: str | None = Field(default=None, description="Environment label")
-    file: str | None = Field(default=None, description="Path to the deployment file used, if applicable")
+    file: str | None = Field(
+        default=None,
+        description="The deployment document's file, relative to the solution root (absolute when it lives elsewhere)",
+    )
 
     # Timing — started_at fixed at the top of the run, never changes once set
     started_at: str = Field(description="ISO-8601 timestamp when the run started")
@@ -270,8 +266,7 @@ class DeploymentManifestModel(PlatformBaseModel):
     # Outcome — tri-state, not a bare bool: 'partial' is real signal a bool can't carry
     status: Literal["success", "partial", "failed"] = Field(description="Overall outcome")
 
-    # Flags
-    force: bool = Field(default=False, description="Whether --force was passed")
+    # Flags. No `force`: `deploy run --force` has no effect.
     dry_run: bool = Field(default=False, description="Whether this was a dry run")
 
     # Actor + git context. No commit author or message: the deployed HEAD is often not the commit that made the
@@ -286,8 +281,11 @@ class DeploymentManifestModel(PlatformBaseModel):
         description="Whether the solution had uncommitted changes when it was built; left out when unknown",
     )
 
-    # Layer 1 evidence
-    pull_request: ManifestPullRequestModel | None = Field(default=None, description="PR evidence, when extracted")
+    pipeline: ManifestPipelineModel | None = Field(
+        default=None, description="The CI run that did the deploy; left out for a run outside CI"
+    )
+
+    # No pull request: deploys are not PR-triggered, and the deployed HEAD is often not a PR's merge commit.
     change_reference: ChangeReferenceModel | None = Field(
         default=None, description="External change/ticket record, when supplied"
     )
@@ -299,18 +297,15 @@ class DeploymentManifestModel(PlatformBaseModel):
     stages: list[ManifestStageModel] | None = Field(default=None, description="Results of each deployment stage")
 
     # Satellite references — reference-only pattern, applied consistently
+    # No `outputs` (step outputs go to the workspace's output store, not a file) and no `signatures` (nothing signs).
     sbom: ManifestSbomReferenceModel | None = Field(default=None, description="Reference to the generated SBOM")
-    outputs: ManifestOutputsReferenceModel | None = Field(
-        default=None, description="Reference to the run's durable outputs artifact"
-    )
-    signatures: dict[str, Any] | None = Field(default=None, description="Signing/attestation data, when configured")
     policy_results: list[ManifestPolicyResultModel] | None = Field(
         default=None, description="Policy evaluation results from all phases run during this deployment"
     )
     # lock: ManifestLockReferenceModel | None = Field(default=None, description="State lock audit trail")
     # — commented out alongside the class above; same reactivation plan.
 
-    # Catch-alls
+    # The run's own findings, by severity
     errors: list[str] | None = Field(default=None, description="Run-level error messages")
+    warnings: list[str] | None = Field(default=None, description="Run-level warnings")
     messages: list[str] | None = Field(default=None, description="Run-level informational messages")
-    metadata: dict[str, Any] | None = Field(default=None, description="Free-form additional data")

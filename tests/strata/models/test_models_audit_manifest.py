@@ -8,8 +8,8 @@ from strata.models.audit_manifest_model import (
     ChangeReferenceModel,
     DeploymentManifestModel,
     ManifestArtifactsModel,
+    ManifestPipelineModel,
     ManifestPlatformReferenceModel,
-    ManifestPullRequestModel,
     ManifestStageModel,
     ManifestStepModel,
 )
@@ -33,7 +33,6 @@ def test_minimal_manifest_is_valid():
     model = DeploymentManifestModel.model_validate(_minimal_manifest())
     assert model.execution_id == "11111111-1111-1111-1111-111111111111"
     assert model.status == "success"
-    assert model.force is False
     assert model.dry_run is False
 
 
@@ -81,9 +80,9 @@ def test_manifest_stage_skipped_requires_no_skip_reason_but_accepts_one():
     assert model.stages[0].skip_reason == "enabled: false"
 
 
-def test_manifest_pull_request_and_change_reference_are_independent_optional_fields():
+def test_manifest_change_reference_is_optional():
+    assert DeploymentManifestModel.model_validate(_minimal_manifest()).change_reference is None
     data = _minimal_manifest(
-        pull_request={"number": 42, "title": "Fix thing", "author": "octocat"},
         change_reference={
             "system": "jira",
             "id": "OPS-1234",
@@ -93,8 +92,16 @@ def test_manifest_pull_request_and_change_reference_are_independent_optional_fie
         },
     )
     model = DeploymentManifestModel.model_validate(data)
-    assert model.pull_request.number == 42
     assert model.change_reference.id == "OPS-1234"
+
+
+def test_manifest_pipeline_needs_a_system_and_a_run_id_only():
+    model = DeploymentManifestModel.model_validate(
+        _minimal_manifest(pipeline={"system": "azure_devops", "run_id": "4711"})
+    )
+    assert model.pipeline == ManifestPipelineModel(system="azure_devops", run_id="4711")
+    with pytest.raises(ValidationError, match="system"):
+        DeploymentManifestModel.model_validate(_minimal_manifest(pipeline={"system": "jenkins", "run_id": "1"}))
 
 
 def test_manifest_records_who_ran_the_deploy():
@@ -102,9 +109,11 @@ def test_manifest_records_who_ran_the_deploy():
     assert model.deployed_by == "ci-runner"
 
 
-@pytest.mark.parametrize("field", ["commit_author", "commit_message"])
-def test_manifest_has_no_commit_author_or_message(field):
-    # Removed: the deployed HEAD is often not the commit that made the change, and `commit_sha` finds both.
+@pytest.mark.parametrize(
+    "field", ["commit_author", "commit_message", "force", "pull_request", "outputs", "signatures", "metadata"]
+)
+def test_manifest_drops_the_fields_nothing_could_fill(field):
+    # docs/design/audit-trail.md, "The audit files". None was ever written, so no existing manifest holds one.
     with pytest.raises(ValidationError, match=field):
         DeploymentManifestModel.model_validate(_minimal_manifest(**{field: "x"}))
 
@@ -152,7 +161,7 @@ def test_manifest_sub_models_importable_directly():
     """Sanity check the module's public sub-model surface is stable and importable."""
     assert ManifestArtifactsModel is not None
     assert ManifestPlatformReferenceModel is not None
-    assert ManifestPullRequestModel is not None
+    assert ManifestPipelineModel is not None
     assert ManifestStageModel is not None
     assert ManifestStepModel is not None
     assert ChangeReferenceModel is not None

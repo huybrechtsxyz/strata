@@ -17,7 +17,7 @@ The record answers the questions a change auditor asks (NIS2, ISO 27001 A.12.1.2
 | What changed                 | `artifacts`: the build's `resolved.yaml` by hash, each repository's commit, images, charts, providers; the SBOM by hash |
 | Why                          | `change_reference`, from the `--change-*` flags                                                      |
 | Who approved                 | `change_reference.approved_by`/`approved_at` (stated by the operator, not checked against a tracker) |
-| Who ran it, and how it went  | `deployed_by`, `status`, timings, `errors`, `policy_results`                                         |
+| Who ran it, and how it went  | `deployed_by`, `pipeline` (the CI run and its log), `status`, timings, findings, `policy_results`    |
 | Every change in a period     | `strata audit changes`, reading the git sink ([audit-commands.md](audit-commands.md))                |
 
 `spec.audit` is optional. With none, a deploy still writes a full local trail and sends it nowhere.
@@ -65,10 +65,14 @@ Both files sit in one directory per run and share an `execution_id`.
 record:
 
 - identity: `execution_id`, `action` (`deploy` or `destroy`), strata `version`, `deployment`, `workspace`,
-  `environment`;
-- timing and outcome: `started_at`, `completed_at`, `duration_seconds`, `status`, run-level `errors`;
-- who and from what: `deployed_by` (see "Actor"), `commit_sha` and `commit_dirty` of the solution, both copied from
-  the build's record ([remote-commit-provenance.md](remote-commit-provenance.md));
+  `environment`, and `file`, the deployment document's path relative to the solution root (absolute for a document
+  from a repository outside it);
+- timing and outcome: `started_at`, `completed_at`, `duration_seconds`, `status`, and the run's own findings by
+  severity: `errors`, `warnings`, `messages`;
+- who and from what: `deployed_by` (see "Actor"); `pipeline`, the CI run that deployed (Azure Pipelines or GitHub
+  Actions: system, run id and number, pipeline, branch, and a link to the run), read from the job's own variables
+  by `ci_run.resolve_pipeline_run()` and left out outside CI; `commit_sha` and `commit_dirty` of the solution, both
+  copied from the build's record ([remote-commit-provenance.md](remote-commit-provenance.md));
 - `artifacts`: `platform` (`resolved.yaml` by hash and path, never its content), `repositories` (each remote's url,
   ref, commit and dirty flag), `images`, `charts`, and `providers` (each provisioner's type, tool version and path);
 - `sbom` (path, format, sha256, component count), `change_reference` and `policy_results`.
@@ -94,8 +98,8 @@ history (or a future event) and are left to whoever aggregates the records.
 rendered from the manifest or metrics at send time (`audit_event_rendering.py`). It points to the manifest by path
 and hash instead of carrying it, and gets a fresh `id` on every send.
 
-**Modeled but never filled:** `file`, `force` (`deploy run --force` has no effect), `pull_request`, `stages`,
-`outputs`, `signatures`, `messages` and `metadata`. They stay empty and are left out of the written JSON.
+**Modeled but not filled yet:** `stages`, the per-step status and timing. `deploy_run()` returns findings, not
+per-step results; until it does, the metrics record counts the run as one stage and `status` is never `partial`.
 
 ### Policy results
 
@@ -222,8 +226,8 @@ in the pull request; nothing copies them into the manifest.
 
 - **`audit diff`**, comparing the resolved values of two records. `commit_sha` and the artifact hashes say which
   versions ran; a value-level diff waits for a real request.
-- **Pull request evidence** (`pull_request`, approvers from `gh`). The deployed HEAD is often not the change's merge
-  commit, and no pipeline has `gh` available.
+- **Pull request evidence** (the PR, its approvers). Deploys are not PR-triggered, the deployed HEAD is often not the
+  change's merge commit, and a lookup would need a GitHub or Azure DevOps token.
 - **Validate-phase policies** (`tenant_zone`, `path_convention`) in `policy_results`: `strata validate` has no build
   directory and no fixed relation to a later deploy.
 - **Event types beyond the three** (`policy.violated`, `secret.accessed`, ...), added when a producer exists.
@@ -280,6 +284,10 @@ in the pull request; nothing copies them into the manifest.
   HEAD, often an unrelated commit, so they would have named the wrong author; `git show <commit_sha>` gives both. For
   the same reason, scoping the commit to the deployment file was rejected: a change in another file the deployment
   uses would be missed. No git-log query answers "what changed"; a value diff would.
+- Five more fields ported from v1 were removed because nothing could fill them: `force` (`deploy run --force` has no
+  effect), `pull_request` (see "Not covered"), `outputs` (step outputs go to the output store, not a file),
+  `signatures` (nothing signs) and the free-form `metadata`, replaced by the typed `pipeline` block. The link to the
+  CI run was the missing piece: the run log holds the full output and every denied attempt.
 - An Azure DevOps approval gate was planned as a script that turns the approval into a change reference. The REST
   API offers no way for a job to find the approval that gated it, and an approval has no structured input, so the
   ticket and reason come from queue-time parameters instead and the gate only stops and waits. v1's pause-and-resume

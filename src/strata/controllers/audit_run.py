@@ -77,6 +77,7 @@ from strata.models.audit_manifest_model import (
     ManifestArtifactsModel,
     ManifestChartModel,
     ManifestImageModel,
+    ManifestPipelineModel,
     ManifestPlatformReferenceModel,
     ManifestProviderModel,
     ManifestRepositoryModel,
@@ -94,6 +95,7 @@ from strata.models.namespace_model import NamespaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
+from strata.utils.ci_run import resolve_pipeline_run
 from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.errors import StrataError
 from strata.utils.sbom_file import SBOM_FILENAME, parse_sbom
@@ -226,12 +228,14 @@ def finalize_and_distribute_deploy_audit(
         deployment=deployment_name,
         workspace=deployment.spec.workspace,
         environment=environment,
+        file=_document_file(context, deployment_name),
         started_at=started_at.isoformat(),
         completed_at=completed_at.isoformat(),
         duration_seconds=duration_seconds,
         status=status,
         dry_run=False,
         deployed_by=actor,
+        pipeline=_pipeline(),
         commit_sha=solution_commit,
         commit_dirty=solution_dirty,
         artifacts=ManifestArtifactsModel(
@@ -245,6 +249,8 @@ def finalize_and_distribute_deploy_audit(
         change_reference=change_reference,
         policy_results=None if action == "destroy" else read_policy_results(build_path),
         errors=run_diagnostics.messages(Severity.ERROR) or None,
+        warnings=run_diagnostics.messages(Severity.WARNING) or None,
+        messages=run_diagnostics.messages(Severity.INFO) or None,
     )
     metrics = DeploymentMetricsModel(
         execution_id=execution_id,
@@ -583,6 +589,24 @@ def _single_environment(deployment: DeploymentModel) -> str | None:
     if environments and len(environments) == 1:
         return environments[0]
     return None
+
+
+def _document_file(context: SolutionContext, deployment_name: str) -> str | None:
+    """The deployment document's file, relative to the solution root; absolute for one that lives elsewhere (a
+    document remote outside the solution)."""
+    entry = context.controller.index.get(PlatformKind.DEPLOYMENT, deployment_name)
+    if entry is None:
+        return None
+    try:
+        return entry.source.resolve().relative_to(context.root.resolve()).as_posix()
+    except ValueError:
+        return entry.source.as_posix()
+
+
+def _pipeline() -> ManifestPipelineModel | None:
+    """The CI run doing this deploy (docs/design/audit-trail.md, "The audit files"); `None` outside CI."""
+    run = resolve_pipeline_run()
+    return None if run is None else ManifestPipelineModel(**run._asdict())
 
 
 def _collect_artifacts_bom(

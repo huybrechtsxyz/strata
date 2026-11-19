@@ -58,6 +58,10 @@ commit to the repository a pipeline checked out, and a solution can read documen
     `document_remote_has_manifest` and `document_remote_overlaps`.
 
   See [Documents in other repositories](../docs/config/solution.md#documents-in-other-repositories).
+- The audit manifest now records:
+  - `pipeline`: the Azure Pipelines or GitHub Actions run that deployed, with a link to it. Left out outside CI.
+  - `file`: the deployment document's path.
+  - `warnings` and `messages`: the run's warnings and info findings. Until now only `errors` were kept.
 
 ### Changed
 
@@ -74,9 +78,11 @@ commit to the repository a pipeline checked out, and a solution can read documen
 
 ### Removed
 
-- `commit_author` and `commit_message` from the audit manifest. Nothing ever filled them, so no existing manifest
-  contains them. The deployed commit is often not the one that made the change, so they would have named the wrong
-  author; `git show <commit_sha>` gives both for the commit that was built.
+- Seven audit manifest fields nothing ever filled, so no existing manifest contains them:
+  - `commit_author` and `commit_message`: the deployed commit is often not the one that made the change, so they
+    would have named the wrong author; `git show <commit_sha>` gives both for the commit that was built;
+  - `force` (`deploy run --force` has no effect), `pull_request`, `outputs`, `signatures`, and `metadata`, replaced
+    by `pipeline`.
 
 ## [2.7.0] - 2026-11-14
 

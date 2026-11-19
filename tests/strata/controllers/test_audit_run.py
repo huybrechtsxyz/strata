@@ -1556,3 +1556,61 @@ def test_manifest_marks_an_image_strata_does_not_deliver(tmp_path: Path, _terraf
     images = manifest["artifacts"]["images"]
     assert {"name": "server", "image": "goauthentik/server:2024.1", "delivered": False} in images
     assert {"name": "redis", "image": "redis:7"} in images
+
+
+# ---------------------------------------------------------------------------
+# file, warnings, messages and pipeline (docs/design/audit-trail.md, "The audit files")
+# ---------------------------------------------------------------------------
+
+_CI_VARIABLES = ("TF_BUILD", "BUILD_BUILDID", "GITHUB_ACTIONS", "GITHUB_RUN_ID")
+
+
+def _finalize_with(root: Path, build_path: Path, run_diagnostics: Diagnostics):
+    return finalize_and_distribute_deploy_audit(
+        _context(root),
+        "app",
+        build_path,
+        execution_id="11111111-1111-1111-1111-111111111111",
+        started_at=datetime.now(timezone.utc),
+        run_diagnostics=run_diagnostics,
+    )
+
+
+def test_the_manifest_names_the_deployment_file_and_keeps_the_runs_warnings_and_infos(
+    tmp_path: Path, _terraform_stub, monkeypatch
+):
+    for name in _CI_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    run_diagnostics = Diagnostics()
+    run_diagnostics.warning("checkout has uncommitted changes")
+    run_diagnostics.info("gitops output committed, not pushed")
+
+    _finalize_with(root, build_path, run_diagnostics)
+
+    manifest = _audit_json(root, "_manifest.json")
+    assert manifest["file"] == "deployment.yaml"
+    assert manifest["warnings"] == ["checkout has uncommitted changes"]
+    assert manifest["messages"] == ["gitops output committed, not pushed"]
+    assert "errors" not in manifest
+    assert "pipeline" not in manifest  # not running in CI
+
+
+def test_the_manifest_links_the_azure_pipelines_run_that_deployed(tmp_path: Path, _terraform_stub, monkeypatch):
+    for name in _CI_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("TF_BUILD", "True")
+    monkeypatch.setenv("BUILD_BUILDID", "4711")
+    monkeypatch.setenv("BUILD_DEFINITIONNAME", "deploy-int")
+    monkeypatch.setenv("SYSTEM_COLLECTIONURI", "https://dev.azure.com/acme/")
+    monkeypatch.setenv("SYSTEM_TEAMPROJECT", "ops")
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize_with(root, build_path, Diagnostics())
+
+    pipeline = _audit_json(root, "_manifest.json")["pipeline"]
+    assert pipeline["system"] == "azure_devops"
+    assert (pipeline["run_id"], pipeline["pipeline"]) == ("4711", "deploy-int")
+    assert pipeline["url"] == "https://dev.azure.com/acme/ops/_build/results?buildId=4711"
