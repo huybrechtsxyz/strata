@@ -136,7 +136,8 @@ spec:
   takes from the same remote would put audit files into the next build. `strata validate` warns
   (`audit_sink_overlaps_source`).
 
-A GitOps provisioner still cannot push to a `path` remote (`path_remote_not_pushable`).
+A GitOps step can write to a `path` remote the same way, with its own `branch` and `action`; see
+[solution.md](solution.md#a-repository-your-pipeline-checked-out).
 
 ## Notes
 

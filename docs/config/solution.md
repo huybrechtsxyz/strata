@@ -92,10 +92,37 @@ strata where that checkout is:
   `.strata/remotes/<name>/<reference>`, so the pipeline must repeat the ref and place or link its
   checkout there.
 
-A `path` remote cannot be pinned by a `version` document, take an `integration`, or be pushed to by a
-GitOps provisioner: those need strata to own the clone and the ref. An audit sink can write to one. Strata
-then commits in the pipeline's checkout and pushes with the pipeline's credentials; see
+A `path` remote cannot be pinned by a `version` document or take an `integration`: those need strata to
+own the clone and the ref. An audit sink and a GitOps step can write to one. Strata then commits in the
+pipeline's checkout and pushes with the pipeline's credentials; see
 [Audit files in a repository your pipeline checked out](configuration.md#audit-files-in-a-repository-your-pipeline-checked-out).
+
+A GitOps step (`argocd`, `flux`) on a `path` remote names the branch it pushes to, because the remote has no
+`reference`:
+
+```yaml
+# workspace
+provisioners:
+  - name: forge_sync
+    tool: argocd
+    gitops:
+      remote: gitops-config      # path: repos/gitops-config
+      output_file: apps/forge/values.yaml
+      branch: main               # the branch pushed to
+      action: push               # the default; commit or none stop earlier
+```
+
+It works as the audit sink does. Strata writes `output_file` in the checkout, commits only that file, and pushes
+with a rebase and retry when the branch moved. A destroy commits and pushes the file's removal. `deploy plan`
+compares with the file as the pipeline checked it out. With `action: commit` or `none` a later pipeline step
+pushes, and `deploy run` reports `gitops_not_pushed` (information). `strata validate` reports:
+
+| Finding                            | Cause                                                                   |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `gitops_branch_required`           | A `path` remote with `action: push` and no `branch`                     |
+| `gitops_branch_needs_path_remote`  | `branch` on a `reference` remote, which pushes to its reference         |
+| `gitops_action_needs_path_remote`  | `commit` or `none` on a `reference` remote, whose clone nothing reads   |
+| `gitops_output_overlaps_source` (warning) | `output_file` inside a `source_path` the build takes from that remote |
 
 ## Documents in other repositories
 

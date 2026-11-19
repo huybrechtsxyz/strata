@@ -1052,6 +1052,86 @@ def test_a_gitops_step_goes_from_build_to_deploy_to_destroy_against_a_real_repo(
     assert not pushed_file.exists()
 
 
+def _gitops_path_remote_solution(tmp_path: Path, gitops_extra: str) -> tuple[Path, Path, Path]:
+    """`(root, checkout, server)`: a GitOps step on a path remote the 'pipeline' cloned, detached, under the root."""
+    server = tmp_path / "server.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(server)], check=True, capture_output=True)
+    seed = tmp_path / "seed"
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run([*git, "clone", str(server), str(seed)], check=True, capture_output=True)
+    (seed / "README.md").write_text("# gitops\n", encoding="utf-8")
+    subprocess.run([*git, "-C", str(seed), "add", "-A"], check=True, capture_output=True)
+    subprocess.run([*git, "-C", str(seed), "commit", "-m", "seed"], check=True, capture_output=True)
+    subprocess.run([*git, "-C", str(seed), "push", "origin", "HEAD:main"], check=True, capture_output=True)
+
+    root = _solution(
+        tmp_path,
+        manifest=(
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: solution\nmeta:\n  name: test-solution\nspec:\n"
+            "  remotes:\n    - name: gitops-config\n      type: git\n"
+            "      url: https://example.com/org/gitops-config.git\n      path: repos/gitops-config\n"
+        ),
+        provisioners=(
+            "    - name: forge_sync\n      tool: argocd\n      gitops:\n        remote: gitops-config\n"
+            f"        output_file: apps/forge/values.yaml\n{gitops_extra}"
+            "      output:\n        template: templates/forge.yaml.j2\n"
+        ),
+        execution="    - name: sync\n      provisioner: forge_sync\n      resources:\n        - r1\n",
+        files={"templates/forge.yaml.j2": "replicas: {{ provisioner.name }}\n"},
+    )
+    checkout = root / "repos" / "gitops-config"
+    subprocess.run(["git", "clone", f"file://{server.as_posix()}", str(checkout)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(checkout), "checkout", "--detach"], check=True, capture_output=True)
+    return root, checkout, server
+
+
+def _server_has(server: Path, relative: str) -> bool:
+    listed = subprocess.run(
+        ["git", "--git-dir", str(server), "ls-tree", "-r", "--name-only", "main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return relative in listed.splitlines()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
+@pytest.mark.slow
+def test_a_gitops_step_on_a_path_remote_pushes_from_the_pipeline_checkout(tmp_path: Path):
+    """docs/work/remote-commit-provenance.md, B4: build, deploy and destroy, with no clone of strata's own."""
+    root, checkout, server = _gitops_path_remote_solution(tmp_path, "        branch: main\n")
+    build_path = _built(tmp_path, root)
+
+    deployed = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert deployed.ok, deployed.messages()
+    assert _server_has(server, "apps/forge/values.yaml")
+    assert "gitops_not_pushed" not in _codes(deployed, "infos")
+    assert not (root / ".strata" / "gitops-push").exists()
+
+    destroyed, _ = _destroy(root, build_path, force=True)
+    assert destroyed.ok, destroyed.messages()
+    assert not _server_has(server, "apps/forge/values.yaml")
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
+@pytest.mark.slow
+def test_a_gitops_step_that_only_commits_says_so(tmp_path: Path):
+    root, checkout, server = _gitops_path_remote_solution(tmp_path, "        action: commit\n")
+    build_path = _built(tmp_path, root)
+
+    deployed = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert deployed.ok, deployed.messages()
+    [info] = [item for item in deployed.infos if item.code == "gitops_not_pushed"]
+    assert "action: commit" in info.message and info.location == "sync"
+    assert not _server_has(server, "apps/forge/values.yaml")
+    committed = subprocess.run(
+        ["git", "-C", str(checkout), "show", "HEAD:apps/forge/values.yaml"], check=True, capture_output=True, text=True
+    )
+    assert committed.stdout == "replicas: forge_sync\n"
+
+
 # ---------------------------------------------------------------------------
 # The durable output record
 # ---------------------------------------------------------------------------

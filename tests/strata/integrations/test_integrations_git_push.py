@@ -68,7 +68,8 @@ def test_non_git_remote_type_fails_without_running_any_command(tmp_path: Path, m
 
 
 def test_path_remote_fails_without_running_any_command(tmp_path: Path, monkeypatch):
-    """A remote with a `path` has no reference, so there is no branch to push to."""
+    """A remote with a `path` has no reference to clone: `push_file()` refuses it, as the GitOps integration
+    writes in that checkout instead (`commit_in_checkout()`)."""
     captured = _capture(monkeypatch)
     remote = SolutionRemoteModel(
         name="gitops-config", type=RemoteType.GIT, url="https://example.com/x.git", path="repos/x"
@@ -78,7 +79,7 @@ def test_path_remote_fails_without_running_any_command(tmp_path: Path, monkeypat
     result = push_file(tmp_path, remote, rendered, "apps/forge/values.yaml", "deploy: forge")
     assert result.success is False
     assert "no reference" in result.detail
-    assert "'path' is read-only" in result.detail
+    assert "written in its checkout instead" in result.detail
     assert captured == []
 
 

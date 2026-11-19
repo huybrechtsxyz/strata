@@ -60,12 +60,12 @@ from pathlib import Path
 
 from strata.controllers.checkout_state import checkout_state
 from strata.controllers.git_checkout import ensure_synced_checkout
-from strata.integrations.git_push import credential_env
+from strata.integrations.git_push import commit_in_checkout, credential_env
 from strata.models.audit_model import AuditGitSinkTargetModel
 from strata.models.auth_models import AuthenticationModel
 from strata.models.solution_model import RemoteType, SolutionModel
 from strata.utils import layout
-from strata.utils.transport import CommandResult, run_command
+from strata.utils.transport import run_command
 
 _GIT_TIMEOUT = 300
 
@@ -167,12 +167,6 @@ def push_audit_files(
     return PushResult(True)
 
 
-#: Pushes in all for a path-remote sink: the first, and a retry after each rebase onto a branch that moved.
-_PUSH_ATTEMPTS = 3
-#: `git push` stderr that means "the branch moved", which a rebase fixes; any other failure is final.
-_REJECTED_MARKERS = ("rejected", "non-fast-forward", "fetch first")
-
-
 def _write_in_checkout(
     checkout: Path,
     sink: AuditGitSinkTargetModel,
@@ -193,10 +187,8 @@ def _write_in_checkout(
     - pushes with the checkout's own credentials (for example Azure DevOps `persistCredentials: true`). A path
       remote has no `integration`.
 
-    When the push is rejected because the branch moved, it fetches the branch and rebases onto it
-    (`--autostash`, so other changes in the tree survive), then pushes again, `_PUSH_ATTEMPTS` times in all. A
-    rebase that conflicts is aborted. Each deploy writes under its own path, so a conflict means two deploys wrote
-    the same audit path.
+    The commit and push, with its rebase and retry, is `git_push.commit_in_checkout()`, shared with a GitOps step.
+    Each deploy writes under its own path, so a rebase conflict means two deploys wrote the same audit path.
     """
     state = checkout_state(checkout)
     if state.commit is None:
@@ -211,42 +203,17 @@ def _write_in_checkout(
     if sink.action == "none":
         return PushResult(True, f"written to '{dest_dir}', not committed (action: none)")
 
-    identity = ["-c", f"user.name={actor}", "-c", f"user.email={actor}@strata-audit.local"]
-    pathspecs = [f":(literal){path}" for path in written]
-
-    def git(*args: str) -> CommandResult:
-        return run_command(["git", *identity, *args], cwd=checkout, timeout=_GIT_TIMEOUT)
-
-    added = git("add", "--", *pathspecs)
-    if not added.is_successful:
-        return PushResult(False, f"'git add' failed: {added.stderr.strip()}")
-    if not git("status", "--porcelain", "--", *pathspecs).stdout.strip():
-        return PushResult(True, "nothing to commit — files already match the checkout's last commit")
-    committed = git("commit", "-m", f"audit: {relative_path.as_posix()}", "--only", "--", *pathspecs)
-    if not committed.is_successful:
-        return PushResult(False, f"'git commit' failed: {committed.stderr.strip()}")
-    if sink.action == "commit":
-        return PushResult(True, f"committed in '{checkout}', not pushed (action: commit)")
-
-    for attempt in range(1, _PUSH_ATTEMPTS + 1):
-        pushed = git("push", "origin", f"HEAD:{sink.branch}")
-        if pushed.is_successful:
-            return PushResult(True)
-        rejected = any(marker in pushed.stderr for marker in _REJECTED_MARKERS)
-        if not rejected or attempt == _PUSH_ATTEMPTS:
-            return PushResult(False, f"'git push' failed after {attempt} attempt(s): {pushed.stderr.strip()}")
-        fetched = git("fetch", "origin", sink.branch)
-        if not fetched.is_successful:
-            return PushResult(False, f"'git fetch origin {sink.branch}' failed: {fetched.stderr.strip()}")
-        rebased = git("rebase", "--autostash", "FETCH_HEAD")
-        if not rebased.is_successful:
-            git("rebase", "--abort")
-            return PushResult(
-                False,
-                f"'git rebase' onto the moved branch '{sink.branch}' failed, and was aborted: "
-                f"{(rebased.stderr or rebased.stdout).strip()}",
-            )
-    return PushResult(False, "'git push' failed")  # not reached: the loop returns on its last attempt
+    result = commit_in_checkout(
+        checkout,
+        written,
+        f"audit: {relative_path.as_posix()}",
+        actor=actor,
+        email_domain="strata-audit.local",
+        branch=sink.branch if sink.action == "push" else None,
+    )
+    if result.success and sink.action == "commit":
+        return PushResult(True, f"{result.detail} (action: commit)")
+    return PushResult(result.success, result.detail)
 
 
 def _configure_identity(checkout_path: Path, actor: str, *, env: Mapping[str, str] | None = None) -> PushResult:

@@ -19,7 +19,7 @@ and the reasoning for which one won.
 """
 
 import re
-from typing import Annotated, Any, ClassVar
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -34,7 +34,7 @@ from strata.models.reference_fields import References, RemoteReference
 from strata.utils.builtin_types import SYNC_PROVISIONER_TYPES, TERRAFORM_COMPATIBLE_TYPES, ProvisionerType
 from strata.utils.dependency_order import topological_order
 from strata.utils.names import check_unique_names
-from strata.utils.path_safety import validate_relative_path
+from strata.utils.path_safety import validate_not_option_like, validate_relative_path
 
 
 class ProvisionerBackendModel(PlatformBaseModel):
@@ -96,6 +96,28 @@ class ProvisionerGitOpsModel(PlatformBaseModel):
         "Design notes: Path, relative to the remote's root, of the file this "
         "provisioner renders and pushes."
     )
+    branch: str | None = Field(
+        default=None,
+        description="The branch pushed to, when `remote` has a `path` (a checkout your pipeline made). Required "
+        "there with `action: push`. A remote with a `reference` pushes to that reference, so `branch` is not "
+        "valid with one.",
+    )
+    action: Literal["none", "commit", "push"] = Field(
+        default="push",
+        description="How far strata goes in a `path` remote's checkout: `push` (default) writes, commits and "
+        "pushes; `commit` writes and commits; `none` writes the file only. A later pipeline step does the rest. "
+        "`commit` and `none` need a `path` remote.\n\n"
+        "Design notes: docs/work/remote-commit-provenance.md, B4. The remote is in another document, so "
+        "`validate` checks the pairing, not this schema.",
+    )
+
+    @field_validator("branch")
+    @classmethod
+    def validate_branch(cls, v: str | None) -> str | None:
+        """A branch name is an argument to `git push`, so it must not read as an option."""
+        if v is not None:
+            validate_not_option_like(v, "branch")
+        return v
 
     @field_validator("output_file")
     @classmethod

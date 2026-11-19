@@ -315,6 +315,14 @@ and `audit_push.py`'s own audit-push checkouts, so none can collide.
 fresh checkout, no write) — all three share one `_commit_and_push()` tail
 and one `_validate_remote()` guard.
 
+**A `path` remote** (docs/work/remote-commit-provenance.md, B4) skips all
+three: the checkout is the pipeline's, so it is never cloned, fetched or
+reset. `BaseGitOpsIntegration` writes `output_file` there and calls
+`commit_in_checkout()`, which commits only that file and pushes to
+`gitops.branch` with a rebase and retry. The audit sink on a `path` remote
+uses the same function. `gitops.action` (`push | commit | none`) stops
+earlier.
+
 ### The Integration class(es)
 
 One shared base (`BaseGitOpsIntegration`) implementing `InfraIntegration`

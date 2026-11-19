@@ -54,7 +54,7 @@ from strata.models.auth_models import AuthenticationModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
-from strata.utils.transport import run_command
+from strata.utils.transport import CommandResult, run_command
 
 _GIT_TIMEOUT = 300
 
@@ -467,6 +467,92 @@ def ensure_checkout(
         return _ensure_checkout(remote.url, branch, checkout_path, env=merged_env)
 
 
+#: Pushes in all from a path remote's checkout: the first, and a retry after each rebase onto a branch that moved.
+PUSH_ATTEMPTS = 3
+#: `git push` stderr that means "the branch moved", which a rebase fixes; any other failure is final.
+_REJECTED_MARKERS = ("rejected", "non-fast-forward", "fetch first")
+
+
+def checkout_problem(checkout: Path) -> str | None:
+    """Why `checkout` cannot be written to as a path remote's checkout, or `None` when it can.
+
+    `.git` must be in the folder itself (a folder, or a file for a worktree or submodule). Otherwise `git` would walk
+    up and commit to an enclosing repository. `controllers/checkout_state.py` applies the same rule for reading; it
+    sits in a higher layer, so this is the integrations-layer copy (ADR-0003).
+    """
+    if not checkout.is_dir():
+        return f"'{checkout}' does not exist"
+    if not (checkout / ".git").exists():
+        return f"'{checkout}' is not a git checkout"
+    head = run_command(["git", "rev-parse", "HEAD"], cwd=checkout, timeout=_GIT_TIMEOUT)
+    if not head.is_successful:
+        return f"'{checkout}' has no commit to build on: {head.stderr.strip()}"
+    return None
+
+
+def commit_in_checkout(
+    checkout: Path,
+    paths: list[str],
+    message: str,
+    *,
+    actor: str,
+    email_domain: str,
+    branch: str | None,
+) -> PushResult:
+    """Commit only `paths` in a checkout someone else owns, then push `HEAD` to `branch` (no push when `None`).
+
+    docs/work/remote-commit-provenance.md, B1, B2 and B4. Shared by an audit sink (`controllers/audit_push.py`) and a
+    GitOps step (`integrations/gitops.py`) on a path remote. The caller has already written (or deleted) `paths`,
+    which are relative to `checkout`.
+
+    - Only `paths` are staged and committed (`:(literal)` pathspecs, `commit --only`). Anything else modified, staged
+      or untracked in the tree stays as it was. A deleted path is staged as a removal.
+    - The identity is passed per command (`git -c user.name=...`); the checkout's config is never written.
+    - The push runs `git push origin HEAD:<branch>`, so a detached `HEAD` works, with the checkout's own credentials.
+      When it is rejected because the branch moved, it fetches the branch, rebases onto `FETCH_HEAD` (`--autostash`,
+      so other changes in the tree survive) and pushes again, `PUSH_ATTEMPTS` times in all. A rebase that conflicts
+      is aborted.
+
+    Never raises for a git failure: `success=False` with the reason.
+    """
+    identity = ["-c", f"user.name={actor}", "-c", f"user.email={actor}@{email_domain}"]
+    pathspecs = [f":(literal){path}" for path in paths]
+
+    def git(*args: str) -> CommandResult:
+        return run_command(["git", *identity, *args], cwd=checkout, timeout=_GIT_TIMEOUT)
+
+    added = git("add", "-A", "--", *pathspecs)
+    if not added.is_successful:
+        return PushResult(False, f"'git add' failed: {added.stderr.strip()}")
+    if not git("status", "--porcelain", "--", *pathspecs).stdout.strip():
+        return PushResult(True, "nothing to commit — the files already match the checkout's last commit")
+    committed = git("commit", "-m", message, "--only", "--", *pathspecs)
+    if not committed.is_successful:
+        return PushResult(False, f"'git commit' failed: {committed.stderr.strip()}")
+    if branch is None:
+        return PushResult(True, f"committed in '{checkout}', not pushed")
+
+    for attempt in range(1, PUSH_ATTEMPTS + 1):
+        pushed = git("push", "origin", f"HEAD:{branch}")
+        if pushed.is_successful:
+            return PushResult(True)
+        rejected = any(marker in pushed.stderr for marker in _REJECTED_MARKERS)
+        if not rejected or attempt == PUSH_ATTEMPTS:
+            return PushResult(False, f"'git push' failed after {attempt} attempt(s): {pushed.stderr.strip()}")
+        fetched = git("fetch", "origin", branch)
+        if not fetched.is_successful:
+            return PushResult(False, f"'git fetch origin {branch}' failed: {fetched.stderr.strip()}")
+        rebased = git("rebase", "--autostash", "FETCH_HEAD")
+        if not rebased.is_successful:
+            git("rebase", "--abort")
+            return PushResult(
+                False,
+                f"'git rebase' onto the moved branch '{branch}' failed, and was aborted: "
+                f"{(rebased.stderr or rebased.stdout).strip()}",
+            )
+    return PushResult(False, "'git push' failed")  # not reached: the loop returns on its last attempt
+
+
 def _validate_remote(remote: SolutionRemoteModel) -> PushResult | None:
     """`None` when `remote` is push-able; a failed `PushResult` naming why otherwise."""
     if remote.type != RemoteType.GIT:
@@ -474,11 +560,12 @@ def _validate_remote(remote: SolutionRemoteModel) -> PushResult | None:
             False, f"remote '{remote.name}' has type '{remote.type.value}', but a GitOps push needs 'git'"
         )
     if remote.reference is None:
-        # Reachable only for a remote with a `path` instead of a `reference`,
-        # which `validate` already rejects as a push target
-        # (`semantic_checks._check_path_remote_pushes()`).
+        # A remote with a `path` never reaches here: `BaseGitOpsIntegration` writes in its checkout instead
+        # (`commit_in_checkout()`). Kept so a direct caller gets a clear failure, not a clone of nothing.
         return PushResult(
-            False, f"remote '{remote.name}' has no reference (branch) to push to; a remote with a 'path' is read-only"
+            False,
+            f"remote '{remote.name}' has no reference (branch) to clone and push to; a remote with a 'path' is "
+            "written in its checkout instead",
         )
     return None
 

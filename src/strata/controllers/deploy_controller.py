@@ -1972,6 +1972,13 @@ def deploy_run(
                 f"Step '{step.name}': deploy failed — {_failure_detail(deploy_result, _redact)}", location=step.name
             )
             return diagnostics
+        if provisioner.gitops is not None and provisioner.gitops.action != "push":
+            # A path remote's `commit` or `none`: a later pipeline step pushes (remote-commit-provenance.md, B4).
+            diagnostics.info(
+                f"Step '{step.name}': {_redact(deploy_result.stdout.strip())}",
+                location=step.name,
+                code="gitops_not_pushed",
+            )
 
         def _outputs_lost(why: str, _name: str = step.name) -> None:
             diagnostics.warning(f"Step '{_name}': could not collect outputs — {_tail(why, _redact)}", location=_name)

@@ -4361,8 +4361,8 @@ def test_script_values_need_no_resolvable_environment_to_be_checked_without_cras
 
 
 # ---------------------------------------------------------------------------
-# A path remote is read-only: GitOps and audit sinks cannot push to it
-# (docs/work/remote-external-path.md)
+# Pushing to a path remote: GitOps steps and audit sinks write in the pipeline's checkout
+# (docs/work/remote-commit-provenance.md, Part B)
 # ---------------------------------------------------------------------------
 
 _PATH_REMOTE_MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
@@ -4436,12 +4436,104 @@ def _push_errors(context) -> list:
     return [e for e in context.diagnostics.errors if e.code == "path_remote_not_pushable"]
 
 
-def test_a_gitops_step_cannot_push_to_a_path_remote(tmp_path):
+def _with_gitops(root: Path, **fields: str) -> None:
+    """Add `fields` (`branch`, `action`) to the GitOps step's `gitops:` block."""
+    workspace = root / "workspace.yaml"
+    workspace.write_text(
+        workspace.read_text(encoding="utf-8") + "".join(f"        {key}: {value}\n" for key, value in fields.items()),
+        encoding="utf-8",
+    )
+
+
+def _gitops_errors(context) -> list:
+    return [e for e in context.diagnostics.errors if e.code.startswith("gitops_")]
+
+
+@pytest.mark.parametrize("action", ["push", "commit", "none"])
+def test_a_gitops_step_may_push_to_a_path_remote(tmp_path, action):
+    """docs/work/remote-commit-provenance.md, B4: written in the pipeline's checkout."""
     root = _solution_pushing_to(tmp_path, locator="path: repos/config", pusher="gitops")
-    errors = _push_errors(_resolve(root))
-    assert len(errors) == 1
-    assert "'config-repo'" in errors[0].message
-    assert "reference" in errors[0].message
+    _with_gitops(root, branch="main", action=action)
+
+    context = _resolve(root)
+
+    assert _push_errors(context) == []
+    assert _gitops_errors(context) == []
+
+
+def test_a_gitops_step_pushing_to_a_path_remote_names_its_branch(tmp_path):
+    root = _solution_pushing_to(tmp_path, locator="path: repos/config", pusher="gitops")
+
+    [error] = _gitops_errors(_resolve(root))
+
+    assert error.code == "gitops_branch_required"
+    assert "'sync'" in error.message and "'config-repo'" in error.message
+    assert error.location == "spec.provisioners.0.gitops.branch"
+    assert error.hint is not None
+
+
+@pytest.mark.parametrize("action", ["commit", "none"])
+def test_a_gitops_step_that_does_not_push_needs_no_branch(tmp_path, action):
+    root = _solution_pushing_to(tmp_path, locator="path: repos/config", pusher="gitops")
+    _with_gitops(root, action=action)
+
+    assert _gitops_errors(_resolve(root)) == []
+
+
+def test_a_gitops_branch_on_a_reference_remote_is_an_error(tmp_path):
+    """The remote's `reference` is the branch: a second one would disagree with it."""
+    root = _solution_pushing_to(tmp_path, locator="reference: main", pusher="gitops")
+    _with_gitops(root, branch="release")
+
+    [error] = _gitops_errors(_resolve(root))
+
+    assert error.code == "gitops_branch_needs_path_remote"
+    assert error.location == "spec.provisioners.0.gitops.branch"
+    assert "'main'" in error.message
+
+
+@pytest.mark.parametrize("action", ["commit", "none"])
+def test_a_gitops_step_that_stops_before_the_push_needs_a_path_remote(tmp_path, action):
+    root = _solution_pushing_to(tmp_path, locator="reference: main", pusher="gitops")
+    _with_gitops(root, action=action)
+
+    [error] = _gitops_errors(_resolve(root))
+
+    assert error.code == "gitops_action_needs_path_remote"
+    assert f"'{action}'" in error.message
+    assert error.location == "spec.provisioners.0.gitops.action"
+    assert error.hint is not None
+
+
+def _gitops_and_source(tmp_path: Path, source_path: str) -> Path:
+    """A GitOps step writing `apps/values.yaml` of path remote `config-repo`, and Terraform taking `source_path`."""
+    root = _solution_pushing_to(tmp_path, locator="path: repos/config", pusher="gitops")
+    _with_gitops(root, branch="main")
+    workspace = root / "workspace.yaml"
+    workspace.write_text(
+        workspace.read_text(encoding="utf-8")
+        + "    - name: tf\n      tool: terraform\n"
+        + f"      source:\n        remote: config-repo\n        source_path: {source_path}\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def _gitops_overlaps(context) -> list:
+    return [w for w in context.diagnostics.warnings if w.code == "gitops_output_overlaps_source"]
+
+
+@pytest.mark.parametrize("source_path", ["apps", ".", "apps/*.yaml"])
+def test_a_gitops_step_writing_where_the_build_reads_warns(tmp_path, source_path):
+    [warning] = _gitops_overlaps(_resolve(_gitops_and_source(tmp_path, source_path)))
+
+    assert "'sync'" in warning.message and "'tf'" in warning.message
+    assert warning.location == "spec.provisioners.0.gitops.output_file"
+
+
+@pytest.mark.parametrize("source_path", ["app", "terraform"])
+def test_a_gitops_step_beside_what_the_build_reads_does_not_warn(tmp_path, source_path):
+    assert _gitops_overlaps(_resolve(_gitops_and_source(tmp_path, source_path))) == []
 
 
 def test_an_audit_sink_may_write_to_a_path_remote(tmp_path):

@@ -69,8 +69,9 @@ from strata.models.namespace_model import NamespaceModel
 from strata.models.network_model import NetworkModel
 from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.provider_model import ProviderModel
+from strata.models.provisioning_model import ProvisionerGitOpsModel
 from strata.models.resource_model import ResourceModel
-from strata.models.solution_model import RemoteFetch, RemoteType, SolutionModel
+from strata.models.solution_model import RemoteFetch, RemoteType, SolutionModel, SolutionRemoteModel
 from strata.models.template_model import DocumentTemplateModel
 from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
@@ -1831,34 +1832,38 @@ def _check_remote_integrations(index: DocumentIndex, solution: SolutionModel | N
 def _check_path_remote_pushes(index: DocumentIndex, solution: SolutionModel | None) -> Diagnostics:
     """Pushes and path remotes.
 
-    - A GitOps step never pushes to a path remote (`path_remote_not_pushable`). It pushes from its own checkout
-      (`layout.gitops_push_checkout_path()`), which a path remote, read where a pipeline put it, never has
-      (docs/work/remote-external-path.md).
-    - An audit sink may write to a path remote: strata writes in the pipeline's checkout
-      (docs/work/remote-commit-provenance.md, Part B). Its `action: commit | none` needs one
-      (`audit_sink_action_needs_path_remote`): with a `reference`, strata's own clone is read by nothing else,
-      so anything short of a push is lost.
-    - A sink writing where the build reads from the same remote warns (`audit_sink_overlaps_source`).
+    - An audit sink or a GitOps step may write to a path remote: strata writes in the pipeline's checkout
+      (docs/work/remote-commit-provenance.md, Part B). `action: commit | none` needs one
+      (`audit_sink_action_needs_path_remote`, `gitops_action_needs_path_remote`): with a `reference`, strata's own
+      clone is read by nothing else, so anything short of a push is lost.
+    - A GitOps step names its `branch` on a path remote (`gitops_branch_required`) and only there
+      (`gitops_branch_needs_path_remote`): a `reference` remote pushes to its reference.
+    - Writing where the build reads from the same remote warns (`audit_sink_overlaps_source`,
+      `gitops_output_overlaps_source`).
 
     Caught here so the mistake is a `validate` finding rather than a failed or lost push mid-deploy.
     """
     diagnostics = Diagnostics()
     remotes = {remote.name: remote for remote in (solution.spec.remotes or [])} if solution else {}
     path_remotes = {name for name, remote in remotes.items() if remote.path}
+    sources = _remote_source_paths(index)
 
     for entry in index.all_of(PlatformKind.WORKSPACE):
         for position, provisioner in enumerate(cast(WorkspaceModel, entry.model).spec.provisioners):
-            if provisioner.gitops is not None and provisioner.gitops.remote in path_remotes:
-                diagnostics.error(
-                    f"GitOps provisioner '{provisioner.name}' pushes to remote '{provisioner.gitops.remote}', which "
-                    "has a 'path': strata only reads a path remote. Give the remote a 'reference' (the branch) "
-                    "instead.",
+            gitops = provisioner.gitops
+            if gitops is None or gitops.remote not in remotes:
+                continue
+            diagnostics.extend(
+                _check_gitops_push(
+                    provisioner.name,
+                    gitops,
+                    remotes[gitops.remote],
+                    sources.get(gitops.remote, []),
                     source=str(entry.source),
-                    location=f"spec.provisioners.{position}.gitops.remote",
-                    code="path_remote_not_pushable",
+                    location=f"spec.provisioners.{position}.gitops",
                 )
+            )
 
-    sources = _remote_source_paths(index)
     for entry in index.all_of(PlatformKind.CONFIGURATION):
         audit = cast(ConfigurationModel, entry.model).spec.audit
         for position, sink in enumerate((audit.sinks or []) if audit else []):
@@ -1887,6 +1892,62 @@ def _check_path_remote_pushes(index: DocumentIndex, solution: SolutionModel | No
                         code="audit_sink_overlaps_source",
                         hint="Give the sink a 'path' outside every 'source_path' taken from that remote.",
                     )
+    return diagnostics
+
+
+def _check_gitops_push(
+    name: str,
+    gitops: ProvisionerGitOpsModel,
+    remote: SolutionRemoteModel,
+    sources: list[tuple[str, str]],
+    *,
+    source: str,
+    location: str,
+) -> Diagnostics:
+    """`_check_path_remote_pushes()` for one GitOps step (remote-commit-provenance.md, B4)."""
+    diagnostics = Diagnostics()
+    if remote.path is not None:
+        if gitops.action == "push" and gitops.branch is None:
+            diagnostics.error(
+                f"GitOps provisioner '{name}' pushes to remote '{remote.name}', which has a 'path' and so no "
+                "'reference': name the branch to push to.",
+                source=source,
+                location=f"{location}.branch",
+                code="gitops_branch_required",
+                hint="Add 'branch' (for example 'main') under 'gitops', or set 'action: commit' or 'none' to leave "
+                "the push to a later pipeline step.",
+            )
+    else:
+        if gitops.branch is not None:
+            diagnostics.error(
+                f"GitOps provisioner '{name}' names branch '{gitops.branch}', but remote '{remote.name}' pushes to "
+                f"its reference '{remote.reference}'.",
+                source=source,
+                location=f"{location}.branch",
+                code="gitops_branch_needs_path_remote",
+                hint="Remove 'branch', or change the remote's 'reference'. 'branch' is for a remote with a 'path'.",
+            )
+        if gitops.action != "push":
+            diagnostics.error(
+                f"GitOps provisioner '{name}' has action '{gitops.action}', but remote '{remote.name}' has a "
+                "'reference': strata writes into its own clone, which nothing else reads, so only a push keeps "
+                "the file.",
+                source=source,
+                location=f"{location}.action",
+                code="gitops_action_needs_path_remote",
+                hint="Use 'action: push', or give the remote a 'path' to the checkout your pipeline makes and "
+                "commits from.",
+            )
+    for user, source_path in sources:
+        if _paths_overlap(gitops.output_file, source_path):
+            diagnostics.warning(
+                f"GitOps provisioner '{name}' writes '{gitops.output_file}' of remote '{remote.name}', where {user} "
+                f"takes '{source_path}' from: the file would become part of the next build.",
+                source=source,
+                location=f"{location}.output_file",
+                code="gitops_output_overlaps_source",
+                hint="Write 'output_file' outside every 'source_path' taken from that remote.",
+            )
     return diagnostics
 
 

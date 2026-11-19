@@ -43,6 +43,12 @@ commit to the repository a pipeline checked out, and a solution can read documen
   [Audit files in a repository your pipeline checked out](../docs/config/configuration.md#audit-files-in-a-repository-your-pipeline-checked-out).
 - `strata validate` warns when an audit sink writes inside a `source_path` the build takes from the same remote
   (`audit_sink_overlaps_source`).
+- **A GitOps step (`argocd`, `flux`) can write to a `path` remote** the same way, with the new `gitops.branch` (the
+  branch pushed to) and `gitops.action` (`push`, `commit` or `none`). Deploy, plan and destroy all work in the
+  pipeline's checkout. `deploy run` reports `gitops_not_pushed` (information) after `commit` or `none`. New
+  `validate` findings: `gitops_branch_required`, `gitops_branch_needs_path_remote`,
+  `gitops_action_needs_path_remote`, and the warning `gitops_output_overlaps_source`. See
+  [A repository your pipeline checked out](../docs/config/solution.md#a-repository-your-pipeline-checked-out).
 - **Documents in other repositories: `spec.discovery.remotes`.** It lists `path` remotes whose checkouts are
   scanned for documents beside the solution root, for example one repository per hub zone.
   - Their documents join the solution's one namespace, so `validate` and the cross-zone views see every zone.
@@ -63,6 +69,8 @@ commit to the repository a pipeline checked out, and a solution can read documen
     listed without a commit.
   - A build made before this release is read at deploy time, as before.
 - `artifacts.repositories` in the audit manifest is sorted by name.
+- `strata validate` no longer reports `path_remote_not_pushable`: an audit sink or a GitOps step may now push to a
+  `path` remote.
 
 ## [2.7.0] - 2026-11-14
 

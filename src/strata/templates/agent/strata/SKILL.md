@@ -153,8 +153,9 @@ How values merge for a deployment:
   `build run`; strata will not clone it. When a pipeline does the checkout, give the remote `path: <checkout dir>`
   instead of `reference`: strata reads it there and the ref stays in the pipeline. The path is relative to the
   solution root (`..` allowed, so `../iac` is a checkout beside the solution) or absolute. A `path` remote cannot
-  be pinned, and a GitOps step cannot push to it. An audit sink can: strata commits only its own files in the
-  pipeline's checkout and pushes with the pipeline's credentials (`action: push | commit | none`).
+  be pinned. An audit sink or a GitOps step can write to it: strata commits only its own files in the pipeline's
+  checkout and pushes with the pipeline's credentials (`action: push | commit | none`). A GitOps step on a `path`
+  remote needs `gitops.branch`; on a `reference` remote it must not set one.
 - A version pin on a `type: local` remote is accepted but changes nothing.
 - A `remote_checkout_dirty` warning from `build run` means files the build took had uncommitted changes. With
   `spec.audit.require_remote_commits` on, the deploy of that build fails: commit, then build again. Do not edit

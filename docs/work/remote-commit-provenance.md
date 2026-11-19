@@ -42,8 +42,8 @@ turning platform-config's `inventory` sink on, is next and lives in that reposit
 
 Before Phase 6, a path remote could not be pushed to. `validate` refused an audit sink or a GitOps step that named
 one, and platform-config's `inventory` sink was commented out. The documented workaround was a second remote with
-`reference: main` and an `integration`, which needs strata to clone from the git server in CI. A GitOps step is
-still refused (B4).
+`reference: main` and an `integration`, which needs strata to clone from the git server in CI. Phase 9 built the
+same for a GitOps step (B4).
 
 **Part C is built (Phase 8).** `spec.discovery.remotes` lists path remotes whose checkouts are scanned for
 documents, and the build records each one's commit. Loading only the checkouts that are present (C2, "later") is not
@@ -150,10 +150,50 @@ error, because the sink is in the configuration and the remote is in `strata.yam
   means one path is inside the other, compared by segments, so `records` and `recordsets` do not overlap. A
   pattern counts from its fixed folders, and `.` overlaps everything.
 
-### B4 - GitOps
+### B4 - GitOps (Phase 9)
 
-A GitOps step pushing to a path remote is the same mechanism. It stays refused (`path_remote_not_pushable`) until
-there is a real case (Q7). Since Phase 6, `validate` reports that error only for GitOps.
+A GitOps step (`argocd`, `flux`) may push to a path remote, the same way an audit sink does (Q7). Until Phase 9
+`validate` refused it (`path_remote_not_pushable`), because the step always pushed from its own clone under
+`.strata/gitops-push/`.
+
+```yaml
+# workspace
+provisioners:
+  - name: forge_sync
+    tool: argocd
+    gitops:
+      remote: gitops-config      # a path remote: repos/gitops-config
+      output_file: apps/forge/values.yaml
+      branch: main               # new: the branch pushed to
+      action: push               # new: push (default) | commit | none
+```
+
+- **`branch`.** A path remote has no `reference`, so the step names the branch it pushes to, as a sink does. It is
+  required on a path remote with `action: push`. With a `reference` remote the reference is the branch, so `branch`
+  is an error there (`gitops_branch_needs_path_remote`). Without it on a path remote: `gitops_branch_required`.
+- **`action`** means what it means for a sink (B2). `commit` and `none` need a path remote
+  (`gitops_action_needs_path_remote`), for the same reason: strata's own clone is read by nothing else. After a
+  deploy with `commit` or `none`, the step reports `gitops_not_pushed` (information).
+- **Each operation, in the checkout.** Nothing is cloned, fetched or reset, as in B1:
+
+  | Operation      | Path remote                                                                                   |
+  | -------------- | --------------------------------------------------------------------------------------------- |
+  | `plan`         | `git diff --no-index` of the checkout's file against the rendered file                        |
+  | `deploy`       | Copies the rendered file to `output_file`, then commits only that file and pushes (B2)        |
+  | `plan_destroy` | Reports whether the checkout holds `output_file`                                              |
+  | `destroy`      | Deletes `output_file`, then commits only that removal and pushes                              |
+  | `output`       | `commit_sha` is the checkout's `HEAD`. With `action: none` that commit does not hold the file |
+
+  `plan` compares with the tree the pipeline checked out, not the branch tip. That is the tree the push rebases from.
+- **Several stages** push once each. The retry with rebase (B2) covers a branch that moved in between.
+- **The shared code.** The commit and push tail of Phase 6 (`add`, `commit --only`, push, fetch, rebase, retry)
+  moves from `audit_push._write_in_checkout()` to `integrations/git_push.commit_in_checkout()`. A GitOps step is an
+  integration, and an integration may not import a controller (ADR-0003). The audit sink calls the moved function.
+- **Reading and writing the same repository** (B3). `validate` warns (`gitops_output_overlaps_source`) when
+  `output_file` is inside a `source_path` the build takes from the same remote.
+- **Credentials.** A path remote has no `integration`, so the push uses the checkout's own, as for a sink.
+- **Old builds.** The build writes `branch` and `action` into the step's `.gitops-push.json`. A sidecar without them
+  means `action: push` and no branch, which only a reference remote could have produced.
 
 ## Part C - Documents in other repositories
 
@@ -294,6 +334,13 @@ starts.
   covers the documents and `type: local` remotes, which Part A otherwise leaves out.
 - **D14 - Only the deploy enforces `require_remote_commits` (Q10).** The build always records and warns, and
   `deploy run` fails before it changes anything. A local edit-build loop keeps working with the option on.
+- **D15 - "Is the commit pushed?" stays out of scope (Q3).** A pipeline's shallow, detached checkout has no
+  remote-tracking refs to compare against. `git ls-remote` needs the network and credentials, which a path remote
+  never has. And a CI build's commits come from the server anyway. The user docs name the limit.
+- **D16 - The SBOM stays as it is (Q5).** `resolved.yaml` and the audit manifest already carry the commits. Adding
+  them as CycloneDX components changes what scanners read, so it is its own change, when someone needs it.
+- **D17 - A GitOps step may push to a path remote (Q7).** Same mechanism as a sink (B1, B2), with its own `branch`
+  and `action`. One commit-and-push function serves both.
 
 ## Open questions
 
@@ -301,16 +348,16 @@ starts.
   Revisit if it starts honouring `.gitignore`.
 - **Q2 - Name and place of the option.** Decided 2026-11-17: `spec.audit.require_remote_commits` (D12).
 - **Q3 - G5.** Leave as a documented limit, or add an opt-in `verify_pushed` that runs `git ls-remote` for remotes
-  with an `integration`?
+  with an `integration`? Decided 2026-11-18: leave it as a documented limit (D15).
 - **Q4 - The solution's own commit in `resolved.yaml`?** Decided 2026-11-17: yes, in this change, under
   `solution: {commit, dirty}` (D13).
 - **Q10 - Local builds with the option on.** Decided 2026-11-17, as recommended: the build always records and warns,
   and only `deploy run` errors on a missing or dirty record (D14). The R3 table was changed to match.
-- **Q5 - The SBOM.** CycloneDX can carry each remote as a component with a `vcs` external reference. Recommend:
-  later, separately.
+- **Q5 - The SBOM.** CycloneDX can carry each remote as a component with a `vcs` external reference. Decided
+  2026-11-19: later, as separate work (D16).
 - **Q6 - Should strata push to a path remote at all, or only commit?** Decided 2026-11-17: push, with
   `action: none | commit | push` to stop earlier (D8).
-- **Q7 - GitOps to a path remote.** Recommend: not until a real case. The mechanism is B1, unchanged.
+- **Q7 - GitOps to a path remote.** Decided 2026-11-19: build it now (D17, B4, Phase 9).
 - **Q8 - A checkout that is missing.** Decided 2026-11-17: every listed remote is required (D9). Loading what is
   present is the later refinement in C2. When it comes, the cross-zone checks (C1 rule 8) must say that they ran on
   a partial solution.
@@ -407,6 +454,35 @@ Branch `feature/remote-commit-provenance`. Test-first. Each phase ends with `ruf
     - `configuration.md`'s record section mentions document remotes;
     - the agent skill has a new row;
     - CHANGELOG `[Unreleased]` has an entry.
+- [x] **Phase 9 - GitOps to a path remote (B4, Q7).**
+  - Move the commit-and-push tail into `git_push.commit_in_checkout()`; `audit_push` calls it. The Phase 6 tests
+    stay green unchanged.
+  - `ProvisionerGitOpsModel.branch` and `.action`.
+  - `BaseGitOpsIntegration`: the sidecar carries `branch` and `action`; each operation has a path-remote branch.
+  - `validate`: drop `path_remote_not_pushable`; add `gitops_branch_required`, `gitops_branch_needs_path_remote`,
+    `gitops_action_needs_path_remote` and the `gitops_output_overlaps_source` warning.
+  - `deploy_run`: information `gitops_not_pushed` after a step with `commit` or `none`.
+  - Real-`git` tests against a bare repository and a detached clone: `prepare` to `destroy` with `push`; `commit`;
+    `none`; a moved branch; other changes in the checkout left alone; a folder that is not a checkout.
+  - Docs: `provisioning`/GitOps reference, `configuration.md`, `solution.md`, the agent skill, CHANGELOG.
+
+  Done, test-first:
+  - `test_integrations_gitops_path_remote.py` has 9 real-`git` tests:
+    - the whole cycle (`prepare`, `plan`, `deploy`, `output`, `plan_destroy`, `destroy`) with no clone of its own;
+    - `commit` and `none`;
+    - a moved branch;
+    - other changes in the checkout left alone;
+    - a folder that is not a checkout;
+    - a push without a branch;
+    - destroying a file that was never committed;
+    - the sidecar carrying `branch` and `action`.
+  - `test_deploy_destroy.py` has 2 end-to-end `build_run` and `deploy_run` tests: push then destroy, and `commit`
+    with its `gitops_not_pushed` information.
+  - `test_semantic_checks.py` covers each new finding, its location and hint, `commit` and `none` needing no
+    branch, and the overlap warning.
+  - The Phase 6 tests passed unchanged after the move to `commit_in_checkout()`.
+  - There is no separate GitOps user page. The section lives in `solution.md`, beside the path-remote rules, and
+    `gitops-integration.md` (design doc) gained a paragraph.
 
 ## Related Decisions
 
@@ -505,3 +581,9 @@ Branch `feature/remote-commit-provenance`. Test-first. Each phase ends with `ruf
 
   Three `relative_to(root)` calls that would have raised on a zone document were fixed. The VS Code extension needs
   no change; schema association needs a `.code-workspace` setting, which is documented but not verified.
+- 2026-11-19: Q5 decided: later (D16). Q7 decided: build it now (D17).
+- 2026-11-19: Phase 9 built, tests first: a GitOps step on a path remote (B4). Changes to the design:
+  - `branch` is required only with `action: push`;
+  - the overlap warning also applies to a `reference` remote, since the build reads the branch it pushes to;
+  - destroying a file that is untracked, or already gone, commits nothing;
+  - `path_remote_not_pushable` is gone.
