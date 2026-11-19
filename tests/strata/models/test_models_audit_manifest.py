@@ -100,11 +100,16 @@ def test_manifest_pull_request_and_change_reference_are_independent_optional_fie
     assert model.change_reference.id == "OPS-1234"
 
 
-def test_manifest_actor_kept_distinct_from_commit_author():
-    data = _minimal_manifest(deployed_by="ci-runner", commit_author="jane.doe")
-    model = DeploymentManifestModel.model_validate(data)
+def test_manifest_records_who_ran_the_deploy():
+    model = DeploymentManifestModel.model_validate(_minimal_manifest(deployed_by="ci-runner"))
     assert model.deployed_by == "ci-runner"
-    assert model.commit_author == "jane.doe"
+
+
+@pytest.mark.parametrize("field", ["commit_author", "commit_message"])
+def test_manifest_has_no_commit_author_or_message(field):
+    # Removed: the deployed HEAD is often not the commit that made the change, and `commit_sha` finds both.
+    with pytest.raises(ValidationError, match=field):
+        DeploymentManifestModel.model_validate(_minimal_manifest(**{field: "x"}))
 
 
 def test_manifest_providers_carry_the_tool_version_and_path_and_both_are_optional():

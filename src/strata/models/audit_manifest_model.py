@@ -274,8 +274,8 @@ class DeploymentManifestModel(PlatformBaseModel):
     force: bool = Field(default=False, description="Whether --force was passed")
     dry_run: bool = Field(default=False, description="Whether this was a dry run")
 
-    # Actor + git context — actor kept distinct from commit_author (who wrote the code
-    # is not who ran the deploy)
+    # Actor + git context. No commit author or message: the deployed HEAD is often not the commit that made the
+    # change, so they would name the wrong person; `git show <commit_sha>` has both.
     deployed_by: str | None = Field(default=None, description="Resolved actor identity")
     commit_sha: str | None = Field(
         default=None,
@@ -285,8 +285,6 @@ class DeploymentManifestModel(PlatformBaseModel):
         default=None,
         description="Whether the solution had uncommitted changes when it was built; left out when unknown",
     )
-    commit_message: str | None = Field(default=None, description="Git commit message")
-    commit_author: str | None = Field(default=None, description="Git commit author")
 
     # Layer 1 evidence
     pull_request: ManifestPullRequestModel | None = Field(default=None, description="PR evidence, when extracted")

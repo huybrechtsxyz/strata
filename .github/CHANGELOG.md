@@ -72,6 +72,12 @@ commit to the repository a pipeline checked out, and a solution can read documen
 - `strata validate` no longer reports `path_remote_not_pushable`: an audit sink or a GitOps step may now push to a
   `path` remote.
 
+### Removed
+
+- `commit_author` and `commit_message` from the audit manifest. Nothing ever filled them, so no existing manifest
+  contains them. The deployed commit is often not the one that made the change, so they would have named the wrong
+  author; `git show <commit_sha>` gives both for the commit that was built.
+
 ## [2.7.0] - 2026-11-14
 
 Several products in one ring can share pins without copying them: a deployment lists several version documents.
