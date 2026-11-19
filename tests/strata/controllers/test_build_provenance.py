@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """`build run` records the commit of the solution and of each git remote in `resolved.yaml`.
 
-docs/work/remote-commit-provenance.md, Phase 2. Real `git` throughout: the record is only as good as what `git` says.
+docs/design/remote-commit-provenance.md, "Collecting what the build took". Real `git` throughout: the record is only as
+good as what `git` says.
 """
 
 import shutil

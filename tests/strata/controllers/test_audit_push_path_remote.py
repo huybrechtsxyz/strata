@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """An audit sink on a path remote: write, commit and push in the pipeline's own checkout.
 
-docs/work/remote-commit-provenance.md, Part B (Phase 6). Real `git` throughout, against a local bare repository
+docs/design/remote-commit-provenance.md, "Writing to a path remote". Real `git` throughout, against a local bare
+repository
 standing in for the server, and a clone of it standing in for the checkout a pipeline made.
 """
 

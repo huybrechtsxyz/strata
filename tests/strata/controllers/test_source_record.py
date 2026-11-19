@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `SourceRecord` (docs/work/remote-commit-provenance.md, "The build record (Phase 2)")."""
+"""Tests for `SourceRecord` (docs/design/remote-commit-provenance.md, "Collecting what the build took")."""
 
 import shutil
 import subprocess

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""A GitOps step on a path remote: written in the pipeline's checkout (docs/work/remote-commit-provenance.md, B4).
+"""A GitOps step on a path remote: written in the pipeline's checkout (docs/design/remote-commit-provenance.md, "Writing
+to a path remote").
 
 Real `git` against a bare repository standing in for the server, and a detached clone standing in for the pipeline's
 `checkout:` step, as `test_audit_push_path_remote.py` does for an audit sink.

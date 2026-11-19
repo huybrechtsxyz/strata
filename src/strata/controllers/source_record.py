@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What a build took from each git remote, for `resolved.yaml`'s `solution` and `remotes` keys.
 
-docs/work/remote-commit-provenance.md, "The build record (Phase 2)". One `SourceRecord` per `build run`, passed as
+docs/design/remote-commit-provenance.md, "Collecting what the build took". One `SourceRecord` per `build run`, passed as
 `record=` beside `credentials=` wherever a source is resolved:
 
 - `resolved()` registers a `type: git` remote's checkout when `source_sync._resolve_repo()` locates it;
@@ -53,7 +53,7 @@ class SourceRecord:
         """Register `remote`'s `checkout` under `key` (the remote's name, or `asset:<name>`). Only `type: git`."""
         if remote.type != RemoteType.GIT or key in self._remotes:
             return
-        # Path mode: the pipeline owns the ref, so none is written (docs/work/remote-external-path.md).
+        # Path mode: the pipeline owns the ref, so none is written (docs/design/remotes.md).
         ref = None if remote.path is not None else remote.reference
         self._remotes[key] = _Remote(remote.url, ref, checkout.resolve())
 

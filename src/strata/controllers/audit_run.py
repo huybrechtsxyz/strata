@@ -444,7 +444,8 @@ def _dispatch_sink(
     )
     if result.success:
         if sink.git.action != "push":
-            # A path remote's `commit` or `none`: a later pipeline step pushes (remote-commit-provenance.md, Part B).
+            # A path remote's `commit` or `none`: a later pipeline step pushes (docs/design/remote-commit-provenance.md,
+            # "Writing to a path remote").
             diagnostics.info(f"sink '{sink.name}': {result.detail}", code="audit_sink_not_pushed")
         return
     _record_sink_failure(
@@ -611,7 +612,8 @@ def _collect_artifacts_bom(
 
     Repositories: with the build's record (`recorded`, from `resolved.yaml`'s `remotes`), each remote it holds is
     copied as recorded, so the manifest names the tree that went into the build output, not the checkout as it is
-    now (docs/work/remote-commit-provenance.md, R2). That adds what the record alone holds (an asset's
+    now (docs/design/remote-commit-provenance.md, "The audit manifest copies the record"). That adds what the record
+    alone holds (an asset's
     `spec.location`, a Checkov config's remote). A remote this workspace names that the build took no file from
     (a chart-based module's) is listed as today, with no commit: there is no tree to record. Without a record (a
     build made before it existed) a path remote's commit is read from its checkout, as before.
@@ -698,10 +700,10 @@ def _checkout_commit(name: str, checkout: Path, diagnostics: Diagnostics) -> str
     """The commit a path remote's checkout is at, or `None` (with a warning) when it cannot be read.
 
     A path remote has no `reference`, so this is the only record of which tree a deploy used
-    (docs/work/remote-external-path.md). Requires `.git` in the directory itself: otherwise `git
+    (docs/design/remotes.md). Requires `.git` in the directory itself: otherwise `git
     rev-parse` would walk up and report the solution repository's own commit for a plain folder.
     It never fails a deploy. The rule and the `git` call are `checkout_state()`'s
-    (docs/work/remote-commit-provenance.md, Phase 1).
+    (docs/design/remote-commit-provenance.md, "Reading a checkout").
     """
     state = checkout_state(checkout)
     if state.commit is None:

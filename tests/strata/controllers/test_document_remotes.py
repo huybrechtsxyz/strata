@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Documents read from other repositories: `spec.discovery.remotes`.
 
-docs/work/remote-commit-provenance.md, Part C (Phase 8). The solution (`platform-config` in the doc) holds the shared
+docs/design/remote-commit-provenance.md, "Documents in other repositories". The solution (`platform-config` in the doc)
+holds the shared
 documents; each zone's environments and deployments live in a checkout of their own, beside the solution or inside
 it, listed in `discovery.remotes`.
 """

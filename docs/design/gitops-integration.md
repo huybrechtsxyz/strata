@@ -315,7 +315,7 @@ and `audit_push.py`'s own audit-push checkouts, so none can collide.
 fresh checkout, no write) — all three share one `_commit_and_push()` tail
 and one `_validate_remote()` guard.
 
-**A `path` remote** (docs/work/remote-commit-provenance.md, B4) skips all
+**A `path` remote** ([remote-commit-provenance.md](remote-commit-provenance.md), "Writing to a path remote") skips all
 three: the checkout is the pipeline's, so it is never cloned, fetched or
 reset. `BaseGitOpsIntegration` writes `output_file` there and calls
 `commit_in_checkout()`, which commits only that file and pushes to
@@ -402,9 +402,8 @@ deploy-time-only" (ADR-0022 D4).
   `InfraIntegration` capability split this design's classes implement.
 - [ADR-0023](../decisions/0023-build-output-rendering.md) D3 — `output.
   template`/`default_output()`, reused here unchanged.
-- `remotes.md` (work doc) — `resolve_remote()`'s
-  current pull-only scope; this design's `push_file()` is the first
-  push-direction primitive.
+- [remotes.md](remotes.md) — `resolve_remote()`, which reads remotes;
+  this design's `push_file()` was the first primitive that writes to one.
 - [docs/design/deploy-command.md](deploy-command.md) — cross-step
   outputs, whose `collect_step_outputs()` this design's `output()` method
   stays compatible with.

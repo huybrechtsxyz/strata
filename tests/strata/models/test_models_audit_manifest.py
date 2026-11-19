@@ -122,7 +122,8 @@ def test_manifest_providers_carry_the_tool_version_and_path_and_both_are_optiona
 
 
 def test_manifest_commit_dirty_and_repository_dirty_are_optional():
-    """docs/work/remote-commit-provenance.md, R2: a manifest written before the build record still loads."""
+    """docs/design/remote-commit-provenance.md, "The audit manifest copies the record": a manifest written before the
+    build record still loads."""
     platform = {"platform": {"hash": "sha256:abc", "path": "resolved.yaml"}}
     old = _minimal_manifest(
         commit_sha="5d0e", artifacts={**platform, "repositories": {"infra": {"url": "u", "commit": "3f9c"}}}

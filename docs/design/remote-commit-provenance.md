@@ -1,19 +1,28 @@
 # Remote commit provenance - Design
 
 - Status: current
-- Last updated: 2026-11-18
+- Last updated: 2026-11-19
 
 ## Overview
 
-An audit must answer "which tree of each repository did this deployment use?" The deployment runs from the build
-output, so only the build can answer it. `build run` therefore records two things in `resolved.yaml`: the commit of
-the solution repository, and the commit of every git remote it copied files from. Each record says whether the files
-taken had uncommitted changes. The deploy's audit manifest copies that record and never reads a checkout. An
-opt-in option, `spec.audit.require_remote_commits`, makes a gap in the record fail the deploy.
+This doc covers three things strata does with git repositories, above all with a `path` remote: a checkout a
+pipeline already made. Strata may read such a checkout, record which commit it was at, and write to it, but never
+clones, fetches into or resets it.
 
-The user-facing reference is "Which commits were deployed" in [configuration.md](../config/configuration.md). The
-remote modes it covers (`path`, `fetch: external`, strata's own clone) are described in
-[solution.md](../config/solution.md).
+- **Provenance.** An audit must answer "which tree of each repository did this deployment use?" The deployment
+  runs from the build output, so only the build can answer it. `build run` therefore records two things in
+  `resolved.yaml`: the commit of the solution repository, and the commit of every git remote it copied files from.
+  Each record says whether the files taken had uncommitted changes. The deploy's audit manifest copies that record
+  and never reads a checkout. An opt-in option, `spec.audit.require_remote_commits`, makes a gap in the record fail
+  the deploy.
+- **Writing to a path remote.** An audit sink or a GitOps step writes its files into the pipeline's checkout,
+  commits only those files, and pushes with the pipeline's credentials, instead of cloning the repository again.
+- **Documents in other repositories.** `spec.discovery.remotes` names path remotes whose checkouts are scanned for
+  documents beside the solution root, for example one repository per hub zone.
+
+The user-facing references are in [configuration.md](../config/configuration.md) ("Which commits were deployed",
+"Audit files in a repository your pipeline checked out") and [solution.md](../config/solution.md) ("A repository
+your pipeline checked out", "Documents in other repositories").
 
 ## Current Design
 
@@ -156,13 +165,146 @@ policy, before value resolution, and before any tool runs.
 - **Configuration.** The option is read from the solution's one configuration. Without exactly one configuration
   it counts as off, as the other configuration-wide checks do.
 
+### Writing to a path remote
+
+An audit sink's `git.remote` may name a path remote, and so may a GitOps step's `gitops.remote`. Strata then works
+in the pipeline's checkout:
+
+- **The checkout is not strata's.** Strata never clones, fetches over a reset, resets or switches branch in it. The
+  folder must be a git checkout itself (`.git` in the folder, as for `checkout_state()`); otherwise nothing is
+  written and the write fails.
+- **Only its own files.** Strata writes its files, then stages and commits only those
+  (`git add -A -- :(literal)<path>`, `git commit --only -- ...`). Anything else modified, staged or untracked in the
+  tree stays as it was. A deleted file is committed as a removal.
+- **Identity.** The commit author is the deploying actor, passed per command (`git -c user.name=... -c
+  user.email=...`). The checkout's config belongs to the pipeline and is never written. Strata's own clones keep
+  writing a local identity, as before.
+- **Pushing.** `git push origin HEAD:<branch>`, so a detached checkout works, with the checkout's own credentials
+  (for example Azure DevOps `persistCredentials: true`). A path remote has no `integration`. When the push is
+  rejected because the branch moved (stderr says `rejected`, `non-fast-forward` or `fetch first`), strata runs
+  `git fetch origin <branch>` and `git rebase --autostash FETCH_HEAD`, then pushes again, three times in all. Any
+  other push failure, such as authentication, is final. A rebase that conflicts is aborted (`git rebase --abort`).
+  `--autostash` keeps the pipeline's other changes, but a staged change comes back unstaged.
+- **`action`** says how far strata goes. Each step includes the ones before it:
+
+  | `action`         | Strata                     | Then                                     | Deploy reports (information)         |
+  | ---------------- | -------------------------- | ---------------------------------------- | ------------------------------------ |
+  | `push` (default) | writes, commits and pushes | -                                        | -                                    |
+  | `commit`         | writes and commits         | a later pipeline step pushes             | `audit_sink_not_pushed` / `gitops_not_pushed` |
+  | `none`           | writes the files only      | a later pipeline step commits and pushes | `audit_sink_not_pushed` / `gitops_not_pushed` |
+
+  `commit` and `none` need a path remote. With a `reference`, strata writes into its own clone, which nothing else
+  reads, so anything short of a push is lost. The remote is in `strata.yaml` and the sink or step in another
+  document, so this is a `validate` error (`audit_sink_action_needs_path_remote`,
+  `gitops_action_needs_path_remote`), not a schema error. `push_audit_files()` also refuses it before running any
+  `git`.
+
+The code is one function, `integrations/git_push.commit_in_checkout()`. `controllers/audit_push.py` calls it for a
+sink, and `integrations/gitops.py` for a GitOps step. It lives in the integrations layer because an integration may
+not import a controller (the layer contract `lint-imports` checks). For the same reason it has its own small `checkout_problem()` check instead of
+`checkout_state()`.
+
+**An audit sink** keeps its `branch`, `path` and `required`. With `required: true`, a failed write, commit or push
+fails the deploy (`audit_sink_push_failed`); otherwise it warns. Each deploy writes under its own folder, so two
+deploys at once do not conflict in the rebase.
+
+**A GitOps step** (`argocd`, `flux`) on a path remote has no `reference` to push to, so it names the branch:
+
+```yaml
+gitops:
+  remote: gitops-config        # path: repos/gitops-config
+  output_file: apps/forge/values.yaml
+  branch: main
+  action: push
+```
+
+- `branch` is required on a path remote with `action: push` (`gitops_branch_required`). On a `reference` remote it is
+  an error (`gitops_branch_needs_path_remote`): the reference is the branch, and two would disagree.
+- `prepare()` (at build) writes `branch` and `action` into the step's `.gitops-push.json` sidecar. A sidecar
+  without them means `action: push` and no branch, which only a reference remote produced.
+- Each operation works in the checkout:
+
+  | Operation      | Path remote                                                                                    |
+  | -------------- | ---------------------------------------------------------------------------------------------- |
+  | `plan`         | `git diff --no-index` of the checkout's file against the rendered file                         |
+  | `deploy`       | copies the rendered file to `output_file`, then `commit_in_checkout()`                         |
+  | `plan_destroy` | reports whether the checkout holds `output_file`                                               |
+  | `destroy`      | deletes `output_file`, then commits and pushes the removal. An untracked or absent file commits nothing |
+  | `output`       | `commit_sha` is the checkout's `HEAD`; with `action: none` that commit does not hold the file  |
+
+  `plan` compares with the tree the pipeline checked out, not the branch tip. Several stages push once each, and
+  the rebase and retry covers a branch that moved in between.
+
+**Reading and writing the same repository.** The build records a checkout's commit before the deploy commits to it,
+so the record still names what was built. But a write inside a `source_path` the build takes from the same remote
+would end up in the next build. `validate` warns: `audit_sink_overlaps_source` for a sink's `path`,
+`gitops_output_overlaps_source` for a GitOps `output_file`. The GitOps warning also applies to a `reference`
+remote, which the build reads from the branch it pushes to. Overlap means one path is inside the other, compared
+by segments, so `records` and `recordsets` do not overlap. A pattern counts from its fixed folders, and `.`
+overlaps everything.
+
+### Documents in other repositories
+
+`spec.discovery.remotes` lists path remotes whose checkouts are extra discovery roots:
+
+```yaml
+# strata.yaml
+spec:
+  remotes:
+    - name: config-zone01
+      type: git
+      url: https://git.example.com/org/config-zone01.git
+      path: ../config-zone01
+  discovery:
+    remotes: [config-zone01]
+```
+
+- **Schema.** `SolutionSpecModel` accepts only declared `type: git` remotes with a `path`, each once. A ref-mode
+  remote would need a clone before `validate` could load anything.
+- **One namespace.** `SolutionController.load()` walks the solution root, then each listed checkout, into one
+  `DocumentIndex`. A name defined twice is the existing `duplicate_document` error, which shows both paths. So
+  `validate`, `graph --unreferenced`, `promote status` and `deploy list` see every root, as if the checkouts were
+  folders. `controller.document_remotes` maps each name to its checkout.
+- **Excludes.** `discovery.exclude` applies inside each root, relative to that root. A checkout inside the solution
+  root is skipped by the root's walk and scanned once, as its own root.
+- **Paths inside documents** stay relative to the solution root. A zone document that needs a file from its own
+  repository names it with `remote:`. Nothing resolves against the root a document was found in, so a document
+  means the same thing wherever it lies.
+- **Errors**, each naming the remote, with a hint, checked in this order:
+  - `document_remote_overlaps`: the checkout holds the solution root (`path: .` or `..`), or overlaps another listed
+    checkout, so documents would load twice;
+  - `document_remote_missing`: the checkout is not there. Every listed remote must be checked out;
+  - `document_remote_has_manifest`: a `strata.yaml` at the checkout's top. One solution has one manifest. A
+    `strata.yaml` deeper inside is a boundary, as in the solution.
+- **The record.** `build_run()` registers each document remote with `SourceRecord`, with `took(checkout, ".")`, so
+  `resolved.yaml`, the audit manifest and `require_remote_commits` cover it. Any uncommitted change in the checkout
+  makes it dirty. Discovery's `exclude` is not applied to that check: at worst it reports a little more than was
+  read.
+- **Writes.** `promote apply` and `version update` write to `IndexEntry.source`, wherever the document was found. A
+  new document (`version new`) goes to the solution root unless `--path` says otherwise.
+- **Code that assumed one root.** Path conventions judge only documents under the solution root. `version show`
+  prints paths with `layout.display_path()`.
+- **Editors.** The VS Code extension resolves each finding's absolute `source`, so findings in a zone checkout
+  land on the right file. Schema association for a zone folder needs a `yaml.schemas` entry in the
+  `.code-workspace` file; `solution.md` shows it.
+
+### Not covered
+
+- **Loading only the listed checkouts that are present.** Every listed remote must be checked out, so a pipeline
+  for one zone checks out every zone. Loading what is there would need every cross-root check (`--unreferenced`,
+  `promote status`) to say that it ran on part of the solution. Revisit when checking out every zone hurts.
+- **"Is the commit pushed?"** See History.
+- **The SBOM.** `sbom.json` lists the solution's commit but not the remotes. CycloneDX could carry each one as a
+  component with a `vcs` reference, but that changes what scanners read, so it is its own change, when someone
+  needs the SBOM alone to say which code went in.
+
 ## Related Decisions
 
 - [ADR-0019](../decisions/0019-version-pinning.md) - remote pins, which decide the `ref` recorded.
-- `remote-external-path.md` (work doc) - path mode, and the deploy-time commit lookup this replaced.
-- `remote-commit-provenance.md` (work doc) - Parts B and C, which build on this record: committing audit files to a
-  path remote, and documents in other repositories.
-- `audit-trail.md` (work doc) - the audit manifest.
+- [gitops-integration.md](gitops-integration.md) - the GitOps integration, including its own clone for a `reference`
+  remote.
+- [remotes.md](remotes.md) - remotes, path mode, and how `resolve_remote()` finds a checkout.
+- `audit-trail.md` (work doc) - the audit manifest and its sinks.
 
 ## History
 
@@ -187,6 +329,34 @@ policy, before value resolution, and before any tool runs.
   harmless; deploying is what the audit is about. An unreadable `dirty` counts as dirty under the option.
 - **"Is the commit pushed?" is out of scope.** `git branch -r --contains` needs remote-tracking refs, which a
   pipeline's shallow, detached checkout usually lacks. `git ls-remote` needs the network and credentials, which a
-  path remote never has. A recorded commit may exist nowhere else; the user docs say so.
+  path remote never has. A CI build's commits come from the server anyway. A recorded commit may exist nowhere
+  else; the user docs say so.
 - **`--no-optional-locks`.** Checking showed that a plain `git status` rewrites the index of a checkout it only reads.
   That checkout belongs to the pipeline.
+- **A path remote used to be read-only.** `validate` refused it as an audit sink or GitOps target
+  (`path_remote_not_pushable`), and the workaround was a second remote with a `reference` and an `integration`, so
+  strata cloned in CI with credentials it often did not have. Writing in the pipeline's checkout removes the second
+  clone and the second credential.
+- **A path-remote write pushes by default.** A sink that never reaches the server is not durable, which is the point
+  of a sink. `commit` and `none` exist for a pipeline that wants to own the commit or the push.
+- **"Not pushed" is information at deploy, not a manifest field.** The manifest is one of the files being written,
+  so it is complete before the sink runs and cannot record the sink's own outcome.
+- **Only a rejected push retries, and the rebase uses `FETCH_HEAD`.** An authentication or network failure will not
+  fix itself. A pipeline's single-branch or shallow clone may not update `origin/<branch>`, and the rebase works on
+  a `--depth 1` checkout too.
+- **GitOps waited for a real case, then reused the sink's code.** The first version refused GitOps on a path
+  remote. When it was built, the commit-and-push tail moved from `audit_push` to `git_push.commit_in_checkout()`, so
+  one function serves both. A GitOps `branch` is required only for a push, and is an error on a `reference` remote
+  rather than an override of it.
+- **Document roots are named in `discovery`, not on the remote.** A remote says where a repository is; discovery
+  says what strata scans.
+- **Why split documents across repositories at all.** For different reviewers per zone, `CODEOWNERS` on each zone
+  folder is far cheaper. Separate repositories are for different read access, separate history, or a team that must
+  not push to the main repository. Strata supports the split, but the choice stays with the team.
+- **The solution holds the zones, not the other way round.** Each zone could have been its own solution that reads
+  the shared bases as a document remote. That gives up `validate` across zones, so a base change could break
+  another zone unseen, and `--unreferenced` would call a base unused that another zone uses. The shared bases are
+  where breakage starts, so the solution that holds them sees every zone.
+- **Documents found outside the solution root.** Three places assumed every document sat under the root and would
+  have raised on a zone document: both path-convention checks and `version show`. They were fixed with the feature,
+  with a regression test.

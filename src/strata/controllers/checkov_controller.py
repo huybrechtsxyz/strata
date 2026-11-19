@@ -286,7 +286,7 @@ def snapshot_checkov_configs(
     check`/`findings` read the same file from the build output and never resolve a remote
     themselves. A repository without the file gets no snapshot; the gate then reports that
     target through `on_missing_data`. Stale snapshots from an earlier build are removed first.
-    `record` records each copied file for `resolved.yaml` (docs/work/remote-commit-provenance.md).
+    `record` records each copied file for `resolved.yaml` (docs/design/remote-commit-provenance.md).
     """
     shutil.rmtree(build_path / CHECKOV_CONFIG_DIR, ignore_errors=True)
     policy = workspace.spec.checkov_policy

@@ -474,7 +474,7 @@ deployment, against the assets its workspace steps select.
   therefore not the right tool for a build-time file copy.
 - [path-conventions.md](path-conventions.md) — `compile_pattern()`'s
   `{name}` token syntax, reused here for filling rather than matching.
-- `remotes.md` (work doc) — `resolve_remote()`, the prerequisite
+- [remotes.md](remotes.md) — `resolve_remote()`, the prerequisite
   this design reuses unchanged.
 - [ADR-0035](../decisions/0035-unified-terraform-projection.md) /
   [unified-terraform-projection.md](unified-terraform-projection.md) —

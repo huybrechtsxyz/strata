@@ -177,7 +177,7 @@ def _write_in_checkout(
 ) -> PushResult:
     """Write `files` into a path remote's checkout, then go as far as `sink.action` says.
 
-    docs/work/remote-commit-provenance.md, Part B. The checkout is the pipeline's, so strata:
+    docs/design/remote-commit-provenance.md, "Writing to a path remote". The checkout is the pipeline's, so strata:
 
     - never clones, resets or checks out a branch, and works with a detached `HEAD` (the push names the branch);
     - commits only the files it wrote (`git commit -- <files>`); anything else modified, staged or untracked in

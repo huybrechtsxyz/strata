@@ -58,7 +58,7 @@ threads `resolved.values` down to these calls **only for a GitOps step**
 `**kwargs: Any` to absorb an unconditionally-passed extra kwarg (found on
 review, not assumed).
 
-**A path remote (docs/work/remote-commit-provenance.md, B4)** — when
+**A path remote (docs/design/remote-commit-provenance.md, "Writing to a path remote")** — when
 `gitops.remote` has a `path`, every operation works in the checkout the
 pipeline made instead of strata's clone under `.strata/gitops-push/`:
 nothing is cloned, fetched or reset, only `output_file` is committed
@@ -146,7 +146,8 @@ def _failed(detail: str) -> CommandResult:
 
 
 def _checkout(sidecar: dict[str, Any], remote: SolutionRemoteModel) -> Path:
-    """A path remote's checkout: where the pipeline put it (docs/work/remote-commit-provenance.md, B4)."""
+    """A path remote's checkout: where the pipeline put it (docs/design/remote-commit-provenance.md, "Writing to a path
+    remote")."""
     assert remote.path is not None  # only called for a path remote
     return layout.path_remote_location(Path(sidecar["root"]), remote.path)
 

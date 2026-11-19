@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What a git checkout holds: the commit it is at, and whether the files a build takes from it have changes.
 
-docs/work/remote-commit-provenance.md, "`checkout_state()` (Phase 1)". The record answers "which tree of this
+docs/design/remote-commit-provenance.md, "Reading a checkout". The record answers "which tree of this
 repository did the deployment use?" for an audit. A commit alone does not answer it when the files on disk differ
 from the commit, hence `dirty`.
 

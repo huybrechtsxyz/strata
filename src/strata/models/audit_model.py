@@ -91,7 +91,8 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
         "`commit` writes and commits, and a later pipeline step pushes; `none` only writes the files, and a later "
         "step commits and pushes. `commit` and `none` need a remote with a `path` (a checkout the pipeline made "
         "and reads afterwards); with a `reference`, strata writes into its own clone, which nothing else reads.\n\n"
-        "Design notes: docs/work/remote-commit-provenance.md, Part B. With a path remote strata writes in that "
+        "Design notes: docs/design/remote-commit-provenance.md, 'Writing to a path remote'. With a path remote strata "
+        "writes in that "
         "checkout, commits only the files it wrote, never resets, and pushes with the checkout's own credentials, "
         "rebasing and retrying when the branch moved.",
     )
@@ -190,7 +191,7 @@ class AuditConfigModel(PlatformBaseModel):
         "git remote it took files from. The build records each commit in `resolved.yaml`, and warns, whatever "
         "this says; only the deploy fails, so building an uncommitted edit still works. A build made by a strata "
         "without the record fails too.\n\n"
-        "Design notes: docs/work/remote-commit-provenance.md, R3 and D14.",
+        "Design notes: docs/design/remote-commit-provenance.md, '`spec.audit.require_remote_commits`'.",
     )
 
     @model_validator(mode="after")

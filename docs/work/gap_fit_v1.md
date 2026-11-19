@@ -1019,7 +1019,7 @@ durable, reviewable record.
   emitted and only surfaces as a Terraform... warning").
 - **Migration action:** none available yet — no design exists. Would need,
   at minimum: locating the target Terraform root on disk (post-`sync_source()`,
-  `docs/work/remotes.md`'s own still-open prerequisite), parsing
+  now built, see `docs/design/remotes.md`), parsing
   `variables.tf` (HCL, not YAML — a new parsing dependency `provisioning-injection-model.md`
   already flagged as a capability-lookup-only concern today), and deciding
   where in `build run`'s flow the check runs and how strict it is (error

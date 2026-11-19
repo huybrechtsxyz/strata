@@ -364,7 +364,7 @@ def write_resolved_manifest(
     documents came from (`spec.version` or `--pin`), and `pin_sources` names the document each pin in
     `version.yaml` (`write_effective_version()`) came from.
 
-    `provenance` adds `solution` and `remotes` (`SourceRecord.provenance()`, docs/work/remote-commit-provenance.md
+    `provenance` adds `solution` and `remotes` (`SourceRecord.provenance()`, docs/design/remote-commit-provenance.md
     R1): which commit of the solution and of each git remote the build took its files from. `build_run()` writes
     the file before it copies any source and again, with these keys, once every source is copied.
     """
@@ -782,7 +782,7 @@ def build_run(
     # One per build: lazy, so a build that clones nothing resolves no credential; `--resolve` also
     # lets a credential come from an integration-backed store.
     credentials = RemoteCredentialResolver(context, deployment_name, allow_stores=resolve, pin=pin)
-    # What each copy below takes from which git remote, for `resolved.yaml` (docs/work/remote-commit-provenance.md).
+    # What each copy below takes from which git remote, for `resolved.yaml` (docs/design/remote-commit-provenance.md).
     record = SourceRecord()
     # Documents read from `spec.discovery.remotes` configured this build too (Part C, C1 rule 6): the whole checkout
     # counts as taken, so any uncommitted change there makes the record dirty.
@@ -1110,7 +1110,8 @@ def build_run(
             write_policy_results(build_path, policy_results)
 
         # After the Checkov snapshot, the last copy: `resolved.yaml` again, now with the commit of the solution and
-        # of every git remote the build took files from (docs/work/remote-commit-provenance.md R1).
+        # of every git remote the build took files from (docs/design/remote-commit-provenance.md, "The record in
+        # `resolved.yaml`").
         write_resolved_manifest(
             build_path,
             graph,

@@ -501,7 +501,8 @@ def commit_in_checkout(
 ) -> PushResult:
     """Commit only `paths` in a checkout someone else owns, then push `HEAD` to `branch` (no push when `None`).
 
-    docs/work/remote-commit-provenance.md, B1, B2 and B4. Shared by an audit sink (`controllers/audit_push.py`) and a
+    docs/design/remote-commit-provenance.md, "Writing to a path remote". Shared by an audit sink
+    (`controllers/audit_push.py`) and a
     GitOps step (`integrations/gitops.py`) on a path remote. The caller has already written (or deleted) `paths`,
     which are relative to `checkout`.
 

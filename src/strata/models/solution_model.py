@@ -222,7 +222,7 @@ class SolutionRemoteModel(PlatformBaseModel):
         "checkout beside the solution, `../iac-int-deployment`; or an absolute path. Strata reads it there "
         "and never clones it. Use instead of `reference` when the pipeline owns the ref; implies "
         "`fetch: external`.\n\n"
-        "Design notes: docs/work/remote-external-path.md. Without it, a `fetch: external` "
+        "Design notes: docs/design/remotes.md. Without it, a `fetch: external` "
         "remote is found at `.strata/remotes/<name>/<reference>`, so a pipeline must repeat "
         "the ref it checked out and link its checkout there. Not keyed by ref: a version pin "
         "cannot apply to it (ADR-0019 rule 4), so there is only ever one tree.",
@@ -395,7 +395,8 @@ class SolutionDiscoveryModel(PlatformBaseModel):
         "join the solution's one namespace, and paths inside them stay relative to the solution root. `exclude` "
         "applies inside each root, relative to that root. The build records each one's commit in "
         "`resolved.yaml` like any other remote.\n\n"
-        "Design notes: docs/work/remote-commit-provenance.md, Part C. Named here, not as a flag on the remote: a "
+        "Design notes: docs/design/remote-commit-provenance.md, 'Documents in other repositories'. Named here, not as a "
+        "flag on the remote: a "
         "remote says where a repository is, discovery says what is scanned.",
     )
 

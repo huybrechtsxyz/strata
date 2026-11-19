@@ -668,6 +668,11 @@ return stops it earlier, before graph and payload work.)
 `append_policy_result(build_path, result)`: read, drop any entry with the same `policy_name`,
 append, write; create the file when absent. Module docstring: no longer build-phase only.
 
+Only `deploy run`, `deploy apply` and `deploy destroy` write an audit manifest, so a denied `build run` reaches no
+sink: its results stay in `policy_results.json` under the build path (`strata policy list` shows them), and the CI
+log is the record of the attempt. This is by design: the audit trail records changes to an environment, and a denied
+build changed none. A denied `deploy run` does write a manifest, with status `failed` and the denying result.
+
 ### 6.6 Commands
 
 - `controllers/policy_controller.py`: the policy dispatch table (D7) and the functions

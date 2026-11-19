@@ -1098,7 +1098,8 @@ def _server_has(server: Path, relative: str) -> bool:
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
 @pytest.mark.slow
 def test_a_gitops_step_on_a_path_remote_pushes_from_the_pipeline_checkout(tmp_path: Path):
-    """docs/work/remote-commit-provenance.md, B4: build, deploy and destroy, with no clone of strata's own."""
+    """docs/design/remote-commit-provenance.md, "Writing to a path remote": build, deploy and destroy, with no clone of
+    strata's own."""
     root, checkout, server = _gitops_path_remote_solution(tmp_path, "        branch: main\n")
     build_path = _built(tmp_path, root)
 

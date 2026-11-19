@@ -107,7 +107,8 @@ class ProvisionerGitOpsModel(PlatformBaseModel):
         description="How far strata goes in a `path` remote's checkout: `push` (default) writes, commits and "
         "pushes; `commit` writes and commits; `none` writes the file only. A later pipeline step does the rest. "
         "`commit` and `none` need a `path` remote.\n\n"
-        "Design notes: docs/work/remote-commit-provenance.md, B4. The remote is in another document, so "
+        "Design notes: docs/design/remote-commit-provenance.md, 'Writing to a path remote'. The remote is in another "
+        "document, so "
         "`validate` checks the pairing, not this schema.",
     )
 

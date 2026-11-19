@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `checkout_state()` (docs/work/remote-commit-provenance.md, Phase 1)."""
+"""Tests for `checkout_state()` (docs/design/remote-commit-provenance.md, "Reading a checkout")."""
 
 import shutil
 import subprocess

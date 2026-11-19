@@ -749,7 +749,7 @@ def test_configured_git_sink_pushes_to_real_bare_repo(tmp_path: Path, _terraform
 def _path_remote_sink_solution(tmp_path: Path, *, required: bool, action: str = "push") -> tuple[Path, Path, Path]:
     """A solution whose audit sink writes to `repos/config`, a pipeline's clone of a bare repository.
 
-    docs/work/remote-commit-provenance.md, Part B. Returns `(root, bare, checkout)`.
+    docs/design/remote-commit-provenance.md, "Writing to a path remote". Returns `(root, bare, checkout)`.
     """
     bare = tmp_path / "bare.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(bare)], check=True, capture_output=True)
@@ -1202,7 +1202,8 @@ def test_a_destroy_pushes_nothing_to_a_git_sink_that_lists_only_completed(tmp_pa
 
 # ---------------------------------------------------------------------------
 # A git remote's commit, and the solution's: copied from the build's record in resolved.yaml
-# (docs/work/remote-commit-provenance.md, R2); read at deploy only for an older build without one
+# (docs/design/remote-commit-provenance.md, "The audit manifest copies the record"); read at deploy only for an older
+# build without one
 # ---------------------------------------------------------------------------
 
 _GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
@@ -1457,7 +1458,7 @@ def test_an_older_build_with_a_path_remote_that_is_not_a_checkout_warns_at_deplo
 
 # ---------------------------------------------------------------------------
 # spec.audit.require_remote_commits: the build warns, only the deploy fails
-# (docs/work/remote-commit-provenance.md, R3 and D14)
+# (docs/design/remote-commit-provenance.md, "`spec.audit.require_remote_commits`")
 # ---------------------------------------------------------------------------
 
 

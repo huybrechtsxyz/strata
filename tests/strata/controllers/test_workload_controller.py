@@ -964,7 +964,8 @@ def test_a_file_dependency_is_copied_without_helm(tmp_path: Path):
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
 def test_a_file_dependency_from_a_remote_is_part_of_the_build_record(tmp_path: Path):
-    """docs/work/remote-commit-provenance.md Phase 2: a changed `file://` dependency makes the remote dirty."""
+    """docs/design/remote-commit-provenance.md, "Collecting what the build took": a changed `file://` dependency makes
+    the remote dirty."""
     from strata.controllers.source_record import SourceRecord
     from strata.models.solution_model import SolutionRemoteModel
 

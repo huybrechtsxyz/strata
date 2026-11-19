@@ -1149,7 +1149,8 @@ def deploy_run(
         if not diagnostics.ok:
             return diagnostics
 
-    # spec.audit.require_remote_commits (docs/work/remote-commit-provenance.md, D14): the build only warns, so the
+    # spec.audit.require_remote_commits (docs/design/remote-commit-provenance.md,
+    # "`spec.audit.require_remote_commits`"): the build only warns, so the
     # deploy fails here, offline and before anything changes, when the build's record has a gap.
     if not destroy and _require_remote_commits(index):
         diagnostics.extend(check_build_record(build_path))
@@ -1973,7 +1974,8 @@ def deploy_run(
             )
             return diagnostics
         if provisioner.gitops is not None and provisioner.gitops.action != "push":
-            # A path remote's `commit` or `none`: a later pipeline step pushes (remote-commit-provenance.md, B4).
+            # A path remote's `commit` or `none`: a later pipeline step pushes (docs/design/remote-commit-provenance.md,
+            # "Writing to a path remote").
             diagnostics.info(
                 f"Step '{step.name}': {_redact(deploy_result.stdout.strip())}",
                 location=step.name,

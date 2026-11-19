@@ -120,7 +120,7 @@ convention:
 - [ADR-0021](../decisions/0021-integration-layer.md) / integration-layer.md — the `Integration`/`InfraIntegration` classes this command will call
 - [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md) — why `sync_source()` copies verbatim and never rewrites a materialised source
 - [build-time-value-categories.md](../design/build-time-value-categories.md) — design in progress for the `features`/`variables`/`properties`/`custom` gap in `default_output()` table above
-- [remotes.md](remotes.md) — `sync_source()`'s own prerequisite (remote-to-filesystem-path resolution, done for `local`/`git`)
+- [remotes.md](../design/remotes.md) — `sync_source()`'s own prerequisite (remote-to-filesystem-path resolution, done for `local`/`git`)
 - [ADR-0029](../decisions/0029-provisioner-source-dependencies.md) / [provisioner-source-dependencies.md](../design/provisioner-source-dependencies.md) — `ProvisionerModel.depends_on`, materialising a provisioner's source even when nothing in `execution` ever names it
 
 ## Remaining Work / Open Questions
@@ -130,7 +130,7 @@ built" when actually done). In build order (per ADR-0022's own dependency
 chain):
 
 1. ~~`build_resolved_workspace_graph()`~~ — done.
-2. ~~Remote resolution~~ ([remotes.md](remotes.md) — done for `local`/`git`; `oci`/`helm` and credentialed private-repo fetches still open) and ~~`resolve_integration()`~~ (D2, done).
+2. ~~Remote resolution~~ ([remotes.md](../design/remotes.md) — done for `local`/`git`; `oci`/`helm` and credentialed private-repo fetches still open) and ~~`resolve_integration()`~~ (D2, done).
 3. ~~`sync_source()`~~ (D3) — done, using `remote_resolution.resolve_remote()`.
 4. ~~The `build_controller.py` orchestrator loop itself~~ — done and end-to-end tested.
 5. ~~`strata build run` CLI command~~ (`commands/build_command.py`) — done, matching `validate_command.py`'s thin-glue-over-controller shape.
@@ -324,7 +324,7 @@ is a missed conversion, but neither has been revisited:
   written but the command itself still does not exist.
 - 2026-09-24: `sync_source()`'s own prerequisite (remote-to-filesystem-path
   resolution) implemented for `local`/`git` remotes — see
-  [remotes.md](remotes.md). `sync_source()` itself still does not exist.
+  [remotes.md](../design/remotes.md). `sync_source()` itself still does not exist.
 - 2026-09-24: `sync_source()` implemented (`strata/controllers/source_sync.py`),
   resolving D3's sibling-provisioner relative-path gap by mirroring each
   source's own `source_path` as its destination under `build_path` rather

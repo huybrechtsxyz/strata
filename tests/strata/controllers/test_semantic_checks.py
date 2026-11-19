@@ -4362,7 +4362,7 @@ def test_script_values_need_no_resolvable_environment_to_be_checked_without_cras
 
 # ---------------------------------------------------------------------------
 # Pushing to a path remote: GitOps steps and audit sinks write in the pipeline's checkout
-# (docs/work/remote-commit-provenance.md, Part B)
+# (docs/design/remote-commit-provenance.md, "Writing to a path remote")
 # ---------------------------------------------------------------------------
 
 _PATH_REMOTE_MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
@@ -4451,7 +4451,7 @@ def _gitops_errors(context) -> list:
 
 @pytest.mark.parametrize("action", ["push", "commit", "none"])
 def test_a_gitops_step_may_push_to_a_path_remote(tmp_path, action):
-    """docs/work/remote-commit-provenance.md, B4: written in the pipeline's checkout."""
+    """docs/design/remote-commit-provenance.md, "Writing to a path remote": written in the pipeline's checkout."""
     root = _solution_pushing_to(tmp_path, locator="path: repos/config", pusher="gitops")
     _with_gitops(root, branch="main", action=action)
 
@@ -4537,7 +4537,7 @@ def test_a_gitops_step_beside_what_the_build_reads_does_not_warn(tmp_path, sourc
 
 
 def test_an_audit_sink_may_write_to_a_path_remote(tmp_path):
-    """docs/work/remote-commit-provenance.md, Part B: written in the pipeline's checkout."""
+    """docs/design/remote-commit-provenance.md, "Writing to a path remote": written in the pipeline's checkout."""
     root = _solution_pushing_to(tmp_path, locator="path: repos/config", pusher="audit")
     assert _push_errors(_resolve(root)) == []
 

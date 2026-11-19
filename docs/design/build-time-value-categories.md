@@ -346,7 +346,7 @@ translation.
 
 The **only** network calls `build run` is allowed to make are `sync_source()`'s
 own — fetching remote `git`/`helm`/`oci` sources so they exist locally to
-build from (ADR-0022/`remotes.md`). That's fetching *inputs* (source code,
+build from (ADR-0022/[remotes.md](remotes.md)). That's fetching *inputs* (source code,
 charts), not *resolving values* — a different thing that happens to also be
 network I/O.
 

@@ -302,7 +302,8 @@ class SolutionController:
         return self.diagnostics
 
     def _document_remotes(self) -> dict[str, Path]:
-        """The checkouts `spec.discovery.remotes` names, each one checked (docs/work/remote-commit-provenance.md, C1).
+        """The checkouts `spec.discovery.remotes` names, each one checked (docs/design/remote-commit-provenance.md,
+        "Documents in other repositories").
 
         One that cannot be scanned is an error naming the remote and the folder: missing (D9: every listed remote
         must be checked out), holding its own `strata.yaml` (one solution, one manifest), or overlapping the solution

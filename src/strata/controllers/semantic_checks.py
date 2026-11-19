@@ -1833,7 +1833,7 @@ def _check_path_remote_pushes(index: DocumentIndex, solution: SolutionModel | No
     """Pushes and path remotes.
 
     - An audit sink or a GitOps step may write to a path remote: strata writes in the pipeline's checkout
-      (docs/work/remote-commit-provenance.md, Part B). `action: commit | none` needs one
+      (docs/design/remote-commit-provenance.md, "Writing to a path remote"). `action: commit | none` needs one
       (`audit_sink_action_needs_path_remote`, `gitops_action_needs_path_remote`): with a `reference`, strata's own
       clone is read by nothing else, so anything short of a push is lost.
     - A GitOps step names its `branch` on a path remote (`gitops_branch_required`) and only there
@@ -1904,7 +1904,8 @@ def _check_gitops_push(
     source: str,
     location: str,
 ) -> Diagnostics:
-    """`_check_path_remote_pushes()` for one GitOps step (remote-commit-provenance.md, B4)."""
+    """`_check_path_remote_pushes()` for one GitOps step (docs/design/remote-commit-provenance.md, "Writing to a path
+    remote")."""
     diagnostics = Diagnostics()
     if remote.path is not None:
         if gitops.action == "push" and gitops.branch is None:

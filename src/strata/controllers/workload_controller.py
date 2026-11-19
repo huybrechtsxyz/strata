@@ -288,7 +288,7 @@ def build_workload_modules(
             registry chart a pull; `None` (default) uses ambient git credentials and Helm's own login only.
         offline: Pull no registry chart; one that is not cached is left unpinned (ADR-0054).
         record: Records what each module source and `file://` dependency takes from a git remote, for
-            `resolved.yaml` (docs/work/remote-commit-provenance.md); `None` records nothing.
+            `resolved.yaml` (docs/design/remote-commit-provenance.md); `None` records nothing.
 
     Returns:
         Warnings (a `configuration` key a Helm chart does not declare, a registry chart left unpinned) and
