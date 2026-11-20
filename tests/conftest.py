@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from strata.controllers import workload_controller
+from strata.controllers import security_gate_controller, workload_controller
 
 # Every git a test starts, directly or through strata, reads only this file: no developer hooks (a pre-commit hook
 # that starts a shell costs every commit), credential helpers or signing, the same as on a CI runner.
@@ -73,3 +73,15 @@ def _no_registry_chart_pulls(request, monkeypatch):
     """
     if request.node.get_closest_marker("chart_pulls") is None:
         monkeypatch.setattr(workload_controller, "can_pull_charts", lambda integration: False)
+
+
+@pytest.fixture(autouse=True)
+def _no_ci_commit(monkeypatch):
+    """No CI commit variable (`GITHUB_SHA`, `BUILD_SOURCEVERSION`, ...) unless a test sets one.
+
+    `built_commit_sha()` reads them before `git`, so on a CI runner a test solution in a temporary folder outside any
+    repository would get the runner's commit, and a build would warn that it cannot check that "checkout" for changes
+    (`remote_checkout_dirty`). A test about those variables sets the one it needs with `monkeypatch.setenv`.
+    """
+    for name in security_gate_controller._COMMIT_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)

@@ -742,25 +742,9 @@ def test_deploy_run_only_resolves_credentials_for_remotes_a_module_pulls_from(tm
     assert calls[0]["input"] == _PROGET_SECRET
 
 
-def _helm_that_cannot_pull(monkeypatch) -> None:
-    """A `helm` whose `repo add`/`pull` fail, as with no network: the build pins nothing. Faked, so the result does not
-    depend on the machine's own helm, its version, or whether the registry can be reached."""
-
-    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
-        if args[1] in ("repo", "pull"):
-            return CommandResult(returncode=1, stdout="", stderr="Error: could not reach the registry")
-        return CommandResult(returncode=0, stdout="ok", stderr="")
-
-    import strata.integrations.base as base_module
-
-    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
-    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
-
-
 @pytest.mark.slow
 def test_deploy_run_refuses_a_registry_chart_the_build_did_not_pin(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
-    _helm_that_cannot_pull(monkeypatch)
     build_path, build_diagnostics = _build_apps(root, tmp_path)
     assert [item.code for item in build_diagnostics.items] == ["helm_chart_not_pinned"], build_diagnostics.messages()
     calls = _fake_helm_calls(monkeypatch)
@@ -786,7 +770,6 @@ def test_deploy_run_refuses_a_local_chart_whose_dependency_the_build_did_not_pin
         "apiVersion: v2\nname: authentik\nversion: 1.0.0\ndependencies:\n"
         "  - name: redis\n    version: 19.0.1\n    repository: https://charts.example.com\n",
     )
-    _helm_that_cannot_pull(monkeypatch)
     build_path, build_diagnostics = _build_apps(root, tmp_path)
     assert [item.code for item in build_diagnostics.items] == ["helm_chart_dependency_not_pinned"], (
         build_diagnostics.messages()
