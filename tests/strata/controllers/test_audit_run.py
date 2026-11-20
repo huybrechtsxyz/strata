@@ -1660,3 +1660,45 @@ def test_the_stages_decide_partial_and_the_metrics_count_them(
     assert [s["status"] for s in manifest.get("stages", [])] == statuses
     assert metrics["dimensions"]["outcome"] == ("success" if expected == "success" else "failed")
     assert (metrics["measures"]["stages_total"], metrics["measures"]["stages_failed"]) == (total, failed)
+
+
+# ---------------------------------------------------------------------------
+# metrics dimensions and policy counts (docs/design/audit-trail.md, "The audit files")
+# ---------------------------------------------------------------------------
+
+
+def test_the_metrics_name_the_tenant_and_commit_and_count_the_policy_checks(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    _write(
+        root,
+        "tenant.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: acme\nspec:\n"
+        "  display_name: Acme\n  geographies: [europe]\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  tenant: acme\n  environments:\n    - prd\n",
+    )
+    build_path = _run_deploy_and_build(root, tmp_path)
+    failing = _policy_result().model_copy(update={"policy_name": "checkov_policy", "passed": False})
+    write_policy_results(build_path, [_policy_result(), failing])
+
+    _finalize(root, build_path)
+
+    manifest = _audit_json(root, "_manifest.json")
+    metrics = _audit_json(root, "_metrics.json")
+    assert metrics["dimensions"]["tenant"] == "acme"
+    assert metrics["dimensions"].get("commit_sha") == manifest.get("commit_sha")
+    assert (metrics["measures"]["policy_checks_total"], metrics["measures"]["policy_checks_failed"]) == (2, 1)
+
+
+def test_the_metrics_leave_the_policy_counts_out_when_no_policy_was_judged(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    measures = _audit_json(root, "_metrics.json")["measures"]
+    assert "policy_checks_total" not in measures and "policy_checks_failed" not in measures

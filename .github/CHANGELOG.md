@@ -68,6 +68,8 @@ commit to the repository a pipeline checked out, and a solution can read documen
 - **A deploy that fails after a step succeeded is recorded as `partial`**, not `failed`: something changed before it
   stopped. The metrics' `stages_total` and `stages_failed` now count real steps; `outcome` there, and in the sent
   event, stays `success` or `failed`.
+- The audit metrics (`_metrics.json`) now fill `tenant` and `commit_sha`, and count the policy checks the manifest
+  records in `policy_checks_total` and `policy_checks_failed` (left out when no policy was judged).
 
 ### Changed
 

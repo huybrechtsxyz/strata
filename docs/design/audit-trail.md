@@ -84,9 +84,11 @@ without copying it.
 **`_metrics.json`** ([audit_metrics_model.py](../../src/strata/models/audit_metrics_model.py)) is the lean sibling,
 meant to be shipped to dashboards and SIEMs more freely:
 
-- `dimensions` (what to slice by: `outcome`, `action`, `environment`, `tenant`, `actor`, `commit_sha`), `measures`
-  (what to add up: `duration_seconds`, stage and policy counts) and `sections` (optional groups, each with a
-  `measured` flag, because `null` cannot tell "not measured" from "zero");
+- `dimensions` (what to slice by: `outcome`, `action`, `environment`, the deployment's `tenant`, `actor`, and the
+  manifest's `commit_sha`), `measures` (what to add up: `duration_seconds`, the stage counts, and
+  `policy_checks_total`/`policy_checks_failed`, counted from `policy_results`, a check that did not pass counting as
+  failed whatever its enforcement, and left out when no policy was judged) and `sections` (optional groups, each
+  with a `measured` flag, because `null` cannot tell "not measured" from "zero");
 - `error_category`, a bounded enum (`auth`, `quota`, `timeout`, `conflict`, `policy`, `network`, `state_lock`,
   `unknown`). Raw error text stays in the manifest; a failing Terraform run can print a connection string;
 - `label_safe`, the dimensions bounded enough to use as metric labels (`execution_id`, `actor` and `commit_sha` are

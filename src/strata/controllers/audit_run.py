@@ -218,6 +218,8 @@ def finalize_and_distribute_deploy_audit(
         (built_commit_sha(context.root), None) if record is None else (record.solution_commit, record.solution_dirty)
     )
 
+    policy_results = None if action == "destroy" else read_policy_results(build_path)
+
     manifest = DeploymentManifestModel(
         execution_id=execution_id,
         action=action,
@@ -245,7 +247,7 @@ def finalize_and_distribute_deploy_audit(
         sbom=_sbom_reference(build_path, diagnostics),
         change_reference=change_reference,
         stages=list(stages) or None,
-        policy_results=None if action == "destroy" else read_policy_results(build_path),
+        policy_results=policy_results,
         errors=run_diagnostics.messages(Severity.ERROR) or None,
         warnings=run_diagnostics.messages(Severity.WARNING) or None,
         messages=run_diagnostics.messages(Severity.INFO) or None,
@@ -260,12 +262,17 @@ def finalize_and_distribute_deploy_audit(
             outcome="success" if status == "success" else "failed",
             action=action,
             environment=environment,
+            tenant=deployment.spec.tenant,
             actor=actor,
+            commit_sha=solution_commit,
         ),
         measures=MetricsMeasuresModel(
             duration_seconds=duration_seconds,
             stages_total=sum(stage.status != "skipped" for stage in stages),
             stages_failed=sum(stage.status == "failed" for stage in stages),
+            # Left out, not zero, when no policy was judged (a destroy, or a build with none configured).
+            policy_checks_total=None if policy_results is None else len(policy_results),
+            policy_checks_failed=None if policy_results is None else sum(not r.passed for r in policy_results),
         ),
     )
 

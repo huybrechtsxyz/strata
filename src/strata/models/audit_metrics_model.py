@@ -75,7 +75,9 @@ class MetricsMeasuresModel(PlatformBaseModel):
     stages_failed: int = Field(description="Number of stages that failed")
     resource_changes: int | None = Field(default=None, description="Resource change count, when available")
     policy_checks_total: int | None = Field(default=None, description="Total policy/gate checks evaluated")
-    policy_checks_failed: int | None = Field(default=None, description="Policy/gate checks that failed")
+    policy_checks_failed: int | None = Field(
+        default=None, description="Policy/gate checks that did not pass, whatever their enforcement (deny, warn, audit)"
+    )
 
 
 class MetricsSectionModel(PlatformBaseModel):
