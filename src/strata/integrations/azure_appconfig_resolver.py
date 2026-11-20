@@ -111,7 +111,7 @@ class AzureAppConfigResolver(StoreIntegration, KeyValueStoreIntegration):
         """Return the current value and version of configuration key `key`,
         or `None` if it does not exist in the store — reuses `resolve()`'s
         own `get_configuration_setting()` call, but treats "not found" as
-        a normal outcome here, not a failure (docs/work/
+        a normal outcome here, not a failure (docs/design/
         key-value-store-integration.md's Backend 2).
 
         Raises:
