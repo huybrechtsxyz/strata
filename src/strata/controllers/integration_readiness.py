@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Is an integration usable here? (docs/work/integration-readiness.md D5-D18).
+"""Is an integration usable here? (docs/design/integration-readiness.md).
 
 One offline answer per integration - enabled, local tool on PATH, installed version against
 `spec.version` - shared by deploy preflight and the `strata integration` commands so they cannot
@@ -24,7 +24,7 @@ from strata.controllers.value_controller import is_direct_store, reachable_envir
 from strata.integrations.base import Integration, ReadinessProblem
 from strata.integrations.capabilities import ConnectionCheckIntegration
 from strata.integrations.errors import IntegrationError
-from strata.integrations.registry import IntegrationNotFoundError, known_types
+from strata.integrations.registry import IntegrationNotFoundError, is_unported_v1_type, known_types
 from strata.integrations.registry import get as get_integration
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import VersionPins
@@ -110,8 +110,10 @@ def assess_named(index: DocumentIndex, name: str, *, read_version: bool = True) 
     types = known_types()
     if name not in types:
         declared = ", ".join(sorted(index.names_of(PlatformKind.INTEGRATION))) or "none"
+        # The same hint a declared document of that type gets from the registry: a real type, not a typo.
+        unported = " It is a v1 integration type not yet ported to v2." if is_unported_v1_type(name) else ""
         raise UsageError(
-            f"'{name}' is not declared and is not a known integration type. "
+            f"'{name}' is not declared and is not a known integration type.{unported} "
             f"Declared: {declared}. Known types: {', '.join(types)}."
         )
     same_type = sorted(

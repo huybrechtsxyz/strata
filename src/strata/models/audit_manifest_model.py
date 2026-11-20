@@ -258,6 +258,15 @@ class DeploymentManifestModel(PlatformBaseModel):
     # Flags. No `force`: `deploy run --force` has no effect.
     dry_run: bool = Field(default=False, description="Whether this was a dry run")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_force(cls, data: Any) -> Any:
+        """A manifest written before 2.8.0 holds `force: false` (it defaulted to `False`, so `exclude_none` kept it).
+        It is dropped on read, so `strata audit status` and `changes` still list those records."""
+        if isinstance(data, dict) and "force" in data:
+            return {key: value for key, value in data.items() if key != "force"}
+        return data
+
     # Actor + git context. No commit author or message: the deployed HEAD is often not the commit that made the
     # change, so they would name the wrong person; `git show <commit_sha>` has both.
     deployed_by: str | None = Field(default=None, description="Resolved actor identity")

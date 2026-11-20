@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `utils/version_constraints.py` (docs/work/integration-readiness.md D3)."""
+"""Tests for `utils/version_constraints.py` (docs/design/integration-readiness.md, "Version constraints")."""
 
 import pytest
 

@@ -113,7 +113,8 @@ provisioners:
 ```
 
 It works as the audit sink does. Strata writes `output_file` in the checkout, commits only that file, and pushes
-with a rebase and retry when the branch moved. A destroy commits and pushes the file's removal. `deploy plan`
+with a rebase and retry when the branch moved. As for the sink, the pipeline must check out `branch`: commits
+strata did not make are never pushed. A destroy commits and pushes the file's removal. `deploy plan`
 compares with the file as the pipeline checked it out. With `action: commit` or `none` a later pipeline step
 pushes, and `deploy run` reports `gitops_not_pushed` (information). `strata validate` reports:
 

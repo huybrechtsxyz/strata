@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`git` as a local tool (docs/work/integration-readiness.md R1).
+"""`git` as a local tool (docs/design/integration-readiness.md).
 
 Source sync, remotes, assets, audit pushes and GitOps all run the `git` CLI, so a `type: git`
 Integration document (a `sources` credential holder) is also a statement about that tool: on PATH,

@@ -179,12 +179,17 @@ in the pipeline's checkout:
 - **Identity.** The commit author is the deploying actor, passed per command (`git -c user.name=... -c
   user.email=...`). The checkout's config belongs to the pipeline and is never written. Strata's own clones keep
   writing a local identity, as before.
-- **Pushing.** `git push origin HEAD:<branch>`, so a detached checkout works, with the checkout's own credentials
-  (for example Azure DevOps `persistCredentials: true`). A path remote has no `integration`. When the push is
-  rejected because the branch moved (stderr says `rejected`, `non-fast-forward` or `fetch first`), strata runs
-  `git fetch origin <branch>` and `git rebase --autostash FETCH_HEAD`, then pushes again, three times in all. Any
-  other push failure, such as authentication, is final. A rebase that conflicts is aborted (`git rebase --abort`).
-  `--autostash` keeps the pipeline's other changes, but a staged change comes back unstaged.
+- **Pushing.** Before each push strata runs `git fetch origin <branch>`. Every commit `HEAD` has that the branch
+  lacks must be strata's own (author email `@strata-audit.local` or `@strata-gitops.local`, no merge); otherwise
+  nothing is pushed and the message says to check out `<branch>`. Without that check, a pipeline that checked out a
+  feature branch or a pull request's merge would put that code on `<branch>`. Strata's own include a commit an
+  earlier run could not push, which goes now, also when this run had nothing new to commit. When the branch moved,
+  strata runs `git rebase --autostash FETCH_HEAD`, which replays only its own commits. It then runs `git push origin
+  HEAD:<branch>`, so a detached checkout works, with the checkout's own credentials (for example Azure DevOps
+  `persistCredentials: true`). A path remote has no `integration`. A push rejected because the branch moved again
+  (`non-fast-forward` or `fetch first`) is retried, three attempts in all. Any other failure is final: an
+  authentication error, or `[remote rejected]` from a protected branch or a hook. A rebase that conflicts is aborted
+  (`git rebase --abort`). `--autostash` keeps the pipeline's other changes, but a staged change comes back unstaged.
 - **`action`** says how far strata goes. Each step includes the ones before it:
 
   | `action`         | Strata                     | Then                                     | Deploy reports (information)         |
@@ -341,9 +346,14 @@ spec:
   of a sink. `commit` and `none` exist for a pipeline that wants to own the commit or the push.
 - **"Not pushed" is information at deploy, not a manifest field.** The manifest is one of the files being written,
   so it is complete before the sink runs and cannot record the sink's own outcome.
-- **Only a rejected push retries, and the rebase uses `FETCH_HEAD`.** An authentication or network failure will not
-  fix itself. A pipeline's single-branch or shallow clone may not update `origin/<branch>`, and the rebase works on
-  a `--depth 1` checkout too.
+- **Only a "branch moved" rejection retries, and the rebase uses `FETCH_HEAD`.** An authentication or network
+  failure will not fix itself, and neither will a protected branch: the first version also retried on any
+  `rejected`, which matched `[remote rejected]` and rebased the checkout three times for nothing. A pipeline's
+  single-branch or shallow clone may not update `origin/<branch>`, and the rebase works on a `--depth 1` checkout
+  too.
+- **Only strata's commits are pushed.** `HEAD:<branch>` pushes everything `HEAD` holds, so the first version would
+  have put a feature branch on `main` when the pipeline checked one out. The check is by author email domain, which
+  only strata's commits use; it also lets a commit an earlier run left unpushed go with the next run.
 - **GitOps waited for a real case, then reused the sink's code.** The first version refused GitOps on a path
   remote. When it was built, the commit-and-push tail moved from `audit_push` to `git_push.commit_in_checkout()`, so
   one function serves both. A GitOps `branch` is required only for a push, and is an error on a `reference` remote

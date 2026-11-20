@@ -1221,7 +1221,7 @@ def _check_workspace_key_value_store_allowed(
 def _check_workspace_key_value_store_supports_cas(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
     """Catch a structurally incompatible output-store backend (one that
     cannot honor `put(if_version=...)` at all, e.g. `azure-keyvault` —
-    docs/work/key-value-store-integration.md's Backend 7) at validate
+    docs/design/key-value-store-integration.md's Backend 7) at validate
     time, before `deploy run` ever gets far enough to discover it as a
     buried warning on every single step's durable write
     (`DeploymentOutputStore.record()`'s own "never fail the run" design,
@@ -1314,7 +1314,7 @@ def _check_workspace_security_gates(index: DocumentIndex, workspace: WorkspaceMo
 
 
 def _check_provisioner_integrations(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
-    """A step's provisioner must not be bound to a disabled Integration (docs/work/integration-readiness.md D29).
+    """A step's provisioner must not be bound to a disabled Integration (docs/design/integration-readiness.md, "Where it runs").
 
     Only provisioners an execution step names: deploy resolves no others, so a `depends_on`-only binding is
     never used. An unknown name is the generic reference walk's finding.
@@ -1399,7 +1399,7 @@ def _check_terraform_family_commands(index: DocumentIndex) -> Diagnostics:
 def _check_integration_versions(index: DocumentIndex) -> Diagnostics:
     """`spec.version` must be checkable: only a `cli` transport has an installed version to read.
 
-    docs/work/integration-readiness.md D4. Class-only lookup (no construction, no PATH); an unregistered
+    docs/design/integration-readiness.md, "Version constraints". Class-only lookup (no construction, no PATH); an unregistered
     type is skipped, as `_check_workspace_security_gates` does.
     """
     diagnostics = Diagnostics()
@@ -1476,7 +1476,7 @@ def _check_workspace_topology_components(index: DocumentIndex, workspace: Worksp
 
 def _check_workspace_subnets(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
     """The registry-backed half of the workspace/subnet check
-    (docs/work/solution-loading-and-phase2-validation.md).
+    (docs/design/solution-loading-and-phase2-validation.md).
 
     `WorkspaceResourceSubnetModel.network` (which Network *document*) is
     already checked in Phase 1 (`validate_resource_subnet_references`)

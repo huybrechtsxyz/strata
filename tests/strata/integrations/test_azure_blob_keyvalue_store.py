@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `AzureBlobKeyValueStore` (docs/work/key-value-store-integration.md's Backend 3)."""
+"""Tests for `AzureBlobKeyValueStore` (docs/design/key-value-store-integration.md's Backend 3)."""
 
 import pytest
 from azure.core import MatchConditions

@@ -700,13 +700,23 @@ def _allowlisted(issue: SecurityIssue, allowed: list[CveAllowedEntryModel]) -> b
 
 
 def _report_missing_data(diagnostics: Diagnostics, gate: str, on_missing_data: str, reason: str) -> None:
-    """Local copy of `sbom_controller._report_missing_data()`: `skip` must still leave a trace."""
+    """Local copy of `sbom_controller._report_missing_data()`: `skip` must still leave a trace. The hint follows the
+    same rule (docs/design/diagnostic-guidance.md): fix the cause, or say what `on_missing_data` trades off."""
     message = f"{gate}_policy: cannot evaluate - {reason}"
     code = f"{gate}_missing_data"
+    fix = "Fix what stopped the check (the message says what)"
     if on_missing_data == "block":
-        diagnostics.error(message, code=code)
+        diagnostics.error(
+            message,
+            code=code,
+            hint=f"{fix}; to let the run continue without it, set {gate}_policy.on_missing_data to 'warn'.",
+        )
     elif on_missing_data == "warn":
-        diagnostics.warning(message, code=code)
+        diagnostics.warning(
+            message,
+            code=code,
+            hint=f"{fix}; keep {gate}_policy.on_missing_data at 'block' where a run must never pass unchecked.",
+        )
     else:
         diagnostics.info(message, code=code)
 

@@ -70,9 +70,8 @@ commit to the repository a pipeline checked out, and a solution can read documen
   event, stays `success` or `failed`.
 - The audit metrics (`_metrics.json`) now fill `tenant` and `commit_sha`, and count the policy checks the manifest
   records in `policy_checks_total` and `policy_checks_failed` (left out when no policy was judged).
-- The audit metrics say why a failed run failed in `error_category`: `policy` (a denying policy), `auth`, `network`,
-  `conflict`, `timeout` or `state_lock`, recognised from strata's own error codes and markers, and `unknown`
-  otherwise. See [Why a run failed](../docs/design/audit-trail.md#why-a-run-failed).
+- The audit metrics say why a failed run failed in `error_category`: `policy` (a denying policy), `auth`, `timeout`
+  or `state_lock`, recognised from strata's own error codes and markers, and `unknown` otherwise. See [Why a run failed](../docs/design/audit-trail.md#why-a-run-failed).
 - `strata audit status` and `audit changes` name the step a failed or partial run stopped at, for example
   `partial (apply_apps)`, and as `failed_step` in JSON output.
 
@@ -86,6 +85,25 @@ commit to the repository a pipeline checked out, and a solution can read documen
     listed without a commit.
   - A build made before this release is read at deploy time, as before.
 - `artifacts.repositories` in the audit manifest is sorted by name.
+- Pushing from a pipeline's checkout (an audit sink or a GitOps step on a `path` remote):
+  - pushes only commits strata made. A checkout of a feature branch or a pull request's merge is refused instead of
+    pushed to the target branch;
+  - pushes a commit an earlier run left unpushed, also when there is nothing new to commit;
+  - retries only when the branch moved, not when a protected branch or a hook refuses the push;
+  - a GitOps destroy fails when `git ls-files` fails, instead of deleting the file without committing.
+- A GitOps step (`argocd`, `flux`) finds its checkout or clone under the deploying solution's folder, not the
+  folder the build ran in. A build output carried to a deploy in another folder, such as a separate stage on a
+  self-hosted agent, no longer looks for a `path` remote's checkout in the build's folder.
+- An audit git sink's `branch` may not start with `-`, the same rule as `gitops.branch`.
+- `extends` merges a stage's `health_checks` by `name` when both deployments set the stage, instead of the child's
+  list replacing the base's, and appends `configurations` base-first like `environments`. Both fields are accepted
+  but not used yet, so no deploy changes.
+- The exported workspace schema accepts one name for a resource's `depends_on`, as strata already did, so an editor
+  no longer flags `depends_on: other`.
+- The `checkov_policy`, `release_gate_policy` and `image_gate_policy` "cannot evaluate" findings carry a hint, as
+  `cve_policy`'s already did: fix the cause, or what changing `on_missing_data` trades off.
+- `strata integration check NAME` says when an undeclared NAME is a v1 integration type not ported yet (such as
+  `ansible`), as a declared document of that type already did, instead of only "not a known integration type".
 - **The audit event's `event.outcome` is `failure`, not `failed`**, for a failed or partial run, as ECS requires. A
   SIEM rule that matches `failed` must match `failure` instead.
 - `strata validate` no longer reports `path_remote_not_pushable`: an audit sink or a GitOps step may now push to a
@@ -93,7 +111,8 @@ commit to the repository a pipeline checked out, and a solution can read documen
 
 ### Removed
 
-- Seven audit manifest fields nothing ever filled, so no existing manifest contains them:
+- Seven audit manifest fields nothing ever filled. Older manifests still load: `force` was written as `false`, and is
+  dropped when a manifest is read.
   - `commit_author` and `commit_message`: the deployed commit is often not the one that made the change, so they
     would have named the wrong author; `git show <commit_sha>` gives both for the commit that was built;
   - `force` (`deploy run --force` has no effect), `pull_request`, `outputs`, `signatures`, and `metadata`, replaced

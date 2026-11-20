@@ -185,12 +185,48 @@ def test_merge_assets_child_wins_on_same_slot():
 
 
 def test_merge_unkeyed_lists_are_replaced():
-    """A list not in the merge-key table is still replaced wholesale."""
+    """A list in no merge table is still replaced wholesale."""
     merged = merge_deployment_specs(
-        {"configurations": ["base-config"]},
-        {"configurations": ["child-config"]},
+        {"properties": {"zones": ["1", "2", "3"]}},
+        {"properties": {"zones": ["1"]}},
     )
-    assert merged["configurations"] == ["child-config"]
+    assert merged["properties"]["zones"] == ["1"]
+
+
+def test_merge_configurations_append_base_first_each_once():
+    """Like `environments`: a base's configurations stay, the child's are added (docs/design/parameter-sets.md)."""
+    merged = merge_deployment_specs(
+        {"configurations": ["base-config", "shared"]},
+        {"configurations": ["shared", "child-config"]},
+    )
+    assert merged["configurations"] == ["base-config", "shared", "child-config"]
+
+
+def test_merge_health_checks_of_a_merged_stage_by_name():
+    """A child stage adding one check keeps the base's; the same name overrides field by field."""
+    base_checks = [
+        {"name": "api", "type": "http", "url": "https://api.base/health", "timeout": 5},
+        {"name": "db", "type": "tcp", "host": "db", "port": 5432},
+    ]
+    child_checks = [
+        {"name": "api", "type": "http", "url": "https://api.child/health"},
+        {"name": "cache", "type": "tcp", "host": "redis", "port": 6379},
+    ]
+    merged = merge_deployment_specs(
+        {"stages": [{"step": "apps", "health_checks": base_checks}]},
+        {"stages": [{"step": "apps", "health_checks": child_checks}]},
+    )
+    checks = merged["stages"][0]["health_checks"]
+    assert [check["name"] for check in checks] == ["api", "db", "cache"]
+    assert checks[0] == {"name": "api", "type": "http", "url": "https://api.child/health", "timeout": 5}
+
+
+def test_merge_health_checks_on_one_side_only_are_kept():
+    merged = merge_deployment_specs(
+        {"stages": [{"step": "apps", "health_checks": [{"name": "api", "type": "tcp", "host": "a", "port": 1}]}]},
+        {"stages": [{"step": "apps", "on_failure": "continue"}]},
+    )
+    assert merged["stages"][0]["health_checks"] == [{"name": "api", "type": "tcp", "host": "a", "port": 1}]
 
 
 def test_merge_keyed_list_never_merges_keyless_items():

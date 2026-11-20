@@ -76,7 +76,7 @@ def test_finding_line_omits_absent_parts():
 
 
 def test_a_hint_is_shown_under_the_finding_aligned_with_its_text():
-    """docs/work/diagnostic-guidance.md: what to do, on its own line under what is wrong."""
+    """docs/design/diagnostic-guidance.md: what to do, on its own line under what is wrong."""
     item = Diagnostic(severity=Severity.WARNING, message="something odd", code="odd", hint="Do this.")
     first, second = format_diagnostic(item, colour=False).split("\n")
     assert first.strip() == "warning  something odd [odd]"

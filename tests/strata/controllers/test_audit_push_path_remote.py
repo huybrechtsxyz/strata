@@ -273,3 +273,49 @@ def test_commit_or_none_on_a_reference_remote_is_refused_without_running_git(tmp
         assert not result.success
         assert f"action '{action}'" in result.detail and "'path'" in result.detail
     assert ran == []
+
+
+def test_a_checkout_on_another_branch_is_not_pushed_to_the_sink_branch(tmp_path: Path):
+    """A pipeline that checked out a feature branch (or a pull request's merge) has commits `main` lacks; pushing
+    `HEAD:main` would put them on `main`. Only strata's own commits may go."""
+    bare = _server(tmp_path)
+    checkout = _pipeline_checkout(tmp_path, bare)
+    (checkout / "README.md").write_text("# feature work\n", encoding="utf-8")
+    _git(checkout, "commit", "-am", "feature work")
+
+    result = _push(tmp_path)
+
+    assert not result.success
+    assert "not made by strata" in result.detail and "Check out 'main'" in result.detail
+    assert _on_server(tmp_path, bare, "README.md") == "# inventory\n"
+    assert _on_server(tmp_path, bare, "deploys/run1/_manifest.json") is None
+
+
+def test_a_commit_an_earlier_run_could_not_push_is_pushed_by_the_next(tmp_path: Path):
+    """On an agent that keeps its checkout, a run that committed but did not push (a failed push, or `commit`)
+    leaves its commit; a later run with nothing new to commit still pushes it."""
+    bare = _server(tmp_path)
+    _pipeline_checkout(tmp_path, bare)
+    assert _push(tmp_path, "commit").success
+
+    result = _push(tmp_path)
+
+    assert result.success, result.detail
+    assert _on_server(tmp_path, bare, "deploys/run1/_manifest.json") == '{"execution_id": "1"}'
+
+
+def test_a_push_the_server_refuses_is_not_retried_or_rebased(tmp_path: Path):
+    """A protected branch or a hook answers `[remote rejected]`; no rebase fixes that, and the checkout stays as it
+    was."""
+    bare = _server(tmp_path)
+    checkout = _pipeline_checkout(tmp_path, bare)
+    hook = bare / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'protected branch' >&2\nexit 1\n", encoding="utf-8", newline="\n")
+    hook.chmod(0o755)
+
+    result = _push(tmp_path)
+
+    assert not result.success
+    assert "after 1 attempt(s)" in result.detail
+    assert _git(checkout, "log", "-1", "--format=%s") == "audit: run1"
+    assert not (checkout / ".git" / "rebase-merge").exists()

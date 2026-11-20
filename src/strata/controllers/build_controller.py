@@ -721,7 +721,7 @@ def build_run(
     version = resolve_version(context, deployment)
 
     diagnostics = Diagnostics()
-    # docs/work/integration-readiness.md D21: a required integration that is not ready stops the build first.
+    # docs/design/integration-readiness.md, "Where it runs": a required integration that is not ready stops the build first.
     preflight = integration_preflight(index)
     diagnostics.extend(preflight)
     if not preflight.ok:

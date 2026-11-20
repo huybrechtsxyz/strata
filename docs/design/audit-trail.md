@@ -111,14 +111,14 @@ by signals strata produces itself, or a tool message that does not change betwee
 
 1. `policy`: a policy result with `enforcement: deny` that did not pass. The gates run before any step, so a denial
    is the cause.
-2. An error code, in run order: `integration_credentials_rejected`, `integration_credentials_unresolved`,
-   `helm_registry_auth_failed`, `helm_registry_credentials_invalid` are `auth`; `integration_unreachable` is
-   `network`; `helm_release_conflict` is `conflict`.
+2. An error code a deploy raises, in run order: `integration_credentials_unresolved`, `helm_registry_auth_failed` and
+   `helm_registry_credentials_invalid` are `auth`.
 3. A marker in an error's text: strata's own "timed out and was killed" is `timeout`; Terraform's "Error acquiring
    the state lock" is `state_lock`.
 
-`quota` has no signal yet: each cloud words it differently, inside tool output. A new code that names a cause is
-added to the table in step 2.
+`quota`, `network` and `conflict` have no signal in a deploy yet: the clouds word them differently, inside tool
+output. `integration_unreachable` and `integration_credentials_rejected` come only from `strata integration test`,
+and `helm_release_conflict` from `validate`. A new deploy code that names a cause is added to the table in step 2.
 
 ### Stages
 
@@ -350,6 +350,8 @@ in the pull request; nothing copies them into the manifest.
   `resource_changes` was removed (only Terraform's plan summary could give it; Helm, Compose and scripts have no such
   count), and so were `sections` (cost, CVE, drift), which nothing measured. The event's `outcome` said `failed`,
   which ECS does not allow, and became `failure`.
+- `force` had defaulted to `false`, so unlike the other removed fields it is in every older manifest. The model drops
+  it on read rather than refusing those records, which `audit status` and `changes` would otherwise skip.
 - `strata audit status` and `changes` name the step a failed or partial run stopped at in the status cell
   (`partial (apply_apps)`) and as `failed_step` in JSON, rather than in a new column.
 - An Azure DevOps approval gate was planned as a script that turns the approval into a change reference. The REST

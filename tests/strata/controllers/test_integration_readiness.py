@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `integration_readiness.py` (docs/work/integration-readiness.md D5-D18, R1-R11)."""
+"""Tests for `integration_readiness.py` (docs/design/integration-readiness.md)."""
 
 import sys
 from dataclasses import replace

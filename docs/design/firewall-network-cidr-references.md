@@ -96,7 +96,7 @@ consumer need shows up.
   `strata network allocate` direction was separately cancelled, which
   turned out not to matter here (the positional-addressing risk this
   design fixes was already real without it).
-- `solution-loading-and-phase2-validation.md` (work doc) —
+- [solution-loading-and-phase2-validation.md](solution-loading-and-phase2-validation.md) —
   a related but distinct concern: the Workspace subnet cross-check
   resolves `WorkspaceResourceSubnetModel.subnet` by `.name` directly on
   its own model field, not through this `${value:}` path-walking

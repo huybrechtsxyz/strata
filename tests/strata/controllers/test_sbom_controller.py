@@ -975,7 +975,7 @@ def test_write_sbom_reports_a_declared_image_the_rendered_chart_does_not_run(tmp
 
 @pytest.mark.parametrize(("mode", "severity"), [("block", "error"), ("warn", "warning")])
 def test_a_missing_cve_scan_says_what_to_do(mode, severity):
-    """docs/work/diagnostic-guidance.md: the fix the docstring always knew now reaches the user as a hint."""
+    """docs/design/diagnostic-guidance.md: the fix the docstring always knew now reaches the user as a hint."""
     diagnostics = Diagnostics()
     _report_missing_data(diagnostics, mode, "no scanner on PATH")
 

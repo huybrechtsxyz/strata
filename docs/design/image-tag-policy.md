@@ -134,7 +134,7 @@ is nothing honest to seed it with.
 - A workspace is shared by every ring, so it cannot be strict on prd and lenient on dev by itself. A `rings`
   selector on the policy, using the ring of the deployment's version document, was chosen over a per-deployment
   override, which would be a new mechanism for every policy and cuts across the "rebind only, no field patches"
-  rule in `workspace-overrides.md` (work doc). A deployment with no ring is judged (fail
+  rule in [workspace-overrides.md](workspace-overrides.md). A deployment with no ring is judged (fail
   closed).
 - "Floating" is the explicit alias list, not "anything that is not a semantic version" as the SBOM treats a
   declared tag: a strict default trains people to switch the policy to `warn`. `tag_pattern` is the opt-in for more.

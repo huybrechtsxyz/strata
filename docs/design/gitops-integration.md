@@ -371,6 +371,12 @@ on-disk build directory — which (unlike process memory) survives between
 the separate `build run`/`deploy run` CLI invocations; `plan`/`deploy`/
 `destroy`/`output` read it back from there alone.
 
+**Where the checkout is comes from the deploy, not the sidecar.** The sidecar also records the solution root
+the build ran in, but a build output is often carried to a deploy elsewhere: another pipeline stage, another
+agent, another workspace folder. A path remote's checkout and strata's own clone are therefore found under the
+deploying solution's root: `deploy_run()` sets `BaseGitOpsIntegration.solution_root` to it, the same place it
+resolves `auth`. The recorded root is only a fallback for a direct caller that sets none.
+
 **Authentication is resolved fresh at `deploy run` time, never persisted.**
 Unlike `remote`/`output_file` (routing, resolved at build time and carried
 via the sidecar), `authentication` (secrets) is resolved directly inside
@@ -456,6 +462,11 @@ deploy-time-only" (ADR-0022 D4).
   deliberately *not* persisted and is instead resolved fresh inside
   `deploy_controller.py`'s per-step loop at actual deploy time, matching
   ADR-0022 D4 ("secrets are deploy-time-only").
+- **The sidecar's solution root was first also used at deploy time**, so a build output carried to a deploy in
+  another folder (a separate stage on a self-hosted agent, say) looked for a path remote's checkout, or created
+  strata's own clone, under the build's folder. Found in a branch review; the deploy now sets the root
+  (`solution_root`), and passing it through every `plan`/`deploy`/`output` call was rejected because Terraform,
+  Helm and Compose do not accept unknown keyword arguments.
 - **A real regression was caught on review before shipping**:
   unconditionally passing `auth=`/`resolved_values=` into every step's
   `output()` call would have silently broken every Terraform deployment's

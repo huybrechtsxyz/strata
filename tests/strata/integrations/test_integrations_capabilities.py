@@ -216,7 +216,7 @@ def test_capability_abcs_covers_every_core_capability_with_a_real_consumer():
 
 
 # ---------------------------------------------------------------------------
-# KeyValueStoreIntegration (docs/work/key-value-store-integration.md) —
+# KeyValueStoreIntegration (docs/design/key-value-store-integration.md) —
 # get/put-with-CAS, modeled alongside StoreIntegration (not merged into it,
 # shape mismatch: single-value resolve vs. versioned get/put).
 # ---------------------------------------------------------------------------
@@ -323,7 +323,7 @@ def test_key_value_entry_is_frozen_and_value_equal():
 
 def test_key_value_conflict_error_is_an_integration_error():
     """Subclass, not a sibling — every existing 'except IntegrationError' call
-    site still catches it unchanged (docs/work/key-value-store-integration.md)."""
+    site still catches it unchanged (docs/design/key-value-store-integration.md)."""
     from strata.integrations.errors import IntegrationError, KeyValueConflictError
 
     assert issubclass(KeyValueConflictError, IntegrationError)

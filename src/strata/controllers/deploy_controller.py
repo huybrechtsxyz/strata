@@ -72,6 +72,7 @@ from strata.controllers.version_composition import deployment_version
 from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError, RegistryAuthError
+from strata.integrations.gitops import BaseGitOpsIntegration
 from strata.integrations.helm import (
     CHART_NOT_PINNED,
     HelmIntegration,
@@ -1383,7 +1384,7 @@ def deploy_run(
             resolved_steps.append((step, provisioner, integration))
             if on_tool is not None:
                 on_tool(provisioner.name, readiness)
-    # Every other enabled integration (docs/work/integration-readiness.md D22): required ones must be ready too.
+    # Every other enabled integration (docs/design/integration-readiness.md, "Where it runs"): required ones must be ready too.
     diagnostics.extend(
         integration_preflight(
             index,
@@ -1881,6 +1882,9 @@ def deploy_run(
         auth: AuthenticationModel | None = None
         step_resolved_values: Mapping[str, str] | None = None
         if provisioner.gitops is not None:
+            if isinstance(integration, BaseGitOpsIntegration):
+                # This deploy's root, not the build's: the build output may have been made on another agent.
+                integration.solution_root = context.root
             step_resolved_values = resolved.values
             gitops_remote = remotes.get(provisioner.gitops.remote)
             if gitops_remote is not None and gitops_remote.integration:

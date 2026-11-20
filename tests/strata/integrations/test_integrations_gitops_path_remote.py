@@ -12,11 +12,13 @@ from pathlib import Path
 
 import pytest
 
+from strata.integrations import gitops as gitops_module
 from strata.integrations.gitops import _SIDECAR_FILENAME, ArgoCDIntegration
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
 from strata.models.provisioning_model import OutputModel, ProvisionerGitOpsModel, ProvisionerModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
+from strata.utils.transport import CommandResult
 
 pytestmark = pytest.mark.slow
 
@@ -238,3 +240,54 @@ def test_destroying_a_file_that_was_never_committed_has_nothing_to_remove(tmp_pa
     assert destroyed.is_successful, destroyed.stderr
     assert "nothing to remove" in destroyed.stdout
     assert _git(checkout, "rev-parse", "HEAD") == head
+
+
+def test_a_destroy_whose_tracking_check_fails_removes_nothing(tmp_path: Path, monkeypatch):
+    """A failing `git ls-files` (an index lock, say) must not read as "untracked": the file would be deleted with
+    nothing committed, and the destroy reported done."""
+    bare = _server(tmp_path)
+    checkout = _pipeline_checkout(tmp_path, bare)
+    integration = ArgoCDIntegration()
+    build_path = _prepared(tmp_path)
+    assert integration.deploy(build_path).is_successful
+    real_run = gitops_module.run_command
+
+    def _ls_files_fails(args, **kwargs):
+        if "ls-files" in args:
+            return CommandResult(returncode=128, stdout="", stderr="index.lock exists")
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(gitops_module, "run_command", _ls_files_fails)
+
+    destroyed = integration.destroy(build_path)
+
+    assert not destroyed.is_successful
+    assert "ls-files" in destroyed.stderr and "index.lock" in destroyed.stderr
+    assert (checkout / _OUTPUT_FILE).is_file()
+    assert _on_server(tmp_path, bare, _OUTPUT_FILE) == "replicas: 3\n"
+
+
+def test_the_checkout_is_found_under_the_deploys_root_not_the_builds(tmp_path: Path):
+    """The build recorded `tmp_path/solution` as its root. The deploy runs from another folder, where the pipeline
+    made its checkout: `deploy_run()` sets `solution_root`, and the step writes there."""
+    bare = _server(tmp_path)
+    build_path = _prepared(tmp_path)
+    deploy_root = tmp_path / "deploy-agent" / "solution"
+    checkout = deploy_root / "repos" / "gitops-config"
+    checkout.parent.mkdir(parents=True)
+    _git(tmp_path, "clone", f"file://{bare.as_posix()}", str(checkout))
+    _git(checkout, "checkout", "--detach")
+
+    without_root = ArgoCDIntegration().deploy(build_path)
+    assert not without_root.is_successful
+    assert "does not exist" in without_root.stderr  # the build's folder has no checkout
+
+    integration = ArgoCDIntegration()
+    integration.solution_root = deploy_root
+    deployed = integration.deploy(build_path)
+
+    assert deployed.is_successful, deployed.stderr
+    assert _on_server(tmp_path, bare, _OUTPUT_FILE) == "replicas: 3\n"
+    assert json.loads(integration.output(build_path).stdout)["commit_sha"]["value"] == _git(
+        checkout, "rev-parse", "HEAD"
+    )

@@ -4,7 +4,7 @@
 - Last updated: 2026-10-28
 - Target: strata 2.x (2.0.0rc2, `v2-beta`)
 - Vendor reference: [aikido-api-reference.md](../archive/aikido-api-reference.md) - Appendix A (offline Aikido API), B (fixtures), C (code anchors), D (sources)
-- Related: ADR-0003 (layering), ADR-0004 (exit codes), ADR-0021 (integration layer), ADR-0022 D4 (build renders, deploy resolves), [cve-scanner-integration.md](../archive/cve-scanner-integration.md), [checkov-integration.md](../archive/checkov-integration.md), `integration-readiness.md` (work doc)
+- Related: ADR-0003 (layering), ADR-0004 (exit codes), ADR-0021 (integration layer), ADR-0022 D4 (build renders, deploy resolves), [cve-scanner-integration.md](../archive/cve-scanner-integration.md), [checkov-integration.md](../archive/checkov-integration.md), [integration-readiness.md](integration-readiness.md)
 
 > Facts about Aikido in the vendor reference are labelled **[V]** (verified against a primary source)
 > or **[U]** (not yet confirmed against a live workspace, see section 12). This design replaces that
@@ -365,8 +365,8 @@ deploy, "could not confirm" fails the gate.
 list[str]` (one line per verified aspect; raises `IntegrationError` on failure). Only Aikido
 implements it now; any integration can add it later, which is why it is not under `policy`.
 The command also checks local readiness first and accepts a type name; a type without a connection
-check passes on local readiness (exit 0) and a disabled integration exits 3 (integration-readiness.md
-D9-D13, [ADR-0050](../decisions/0050-one-offline-integration-readiness-check.md)).
+check passes on local readiness (exit 0) and a disabled integration exits 3 ([integration-readiness.md](integration-readiness.md),
+"`strata integration check`", [ADR-0050](../decisions/0050-one-offline-integration-readiness-check.md)).
 A credential that is missing or rejected (HTTP 401/403) is raised as `IntegrationCredentialError`,
 a subclass, so the command can tell exit 3 (fix the credential) from exit 1 (platform unreachable).
 
@@ -679,7 +679,7 @@ build changed none. A denied `deploy run` does write a manifest, with status `fa
   `list_policies()`, `check_policies()`, `policy_findings()`; the gate rows delegate to
   `security_gate_controller` (`evaluate_security_gates()`, plus a read-only image findings lookup).
 - `commands/policy_command.py`: group `policy`, subcommands `list`, `check`, `findings` (D7).
-- `commands/integration_command.py`: group `integration`, subcommands `check` and `list` (`list`: integration-readiness.md).
+- `commands/integration_command.py`: group `integration`, subcommands `check` and `list` (`list`: [integration-readiness.md](integration-readiness.md)).
 - `commands/cli.py`: register both.
 
 ## 7. Flow

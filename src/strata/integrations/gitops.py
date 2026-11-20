@@ -145,11 +145,11 @@ def _failed(detail: str) -> CommandResult:
     return CommandResult(returncode=1, stdout="", stderr=detail)
 
 
-def _checkout(sidecar: dict[str, Any], remote: SolutionRemoteModel) -> Path:
-    """A path remote's checkout: where the pipeline put it (docs/design/remote-commit-provenance.md, "Writing to a path
-    remote")."""
+def _checkout(root: Path, remote: SolutionRemoteModel) -> Path:
+    """A path remote's checkout: where the pipeline put it, under the deploy's solution `root`
+    (docs/design/remote-commit-provenance.md, "Writing to a path remote")."""
     assert remote.path is not None  # only called for a path remote
-    return layout.path_remote_location(Path(sidecar["root"]), remote.path)
+    return layout.path_remote_location(root, remote.path)
 
 
 def _push_branch(sidecar: dict[str, Any]) -> tuple[str | None, str | None]:
@@ -174,9 +174,9 @@ def _commit_message(verb: str, sidecar: dict[str, Any], path: Path) -> str:
     return f"strata: {verb} {sidecar['output_file']} (provisioner step '{path.name}')"
 
 
-def _deploy_in_checkout(path: Path, sidecar: dict[str, Any], remote: SolutionRemoteModel) -> CommandResult:
+def _deploy_in_checkout(path: Path, root: Path, sidecar: dict[str, Any], remote: SolutionRemoteModel) -> CommandResult:
     """Write the rendered file into the pipeline's checkout, then go as far as `action` says (B4)."""
-    checkout = _checkout(sidecar, remote)
+    checkout = _checkout(root, remote)
     problem = checkout_problem(checkout)
     if problem is not None:
         return _failed(f"remote '{remote.name}': {problem}, so the GitOps file cannot be written there")
@@ -206,9 +206,9 @@ def _deploy_in_checkout(path: Path, sidecar: dict[str, Any], remote: SolutionRem
     return CommandResult(returncode=0, stdout=result.detail, stderr="")
 
 
-def _destroy_in_checkout(path: Path, sidecar: dict[str, Any], remote: SolutionRemoteModel) -> CommandResult:
+def _destroy_in_checkout(path: Path, root: Path, sidecar: dict[str, Any], remote: SolutionRemoteModel) -> CommandResult:
     """Delete the file from the pipeline's checkout, then commit and push only that removal, as `action` says (B4)."""
-    checkout = _checkout(sidecar, remote)
+    checkout = _checkout(root, remote)
     problem = checkout_problem(checkout)
     if problem is not None:
         return _failed(f"remote '{remote.name}': {problem}, so the GitOps file cannot be removed there")
@@ -217,9 +217,13 @@ def _destroy_in_checkout(path: Path, sidecar: dict[str, Any], remote: SolutionRe
         return _failed(problem)
 
     output_file = sidecar["output_file"]
-    tracked = run_command(
-        ["git", "ls-files", "--", f":(literal){output_file}"], cwd=checkout, timeout=_GIT_TIMEOUT
-    ).stdout.strip()
+    listed = run_command(["git", "ls-files", "--", f":(literal){output_file}"], cwd=checkout, timeout=_GIT_TIMEOUT)
+    if not listed.is_successful:
+        # Read as "untracked", the file would be deleted with nothing committed and the destroy reported done.
+        return _failed(
+            f"remote '{remote.name}': 'git ls-files' failed, so nothing was removed: {listed.stderr.strip()}"
+        )
+    tracked = listed.stdout.strip()
     target = checkout / output_file
     existed = target.is_file()
     if existed:
@@ -251,6 +255,15 @@ class BaseGitOpsIntegration(InfraIntegration):
     TRANSPORTS = frozenset({"cli"})
     COMMAND = "git"
     SUPPORTS_SAVED_PLAN = False
+
+    #: The deploying solution's root, set by `deploy_run()` before it calls this step. A path remote's checkout and
+    #: strata's own clone are found under it, not under the root the build recorded in the sidecar: a build output
+    #: carried to a deploy elsewhere (another agent, another workspace folder) would otherwise point at the build's
+    #: folder. `None` for a direct caller, which then gets the build's root.
+    solution_root: Path | None = None
+
+    def _root(self, sidecar: dict[str, Any]) -> Path:
+        return self.solution_root if self.solution_root is not None else Path(sidecar["root"])
 
     def parse_version(self, raw: str) -> str:
         """Extract `X.Y.Z` from `"git version X.Y.Z"`."""
@@ -365,7 +378,7 @@ class BaseGitOpsIntegration(InfraIntegration):
                 returncode=1, stdout="", stderr=f"{self.name}: no GitOps sidecar at {path} — was prepare() run?"
             )
         remote = SolutionRemoteModel.model_validate(sidecar["remote"])
-        root = Path(sidecar["root"])
+        root = self._root(sidecar)
         rendered_file = path / sidecar["rendered_filename"]
         if not rendered_file.is_file():
             return CommandResult(
@@ -377,7 +390,7 @@ class BaseGitOpsIntegration(InfraIntegration):
 
         if remote.path is not None:
             # The pipeline's checkout, as it is: never fetched or reset (B4).
-            checkout_path = _checkout(sidecar, remote)
+            checkout_path = _checkout(root, remote)
             problem = checkout_problem(checkout_path)
             if problem is not None:
                 return _failed(f"remote '{remote.name}': {problem}")
@@ -419,7 +432,7 @@ class BaseGitOpsIntegration(InfraIntegration):
                 returncode=1, stdout="", stderr=f"{self.name}: no GitOps sidecar at {path} — was prepare() run?"
             )
         remote = SolutionRemoteModel.model_validate(sidecar["remote"])
-        root = Path(sidecar["root"])
+        root = self._root(sidecar)
         rendered_file = path / sidecar["rendered_filename"]
         if not rendered_file.is_file():
             return CommandResult(
@@ -429,7 +442,7 @@ class BaseGitOpsIntegration(InfraIntegration):
                 "output.template rendered (render_output_template()) before deploy()?",
             )
         if remote.path is not None:
-            return _deploy_in_checkout(path, sidecar, remote)
+            return _deploy_in_checkout(path, root, sidecar, remote)
         message = _commit_message("update", sidecar, path)
         try:
             result = push_file(
@@ -463,10 +476,10 @@ class BaseGitOpsIntegration(InfraIntegration):
                 returncode=1, stdout="", stderr=f"{self.name}: no GitOps sidecar at {path} - was prepare() run?"
             )
         remote = SolutionRemoteModel.model_validate(sidecar["remote"])
-        root = Path(sidecar["root"])
+        root = self._root(sidecar)
         output_file = sidecar["output_file"]
         if remote.path is not None:
-            checkout_path = _checkout(sidecar, remote)
+            checkout_path = _checkout(root, remote)
             problem = checkout_problem(checkout_path)
             if problem is not None:
                 return _failed(f"remote '{remote.name}': {problem}")
@@ -497,9 +510,9 @@ class BaseGitOpsIntegration(InfraIntegration):
                 returncode=1, stdout="", stderr=f"{self.name}: no GitOps sidecar at {path} — was prepare() run?"
             )
         remote = SolutionRemoteModel.model_validate(sidecar["remote"])
-        root = Path(sidecar["root"])
+        root = self._root(sidecar)
         if remote.path is not None:
-            return _destroy_in_checkout(path, sidecar, remote)
+            return _destroy_in_checkout(path, root, sidecar, remote)
         message = _commit_message("remove", sidecar, path)
         try:
             result = remove_file(
@@ -541,11 +554,11 @@ class BaseGitOpsIntegration(InfraIntegration):
                 returncode=1, stdout="", stderr=f"{self.name}: no GitOps sidecar at {path} — was prepare() run?"
             )
         remote = SolutionRemoteModel.model_validate(sidecar["remote"])
-        root = Path(sidecar["root"])
+        root = self._root(sidecar)
 
         if remote.path is not None:
             # The checkout's `HEAD`: with `action: none` that commit does not hold the file (B4).
-            checkout_path = _checkout(sidecar, remote)
+            checkout_path = _checkout(root, remote)
             problem = checkout_problem(checkout_path)
             if problem is not None:
                 return _failed(f"remote '{remote.name}': {problem}")

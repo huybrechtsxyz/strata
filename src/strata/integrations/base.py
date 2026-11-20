@@ -39,7 +39,7 @@ from strata.utils.transport import (
 
 @dataclass(frozen=True)
 class ReadinessProblem:
-    """One readiness finding (docs/work/integration-readiness.md), here so an integration can return its own.
+    """One readiness finding (docs/design/integration-readiness.md), here so an integration can return its own.
 
     `flags_only`: the problem is about the flags strata would pass, not whether the tool works at all, so a command
     that passes none of those flags may treat it as a warning (docs/design/helm-chart-deployment.md).

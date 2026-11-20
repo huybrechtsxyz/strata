@@ -34,11 +34,12 @@ Deliberately not ported from v1's real `models/audit_config_model.py`:
 
 from typing import Annotated, ClassVar, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import PlatformBaseModel, PlatformKind, PlatformName
 from strata.models.reference_fields import References, RemoteReference
 from strata.utils.names import check_unique_names
+from strata.utils.path_safety import validate_not_option_like
 
 #: The closed set of event types v2 actually produces, each with its
 #: default enabled state. Not configurable — `event_overrides` may only
@@ -94,6 +95,14 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
         "checkout, commits only the files it wrote, never resets, and pushes with the checkout's own credentials, "
         "rebasing and retrying when the branch moved.",
     )
+
+    @field_validator("branch")
+    @classmethod
+    def validate_branch(cls, v: str) -> str:
+        """A branch name is an argument to `git fetch`, `git clone` and `git push`, so it must not read as an option
+        (`--upload-pack=...` would run a command)."""
+        validate_not_option_like(v, "branch")
+        return v
 
 
 class AuditSinkModel(PlatformBaseModel):

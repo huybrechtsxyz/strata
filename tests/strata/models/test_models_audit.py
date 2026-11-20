@@ -76,6 +76,14 @@ def test_git_sink_action_defaults_to_push_and_takes_commit_or_none():
         AuditSinkModel.model_validate(data)
 
 
+def test_git_sink_branch_must_not_read_as_a_git_option():
+    """It is passed to `git fetch origin <branch>`, where `--upload-pack=...` would run a command."""
+    data = _git_sink()
+    data["git"]["branch"] = "--upload-pack=touch /tmp/pwned"
+    with pytest.raises(ValidationError, match="must not start with '-'"):
+        AuditSinkModel.model_validate(data)
+
+
 def test_sink_rejects_unknown_event_type():
     data = _git_sink()
     data["events"] = ["deployment.completed", "policy.violated"]

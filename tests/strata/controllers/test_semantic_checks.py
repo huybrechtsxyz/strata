@@ -1235,7 +1235,7 @@ def test_topology_component_check_is_skipped_without_a_configuration_document(tm
 
 # ---------------------------------------------------------------------------
 # Workspace -> Network: resource subnet references name a real subnet
-# (docs/work/solution-loading-and-phase2-validation.md)
+# (docs/design/solution-loading-and-phase2-validation.md)
 # ---------------------------------------------------------------------------
 
 
@@ -1972,7 +1972,7 @@ def test_spec_version_with_a_networked_transport_is_an_error(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Disabled integrations (docs/work/integration-readiness.md D29-D30)
+# Disabled integrations (docs/design/integration-readiness.md, "Where it runs")
 # ---------------------------------------------------------------------------
 
 

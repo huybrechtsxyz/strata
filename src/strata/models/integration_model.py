@@ -123,7 +123,7 @@ class Capability(StrEnum):
     # `ScannerIntegration`'s own docstring (`capabilities.py`) for exactly
     # how thin that shared contract deliberately is.
     SCANNER = "scanner"  #: External security scanner tools (CVE/SCA, static IaC, ...)
-    # docs/work/key-value-store-integration.md — get/put of a single small
+    # docs/design/key-value-store-integration.md — get/put of a single small
     # value by key with optional compare-and-swap, backend-agnostic (not
     # one feature's name, e.g. not 'output_store' — this capability already
     # has more than one real consumer planned, see that doc's own
@@ -308,7 +308,7 @@ class IntegrationSpecModel(PlatformBaseModel):
     @field_validator("version")
     @classmethod
     def validate_version(cls, v: str | None) -> str | None:
-        """Reject a constraint the readiness check could not parse (docs/work/integration-readiness.md D3)."""
+        """Reject a constraint the readiness check could not parse (docs/design/integration-readiness.md, "Version constraints")."""
         if v is not None:
             parse_version_constraint(v)
         return v

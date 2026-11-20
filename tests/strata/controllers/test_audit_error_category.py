@@ -41,16 +41,21 @@ def test_a_policy_that_did_not_stop_the_run_is_not_the_cause(enforcement, passed
 @pytest.mark.parametrize(
     ("code", "category"),
     [
-        ("integration_credentials_rejected", ErrorCategory.AUTH),
         ("integration_credentials_unresolved", ErrorCategory.AUTH),
         ("helm_registry_auth_failed", ErrorCategory.AUTH),
         ("helm_registry_credentials_invalid", ErrorCategory.AUTH),
-        ("integration_unreachable", ErrorCategory.NETWORK),
-        ("helm_release_conflict", ErrorCategory.CONFLICT),
     ],
 )
 def test_an_error_code_names_its_category(code, category):
     assert error_category(_failed("problem", code=code), None) is category
+
+
+@pytest.mark.parametrize(
+    "code", ["integration_unreachable", "integration_credentials_rejected", "helm_release_conflict"]
+)
+def test_codes_a_deploy_never_raises_are_not_mapped(code):
+    # `strata integration test` and `validate` raise these; a deploy does not, so a mapping would be dead.
+    assert error_category(_failed("problem", code=code), None) is ErrorCategory.UNKNOWN
 
 
 @pytest.mark.parametrize(

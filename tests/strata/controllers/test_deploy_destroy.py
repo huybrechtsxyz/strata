@@ -1011,6 +1011,27 @@ def test_a_gitops_step_is_destroyed_with_its_resolved_values(tmp_path: Path, too
     assert captured["auth"] is None  # the remote names no integration
 
 
+def test_a_gitops_step_works_under_the_deploys_root_not_the_builds(tmp_path: Path, tools, monkeypatch):
+    """A build output carried to a deploy elsewhere (another agent or workspace folder) still records the build's
+    root; the step must look under the deploying solution's root (docs/design/gitops-integration.md)."""
+    roots: list[Path | None] = []
+
+    def _destroy_step(self, path, **kwargs):
+        roots.append(self.solution_root)
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(ArgoCDIntegration, "destroy", _destroy_step)
+    build_root = _gitops_solution(tmp_path / "build-agent")
+    build_path = _built(tmp_path, build_root)
+    deploy_root = tmp_path / "deploy-agent" / build_root.name
+    shutil.copytree(build_root, deploy_root)
+
+    diagnostics, _ = _destroy(deploy_root, build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert roots == [deploy_root]
+
+
 def test_a_gitops_preview_is_shown_without_follow(tmp_path: Path, tools, monkeypatch):
     def _preview(self, path, **kwargs):
         return CommandResult(returncode=0, stdout="would remove apps/forge/values.yaml from gitops-config", stderr="")

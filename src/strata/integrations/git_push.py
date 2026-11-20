@@ -469,8 +469,12 @@ def ensure_checkout(
 
 #: Pushes in all from a path remote's checkout: the first, and a retry after each rebase onto a branch that moved.
 PUSH_ATTEMPTS = 3
-#: `git push` stderr that means "the branch moved", which a rebase fixes; any other failure is final.
-_REJECTED_MARKERS = ("rejected", "non-fast-forward", "fetch first")
+#: `git push` stderr that means "the branch moved", which a rebase fixes. Not a bare "rejected": a protected branch
+#: or a hook says `[remote rejected]`, which no rebase fixes, so any other failure is final.
+_REJECTED_MARKERS = ("non-fast-forward", "fetch first")
+#: The author email domains of strata's own commits (`commit_in_checkout(email_domain=...)`): an audit sink's and a
+#: GitOps step's. Only commits with one of them may be pushed from a pipeline's checkout.
+STRATA_EMAIL_DOMAINS = frozenset({"strata-audit.local", "strata-gitops.local"})
 
 
 def checkout_problem(checkout: Path) -> str | None:
@@ -509,10 +513,14 @@ def commit_in_checkout(
     - Only `paths` are staged and committed (`:(literal)` pathspecs, `commit --only`). Anything else modified, staged
       or untracked in the tree stays as it was. A deleted path is staged as a removal.
     - The identity is passed per command (`git -c user.name=...`); the checkout's config is never written.
-    - The push runs `git push origin HEAD:<branch>`, so a detached `HEAD` works, with the checkout's own credentials.
-      When it is rejected because the branch moved, it fetches the branch, rebases onto `FETCH_HEAD` (`--autostash`,
-      so other changes in the tree survive) and pushes again, `PUSH_ATTEMPTS` times in all. A rebase that conflicts
-      is aborted.
+    - Before each push it fetches `branch`. Every commit `HEAD` has that the branch lacks must be strata's own (an
+      author email in `STRATA_EMAIL_DOMAINS`, no merge): a pipeline that checked out a feature branch or a pull
+      request's merge would otherwise push that code to `branch`. Strata's own include one an earlier run committed
+      but could not push, which is pushed now, also when this run had nothing new to commit.
+    - When the branch moved, it rebases onto `FETCH_HEAD` (`--autostash`, so other changes in the tree survive),
+      replaying only strata's commits; a rebase that conflicts is aborted. It pushes `HEAD:<branch>`, so a detached
+      `HEAD` works, with the checkout's own credentials. A push rejected because the branch moved again is retried,
+      `PUSH_ATTEMPTS` times in all; any other rejection (a protected branch, a hook) is final.
 
     Never raises for a git failure: `success=False` with the reason.
     """
@@ -525,33 +533,62 @@ def commit_in_checkout(
     added = git("add", "-A", "--", *pathspecs)
     if not added.is_successful:
         return PushResult(False, f"'git add' failed: {added.stderr.strip()}")
-    if not git("status", "--porcelain", "--", *pathspecs).stdout.strip():
-        return PushResult(True, "nothing to commit — the files already match the checkout's last commit")
-    committed = git("commit", "-m", message, "--only", "--", *pathspecs)
-    if not committed.is_successful:
-        return PushResult(False, f"'git commit' failed: {committed.stderr.strip()}")
+    status = git("status", "--porcelain", "--", *pathspecs)
+    if not status.is_successful:
+        return PushResult(False, f"'git status' failed: {status.stderr.strip()}")
+    changed = bool(status.stdout.strip())
+    if changed:
+        committed = git("commit", "-m", message, "--only", "--", *pathspecs)
+        if not committed.is_successful:
+            return PushResult(False, f"'git commit' failed: {committed.stderr.strip()}")
     if branch is None:
+        if not changed:
+            return PushResult(True, "nothing to commit — the files already match the checkout's last commit")
         return PushResult(True, f"committed in '{checkout}', not pushed")
 
     for attempt in range(1, PUSH_ATTEMPTS + 1):
+        fetched = git("fetch", "origin", branch)
+        if not fetched.is_successful:
+            return PushResult(False, f"could not fetch '{branch}' before the push: {fetched.stderr.strip()}")
+        problem = _foreign_commits(git, branch)
+        if problem is not None:
+            return PushResult(False, problem)
+        if not git("rev-list", "FETCH_HEAD..HEAD").stdout.strip():
+            # Only without a new commit: the branch already has everything the checkout holds.
+            return PushResult(True, "nothing to commit — the files already match the checkout's last commit")
+        if not git("merge-base", "--is-ancestor", "FETCH_HEAD", "HEAD").is_successful:
+            rebased = git("rebase", "--autostash", "FETCH_HEAD")
+            if not rebased.is_successful:
+                git("rebase", "--abort")
+                return PushResult(
+                    False,
+                    f"'git rebase' onto the moved branch '{branch}' failed, and was aborted: "
+                    f"{(rebased.stderr or rebased.stdout).strip()}",
+                )
         pushed = git("push", "origin", f"HEAD:{branch}")
         if pushed.is_successful:
             return PushResult(True)
-        rejected = any(marker in pushed.stderr for marker in _REJECTED_MARKERS)
-        if not rejected or attempt == PUSH_ATTEMPTS:
+        moved = any(marker in pushed.stderr for marker in _REJECTED_MARKERS)
+        if not moved or attempt == PUSH_ATTEMPTS:
             return PushResult(False, f"'git push' failed after {attempt} attempt(s): {pushed.stderr.strip()}")
-        fetched = git("fetch", "origin", branch)
-        if not fetched.is_successful:
-            return PushResult(False, f"'git fetch origin {branch}' failed: {fetched.stderr.strip()}")
-        rebased = git("rebase", "--autostash", "FETCH_HEAD")
-        if not rebased.is_successful:
-            git("rebase", "--abort")
-            return PushResult(
-                False,
-                f"'git rebase' onto the moved branch '{branch}' failed, and was aborted: "
-                f"{(rebased.stderr or rebased.stdout).strip()}",
-            )
     return PushResult(False, "'git push' failed")  # not reached: the loop returns on its last attempt
+
+
+def _foreign_commits(git: Callable[..., CommandResult], branch: str) -> str | None:
+    """Why `HEAD` cannot be pushed to `branch` (just fetched), or `None`: a commit it has that the branch lacks is
+    not strata's own, or is a merge."""
+    listed = git("log", "--format=%H %ae %P", "FETCH_HEAD..HEAD")
+    if not listed.is_successful:
+        return f"could not compare the checkout with '{branch}': {listed.stderr.strip()}"
+    for line in listed.stdout.splitlines():
+        sha, email, *parents = line.split()
+        if len(parents) > 1 or email.rpartition("@")[2] not in STRATA_EMAIL_DOMAINS:
+            return (
+                f"the checkout's HEAD has commit {sha[:12]} that is not on '{branch}' and was not made by strata, so "
+                f"pushing HEAD would put it on '{branch}'. Check out '{branch}' in the pipeline, or write to a "
+                "branch the checkout is on."
+            )
+    return None
 
 
 def _validate_remote(remote: SolutionRemoteModel) -> PushResult | None:

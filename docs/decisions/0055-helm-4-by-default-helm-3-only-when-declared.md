@@ -5,7 +5,7 @@
 - Related: [ADR-0043](0043-helm-lint-as-the-container-check-phase.md) (the check phase; unaffected),
   `helm-4-support.md` (work doc) (the design),
   `helm-gap-analysis.md` (work doc) (gap 10),
-  `integration-readiness.md` (work doc) (where the version is read)
+  [integration-readiness.md](../design/integration-readiness.md) (where the version is read)
 
 ## Context and Problem Statement
 

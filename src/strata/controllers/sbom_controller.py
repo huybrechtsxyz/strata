@@ -393,7 +393,7 @@ def _hash_types(hashes: dict[str, str]) -> list[HashType]:
 
 
 def declared_cve_scanner(index: DocumentIndex) -> CveScannerIntegration | None:
-    """The enabled `trivy` document's scanner, else the enabled `grype` one (docs/work/integration-readiness.md D26)."""
+    """The enabled `trivy` document's scanner, else the enabled `grype` one (docs/design/integration-readiness.md, "Local tools as declarable integrations")."""
     for integration_type, scanner_class in (("trivy", TrivyIntegration), ("grype", GrypeIntegration)):
         config = bind_integration_config(index, integration_type, requester="cve_policy")
         if config is not None:

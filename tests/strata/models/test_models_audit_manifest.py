@@ -117,12 +117,18 @@ def test_manifest_records_who_ran_the_deploy():
 
 
 @pytest.mark.parametrize(
-    "field", ["commit_author", "commit_message", "force", "pull_request", "outputs", "signatures", "metadata"]
+    "field", ["commit_author", "commit_message", "pull_request", "outputs", "signatures", "metadata"]
 )
 def test_manifest_drops_the_fields_nothing_could_fill(field):
     # docs/design/audit-trail.md, "The audit files". None was ever written, so no existing manifest holds one.
     with pytest.raises(ValidationError, match=field):
         DeploymentManifestModel.model_validate(_minimal_manifest(**{field: "x"}))
+
+
+def test_a_manifest_written_before_force_was_removed_still_loads():
+    """`force` defaulted to `False`, so every older manifest holds `"force": false`; it is dropped on read."""
+    model = DeploymentManifestModel.model_validate(_minimal_manifest(force=False))
+    assert "force" not in model.model_dump()
 
 
 def test_manifest_providers_carry_the_tool_version_and_path_and_both_are_optional():

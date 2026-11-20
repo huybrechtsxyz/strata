@@ -979,7 +979,7 @@ durable, reviewable record.
 
 ### 15. Terraform input validation against `variables.tf` has no v2 equivalent
 
-- **Found in:** not a fresh discovery — `docs/work/build-command.md`'s
+- **Found in:** not a fresh discovery — `docs/design/build-command.md`'s
   own "Remaining Work / Open Questions" section already tracks this
   ("Terraform input validation against `variables.tf` — v1 fails the build
   on a declared-input/schema mismatch before `apply` would.
@@ -998,9 +998,15 @@ durable, reviewable record.
   and `strata build run` fails before `apply` would if a key is undeclared
   there or type-mismatched.
 - **Status:** open — deliberate scope limitation so far
-  (`build-command.md`'s own framing: "mentions parsing `variables.tf` as a
+  (the build doc's own framing: "mentions parsing `variables.tf` as a
   capability lookup, but not as a build-time gate"), not yet designed or
-  scheduled. No v2 code path reads a Terraform root's `variables.tf` file
+  scheduled. **Changed form (2026-11-20):** since ADR-0035 every value reaches
+  Terraform inside one `strata` variable whose declaration strata writes, with
+  `variables`/`flags` as maps. A key the root reads but no environment declares
+  now fails at `terraform plan` (not silently); a key nothing reads is ignored.
+  What is left is reading the root's HCL for `var.strata.variables[...]`
+  references; [build-command.md](../design/build-command.md) lists it under
+  "Not covered". No v2 code path reads a Terraform root's `variables.tf` file
   at all today — `.v2-cfg`'s `workspaces/spoke.yaml`/`environments/
   spoke-env.yaml` declare `keyvaults`/`ring_subnet_cidrs`/`aks_config`/etc.
   with no cross-check against the real `spoke/terraform` root's declared
@@ -1698,7 +1704,7 @@ and the provider/providerconfig/topologyconfig registry split.
   caught it, then reverted) that the docstring's claimed deferral is
   already false; no other new schema/feature gap surfaced by this pass.
   Separately (not a new finding, already documented in
-  `docs/work/build-command.md`'s Remaining Work): the real spoke
+  `docs/design/build-command.md`'s Remaining Work): the real spoke
   environment's own comment about `tf_state_*` variables being "excluded
   from strata's variable declaration check" is live evidence for that
   doc's already-tracked "Terraform input validation against `variables.tf`"
@@ -1711,7 +1717,7 @@ and the provider/providerconfig/topologyconfig registry split.
   (no per-kind opt-in needed) and dropped the stale "most authored kind
   missing from v2" characterization of `environment` — no behavior change,
   the check itself was already correct, only the docstring was wrong. Gap
-  #15: cross-referenced `docs/work/build-command.md`'s existing
+  #15: cross-referenced `docs/design/build-command.md`'s existing
   Remaining Work item ("Terraform input validation against `variables.tf`")
   into this file's numbered gap list for the first time, per request —
   explicitly framed as already-documented, not a fresh discovery here; the

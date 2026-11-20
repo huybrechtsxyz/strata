@@ -76,7 +76,7 @@ _FRAMEWORK_TOOLS: dict[str, frozenset[str]] = {
 
 
 def declared_checkov(index: DocumentIndex | None) -> CheckovIntegration | None:
-    """The enabled `checkov` document's scanner, else `None` (docs/work/integration-readiness.md D26)."""
+    """The enabled `checkov` document's scanner, else `None` (docs/design/integration-readiness.md, "Local tools as declarable integrations")."""
     config = bind_integration_config(index, "checkov", requester="checkov_policy") if index is not None else None
     return CheckovIntegration(config) if config is not None else None
 
@@ -449,6 +449,16 @@ def _report_missing_data(
     scope_label = scope if scope is not None else "policy"
     message = f"checkov_policy: cannot evaluate {scope_label} — {reason}."
     if on_missing_data == "block":
-        diagnostics.error(message, code="checkov_policy_missing_data")
+        diagnostics.error(
+            message,
+            code="checkov_policy_missing_data",
+            hint="Make the scan possible (install checkov, and let the build materialise what it scans); to let the "
+            "run continue without it, set the policy's on_missing_data to 'warn'.",
+        )
     elif on_missing_data == "warn":
-        diagnostics.warning(message, code="checkov_policy_missing_data")
+        diagnostics.warning(
+            message,
+            code="checkov_policy_missing_data",
+            hint="Make the scan possible (install checkov, and let the build materialise what it scans); keep "
+            "on_missing_data at 'block' where a run must never pass unscanned.",
+        )

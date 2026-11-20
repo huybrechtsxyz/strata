@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Azure Blob Storage key/value backend — Azure SDK, not the `az` CLI
-(docs/work/key-value-store-integration.md's Backend 3).
+(docs/design/key-value-store-integration.md's Backend 3).
 
 The container URL may come from a bound `kind: integration` document's
 `spec.endpoints.address` (same convention as the Key Vault/App Configuration

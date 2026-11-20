@@ -115,6 +115,11 @@ spec:
   checkout's own credentials. In Azure DevOps that means `persistCredentials: true` on the `checkout:` step. When
   the branch moved since the checkout, strata fetches it, rebases the audit commit onto it and pushes again, three
   times in all.
+  - **Check out `branch`** (or a commit already on it). Strata pushes only commits it made: when the checkout holds
+    others the branch lacks, such as a feature branch or a pull request's merge, the push is refused with a message
+    naming the commit, so they never land on `branch`.
+  - A commit an earlier run left unpushed, on an agent that keeps its checkout, is pushed by the next run.
+  - A push the server refuses, such as a protected branch, fails at once without a rebase.
   - `--autostash` keeps the checkout's other changes, but a staged change comes back unstaged.
   - A rebase that conflicts is aborted. Each deploy writes its own folder, so a conflict means two deploys wrote the
     same audit path.
