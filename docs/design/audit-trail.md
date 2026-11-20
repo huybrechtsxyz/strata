@@ -75,6 +75,7 @@ record:
   copied from the build's record ([remote-commit-provenance.md](remote-commit-provenance.md));
 - `artifacts`: `platform` (`resolved.yaml` by hash and path, never its content), `repositories` (each remote's url,
   ref, commit and dirty flag), `images`, `charts`, and `providers` (each provisioner's type, tool version and path);
+- `stages`, one per provisioning step (see "Stages");
 - `sbom` (path, format, sha256, component count), `change_reference` and `policy_results`.
 
 Satellite files are referenced by path and hash, never embedded: the manifest stays small and vouches for each file
@@ -98,8 +99,38 @@ history (or a future event) and are left to whoever aggregates the records.
 rendered from the manifest or metrics at send time (`audit_event_rendering.py`). It points to the manifest by path
 and hash instead of carrying it, and gets a fresh `id` on every send.
 
-**Modeled but not filled yet:** `stages`, the per-step status and timing. `deploy_run()` returns findings, not
-per-step results; until it does, the metrics record counts the run as one stage and `status` is never `partial`.
+### Stages
+
+A stage is one provisioning step the run selected (after `--stage` and `--scope`), in run order; a deploy stops
+at the first failing step, so the order tells what ran. Each holds:
+
+- `name`, `provisioner`, `status` (`success`, `failed` or `skipped`, with a `skip_reason`), `started_at`,
+  `completed_at`, `duration_seconds`;
+- `steps`, one per phase that ran, with `success` and `duration_seconds`. The phases are named as a deployment
+  stage's `timeouts` are: `setup` (`init`), `check` (`validate`, or a container step's check), `plan`, `apply`,
+  `destroy`. `deploy apply` has no `check` or `plan`; a container step has no `setup`;
+- `errors`, `warnings`, `messages`: the run's findings that name the step (their `location`). They are also in the
+  manifest's own lists, which hold every finding.
+
+`deploy_run()` fills a `StageLog` ([deploy_stage_log.py](../../src/strata/controllers/deploy_stage_log.py)) as
+it goes and still returns only its findings. The loop says which steps it means to run, when each begins and which
+phase it is in; the outcome is worked out from the findings once the run returned, so none of the loop's early
+returns needs bookkeeping:
+
+- a stage the loop returned out of failed, since the loop only returns after an error; so did a stage whose phase
+  added an error, or one an error names;
+- a step never begun is `skipped` ("an earlier step failed", or "the run stopped before this step" when a check
+  before the first step failed), unless an error names it, as a failed tool preflight does: then it is `failed`;
+- under `deploy destroy`, a step whose tool cannot destroy is skipped with that reason.
+
+**`partial`**: a run that failed after a stage succeeded is `partial`, not `failed`: something changed before it
+stopped, which is what an auditor needs to know. The metrics keep `outcome` to `success` and `failed` (a partial
+run counts as failed in a failure rate), as does the event's `outcome`; `stages_total` counts the stages that ran,
+`stages_failed` the failed ones.
+
+**No output values.** A stage carries no step outputs and no reference to an outputs file: the values stay in the
+workspace's `output_store`, where `deploy output` reads them, rather than in a file sent to every sink, where an
+output not marked sensitive could still carry a secret.
 
 ### Policy results
 
@@ -288,6 +319,11 @@ in the pull request; nothing copies them into the manifest.
   effect), `pull_request` (see "Not covered"), `outputs` (step outputs go to the output store, not a file),
   `signatures` (nothing signs) and the free-form `metadata`, replaced by the typed `pipeline` block. The link to the
   CI run was the missing piece: the run log holds the full output and every denied attempt.
+- `stages` waited on `deploy_run()`, which returns only findings. Changing its return value would touch every
+  caller and its many early returns, so the loop reports to a `StageLog` instead, the way `on_tool` already reports
+  tool versions, and the outcome is derived from the findings afterwards. The stage's `outputs`, `outputs_artifact`
+  and `topology` were removed: outputs for the same reason as the top-level field, and `topology` because a step
+  can target several. Until then the metrics counted every run as one stage and `status` was never `partial`.
 - An Azure DevOps approval gate was planned as a script that turns the approval into a change reference. The REST
   API offers no way for a job to find the approval that gated it, and an approval has no structured input, so the
   ticket and reason come from queue-time parameters instead and the gate only stops and waits. v1's pause-and-resume

@@ -55,23 +55,30 @@ def test_manifest_artifacts_platform_is_reference_only():
         DeploymentManifestModel.model_validate(data)
 
 
-def test_manifest_stage_with_steps_and_outputs_artifact():
+def test_manifest_stage_with_its_phases():
     data = _minimal_manifest(
         stages=[
             {
                 "name": "infrastructure",
+                "provisioner": "tf_main",
                 "status": "success",
                 "steps": [
-                    {"step": "init", "success": True, "duration_seconds": 1.5},
+                    {"step": "setup", "success": True, "duration_seconds": 1.5},
                     {"step": "apply", "success": True, "duration_seconds": 12.0},
                 ],
-                "outputs_artifact": {"path": "outputs.json", "sha256": "sha256:def"},
             }
         ]
     )
     model = DeploymentManifestModel.model_validate(data)
-    assert model.stages[0].steps[0].step == "init"
-    assert model.stages[0].outputs_artifact.sha256 == "sha256:def"
+    assert [step.step for step in model.stages[0].steps] == ["setup", "apply"]
+
+
+@pytest.mark.parametrize("field", ["outputs", "outputs_artifact", "topology"])
+def test_manifest_stage_carries_no_output_values_and_no_topology(field):
+    # docs/design/audit-trail.md, "Stages": output values stay in the output store.
+    stage = {"name": "infrastructure", "status": "success", field: {"x": "y"}}
+    with pytest.raises(ValidationError, match=field):
+        DeploymentManifestModel.model_validate(_minimal_manifest(stages=[stage]))
 
 
 def test_manifest_stage_skipped_requires_no_skip_reason_but_accepts_one():

@@ -25,7 +25,7 @@ from strata.controllers.policy_results import write_policy_results
 from strata.controllers.solution_context import open_solution
 from strata.integrations.capabilities import AuditSinkIntegration
 from strata.integrations.errors import IntegrationError
-from strata.models.audit_manifest_model import ManifestPolicyResultModel, ManifestProviderModel
+from strata.models.audit_manifest_model import ManifestPolicyResultModel, ManifestProviderModel, ManifestStageModel
 from strata.models.integration_model import Capability
 from strata.utils import layout
 from strata.utils.diagnostics import Diagnostics
@@ -1614,3 +1614,49 @@ def test_the_manifest_links_the_azure_pipelines_run_that_deployed(tmp_path: Path
     assert pipeline["system"] == "azure_devops"
     assert (pipeline["run_id"], pipeline["pipeline"]) == ("4711", "deploy-int")
     assert pipeline["url"] == "https://dev.azure.com/acme/ops/_build/results?buildId=4711"
+
+
+# ---------------------------------------------------------------------------
+# stages and the partial status (docs/design/audit-trail.md, "Stages")
+# ---------------------------------------------------------------------------
+
+
+def _stage(name: str, status: str) -> ManifestStageModel:
+    return ManifestStageModel(name=name, provisioner="tf_main", status=status)
+
+
+@pytest.mark.parametrize(
+    ("statuses", "run_failed", "expected", "total", "failed"),
+    [
+        (["success", "success"], False, "success", 2, 0),
+        (["success", "failed"], True, "partial", 2, 1),
+        (["failed", "skipped"], True, "failed", 1, 1),
+        ([], True, "failed", 0, 0),
+    ],
+)
+def test_the_stages_decide_partial_and_the_metrics_count_them(
+    tmp_path: Path, _terraform_stub, statuses, run_failed, expected, total, failed
+):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    run_diagnostics = Diagnostics()
+    if run_failed:
+        run_diagnostics.error("Step 'second': deploy failed", location="second")
+    stages = [_stage(name, status) for name, status in zip(("first", "second")[: len(statuses)], statuses, strict=True)]
+
+    finalize_and_distribute_deploy_audit(
+        _context(root),
+        "app",
+        build_path,
+        execution_id="11111111-1111-1111-1111-111111111111",
+        started_at=datetime.now(timezone.utc),
+        run_diagnostics=run_diagnostics,
+        stages=stages,
+    )
+
+    manifest = _audit_json(root, "_manifest.json")
+    metrics = _audit_json(root, "_metrics.json")
+    assert manifest["status"] == expected
+    assert [s["status"] for s in manifest.get("stages", [])] == statuses
+    assert metrics["dimensions"]["outcome"] == ("success" if expected == "success" else "failed")
+    assert (metrics["measures"]["stages_total"], metrics["measures"]["stages_failed"]) == (total, failed)

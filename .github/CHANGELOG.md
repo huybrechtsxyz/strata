@@ -62,6 +62,12 @@ commit to the repository a pipeline checked out, and a solution can read documen
   - `pipeline`: the Azure Pipelines or GitHub Actions run that deployed, with a link to it. Left out outside CI.
   - `file`: the deployment document's path.
   - `warnings` and `messages`: the run's warnings and info findings. Until now only `errors` were kept.
+  - `stages`: one per provisioning step, with its status (`success`, `failed`, or `skipped` and why), its timing,
+    each phase it ran (`setup`, `check`, `plan`, `apply`, `destroy`) and the findings that name it. See
+    [Stages](../docs/design/audit-trail.md#stages).
+- **A deploy that fails after a step succeeded is recorded as `partial`**, not `failed`: something changed before it
+  stopped. The metrics' `stages_total` and `stages_failed` now count real steps; `outcome` there, and in the sent
+  event, stays `success` or `failed`.
 
 ### Changed
 
@@ -83,6 +89,8 @@ commit to the repository a pipeline checked out, and a solution can read documen
     would have named the wrong author; `git show <commit_sha>` gives both for the commit that was built;
   - `force` (`deploy run --force` has no effect), `pull_request`, `outputs`, `signatures`, and `metadata`, replaced
     by `pipeline`.
+- A stage's `outputs`, `outputs_artifact` and `topology`, also never filled. Output values stay in the workspace's
+  `output_store`; a step can target several topologies.
 
 ## [2.7.0] - 2026-11-14
 

@@ -35,6 +35,7 @@ from strata.commands.options import output_option, pin_callback, quiet_option, r
 from strata.commands.run import command_run
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.deploy_controller import deploy_run
+from strata.controllers.deploy_stage_log import StageLog
 from strata.controllers.integration_readiness import IntegrationReadiness
 from strata.controllers.solution_context import open_solution
 from strata.models.audit_manifest_model import ManifestProviderModel
@@ -474,6 +475,7 @@ def deploy_run_command(
         # own "Per-line event shape" design question).
         on_step, on_line = _line_follow_callbacks(follow, output, run.step)
         providers, on_tool = _provider_recorder()
+        stage_log = StageLog()
 
         diagnostics = deploy_run(
             context,
@@ -489,6 +491,7 @@ def deploy_run_command(
             pin=pin,
             output_max_age=output_max_age,
             on_tool=on_tool,
+            stage_log=stage_log,
         )
 
         # Audit trail — finalize + write locally + distribute (docs/design/
@@ -515,6 +518,7 @@ def deploy_run_command(
             change_approved_by=change_approved_by,
             change_approved_at=change_approved_at,
             providers=list(providers.values()),
+            stages=stage_log.stages(diagnostics),
         )
         diagnostics.extend(audit_diagnostics)
 
@@ -787,6 +791,7 @@ def deploy_apply_command(
 
         on_step, on_line = _line_follow_callbacks(follow, output, run.step)
         providers, on_tool = _provider_recorder()
+        stage_log = StageLog()
 
         diagnostics = deploy_run(
             context,
@@ -801,6 +806,7 @@ def deploy_apply_command(
             pin=pin,
             output_max_age=output_max_age,
             on_tool=on_tool,
+            stage_log=stage_log,
         )
 
         # Audit trail — same as `deploy run` (docs/design/audit-trail.md):
@@ -827,6 +833,7 @@ def deploy_apply_command(
             change_approved_by=change_approved_by,
             change_approved_at=change_approved_at,
             providers=list(providers.values()),
+            stages=stage_log.stages(diagnostics),
         )
         diagnostics.extend(audit_diagnostics)
 
@@ -946,6 +953,7 @@ def deploy_destroy_command(
 
         on_step, on_line = _line_follow_callbacks(follow, output, run.step)
         providers, on_tool = _provider_recorder()
+        stage_log = StageLog()
 
         diagnostics = deploy_run(
             context,
@@ -962,6 +970,7 @@ def deploy_destroy_command(
             pin=pin,
             output_max_age=output_max_age,
             on_tool=on_tool,
+            stage_log=stage_log,
         )
 
         # A preview or a smoke test changes nothing, so only a real destroy gets an audit record.
@@ -985,6 +994,7 @@ def deploy_destroy_command(
                 change_approved_by=change_approved_by,
                 change_approved_at=change_approved_at,
                 providers=list(providers.values()),
+                stages=stage_log.stages(diagnostics),
             )
             diagnostics.extend(audit_diagnostics)
 

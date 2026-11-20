@@ -3,15 +3,8 @@
 sequencing (docs/design/audit-trail.md's "Write once locally, then
 distribute").
 
-Glues the audit trail into `deploy run`'s command flow. Deliberately a
-NEW module, not a change to `deploy_controller.py::deploy_run()` itself:
-that function's existing fail-fast, single-return-diagnostics shape is
-complex, heavily tested, and load-bearing — this wraps its *result*
-rather than restructuring its internals to expose finer-grained stage/step
-data it doesn't have today. `stages`/per-step timing on the manifest are
-therefore coarser than the full design in this pass: no `stages[]` at all
-— revisited once `deploy_run()` itself is refactored to expose that data
-(separate, larger work, not bundled into this phase).
+Glues the audit trail into `deploy run`'s command flow. It wraps `deploy_run()`'s *result*: the run's findings,
+and the `stages` its `StageLog` recorded (`deploy_stage_log.py`), which also decide `partial`.
 
 `artifacts.platform` references `build_path/resolved.yaml`
 (`build_controller.write_resolved_manifest()`) — v2's closest real
@@ -82,6 +75,7 @@ from strata.models.audit_manifest_model import (
     ManifestProviderModel,
     ManifestRepositoryModel,
     ManifestSbomReferenceModel,
+    ManifestStageModel,
 )
 from strata.models.audit_metrics_model import DeploymentMetricsModel, MetricsDimensionsModel, MetricsMeasuresModel
 from strata.models.audit_model import EVENT_DEFAULTS, AuditGitSinkTargetModel, AuditSinkModel
@@ -128,6 +122,7 @@ def finalize_and_distribute_deploy_audit(
     change_approved_by: str | None = None,
     change_approved_at: str | None = None,
     providers: Sequence[ManifestProviderModel] = (),
+    stages: Sequence[ManifestStageModel] = (),
 ) -> Diagnostics:
     """Finalize the manifest + metrics for a `deploy run` invocation, write
     them locally, then distribute to every configured sink.
@@ -175,6 +170,8 @@ def finalize_and_distribute_deploy_audit(
             auto-derived from this run's own clock.
         providers: One entry per provisioner the run used, with the tool version and path its preflight found
             (`deploy_run(on_tool=...)`, docs/design/helm-chart-deployment.md); `artifacts.providers` is omitted when empty.
+        stages: What each step did (`deploy_run(stage_log=...)`); `stages` is omitted when empty. A failed run with
+            a stage that succeeded is `partial`: something changed before it stopped.
 
     Returns:
         Findings from finalizing/writing/distributing only — never
@@ -197,7 +194,7 @@ def finalize_and_distribute_deploy_audit(
     configuration = _single_configuration(context)
     completed_at = datetime.now(timezone.utc)
     duration_seconds = (completed_at - started_at).total_seconds()
-    status: Literal["success", "failed"] = "success" if run_diagnostics.ok else "failed"
+    status = _status(run_diagnostics, stages)
     actor = resolve_actor()
     environment = _single_environment(deployment)
     change_reference = _build_change_reference(
@@ -247,6 +244,7 @@ def finalize_and_distribute_deploy_audit(
         ),
         sbom=_sbom_reference(build_path, diagnostics),
         change_reference=change_reference,
+        stages=list(stages) or None,
         policy_results=None if action == "destroy" else read_policy_results(build_path),
         errors=run_diagnostics.messages(Severity.ERROR) or None,
         warnings=run_diagnostics.messages(Severity.WARNING) or None,
@@ -257,9 +255,17 @@ def finalize_and_distribute_deploy_audit(
         deployment=deployment_name,
         workspace=deployment.spec.workspace,
         timestamp=started_at.isoformat(),
-        dimensions=MetricsDimensionsModel(outcome=status, action=action, environment=environment, actor=actor),
+        # `outcome` stays success or failed, so a dashboard's failure rate counts a partial run as failed.
+        dimensions=MetricsDimensionsModel(
+            outcome="success" if status == "success" else "failed",
+            action=action,
+            environment=environment,
+            actor=actor,
+        ),
         measures=MetricsMeasuresModel(
-            duration_seconds=duration_seconds, stages_total=1, stages_failed=0 if status == "success" else 1
+            duration_seconds=duration_seconds,
+            stages_total=sum(stage.status != "skipped" for stage in stages),
+            stages_failed=sum(stage.status == "failed" for stage in stages),
         ),
     )
 
@@ -601,6 +607,16 @@ def _document_file(context: SolutionContext, deployment_name: str) -> str | None
         return entry.source.resolve().relative_to(context.root.resolve()).as_posix()
     except ValueError:
         return entry.source.as_posix()
+
+
+def _status(
+    run_diagnostics: Diagnostics, stages: Sequence[ManifestStageModel]
+) -> Literal["success", "partial", "failed"]:
+    """`success` without errors; `partial` when the run failed after a stage succeeded, so something changed;
+    `failed` otherwise (docs/design/audit-trail.md, "Stages")."""
+    if run_diagnostics.ok:
+        return "success"
+    return "partial" if any(stage.status == "success" for stage in stages) else "failed"
 
 
 def _pipeline() -> ManifestPipelineModel | None:

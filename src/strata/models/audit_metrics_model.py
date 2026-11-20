@@ -57,7 +57,9 @@ class MetricsDimensionsModel(PlatformBaseModel):
     structurally does not carry).
     """
 
-    outcome: str = Field(description="Execution-level success/failure: 'success' | 'failed'")
+    outcome: str = Field(
+        description="Execution-level success/failure: 'success' | 'failed'; a 'partial' manifest is 'failed' here"
+    )
     action: str = Field(description="'deploy' | 'destroy' — never 'build', never a dry run")
     environment: str | None = Field(default=None, description="Environment label")
     tenant: str | None = Field(default=None, description="Tenant name, when applicable")
@@ -69,7 +71,7 @@ class MetricsMeasuresModel(PlatformBaseModel):
     """What you aggregate."""
 
     duration_seconds: float = Field(description="Total wall-clock duration — the 'runtime' ask")
-    stages_total: int = Field(description="Total number of stages executed")
+    stages_total: int = Field(description="Number of stages that ran (not skipped)")
     stages_failed: int = Field(description="Number of stages that failed")
     resource_changes: int | None = Field(default=None, description="Resource change count, when available")
     policy_checks_total: int | None = Field(default=None, description="Total policy/gate checks evaluated")

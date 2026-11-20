@@ -122,7 +122,8 @@ def render_manifest_event(
         api_version=api_version,
         event_type=f"deployment.{suffix}",
         ecs_action=f"deployment-{suffix}",
-        outcome=manifest.status,
+        # Two values, as in the metrics' `outcome`: a partial run failed. The manifest it points to says `partial`.
+        outcome="success" if manifest.status == "success" else "failed",
         time=manifest.completed_at or manifest.started_at,
         workspace=manifest.workspace,
         deployment=manifest.deployment,

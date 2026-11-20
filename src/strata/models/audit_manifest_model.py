@@ -169,27 +169,20 @@ class ManifestArtifactsModel(PlatformBaseModel):
 
 
 class ManifestStepModel(PlatformBaseModel):
-    """One step within a stage — deploy-log's richer per-step shape, kept over the
-    manifest's own coarser (names-only) `steps[]`."""
+    """One phase of a stage: `setup`, `check`, `plan`, `apply` or `destroy`, the names a deployment stage's
+    `timeouts` use."""
 
-    step: str = Field(description="Step name, e.g. 'init', 'plan', 'apply'")
-    success: bool = Field(description="Whether this step succeeded")
+    step: str = Field(description="Phase name: 'setup', 'check', 'plan', 'apply' or 'destroy'")
+    success: bool = Field(description="Whether this phase succeeded")
     duration_seconds: float | None = Field(default=None, description="Wall-clock duration in seconds")
 
 
-class ManifestOutputsReferenceModel(PlatformBaseModel):
-    """Reference to a durable outputs artifact — path + hash, never embedded values."""
-
-    path: str = Field(description="Relative path to the outputs artifact JSON file")
-    sha256: str = Field(description="SHA-256 hash of the outputs artifact")
-
-
 class ManifestStageModel(PlatformBaseModel):
-    """Result of a single deployment stage execution."""
+    """One provisioning step of the run (docs/design/audit-trail.md, "Stages"). No output values: those stay in
+    the workspace's `output_store`, out of a file sent to every sink."""
 
-    name: PlatformName = Field(description="Stage name")
+    name: PlatformName = Field(description="Provisioning step name")
     provisioner: str | None = Field(default=None, description="Provisioner used")
-    topology: str | None = Field(default=None, description="Topology name, if topology-based")
     status: Literal["success", "failed", "skipped"] = Field(description="Stage outcome")
     skip_reason: str | None = Field(
         default=None, description="Why the stage was skipped — set only when status is 'skipped'"
@@ -197,11 +190,7 @@ class ManifestStageModel(PlatformBaseModel):
     started_at: str | None = Field(default=None, description="ISO-8601 start timestamp")
     completed_at: str | None = Field(default=None, description="ISO-8601 completion timestamp")
     duration_seconds: float | None = Field(default=None, description="Wall-clock duration in seconds")
-    steps: list[ManifestStepModel] | None = Field(default=None, description="Per-step outcome and timing")
-    outputs: dict[str, Any] | None = Field(default=None, description="Non-sensitive outputs collected from the stage")
-    outputs_artifact: ManifestOutputsReferenceModel | None = Field(
-        default=None, description="Reference to the durable outputs artifact for this stage"
-    )
+    steps: list[ManifestStepModel] | None = Field(default=None, description="Per-phase outcome and timing")
     errors: list[str] | None = Field(default=None, description="Error messages if the stage failed")
     warnings: list[str] | None = Field(default=None, description="Non-fatal warnings recorded for this stage")
     messages: list[str] | None = Field(default=None, description="Informational messages recorded for this stage")

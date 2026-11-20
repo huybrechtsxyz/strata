@@ -37,6 +37,7 @@ from strata.controllers.build_controller import (
     build_resolved_workspace_graph,
     ordered_by_depends_on,
 )
+from strata.controllers.deploy_stage_log import StageLog
 from strata.controllers.deployment_output_store import (
     DeploymentOutputStore,
     OutputRecordNotFoundError,
@@ -968,6 +969,7 @@ def deploy_run(
     output_max_age: int | None = None,
     destroy: bool = False,
     on_tool: Callable[[str, IntegrationReadiness], None] | None = None,
+    stage_log: StageLog | None = None,
 ) -> Diagnostics:
     """Execute `deployment_name`'s workspace provisioners against `build_path`
     (already rendered by a prior `build run` — this never re-renders it).
@@ -1081,6 +1083,9 @@ def deploy_run(
         on_tool: Called as `(provisioner name, readiness)` for every step the preflight lets run, so the caller
             can record which tool, version and path deployed it (docs/design/helm-chart-deployment.md). Called before any
             step runs, also when a later step then fails.
+        stage_log: Filled with what each selected step did (when it started, its phases, whether it got there), for
+            the audit manifest's `stages` (docs/design/audit-trail.md, "Stages"). Read it with `stages()` after this
+            returns.
 
     Returns:
         Diagnostics accumulated while resolving values, preflight-
@@ -1343,6 +1348,8 @@ def deploy_run(
             return diagnostics
         _step("no steps match the given --stage/--scope filter")
         return diagnostics
+    log = stage_log if stage_log is not None else StageLog()
+    log.expect([(step.name, step.provisioner) for step in steps], diagnostics)
 
     # Preflight — validate every filtered step's tool is available BEFORE
     # running anything (docs/design/deploy-command.md's "Structural
@@ -1505,7 +1512,9 @@ def deploy_run(
         integration_type = type(integration).__name__
         deployment_stage = stage_by_step.get(step.name)
         if destroy and not integration.supports_destroy:
+            log.skip(step.name, f"{integration.TYPE} cannot destroy")
             continue  # already reported by the pre-flight
+        log.begin(step.name)
 
         # `_tool` is bound as a default argument, not read from the
         # enclosing scope at call time (ruff B023) — `integration` is a
@@ -1600,6 +1609,7 @@ def deploy_run(
                     f"step '{step.name}' via {integration_type}: {_target_context_label(integration)} '{target_context}'"
                 )
             if destroy:
+                log.phase("destroy")
                 for namespace, modules in reversed(container_targets):
                     diagnostics.extend(
                         integration.destroy_namespace(
@@ -1620,6 +1630,7 @@ def deploy_run(
                 # The container counterpart to Terraform's `validate()` (ADR-0043);
                 # `deploy apply` skips it, as it skips `validate()`.
                 has_check_phase = True
+                log.phase("check")
                 for namespace, modules in container_targets:
                     try:
                         check_diagnostics = integration.check_namespace(
@@ -1658,6 +1669,7 @@ def deploy_run(
                 if report_store is not None and not dry_run
                 else (set(), False)
             )
+            log.phase("plan" if dry_run else "apply")
             for namespace, modules in container_targets:
                 diagnostics.extend(
                     integration.deploy_namespace(
@@ -1674,6 +1686,7 @@ def deploy_run(
                 )
             if not diagnostics.ok:
                 return diagnostics
+            log.end_phase()
             if report_store is not None and not dry_run:
                 # A container step has no outputs, only a report record: the secrets its modules used.
                 try:
@@ -1808,6 +1821,7 @@ def deploy_run(
         _step(f"running step '{step.name}' via {integration_type}")
         init = getattr(integration, "init", None)
         if init is not None:
+            log.phase("setup")
             init_result = init(
                 path,
                 backend_config=backend_config,
@@ -1838,6 +1852,7 @@ def deploy_run(
         elif not destroy:
             validate = getattr(integration, "validate", None)
             if validate is not None:
+                log.phase("check")
                 validate_result = validate(
                     path, env=env, line_callback=_line, **_timeout_kwargs(step, deployment_stage, "check")
                 )
@@ -1881,6 +1896,7 @@ def deploy_run(
             step_resolved_values = tokens
 
         if destroy:
+            log.phase("plan" if dry_run else "destroy")
             if not _destroy_step(
                 integration,
                 step,
@@ -1901,6 +1917,7 @@ def deploy_run(
             continue
 
         if not use_saved_plan:
+            log.phase("plan")
             plan_seen: list[bool] = []
 
             def _watching_plan(
@@ -1958,6 +1975,7 @@ def deploy_run(
                 _step(f"planned step '{step.name}' via {integration_type} (dry-run, no apply)")
                 continue
 
+        log.phase("apply")
         deploy_result = integration.deploy(
             path,
             plan_file=f"{step.name}.tfplan",
@@ -1973,6 +1991,7 @@ def deploy_run(
                 f"Step '{step.name}': deploy failed — {_failure_detail(deploy_result, _redact)}", location=step.name
             )
             return diagnostics
+        log.end_phase()
         if provisioner.gitops is not None and provisioner.gitops.action != "push":
             # A path remote's `commit` or `none`: a later pipeline step pushes (docs/design/remote-commit-provenance.md,
             # "Writing to a path remote").
@@ -2038,6 +2057,7 @@ def deploy_run(
             )
 
         _step(f"deployed step '{step.name}' via {integration_type}")
+    log.finish()
 
     # Only after the whole run succeeded: a retry re-runs the steps already destroyed, and those still need
     # their upstream steps' recorded outputs (docs/design/deploy-destroy.md, D8).
