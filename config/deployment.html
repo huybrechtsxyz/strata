@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deployment (kind: deployment) &mdash; strata 2.7.0 documentation</title>
+  <title>Deployment (kind: deployment) &mdash; strata 2.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=dfec817d"></script>
+      <script src="../_static/documentation_options.js?v=69ff2ef9"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -173,9 +173,9 @@ replaces the list for one run</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.docker_context</span></code> — the Docker context that this deployment’s Compose steps deploy to — see “Choosing the
 target” below</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> — another deployment document (typically <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code>) whose spec is merged
-in before this one’s (child wins; nested blocks deep-merge; stages merge by step name and
-<code class="docutils literal notranslate"><span class="pre">providers</span></code> and <code class="docutils literal notranslate"><span class="pre">assets</span></code> by slot; <code class="docutils literal notranslate"><span class="pre">environments</span></code> and <code class="docutils literal notranslate"><span class="pre">version</span></code> lists append base-first, each entry once; other
-lists are replaced)</p></li>
+in before this one’s (child wins; nested blocks deep-merge; stages merge by step name, and a merged stage’s
+<code class="docutils literal notranslate"><span class="pre">health_checks</span></code> by name; <code class="docutils literal notranslate"><span class="pre">providers</span></code> and <code class="docutils literal notranslate"><span class="pre">assets</span></code> merge by slot; <code class="docutils literal notranslate"><span class="pre">environments</span></code>, <code class="docutils literal notranslate"><span class="pre">configurations</span></code> and <code class="docutils literal notranslate"><span class="pre">version</span></code>
+lists append base-first, each entry once; other lists are replaced)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.partial</span></code> — <code class="docutils literal notranslate"><span class="pre">true</span></code> marks a base deployment as not independently deployable (a leaf picks it
 up via <code class="docutils literal notranslate"><span class="pre">extends</span></code>)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.providers[]</span></code> — rebind <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">workspace</span></code></span></a> provider slots for this deployment, each

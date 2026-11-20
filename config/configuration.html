@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Configuration (kind: configuration) &mdash; strata 2.7.0 documentation</title>
+  <title>Configuration (kind: configuration) &mdash; strata 2.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=dfec817d"></script>
+      <script src="../_static/documentation_options.js?v=69ff2ef9"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -77,6 +77,8 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#which-commits-were-deployed">Which commits were deployed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#audit-files-in-a-repository-your-pipeline-checked-out">Audit files in a repository your pipeline checked out</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
@@ -145,6 +147,15 @@ logging, cost/drift tracking are not ported (only added when a v2 feature actual
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.providers[]</span></code> — names of <code class="docutils literal notranslate"><span class="pre">ProviderConfig</span></code> documents (the provider type registry)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.topologies[]</span></code> — names of <code class="docutils literal notranslate"><span class="pre">TopologyConfig</span></code> documents (the topology type registry)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.additional_topologies</span></code> — allow topology types not listed in <code class="docutils literal notranslate"><span class="pre">spec.topologies</span></code> (default <code class="docutils literal notranslate"><span class="pre">false</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.audit</span></code> — the deployment audit trail, all optional:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">event_overrides</span></code> — switch event types on or off;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sinks[]</span></code> — send the audit record to a git repository or an integration. A git sink names a <code class="docutils literal notranslate"><span class="pre">remote</span></code>, the
+<code class="docutils literal notranslate"><span class="pre">branch</span></code> to push to, a folder <code class="docutils literal notranslate"><span class="pre">path</span></code>, and an <code class="docutils literal notranslate"><span class="pre">action</span></code> (<code class="docutils literal notranslate"><span class="pre">push</span></code>, the default; <code class="docutils literal notranslate"><span class="pre">commit</span></code>; <code class="docutils literal notranslate"><span class="pre">none</span></code>; see below);</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">require_remote_commits</span></code> — fail <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> when the build does not record a clean commit for every
+repository it took files from (default <code class="docutils literal notranslate"><span class="pre">false</span></code>; see below)</p></li>
+</ul>
+</li>
 </ul>
 </section>
 <section id="example">
@@ -161,6 +172,142 @@ logging, cost/drift tracking are not ported (only added when a v2 feature actual
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kubernetes</span>
 </pre></div>
 </div>
+</section>
+<section id="which-commits-were-deployed">
+<h2>Which commits were deployed<a class="headerlink" href="#which-commits-were-deployed" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> writes two keys in <code class="docutils literal notranslate"><span class="pre">build/&lt;deployment&gt;/resolved.yaml</span></code>. The solution’s own commit sits under <code class="docutils literal notranslate"><span class="pre">solution</span></code>.
+Every git remote the build copied files from sits under <code class="docutils literal notranslate"><span class="pre">remotes</span></code>, and so does every document remote
+(<code class="docutils literal notranslate"><span class="pre">spec.discovery.remotes</span></code> in <a class="reference internal" href="solution.html#documents-in-other-repositories"><span class="std std-ref">solution.md</span></a>). An asset’s own
+<code class="docutils literal notranslate"><span class="pre">spec.location</span></code> is listed as <code class="docutils literal notranslate"><span class="pre">asset:&lt;name&gt;</span></code>.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">solution</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">commit</span><span class="p">:</span><span class="w"> </span><span class="nv">5d0e7a9c31...</span><span class="p p-Indicator">,</span><span class="nt"> dirty</span><span class="p">:</span><span class="w"> </span><span class="nv">false</span><span class="p p-Indicator">}</span>
+<span class="nt">remotes</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">iac</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="nv">https</span><span class="p p-Indicator">:</span><span class="nv">//github.com/org/iac.git</span><span class="p p-Indicator">,</span><span class="nt"> ref</span><span class="p">:</span><span class="w"> </span><span class="nv">null</span><span class="p p-Indicator">,</span><span class="nt"> commit</span><span class="p">:</span><span class="w"> </span><span class="nv">3f9c2e1d4b...</span><span class="p p-Indicator">,</span><span class="nt"> dirty</span><span class="p">:</span><span class="w"> </span><span class="nv">false</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ref</span></code> is the reference after version pins. It is <code class="docutils literal notranslate"><span class="pre">null</span></code> for a <code class="docutils literal notranslate"><span class="pre">path</span></code> remote, because the pipeline chose it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dirty:</span> <span class="pre">true</span></code> means files the build took had uncommitted changes, so the commit alone does not describe them.
+Only the paths the build copied are checked. Files that git ignores do not count.</p></li>
+<li><p>The solution’s <code class="docutils literal notranslate"><span class="pre">commit</span></code> is the one the SBOM records: a CI commit variable first, otherwise <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">rev-parse</span> <span class="pre">HEAD</span></code>.</p></li>
+</ul>
+<p>The deploy’s audit manifest copies the record. <code class="docutils literal notranslate"><span class="pre">artifacts.repositories.&lt;name&gt;</span></code> gains <code class="docutils literal notranslate"><span class="pre">commit</span></code> and <code class="docutils literal notranslate"><span class="pre">dirty</span></code>, and the
+solution’s record becomes <code class="docutils literal notranslate"><span class="pre">commit_sha</span></code> and <code class="docutils literal notranslate"><span class="pre">commit_dirty</span></code>. The manifest therefore names what was built, even when
+build and deploy run in separate jobs or a checkout moved in between. A build made by an older strata has no record.
+Its deploy reads the commits at deploy time, as before.</p>
+<p>The build warns about a gap: <code class="docutils literal notranslate"><span class="pre">audit_remote_commit_unavailable</span></code> when a commit could not be read, and
+<code class="docutils literal notranslate"><span class="pre">remote_checkout_dirty</span></code> when files had uncommitted changes. A solution that is not a git repository records <code class="docutils literal notranslate"><span class="pre">null</span></code>
+without a warning.</p>
+<p>To make a gap fail the deploy, turn the option on:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">audit</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">require_remote_commits</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>, <code class="docutils literal notranslate"><span class="pre">plan</span></code> and <code class="docutils literal notranslate"><span class="pre">apply</span></code> then stop before anything changes, with one error per gap:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Error</p></th>
+<th class="head"><p>Cause</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">audit_remote_commit_unavailable</span></code></p></td>
+<td><p>The solution or a remote has no recorded commit, for example a plain copy or a solution outside git</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">remote_checkout_dirty</span></code></p></td>
+<td><p>Files the build took had uncommitted changes, or could not be checked</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">build_remote_provenance_missing</span></code></p></td>
+<td><p>The build was made by a strata that did not record commits</p></td>
+</tr>
+</tbody>
+</table>
+<p>A build still only warns, so building an uncommitted edit on a workstation keeps working. Rebuild from a clean,
+committed checkout to deploy. A destroy is not checked. A recorded commit may never have been pushed. Strata does not
+check that, because a pipeline’s checkout usually has no remote branches to compare with.</p>
+</section>
+<section id="audit-files-in-a-repository-your-pipeline-checked-out">
+<h2>Audit files in a repository your pipeline checked out<a class="headerlink" href="#audit-files-in-a-repository-your-pipeline-checked-out" title="Link to this heading"></a></h2>
+<p>A git audit sink usually names a remote with a <code class="docutils literal notranslate"><span class="pre">reference</span></code>. Strata then keeps its own clone under
+<code class="docutils literal notranslate"><span class="pre">.strata/audit-push/</span></code>, fetches and resets it before each write, and pushes with the remote’s <code class="docutils literal notranslate"><span class="pre">integration</span></code>.</p>
+<p>When the pipeline has already checked the repository out, name a remote with a <code class="docutils literal notranslate"><span class="pre">path</span></code> instead
+(see <a class="reference internal" href="solution.html#a-repository-your-pipeline-checked-out"><span class="std std-ref">solution.md</span></a>). Strata then writes in that checkout:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># strata.yaml</span>
+<span class="nt">remotes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">inventory</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git</span>
+<span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://dev.azure.com/org/project/_git/inventory</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repos/inventory</span><span class="w">          </span><span class="c1"># the pipeline's checkout</span>
+
+<span class="c1"># configuration.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">audit</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">sinks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">inventory</span>
+<span class="w">        </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="nt">git</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">remote</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">inventory</span>
+<span class="w">          </span><span class="nt">branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span><span class="w">             </span><span class="c1"># the branch pushed to</span>
+<span class="w">          </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploys</span>
+<span class="w">          </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">push</span><span class="w">             </span><span class="c1"># the default</span>
+</pre></div>
+</div>
+<ul>
+<li><p><strong>What strata does in the checkout.</strong> It never clones, resets or switches branch in it. It writes the audit
+files under <code class="docutils literal notranslate"><span class="pre">path</span></code> and commits only those files. Other changes in the checkout stay as they were: modified,
+staged or untracked. The commit author is the deploying actor. Strata passes it per command and does not
+change the checkout’s git config.</p></li>
+<li><p><strong>Pushing.</strong> The push runs <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">push</span> <span class="pre">origin</span> <span class="pre">HEAD:&lt;branch&gt;</span></code>, so a detached checkout works. It uses the
+checkout’s own credentials. In Azure DevOps that means <code class="docutils literal notranslate"><span class="pre">persistCredentials:</span> <span class="pre">true</span></code> on the <code class="docutils literal notranslate"><span class="pre">checkout:</span></code> step. When
+the branch moved since the checkout, strata fetches it, rebases the audit commit onto it and pushes again, three
+times in all.</p>
+<ul class="simple">
+<li><p><strong>Check out <code class="docutils literal notranslate"><span class="pre">branch</span></code></strong> (or a commit already on it). Strata pushes only commits it made: when the checkout holds
+others the branch lacks, such as a feature branch or a pull request’s merge, the push is refused with a message
+naming the commit, so they never land on <code class="docutils literal notranslate"><span class="pre">branch</span></code>.</p></li>
+<li><p>A commit an earlier run left unpushed, on an agent that keeps its checkout, is pushed by the next run.</p></li>
+<li><p>A push the server refuses, such as a protected branch, fails at once without a rebase.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--autostash</span></code> keeps the checkout’s other changes, but a staged change comes back unstaged.</p></li>
+<li><p>A rebase that conflicts is aborted. Each deploy writes its own folder, so a conflict means two deploys wrote the
+same audit path.</p></li>
+</ul>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">action</span></code></strong> says how far strata goes. Each step includes the ones before it:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">action</span></code></p></th>
+<th class="head"><p>Strata</p></th>
+<th class="head"><p>Then</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">push</span></code> (default)</p></td>
+<td><p>writes, commits and pushes</p></td>
+<td><p>-</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">commit</span></code></p></td>
+<td><p>writes and commits</p></td>
+<td><p>a later pipeline step pushes</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">none</span></code></p></td>
+<td><p>writes the files only</p></td>
+<td><p>a later pipeline step commits and pushes</p></td>
+</tr>
+</tbody>
+</table>
+<p>With <code class="docutils literal notranslate"><span class="pre">commit</span></code> or <code class="docutils literal notranslate"><span class="pre">none</span></code> the deploy reports <code class="docutils literal notranslate"><span class="pre">audit_sink_not_pushed</span></code> as information. Both need a remote with a
+<code class="docutils literal notranslate"><span class="pre">path</span></code>. With a <code class="docutils literal notranslate"><span class="pre">reference</span></code>, strata writes into its own clone, which nothing else reads, so <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>
+reports <code class="docutils literal notranslate"><span class="pre">audit_sink_action_needs_path_remote</span></code>.</p>
+</li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">required</span></code></strong> keeps its meaning. With <code class="docutils literal notranslate"><span class="pre">required:</span> <span class="pre">true</span></code>, a failed write, commit or push fails the deploy
+(<code class="docutils literal notranslate"><span class="pre">audit_sink_push_failed</span></code>). Without it, the failure is a warning.</p></li>
+<li><p><strong>Reading and writing the same repository.</strong> The build records the checkout’s commit before the deploy commits
+the audit files, so the record still names what was built. But a sink <code class="docutils literal notranslate"><span class="pre">path</span></code> inside a <code class="docutils literal notranslate"><span class="pre">source_path</span></code> the build
+takes from the same remote would put audit files into the next build. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> warns
+(<code class="docutils literal notranslate"><span class="pre">audit_sink_overlaps_source</span></code>).</p></li>
+</ul>
+<p>A GitOps step can write to a <code class="docutils literal notranslate"><span class="pre">path</span></code> remote the same way, with its own <code class="docutils literal notranslate"><span class="pre">branch</span></code> and <code class="docutils literal notranslate"><span class="pre">action</span></code>; see
+<a class="reference internal" href="solution.html#a-repository-your-pipeline-checked-out"><span class="std std-ref">solution.md</span></a>.</p>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
