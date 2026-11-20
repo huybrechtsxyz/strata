@@ -24,7 +24,6 @@ action with no gates/approvals/lock/resource changes) and never a dry run
 """
 
 from enum import Enum
-from typing import Any
 
 from pydantic import Field, model_validator
 
@@ -73,23 +72,11 @@ class MetricsMeasuresModel(PlatformBaseModel):
     duration_seconds: float = Field(description="Total wall-clock duration — the 'runtime' ask")
     stages_total: int = Field(description="Number of stages that ran (not skipped)")
     stages_failed: int = Field(description="Number of stages that failed")
-    resource_changes: int | None = Field(default=None, description="Resource change count, when available")
+    # No `resource_changes`: only Terraform's plan summary could give it (docs/design/audit-trail.md, History).
     policy_checks_total: int | None = Field(default=None, description="Total policy/gate checks evaluated")
     policy_checks_failed: int | None = Field(
         default=None, description="Policy/gate checks that did not pass, whatever their enforcement (deny, warn, audit)"
     )
-
-
-class MetricsSectionModel(PlatformBaseModel):
-    """A conditional group (cost, SBOM/CVE, drift) that may not have run for a given deploy.
-
-    `measured` is explicit rather than inferred from `data` being present —
-    a plain `null` cannot distinguish "not measured" from "measured as
-    zero", and that ambiguity silently corrupts any average built on top.
-    """
-
-    measured: bool = Field(default=False, description="Whether this section actually ran for this deployment")
-    data: dict[str, Any] | None = Field(default=None, description="Section-specific fields, when measured")
 
 
 class DeploymentMetricsModel(PlatformBaseModel):
@@ -102,12 +89,12 @@ class DeploymentMetricsModel(PlatformBaseModel):
 
     dimensions: MetricsDimensionsModel = Field(description="What this record can be sliced by")
     measures: MetricsMeasuresModel = Field(description="What this record can be aggregated on")
-    sections: dict[str, MetricsSectionModel] | None = Field(
-        default=None, description="Conditional groups keyed by name, e.g. 'cost', 'sbom_cve', 'drift'"
-    )
+    # No `sections` (cost, CVE, drift): nothing measures them. A measure left out means "not measured".
 
     error_category: ErrorCategory | None = Field(
-        default=None, description="Bounded failure classification — set only when outcome is 'failed'"
+        default=None,
+        description="Bounded failure classification — set only when outcome is 'failed' "
+        "(`audit_error_category.error_category()`)",
     )
     label_safe: list[str] = Field(
         default_factory=lambda: ["outcome", "action", "environment", "tenant"],

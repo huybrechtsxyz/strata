@@ -89,7 +89,9 @@ def _render_event(
                 "kind": "event",
                 "category": ["configuration"],
                 "action": ecs_action,
-                "outcome": outcome,
+                # ECS allows `success`, `failure` and `unknown`; a failed or partial run is a `failure`. The
+                # manifest it points to says which (docs/design/audit-trail.md, "Stages").
+                "outcome": "success" if outcome == "success" else "failure",
                 "duration": duration_nanos,
             },
             "user": {"name": actor},
@@ -122,8 +124,7 @@ def render_manifest_event(
         api_version=api_version,
         event_type=f"deployment.{suffix}",
         ecs_action=f"deployment-{suffix}",
-        # Two values, as in the metrics' `outcome`: a partial run failed. The manifest it points to says `partial`.
-        outcome="success" if manifest.status == "success" else "failed",
+        outcome=manifest.status,
         time=manifest.completed_at or manifest.started_at,
         workspace=manifest.workspace,
         deployment=manifest.deployment,

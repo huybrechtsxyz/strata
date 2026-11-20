@@ -13,6 +13,7 @@ test driving a real local bare git repository to prove the whole
 
 import json
 import subprocess
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -49,6 +50,7 @@ def _manifest_json(
     status: str = "success",
     action: str = "deploy",
     commit_sha: str | None = None,
+    stages: list[dict] | None = None,
 ) -> str:
     return json.dumps(
         {
@@ -63,6 +65,7 @@ def _manifest_json(
             "version": "2.4.1",
             "artifacts": {"platform": {"hash": "sha256:abc123", "path": "resolved.yaml"}},
             **({"commit_sha": commit_sha} if commit_sha else {}),
+            **({"stages": stages} if stages else {}),
         }
     )
 
@@ -205,6 +208,46 @@ def test_list_latest_per_deployment_keeps_only_the_max_started_at(tmp_path: Path
 
     assert len(records) == 1
     assert records[0].completed_at == "2026-10-05T00:00:00+00:00"
+
+
+def test_a_record_names_the_step_a_partial_run_stopped_at(tmp_path: Path):
+    """docs/design/audit-trail.md, "Stages": the first failed stage, read from the record."""
+    sink = _git_sink().git
+    assert sink is not None
+    stages = [
+        {"name": "apply_infra", "status": "success"},
+        {"name": "apply_apps", "status": "failed"},
+        {"name": "apply_dns", "status": "skipped", "skip_reason": "an earlier step failed"},
+    ]
+    _write_manifest(
+        tmp_path / "records", "app/run1", started_at="2026-10-05T00:00:00+00:00", status="partial", stages=stages
+    )
+    _write_manifest(tmp_path / "records", "other/run1", deployment="other", started_at="2026-10-05T00:00:00+00:00")
+
+    status = list_latest_per_deployment(tmp_path, sink, deployment=None, diagnostics=Diagnostics())
+    changes = list_manifests_in_range(
+        tmp_path, sink, deployment=None, since=None, until=None, status=None, diagnostics=Diagnostics()
+    )
+
+    assert {r.deployment: r.failed_step for r in status} == {"app": "apply_apps", "other": None}
+    assert {r.deployment: r.failed_step for r in changes} == {"app": "apply_apps", "other": None}
+
+
+def test_the_status_cell_names_the_failed_step():
+    from strata.commands.audit_command import _status_cell
+
+    record = DeploymentStatusRecord(
+        deployment="app",
+        status="partial",
+        action="deploy",
+        version="2.8.0",
+        deployed_by="ci",
+        completed_at="t",
+        change_reference=None,
+        failed_step="apply_apps",
+    )
+    assert _status_cell(record) == "partial (apply_apps)"
+    assert _status_cell(replace(record, status="success", failed_step=None)) == "success"
 
 
 def test_list_latest_per_deployment_filters_by_deployment_name(tmp_path: Path):

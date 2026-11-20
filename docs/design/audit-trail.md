@@ -87,10 +87,11 @@ meant to be shipped to dashboards and SIEMs more freely:
 - `dimensions` (what to slice by: `outcome`, `action`, `environment`, the deployment's `tenant`, `actor`, and the
   manifest's `commit_sha`), `measures` (what to add up: `duration_seconds`, the stage counts, and
   `policy_checks_total`/`policy_checks_failed`, counted from `policy_results`, a check that did not pass counting as
-  failed whatever its enforcement, and left out when no policy was judged) and `sections` (optional groups, each
-  with a `measured` flag, because `null` cannot tell "not measured" from "zero");
-- `error_category`, a bounded enum (`auth`, `quota`, `timeout`, `conflict`, `policy`, `network`, `state_lock`,
-  `unknown`). Raw error text stays in the manifest; a failing Terraform run can print a connection string;
+  failed whatever its enforcement, and left out when no policy was judged). A measure that is left out was not
+  measured, because `null` cannot tell "not measured" from "zero";
+- `error_category` on a failed or partial run, a bounded enum (`auth`, `quota`, `timeout`, `conflict`, `policy`,
+  `network`, `state_lock`, `unknown`; see "Why a run failed"). Raw error text stays in the manifest; a failing
+  Terraform run can print a connection string;
 - `label_safe`, the dimensions bounded enough to use as metric labels (`execution_id`, `actor` and `commit_sha` are
   not).
 
@@ -99,7 +100,25 @@ history (or a future event) and are left to whoever aggregates the records.
 
 **The event is rendered, never written.** An integration sink gets a CloudEvents 1.0 envelope with ECS fields,
 rendered from the manifest or metrics at send time (`audit_event_rendering.py`). It points to the manifest by path
-and hash instead of carrying it, and gets a fresh `id` on every send.
+and hash instead of carrying it, and gets a fresh `id` on every send. Its `event.outcome` uses the ECS values:
+`success`, or `failure` for a failed or partial run.
+
+### Why a run failed
+
+`error_category` ([audit_error_category.py](../../src/strata/controllers/audit_error_category.py)) is decided only
+by signals strata produces itself, or a tool message that does not change between versions; anything else is
+`unknown`, never a guess. The first that matches wins:
+
+1. `policy`: a policy result with `enforcement: deny` that did not pass. The gates run before any step, so a denial
+   is the cause.
+2. An error code, in run order: `integration_credentials_rejected`, `integration_credentials_unresolved`,
+   `helm_registry_auth_failed`, `helm_registry_credentials_invalid` are `auth`; `integration_unreachable` is
+   `network`; `helm_release_conflict` is `conflict`.
+3. A marker in an error's text: strata's own "timed out and was killed" is `timeout`; Terraform's "Error acquiring
+   the state lock" is `state_lock`.
+
+`quota` has no signal yet: each cloud words it differently, inside tool output. A new code that names a cause is
+added to the table in step 2.
 
 ### Stages
 
@@ -326,6 +345,13 @@ in the pull request; nothing copies them into the manifest.
   tool versions, and the outcome is derived from the findings afterwards. The stage's `outputs`, `outputs_artifact`
   and `topology` were removed: outputs for the same reason as the top-level field, and `topology` because a step
   can target several. Until then the metrics counted every run as one stage and `status` was never `partial`.
+- The metrics file had the same gap: fields modeled from v1's ADR-0064 that nothing filled. `tenant`, `commit_sha`
+  and the policy counts were filled from data the run already had, and `error_category` from strata's own codes.
+  `resource_changes` was removed (only Terraform's plan summary could give it; Helm, Compose and scripts have no such
+  count), and so were `sections` (cost, CVE, drift), which nothing measured. The event's `outcome` said `failed`,
+  which ECS does not allow, and became `failure`.
+- `strata audit status` and `changes` name the step a failed or partial run stopped at in the status cell
+  (`partial (apply_apps)`) and as `failed_step` in JSON, rather than in a new column.
 - An Azure DevOps approval gate was planned as a script that turns the approval into a change reference. The REST
   API offers no way for a job to find the approval that gated it, and an approval has no structured input, so the
   ticket and reason come from queue-time parameters instead and the gate only stops and waits. v1's pause-and-resume

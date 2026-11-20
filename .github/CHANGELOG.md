@@ -70,6 +70,11 @@ commit to the repository a pipeline checked out, and a solution can read documen
   event, stays `success` or `failed`.
 - The audit metrics (`_metrics.json`) now fill `tenant` and `commit_sha`, and count the policy checks the manifest
   records in `policy_checks_total` and `policy_checks_failed` (left out when no policy was judged).
+- The audit metrics say why a failed run failed in `error_category`: `policy` (a denying policy), `auth`, `network`,
+  `conflict`, `timeout` or `state_lock`, recognised from strata's own error codes and markers, and `unknown`
+  otherwise. See [Why a run failed](../docs/design/audit-trail.md#why-a-run-failed).
+- `strata audit status` and `audit changes` name the step a failed or partial run stopped at, for example
+  `partial (apply_apps)`, and as `failed_step` in JSON output.
 
 ### Changed
 
@@ -81,6 +86,8 @@ commit to the repository a pipeline checked out, and a solution can read documen
     listed without a commit.
   - A build made before this release is read at deploy time, as before.
 - `artifacts.repositories` in the audit manifest is sorted by name.
+- **The audit event's `event.outcome` is `failure`, not `failed`**, for a failed or partial run, as ECS requires. A
+  SIEM rule that matches `failed` must match `failure` instead.
 - `strata validate` no longer reports `path_remote_not_pushable`: an audit sink or a GitOps step may now push to a
   `path` remote.
 
@@ -91,6 +98,8 @@ commit to the repository a pipeline checked out, and a solution can read documen
     would have named the wrong author; `git show <commit_sha>` gives both for the commit that was built;
   - `force` (`deploy run --force` has no effect), `pull_request`, `outputs`, `signatures`, and `metadata`, replaced
     by `pipeline`.
+- The audit metrics' `resource_changes` and `sections` (cost, CVE, drift), never filled: only Terraform could count
+  resource changes, and nothing measured the sections.
 - A stage's `outputs`, `outputs_artifact` and `topology`, also never filled. Output values stay in the workspace's
   `output_store`; a step can target several topologies.
 

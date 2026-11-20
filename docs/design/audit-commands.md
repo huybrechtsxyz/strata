@@ -79,15 +79,19 @@ every other command does. **No `--sink` flag in this first cut** — see
 
 ```console
 $ strata audit status
-DEPLOYMENT        ACTION   STATUS   VERSION  DEPLOYED BY        COMPLETED AT          CHANGE REF
-web-frontend      deploy   success  2.4.1    svc-pipeline-ado   2026-10-05T14:02:11Z  OPS-1234
-api-backend       deploy   failed   2.4.1    svc-pipeline-ado   2026-10-05T13:47:02Z  -
-db-migrations     destroy  success  2.3.0    jsmith             2026-10-04T09:12:55Z  -
+DEPLOYMENT        ACTION   STATUS                VERSION  DEPLOYED BY        COMPLETED AT          CHANGE REF
+web-frontend      deploy   success               2.4.1    svc-pipeline-ado   2026-10-05T14:02:11Z  OPS-1234
+api-backend       deploy   partial (apply_apps)  2.4.1    svc-pipeline-ado   2026-10-05T13:47:02Z  -
+db-migrations     destroy  success               2.3.0    jsmith             2026-10-04T09:12:55Z  -
 
 $ strata audit status api-backend
-DEPLOYMENT    ACTION  STATUS   VERSION  DEPLOYED BY       COMPLETED AT          CHANGE REF
-api-backend   deploy  failed   2.4.1    svc-pipeline-ado  2026-10-05T13:47:02Z  -
+DEPLOYMENT    ACTION  STATUS                VERSION  DEPLOYED BY       COMPLETED AT          CHANGE REF
+api-backend   deploy  partial (apply_apps)  2.4.1    svc-pipeline-ado  2026-10-05T13:47:02Z  -
 ```
+
+A failed or partial run names the step it stopped at, its first failed stage ([audit-trail.md](audit-trail.md),
+"Stages"), in the status cell and as `failed_step` in JSON; `audit changes` does the same. A record written before
+stages were shows the status alone.
 
 `changes` is now fully designed (not merely deferred) — see "`strata audit
 changes` — range listing" below for its own command surface, filter

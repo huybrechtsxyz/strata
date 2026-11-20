@@ -1702,3 +1702,23 @@ def test_the_metrics_leave_the_policy_counts_out_when_no_policy_was_judged(tmp_p
 
     measures = _audit_json(root, "_metrics.json")["measures"]
     assert "policy_checks_total" not in measures and "policy_checks_failed" not in measures
+
+
+def test_the_metrics_say_why_a_run_failed(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    denied = _policy_result().model_copy(update={"enforcement": "deny", "passed": False})
+    write_policy_results(build_path, [denied])
+
+    _finalize(root, build_path, run_ok=False)
+
+    assert _audit_json(root, "_metrics.json")["error_category"] == "policy"
+
+
+def test_a_successful_run_has_no_error_category(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    assert "error_category" not in _audit_json(root, "_metrics.json")

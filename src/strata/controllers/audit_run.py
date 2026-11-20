@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from strata import __version__
+from strata.controllers.audit_error_category import error_category
 from strata.controllers.audit_event_rendering import render_manifest_event, render_metrics_event
 from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
@@ -274,6 +275,7 @@ def finalize_and_distribute_deploy_audit(
             policy_checks_total=None if policy_results is None else len(policy_results),
             policy_checks_failed=None if policy_results is None else sum(not r.passed for r in policy_results),
         ),
+        error_category=error_category(run_diagnostics, policy_results),
     )
 
     relative_path = resolve_audit_relative_path(deployment, configuration, started_at.isoformat())
