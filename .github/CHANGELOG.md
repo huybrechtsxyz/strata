@@ -8,8 +8,22 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-20
+
 The audit record names the commits that were built, not the checkouts as they are at deploy time. An audit sink can
-commit to the repository a pipeline checked out, and a solution can read documents from other repositories.
+commit to the repository a pipeline checked out, and a solution can read documents from other repositories. The
+audit manifest records each step's outcome, the CI run and why a run failed, and a run that failed after changing
+something is `partial`.
+
+Check before upgrading:
+
+- An integration audit sink now sends `event.outcome: failure` (was `failed`), as ECS requires. Update a SIEM rule
+  that matches `failed`.
+- Strata pushes only its own commits from a pipeline's checkout. A pipeline that checks out a feature branch or a pull
+  request's merge and writes audit files or a GitOps file to another branch now fails that push; check out the target
+  branch instead.
+- A GitOps step finds its checkout under the deploying solution's folder, not the build's. A pipeline that builds and
+  deploys in different folders now works.
 
 ### Added
 
@@ -871,7 +885,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.7.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/huybrechtsxyz/strata/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/huybrechtsxyz/strata/compare/v2.6.3...v2.7.0
 [2.6.3]: https://github.com/huybrechtsxyz/strata/compare/v2.6.2...v2.6.3
 [2.6.2]: https://github.com/huybrechtsxyz/strata/compare/v2.6.1...v2.6.2

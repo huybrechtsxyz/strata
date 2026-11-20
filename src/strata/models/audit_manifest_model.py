@@ -261,7 +261,8 @@ class DeploymentManifestModel(PlatformBaseModel):
     @model_validator(mode="before")
     @classmethod
     def _drop_legacy_force(cls, data: Any) -> Any:
-        """A manifest written before 2.8.0 holds `force: false` (it defaulted to `False`, so `exclude_none` kept it).
+        """A manifest written before `force` was removed holds `force: false` (it defaulted to `False`, so
+        `exclude_none` kept it).
         It is dropped on read, so `strata audit status` and `changes` still list those records."""
         if isinstance(data, dict) and "force" in data:
             return {key: value for key, value in data.items() if key != "force"}
